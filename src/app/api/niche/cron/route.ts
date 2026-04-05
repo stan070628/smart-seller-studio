@@ -72,8 +72,8 @@ export async function GET(request: NextRequest) {
   let logId: string;
   try {
     const logResult = await pool.query<{ id: string }>(
-      `INSERT INTO niche_cron_logs (status, trigger_type)
-       VALUES ('running', 'cron')
+      `INSERT INTO niche_cron_logs (status)
+       VALUES ('running')
        RETURNING id`,
     );
     const logRow = logResult.rows[0];
@@ -242,14 +242,13 @@ export async function GET(request: NextRequest) {
     // niche_cron_logs 완료 업데이트
     await pool.query(
       `UPDATE niche_cron_logs
-       SET status      = 'success',
-           finished_at = now(),
-           analyzed    = $1,
-           updated     = $2,
-           new_sa      = $3,
-           elapsed_ms  = $4
-       WHERE id = $5`,
-      [analyzedCount, updatedCount, newSACount, elapsed, logId],
+       SET status            = 'success',
+           finished_at       = now(),
+           keywords_analyzed = $1,
+           keywords_updated  = $2,
+           new_sa_count      = $3
+       WHERE id = $4`,
+      [analyzedCount, updatedCount, newSACount, logId],
     );
 
     return Response.json({
@@ -270,12 +269,11 @@ export async function GET(request: NextRequest) {
     await pool
       .query(
         `UPDATE niche_cron_logs
-         SET status        = 'failed',
-             finished_at   = now(),
-             elapsed_ms    = $1,
-             error_message = $2
-         WHERE id = $3`,
-        [elapsed, message, logId],
+         SET status      = 'failed',
+             finished_at = now(),
+             errors      = $1::jsonb
+         WHERE id = $2`,
+        [JSON.stringify({ error: message }), logId],
       )
       .catch((updateErr) => {
         console.error('[niche-cron] 실패 로그 업데이트 오류:', updateErr);

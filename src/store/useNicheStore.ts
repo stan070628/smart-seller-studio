@@ -99,15 +99,17 @@ export const useNicheStore = create<NicheStore>()(
         set({ isLoading: true, error: null });
 
         try {
+          const limit = pageSize;
+          const offset = (page - 1) * pageSize;
           const params = new URLSearchParams({
-            sortField,
-            sortOrder,
-            page: String(page),
-            pageSize: String(pageSize),
+            sort: sortField,
+            order: sortOrder,
+            limit: String(limit),
+            offset: String(offset),
           });
 
           if (gradeFilter.length > 0) {
-            params.set('grades', gradeFilter.join(','));
+            params.set('grade', gradeFilter.join(','));
           }
           if (categoryFilter) {
             params.set('category', categoryFilter);
@@ -123,8 +125,13 @@ export const useNicheStore = create<NicheStore>()(
             throw new Error(body?.error ?? `서버 오류 (${res.status})`);
           }
 
-          const data = await res.json();
-          set({ keywords: data.keywords ?? [], keywordsTotal: data.total ?? 0 });
+          const json = await res.json();
+          const data = json.data ?? json;
+          set({
+            keywords: data.items ?? [],
+            keywordsTotal: data.total ?? 0,
+            unreadAlertCount: data.unreadAlertCount ?? 0,
+          });
         } catch (err) {
           set({ error: err instanceof Error ? err.message : '키워드 목록 로드 실패' });
         } finally {
@@ -150,11 +157,16 @@ export const useNicheStore = create<NicheStore>()(
             throw new Error(body?.error ?? `분석 실패 (${res.status})`);
           }
 
-          const data = await res.json();
+          const json = await res.json();
+          const result = json.data ?? json;
 
           // 분석 완료 후 결과 저장 + 상세 뷰 전환
           set({
-            currentAnalysis: data as CurrentAnalysis,
+            currentAnalysis: {
+              ...result,
+              rawTotalProducts: result.rawData?.totalProductCount ?? null,
+              rawAvgPrice: result.rawData?.avgPrice ?? null,
+            } as CurrentAnalysis,
             selectedKeyword: keyword.trim(),
             activeView: 'detail',
           });

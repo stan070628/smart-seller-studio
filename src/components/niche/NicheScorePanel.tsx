@@ -267,7 +267,7 @@ export default function NicheScorePanel({ keyword, result, onBack }: NicheScoreP
           {/* 왼쪽: 수평 막대 차트 */}
           <div style={{ flex: '1 1 260px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {BREAKDOWN_META.map((item) => {
-              const score = result.breakdown[item.key] ?? 0;
+              const score = result.breakdown?.[item.key] ?? 0;
               const ratio = item.max > 0 ? score / item.max : 0;
               const barColor = getBarColor(ratio);
 
