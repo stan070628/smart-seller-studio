@@ -39,8 +39,29 @@ async function runFetchAndSnapshot(): Promise<FetchAndSnapshotResult> {
   const kstNow = new Date(Date.now() + 9 * 60 * 60 * 1000);
   const snapshotDate = kstNow.toISOString().slice(0, 10); // 'YYYY-MM-DD'
 
-  // getItemList v4.1 — 전체 페이지 자동 순회 (sz=200)
-  const allItems: DomeggookListItem[] = await client.getAllItems();
+  // 다중 키워드 순회 수집 (중복 제거)
+  const KEYWORDS = [
+    '생활용품', '주방용품', '뷰티', '화장품',
+    '건강', '디지털', '가전', '유아', '아동',
+    '반려동물', '패션잡화', '식품',
+  ];
+  const allItems: DomeggookListItem[] = [];
+  const seenNos = new Set<number>();
+
+  for (const kw of KEYWORDS) {
+    try {
+      const items = await client.getAllItems({ keyword: kw });
+      for (const item of items) {
+        if (!seenNos.has(item.no)) {
+          seenNos.add(item.no);
+          allItems.push(item);
+        }
+      }
+      console.info(`[sourcing-cron] 키워드 "${kw}" 수집 완료 (누적 ${allItems.length}건)`);
+    } catch (err) {
+      console.warn(`[sourcing-cron] 키워드 "${kw}" 수집 실패:`, err);
+    }
+  }
 
   if (allItems.length === 0) {
     return {
@@ -217,6 +238,21 @@ export async function GET(request: NextRequest) {
       ],
     );
 
+    // 30일 이전 데이터 정리
+    const cleanupResults = await Promise.allSettled([
+      pool.query(`DELETE FROM inventory_snapshots WHERE snapshot_date < CURRENT_DATE - INTERVAL '30 days'`),
+      pool.query(`DELETE FROM collection_logs WHERE started_at < NOW() - INTERVAL '30 days'`),
+      pool.query(`DELETE FROM niche_score_history WHERE snapshot_date < CURRENT_DATE - INTERVAL '30 days'`),
+      pool.query(`DELETE FROM niche_analyses WHERE created_at < NOW() - INTERVAL '30 days'`),
+      pool.query(`DELETE FROM niche_cron_logs WHERE created_at < NOW() - INTERVAL '30 days'`),
+    ]);
+    const cleaned = cleanupResults
+      .filter((r) => r.status === 'fulfilled')
+      .reduce((sum, r) => sum + ((r as PromiseFulfilledResult<{ rowCount: number | null }>).value.rowCount ?? 0), 0);
+    if (cleaned > 0) {
+      console.info(`[cron] 30일 이전 데이터 ${cleaned}건 삭제`);
+    }
+
     return Response.json({
       success: true,
       data: {
@@ -228,6 +264,7 @@ export async function GET(request: NextRequest) {
         updatedItems: result.updatedItems,
         snapshotsSaved: result.snapshotsSaved,
         failedItems: result.failedItems,
+        cleaned,
       },
     });
   } catch (err) {

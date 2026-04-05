@@ -105,13 +105,30 @@ export default function NicheTab() {
     [handleAnalyze],
   );
 
-  // 카드 클릭 → 분석 실행
+  // 카드 클릭 → 이미 데이터가 있으면 바로 상세뷰, 없으면 API 호출
   const handleCardSelect = useCallback(
     (kw: string) => {
       setInputValue(kw);
-      analyzeKeyword(kw);
+      const existing = keywords.find((k) => k.keyword === kw);
+      if (existing) {
+        // 이미 목록에 있는 데이터로 바로 상세 패널 표시
+        useNicheStore.setState({
+          currentAnalysis: {
+            totalScore: existing.totalScore,
+            grade: existing.grade as 'S' | 'A' | 'B' | 'C' | 'D',
+            breakdown: existing.breakdown,
+            signals: existing.signals,
+            rawTotalProducts: existing.rawTotalProducts ?? 0,
+            rawAvgPrice: existing.rawAvgPrice ?? 0,
+          },
+          selectedKeyword: kw,
+          activeView: 'detail',
+        });
+      } else {
+        analyzeKeyword(kw);
+      }
     },
-    [analyzeKeyword],
+    [keywords, analyzeKeyword],
   );
 
   // 등급 필터 토글
