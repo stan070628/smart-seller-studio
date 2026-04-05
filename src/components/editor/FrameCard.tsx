@@ -14,7 +14,7 @@
  */
 
 import React, { useRef, useState, forwardRef, useEffect, useCallback } from 'react';
-import { Download, Loader2, ImagePlus, X, FileCode2, Trash2 } from 'lucide-react';
+import { Download, Loader2, ImagePlus, X, FileCode2, Trash2, Sparkles, Copy, Pencil } from 'lucide-react';
 import type { FrameType } from '@/types/frames';
 import { TEMPLATE_MAP, FRAME_LABEL_KO } from '@/components/templates';
 import useEditorStore from '@/store/useEditorStore';
@@ -52,6 +52,13 @@ const FrameCard = forwardRef<HTMLDivElement, FrameCardProps>(
     const [showPicker, setShowPicker] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [showImageAdjust, setShowImageAdjust] = useState(false);
+    // 프롬프트 인라인 편집 상태
+    const [isEditingPrompt, setIsEditingPrompt] = useState(false);
+    const [promptDraft, setPromptDraft] = useState('');
+    // AI 이미지 생성 에러 메시지
+    const [aiGenError, setAiGenError] = useState<string | null>(null);
+    // AI 이미지 생성 성공 피드백 (초록 테두리 flash)
+    const [aiGenSuccess, setAiGenSuccess] = useState(false);
 
     // 컨테이너 너비 측정 → 동적 scale 계산
     const [containerWidth, setContainerWidth] = useState(560);
@@ -67,10 +74,23 @@ const FrameCard = forwardRef<HTMLDivElement, FrameCardProps>(
     const updateFrame = useEditorStore((s) => s.updateFrame);
     const removeFrame = useEditorStore((s) => s.removeFrame);
     const theme = useEditorStore((s) => s.theme);
+    const generatingImageForFrame = useEditorStore((s) => s.generatingImageForFrame);
+    // store 액션명 충돌 방지를 위해 generateFrameImageAction으로 alias
+    const generateFrameImageAction = useEditorStore((s) => s.generateFrameImage);
 
-    // 이 프레임에 지정된 이미지 or 기본 이미지
-    const assignedImageUrl = frameImages[frame.frameType] ?? defaultImageUrl;
-    const hasCustomImage = !!frameImages[frame.frameType];
+    // 슬롯 전체 맵 구성
+    const frameSlots = frameImages[frame.frameType] ?? {};
+    const assignedImageUrl = frameSlots['main'] ?? defaultImageUrl;
+    const hasCustomImage = !!frameSlots['main'];
+
+    // imageUrls: 슬롯 맵 복사 후 main 슬롯 기본값 보정
+    const imageUrls: Record<string, string> = { ...frameSlots };
+    if (!imageUrls['main'] && defaultImageUrl) {
+      imageUrls['main'] = defaultImageUrl;
+    }
+
+    // 슬롯별 이미지 설정
+    const slotSettings = frameImageSettings[frame.frameType] ?? {};
 
     const templateRef = useRef<HTMLDivElement>(null);
     const pickerRef = useRef<HTMLDivElement>(null);
@@ -80,8 +100,8 @@ const FrameCard = forwardRef<HTMLDivElement, FrameCardProps>(
     const labelKo = FRAME_LABEL_KO[frame.frameType] ?? frame.frameType;
     const indexLabel = String(frameIndex).padStart(2, '0');
 
-    // 동적 scale 계산 (너비 기준, 최대 1.0)
-    const scale = Math.min(1, containerWidth / TEMPLATE_W);
+    // 동적 scale 계산 (너비 기준, 최대 0.55로 제한 — 다운로드 크기 영향 없음)
+    const scale = Math.min(0.55, containerWidth / TEMPLATE_W);
     const previewWidth = Math.round(containerWidth);
     const previewHeight = Math.round(TEMPLATE_H * scale);
 
@@ -185,6 +205,7 @@ const FrameCard = forwardRef<HTMLDivElement, FrameCardProps>(
           width: TEMPLATE_W,
           height: TEMPLATE_H,
           pixelRatio: 1,
+          fontEmbedCSS: '', // cross-origin Google Fonts cssRules 접근 오류 방지
         });
         const link = document.createElement('a');
         link.download = `frame-${indexLabel}-${frame.frameType}.jpg`;
@@ -231,13 +252,13 @@ const FrameCard = forwardRef<HTMLDivElement, FrameCardProps>(
     // -----------------------------------------------------------------------
     const handleSelectImage = (img: UploadedImage) => {
       const url = img.storageUrl ?? img.url;
-      setFrameImage(frame.frameType as FrameType, url);
+      setFrameImage(frame.frameType as FrameType, 'main', url);
       setShowPicker(false);
     };
 
     const handleRemoveCustomImage = (e: React.MouseEvent) => {
       e.stopPropagation();
-      setFrameImage(frame.frameType as FrameType, null);
+      setFrameImage(frame.frameType as FrameType, 'main', null);
     };
 
     // PC 파일 선택 → 스토어에 추가 후 이 프레임에 적용
@@ -255,7 +276,7 @@ const FrameCard = forwardRef<HTMLDivElement, FrameCardProps>(
           uploadStatus: 'done',
         };
         addImage(newImg);
-        setFrameImage(frame.frameType as FrameType, url);
+        setFrameImage(frame.frameType as FrameType, 'main', url);
         setShowPicker(false);
         // input 초기화 (같은 파일 재선택 가능)
         e.target.value = '';
@@ -263,12 +284,66 @@ const FrameCard = forwardRef<HTMLDivElement, FrameCardProps>(
       [addImage, setFrameImage, frame.frameType],
     );
 
-    // 편집 모드에서 이미지 추가 버튼 클릭 → 이미지 선택 팝오버 열기
+    // 이미지 추가 버튼 클릭 → 항상 팝오버 열기 (이미지 없으면 안내 메시지 표시)
     const handleImageAdd = () => {
-      if (uploadedImages.length > 0) {
-        setShowPicker(true);
+      setShowPicker(true);
+    };
+
+    // AI 이미지 생성 버튼 클릭 핸들러
+    const handleGenerateAIImage = async () => {
+      setAiGenError(null);
+      try {
+        await generateFrameImageAction(frame.frameType as FrameType);
+        setShowPicker(false);
+        // 성공 피드백: 1.5초간 초록 테두리 flash
+        setAiGenSuccess(true);
+        setTimeout(() => setAiGenSuccess(false), 1500);
+      } catch (err) {
+        console.error('[FrameCard] AI 이미지 생성 오류:', err);
+        setAiGenError(err instanceof Error ? err.message : '이미지 생성에 실패했습니다.');
       }
     };
+
+    // 프롬프트 편집 시작
+    const handleStartEditPrompt = () => {
+      setPromptDraft(frame.imagePrompt ?? '');
+      setIsEditingPrompt(true);
+    };
+
+    // 프롬프트 편집 완료 (blur 또는 Shift+Enter)
+    const handleFinishEditPrompt = () => {
+      const trimmed = promptDraft.trim();
+      if (trimmed && trimmed !== frame.imagePrompt) {
+        updateFrame(frame.frameType as FrameType, { imagePrompt: trimmed });
+      }
+      setIsEditingPrompt(false);
+    };
+
+    // 프롬프트 textarea 키 입력 처리
+    const handlePromptKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === 'Enter' && e.shiftKey) {
+        e.preventDefault();
+        handleFinishEditPrompt();
+      }
+      if (e.key === 'Escape') {
+        setIsEditingPrompt(false);
+      }
+    };
+
+    // 프롬프트 클립보드 복사
+    const handleCopyPrompt = () => {
+      if (frame.imagePrompt) {
+        navigator.clipboard.writeText(frame.imagePrompt).catch((err) => {
+          console.error('[FrameCard] 클립보드 복사 오류:', err);
+        });
+      }
+    };
+
+    // 현재 프레임의 생성 진행 중 여부
+    const isGeneratingThisFrame = generatingImageForFrame === frame.frameType;
+
+    // 다른 프레임 생성 중 (동시 생성 1개 제한)
+    const isAnotherFrameGenerating = generatingImageForFrame !== null && !isGeneratingThisFrame;
 
     return (
       <div
@@ -306,11 +381,54 @@ const FrameCard = forwardRef<HTMLDivElement, FrameCardProps>(
             </span>
           )}
 
+          {/* 이미지 변경 아이콘 버튼 (상시 노출) */}
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowPicker((v) => !v); }}
+            title="이미지 변경"
+            style={{
+              marginLeft: 'auto',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '4px 8px',
+              fontSize: '12px',
+              borderRadius: '6px',
+              border: showPicker ? '1px solid #6366f1' : '1px solid #3f3f46',
+              backgroundColor: showPicker ? 'rgba(99,102,241,0.15)' : 'transparent',
+              color: showPicker ? '#818cf8' : '#71717a',
+              cursor: 'pointer',
+              transition: 'all 0.15s',
+            }}
+          >
+            <ImagePlus size={13} />
+          </button>
+
+          {/* 저장 아이콘 버튼 (상시 노출) */}
+          <button
+            onClick={handleSaveImage}
+            disabled={isSaving}
+            title="이미지 저장"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '4px 8px',
+              fontSize: '12px',
+              borderRadius: '6px',
+              border: '1px solid #3f3f46',
+              backgroundColor: 'transparent',
+              color: isSaving ? '#52525b' : '#71717a',
+              cursor: isSaving ? 'not-allowed' : 'pointer',
+              transition: 'all 0.15s',
+            }}
+          >
+            {isSaving ? <Loader2 size={13} /> : <Download size={13} />}
+          </button>
+
           {/* 이미지 조정 버튼 */}
           <button
             onClick={() => setShowImageAdjust((v) => !v)}
             style={{
-              marginLeft: 'auto',
               padding: '4px 12px',
               fontSize: '12px',
               fontWeight: '600',
@@ -327,7 +445,15 @@ const FrameCard = forwardRef<HTMLDivElement, FrameCardProps>(
 
           {/* 편집 토글 버튼 */}
           <button
-            onClick={() => setIsEditing((v) => !v)}
+            onClick={() => {
+              if (isEditing) {
+                // 편집 종료 전 contenteditable 요소 blur 강제 호출 → 마지막 입력 누락 방지
+                templateRef.current
+                  ?.querySelectorAll('[contenteditable]')
+                  .forEach((el) => (el as HTMLElement).blur());
+              }
+              setIsEditing((v) => !v);
+            }}
             style={{
               padding: '4px 12px',
               fontSize: '12px',
@@ -391,12 +517,17 @@ const FrameCard = forwardRef<HTMLDivElement, FrameCardProps>(
               cursor: isEditing ? 'default' : 'pointer',
               border: isEditing
                 ? '2px solid #6366f1'
-                : hasCustomImage
-                  ? '1px solid #34d399'
-                  : '1px solid #27272a',
+                : aiGenSuccess
+                  ? '2px solid #34d399'
+                  : hasCustomImage
+                    ? '1px solid #34d399'
+                    : '1px solid #27272a',
               boxShadow: isEditing
                 ? '0 0 0 2px rgba(99,102,241,0.2)'
-                : '0 2px 8px rgba(0,0,0,0.3)',
+                : aiGenSuccess
+                  ? '0 0 0 3px rgba(52,211,153,0.3)'
+                  : '0 2px 8px rgba(0,0,0,0.3)',
+              transition: 'border 0.3s, box-shadow 0.3s',
             }}
             onMouseEnter={() => !isEditing && setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
@@ -420,14 +551,16 @@ const FrameCard = forwardRef<HTMLDivElement, FrameCardProps>(
                 <TemplateComponent
                   frame={frame}
                   imageUrl={assignedImageUrl}
+                  imageUrls={imageUrls}
                   isEditable={isEditing}
                   onFieldChange={handleFieldChange}
                   onImageAdd={handleImageAdd}
                   theme={theme}
-                  imageFit={frameImageFit[frame.frameType] ?? 'cover'}
-                  imageScale={frameImageSettings[frame.frameType]?.scale ?? 1}
-                  imageOffsetX={frameImageSettings[frame.frameType]?.x ?? 50}
-                  imageOffsetY={frameImageSettings[frame.frameType]?.y ?? 50}
+                  imageFit={frameImageFit[frame.frameType]?.['main'] ?? 'cover'}
+                  imageScale={slotSettings['main']?.scale ?? 1}
+                  imageOffsetX={slotSettings['main']?.x ?? 50}
+                  imageOffsetY={slotSettings['main']?.y ?? 50}
+                  imageSlotSettings={slotSettings}
                 />
               </div>
             </div>
@@ -497,28 +630,69 @@ const FrameCard = forwardRef<HTMLDivElement, FrameCardProps>(
                   {isSaving ? '저장 중...' : '피그마용 PNG'}
                 </button>
 
-                {/* 이미지 변경 버튼 */}
-                {uploadedImages.length > 0 && (
+                {/* 이미지 변경 버튼 (항상 표시) */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowPicker((v) => !v); }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    backgroundColor: '#18181b',
+                    color: '#a1a1aa',
+                    border: '1px solid #3f3f46',
+                    borderRadius: '10px',
+                    padding: '9px 16px',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    width: '140px',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <ImagePlus size={14} />
+                  이미지 변경
+                </button>
+
+                {/* AI 이미지 생성 버튼 — imagePrompt 있을 때 (hero 포함 모든 프레임) */}
+                {frame.imagePrompt && (
                   <button
-                    onClick={(e) => { e.stopPropagation(); setShowPicker((v) => !v); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setAiGenError(null);
+                      generateFrameImageAction(frame.frameType as FrameType)
+                        .then(() => {
+                          setAiGenSuccess(true);
+                          setTimeout(() => setAiGenSuccess(false), 1500);
+                        })
+                        .catch((err: unknown) => {
+                          setAiGenError(err instanceof Error ? err.message : '이미지 생성에 실패했습니다.');
+                        });
+                    }}
+                    disabled={isGeneratingThisFrame || isAnotherFrameGenerating}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
                       gap: '6px',
-                      backgroundColor: '#18181b',
-                      color: '#a1a1aa',
-                      border: '1px solid #3f3f46',
+                      backgroundColor: isGeneratingThisFrame || isAnotherFrameGenerating
+                        ? 'rgba(99,102,241,0.1)'
+                        : 'rgba(99,102,241,0.25)',
+                      color: '#818cf8',
+                      border: '1px solid #6366f1',
                       borderRadius: '10px',
                       padding: '9px 16px',
                       fontSize: '13px',
                       fontWeight: '600',
-                      cursor: 'pointer',
+                      cursor: isGeneratingThisFrame || isAnotherFrameGenerating ? 'not-allowed' : 'pointer',
                       width: '140px',
                       justifyContent: 'center',
+                      opacity: isAnotherFrameGenerating ? 0.5 : 1,
                     }}
                   >
-                    <ImagePlus size={14} />
-                    이미지 변경
+                    {isGeneratingThisFrame ? (
+                      <><Loader2 size={14} className="animate-spin" />생성 중...</>
+                    ) : (
+                      <><Sparkles size={14} />AI 이미지</>
+                    )}
                   </button>
                 )}
               </div>
@@ -543,9 +717,9 @@ const FrameCard = forwardRef<HTMLDivElement, FrameCardProps>(
 
             {/* 크기/좌우/상하 슬라이더 */}
             {[
-              { label: '크기', key: 'scale' as const, min: 0.5, max: 3, step: 0.05, value: frameImageSettings[frame.frameType]?.scale ?? 1, format: (v: number) => `${Math.round(v * 100)}%` },
-              { label: '좌우', key: 'x' as const, min: 0, max: 100, step: 1, value: frameImageSettings[frame.frameType]?.x ?? 50, format: (v: number) => `${v}` },
-              { label: '상하', key: 'y' as const, min: 0, max: 100, step: 1, value: frameImageSettings[frame.frameType]?.y ?? 50, format: (v: number) => `${v}` },
+              { label: '크기', key: 'scale' as const, min: 0.5, max: 3, step: 0.05, value: frameImageSettings[frame.frameType]?.['main']?.scale ?? 1, format: (v: number) => `${Math.round(v * 100)}%` },
+              { label: '좌우', key: 'x' as const, min: 0, max: 100, step: 1, value: frameImageSettings[frame.frameType]?.['main']?.x ?? 50, format: (v: number) => `${v}` },
+              { label: '상하', key: 'y' as const, min: 0, max: 100, step: 1, value: frameImageSettings[frame.frameType]?.['main']?.y ?? 50, format: (v: number) => `${v}` },
             ].map(({ label, key, min, max, step, value, format }) => (
               <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{ fontSize: '11px', color: '#a1a1aa', width: '28px', flexShrink: 0 }}>{label}</span>
@@ -555,7 +729,7 @@ const FrameCard = forwardRef<HTMLDivElement, FrameCardProps>(
                   max={max}
                   step={step}
                   value={value}
-                  onChange={(e) => setFrameImageSettings(frame.frameType as FrameType, { [key]: parseFloat(e.target.value) })}
+                  onChange={(e) => setFrameImageSettings(frame.frameType as FrameType, 'main', { [key]: parseFloat(e.target.value) })}
                   style={{ flex: 1, accentColor: '#f59e0b', cursor: 'pointer' }}
                 />
                 <span style={{ fontSize: '11px', color: '#71717a', width: '36px', textAlign: 'right', flexShrink: 0 }}>
@@ -566,7 +740,7 @@ const FrameCard = forwardRef<HTMLDivElement, FrameCardProps>(
 
             {/* 초기화 버튼 */}
             <button
-              onClick={() => setFrameImageSettings(frame.frameType as FrameType, { scale: 1, x: 50, y: 50 })}
+              onClick={() => setFrameImageSettings(frame.frameType as FrameType, 'main', { scale: 1, x: 50, y: 50 })}
               style={{
                 marginTop: '2px',
                 padding: '5px',
@@ -648,11 +822,27 @@ const FrameCard = forwardRef<HTMLDivElement, FrameCardProps>(
               PC에서 새 사진 업로드
             </button>
 
-            {/* 이미지 그리드 */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+            {/* 이미지 그리드 — 업로드된 이미지 없을 때 안내 */}
+            {uploadedImages.length === 0 ? (
+              <p style={{
+                margin: '0 0 10px',
+                padding: '12px',
+                fontSize: '12px',
+                color: '#71717a',
+                textAlign: 'center',
+                backgroundColor: '#09090b',
+                borderRadius: '8px',
+                border: '1px dashed #3f3f46',
+              }}>
+                업로드된 이미지가 없습니다.
+                <br />
+                위 버튼으로 새 사진을 업로드해주세요.
+              </p>
+            ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '0' }}>
               {uploadedImages.map((img) => {
                 const url = img.storageUrl ?? img.url;
-                const isSelected = frameImages[frame.frameType] === url;
+                const isSelected = frameImages[frame.frameType]?.['main'] === url;
                 return (
                   <button
                     key={img.id}
@@ -686,16 +876,17 @@ const FrameCard = forwardRef<HTMLDivElement, FrameCardProps>(
                 );
               })}
             </div>
+            )}
 
             {/* 이미지 Fit 설정 */}
             <div style={{ marginTop: '10px', display: 'flex', gap: '6px' }}>
               <span style={{ fontSize: '11px', color: '#71717a', alignSelf: 'center' }}>맞춤:</span>
               {(['cover', 'contain'] as const).map((fit) => {
-                const active = (frameImageFit[frame.frameType] ?? 'cover') === fit;
+                const active = (frameImageFit[frame.frameType]?.['main'] ?? 'cover') === fit;
                 return (
                   <button
                     key={fit}
-                    onClick={() => setFrameImageFit(frame.frameType as FrameType, fit)}
+                    onClick={() => setFrameImageFit(frame.frameType as FrameType, 'main', fit)}
                     style={{
                       flex: 1,
                       padding: '5px',
@@ -733,15 +924,207 @@ const FrameCard = forwardRef<HTMLDivElement, FrameCardProps>(
                 기본 이미지로 되돌리기
               </button>
             )}
+
+            {/* AI 이미지 생성 영역 — 모든 프레임 (hero 포함) */}
+            <>
+              {/* 구분선 */}
+              <hr style={{ margin: '12px 0 10px', border: 'none', borderTop: '1px solid #27272a' }} />
+
+              {/* Task 3-3: 프롬프트 미리보기 + 편집 UI */}
+                {frame.imagePrompt && (
+                  <div style={{ marginBottom: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '5px' }}>
+                      <span style={{ fontSize: '10px', color: '#6366f1', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                        AI 프롬프트
+                      </span>
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        {/* 복사 버튼 */}
+                        <button
+                          onClick={handleCopyPrompt}
+                          title="프롬프트 복사"
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '3px',
+                            padding: '3px 7px',
+                            backgroundColor: 'transparent',
+                            border: '1px solid #3f3f46',
+                            borderRadius: '5px',
+                            color: '#71717a',
+                            fontSize: '10px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <Copy size={10} />
+                          복사
+                        </button>
+                        {/* 수정 버튼 */}
+                        <button
+                          onClick={handleStartEditPrompt}
+                          title="프롬프트 수정"
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '3px',
+                            padding: '3px 7px',
+                            backgroundColor: isEditingPrompt ? 'rgba(99,102,241,0.15)' : 'transparent',
+                            border: isEditingPrompt ? '1px solid #6366f1' : '1px solid #3f3f46',
+                            borderRadius: '5px',
+                            color: isEditingPrompt ? '#818cf8' : '#71717a',
+                            fontSize: '10px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <Pencil size={10} />
+                          수정
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 편집 모드: textarea */}
+                    {isEditingPrompt ? (
+                      <div>
+                        <textarea
+                          value={promptDraft}
+                          onChange={(e) => setPromptDraft(e.target.value)}
+                          onBlur={handleFinishEditPrompt}
+                          onKeyDown={handlePromptKeyDown}
+                          autoFocus
+                          rows={3}
+                          style={{
+                            width: '100%',
+                            padding: '7px 9px',
+                            backgroundColor: '#09090b',
+                            border: '1px solid #6366f1',
+                            borderRadius: '7px',
+                            color: '#d4d4d8',
+                            fontSize: '11px',
+                            lineHeight: '1.5',
+                            resize: 'vertical',
+                            outline: 'none',
+                            fontFamily: 'inherit',
+                            boxSizing: 'border-box',
+                          }}
+                        />
+                        <p style={{ margin: '3px 0 0', fontSize: '10px', color: '#52525b' }}>
+                          Shift+Enter 또는 포커스 해제 시 저장
+                        </p>
+                      </div>
+                    ) : (
+                      /* 읽기 전용 텍스트 — 최대 2줄 말줄임 */
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: '11px',
+                          color: '#a1a1aa',
+                          lineHeight: '1.5',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                          backgroundColor: '#09090b',
+                          padding: '6px 9px',
+                          borderRadius: '7px',
+                          border: '1px solid #27272a',
+                          cursor: 'text',
+                        }}
+                        onClick={handleStartEditPrompt}
+                        title={frame.imagePrompt}
+                      >
+                        {frame.imagePrompt}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+              {/* AI 이미지 생성 버튼 */}
+              <button
+                onClick={handleGenerateAIImage}
+                disabled={isGeneratingThisFrame || isAnotherFrameGenerating || !frame.imagePrompt}
+                style={{
+                  width: '100%',
+                  padding: '9px',
+                  backgroundColor:
+                    isGeneratingThisFrame || isAnotherFrameGenerating || !frame.imagePrompt
+                      ? 'rgba(99,102,241,0.1)'
+                      : 'rgba(99,102,241,0.2)',
+                  border: '1px solid #6366f1',
+                  borderRadius: '8px',
+                  color:
+                    isGeneratingThisFrame || isAnotherFrameGenerating || !frame.imagePrompt
+                      ? '#6366f1'
+                      : '#818cf8',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  cursor:
+                    isGeneratingThisFrame || isAnotherFrameGenerating || !frame.imagePrompt
+                      ? 'not-allowed'
+                      : 'pointer',
+                  opacity:
+                    isAnotherFrameGenerating || !frame.imagePrompt ? 0.5 : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  transition: 'all 0.15s',
+                }}
+              >
+                {isGeneratingThisFrame ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin" />
+                    이미지 생성 중...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={13} />
+                    {frame.needsProductImage === true
+                      ? 'AI 이미지 생성 (상품 참조)'
+                      : 'AI 이미지 생성'}
+                  </>
+                )}
+              </button>
+            </>
           </div>
         )}
 
-        {/* 촬영 팁 */}
-        {frame.imageDirection && (
+        {/* 촬영 팁 — 커스텀 이미지 또는 프레임 지정 이미지가 있으면 숨김 */}
+        {frame.imageDirection && !hasCustomImage && !frameImages[frame.frameType]?.['main'] && (
           <p style={{ fontSize: '11px', color: '#71717a', margin: 0, lineHeight: '1.5', padding: '0 2px' }}>
             <span style={{ color: '#6366f1', fontWeight: '600' }}>촬영 팁: </span>
             {frame.imageDirection}
           </p>
+        )}
+
+        {/* AI 이미지 생성 에러 — 카드 하단 고정 (수동 닫기 가능) */}
+        {aiGenError && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '8px',
+            padding: '10px 12px',
+            backgroundColor: 'rgba(239,68,68,0.08)',
+            border: '1px solid rgba(239,68,68,0.3)',
+            borderRadius: '8px',
+          }}>
+            <p style={{ flex: 1, margin: 0, fontSize: '12px', color: '#f87171', lineHeight: '1.5' }}>
+              {aiGenError}
+            </p>
+            <button
+              onClick={() => setAiGenError(null)}
+              style={{
+                flexShrink: 0,
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: '#71717a',
+                padding: '1px',
+                lineHeight: 0,
+              }}
+              title="닫기"
+            >
+              <X size={13} />
+            </button>
+          </div>
         )}
       </div>
     );

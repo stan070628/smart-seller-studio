@@ -21,8 +21,10 @@
 html,
 body {
   height: 100%;
-  overflow: hidden; /* 에디터 전체가 뷰포트를 채우도록 */
 }
+
+/* 에디터/소싱 페이지는 뷰포트 고정 레이아웃이므로 body overflow hidden을
+   각 레이아웃 컴포넌트에서 처리 (calculator 등 스크롤 필요 페이지를 위해) */
 
 body {
   background: var(--background);

@@ -43,7 +43,7 @@ function validateRequestBody(body: unknown): FrameUserPromptParams {
     throw new Error('요청 바디가 유효한 JSON 객체가 아닙니다.');
   }
 
-  const { reviews, productName, imageAnalysis, productDescription } = body as Record<string, unknown>;
+  const { reviews, productName, imageAnalysis, productDescription, productExtract } = body as Record<string, unknown>;
 
   if (!Array.isArray(reviews) || reviews.length === 0) {
     throw new Error('reviews 필드는 비어있지 않은 배열이어야 합니다.');
@@ -70,6 +70,7 @@ function validateRequestBody(body: unknown): FrameUserPromptParams {
     productName: productName as string | undefined,
     productDescription: productDescription as string | undefined,
     imageAnalysis: imageAnalysis as FrameUserPromptParams['imageAnalysis'],
+    productExtract: productExtract as FrameUserPromptParams['productExtract'],
   };
 }
 
@@ -133,7 +134,7 @@ export async function POST(
       () =>
         client.messages.create({
           model: 'claude-sonnet-4-6',
-          max_tokens: 8192,
+          max_tokens: 16384,
           system: FRAME_SYSTEM_PROMPT,
           messages: [{ role: 'user', content: userMessage }],
         }),

@@ -9,15 +9,24 @@ import EditableText from './EditableText';
 
 export interface TemplateProps {
   frame: GeneratedFrame;
+  /** 단일 슬롯용 (하위 호환 유지, main 슬롯에 해당) */
   imageUrl: string | null;
   isEditable?: boolean;
   onFieldChange?: (field: string, value: unknown) => void;
   onImageAdd?: () => void;
   theme?: Theme;
+  /** 단일 슬롯용 fit (하위 호환 유지, main 슬롯에 해당) */
   imageFit?: 'cover' | 'contain';
+  /** 단일 슬롯용 스케일 (하위 호환 유지, main 슬롯에 해당) */
   imageScale?: number;
-  imageOffsetX?: number; // 0-100, 기본 50 (center)
-  imageOffsetY?: number; // 0-100, 기본 50 (center)
+  /** 0-100, 기본 50 (center) — 하위 호환 유지 */
+  imageOffsetX?: number;
+  /** 0-100, 기본 50 (center) — 하위 호환 유지 */
+  imageOffsetY?: number;
+  /** 다중 슬롯 이미지 맵 (슬롯키 → URL) */
+  imageUrls?: Record<string, string>;
+  /** 슬롯별 이미지 설정 (fit, scale, offset) */
+  imageSlotSettings?: Record<string, { fit?: 'cover' | 'contain'; scale?: number; x?: number; y?: number }>;
 }
 
 export const ImagePlaceholder: React.FC<{ onImageAdd?: () => void; width?: string; height?: string; theme?: Theme }> = ({

@@ -10,7 +10,7 @@ import { DEFAULT_THEME } from '@/lib/themes';
 import EditableText from './EditableText';
 
 const CustomGalleryTemplate: React.FC<TemplateProps> = ({
-  frame, imageUrl, isEditable = false, onFieldChange, onImageAdd, theme = DEFAULT_THEME, imageFit = 'cover', imageScale = 1, imageOffsetX = 50, imageOffsetY = 50,
+  frame, imageUrl, imageUrls, imageSlotSettings, isEditable = false, onFieldChange, onImageAdd, theme = DEFAULT_THEME, imageFit = 'cover', imageScale = 1, imageOffsetX = 50, imageOffsetY = 50,
 }) => {
   if (frame.skip) return null;
 
@@ -21,12 +21,16 @@ const CustomGalleryTemplate: React.FC<TemplateProps> = ({
     (frame.metadata?.caption4 as string) ?? '',
   ];
 
+  // imageUrls 슬롯에서 갤러리 이미지 가져오기
   const images: (string | null)[] = [
-    (frame.metadata?.image1 as string | undefined) ?? imageUrl,
-    (frame.metadata?.image2 as string | undefined) ?? null,
-    (frame.metadata?.image3 as string | undefined) ?? null,
-    (frame.metadata?.image4 as string | undefined) ?? null,
+    imageUrls?.slot1 ?? imageUrl,
+    imageUrls?.slot2 ?? null,
+    imageUrls?.slot3 ?? null,
+    imageUrls?.slot4 ?? null,
   ];
+
+  // 슬롯 키 배열 (imageSlotSettings 조회용)
+  const slotKeys = ['slot1', 'slot2', 'slot3', 'slot4'] as const;
 
   return (
     <div style={{
@@ -60,7 +64,17 @@ const CustomGalleryTemplate: React.FC<TemplateProps> = ({
           <div key={i} style={{ position: 'relative', overflow: 'hidden' }}>
             {images[i] ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={images[i]!} alt={`갤러리 ${i+1}`} style={{ width: '100%', height: '100%', objectFit: imageFit, transform: i === 0 ? `scale(${imageScale})` : undefined, transformOrigin: i === 0 ? `${imageOffsetX}% ${imageOffsetY}%` : undefined, display: 'block' }} />
+              <img
+                src={images[i]!}
+                alt={`갤러리 ${i + 1}`}
+                style={{
+                  width: '100%', height: '100%',
+                  objectFit: imageSlotSettings?.[slotKeys[i]]?.fit ?? imageFit,
+                  transform: `scale(${imageSlotSettings?.[slotKeys[i]]?.scale ?? (i === 0 ? imageScale : 1)})`,
+                  transformOrigin: `${imageSlotSettings?.[slotKeys[i]]?.x ?? (i === 0 ? imageOffsetX : 50)}% ${imageSlotSettings?.[slotKeys[i]]?.y ?? (i === 0 ? imageOffsetY : 50)}%`,
+                  display: 'block',
+                }}
+              />
             ) : (
               <ImagePlaceholder onImageAdd={onImageAdd} theme={theme} />
             )}
