@@ -53,6 +53,10 @@ export interface GeneratedFrame {
   skip?: boolean;
   /** 이 프레임에 어울리는 이미지 연출 제안 (빈 슬롯 안내 문구로 표시) */
   imageDirection?: string | null;
+  /** Gemini Imagen에 직접 입력할 상세 영어 프롬프트 (hero 프레임은 null) */
+  imagePrompt?: string | null;
+  /** 상품 참조 이미지 필요 여부 (true: 원본 상품 사진 사용, false: 텍스트 프롬프트만 사용) */
+  needsProductImage?: boolean;
 }
 
 export interface FrameState {

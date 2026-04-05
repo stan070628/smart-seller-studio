@@ -25,6 +25,8 @@ const GeneratedFrameSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional().transform((v) => v ?? {}),
   skip: z.boolean().optional().default(false),
   imageDirection: z.string().nullable().optional(),
+  imagePrompt: z.string().max(500).nullable().optional(),
+  needsProductImage: z.boolean().optional().default(false),
 });
 
 export const FrameGenerationResponseSchema = z.object({
@@ -42,6 +44,75 @@ function extractJson(rawText: string): string {
     .replace(/^```(?:json)?\s*/i, '')
     .replace(/\s*```\s*$/, '')
     .trim();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 아이콘 배열 검증 유틸
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** icons 배열이 존재할 경우 문자열 배열인지 검증하고, 예상 길이와 일치하는지 확인합니다. */
+export function validateIcons(
+  metadata: Record<string, unknown>,
+  expectedLength: number,
+  frameType: string
+): { valid: boolean; warnings: string[] } {
+  const warnings: string[] = [];
+
+  if (!('icons' in metadata)) {
+    warnings.push(`[${frameType}] metadata.icons 누락`);
+    return { valid: false, warnings };
+  }
+
+  const icons = metadata.icons;
+
+  if (!Array.isArray(icons)) {
+    warnings.push(`[${frameType}] metadata.icons가 배열이 아닙니다`);
+    return { valid: false, warnings };
+  }
+
+  const nonString = (icons as unknown[]).filter((v) => typeof v !== 'string');
+  if (nonString.length > 0) {
+    warnings.push(`[${frameType}] metadata.icons에 문자열이 아닌 항목이 포함되어 있습니다`);
+    return { valid: false, warnings };
+  }
+
+  if (icons.length !== expectedLength) {
+    warnings.push(
+      `[${frameType}] metadata.icons 길이 불일치: 예상 ${expectedLength}개, 실제 ${icons.length}개`
+    );
+    return { valid: false, warnings };
+  }
+
+  return { valid: true, warnings };
+}
+
+/** 카드형 프레임 4종의 icons 배열을 일괄 검증합니다. 경고 목록을 반환합니다. */
+export function validateCardFrameIcons(frames: GeneratedFrame[]): string[] {
+  const CARD_FRAME_CONFIG: Record<string, { arrayKey: string; expectedLength: number }> = {
+    pain_point: { arrayKey: 'painPoints', expectedLength: 3 },
+    solution:   { arrayKey: 'solutions',  expectedLength: 3 },
+    detail_1:   { arrayKey: 'bulletPoints', expectedLength: 3 },
+    target:     { arrayKey: 'personas',   expectedLength: 3 },
+  };
+
+  const allWarnings: string[] = [];
+
+  for (const frame of frames) {
+    const config = CARD_FRAME_CONFIG[frame.frameType];
+    if (!config) continue;
+    if (frame.skip) continue;
+
+    const metadata = (frame.metadata ?? {}) as Record<string, unknown>;
+
+    // 실제 배열 길이가 있으면 그것을 기준으로 사용 (solution은 2~3개 허용)
+    const cardArray = metadata[config.arrayKey];
+    const actualLength = Array.isArray(cardArray) ? cardArray.length : config.expectedLength;
+
+    const { warnings } = validateIcons(metadata, actualLength, frame.frameType);
+    allWarnings.push(...warnings);
+  }
+
+  return allWarnings;
 }
 
 export function parseFrameGenerationResponse(raw: string): GeneratedFrame[] {

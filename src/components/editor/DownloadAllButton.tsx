@@ -71,9 +71,10 @@ const DownloadAllButton: React.FC<DownloadAllButtonProps> = ({ frameGridRef }) =
         try {
           const dataUrl = await toJpeg(node, {
             quality: 0.95,
-            width: 860,
-            height: 860,
+            width: 780,
+            height: 1100,
             pixelRatio: 1,
+            fontEmbedCSS: '',
           });
 
           // data URL → base64 추출
@@ -119,13 +120,13 @@ const DownloadAllButton: React.FC<DownloadAllButtonProps> = ({ frameGridRef }) =
         fontFamily: 'inherit',
         ...(isDownloading || activeCount === 0
           ? {
-              backgroundColor: '#18181b',
-              borderColor: '#27272a',
-              color: '#52525b',
+              backgroundColor: '#f3f3f3',
+              borderColor: '#eeeeee',
+              color: '#926f6b',
             }
           : {
-              backgroundColor: '#4f46e5',
-              borderColor: '#4f46e5',
+              backgroundColor: '#be0014',
+              borderColor: '#be0014',
               color: '#ffffff',
             }),
       }}

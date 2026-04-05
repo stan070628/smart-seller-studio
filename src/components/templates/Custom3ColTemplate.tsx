@@ -10,7 +10,7 @@ import { DEFAULT_THEME } from '@/lib/themes';
 import EditableText from './EditableText';
 
 const Custom3ColTemplate: React.FC<TemplateProps> = ({
-  frame, imageUrl, isEditable = false, onFieldChange, onImageAdd, theme = DEFAULT_THEME, imageFit = 'cover', imageScale = 1, imageOffsetX = 50, imageOffsetY = 50,
+  frame, imageUrl, imageUrls, imageSlotSettings, isEditable = false, onFieldChange, onImageAdd, theme = DEFAULT_THEME, imageFit = 'cover', imageScale = 1, imageOffsetX = 50, imageOffsetY = 50,
 }) => {
   if (frame.skip) return null;
 
@@ -22,12 +22,15 @@ const Custom3ColTemplate: React.FC<TemplateProps> = ({
     (frame.metadata?.col3 as ColData) ?? { title: '3번 라인', tag: '특징', name: '제품명 3', hashtags: '#태그1 #태그2' },
   ];
 
-  // 3개 컬럼에 이미지 배열 사용 (frame.metadata.images 또는 기본 이미지)
+  // imageUrls 슬롯에서 컬럼별 이미지 가져오기
   const colImages: (string | null)[] = [
-    (frame.metadata?.image1 as string | undefined) ?? imageUrl,
-    (frame.metadata?.image2 as string | undefined) ?? null,
-    (frame.metadata?.image3 as string | undefined) ?? null,
+    imageUrls?.col1 ?? imageUrl,
+    imageUrls?.col2 ?? null,
+    imageUrls?.col3 ?? null,
   ];
+
+  // 슬롯 키 배열 (imageSlotSettings 조회용)
+  const slotKeys = ['col1', 'col2', 'col3'] as const;
 
   // 컬럼별 배경색
   const colBgs = [theme.bgSubtle, theme.bgCard, theme.bgAccentLight];
@@ -88,7 +91,16 @@ const Custom3ColTemplate: React.FC<TemplateProps> = ({
             <div style={{ width: '100%', flex: 1, borderRadius: '12px', overflow: 'hidden', marginBottom: '12px', minHeight: '180px' }}>
               {colImages[i] ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={colImages[i]!} alt={`제품 ${i+1}`} style={{ width: '100%', height: '100%', objectFit: imageFit, transform: i === 0 ? `scale(${imageScale})` : undefined, transformOrigin: i === 0 ? `${imageOffsetX}% ${imageOffsetY}%` : undefined }} />
+                <img
+                  src={colImages[i]!}
+                  alt={`제품 ${i + 1}`}
+                  style={{
+                    width: '100%', height: '100%',
+                    objectFit: imageSlotSettings?.[slotKeys[i]]?.fit ?? imageFit,
+                    transform: `scale(${imageSlotSettings?.[slotKeys[i]]?.scale ?? (i === 0 ? imageScale : 1)})`,
+                    transformOrigin: `${imageSlotSettings?.[slotKeys[i]]?.x ?? (i === 0 ? imageOffsetX : 50)}% ${imageSlotSettings?.[slotKeys[i]]?.y ?? (i === 0 ? imageOffsetY : 50)}%`,
+                  }}
+                />
               ) : (
                 <ImagePlaceholder onImageAdd={onImageAdd} theme={theme} />
               )}
