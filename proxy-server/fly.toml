@@ -1,0 +1,16 @@
+[app]
+name = "smart-seller-proxy"
+primary_region = "nrt"  # Tokyo (한국 API와 가까움)
+
+[build]
+dockerfile = "Dockerfile"
+
+[http_service]
+internal_port = 3001
+force_https = true
+auto_stop_machines = "stop"
+auto_start_machines = true
+min_machines_running = 1
+
+[env]
+PORT = "3001"
