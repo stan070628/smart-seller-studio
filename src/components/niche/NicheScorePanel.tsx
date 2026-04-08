@@ -13,6 +13,8 @@ import type { CurrentAnalysis } from '@/store/useNicheStore';
 import { useNicheStore } from '@/store/useNicheStore';
 import NicheRadarChart from './NicheRadarChart';
 import NicheHistoryChart from './NicheHistoryChart';
+import NicheSourcingLinks from './NicheSourcingLinks';
+import NicheCompetitorPanel from './NicheCompetitorPanel';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 색상 상수 (SourcingDashboard 동일 테마)
@@ -395,6 +397,12 @@ export default function NicheScorePanel({ keyword, result, onBack }: NicheScoreP
           </div>
         </div>
       )}
+
+      {/* ── 소싱 검색 (중국어 검색어 + 플랫폼 링크) ──────────────────���────── */}
+      <NicheSourcingLinks keyword={keyword} />
+
+      {/* ── 경쟁 상품 추적 (등록 + 스냅샷 입력) ────────────────────────────── */}
+      <NicheCompetitorPanel keyword={keyword} />
 
       {/* ── 점수 변동 추이 차트 ────────────────────────────────────────────── */}
       <div

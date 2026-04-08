@@ -215,6 +215,13 @@ export default function SourcingDashboard() {
     searchQuery,
     moqFilter,
     freeDeliOnly,
+    minSales1d,
+    minSales7d,
+    minPrice,
+    maxPrice,
+    minMargin,
+    legalFilter,
+    ipRiskFilter,
     page,
     pageSize,
     fetchAnalysis,
@@ -224,6 +231,13 @@ export default function SourcingDashboard() {
     setSearchQuery,
     setMoqFilter,
     setFreeDeliOnly,
+    setMinSales1d,
+    setMinSales7d,
+    setMinPrice,
+    setMaxPrice,
+    setMinMargin,
+    setLegalFilter,
+    setIpRiskFilter,
     setPage,
     clearError,
     triggerLegalCheck,
@@ -596,6 +610,157 @@ export default function SourcingDashboard() {
           />
           무료배송만
         </label>
+
+        {/* 전일판매 최소 */}
+        <select
+          value={minSales1d ?? ''}
+          onChange={(e) => setMinSales1d(e.target.value ? Number(e.target.value) : null)}
+          style={{
+            height: '36px',
+            padding: '0 10px',
+            borderRadius: '8px',
+            border: `1px solid ${minSales1d != null ? C.accent : C.border}`,
+            backgroundColor: minSales1d != null ? 'rgba(190, 0, 20, 0.04)' : C.card,
+            color: minSales1d != null ? C.accent : C.textSub,
+            fontSize: '13px',
+            cursor: 'pointer',
+            outline: 'none',
+            fontWeight: minSales1d != null ? '600' : '400',
+          }}
+        >
+          <option value="">전일판매</option>
+          <option value="1">1개 이상</option>
+          <option value="5">5개 이상</option>
+          <option value="10">10개 이상</option>
+          <option value="50">50개 이상</option>
+          <option value="100">100개 이상</option>
+        </select>
+
+        {/* 7일판매 최소 */}
+        <select
+          value={minSales7d ?? ''}
+          onChange={(e) => setMinSales7d(e.target.value ? Number(e.target.value) : null)}
+          style={{
+            height: '36px',
+            padding: '0 10px',
+            borderRadius: '8px',
+            border: `1px solid ${minSales7d != null ? C.accent : C.border}`,
+            backgroundColor: minSales7d != null ? 'rgba(190, 0, 20, 0.04)' : C.card,
+            color: minSales7d != null ? C.accent : C.textSub,
+            fontSize: '13px',
+            cursor: 'pointer',
+            outline: 'none',
+            fontWeight: minSales7d != null ? '600' : '400',
+          }}
+        >
+          <option value="">7일판매</option>
+          <option value="1">1개 이상</option>
+          <option value="10">10개 이상</option>
+          <option value="50">50개 이상</option>
+          <option value="100">100개 이상</option>
+          <option value="500">500개 이상</option>
+        </select>
+
+        {/* 도매가 범위 */}
+        <select
+          value={minPrice != null ? `${minPrice}-${maxPrice ?? ''}` : ''}
+          onChange={(e) => {
+            if (!e.target.value) { setMinPrice(null); setMaxPrice(null); return; }
+            const [lo, hi] = e.target.value.split('-').map(Number);
+            setMinPrice(lo || null);
+            setMaxPrice(hi || null);
+          }}
+          style={{
+            height: '36px',
+            padding: '0 10px',
+            borderRadius: '8px',
+            border: `1px solid ${minPrice != null || maxPrice != null ? C.accent : C.border}`,
+            backgroundColor: minPrice != null || maxPrice != null ? 'rgba(190, 0, 20, 0.04)' : C.card,
+            color: minPrice != null || maxPrice != null ? C.accent : C.textSub,
+            fontSize: '13px',
+            cursor: 'pointer',
+            outline: 'none',
+            fontWeight: minPrice != null || maxPrice != null ? '600' : '400',
+          }}
+        >
+          <option value="">도매가</option>
+          <option value="0-5000">5,000원 이하</option>
+          <option value="5000-10000">5,000~10,000원</option>
+          <option value="10000-30000">10,000~30,000원</option>
+          <option value="30000-">30,000원 이상</option>
+        </select>
+
+        {/* 마진율 최소 */}
+        <select
+          value={minMargin ?? ''}
+          onChange={(e) => setMinMargin(e.target.value ? Number(e.target.value) : null)}
+          style={{
+            height: '36px',
+            padding: '0 10px',
+            borderRadius: '8px',
+            border: `1px solid ${minMargin != null ? C.accent : C.border}`,
+            backgroundColor: minMargin != null ? 'rgba(190, 0, 20, 0.04)' : C.card,
+            color: minMargin != null ? C.accent : C.textSub,
+            fontSize: '13px',
+            cursor: 'pointer',
+            outline: 'none',
+            fontWeight: minMargin != null ? '600' : '400',
+          }}
+        >
+          <option value="">마진율</option>
+          <option value="10">10% 이상</option>
+          <option value="20">20% 이상</option>
+          <option value="30">30% 이상</option>
+          <option value="40">40% 이상</option>
+          <option value="50">50% 이상</option>
+        </select>
+
+        {/* Legal 상태 */}
+        <select
+          value={legalFilter ?? ''}
+          onChange={(e) => setLegalFilter(e.target.value || null)}
+          style={{
+            height: '36px',
+            padding: '0 10px',
+            borderRadius: '8px',
+            border: `1px solid ${legalFilter ? C.accent : C.border}`,
+            backgroundColor: legalFilter ? 'rgba(190, 0, 20, 0.04)' : C.card,
+            color: legalFilter ? C.accent : C.textSub,
+            fontSize: '13px',
+            cursor: 'pointer',
+            outline: 'none',
+            fontWeight: legalFilter ? '600' : '400',
+          }}
+        >
+          <option value="">Legal 전체</option>
+          <option value="safe">안전 (safe)</option>
+          <option value="warning">주의 (warning)</option>
+          <option value="blocked">차단 (blocked)</option>
+          <option value="unchecked">미검토</option>
+        </select>
+
+        {/* IP 리스크 */}
+        <select
+          value={ipRiskFilter ?? ''}
+          onChange={(e) => setIpRiskFilter(e.target.value || null)}
+          style={{
+            height: '36px',
+            padding: '0 10px',
+            borderRadius: '8px',
+            border: `1px solid ${ipRiskFilter ? C.accent : C.border}`,
+            backgroundColor: ipRiskFilter ? 'rgba(190, 0, 20, 0.04)' : C.card,
+            color: ipRiskFilter ? C.accent : C.textSub,
+            fontSize: '13px',
+            cursor: 'pointer',
+            outline: 'none',
+            fontWeight: ipRiskFilter ? '600' : '400',
+          }}
+        >
+          <option value="">IP 리스크</option>
+          <option value="low">낮음 (low)</option>
+          <option value="medium">보통 (medium)</option>
+          <option value="high">높음 (high)</option>
+        </select>
 
         {/* 우측 버튼 그룹 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>

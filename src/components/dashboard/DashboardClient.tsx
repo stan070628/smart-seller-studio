@@ -24,7 +24,7 @@ const NAV_ITEMS = [
   { href: '/orders', label: '주문/매출' },
 ];
 
-// ─── 소싱 통계 타입 ─────────────────────────────────────────
+// ─── 타입 ─────────────────────────────────────────────────────
 interface SourcingStats {
   totalItems: number;
   legalBlocked: number;
@@ -32,8 +32,19 @@ interface SourcingStats {
   topSellers: { title: string; sales7d: number; marginRate: number | null }[];
 }
 
+interface OrderStats {
+  totalOrders: number;
+  totalRevenue: number;
+  newOrders: number;  // ACCEPT 상태
+}
+
+const CANCELLED = new Set(['CANCEL_REQUEST', 'CANCEL_DONE', 'RETURN_REQUEST', 'RETURN_DONE']);
+
+function toDateStr(d: Date) { return d.toISOString().slice(0, 10); }
+
 export default function DashboardClient() {
   const [sourcingStats, setSourcingStats] = useState<SourcingStats | null>(null);
+  const [orderStats, setOrderStats] = useState<OrderStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -43,21 +54,46 @@ export default function DashboardClient() {
   const fetchDashboardData = async () => {
     setIsLoading(true);
     try {
-      // 소싱 데이터에서 통계 추출
-      const res = await fetch('/api/sourcing/analyze?sort=sales_7d&order=desc&limit=5');
-      const json = await res.json();
-      if (json.success) {
-        const items = json.data.items ?? [];
-        setSourcingStats({
-          totalItems: json.data.total ?? 0,
-          legalBlocked: items.filter((i: Record<string, unknown>) => i.legalStatus === 'blocked').length,
-          legalWarning: items.filter((i: Record<string, unknown>) => i.legalStatus === 'warning').length,
-          topSellers: items.slice(0, 5).map((i: Record<string, unknown>) => ({
-            title: i.title as string,
-            sales7d: i.sales7d as number,
-            marginRate: i.marginRate as number | null,
-          })),
-        });
+      const today = new Date();
+      const from7 = toDateStr(new Date(today.getTime() - 6 * 86400_000));
+      const to = toDateStr(today);
+
+      const [sourcingRes, ordersRes] = await Promise.allSettled([
+        fetch('/api/sourcing/analyze?sort=sales_7d&order=desc&limit=5'),
+        fetch(`/api/orders/coupang?from=${from7}&to=${to}`),
+      ]);
+
+      if (sourcingRes.status === 'fulfilled') {
+        const json = await sourcingRes.value.json();
+        if (json.success) {
+          const items = json.data.items ?? [];
+          setSourcingStats({
+            totalItems: json.data.total ?? 0,
+            legalBlocked: items.filter((i: Record<string, unknown>) => i.legalStatus === 'blocked').length,
+            legalWarning: items.filter((i: Record<string, unknown>) => i.legalStatus === 'warning').length,
+            topSellers: items.slice(0, 5).map((i: Record<string, unknown>) => ({
+              title: i.title as string,
+              sales7d: i.sales7d as number,
+              marginRate: i.marginRate as number | null,
+            })),
+          });
+        }
+      }
+
+      if (ordersRes.status === 'fulfilled') {
+        const json = await ordersRes.value.json();
+        if (json.success) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const orders: any[] = json.data?.items ?? [];
+          const active = orders.filter((o) => !CANCELLED.has(o.status));
+          const totalRevenue = active.reduce((s: number, o: any) =>
+            s + (o.orderItems ?? []).reduce((is: number, i: any) => is + (i.orderPrice ?? 0), 0), 0);
+          setOrderStats({
+            totalOrders: active.length,
+            totalRevenue,
+            newOrders: orders.filter((o) => o.status === 'ACCEPT').length,
+          });
+        }
       }
     } catch {
       // 데이터 없어도 대시보드는 표시
@@ -130,8 +166,8 @@ export default function DashboardClient() {
             {/* 요약 카드 4개 */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
               <SummaryCard icon={<Package size={18} />} label="추적 상품" value={sourcingStats?.totalItems ?? 0} unit="개" color="#2563eb" href="/sourcing" />
-              <SummaryCard icon={<ShoppingCart size={18} />} label="주문 (미연동)" value="—" color="#16a34a" href="/orders" />
-              <SummaryCard icon={<BarChart3 size={18} />} label="매출 (미연동)" value="—" color="#7c3aed" href="/orders" />
+              <SummaryCard icon={<ShoppingCart size={18} />} label="주문 (7일·쿠팡)" value={orderStats?.totalOrders ?? '—'} unit={orderStats ? '건' : ''} sub={orderStats?.newOrders ? `신규 ${orderStats.newOrders}건` : undefined} color="#16a34a" href="/orders" />
+              <SummaryCard icon={<BarChart3 size={18} />} label="매출 (7일·쿠팡)" value={orderStats ? `${Math.round(orderStats.totalRevenue / 10000)}만` : '—'} unit={orderStats ? '원' : ''} color="#7c3aed" href="/orders" />
               <SummaryCard icon={<Shield size={18} />} label="법적 이슈" value={`${sourcingStats?.legalBlocked ?? 0}건`} sub={`주의 ${sourcingStats?.legalWarning ?? 0}건`} color="#dc2626" href="/sourcing" />
             </div>
 
@@ -180,8 +216,8 @@ export default function DashboardClient() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <ActionItem emoji="🔴" text={`KC 인증 누락 ${sourcingStats?.legalBlocked ?? 0}건`} linkText="검토하기" href="/sourcing" />
                   <ActionItem emoji="🟡" text={`상표/과장광고 주의 ${sourcingStats?.legalWarning ?? 0}건`} linkText="확인하기" href="/sourcing" />
-                  <ActionItem emoji="📦" text="주문 채널 미연동" linkText="설정하기" href="/orders" />
-                  <ActionItem emoji="📋" text="상품등록 채널 미연동" linkText="연동하기" href="/listing" />
+                  {orderStats?.newOrders ? <ActionItem emoji="📦" text={`미처리 신규주문 ${orderStats.newOrders}건`} linkText="처리하기" href="/orders" /> : <ActionItem emoji="📦" text="신규 주문 없음 (쿠팡 7일)" linkText="확인하기" href="/orders" />}
+                  <ActionItem emoji="📋" text="네이버·쿠팡 상품 등록됨" linkText="관리하기" href="/listing" />
                 </div>
               </div>
             </div>

@@ -35,6 +35,13 @@ interface SourcingStore {
   searchQuery: string;
   moqFilter: number | null;    // null=전체, 10=10개 이하, 50=50개 이하
   freeDeliOnly: boolean;       // true=무료배송만 표시
+  minSales1d: number | null;
+  minSales7d: number | null;
+  minPrice: number | null;
+  maxPrice: number | null;
+  minMargin: number | null;
+  legalFilter: string | null;  // safe | warning | blocked
+  ipRiskFilter: string | null; // low | medium | high
   page: number;
   pageSize: number;            // 고정값: 20
 
@@ -47,6 +54,13 @@ interface SourcingStore {
   setSearchQuery: (q: string) => void;
   setMoqFilter: (moq: number | null) => void;
   setFreeDeliOnly: (v: boolean) => void;
+  setMinSales1d: (v: number | null) => void;
+  setMinSales7d: (v: number | null) => void;
+  setMinPrice: (v: number | null) => void;
+  setMaxPrice: (v: number | null) => void;
+  setMinMargin: (v: number | null) => void;
+  setLegalFilter: (v: string | null) => void;
+  setIpRiskFilter: (v: string | null) => void;
   setPage: (p: number) => void;
   clearError: () => void;
   triggerLegalCheck: () => Promise<void>;
@@ -75,6 +89,13 @@ export const useSourcingStore = create<SourcingStore>()(
       searchQuery: '',
       moqFilter: null,
       freeDeliOnly: false,
+      minSales1d: null,
+      minSales7d: null,
+      minPrice: null,
+      maxPrice: null,
+      minMargin: null,
+      legalFilter: null,
+      ipRiskFilter: null,
       page: 1,
       pageSize: 20,
       isLegalChecking: false,
@@ -82,7 +103,11 @@ export const useSourcingStore = create<SourcingStore>()(
 
       // ─── fetchAnalysis ───────────────────────────────────────────────────
       fetchAnalysis: async () => {
-        const { sortField, sortOrder, categoryFilter, searchQuery, moqFilter, freeDeliOnly, page, pageSize } = get();
+        const {
+          sortField, sortOrder, categoryFilter, searchQuery, moqFilter, freeDeliOnly,
+          minSales1d, minSales7d, minPrice, maxPrice, minMargin, legalFilter, ipRiskFilter,
+          page, pageSize,
+        } = get();
 
         set({ isLoading: true, error: null }, false, 'sourcing/fetchAnalysis/start');
 
@@ -98,6 +123,13 @@ export const useSourcingStore = create<SourcingStore>()(
           if (searchQuery.trim()) params.set('search', searchQuery.trim());
           if (moqFilter != null) params.set('moq', String(moqFilter));
           if (freeDeliOnly) params.set('freeDeliOnly', '1');
+          if (minSales1d != null) params.set('minSales1d', String(minSales1d));
+          if (minSales7d != null) params.set('minSales7d', String(minSales7d));
+          if (minPrice != null) params.set('minPrice', String(minPrice));
+          if (maxPrice != null) params.set('maxPrice', String(maxPrice));
+          if (minMargin != null) params.set('minMargin', String(minMargin));
+          if (legalFilter) params.set('legal', legalFilter);
+          if (ipRiskFilter) params.set('ipRisk', ipRiskFilter);
 
           const res = await fetch(`/api/sourcing/analyze?${params.toString()}`);
           const json = await res.json();
@@ -263,6 +295,35 @@ export const useSourcingStore = create<SourcingStore>()(
 
       setFreeDeliOnly: (v: boolean) => {
         set({ freeDeliOnly: v, page: 1 }, false, 'sourcing/setFreeDeliOnly');
+        get().fetchAnalysis();
+      },
+
+      setMinSales1d: (v: number | null) => {
+        set({ minSales1d: v, page: 1 }, false, 'sourcing/setMinSales1d');
+        get().fetchAnalysis();
+      },
+      setMinSales7d: (v: number | null) => {
+        set({ minSales7d: v, page: 1 }, false, 'sourcing/setMinSales7d');
+        get().fetchAnalysis();
+      },
+      setMinPrice: (v: number | null) => {
+        set({ minPrice: v, page: 1 }, false, 'sourcing/setMinPrice');
+        get().fetchAnalysis();
+      },
+      setMaxPrice: (v: number | null) => {
+        set({ maxPrice: v, page: 1 }, false, 'sourcing/setMaxPrice');
+        get().fetchAnalysis();
+      },
+      setMinMargin: (v: number | null) => {
+        set({ minMargin: v, page: 1 }, false, 'sourcing/setMinMargin');
+        get().fetchAnalysis();
+      },
+      setLegalFilter: (v: string | null) => {
+        set({ legalFilter: v, page: 1 }, false, 'sourcing/setLegalFilter');
+        get().fetchAnalysis();
+      },
+      setIpRiskFilter: (v: string | null) => {
+        set({ ipRiskFilter: v, page: 1 }, false, 'sourcing/setIpRiskFilter');
         get().fetchAnalysis();
       },
 

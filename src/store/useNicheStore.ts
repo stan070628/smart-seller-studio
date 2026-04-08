@@ -31,6 +31,11 @@ interface NicheStore {
   history: NicheScoreSnapshot[];
   isHistoryLoading: boolean;
 
+  // ── 중국어 검색어 ──────────────────────────────────────────────────────────
+  chineseQueries: string[];
+  isChineseLoading: boolean;
+  chineseError: string | null;
+
   // ── UI 상태 ──────────────────────────────────────────────────────────────────
   isLoading: boolean;
   isAnalyzing: boolean;
@@ -50,6 +55,7 @@ interface NicheStore {
   // ── 액션 ─────────────────────────────────────────────────────────────────────
   fetchKeywords: () => Promise<void>;
   analyzeKeyword: (keyword: string) => Promise<void>;
+  fetchChineseQueries: (keyword: string, forceRefresh?: boolean) => Promise<void>;
   addToWatchlist: (keyword: string) => Promise<void>;
   removeFromWatchlist: (id: string) => Promise<void>;
   fetchWatchlist: () => Promise<void>;
@@ -74,6 +80,11 @@ export const useNicheStore = create<NicheStore>()(
       watchlist: [],
       history: [],
       isHistoryLoading: false,
+
+      // ── 초기 중국어 검색어 ─────────────────────────────────────────────────
+      chineseQueries: [],
+      isChineseLoading: false,
+      chineseError: null,
 
       // ── 초기 UI 상태 ───────────────────────────────────────────────────────
       isLoading: false,
@@ -177,6 +188,38 @@ export const useNicheStore = create<NicheStore>()(
           set({ error: err instanceof Error ? err.message : '키워드 분석 실패' });
         } finally {
           set({ isAnalyzing: false });
+        }
+      },
+
+      // ── fetchChineseQueries ──────────────────────────────────────────────
+      fetchChineseQueries: async (keyword: string, forceRefresh = false) => {
+        if (!keyword.trim()) return;
+
+        set({ isChineseLoading: true, chineseError: null });
+
+        try {
+          const res = await fetch('/api/niche/chinese-query', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ keyword: keyword.trim(), forceRefresh }),
+          });
+
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(body?.error ?? `중국어 생성 실패 (${res.status})`);
+          }
+
+          const json = await res.json();
+          const data = json.data ?? json;
+          set({ chineseQueries: data.chineseQueries ?? [] });
+        } catch (err) {
+          console.warn('[NicheStore] fetchChineseQueries 실패:', err);
+          set({
+            chineseError: err instanceof Error ? err.message : '중국어 검색어 생성 실패',
+            chineseQueries: [],
+          });
+        } finally {
+          set({ isChineseLoading: false });
         }
       },
 

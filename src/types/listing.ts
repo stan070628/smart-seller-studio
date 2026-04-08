@@ -15,8 +15,8 @@ export interface PlatformMeta {
 
 export const PLATFORMS: PlatformMeta[] = [
   { id: 'elevenst', label: '11번가', emoji: '🏪', authType: 'api_key', enabled: true },
-  { id: 'naver', label: '네이버', emoji: '🟢', authType: 'oauth2', enabled: false },
-  { id: 'coupang', label: '쿠팡', emoji: '🟠', authType: 'hmac', enabled: false },
+  { id: 'naver', label: '네이버', emoji: '🟢', authType: 'oauth2', enabled: true },
+  { id: 'coupang', label: '쿠팡', emoji: '🟠', authType: 'hmac', enabled: true },
   { id: 'gmarket', label: 'G마켓', emoji: '🔴', authType: 'jwt', enabled: false },
   { id: 'shopee', label: 'Shopee', emoji: '🧡', authType: 'hmac', enabled: false },
 ];
