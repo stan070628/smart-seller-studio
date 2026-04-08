@@ -6,6 +6,7 @@
  */
 
 import crypto from 'crypto';
+import { proxyFetch } from '@/lib/proxy-fetch';
 
 // ─────────────────────────────────────────────────────────────
 // 상수
@@ -176,7 +177,7 @@ export class CoupangClient {
   private async request<T>(method: string, urlWithQuery: string, body?: unknown): Promise<CoupangApiResponse<T>> {
     const auth = this.generateAuth(method, urlWithQuery);
 
-    const res = await fetch(API_HOST + urlWithQuery, {
+    const res = await proxyFetch(API_HOST + urlWithQuery, {
       method,
       headers: {
         Authorization: auth,

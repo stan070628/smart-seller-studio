@@ -6,6 +6,7 @@
  */
 
 import bcrypt from 'bcryptjs';
+import { proxyFetch } from '@/lib/proxy-fetch';
 
 // ─────────────────────────────────────────────────────────────
 // 상수
@@ -87,7 +88,7 @@ export class NaverCommerceClient {
     const hashed = bcrypt.hashSync(password, this.clientSecret);
     const sign = Buffer.from(hashed).toString('base64');
 
-    const res = await fetch(`${API_HOST}/external/v1/oauth2/token`, {
+    const res = await proxyFetch(`${API_HOST}/external/v1/oauth2/token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -118,7 +119,7 @@ export class NaverCommerceClient {
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const token = await this.getToken();
 
-    const res = await fetch(API_HOST + path, {
+    const res = await proxyFetch(API_HOST + path, {
       method,
       headers: {
         Authorization: `Bearer ${token}`,
