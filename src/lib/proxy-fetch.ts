@@ -14,7 +14,7 @@ export async function proxyFetch(url: string, init?: RequestInit): Promise<Respo
     headers.set('x-proxy-secret', proxySecret);
     headers.set('x-target-url', url);
 
-    return fetch(`${proxyUrl}/proxy`, {
+    return fetch(`${proxyUrl}/api/proxy`, {
       ...init,
       headers,
     });

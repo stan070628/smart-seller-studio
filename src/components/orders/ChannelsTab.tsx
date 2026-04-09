@@ -12,8 +12,8 @@ interface ChannelConfig {
 }
 
 const CHANNELS: ChannelConfig[] = [
-  { platform: 'coupang', connected: false, envKeys: ['COUPANG_ACCESS_KEY', 'COUPANG_SECRET_KEY', 'COUPANG_VENDOR_ID'], guideUrl: 'wing.coupang.com' },
-  { platform: 'naver', connected: false, envKeys: ['NAVER_COMMERCE_CLIENT_ID', 'NAVER_COMMERCE_CLIENT_SECRET'], guideUrl: 'apicenter.commerce.naver.com' },
+  { platform: 'coupang', connected: true, envKeys: ['COUPANG_ACCESS_KEY', 'COUPANG_SECRET_KEY', 'COUPANG_VENDOR_ID'], guideUrl: 'wing.coupang.com' },
+  { platform: 'naver', connected: true, envKeys: ['NAVER_COMMERCE_CLIENT_ID', 'NAVER_COMMERCE_CLIENT_SECRET'], guideUrl: 'apicenter.commerce.naver.com' },
   { platform: 'gmarket', connected: false, envKeys: ['ESM_ACCESS_KEY', 'ESM_MASTER_ID'], guideUrl: 'esmplus.com' },
   { platform: 'elevenst', connected: false, envKeys: ['ELEVENST_API_KEY'], guideUrl: 'soffice.11st.co.kr' },
   { platform: 'shopee', connected: false, envKeys: ['SHOPEE_PARTNER_ID', 'SHOPEE_PARTNER_KEY', 'SHOPEE_SHOP_ID'], guideUrl: 'open.shopee.com' },

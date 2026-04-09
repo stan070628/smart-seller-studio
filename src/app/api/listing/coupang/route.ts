@@ -47,7 +47,8 @@ const RegisterSchema = z.object({
   salePrice: z.number().int().min(100),
   originalPrice: z.number().int().min(100).optional(),
   stock: z.number().int().min(1).default(999),
-  images: z.array(z.string().url()).min(1).max(10),
+  thumbnailImages: z.array(z.string().url()).min(1).max(10),
+  detailImages: z.array(z.string().url()).max(20).default([]),
   description: z.string().min(1),
   deliveryCharge: z.number().int().min(0).default(0),
   deliveryChargeType: z.enum(['FREE', 'NOT_FREE', 'CHARGE_RECEIVED']).default('FREE'),
@@ -133,7 +134,7 @@ export async function POST(request: NextRequest) {
           maximumBuyCount: d.maximumBuyCount,
           maximumBuyForPerson: d.maximumBuyForPerson,
           unitCount: 1,
-          images: d.images.map((url, i) => ({
+          images: d.thumbnailImages.map((url, i) => ({
             imageOrder: i,
             imageType: i === 0 ? 'REPRESENTATIVE' : 'DETAIL',
             vendorPath: url,
@@ -143,7 +144,17 @@ export async function POST(request: NextRequest) {
             {
               contentsType: 'HTML',
               contentDetails: [
-                { content: d.description, detailType: 'HTML' },
+                {
+                  // detailImages가 있으면 description 끝에 이미지 태그를 추가한다
+                  content: d.description + (
+                    d.detailImages.length > 0
+                      ? d.detailImages
+                          .map(url => `<img src="${url}" style="width:100%;display:block;" />`)
+                          .join('')
+                      : ''
+                  ),
+                  detailType: 'HTML',
+                },
               ],
             },
           ],

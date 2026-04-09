@@ -59,7 +59,8 @@ const RegisterSchema = z.object({
   leafCategoryId: z.string().min(1),
   salePrice: z.number().int().min(100),
   stockQuantity: z.number().int().min(0).default(999),
-  images: z.array(z.string().url()).min(1).max(10),
+  thumbnailImages: z.array(z.string().url()).min(1).max(10),
+  detailImages: z.array(z.string().url()).max(20).default([]),
   detailContent: z.string().min(1),
   deliveryFee: z.number().int().min(0).default(0),
   returnFee: z.number().int().min(0).default(4000),
@@ -96,8 +97,8 @@ export async function POST(request: NextRequest) {
         leafCategoryId: d.leafCategoryId,
         name: d.name,
         images: {
-          representativeImage: { url: d.images[0] },
-          optionalImages: d.images.slice(1).map((url) => ({ url })),
+          representativeImage: { url: d.thumbnailImages[0] },
+          optionalImages: d.thumbnailImages.slice(1).map((url) => ({ url })),
         },
         detailAttribute: {
           naverShoppingSearchInfo: {
@@ -131,7 +132,14 @@ export async function POST(request: NextRequest) {
             exchangeDeliveryFee: d.exchangeFee,
           },
         },
-        detailContent: `<div>${d.detailContent}</div>`,
+        // detailImages가 있으면 detailContent 끝에 이미지 태그를 추가한다
+        detailContent: `<div>${d.detailContent}${
+          d.detailImages.length > 0
+            ? d.detailImages
+                .map(url => `<img src="${url}" style="width:100%;display:block;" />`)
+                .join('')
+            : ''
+        }</div>`,
       },
       smartstoreChannelProduct: {
         naverShoppingRegistration: true,

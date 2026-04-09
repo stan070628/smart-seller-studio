@@ -10,9 +10,11 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { Layers } from 'lucide-react';
 import { useListingStore } from '@/store/useListingStore';
 import { PLATFORMS } from '@/types/listing';
 import type { PlatformId, ListingStatus, ProductListing } from '@/types/listing';
+import BothRegisterForm from '@/components/listing/BothRegisterForm';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 색상 상수
@@ -339,64 +341,92 @@ function EmptyListState() {
 function PlatformTabs({
   activePlatform,
   onSelect,
+  showBothMode,
+  onToggleBothMode,
 }: {
   activePlatform: PlatformId;
   onSelect: (id: PlatformId) => void;
+  showBothMode: boolean;
+  onToggleBothMode: () => void;
 }) {
   return (
     <div
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: '0',
+        justifyContent: 'space-between',
         borderBottom: `1px solid ${C.border}`,
         backgroundColor: C.card,
         padding: '0 24px',
       }}
     >
-      {PLATFORMS.map((platform) => {
-        const isActive = activePlatform === platform.id;
-        return (
-          <button
-            key={platform.id}
-            onClick={() => platform.enabled && onSelect(platform.id)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '12px 16px',
-              fontSize: '13px',
-              fontWeight: isActive ? 700 : 500,
-              color: isActive ? C.accent : C.text,
-              backgroundColor: 'transparent',
-              border: 'none',
-              borderBottom: isActive ? `2px solid ${C.accent}` : '2px solid transparent',
-              cursor: platform.enabled ? 'pointer' : 'not-allowed',
-              opacity: platform.enabled ? 1 : 0.4,
-              marginBottom: '-1px',
-              transition: 'color 0.15s',
-            }}
-          >
-            <span style={{ fontSize: '16px' }}>{platform.emoji}</span>
-            <span>{platform.label}</span>
-            {!platform.enabled && (
-              <span
-                style={{
-                  fontSize: '10px',
-                  fontWeight: 600,
-                  color: '#71717a',
-                  backgroundColor: '#f3f3f3',
-                  border: `1px solid ${C.border}`,
-                  borderRadius: '4px',
-                  padding: '1px 5px',
-                }}
-              >
-                준비중
-              </span>
-            )}
-          </button>
-        );
-      })}
+      {/* 플랫폼 탭 목록 */}
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        {PLATFORMS.map((platform) => {
+          const isActive = activePlatform === platform.id;
+          return (
+            <button
+              key={platform.id}
+              onClick={() => platform.enabled && onSelect(platform.id)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '12px 16px',
+                fontSize: '13px',
+                fontWeight: isActive ? 700 : 500,
+                color: isActive ? C.accent : C.text,
+                backgroundColor: 'transparent',
+                border: 'none',
+                borderBottom: isActive ? `2px solid ${C.accent}` : '2px solid transparent',
+                cursor: platform.enabled ? 'pointer' : 'not-allowed',
+                opacity: platform.enabled ? 1 : 0.4,
+                marginBottom: '-1px',
+                transition: 'color 0.15s',
+              }}
+            >
+              <span style={{ fontSize: '16px' }}>{platform.emoji}</span>
+              <span>{platform.label}</span>
+              {!platform.enabled && (
+                <span
+                  style={{
+                    fontSize: '10px',
+                    fontWeight: 600,
+                    color: '#71717a',
+                    backgroundColor: '#f3f3f3',
+                    border: `1px solid ${C.border}`,
+                    borderRadius: '4px',
+                    padding: '1px 5px',
+                  }}
+                >
+                  준비중
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 동시 등록 버튼 */}
+      <button
+        onClick={onToggleBothMode}
+        style={{
+          padding: '6px 14px',
+          borderRadius: '8px',
+          border: '1px solid rgba(190,0,20,0.3)',
+          backgroundColor: showBothMode ? '#be0014' : 'rgba(190,0,20,0.07)',
+          color: showBothMode ? '#ffffff' : '#be0014',
+          fontSize: '13px',
+          fontWeight: 600,
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+        }}
+      >
+        <Layers size={14} />
+        {showBothMode ? '단일 등록으로' : '동시 등록'}
+      </button>
     </div>
   );
 }
@@ -427,6 +457,71 @@ const labelStyle: React.CSSProperties = {
   color: C.textSub,
   marginBottom: '6px',
 };
+
+// ─── 이미지 URL 미리보기 ─────────────────────────────────────────────────────
+
+function ImageUrlPreview({ urls }: { urls: string[] }) {
+  if (urls.length === 0) return null;
+  return (
+    <div>
+      <div style={{ fontSize: '11px', fontWeight: 600, color: C.textSub, marginBottom: '6px' }}>
+        미리보기 ({urls.length}장)
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+        {urls.map((url, i) => (
+          <ImageThumb key={i} url={url} index={i} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ImageThumb({ url, index }: { url: string; index: number }) {
+  const [failed, setFailed] = React.useState(false);
+
+  return (
+    <div
+      style={{
+        position: 'relative',
+        width: '60px',
+        height: '60px',
+        borderRadius: '6px',
+        overflow: 'hidden',
+        border: failed ? '2px solid #b91c1c' : `1px solid ${C.border}`,
+        flexShrink: 0,
+        backgroundColor: C.tableHeader,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      {failed ? (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+          <span style={{ fontSize: '18px' }}>❌</span>
+          <span style={{ fontSize: '9px', color: '#b91c1c', textAlign: 'center', lineHeight: 1.2, padding: '0 2px' }}>
+            로드 실패
+          </span>
+        </div>
+      ) : (
+        <img
+          src={url}
+          alt={`이미지 ${index + 1}`}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          onError={() => setFailed(true)}
+        />
+      )}
+      {index === 0 && !failed && (
+        <span style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0,
+          fontSize: '9px', textAlign: 'center',
+          backgroundColor: 'rgba(190,0,20,0.8)', color: '#fff', padding: '1px 0',
+        }}>
+          대표
+        </span>
+      )}
+    </div>
+  );
+}
 
 // ─── 카테고리 검색 선택기 ────────────────────────────────────────────────────
 
@@ -655,27 +750,46 @@ function OptionEditor({
 
 // ─── 등록 폼 ────────────────────────────────────────────────────────────────
 
+const COUPANG_DEFAULTS_KEY = 'sss_coupang_defaults';
+
+function loadCoupangDefaults(): { brand: string; deliveryChargeType: string; deliveryCharge: string; returnCharge: string } {
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(COUPANG_DEFAULTS_KEY) : null;
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  return { brand: '', deliveryChargeType: 'FREE', deliveryCharge: '0', returnCharge: '5000' };
+}
+
+function saveCoupangDefaults(vals: { brand: string; deliveryChargeType: string; deliveryCharge: string; returnCharge: string }) {
+  try {
+    localStorage.setItem(COUPANG_DEFAULTS_KEY, JSON.stringify(vals));
+  } catch { /* ignore */ }
+}
+
 function CoupangRegisterForm({ onClose }: { onClose: () => void }) {
-  const { registerCoupangProduct, isRegistering, error, clearError } = useListingStore();
+  const { registerCoupangProduct, isRegistering, error, clearError, sharedDraft, updateSharedDraft } = useListingStore();
+
+  const defaults = loadCoupangDefaults();
 
   const [form, setForm] = useState({
     // 판매방식
     fulfillmentType: 'VENDOR',  // VENDOR=판매자배송, ROCKET=로켓그로스
     // 기본 정보
-    sellerProductName: '',
+    sellerProductName: sharedDraft.name || '',
     displayCategoryCode: '',
     categoryPath: '',
-    brand: '',
+    brand: defaults.brand,
     noBrand: false,
     // 가격/재고
-    salePrice: '',
+    salePrice: sharedDraft.salePrice || '',
     originalPrice: '',
-    stock: '999',
+    stock: sharedDraft.stock || '999',
     maximumBuyForPerson: '0',
     // 이미지
-    images: '',
+    thumbnailImages: sharedDraft.thumbnailImages.join('\n') || '',
+    detailImages: sharedDraft.detailImages.join('\n') || '',
     // 상세설명
-    description: '',
+    description: sharedDraft.description || '',
     // 검색어
     searchTags: '',
     // 상품정보제공고시
@@ -685,24 +799,58 @@ function CoupangRegisterForm({ onClose }: { onClose: () => void }) {
     noticeManufacturer: '상세페이지 참조',
     // 배송
     deliveryCompany: 'CJGLS',
-    deliveryChargeType: 'FREE',
-    deliveryCharge: '0',
+    deliveryChargeType: sharedDraft.deliveryChargeType || defaults.deliveryChargeType,
+    deliveryCharge: sharedDraft.deliveryCharge || defaults.deliveryCharge,
     freeShipOverAmount: '0',
     // 반품/교환
-    returnCharge: '5000',
+    returnCharge: sharedDraft.returnCharge || defaults.returnCharge,
     exchangeCharge: '5000',
   });
 
   const [options, setOptions] = useState<OptionRow[]>([]);
 
-  const update = (key: string, value: string | boolean) => setForm((prev) => ({ ...prev, [key]: value }));
+  const update = (key: string, value: string | boolean) => {
+    setForm((prev) => {
+      const next = { ...prev, [key]: value };
+      // 저장 대상 필드일 때 localStorage 동기화
+      if (['brand', 'deliveryChargeType', 'deliveryCharge', 'returnCharge'].includes(key)) {
+        saveCoupangDefaults({
+          brand: key === 'brand' ? String(value) : next.brand,
+          deliveryChargeType: key === 'deliveryChargeType' ? String(value) : next.deliveryChargeType,
+          deliveryCharge: key === 'deliveryCharge' ? String(value) : next.deliveryCharge,
+          returnCharge: key === 'returnCharge' ? String(value) : next.returnCharge,
+        });
+      }
+      // sharedDraft 공통 필드 동기화
+      const sharedFieldMap: Record<string, keyof typeof sharedDraft> = {
+        sellerProductName: 'name',
+        salePrice: 'salePrice',
+        stock: 'stock',
+        description: 'description',
+        deliveryChargeType: 'deliveryChargeType',
+        deliveryCharge: 'deliveryCharge',
+        returnCharge: 'returnCharge',
+      };
+      if (key in sharedFieldMap) {
+        updateSharedDraft({ [sharedFieldMap[key]]: String(value) } as Parameters<typeof updateSharedDraft>[0]);
+      }
+      if (key === 'thumbnailImages') {
+        updateSharedDraft({ thumbnailImages: String(value).split('\n').map((s) => s.trim()).filter(Boolean) });
+      }
+      if (key === 'detailImages') {
+        updateSharedDraft({ detailImages: String(value).split('\n').map((s) => s.trim()).filter(Boolean) });
+      }
+      return next;
+    });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError();
 
-    const images = form.images.split('\n').map((s) => s.trim()).filter(Boolean);
-    if (images.length === 0) return;
+    const thumbnailImages = form.thumbnailImages.split('\n').map((s) => s.trim()).filter(Boolean);
+    const detailImages = form.detailImages.split('\n').map((s) => s.trim()).filter(Boolean);
+    if (thumbnailImages.length === 0) return;
 
     const result = await registerCoupangProduct({
       displayCategoryCode: parseInt(form.displayCategoryCode, 10),
@@ -711,7 +859,8 @@ function CoupangRegisterForm({ onClose }: { onClose: () => void }) {
       salePrice: parseInt(form.salePrice, 10),
       originalPrice: form.originalPrice ? parseInt(form.originalPrice, 10) : undefined,
       stock: parseInt(form.stock, 10),
-      images,
+      thumbnailImages,
+      detailImages: detailImages.length > 0 ? detailImages : undefined,
       description: form.description,
       deliveryChargeType: form.deliveryChargeType,
       deliveryCharge: parseInt(form.deliveryCharge, 10),
@@ -847,16 +996,41 @@ function CoupangRegisterForm({ onClose }: { onClose: () => void }) {
 
         {/* ── 5. 상품이미지 ───────────────────────────────────────── */}
         <Section title="상품이미지" required>
-          <div style={{ fontSize: '12px', color: C.textSub, marginBottom: '4px' }}>
-            이미지 URL을 줄바꿈으로 구분하여 입력하세요. 첫 번째가 대표 이미지입니다. (최소 1장, 최대 10장)
+          {/* 썸네일 이미지 섹션 */}
+          <div>
+            <label style={labelStyle}>
+              상품 이미지 (썸네일) <span style={{ color: C.accent }}>*</span>
+            </label>
+            <div style={{ fontSize: '11px', color: C.textSub, marginBottom: '6px' }}>
+              URL을 줄바꿈으로 구분 · 첫 번째가 대표이미지 · 최대 10개
+            </div>
+            <textarea
+              style={{ ...inputStyle, height: '80px', resize: 'vertical' }}
+              value={form.thumbnailImages}
+              onChange={(e) => update('thumbnailImages', e.target.value)}
+              placeholder={'https://example.com/image1.jpg\nhttps://example.com/image2.jpg'}
+              required
+            />
+            <ImageUrlPreview
+              urls={form.thumbnailImages.split('\n').map((s) => s.trim()).filter(Boolean)}
+            />
           </div>
-          <textarea
-            style={{ ...inputStyle, minHeight: '100px', resize: 'vertical' }}
-            value={form.images}
-            onChange={(e) => update('images', e.target.value)}
-            placeholder={'https://example.com/image1.jpg\nhttps://example.com/image2.jpg'}
-            required
-          />
+          {/* 상세페이지 이미지 섹션 */}
+          <div style={{ marginTop: '12px' }}>
+            <label style={labelStyle}>상세페이지 이미지</label>
+            <div style={{ fontSize: '11px', color: C.textSub, marginBottom: '6px' }}>
+              상품 상세설명 하단에 자동 삽입됩니다 · 최대 20개
+            </div>
+            <textarea
+              style={{ ...inputStyle, height: '80px', resize: 'vertical' }}
+              value={form.detailImages}
+              onChange={(e) => update('detailImages', e.target.value)}
+              placeholder={'https://example.com/detail1.jpg\nhttps://example.com/detail2.jpg'}
+            />
+            <ImageUrlPreview
+              urls={form.detailImages.split('\n').map((s) => s.trim()).filter(Boolean)}
+            />
+          </div>
         </Section>
 
         {/* ── 6. 상세설명 ─────────────────────────────────────────── */}
@@ -969,7 +1143,7 @@ function CoupangRegisterForm({ onClose }: { onClose: () => void }) {
               <label style={labelStyle}>배송비 (원)</label>
               <input style={inputStyle} value={form.deliveryCharge} onChange={(e) => update('deliveryCharge', e.target.value)} type="number" min="0" />
             </div>
-            {form.deliveryChargeType === 'CONDITIONAL_FREE' && (
+            {(form.deliveryChargeType as string) === 'CONDITIONAL_FREE' && (
               <div>
                 <label style={labelStyle}>무료배송 기준 금액</label>
                 <input style={inputStyle} value={form.freeShipOverAmount} onChange={(e) => update('freeShipOverAmount', e.target.value)} type="number" min="0" />
@@ -1497,22 +1671,85 @@ function NaverCategoryPicker({ value, onChange }: { value: string; onChange: (id
   );
 }
 
+const NAVER_DEFAULTS_KEY = 'sss_naver_defaults';
+
+function loadNaverDefaults(): { deliveryFee: string; returnFee: string; exchangeFee: string } {
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(NAVER_DEFAULTS_KEY) : null;
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  return { deliveryFee: '0', returnFee: '4000', exchangeFee: '8000' };
+}
+
+function saveNaverDefaults(vals: { deliveryFee: string; returnFee: string; exchangeFee: string }) {
+  try {
+    localStorage.setItem(NAVER_DEFAULTS_KEY, JSON.stringify(vals));
+  } catch { /* ignore */ }
+}
+
 function NaverRegisterForm({ onClose }: { onClose: () => void }) {
-  const { registerNaverProduct, isRegistering, error, clearError } = useListingStore();
+  const { registerNaverProduct, isRegistering, error, clearError, sharedDraft, updateSharedDraft } = useListingStore();
+  const naverDefaults = loadNaverDefaults();
   const [form, setForm] = useState({
-    name: '', leafCategoryId: '', categoryPath: '', salePrice: '', stockQuantity: '999',
-    images: '', detailContent: '', deliveryFee: '0', returnFee: '4000', exchangeFee: '8000', tags: '',
+    name: sharedDraft.name || '',
+    leafCategoryId: '', categoryPath: '',
+    salePrice: sharedDraft.salePrice || '',
+    stockQuantity: sharedDraft.stock || '999',
+    thumbnailImages: sharedDraft.thumbnailImages.join('\n') || '',
+    detailImages: sharedDraft.detailImages.join('\n') || '',
+    detailContent: sharedDraft.description || '',
+    deliveryFee: sharedDraft.deliveryCharge || naverDefaults.deliveryFee,
+    returnFee: sharedDraft.returnCharge || naverDefaults.returnFee,
+    exchangeFee: naverDefaults.exchangeFee,
+    tags: sharedDraft.tags.join(', ') || '',
   });
-  const update = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
+  const update = (k: string, v: string) => {
+    setForm((p) => {
+      const next = { ...p, [k]: v };
+      if (['deliveryFee', 'returnFee', 'exchangeFee'].includes(k)) {
+        saveNaverDefaults({
+          deliveryFee: k === 'deliveryFee' ? v : next.deliveryFee,
+          returnFee: k === 'returnFee' ? v : next.returnFee,
+          exchangeFee: k === 'exchangeFee' ? v : next.exchangeFee,
+        });
+      }
+      // sharedDraft 공통 필드 동기화
+      const sharedFieldMap: Record<string, keyof typeof sharedDraft> = {
+        name: 'name',
+        salePrice: 'salePrice',
+        stockQuantity: 'stock',
+        detailContent: 'description',
+        deliveryFee: 'deliveryCharge',
+        returnFee: 'returnCharge',
+      };
+      if (k in sharedFieldMap) {
+        updateSharedDraft({ [sharedFieldMap[k]]: v } as Parameters<typeof updateSharedDraft>[0]);
+      }
+      if (k === 'thumbnailImages') {
+        updateSharedDraft({ thumbnailImages: v.split('\n').map((s) => s.trim()).filter(Boolean) });
+      }
+      if (k === 'detailImages') {
+        updateSharedDraft({ detailImages: v.split('\n').map((s) => s.trim()).filter(Boolean) });
+      }
+      if (k === 'tags') {
+        updateSharedDraft({ tags: v.split(',').map((s) => s.trim()).filter(Boolean) });
+      }
+      return next;
+    });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); clearError();
-    const images = form.images.split('\n').map((s) => s.trim()).filter(Boolean);
-    if (!images.length) return;
+    const thumbnailImages = form.thumbnailImages.split('\n').map((s) => s.trim()).filter(Boolean);
+    const detailImages = form.detailImages.split('\n').map((s) => s.trim()).filter(Boolean);
+    if (!thumbnailImages.length) return;
     const tags = form.tags.split(',').map((s) => s.trim()).filter(Boolean);
     const result = await registerNaverProduct({
       name: form.name, leafCategoryId: form.leafCategoryId, salePrice: parseInt(form.salePrice, 10),
-      stockQuantity: parseInt(form.stockQuantity, 10), images, detailContent: form.detailContent,
+      stockQuantity: parseInt(form.stockQuantity, 10),
+      thumbnailImages,
+      detailImages: detailImages.length > 0 ? detailImages : undefined,
+      detailContent: form.detailContent,
       deliveryFee: parseInt(form.deliveryFee, 10), returnFee: parseInt(form.returnFee, 10),
       exchangeFee: parseInt(form.exchangeFee, 10), tags,
     });
@@ -1541,13 +1778,49 @@ function NaverRegisterForm({ onClose }: { onClose: () => void }) {
           </div>
         </Section>
         <Section title="상품이미지" required>
-          <div style={{ fontSize: '12px', color: C.textSub, marginBottom: '4px' }}>이미지 URL을 줄바꿈으로 구분 (첫 번째가 대표 이미지)</div>
-          <textarea style={{ ...inputStyle, minHeight: '100px', resize: 'vertical' }} value={form.images} onChange={(e) => update('images', e.target.value)} placeholder={'https://example.com/image1.jpg\nhttps://example.com/image2.jpg'} required />
+          {/* 썸네일 이미지 섹션 */}
+          <div>
+            <label style={labelStyle}>
+              상품 이미지 (썸네일) <span style={{ color: C.accent }}>*</span>
+            </label>
+            <div style={{ fontSize: '11px', color: C.textSub, marginBottom: '6px' }}>
+              URL을 줄바꿈으로 구분 · 첫 번째가 대표이미지 · 최대 10개
+            </div>
+            <textarea
+              style={{ ...inputStyle, height: '80px', resize: 'vertical' }}
+              value={form.thumbnailImages}
+              onChange={(e) => update('thumbnailImages', e.target.value)}
+              placeholder={'https://example.com/image1.jpg\nhttps://example.com/image2.jpg'}
+              required
+            />
+            <ImageUrlPreview
+              urls={form.thumbnailImages.split('\n').map((s) => s.trim()).filter(Boolean)}
+            />
+          </div>
+          {/* 상세페이지 이미지 섹션 */}
+          <div style={{ marginTop: '12px' }}>
+            <label style={labelStyle}>상세페이지 이미지</label>
+            <div style={{ fontSize: '11px', color: C.textSub, marginBottom: '6px' }}>
+              상품 상세설명 하단에 자동 삽입됩니다 · 최대 20개
+            </div>
+            <textarea
+              style={{ ...inputStyle, height: '80px', resize: 'vertical' }}
+              value={form.detailImages}
+              onChange={(e) => update('detailImages', e.target.value)}
+              placeholder={'https://example.com/detail1.jpg\nhttps://example.com/detail2.jpg'}
+            />
+            <ImageUrlPreview
+              urls={form.detailImages.split('\n').map((s) => s.trim()).filter(Boolean)}
+            />
+          </div>
         </Section>
         <Section title="상세설명" required>
           <textarea style={{ ...inputStyle, minHeight: '150px', resize: 'vertical' }} value={form.detailContent} onChange={(e) => update('detailContent', e.target.value)} placeholder="상품 상세 설명 (HTML 지원)" required />
         </Section>
-        <Section title="검색어(태그)" defaultOpen={false}>
+        <Section title="검색어(태그)" defaultOpen={true}>
+          <div style={{ fontSize: '12px', color: C.textSub, marginBottom: '4px' }}>
+            네이버 검색 노출에 직접 영향을 미칩니다. 쉼표(,)로 구분하여 최대 10개 입력하세요.
+          </div>
           <input style={inputStyle} value={form.tags} onChange={(e) => update('tags', e.target.value)} placeholder="쉼표 구분 (예: 무선고데기, 미니고데기, 여행용)" />
         </Section>
         <Section title="배송" required>
@@ -1682,6 +1955,8 @@ export default function ListingDashboard() {
   const { activePlatform, listings, isLoading, setActivePlatform, fetchListings } =
     useListingStore();
 
+  const [showBothMode, setShowBothMode] = useState(false);
+
   // 마운트 시 목록 조회
   useEffect(() => {
     fetchListings();
@@ -1781,7 +2056,12 @@ export default function ListingDashboard() {
       {/* -------------------------------------------------------------------- */}
       {/* 플랫폼 탭                                                              */}
       {/* -------------------------------------------------------------------- */}
-      <PlatformTabs activePlatform={activePlatform} onSelect={setActivePlatform} />
+      <PlatformTabs
+        activePlatform={activePlatform}
+        onSelect={setActivePlatform}
+        showBothMode={showBothMode}
+        onToggleBothMode={() => setShowBothMode((v) => !v)}
+      />
 
       {/* -------------------------------------------------------------------- */}
       {/* 본문                                                                   */}
@@ -1795,14 +2075,19 @@ export default function ListingDashboard() {
           margin: '0 auto',
         }}
       >
-        {/* 쿠팡 탭 */}
-        {isCoupang && <CoupangTabContent />}
+        {/* 동시 등록 모드 */}
+        {showBothMode && (
+          <BothRegisterForm onClose={() => setShowBothMode(false)} />
+        )}
+
+        {/* 단일 등록 모드 — showBothMode가 false일 때만 렌더 */}
+        {!showBothMode && isCoupang && <CoupangTabContent />}
 
         {/* 네이버 탭 */}
-        {isNaver && <NaverTabContent />}
+        {!showBothMode && isNaver && <NaverTabContent />}
 
         {/* 기타 플랫폼 — 기존 로직 */}
-        {!isCoupang && !isNaver && (
+        {!showBothMode && !isCoupang && !isNaver && (
           <>
             {/* 로딩 */}
             {isLoading && (

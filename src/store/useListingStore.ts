@@ -7,6 +7,59 @@ import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import type { PlatformId, ProductListing } from '@/types/listing';
 
+// ─── SharedDraft 타입 ────────────────────────────────────────────────────────
+// 탭 이동 시에도 입력값이 유지되도록 공통 필드를 스토어에서 관리
+interface SharedDraft {
+  name: string;
+  salePrice: string;         // input value는 string으로 관리
+  originalPrice: string;
+  stock: string;
+  thumbnailImages: string[]; // 상품 목록/상단 이미지 (최소 1개 필요)
+  detailImages: string[];    // 상세페이지 이미지 (선택사항)
+  description: string;
+  deliveryCharge: string;
+  deliveryChargeType: 'FREE' | 'NOT_FREE' | 'CHARGE_RECEIVED';
+  returnCharge: string;
+  tags: string[];            // 공통 태그 (네이버에서 주로 사용)
+}
+
+const SHARED_DRAFT_INITIAL: SharedDraft = {
+  name: '',
+  salePrice: '',
+  originalPrice: '',
+  stock: '999',
+  thumbnailImages: [],
+  detailImages: [],
+  description: '',
+  deliveryCharge: '0',
+  deliveryChargeType: 'FREE',
+  returnCharge: '5000',
+  tags: [],
+};
+
+// ─── BothRegistration 타입 ───────────────────────────────────────────────────
+// 동시 등록 진행 상태
+type PlatformStatus = 'idle' | 'loading' | 'success' | 'error';
+
+interface BothRegistrationState {
+  coupang: {
+    status: PlatformStatus;
+    sellerProductId?: number;
+    error?: string;
+  };
+  naver: {
+    status: PlatformStatus;
+    originProductNo?: number;
+    channelProductNo?: number;
+    error?: string;
+  };
+}
+
+const BOTH_REGISTRATION_INITIAL: BothRegistrationState = {
+  coupang: { status: 'idle' },
+  naver: { status: 'idle' },
+};
+
 interface CoupangProduct {
   sellerProductId: number;
   sellerProductName: string;
@@ -71,7 +124,8 @@ interface ListingStore {
     salePrice: number;
     originalPrice?: number;
     stock?: number;
-    images: string[];
+    thumbnailImages: string[];
+    detailImages?: string[];
     description: string;
     deliveryChargeType?: string;
     deliveryCharge?: number;
@@ -86,6 +140,38 @@ interface ListingStore {
   updateNaverProduct: (originProductNo: number, data: Record<string, unknown>) => Promise<boolean>;
   setEditingNaverProduct: (product: NaverProductDetail | null) => void;
   clearError: () => void;
+
+  // ─── SharedDraft 액션 ───────────────────────────────────────────────────────
+  sharedDraft: SharedDraft;
+  updateSharedDraft: (patch: Partial<SharedDraft>) => void;
+  resetSharedDraft: () => void;
+
+  // ─── BothRegistration 액션 ──────────────────────────────────────────────────
+  bothRegistration: BothRegistrationState;
+  registerBothProducts: (data: {
+    name: string;
+    salePrice: number;
+    originalPrice?: number;
+    stock?: number;
+    thumbnailImages: string[];
+    detailImages?: string[];
+    description: string;
+    deliveryCharge?: number;
+    deliveryChargeType?: 'FREE' | 'NOT_FREE' | 'CHARGE_RECEIVED';
+    returnCharge?: number;
+    coupang: {
+      displayCategoryCode: number;
+      brand?: string;
+      maximumBuyCount?: number;
+      maximumBuyForPerson?: number;
+    };
+    naver: {
+      leafCategoryId: string;
+      tags?: string[];
+      exchangeFee?: number;
+    };
+  }) => Promise<{ coupangSuccess: boolean; naverSuccess: boolean }>;
+  resetBothRegistration: () => void;
 }
 
 export const useListingStore = create<ListingStore>()(
@@ -308,6 +394,102 @@ export const useListingStore = create<ListingStore>()(
 
       // ─── 에러 초기화 ───────────────────────────────────────────────────────
       clearError: () => set({ error: null }, false, 'listing/clearError'),
+
+      // ─── SharedDraft 초기값 및 액션 ────────────────────────────────────────
+      sharedDraft: SHARED_DRAFT_INITIAL,
+
+      updateSharedDraft: (patch) =>
+        set(
+          (s) => ({ sharedDraft: { ...s.sharedDraft, ...patch } }),
+          false,
+          'listing/updateSharedDraft',
+        ),
+
+      resetSharedDraft: () =>
+        set({ sharedDraft: SHARED_DRAFT_INITIAL }, false, 'listing/resetSharedDraft'),
+
+      // ─── BothRegistration 초기값 및 액션 ───────────────────────────────────
+      bothRegistration: BOTH_REGISTRATION_INITIAL,
+
+      registerBothProducts: async (data) => {
+        // 양쪽 loading으로 설정
+        set(
+          () => ({
+            bothRegistration: {
+              coupang: { status: 'loading' },
+              naver: { status: 'loading' },
+            },
+          }),
+          false,
+          'listing/registerBoth/start',
+        );
+
+        try {
+          const res = await fetch('/api/listing/both', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+          });
+          const json = await res.json();
+
+          if (!res.ok || !json.success) {
+            set(
+              () => ({
+                bothRegistration: {
+                  coupang: { status: 'error', error: json.error ?? '요청 실패' },
+                  naver: { status: 'error', error: json.error ?? '요청 실패' },
+                },
+              }),
+              false,
+              'listing/registerBoth/error',
+            );
+            return { coupangSuccess: false, naverSuccess: false };
+          }
+
+          const { coupang, naver } = json.data;
+          set(
+            () => ({
+              bothRegistration: {
+                coupang: coupang.success
+                  ? { status: 'success', sellerProductId: coupang.sellerProductId }
+                  : { status: 'error', error: coupang.error },
+                naver: naver.success
+                  ? { status: 'success', originProductNo: naver.originProductNo, channelProductNo: naver.channelProductNo }
+                  : { status: 'error', error: naver.error },
+              },
+            }),
+            false,
+            'listing/registerBoth/done',
+          );
+
+          // 성공한 플랫폼 목록 갱신
+          const state = get();
+          if (coupang.success) await state.fetchCoupangProducts(true);
+          if (naver.success) await state.fetchNaverProducts(1);
+
+          return { coupangSuccess: coupang.success, naverSuccess: naver.success };
+        } catch (err) {
+          const message = err instanceof Error ? err.message : '동시 등록 오류';
+          set(
+            () => ({
+              bothRegistration: {
+                coupang: { status: 'error', error: message },
+                naver: { status: 'error', error: message },
+              },
+            }),
+            false,
+            'listing/registerBoth/catch',
+          );
+          return { coupangSuccess: false, naverSuccess: false };
+        }
+      },
+
+      resetBothRegistration: () =>
+        set(
+          () => ({ bothRegistration: BOTH_REGISTRATION_INITIAL }),
+          false,
+          'listing/resetBothRegistration',
+        ),
     }),
     { name: 'ListingStore' },
   ),
