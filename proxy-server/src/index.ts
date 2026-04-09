@@ -47,7 +47,7 @@ app.all('/proxy', async (req: Request, res: Response) => {
   const responseBody = await upstream.arrayBuffer();
 
   upstream.headers.forEach((value, key) => {
-    if (key === 'transfer-encoding' || key === 'connection') return;
+    if (key === 'transfer-encoding' || key === 'connection' || key === 'content-encoding') return;
     res.setHeader(key, value);
   });
 
