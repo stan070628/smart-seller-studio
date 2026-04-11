@@ -11,7 +11,7 @@ if (!PROXY_SECRET) {
 
 app.use(express.raw({ type: '*/*', limit: '10mb' }));
 
-app.all('/proxy', async (req: Request, res: Response) => {
+async function proxyHandler(req: Request, res: Response) {
   if (req.headers['x-proxy-secret'] !== PROXY_SECRET) {
     res.status(401).json({ error: 'Unauthorized' });
     return;
@@ -52,7 +52,10 @@ app.all('/proxy', async (req: Request, res: Response) => {
   });
 
   res.status(upstream.status).send(Buffer.from(responseBody));
-});
+}
+
+app.all('/proxy', proxyHandler);
+app.all('/api/proxy', proxyHandler);
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });

@@ -18,7 +18,7 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 // PROXY_URL이 설정되어 있으면 Vercel Tokyo 프록시를 경유해 호출
 async function domeggookFetch(url: string): Promise<Response> {
   if (PROXY_URL && PROXY_SECRET) {
-    return fetch(PROXY_URL, {
+    return fetch(`${PROXY_URL}/proxy`, {
       method: 'GET',
       headers: {
         'x-proxy-secret': PROXY_SECRET,
