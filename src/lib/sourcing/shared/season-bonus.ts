@@ -156,6 +156,24 @@ export interface SeasonBonusResult {
  * getSeasonBonus('여름 캠핑 텐트', new Date('2026-06-15'))
  * // → { bonus: 6, matchedSeasons: ['여름캠핑'], activeNow: true }
  */
+/**
+ * 현재 날짜 기준 활성 시즌의 키워드 목록 반환
+ * 서버 사이드 SQL 필터링에 사용
+ */
+export function getActiveSeasonKeywords(today: Date = new Date()): string[] {
+  const keywords: string[] = [];
+  for (const cfg of Object.values(SEASONS)) {
+    let active = false;
+    if (cfg.schedule.type === 'months') {
+      active = cfg.schedule.months.includes(today.getMonth() + 1);
+    } else {
+      active = isWithinSolarWindow(today, cfg.schedule.monthDay, cfg.schedule.leadDays);
+    }
+    if (active) keywords.push(...cfg.keywords);
+  }
+  return [...new Set(keywords)];
+}
+
 export function getSeasonBonus(
   productName: string,
   today: Date = new Date(),

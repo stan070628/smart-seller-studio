@@ -18,7 +18,7 @@ type CategoryTier = 'high' | 'mid_high' | 'neutral';
 const MALE_ORIENTED_CATEGORIES: Record<string, CategoryTier> = {
   // 압도적 남성 (90%+)
   낚시: 'high', 캠핑: 'high', 공구: 'high',
-  차량용품: 'high', DIY: 'high', 골프용품: 'high',
+  차량용품: 'high', 자동차용품: 'high', DIY: 'high', 골프용품: 'high',
   전자공구: 'high', RC: 'high', 오토바이: 'high',
 
   // 남성 우세 (60~80%)
@@ -125,10 +125,12 @@ export function classifyMaleTarget(
   const needsReview = NEEDS_REVIEW_KEYWORDS.some((kw) => name.includes(kw) || cat.includes(kw));
 
   // ── 카테고리 베이스 점수 ───────────────────────────────────────────────────
+  // 'high' 카테고리 → +40pts (tier cutoff 40 직접 충족)
+  // 'mid_high' 카테고리 → +20pts (tier cutoff 20 직접 충족)
   let score = 0;
   for (const [catKey, tier] of Object.entries(MALE_ORIENTED_CATEGORIES)) {
     if (cat.includes(catKey.toLowerCase())) {
-      score += tier === 'high' ? 30 : 15;
+      score += tier === 'high' ? 40 : 20;
       break;
     }
   }

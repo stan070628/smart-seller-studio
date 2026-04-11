@@ -10,7 +10,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Loader2, RefreshCw, Search, X, ExternalLink,
-  ChevronDown, ShoppingCart, Pencil, Check, Ban,
+  ChevronDown, ShoppingCart, Pencil, Check, Ban, ShieldCheck,
 } from 'lucide-react';
 import type { CostcoProductRow, CostcoSortKey } from '@/types/costco';
 import { STOCK_STATUS_LABELS } from '@/lib/sourcing/costco-constants';
@@ -18,6 +18,10 @@ import {
   calcRecommendedPrice, calcGrade, getWeightKgFromProduct,
   GRADE_COLORS, type SourcingGrade,
 } from '@/lib/sourcing/costco-pricing';
+import { classifyMaleTarget, type MaleTier } from '@/lib/sourcing/shared/male-classifier';
+import { getSeasonBonus } from '@/lib/sourcing/shared/season-bonus';
+import { getCsRisk } from '@/lib/sourcing/domeggook-cs-filter';
+import { COSTCO_SCORE_MAX, COSTCO_SCORE_LABELS } from '@/lib/sourcing/costco-scoring';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 색상 상수
@@ -43,6 +47,54 @@ const C = {
   coupang: '#e52222',
   coupangBg: '#fff0f0',
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// v2 소싱 스코어 상수
+// ─────────────────────────────────────────────────────────────────────────────
+
+const MALE_TIER_BADGE: Record<MaleTier, string> = {
+  high:    '🔵 남성',
+  mid:     '⚪ 친화',
+  neutral: '',
+  female:  '🚫 여성',
+};
+
+/** v2 스코어 키 → DB 컬럼명 매핑 */
+const SCORE_KEY_TO_DB: Record<string, keyof CostcoProductRow> = {
+  legalIp:   'costco_score_legal',
+  priceComp: 'costco_score_price',
+  csSafety:  'costco_score_cs',
+  margin:    'costco_score_margin',
+  demand:    'costco_score_demand',
+  turnover:  'costco_score_turnover',
+  supply:    'costco_score_supply',
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// v2 실시간 계산 헬퍼 (DB null 시 fallback)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** DB에 male_tier가 있으면 그대로, 없으면 classifyMaleTarget으로 실시간 계산 */
+function getEffectiveMaleTier(p: CostcoProductRow): MaleTier {
+  if (p.male_tier) return p.male_tier as MaleTier;
+  return classifyMaleTarget(p.title, p.category_name ?? '').tier;
+}
+
+/** 시즌 가산점은 날짜 의존 값이므로 항상 실시간 계산 */
+function getEffectiveSeasonBonus(p: CostcoProductRow): { bonus: number; seasons: string[] } {
+  const r = getSeasonBonus(p.title);
+  return { bonus: r.bonus, seasons: r.matchedSeasons };
+}
+
+/** blocked_reason 우선, 없으면 실시간 판정 */
+function getEffectiveBlockedReason(p: CostcoProductRow): string | null {
+  if (p.blocked_reason !== undefined) return p.blocked_reason;
+  const male = classifyMaleTarget(p.title, p.category_name ?? '');
+  if (male.legalBlocked) return '법적 통신판매 금지 키워드 포함';
+  const cs = getCsRisk(p.category_name);
+  if (cs.level === 'high') return `고위험 CS: ${cs.reason ?? ''}`;
+  return null;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 유틸리티
@@ -95,14 +147,28 @@ function ChannelPriceCell({
   product: CostcoProductRow;
   channel: 'naver' | 'coupang';
 }) {
-  const weightKg    = getWeightKgFromProduct(product);
-  const marketPrice = product.market_lowest_price ?? null;
-  const pricing     = calcRecommendedPrice(
+  const weightKg = getWeightKgFromProduct(product);
+
+  // 시장가 환산: market_unit_price가 있으면 동일 수량 기준으로 환산
+  // (예: 300매×6×4팩 → market_unit_price(1매당) × 7200 / 1)
+  // DB effMarketExpr과 동일 로직
+  const effMarketPrice: number | null = (() => {
+    if (
+      product.market_unit_price && product.market_unit_price > 0 &&
+      product.total_quantity    && product.total_quantity    > 0
+    ) {
+      const divisor = product.unit_type === 'count' ? 1 : 100;
+      return Math.round(product.market_unit_price * product.total_quantity / divisor);
+    }
+    return product.market_lowest_price ?? null;
+  })();
+
+  const pricing = calcRecommendedPrice(
     product.price,
     product.category_name,
     channel,
     weightKg,
-    marketPrice,
+    effMarketPrice,
   );
 
   const channelColor = channel === 'naver' ? C.naver : C.coupang;
@@ -114,7 +180,7 @@ function ChannelPriceCell({
         {fmtPrice(pricing.recommendedPrice)}
       </span>
       <span style={{ fontSize: '10px', color: marginColor(pricing.realMarginRate), fontWeight: 600 }}>
-        {(pricing.realMarginRate * 100).toFixed(1)}% 마진
+        {pricing.realMarginRate.toFixed(1)}% 마진
       </span>
       {pricing.vsMarket != null && (
         <span
@@ -128,7 +194,12 @@ function ChannelPriceCell({
             : `시장가 -${Math.abs(pricing.vsMarket).toFixed(1)}%`}
         </span>
       )}
-      {!marketPrice && (
+      {product.unit_type === 'count' && product.total_quantity && product.total_quantity > 1 && (
+        <span style={{ fontSize: '9px', color: C.textSub }}>
+          개당 {fmtPrice(pricing.perUnitPrice)}
+        </span>
+      )}
+      {!effMarketPrice && (
         <span style={{ fontSize: '9px', color: '#c4c4c4' }}>시장가 없음</span>
       )}
     </div>
@@ -263,6 +334,8 @@ function ScoreBadge({ product }: { product: CostcoProductRow }) {
     setShow(true);
   };
 
+  const displayScore = product.costco_score_total ?? product.sourcing_score;
+
   return (
     <div
       ref={ref}
@@ -270,18 +343,18 @@ function ScoreBadge({ product }: { product: CostcoProductRow }) {
       onMouseEnter={handleMouseEnter}
       onMouseLeave={() => setShow(false)}
     >
-      <GradeBadge score={product.sourcing_score} />
+      <GradeBadge score={displayScore} />
       <div
         style={{
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           height: '20px', padding: '0 6px', borderRadius: '10px',
-          backgroundColor: scoreColor(product.sourcing_score) + '18',
-          color: scoreColor(product.sourcing_score),
+          backgroundColor: scoreColor(displayScore) + '18',
+          color: scoreColor(displayScore),
           fontWeight: 600, fontSize: '11px', cursor: 'default',
-          border: `1px solid ${scoreColor(product.sourcing_score)}44`,
+          border: `1px solid ${scoreColor(displayScore)}44`,
         }}
       >
-        {product.sourcing_score}
+        {displayScore}
       </div>
       {show && (
         <div
@@ -294,20 +367,38 @@ function ScoreBadge({ product }: { product: CostcoProductRow }) {
             whiteSpace: 'nowrap', zIndex: 100, boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
           }}
         >
-          <div style={{ fontWeight: 700, marginBottom: '4px', color: '#f9f9f9' }}>소싱 스코어 분석</div>
-          <div>수요 점수 <span style={{ color: '#86efac', fontWeight: 600 }}>{product.demand_score}</span> / 100 × 20%</div>
-          <div>가격 기회 <span style={{ color: '#86efac', fontWeight: 600 }}>{product.price_opp_score}</span> / 100 × 30%</div>
-          <div>희소성     <span style={{ color: '#86efac', fontWeight: 600 }}>{product.urgency_score}</span> / 100 × 10%</div>
-          <div>경쟁 강도  <span style={{ color: '#86efac', fontWeight: 600 }}>{product.seasonal_score}</span> / 100 × 15%</div>
-          <div>마진       <span style={{ color: '#86efac', fontWeight: 600 }}>{product.margin_score}</span> / 100 × 25%</div>
-          <div
-            style={{
-              borderTop: '1px solid rgba(255,255,255,0.15)', marginTop: '6px',
-              paddingTop: '6px', fontWeight: 700,
-            }}
-          >
-            종합 <span style={{ color: scoreColor(product.sourcing_score) }}>{product.sourcing_score}</span>점
-          </div>
+          {product.costco_score_total != null ? (
+            // v2 스코어 breakdown
+            <>
+              <div style={{ fontWeight: 700, marginBottom: '4px', color: '#f9f9f9' }}>v2 소싱 스코어</div>
+              {Object.entries(COSTCO_SCORE_MAX).map(([key, max]) => {
+                const dbKey = SCORE_KEY_TO_DB[key];
+                const val = dbKey ? (product[dbKey] as number | null) : null;
+                const label = COSTCO_SCORE_LABELS[key];
+                return (
+                  <div key={key}>
+                    {label} <span style={{ color: '#86efac', fontWeight: 600 }}>{val ?? '-'}</span> / {max}
+                  </div>
+                );
+              })}
+              <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', marginTop: '6px', paddingTop: '6px', fontWeight: 700 }}>
+                종합 <span style={{ color: scoreColor(product.costco_score_total) }}>{product.costco_score_total}</span>점 / 110
+              </div>
+            </>
+          ) : (
+            // v1 fallback
+            <>
+              <div style={{ fontWeight: 700, marginBottom: '4px', color: '#f9f9f9' }}>소싱 스코어 분석</div>
+              <div>수요 점수 <span style={{ color: '#86efac', fontWeight: 600 }}>{product.demand_score}</span> / 100 × 20%</div>
+              <div>가격 기회 <span style={{ color: '#86efac', fontWeight: 600 }}>{product.price_opp_score}</span> / 100 × 30%</div>
+              <div>희소성     <span style={{ color: '#86efac', fontWeight: 600 }}>{product.urgency_score}</span> / 100 × 10%</div>
+              <div>경쟁 강도  <span style={{ color: '#86efac', fontWeight: 600 }}>{product.seasonal_score}</span> / 100 × 15%</div>
+              <div>마진       <span style={{ color: '#86efac', fontWeight: 600 }}>{product.margin_score}</span> / 100 × 25%</div>
+              <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', marginTop: '6px', paddingTop: '6px', fontWeight: 700 }}>
+                종합 <span style={{ color: scoreColor(product.sourcing_score) }}>{product.sourcing_score}</span>점
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -328,16 +419,27 @@ interface ApiResponse {
 }
 
 type GradeFilter = 'all' | SourcingGrade;
+type MaleTierFilter = 'all' | 'male_high' | 'male_friendly' | 'neutral' | 'female';
 
-export default function CostcoTab() {
+export interface CostcoTabProps {
+  /** 외부 서브메뉴에서 주입하는 성별 타겟 필터 (변경 시 내부 상태 동기화) */
+  externalGenderFilter?: MaleTierFilter;
+}
+
+export default function CostcoTab({ externalGenderFilter }: CostcoTabProps = {}) {
   const [products, setProducts]           = useState<CostcoProductRow[]>([]);
   const [total, setTotal]                 = useState(0);
   const [categories, setCategories]       = useState<string[]>([]);
   const [lastCollected, setLastCollected] = useState<string | null>(null);
   const [isLoading, setIsLoading]         = useState(false);
-  const [isCollecting, setIsCollecting]   = useState(false);
-  const [error, setError]                 = useState<string | null>(null);
-  const [collectError, setCollectError]   = useState<string | null>(null);
+  const [isCollecting, setIsCollecting]     = useState(false);
+  const [error, setError]                   = useState<string | null>(null);
+  const [collectError, setCollectError]     = useState<string | null>(null);
+  const [isLegalChecking, setIsLegalChecking] = useState(false);
+  const [legalCheckResult, setLegalCheckResult] = useState<{ checkedCount: number; blockedCount: number; warningCount: number } | null>(null);
+  // IP 검증 상태: 현재 검증 중인 product_code, 완료된 결과 맵
+  const [ipVerifyingId, setIpVerifyingId] = useState<string | null>(null);
+  const [ipRiskMap, setIpRiskMap] = useState<Record<string, 'low' | 'medium' | 'high'>>({});
 
   // 필터 & 정렬
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -348,7 +450,22 @@ export default function CostcoTab() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sort, setSort]                     = useState<CostcoSortKey>('sourcing_score_desc');
   const [page, setPage]                     = useState(1);
+
+  // v2 소싱 스코어 필터
+  const [genderFilter, setGenderFilter]         = useState<MaleTierFilter>(externalGenderFilter ?? 'all');
+  const [hideHighCs, setHideHighCs]             = useState(true);   // 기본 ON
+  const [hideBlocked, setHideBlocked]           = useState(true);   // 기본 ON
+  const [asteriskOnly, setAsteriskOnly]         = useState(false);
+  const [seasonOnly, setSeasonOnly]             = useState(false);
   const PAGE_SIZE = 50;
+
+  // 외부 서브메뉴 필터 변경 시 내부 상태 동기화
+  useEffect(() => {
+    if (externalGenderFilter !== undefined) {
+      setGenderFilter(externalGenderFilter);
+      setPage(1);
+    }
+  }, [externalGenderFilter]);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleSearchChange = (val: string) => {
@@ -366,6 +483,11 @@ export default function CostcoTab() {
       if (categoryFilter)         params.set('category', categoryFilter);
       if (debouncedSearch)        params.set('search', debouncedSearch);
       if (stockFilter !== 'all')  params.set('stockStatus', stockFilter);
+      // 성별 필터를 서버에 전달 (서버 사이드 카테고리+키워드 필터링)
+      if (genderFilter !== 'all') params.set('genderFilter', genderFilter);
+      if (seasonOnly)             params.set('seasonOnly', '1');
+      if (gradeFilter !== 'all')  params.set('grade', gradeFilter);
+      if (asteriskOnly)           params.set('asteriskOnly', '1');
 
       const res = await fetch(`/api/sourcing/costco?${params}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -379,7 +501,7 @@ export default function CostcoTab() {
     } finally {
       setIsLoading(false);
     }
-  }, [categoryFilter, stockFilter, debouncedSearch, sort, page]);
+  }, [categoryFilter, stockFilter, debouncedSearch, sort, page, genderFilter, seasonOnly, gradeFilter, asteriskOnly]);
 
   useEffect(() => { fetchProducts(); }, [fetchProducts]);
 
@@ -404,6 +526,55 @@ export default function CostcoTab() {
     }
   };
 
+  // ── 법적 검토 실행
+  const handleLegalCheck = async () => {
+    if (isLegalChecking) return;
+    setIsLegalChecking(true);
+    setLegalCheckResult(null);
+    try {
+      const res = await fetch('/api/sourcing/costco/legal-check', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error ?? '법적 검토 실패');
+      setLegalCheckResult(data.data);
+      await fetchProducts();
+    } catch (e) {
+      setCollectError(e instanceof Error ? e.message : '법적 검토 실패');
+    } finally {
+      setIsLegalChecking(false);
+    }
+  };
+
+  // ── KIPRIS IP 검증
+  const handleVerifyIp = async (productCode: string, title: string) => {
+    if (ipVerifyingId) return;
+    setIpVerifyingId(productCode);
+    try {
+      const res = await fetch('/api/sourcing/costco/verify-ip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keyword: title, productCode }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error ?? 'IP 검증 실패');
+      const risk = data.data.overallRisk as 'low' | 'medium' | 'high';
+      setIpRiskMap((prev) => ({ ...prev, [productCode]: risk }));
+      // costco_score_legal 로컬 반영
+      if (typeof data.data.legalScore === 'number') {
+        setProducts((prev) =>
+          prev.map((p) =>
+            p.product_code === productCode
+              ? { ...p, costco_score_legal: data.data.legalScore as number }
+              : p,
+          ),
+        );
+      }
+    } catch (e) {
+      console.error('[handleVerifyIp]', e);
+    } finally {
+      setIpVerifyingId(null);
+    }
+  };
+
   // 시장최저가 인라인 업데이트 (리렌더 없이 로컬 반영)
   const handleMarketPriceSaved = (productCode: string, newPrice: number) => {
     setProducts((prev) =>
@@ -415,20 +586,25 @@ export default function CostcoTab() {
     );
   };
 
-  // 등급/시장가초과 필터는 프론트엔드에서 처리
+  // grade/asteriskOnly/genderFilter/seasonOnly는 서버에서 처리됨
+  // 클라이언트에서는 시장가 초과·CS·차단 등 계산 필요한 필터만 처리
   const filteredProducts = products.filter((p) => {
-    if (gradeFilter !== 'all' && calcGrade(p.sourcing_score) !== gradeFilter) return false;
     if (overpriceOnly) {
       const wKg = getWeightKgFromProduct(p);
       const mkt  = p.market_lowest_price ?? null;
       const naver = calcRecommendedPrice(p.price, p.category_name, 'naver', wKg, mkt);
       if (!naver.isOverprice) return false;
     }
+    // 고위험 CS 숨기기
+    if (hideHighCs && getCsRisk(p.category_name).level === 'high') return false;
+    // 차단 숨기기
+    if (hideBlocked && getEffectiveBlockedReason(p) !== null) return false;
     return true;
   });
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
-  const hasFilter  = !!(categoryFilter || debouncedSearch || stockFilter !== 'all' || gradeFilter !== 'all' || overpriceOnly);
+  const hasFilter  = !!(categoryFilter || debouncedSearch || stockFilter !== 'all' || gradeFilter !== 'all' || overpriceOnly
+    || genderFilter !== 'all' || !hideHighCs || !hideBlocked || asteriskOnly || seasonOnly);
 
   const handleSortClick = (key: CostcoSortKey) => { setSort(key); setPage(1); };
 
@@ -457,23 +633,46 @@ export default function CostcoTab() {
             전체 <strong style={{ color: C.text }}>{total.toLocaleString()}</strong>개
           </span>
         </div>
-        <button
-          onClick={handleCollect}
-          disabled={isCollecting}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '6px',
-            padding: '7px 16px',
-            backgroundColor: isCollecting ? '#f3f3f3' : C.accent,
-            color: isCollecting ? C.textSub : '#fff',
-            border: 'none', borderRadius: '6px',
-            fontSize: '13px', fontWeight: 600,
-            cursor: isCollecting ? 'not-allowed' : 'pointer',
-          }}
-        >
-          {isCollecting
-            ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> 수집 중...</>
-            : <><RefreshCw size={13} /> 코스트코 수집</>}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {/* 법적 검토 */}
+          <button
+            onClick={handleLegalCheck}
+            disabled={isLegalChecking || isCollecting}
+            title={legalCheckResult ? `검토 완료: ${legalCheckResult.checkedCount}건 / 차단 ${legalCheckResult.blockedCount}건 / 검토 ${legalCheckResult.warningCount}건` : '전체 상품 법적 검토 실행'}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              padding: '7px 14px',
+              backgroundColor: '#f3f3f3',
+              color: isLegalChecking ? C.textSub : C.text,
+              border: `1px solid ${C.border}`, borderRadius: '6px',
+              fontSize: '12px', fontWeight: 600,
+              cursor: isLegalChecking || isCollecting ? 'not-allowed' : 'pointer',
+              opacity: isLegalChecking || isCollecting ? 0.6 : 1,
+            }}
+          >
+            {isLegalChecking
+              ? <><Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> 검토 중...</>
+              : <><ShieldCheck size={12} /> 법적 검토</>}
+          </button>
+          {/* 코스트코 수집 */}
+          <button
+            onClick={handleCollect}
+            disabled={isCollecting}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              padding: '7px 16px',
+              backgroundColor: isCollecting ? '#f3f3f3' : C.accent,
+              color: isCollecting ? C.textSub : '#fff',
+              border: 'none', borderRadius: '6px',
+              fontSize: '13px', fontWeight: 600,
+              cursor: isCollecting ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {isCollecting
+              ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> 수집 중...</>
+              : <><RefreshCw size={13} /> 코스트코 수집</>}
+          </button>
+        </div>
       </div>
 
       {/* ── 에러 배너 */}
@@ -576,6 +775,42 @@ export default function CostcoTab() {
           <option value="outOfStock">품절</option>
         </select>
 
+        {/* 성별 타겟 필터 */}
+        <select
+          value={genderFilter}
+          onChange={(e) => { setGenderFilter(e.target.value as MaleTierFilter); setPage(1); }}
+          style={{
+            ...selectStyle,
+            borderColor: genderFilter !== 'all' ? '#2563eb' : C.border,
+            color:       genderFilter !== 'all' ? '#2563eb' : C.text,
+            fontWeight:  genderFilter !== 'all' ? 600 : 400,
+          }}
+        >
+          <option value="all">타겟 전체</option>
+          <option value="male_high">🔵 남성 타겟만</option>
+          <option value="male_friendly">⚪ 남성 친화 이상</option>
+          <option value="neutral">중립</option>
+          <option value="female">🚫 여성 타겟만</option>
+        </select>
+
+        {/* 체크박스 그룹 */}
+        <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: C.textSub, cursor: 'pointer', userSelect: 'none' }}>
+          <input type="checkbox" checked={hideHighCs} onChange={(e) => { setHideHighCs(e.target.checked); setPage(1); }} />
+          고위험CS 숨기기
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: C.textSub, cursor: 'pointer', userSelect: 'none' }}>
+          <input type="checkbox" checked={hideBlocked} onChange={(e) => { setHideBlocked(e.target.checked); setPage(1); }} />
+          차단 숨기기
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: C.textSub, cursor: 'pointer', userSelect: 'none' }}>
+          <input type="checkbox" checked={asteriskOnly} onChange={(e) => { setAsteriskOnly(e.target.checked); setPage(1); }} />
+          ★ 별표만
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: C.textSub, cursor: 'pointer', userSelect: 'none' }}>
+          <input type="checkbox" checked={seasonOnly} onChange={(e) => { setSeasonOnly(e.target.checked); setPage(1); }} />
+          시즌 상품만
+        </label>
+
         {/* 정렬 */}
         <select
           value={sort}
@@ -601,6 +836,11 @@ export default function CostcoTab() {
               setStockFilter('all');
               setGradeFilter('all');
               setOverpriceOnly(false);
+              setGenderFilter('all');
+              setHideHighCs(true);
+              setHideBlocked(true);
+              setAsteriskOnly(false);
+              setSeasonOnly(false);
               setPage(1);
             }}
             style={{
@@ -667,6 +907,14 @@ export default function CostcoTab() {
                         등급/점수 <SortIcon col="sourcing_score_desc" />
                       </span>
                     </th>
+
+                    {/* 타겟 */}
+                    <th style={{ ...thStyle, width: '68px', textAlign: 'center' }}>타겟</th>
+                    {/* 시즌 */}
+                    <th style={{ ...thStyle, width: '68px', textAlign: 'center' }}>시즌</th>
+                    {/* 검토 / IP */}
+                    <th style={{ ...thStyle, width: '90px', textAlign: 'center' }}>검토 / IP</th>
+
 
                     {/* 매입가 */}
                     <th
@@ -829,6 +1077,121 @@ export default function CostcoTab() {
                         <td style={{ padding: '8px 10px', textAlign: 'center', verticalAlign: 'middle' }}>
                           <ScoreBadge product={product} />
                         </td>
+
+                        {/* 타겟 */}
+                        {(() => {
+                          const tier = getEffectiveMaleTier(product);
+                          const label = MALE_TIER_BADGE[tier];
+                          if (!label) return <td style={{ padding: '8px', textAlign: 'center', verticalAlign: 'middle' }}>-</td>;
+                          return (
+                            <td style={{ padding: '8px', textAlign: 'center', verticalAlign: 'middle' }}>
+                              <span style={{ fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap' }}>{label}</span>
+                            </td>
+                          );
+                        })()}
+
+                        {/* 시즌 */}
+                        {(() => {
+                          const { bonus, seasons } = getEffectiveSeasonBonus(product);
+                          if (bonus === 0) return <td style={{ padding: '8px', textAlign: 'center', verticalAlign: 'middle', color: '#ccc', fontSize: '11px' }}>-</td>;
+                          return (
+                            <td style={{ padding: '8px', textAlign: 'center', verticalAlign: 'middle' }}>
+                              <span
+                                style={{ fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: '8px', backgroundColor: 'rgba(22,163,74,0.08)', color: '#16a34a', whiteSpace: 'nowrap' }}
+                                title={seasons.join(', ')}
+                              >
+                                +{bonus}
+                              </span>
+                            </td>
+                          );
+                        })()}
+
+                        {/* 검토 / IP */}
+                        {(() => {
+                          const blocked = getEffectiveBlockedReason(product);
+                          const review  = product.needs_review;
+                          const ipRisk  = ipRiskMap[product.product_code];
+                          const isVerifyingThis = ipVerifyingId === product.product_code;
+                          const isOtherVerifying = ipVerifyingId !== null && !isVerifyingThis;
+
+                          const IP_RISK_BADGE: Record<'low' | 'medium' | 'high', { label: string; color: string; bg: string }> = {
+                            low:    { label: '🟢 안전', color: C.green,  bg: C.greenBg },
+                            medium: { label: '🟡 주의', color: '#ca8a04', bg: '#fefce8' },
+                            high:   { label: '🔴 위험', color: C.red,    bg: C.redBg },
+                          };
+
+                          return (
+                            <td style={{ padding: '6px 8px', textAlign: 'center', verticalAlign: 'middle' }}>
+                              {/* 일괄 검토 결과 뱃지 */}
+                              <div style={{ marginBottom: ipRisk || isVerifyingThis ? '4px' : '0' }}>
+                                {blocked ? (
+                                  <span
+                                    style={{ fontSize: '10px', fontWeight: 700, padding: '1px 5px', borderRadius: '4px', backgroundColor: 'rgba(220,38,38,0.08)', color: '#dc2626', cursor: 'default' }}
+                                    title={blocked}
+                                  >
+                                    ❌
+                                  </span>
+                                ) : review ? (
+                                  <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 5px', borderRadius: '4px', backgroundColor: 'rgba(217,119,6,0.08)', color: '#d97706' }}>⚠</span>
+                                ) : (
+                                  <span style={{ fontSize: '10px', color: '#ccc' }}>✓</span>
+                                )}
+                              </div>
+
+                              {/* IP 검증 결과 또는 버튼 */}
+                              {isVerifyingThis ? (
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px', fontSize: '10px', color: C.textSub }}>
+                                  <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} />
+                                  <span>검증중</span>
+                                </div>
+                              ) : ipRisk ? (
+                                <span
+                                  style={{
+                                    fontSize: '10px', fontWeight: 700, padding: '1px 5px',
+                                    borderRadius: '4px',
+                                    backgroundColor: IP_RISK_BADGE[ipRisk].bg,
+                                    color: IP_RISK_BADGE[ipRisk].color,
+                                    cursor: 'pointer',
+                                    display: 'inline-block',
+                                  }}
+                                  title="클릭하여 IP 재검증"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (!isOtherVerifying) {
+                                      handleVerifyIp(product.product_code, product.title);
+                                    }
+                                  }}
+                                >
+                                  {IP_RISK_BADGE[ipRisk].label}
+                                </span>
+                              ) : (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (!isOtherVerifying) {
+                                      handleVerifyIp(product.product_code, product.title);
+                                    }
+                                  }}
+                                  disabled={isOtherVerifying}
+                                  title={isOtherVerifying ? '다른 항목 검증 중' : 'KIPRIS 상표·특허·디자인 검증'}
+                                  style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: '3px',
+                                    fontSize: '10px', fontWeight: 600,
+                                    padding: '2px 6px', borderRadius: '4px',
+                                    border: `1px solid ${isOtherVerifying ? '#ddd' : C.blue + '66'}`,
+                                    backgroundColor: isOtherVerifying ? '#f5f5f5' : 'rgba(37,99,235,0.05)',
+                                    color: isOtherVerifying ? '#bbb' : C.blue,
+                                    cursor: isOtherVerifying ? 'not-allowed' : 'pointer',
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                >
+                                  <ShieldCheck size={10} />
+                                  IP 검증
+                                </button>
+                              )}
+                            </td>
+                          );
+                        })()}
 
                         {/* 매입가 */}
                         <td style={{ padding: '8px 10px', textAlign: 'right', verticalAlign: 'middle' }}>

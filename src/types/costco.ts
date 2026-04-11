@@ -95,7 +95,6 @@ export interface CostcoProductRow {
   original_price: number | null;
   first_price: number | null;
   lowest_price: number | null;
-  target_sell_price: number | null; // GENERATED ALWAYS AS
 
   average_rating: string | null; // numeric → string (pg driver)
   review_count: number;
@@ -125,6 +124,33 @@ export interface CostcoProductRow {
   urgency_score: number;
   seasonal_score: number;
   margin_score: number;
+
+  // v2 입수·별표·회전 메타
+  pack_qty: number;
+  has_asterisk: boolean;
+  expected_turnover_days: number | null;
+
+  // v2 성별·시즌 분류
+  male_tier: 'high' | 'mid' | 'neutral' | 'female' | null;
+  male_bonus: number | null;
+  season_bonus: number | null;
+  season_labels: string | null;
+  asterisk_bonus: number | null;
+
+  // v2 차단·검토
+  blocked_reason: string | null;
+  needs_review: boolean;
+
+  // v2 개별 스코어 (costco-scoring.ts 결과)
+  costco_score_legal: number | null;
+  costco_score_price: number | null;
+  costco_score_cs: number | null;
+  costco_score_margin: number | null;
+  costco_score_demand: number | null;
+  costco_score_turnover: number | null;
+  costco_score_supply: number | null;
+  costco_score_total: number | null;
+  costco_score_calculated_at: string | null;
 
   is_active: boolean;
   collected_at: string;

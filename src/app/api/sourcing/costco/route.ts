@@ -11,6 +11,8 @@ import { recalculateSourcingScores } from '@/lib/sourcing/costco-scorer';
 import { parseProductUnit } from '@/lib/sourcing/unit-parser';
 import type { CostcoApiProduct } from '@/types/costco';
 import type { Pool } from 'pg';
+import { logDiscoveryBatch, type DiscoveryLogEntry } from '@/lib/sourcing/analytics-logger';
+import { getActiveSeasonKeywords } from '@/lib/sourcing/shared/season-bonus';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET — 상품 목록 조회
@@ -36,6 +38,14 @@ const getQuerySchema = z.object({
   stockStatus: z.enum(['all', 'inStock', 'outOfStock', 'lowStock']).optional().default('all'),
   /** 단가 절감율 필터: high=30%+, mid=15%+, any=단가비교 가능한 것만 */
   savingFilter: z.enum(['all', 'high', 'mid', 'any']).optional().default('all'),
+  /** 성별 타겟 필터: male_high=남성타겟만, male_friendly=남성친화 이상, female=여성타겟 */
+  genderFilter: z.enum(['all', 'male_high', 'male_friendly', 'female']).optional().default('all'),
+  /** 시즌 상품만: true이면 현재 날짜 기준 활성 키워드 포함 상품만 조회 */
+  seasonOnly: z.coerce.boolean().optional().default(false),
+  /** 소싱 등급 필터 (grade.ts 기준): S=80+, A=65+, B=50+, C=35+, D=미만 */
+  grade: z.enum(['all', 'S', 'A', 'B', 'C', 'D']).optional().default('all'),
+  /** 별표 상품만 */
+  asteriskOnly: z.coerce.boolean().optional().default(false),
 });
 
 export async function GET(req: NextRequest) {
@@ -45,7 +55,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { category, page, pageSize, search, sort, stockStatus, savingFilter } = parsed.data;
+  const { category, page, pageSize, search, sort, stockStatus, savingFilter, genderFilter, seasonOnly, grade, asteriskOnly } = parsed.data;
   const offset = (page - 1) * pageSize;
 
   const pool = getSourcingPool();
@@ -73,6 +83,60 @@ export async function GET(req: NextRequest) {
     conditions.push(`(unit_price IS NOT NULL AND market_unit_price IS NOT NULL AND market_unit_price / NULLIF(unit_price, 0) >= 1.15)`);
   } else if (savingFilter === 'any') {
     conditions.push(`(market_unit_price IS NOT NULL AND unit_price IS NOT NULL)`);
+  }
+
+  // 성별 타겟 필터 (카테고리 + 상품명 키워드 기반)
+  // high 카테고리: 자동차용품 (score=40 → tier='high')
+  // mid 카테고리:  완구·스포츠 (score=20 → tier='mid')
+  const MALE_HIGH_CATS = ['자동차용품'];
+  const MALE_MID_CATS  = ['완구·스포츠'];
+  const MALE_STRONG_KW = ['남성용', '남자', '낚시', '캠핑', '골프', '공구', '면도기', '덤벨', '게이밍', '등산', '아빠'];
+  const FEMALE_KW      = ['여성용', '여자', '임산부', '여성'];
+
+  if (genderFilter === 'male_high') {
+    // 자동차용품 카테고리 OR 강력 남성 키워드 2개 이상 (score≥40 근사)
+    const catPart = `category_name = ANY($${idx++})`;
+    values.push(MALE_HIGH_CATS);
+    const kwParts = MALE_STRONG_KW.map((kw) => { const p = `title ILIKE $${idx++}`; values.push(`%${kw}%`); return p; });
+    conditions.push(`(${catPart} OR ${kwParts.join(' OR ')})`);
+  } else if (genderFilter === 'male_friendly') {
+    // 자동차용품·완구·스포츠 카테고리 OR 강력 남성 키워드 포함
+    const catPart = `category_name = ANY($${idx++})`;
+    values.push([...MALE_HIGH_CATS, ...MALE_MID_CATS]);
+    const kwParts = MALE_STRONG_KW.map((kw) => { const p = `title ILIKE $${idx++}`; values.push(`%${kw}%`); return p; });
+    conditions.push(`(${catPart} OR ${kwParts.join(' OR ')})`);
+  } else if (genderFilter === 'female') {
+    const kwParts = FEMALE_KW.map((kw) => { const p = `title ILIKE $${idx++}`; values.push(`%${kw}%`); return p; });
+    conditions.push(`(${kwParts.join(' OR ')})`);
+  }
+
+  // 시즌 상품 필터 — 현재 날짜 기준 활성 키워드 OR 조건
+  if (seasonOnly) {
+    const keywords = getActiveSeasonKeywords();
+    if (keywords.length > 0) {
+      const kParts = keywords.map((kw) => {
+        const p = `title ILIKE $${idx++}`;
+        values.push(`%${kw}%`);
+        return p;
+      });
+      conditions.push(`(${kParts.join(' OR ')})`);
+    }
+  }
+
+  // 소싱 등급 필터 (grade.ts 컷오프: S≥80, A≥65, B≥50, C≥35, D<35)
+  // costco_score_total null이면 구형 sourcing_score fallback
+  if (grade !== 'all') {
+    const sc = `COALESCE(costco_score_total, sourcing_score)`;
+    if      (grade === 'S') conditions.push(`${sc} >= 80`);
+    else if (grade === 'A') conditions.push(`${sc} >= 65 AND ${sc} < 80`);
+    else if (grade === 'B') conditions.push(`${sc} >= 50 AND ${sc} < 65`);
+    else if (grade === 'C') conditions.push(`${sc} >= 35 AND ${sc} < 50`);
+    else if (grade === 'D') conditions.push(`${sc} < 35`);
+  }
+
+  // 별표 상품만 (migration 025 적용 시 활성화)
+  if (asteriskOnly) {
+    conditions.push(`has_asterisk = true`);
   }
 
   const where = `WHERE ${conditions.join(' AND ')}`;
@@ -109,8 +173,8 @@ export async function GET(req: NextRequest) {
   `;
 
   const orderBy: Record<string, string> = {
-    sourcing_score_desc:    'sourcing_score DESC, collected_at DESC',
-    unit_saving_rate_desc:  `(${unitSavingExpr}) DESC NULLS LAST, sourcing_score DESC`,
+    sourcing_score_desc:    'COALESCE(costco_score_total, sourcing_score) DESC, collected_at DESC',
+    unit_saving_rate_desc:  `(${unitSavingExpr}) DESC NULLS LAST, COALESCE(costco_score_total, sourcing_score) DESC`,
     margin_rate_desc:       `(${marginExpr}) DESC NULLS LAST`,
     price_asc:              'price ASC',
     price_desc:             'price DESC',
@@ -124,12 +188,18 @@ export async function GET(req: NextRequest) {
         `SELECT
            id, product_code, title, category_name, category_code,
            image_url, product_url, brand,
-           price, original_price, first_price, lowest_price, target_sell_price,
+           price, original_price, first_price, lowest_price,
            average_rating, review_count, stock_status, shipping_included,
            market_lowest_price, market_price_source, market_price_updated_at,
            sourcing_score, demand_score, price_opp_score, urgency_score,
            seasonal_score, margin_score,
            unit_type, total_quantity, unit_price, unit_price_label, market_unit_price, market_unit_title,
+           pack_qty, has_asterisk, expected_turnover_days,
+           male_tier, male_bonus, season_bonus, season_labels, asterisk_bonus,
+           blocked_reason, needs_review,
+           costco_score_legal, costco_score_price, costco_score_cs,
+           costco_score_margin, costco_score_demand, costco_score_turnover,
+           costco_score_supply, costco_score_total, costco_score_calculated_at,
            collected_at
          FROM public.costco_products
          ${where}
@@ -151,6 +221,9 @@ export async function GET(req: NextRequest) {
         `SELECT MAX(collected_at) AS last_collected FROM public.costco_products`,
       ),
     ]);
+
+    // ── Layer 1 자동 로깅 (fire-and-forget) ──────────────────────────────
+    void _logCostcoDiscovery(rowsRes.rows);
 
     return NextResponse.json({
       products: rowsRes.rows,
@@ -334,4 +407,49 @@ async function logPrices(pool: Pool, products: CostcoApiProduct[]) {
       [idRes.rows[0].id, product.productCode, product.price],
     );
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Layer 1 로깅 헬퍼 — costco_products row[] → DiscoveryLogEntry[] 변환 후 upsert
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function _logCostcoDiscovery(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  products: Record<string, any>[],
+): Promise<void> {
+  if (products.length === 0) return;
+
+  const entries: DiscoveryLogEntry[] = products.map((p) => ({
+    channelSource: 'costco' as const,
+    productId:     String(p.product_code),
+    productName:   String(p.title ?? ''),
+    category:      p.category_name ?? null,
+
+    // v2 스코어가 있으면 사용, 없으면 구형 sourcing_score로 fallback
+    scoreTotal:     p.costco_score_total ?? p.sourcing_score ?? null,
+    scoreBreakdown: (p.costco_score_legal != null) ? {
+      legal:    p.costco_score_legal    ?? 0,
+      price:    p.costco_score_price    ?? 0,
+      cs:       p.costco_score_cs       ?? 0,
+      margin:   p.costco_score_margin   ?? 0,
+      demand:   p.costco_score_demand   ?? 0,
+      turnover: p.costco_score_turnover ?? 0,
+      supply:   p.costco_score_supply   ?? 0,
+    } : null,
+    grade: null, // logDiscoveryBatch 내부에서 scoreTotal 기반 계산
+
+    recommendedPriceNaver:   p.market_lowest_price ?? null,
+    recommendedPriceCoupang: null,  // 코스트코는 단일 시장가 기준
+
+    maleScore:     p.male_bonus    ?? null,
+    maleTier:      p.male_tier     ?? null,
+    seasonBonus:   p.season_bonus  ?? null,
+    seasonLabels:  p.season_labels
+      ? String(p.season_labels).split(',').filter(Boolean)
+      : [],
+    needsReview:   p.needs_review  ?? false,
+    blockedReason: p.blocked_reason ?? null,
+  }));
+
+  await logDiscoveryBatch(entries);
 }
