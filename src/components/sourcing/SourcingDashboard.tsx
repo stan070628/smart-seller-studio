@@ -388,14 +388,14 @@ export default function SourcingDashboard() {
       </header>
 
       {/* ──────────────────────────────────────────────────────────────────── */}
-      {/* 서브탭 (상품추적 / 마진계산기)                                       */}
+      {/* 서브탭 (니치소싱 / 도매꾹 / 코스트코 / 마진계산기)                    */}
       {/* ──────────────────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', gap: '0', backgroundColor: C.card, borderBottom: `1px solid ${C.border}`, padding: '0 24px' }}>
         {([
-          { id: 'tracking' as const, label: '상품추적', icon: <RefreshCw size={13} /> },
-          { id: 'calculator' as const, label: '마진계산기', icon: <Calculator size={13} /> },
           { id: 'niche' as const, label: '니치소싱', icon: <Search size={13} />, badge: <NicheAlertBadge count={unreadAlertCount} /> },
+          { id: 'tracking' as const, label: '도매꾹', icon: <RefreshCw size={13} /> },
           { id: 'costco' as const, label: '코스트코', icon: <span style={{ fontSize: '13px' }}>🏬</span> },
+          { id: 'calculator' as const, label: '마진계산기', icon: <Calculator size={13} /> },
         ]).map((tab) => (
           <button
             key={tab.id}
@@ -432,7 +432,7 @@ export default function SourcingDashboard() {
         <CostcoTab />
       )}
 
-      {/* 상품추적 서브탭 — 기존 콘텐츠 시작 */}
+      {/* 도매꾹 서브탭 — 기존 콘텐츠 시작 */}
       {sourcingSubTab === 'tracking' && <>
 
       {/* ──────────────────────────────────────────────────────────────────── */}
