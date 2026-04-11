@@ -83,6 +83,50 @@ export function normalizeProductQuery(title: string): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 단가 비교 전용 검색어 정규화
+//
+// normalizeProductQuery()와의 차이:
+//   - 묶음 "x 24" 등 곱셈 수량은 제거하되
+//   - 첫 번째 단위 규격("190ml", "1.36kg", "300정")은 유지
+//
+// 예시:
+//   "베지밀 두유 190ml x 24"    → "베지밀 두유 190ml"
+//   "커클랜드 아몬드 1.36kg"    → "커클랜드 아몬드 1.36kg"
+//   "센트룸 비타민 300정 + 60정" → "센트룸 비타민 300정"
+//   "캐스트롤 엔진오일 1L 6개"   → "캐스트롤 엔진오일 1L"
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function normalizeForUnitSearch(title: string): string {
+  let q = title.trim();
+
+  // 1. 괄호·대괄호 내용 제거
+  q = q.replace(/\([^)]*\)/g, ' ').replace(/\[[^\]]*\]/g, ' ');
+
+  // 2. 곱셈 수량만 제거 (x N, × N, X N) — 앞 단위 규격은 유지
+  q = q.replace(/[xX×]\s*\d+(\.\d+)?/g, '');
+
+  // 3. 덧셈 추가 규격 제거 (+ 60ml, + 60정 등)
+  const VOL = '(ml|ML|mL|l|L|kg|KG|g|G|mg|oz|fl\\.?oz|정|캡슐|알|개|봉|포|팩|매)';
+  q = q.replace(new RegExp(`[+]\\s*\\d+(\\.\\d+)?\\s*${VOL}`, 'gi'), '');
+
+  // 4. 끝부분 낱개 묶음 단위 제거 (6개, 24입, 2팩 — 수량 앞에 단위가 없는 경우)
+  const BUNDLE = '(개|팩|박스|세트|입|묶음|통|병|캔|포|매|롤|장|pk|ct)';
+  q = q.replace(new RegExp(`\\b\\d+\\s*${BUNDLE}\\b`, 'gi'), '');
+
+  // 5. 연속 공백·특수문자 정리
+  q = q.replace(/[/\\&_]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+
+  // 6. 너무 짧아지면 원본 앞 3단어 사용
+  const words = q.split(/\s+/).filter(Boolean);
+  if (words.length === 0) {
+    return title.split(/\s+/).slice(0, 3).join(' ');
+  }
+
+  // 7. 최대 5단어로 제한 (규격 포함이라 4→5)
+  return words.slice(0, 5).join(' ');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 내부 유틸
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -209,6 +253,7 @@ export interface NaverUnitPriceResult {
 export async function searchNaverUnitPrice(
   query: string,
   costcoUnit: ParsedUnit,
+  costcoUnitPrice?: number, // 이상치 필터 기준 (코스트코 단가)
 ): Promise<NaverUnitPriceResult | null> {
   const clientId = process.env.NAVER_CLIENT_ID;
   const clientSecret = process.env.NAVER_CLIENT_SECRET;
@@ -218,11 +263,11 @@ export async function searchNaverUnitPrice(
     return null;
   }
 
-  const normalizedQuery = normalizeProductQuery(query);
+  const normalizedQuery = normalizeForUnitSearch(query);
 
   const url = new URL('https://openapi.naver.com/v1/search/shop.json');
   url.searchParams.set('query', normalizedQuery);
-  url.searchParams.set('display', '10');
+  url.searchParams.set('display', '20'); // 10→20: 매칭 후보 확대
   url.searchParams.set('sort', 'sim'); // 관련도 정렬 → 단가 최저를 직접 계산
 
   const controller = new AbortController();
@@ -272,6 +317,13 @@ export async function searchNaverUnitPrice(
 
       const itemUnitPrice =
         Math.round((totalPrice / totalQuantity) * unitPriceDivisor * 100) / 100;
+
+      // 이상치 필터: 코스트코 단가 대비 0.3x ~ 30x 범위 밖은 제외
+      // (오파싱된 묶음상품이나 전혀 다른 규격의 상품 차단)
+      if (costcoUnitPrice && costcoUnitPrice > 0) {
+        const ratio = itemUnitPrice / costcoUnitPrice;
+        if (ratio < 0.3 || ratio > 30) continue;
+      }
 
       if (itemUnitPrice < bestUnitPrice) {
         bestUnitPrice = itemUnitPrice;

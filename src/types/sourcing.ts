@@ -118,6 +118,21 @@ export interface SalesAnalysisItem {
   marketPriceUpdatedAt: string | null;
   // 수량별 가격 티어
   priceTiers: PriceTiers;
+  // v2 드롭쉬핑 스코어링 필드
+  scoreTotal: number | null;
+  scoreLegalIp: number | null;
+  scorePriceComp: number | null;
+  scoreCsSafety: number | null;
+  scoreMargin: number | null;
+  scoreDemand: number | null;
+  scoreSupply: number | null;
+  scoreMoqFit: number | null;
+  scoreCalculatedAt: string | null;
+  csRiskLevel: 'low' | 'medium' | 'high' | null;
+  csRiskReason: string | null;
+  dropshipMoqStrategy: 'single' | '1+1' | '2+1' | null;
+  dropshipBundlePrice: number | null;
+  dropshipPriceGapRate: number | null;
 }
 
 export interface PriceTier {

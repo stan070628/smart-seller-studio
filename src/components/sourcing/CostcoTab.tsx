@@ -76,6 +76,15 @@ function marginColor(rate: number): string {
   return C.red;
 }
 
+/** 단가 절감율 (양수 = 코스트코가 저렴) */
+function calcUnitSavingRate(
+  costcoUnit: number | null | undefined,
+  naverUnit: number | null | undefined,
+): number | null {
+  if (!costcoUnit || !naverUnit || costcoUnit <= 0) return null;
+  return Math.round((naverUnit / costcoUnit - 1) * 1000) / 10;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 채널 추천가 셀 (네이버 / 쿠팡)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -122,33 +131,6 @@ function ChannelPriceCell({
       {!marketPrice && (
         <span style={{ fontSize: '9px', color: '#c4c4c4' }}>시장가 없음</span>
       )}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 실질마진율 셀
-// ─────────────────────────────────────────────────────────────────────────────
-function MarginRateCell({ product }: { product: CostcoProductRow }) {
-  const weightKg    = getWeightKgFromProduct(product);
-  const marketPrice = product.market_lowest_price ?? null;
-  const naver       = calcRecommendedPrice(product.price, product.category_name, 'naver', weightKg, marketPrice);
-  const coupang     = calcRecommendedPrice(product.price, product.category_name, 'coupang', weightKg, marketPrice);
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-end' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-        <span style={{ fontSize: '9px', color: C.naver, fontWeight: 700 }}>N</span>
-        <span style={{ fontSize: '12px', fontWeight: 600, color: marginColor(naver.realMarginRate) }}>
-          {(naver.realMarginRate * 100).toFixed(1)}%
-        </span>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-        <span style={{ fontSize: '9px', color: C.coupang, fontWeight: 700 }}>C</span>
-        <span style={{ fontSize: '12px', fontWeight: 600, color: marginColor(coupang.realMarginRate) }}>
-          {(coupang.realMarginRate * 100).toFixed(1)}%
-        </span>
-      </div>
     </div>
   );
 }
@@ -601,6 +583,7 @@ export default function CostcoTab() {
           style={selectStyle}
         >
           <option value="sourcing_score_desc">소싱스코어 높은순</option>
+          <option value="unit_saving_rate_desc">단가절감율 높은순</option>
           <option value="margin_rate_desc">마진율 높은순</option>
           <option value="price_asc">매입가 낮은순</option>
           <option value="price_desc">매입가 높은순</option>
@@ -661,11 +644,29 @@ export default function CostcoTab() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
                 <thead>
                   <tr style={{ backgroundColor: C.tableHeader }}>
-                    {/* 이미지 */}
-                    <th style={{ ...thStyle, width: '52px', textAlign: 'center' }}></th>
+                    {/* 이미지 — sticky left */}
+                    <th style={{
+                      ...thStyle, width: '52px', textAlign: 'center',
+                      position: 'sticky', left: 0, zIndex: 2, backgroundColor: C.tableHeader,
+                    }}></th>
 
-                    {/* 상품명 */}
-                    <th style={{ ...thStyle, minWidth: '200px', textAlign: 'left' }}>상품명</th>
+                    {/* 상품명 — sticky left (이미지 너비 다음) */}
+                    <th style={{
+                      ...thStyle, minWidth: '240px', textAlign: 'left',
+                      position: 'sticky', left: '52px', zIndex: 2, backgroundColor: C.tableHeader,
+                      boxShadow: '2px 0 4px rgba(0,0,0,0.06)',
+                    }}>상품명</th>
+
+                    {/* 등급/점수 — 상품명 바로 다음 */}
+                    <th
+                      style={{ ...thStyle, width: '90px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}
+                      onClick={() => handleSortClick('sourcing_score_desc')}
+                      title="소싱 스코어 높은순 정렬"
+                    >
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
+                        등급/점수 <SortIcon col="sourcing_score_desc" />
+                      </span>
+                    </th>
 
                     {/* 매입가 */}
                     <th
@@ -706,28 +707,6 @@ export default function CostcoTab() {
                       </span>
                     </th>
 
-                    {/* 실질마진율 */}
-                    <th
-                      style={{ ...thStyle, width: '90px', textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}
-                      onClick={() => handleSortClick('margin_rate_desc')}
-                      title="마진율 높은순 정렬"
-                    >
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
-                        실질마진율 <SortIcon col="margin_rate_desc" />
-                      </span>
-                    </th>
-
-                    {/* 등급/스코어 */}
-                    <th
-                      style={{ ...thStyle, width: '90px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}
-                      onClick={() => handleSortClick('sourcing_score_desc')}
-                      title="소싱 스코어 높은순 정렬"
-                    >
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
-                        등급/점수 <SortIcon col="sourcing_score_desc" />
-                      </span>
-                    </th>
-
                     {/* 재고 */}
                     <th style={{ ...thStyle, width: '72px', textAlign: 'center' }}>재고</th>
 
@@ -746,11 +725,25 @@ export default function CostcoTab() {
                       <tr
                         key={product.id}
                         style={{ backgroundColor: bgColor, borderBottom: `1px solid ${C.border}` }}
-                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = C.rowHover)}
-                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = bgColor)}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = C.rowHover;
+                          e.currentTarget.querySelectorAll<HTMLElement>('td[data-sticky]').forEach(
+                            (td) => { td.style.backgroundColor = C.rowHover; },
+                          );
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = bgColor;
+                          e.currentTarget.querySelectorAll<HTMLElement>('td[data-sticky]').forEach(
+                            (td) => { td.style.backgroundColor = bgColor; },
+                          );
+                        }}
                       >
-                        {/* 이미지 */}
-                        <td style={{ padding: '8px', textAlign: 'center', verticalAlign: 'middle' }}>
+                        {/* 이미지 — sticky left */}
+                        <td data-sticky="true" style={{
+                          padding: '8px', textAlign: 'center', verticalAlign: 'middle',
+                          position: 'sticky', left: 0, zIndex: 1,
+                          backgroundColor: bgColor,
+                        }}>
                           {product.image_url ? (
                             <img
                               src={product.image_url}
@@ -765,29 +758,76 @@ export default function CostcoTab() {
                           )}
                         </td>
 
-                        {/* 상품명 */}
-                        <td style={{ padding: '8px 10px', verticalAlign: 'middle' }}>
-                          <div
-                            style={{ fontWeight: 500, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '300px' }}
-                            title={product.title}
-                          >
-                            {product.title}
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px', flexWrap: 'wrap' }}>
-                            {product.brand && (
-                              <span style={{ fontSize: '10px', color: C.textSub }}>{product.brand}</span>
-                            )}
-                            {product.category_name && (
-                              <span style={{ fontSize: '9px', padding: '1px 5px', borderRadius: '3px', backgroundColor: '#f3f3f3', color: C.textSub }}>
-                                {product.category_name}
-                              </span>
-                            )}
-                            {product.average_rating && (
-                              <span style={{ fontSize: '10px', color: '#ca8a04' }}>
-                                ★ {Number(product.average_rating).toFixed(1)} ({product.review_count.toLocaleString()})
-                              </span>
-                            )}
-                          </div>
+                        {/* 상품명 — sticky left, 단위가격 3번째 줄 포함 */}
+                        {(() => {
+                          const savingRate = calcUnitSavingRate(product.unit_price, product.market_unit_price);
+                          const hasUnitPrice = product.unit_price != null && product.unit_price_label;
+                          return (
+                            <td data-sticky="true" style={{
+                              padding: '8px 10px', verticalAlign: 'middle',
+                              position: 'sticky', left: '52px', zIndex: 1,
+                              backgroundColor: bgColor,
+                              boxShadow: '2px 0 4px rgba(0,0,0,0.06)',
+                            }}>
+                              <div
+                                style={{ fontWeight: 500, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '280px' }}
+                                title={product.title}
+                              >
+                                {product.title}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px', flexWrap: 'wrap' }}>
+                                {product.brand && (
+                                  <span style={{ fontSize: '10px', color: C.textSub }}>{product.brand}</span>
+                                )}
+                                {product.category_name && (
+                                  <span style={{ fontSize: '9px', padding: '1px 5px', borderRadius: '3px', backgroundColor: '#f3f3f3', color: C.textSub }}>
+                                    {product.category_name}
+                                  </span>
+                                )}
+                                {product.average_rating && (
+                                  <span style={{ fontSize: '10px', color: '#ca8a04' }}>
+                                    ★ {Number(product.average_rating).toFixed(1)} ({product.review_count.toLocaleString()})
+                                  </span>
+                                )}
+                              </div>
+                              {/* 3번째 줄: 단위가격 비교 (unit_price가 있을 때만) */}
+                              {hasUnitPrice && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '3px', flexWrap: 'wrap' }}>
+                                  <span style={{ fontSize: '9px', color: C.accent, fontWeight: 600 }}>
+                                    코C {fmtPrice(Math.round(product.unit_price!))}
+                                  </span>
+                                  <span style={{ fontSize: '9px', color: '#ccc' }}>·</span>
+                                  {product.market_unit_price != null ? (
+                                    <>
+                                      <span style={{ fontSize: '9px', color: C.naver, fontWeight: 600 }}>
+                                        네N {fmtPrice(Math.round(product.market_unit_price))}
+                                      </span>
+                                      <span style={{ fontSize: '9px', color: '#ccc' }}>·</span>
+                                      {savingRate != null && (
+                                        <span style={{
+                                          fontSize: '9px', fontWeight: 700,
+                                          color: savingRate >= 0 ? C.green : C.red,
+                                        }}>
+                                          {savingRate >= 0 ? `▼${savingRate.toFixed(1)}%` : `▲${Math.abs(savingRate).toFixed(1)}%`}
+                                          {' '}{savingRate >= 0 ? '저렴' : '비쌈'}
+                                        </span>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <span style={{ fontSize: '9px', color: '#c4c4c4' }}>네이버 수집 예정</span>
+                                  )}
+                                  <span style={{ fontSize: '9px', color: '#bbb', marginLeft: '2px' }}>
+                                    ({product.unit_price_label})
+                                  </span>
+                                </div>
+                              )}
+                            </td>
+                          );
+                        })()}
+
+                        {/* 등급/점수 */}
+                        <td style={{ padding: '8px 10px', textAlign: 'center', verticalAlign: 'middle' }}>
+                          <ScoreBadge product={product} />
                         </td>
 
                         {/* 매입가 */}
@@ -813,16 +853,6 @@ export default function CostcoTab() {
                         {/* 추천가(쿠팡) */}
                         <td style={{ padding: '8px 10px', textAlign: 'right', verticalAlign: 'middle' }}>
                           <ChannelPriceCell product={product} channel="coupang" />
-                        </td>
-
-                        {/* 실질마진율 */}
-                        <td style={{ padding: '8px 10px', textAlign: 'right', verticalAlign: 'middle' }}>
-                          <MarginRateCell product={product} />
-                        </td>
-
-                        {/* 등급/스코어 */}
-                        <td style={{ padding: '8px 10px', textAlign: 'center', verticalAlign: 'middle' }}>
-                          <ScoreBadge product={product} />
                         </td>
 
                         {/* 재고 상태 */}

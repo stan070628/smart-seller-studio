@@ -87,6 +87,21 @@ function toSalesAnalysisItem(row: Record<string, unknown>): SalesAnalysisItem {
     marketPriceSource: (row.market_price_source as 'naver_api' | 'manual' | null) ?? null,
     marketPriceUpdatedAt: (row.market_price_updated_at as string) ?? null,
     priceTiers: { dome: [], supply: [], resale: [] },
+    // v2 드롭쉬핑 스코어링 필드
+    scoreTotal: (row.score_total as number) ?? null,
+    scoreLegalIp: (row.score_legal_ip as number) ?? null,
+    scorePriceComp: (row.score_price_comp as number) ?? null,
+    scoreCsSafety: (row.score_cs_safety as number) ?? null,
+    scoreMargin: (row.score_margin as number) ?? null,
+    scoreDemand: (row.score_demand as number) ?? null,
+    scoreSupply: (row.score_supply as number) ?? null,
+    scoreMoqFit: (row.score_moq_fit as number) ?? null,
+    scoreCalculatedAt: (row.score_calculated_at as string) ?? null,
+    csRiskLevel: (row.cs_risk_level as 'low' | 'medium' | 'high' | null) ?? null,
+    csRiskReason: (row.cs_risk_reason as string) ?? null,
+    dropshipMoqStrategy: (row.dropship_moq_strategy as 'single' | '1+1' | '2+1' | null) ?? null,
+    dropshipBundlePrice: (row.dropship_bundle_price as number) ?? null,
+    dropshipPriceGapRate: row.dropship_price_gap_rate != null ? Number(row.dropship_price_gap_rate) : null,
   } as SalesAnalysisItem;
 }
 
@@ -260,6 +275,20 @@ export async function GET(request: NextRequest) {
          si.market_lowest_price,
          si.market_price_source,
          si.market_price_updated_at,
+         si.score_total,
+         si.score_legal_ip,
+         si.score_price_comp,
+         si.score_cs_safety,
+         si.score_margin,
+         si.score_demand,
+         si.score_supply,
+         si.score_moq_fit,
+         si.score_calculated_at,
+         si.cs_risk_level,
+         si.cs_risk_reason,
+         si.dropship_moq_strategy,
+         si.dropship_bundle_price,
+         si.dropship_price_gap_rate,
          CASE
            WHEN si.price_resale_recommend > 0
              THEN ROUND(

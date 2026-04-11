@@ -79,6 +79,7 @@ interface ProductRow {
   base_unit: string | null;
   unit_price_label: string | null;
   unit_price_divisor: number | null; // 100 (weight/volume) 또는 1 (count)
+  unit_price: string | null;         // numeric → pg driver가 string으로 반환 (100g/100ml/개당 코스트코 단가)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -119,7 +120,7 @@ export async function POST(req: NextRequest) {
   try {
     const res = await pool.query<ProductRow>(
       `SELECT id, product_code, title,
-              unit_type, total_quantity, base_unit, unit_price_label,
+              unit_type, total_quantity, base_unit, unit_price_label, unit_price,
               CASE unit_type
                 WHEN 'weight' THEN 100
                 WHEN 'volume' THEN 100
@@ -189,7 +190,11 @@ export async function POST(req: NextRequest) {
           unitPriceLabel: product.unit_price_label,
         };
 
-        const unitResult = await searchNaverUnitPrice(product.title, costcoUnit);
+        const unitResult = await searchNaverUnitPrice(
+          product.title,
+          costcoUnit,
+          product.unit_price ? parseFloat(product.unit_price) : undefined,
+        );
 
         if (unitResult !== null) {
           lowestPrice = unitResult.totalPrice;
