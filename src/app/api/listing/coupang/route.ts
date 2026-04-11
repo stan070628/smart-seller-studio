@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
       displayCategoryCode: d.displayCategoryCode,
       sellerProductName: d.sellerProductName,
       vendorId: client.vendor,
-      saleStartedAt: new Date().toISOString().slice(0, 19),
+      saleStartedAt: '2099-01-01T00:00:00',
       saleEndedAt: '2099-12-31T23:59:59',
       brand: d.brand,
       generalProductName: d.sellerProductName,

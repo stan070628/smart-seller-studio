@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
 
     const payload = {
       originProduct: {
-        statusType: 'SALE',
+        statusType: 'WAIT',
         saleType: 'NEW',
         leafCategoryId: d.leafCategoryId,
         name: d.name,
