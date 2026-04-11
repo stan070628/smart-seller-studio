@@ -86,14 +86,29 @@ function removeBrackets(text: string): string {
  */
 function applyMultipliers(afterUnit: string, baseQty: number): number {
   let result = baseQty;
-  const regex = /[xX×]\s*(\d+(?:\.\d+)?)/g;
+
+  // ── 1. "x N" 명시적 곱셈 ─────────────────────────────────────────────────
+  const xRegex = /[xX×]\s*(\d+(?:\.\d+)?)/g;
   let match: RegExpExecArray | null;
-  while ((match = regex.exec(afterUnit)) !== null) {
+  while ((match = xRegex.exec(afterUnit)) !== null) {
     const factor = parseFloat(match[1]);
     if (!isNaN(factor) && factor > 0) {
       result *= factor;
     }
   }
+
+  // ── 2. "Nt" 묶음 수 (티백/스틱 단위) — x 없이 나오는 경우 ────────────────
+  // 예: "11.7g 20T, 1개" → ×20
+  // "x 210T" 와 혼동 방지: x 구문 제거 후 검색
+  const afterStripped = afterUnit.replace(/[xX×]\s*\d+(?:\.\d+)?/g, ' ');
+  const tRegex = /\b(\d+)\s*[Tt]\b/g;
+  while ((match = tRegex.exec(afterStripped)) !== null) {
+    const factor = parseFloat(match[1]);
+    if (!isNaN(factor) && factor > 1) {
+      result *= factor;
+    }
+  }
+
   return result;
 }
 
@@ -185,7 +200,7 @@ export function parseProductUnit(title: string): ParseResult {
     //     "6병 330ml" (중량 형식은 아니지만 동일 패턴)
     const beforeUnit = cleaned.slice(0, weightMatch.index);
     const precedingCountMatch = beforeUnit.match(
-      /(\d+(?:\.\d+)?)\s*(개|입|팩|봉|포|병|캔|통|ct\b|pk\b)\s*$/i,
+      /(\d+(?:\.\d+)?)\s*(개|입|팩|봉|포|병|캔|통|[Tt]\b|ct\b|pk\b)\s*$/i,
     );
     if (precedingCountMatch) {
       const precedingFactor = parseFloat(precedingCountMatch[1]);
@@ -234,7 +249,7 @@ export function parseProductUnit(title: string): ParseResult {
     // 예: "6병 330ml" → 6 × 330ml = 1980ml
     const beforeVolUnit = cleaned.slice(0, volumeMatch.index);
     const precedingVolCount = beforeVolUnit.match(
-      /(\d+(?:\.\d+)?)\s*(개|입|팩|봉|포|병|캔|통|ct\b|pk\b)\s*$/i,
+      /(\d+(?:\.\d+)?)\s*(개|입|팩|봉|포|병|캔|통|[Tt]\b|ct\b|pk\b)\s*$/i,
     );
     if (precedingVolCount) {
       const factor = parseFloat(precedingVolCount[1]);
