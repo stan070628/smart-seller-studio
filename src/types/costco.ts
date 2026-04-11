@@ -106,15 +106,6 @@ export interface CostcoProductRow {
   market_price_source: 'manual' | 'naver_api' | 'coupang_api' | null;
   market_price_updated_at: string | null;
 
-  /** 단위 (예: "100g", "1정", "100ml") */
-  costco_unit: string | null;
-  /** 코스트코 단위당 가격 (예: 100g당 450원) */
-  costco_unit_price: number | null;
-  /** 네이버 동일 단위 최저가 (예: 100g당 820원) */
-  naver_unit_price: number | null;
-  /** 단가 절감율 (예: 45.1 → 45.1% 저렴) */
-  unit_saving_rate: number | null;
-
   /** 단위 유형: 무게/부피/개수 */
   unit_type?: 'weight' | 'volume' | 'count' | null;
   /** 코스트코 단가 (100g당/100ml당/1개당) */

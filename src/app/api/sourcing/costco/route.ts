@@ -128,7 +128,6 @@ export async function GET(req: NextRequest) {
            market_lowest_price, market_price_source, market_price_updated_at,
            sourcing_score, demand_score, price_opp_score, urgency_score,
            seasonal_score, margin_score,
-           costco_unit, costco_unit_price, naver_unit_price, unit_saving_rate,
            unit_type, unit_price, unit_price_label, market_unit_price, market_unit_title,
            collected_at
          FROM public.costco_products

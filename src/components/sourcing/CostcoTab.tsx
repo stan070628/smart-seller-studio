@@ -170,11 +170,9 @@ function SavingBadge({ rate }: { rate: number | null }) {
 // 단가 비교 셀
 // ─────────────────────────────────────────────────────────────────────────────
 function UnitPriceCell({ product }: { product: CostcoProductRow }) {
-  // 새 컬럼(unit_price, unit_price_label) 우선, 없으면 기존 컬럼 폴백
-  const costcoUnitPrice = product.unit_price ?? product.costco_unit_price ?? null;
-  const naverUnitPrice = product.market_unit_price ?? product.naver_unit_price ?? null;
-  // 단가 레이블: 새 컬럼 우선, 없으면 기존 costco_unit에서 "/{unit}" 형태로 표시
-  const unitLabel = product.unit_price_label ?? (product.costco_unit ? product.costco_unit : null);
+  const costcoUnitPrice = product.unit_price ?? null;
+  const naverUnitPrice = product.market_unit_price ?? null;
+  const unitLabel = product.unit_price_label ?? null;
 
   if (costcoUnitPrice == null && !unitLabel) {
     return <span style={{ color: '#c4c4c4', fontSize: '11px' }}>단위 미확인</span>;
@@ -812,11 +810,7 @@ export default function CostcoTab() {
                     const naverUrl = `https://search.shopping.naver.com/search/all?query=${naverQuery}`;
                     const coupangUrl = `https://www.coupang.com/np/search?q=${naverQuery}`;
                     const marginRate = calcMarginRate(product.price, product.market_lowest_price);
-                    // 새 컬럼(unit_price, market_unit_price)으로 절감율 재계산, 없으면 기존 unit_saving_rate 사용
-                    const savingRate =
-                      (product.unit_price != null && product.market_unit_price != null)
-                        ? calcUnitSavingRate(product.unit_price, product.market_unit_price)
-                        : product.unit_saving_rate;
+                    const savingRate = calcUnitSavingRate(product.unit_price, product.market_unit_price);
 
                     return (
                       <tr
