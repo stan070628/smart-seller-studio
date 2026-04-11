@@ -66,23 +66,13 @@ export async function GET(req: NextRequest) {
     conditions.push(`stock_status = $${idx++}`);
     values.push(stockStatus);
   }
-  // 단가 절감율 필터
-  // 새 컬럼(market_unit_price / unit_price) 또는 기존 unit_saving_rate 중 하나라도 조건 충족 시 포함
+  // 단가 절감율 필터 (market_unit_price / unit_price 기반)
   if (savingFilter === 'high') {
-    conditions.push(`(
-      unit_saving_rate >= 30
-      OR (unit_price IS NOT NULL AND market_unit_price IS NOT NULL AND market_unit_price / NULLIF(unit_price, 0) >= 1.30)
-    )`);
+    conditions.push(`(unit_price IS NOT NULL AND market_unit_price IS NOT NULL AND market_unit_price / NULLIF(unit_price, 0) >= 1.30)`);
   } else if (savingFilter === 'mid') {
-    conditions.push(`(
-      unit_saving_rate >= 15
-      OR (unit_price IS NOT NULL AND market_unit_price IS NOT NULL AND market_unit_price / NULLIF(unit_price, 0) >= 1.15)
-    )`);
+    conditions.push(`(unit_price IS NOT NULL AND market_unit_price IS NOT NULL AND market_unit_price / NULLIF(unit_price, 0) >= 1.15)`);
   } else if (savingFilter === 'any') {
-    conditions.push(`(
-      unit_saving_rate IS NOT NULL
-      OR (market_unit_price IS NOT NULL AND unit_price IS NOT NULL)
-    )`);
+    conditions.push(`(market_unit_price IS NOT NULL AND unit_price IS NOT NULL)`);
   }
 
   const where = `WHERE ${conditions.join(' AND ')}`;
@@ -96,15 +86,12 @@ export async function GET(req: NextRequest) {
     END
   `;
 
-  // 새 컬럼(market_unit_price / unit_price - 1) 또는 기존 unit_saving_rate 중 유효한 값으로 정렬
+  // 단가 절감율 정렬 표현식
   const unitSavingExpr = `
-    COALESCE(
-      CASE WHEN unit_price IS NOT NULL AND unit_price > 0 AND market_unit_price IS NOT NULL
-        THEN (market_unit_price / unit_price - 1) * 100
-        ELSE NULL
-      END,
-      unit_saving_rate
-    )
+    CASE WHEN unit_price IS NOT NULL AND unit_price > 0 AND market_unit_price IS NOT NULL
+      THEN (market_unit_price / unit_price - 1) * 100
+      ELSE NULL
+    END
   `;
 
   const orderBy: Record<string, string> = {
