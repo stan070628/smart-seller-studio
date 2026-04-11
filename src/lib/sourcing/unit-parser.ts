@@ -178,7 +178,21 @@ export function parseProductUnit(title: string): ParseResult {
     if (!(unitKey in WEIGHT_TO_GRAM)) continue;
 
     // g 단위로 정규화
-    const baseGrams = rawQty * WEIGHT_TO_GRAM[unitKey];
+    let baseGrams = rawQty * WEIGHT_TO_GRAM[unitKey];
+
+    // "N개/N입 Mg" 형식: 중량 앞에 낱개 수량이 있으면 곱셈 적용
+    // 예: "220입 11.7g" → 220 × 11.7g = 2574g
+    //     "6병 330ml" (중량 형식은 아니지만 동일 패턴)
+    const beforeUnit = cleaned.slice(0, weightMatch.index);
+    const precedingCountMatch = beforeUnit.match(
+      /(\d+(?:\.\d+)?)\s*(개|입|팩|봉|포|병|캔|통|ct\b|pk\b)\s*$/i,
+    );
+    if (precedingCountMatch) {
+      const precedingFactor = parseFloat(precedingCountMatch[1]);
+      if (!isNaN(precedingFactor) && precedingFactor > 1) {
+        baseGrams *= precedingFactor;
+      }
+    }
 
     // 단위 이후 문자열에서 곱셈·덧셈 적용
     const afterUnit = cleaned.slice(weightMatch.index + weightMatch[0].length);
@@ -214,7 +228,20 @@ export function parseProductUnit(title: string): ParseResult {
     if (!(unitKeyNorm in VOLUME_TO_ML)) continue;
 
     // ml 단위로 정규화
-    const baseML = rawQty * VOLUME_TO_ML[unitKeyNorm];
+    let baseML = rawQty * VOLUME_TO_ML[unitKeyNorm];
+
+    // "N병/N팩 Xml" 형식: 용량 앞에 낱개 수량이 있으면 곱셈 적용
+    // 예: "6병 330ml" → 6 × 330ml = 1980ml
+    const beforeVolUnit = cleaned.slice(0, volumeMatch.index);
+    const precedingVolCount = beforeVolUnit.match(
+      /(\d+(?:\.\d+)?)\s*(개|입|팩|봉|포|병|캔|통|ct\b|pk\b)\s*$/i,
+    );
+    if (precedingVolCount) {
+      const factor = parseFloat(precedingVolCount[1]);
+      if (!isNaN(factor) && factor > 1) {
+        baseML *= factor;
+      }
+    }
 
     const afterUnit = cleaned.slice(volumeMatch.index + volumeMatch[0].length);
     const withMultipliers = applyMultipliers(afterUnit, baseML);
