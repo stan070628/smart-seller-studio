@@ -1,6 +1,8 @@
 import {
   DOMEGGOOK_API_BASE_URL,
   DOMEGGOOK_API_KEY,
+  PROXY_URL,
+  PROXY_SECRET,
   API_CALL_DELAY_MS,
 } from './constants';
 import type {
@@ -12,6 +14,20 @@ import type {
 
 // 지정된 ms 만큼 대기
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+// PROXY_URL이 설정되어 있으면 Vercel Tokyo 프록시를 경유해 호출
+async function domeggookFetch(url: string): Promise<Response> {
+  if (PROXY_URL && PROXY_SECRET) {
+    return fetch(PROXY_URL, {
+      method: 'GET',
+      headers: {
+        'x-proxy-secret': PROXY_SECRET,
+        'x-target-url': url,
+      },
+    });
+  }
+  return fetch(url);
+}
 
 // ────────────────────────────────────────────
 // getItemList 호출 옵션
@@ -75,7 +91,7 @@ export class DomeggookClient {
     }
 
     const url = `${this.baseUrl}?${params.toString()}`;
-    const res = await fetch(url);
+    const res = await domeggookFetch(url);
 
     if (!res.ok) {
       throw new Error(`[도매꾹] getItemList API 오류: ${res.status} ${res.statusText}`);
@@ -119,7 +135,7 @@ export class DomeggookClient {
     });
 
     const url = `${this.baseUrl}?${params.toString()}`;
-    const res = await fetch(url);
+    const res = await domeggookFetch(url);
 
     if (!res.ok) {
       throw new Error(`[도매꾹] 상품 ${itemNo} 상세 조회 실패: ${res.status} ${res.statusText}`);

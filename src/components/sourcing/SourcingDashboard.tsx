@@ -18,6 +18,9 @@ import type { SalesAnalysisItem } from '@/types/sourcing';
 // 니치소싱 탭
 import NicheTab from '@/components/niche/NicheTab';
 import NicheAlertBadge from '@/components/niche/NicheAlertBadge';
+
+// 코스트코 탭
+import CostcoTab from '@/components/sourcing/CostcoTab';
 import { useNicheStore } from '@/store/useNicheStore';
 
 // 마진계산기 컴포넌트 (서브탭용)
@@ -193,7 +196,7 @@ function CollectingProgressBar({ progress }: { progress: CollectingProgress }) {
 export default function SourcingDashboard() {
   const router = useRouter();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [sourcingSubTab, setSourcingSubTab] = useState<'tracking' | 'calculator' | 'niche'>('tracking');
+  const [sourcingSubTab, setSourcingSubTab] = useState<'tracking' | 'calculator' | 'niche' | 'costco'>('tracking');
   const [calcItem, setCalcItem] = useState<SalesAnalysisItem | null>(null);
 
   // 니치소싱 읽지 않은 알림 수
@@ -392,6 +395,7 @@ export default function SourcingDashboard() {
           { id: 'tracking' as const, label: '상품추적', icon: <RefreshCw size={13} /> },
           { id: 'calculator' as const, label: '마진계산기', icon: <Calculator size={13} /> },
           { id: 'niche' as const, label: '니치소싱', icon: <Search size={13} />, badge: <NicheAlertBadge count={unreadAlertCount} /> },
+          { id: 'costco' as const, label: '코스트코', icon: <span style={{ fontSize: '13px' }}>🏬</span> },
         ]).map((tab) => (
           <button
             key={tab.id}
@@ -421,6 +425,11 @@ export default function SourcingDashboard() {
       {/* 니치소싱 서브탭 콘텐츠 */}
       {sourcingSubTab === 'niche' && (
         <NicheTab />
+      )}
+
+      {/* 코스트코 서브탭 콘텐츠 */}
+      {sourcingSubTab === 'costco' && (
+        <CostcoTab />
       )}
 
       {/* 상품추적 서브탭 — 기존 콘텐츠 시작 */}

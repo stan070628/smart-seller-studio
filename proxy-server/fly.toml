@@ -1,6 +1,5 @@
-[app]
-name = "smart-seller-proxy"
-primary_region = "nrt"  # Tokyo (한국 API와 가까움)
+app = "smart-seller-proxy"
+primary_region = "nrt"
 
 [build]
 dockerfile = "Dockerfile"

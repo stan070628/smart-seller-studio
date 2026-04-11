@@ -99,22 +99,34 @@ async function fetchOrdersForPeriod(from: string, to: string): Promise<CoupangOr
   return json.data?.items ?? [];
 }
 
-export default function AnalyticsTab() {
-  const today = new Date();
-  const defaultTo = toDateStr(today);
-  const defaultFrom7 = toDateStr(new Date(today.getTime() - 6 * 86400_000));
+const PERIODS = [
+  { label: '1개월', months: 1 },
+  { label: '3개월', months: 3 },
+  { label: '6개월', months: 6 },
+  { label: '1년', months: 12 },
+] as const;
 
-  const [from, setFrom] = useState(defaultFrom7);
-  const [to, setTo] = useState(defaultTo);
+function getPeriodDates(months: number): { from: string; to: string } {
+  const to = new Date();
+  const from = new Date(to);
+  from.setMonth(from.getMonth() - months);
+  return { from: toDateStr(from), to: toDateStr(to) };
+}
+
+export default function AnalyticsTab() {
+  const [selectedMonths, setSelectedMonths] = useState<number>(1);
+
+  const { from, to } = getPeriodDates(selectedMonths);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [current, setCurrent] = useState<Analytics | null>(null);
   const [previous, setPrevious] = useState<Analytics | null>(null);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (months: number) => {
     setLoading(true);
     setError(null);
     try {
+      const { from, to } = getPeriodDates(months);
       const fromDate = new Date(from);
       const toDate = new Date(to);
       const daysDiff = Math.round((toDate.getTime() - fromDate.getTime()) / 86400_000);
@@ -134,12 +146,12 @@ export default function AnalyticsTab() {
     } finally {
       setLoading(false);
     }
-  }, [from, to]);
+  }, []);
 
   useEffect(() => {
-    fetchData();
+    fetchData(selectedMonths);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [selectedMonths]);
 
   const fmt = (n: number) => {
     if (n >= 10_000_000) return `${(n / 10_000_000).toFixed(1)}천만`;
@@ -150,17 +162,27 @@ export default function AnalyticsTab() {
   return (
     <div>
       {/* 필터 행 */}
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', alignItems: 'center' }}>
-        <span style={{ fontSize: '13px', color: '#71717a' }}>기간</span>
-        <input type="date" value={from} onChange={(e) => setFrom(e.target.value)}
-          style={{ fontSize: '13px', padding: '5px 8px', borderRadius: '8px', border: '1px solid #e5e5e5', outline: 'none', color: '#18181b' }} />
-        <span style={{ fontSize: '13px', color: '#71717a' }}>~</span>
-        <input type="date" value={to} onChange={(e) => setTo(e.target.value)}
-          style={{ fontSize: '13px', padding: '5px 8px', borderRadius: '8px', border: '1px solid #e5e5e5', outline: 'none', color: '#18181b' }} />
-        <button onClick={fetchData} disabled={loading}
-          style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '13px', fontWeight: 500, padding: '5px 14px', borderRadius: '8px', border: '1px solid #e5e5e5', backgroundColor: '#fff', color: '#18181b', cursor: loading ? 'default' : 'pointer' }}>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', alignItems: 'center' }}>
+        {PERIODS.map(({ label, months }) => (
+          <button
+            key={months}
+            onClick={() => setSelectedMonths(months)}
+            disabled={loading}
+            style={{
+              fontSize: '13px', fontWeight: selectedMonths === months ? 700 : 500,
+              padding: '5px 16px', borderRadius: '8px', cursor: loading ? 'default' : 'pointer',
+              border: selectedMonths === months ? '1px solid #18181b' : '1px solid #e5e5e5',
+              backgroundColor: selectedMonths === months ? '#18181b' : '#fff',
+              color: selectedMonths === months ? '#fff' : '#18181b',
+            }}
+          >
+            {label}
+          </button>
+        ))}
+        <button onClick={() => fetchData(selectedMonths)} disabled={loading}
+          style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '13px', fontWeight: 500, padding: '5px 14px', borderRadius: '8px', border: '1px solid #e5e5e5', backgroundColor: '#fff', color: '#18181b', cursor: loading ? 'default' : 'pointer', marginLeft: '4px' }}>
           <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
-          조회
+          새로고침
         </button>
         <span style={{ fontSize: '12px', color: '#a1a1aa' }}>* 쿠팡 주문 기준 · 전기 대비 = 동일 기간 이전</span>
       </div>

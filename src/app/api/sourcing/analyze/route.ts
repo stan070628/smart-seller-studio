@@ -127,6 +127,13 @@ export async function GET(request: NextRequest) {
     const rawMoq = searchParams.get('moq');
     const moqMax = rawMoq != null ? parseInt(rawMoq, 10) : null;
     const freeDeliOnly = searchParams.get('freeDeliOnly') === '1';
+    const minSales1d = searchParams.get('minSales1d') ? parseInt(searchParams.get('minSales1d')!, 10) : null;
+    const minSales7d = searchParams.get('minSales7d') ? parseInt(searchParams.get('minSales7d')!, 10) : null;
+    const minPrice = searchParams.get('minPrice') ? parseInt(searchParams.get('minPrice')!, 10) : null;
+    const maxPrice = searchParams.get('maxPrice') ? parseInt(searchParams.get('maxPrice')!, 10) : null;
+    const minMargin = searchParams.get('minMargin') ? parseFloat(searchParams.get('minMargin')!) : null;
+    const legalFilter = searchParams.get('legal') ?? null;
+    const ipRiskFilter = searchParams.get('ipRisk') ?? null;
 
     const pool = getSourcingPool();
 
@@ -135,14 +142,14 @@ export async function GET(request: NextRequest) {
     const vConditions: string[] = [];
     // si. 접두사 조건 (sourcing_items 컬럼)
     const siConditions: string[] = [];
+    // HAVING 또는 외부 WHERE 조건 (계산 컬럼)
+    const havingConditions: string[] = [];
     const params: unknown[] = [];
     let paramIdx = 1;
 
     if (category) {
-      // 상위 카테고리 → 세분류 목록으로 IN 조건
       const subs = getSubCategories(category);
       if (category === '기타' || subs.length === 0) {
-        // '기타'이거나 매핑 없으면 직접 비교
         vConditions.push(`v.category_name = $${paramIdx++}`);
         params.push(category);
       } else {
@@ -153,7 +160,6 @@ export async function GET(request: NextRequest) {
     }
 
     if (search) {
-      // ILIKE로 대소문자 무관 부분 일치 검색
       vConditions.push(`v.title ILIKE $${paramIdx++}`);
       params.push(`%${search}%`);
     }
@@ -165,6 +171,52 @@ export async function GET(request: NextRequest) {
 
     if (freeDeliOnly) {
       siConditions.push(`si.deli_who = 'S'`);
+    }
+
+    // 전일판매 최소값
+    if (minSales1d != null && !Number.isNaN(minSales1d)) {
+      vConditions.push(`v.sales_1d >= $${paramIdx++}`);
+      params.push(minSales1d);
+    }
+
+    // 7일판매 최소값
+    if (minSales7d != null && !Number.isNaN(minSales7d)) {
+      vConditions.push(`v.sales_7d >= $${paramIdx++}`);
+      params.push(minSales7d);
+    }
+
+    // 도매가 범위
+    if (minPrice != null && !Number.isNaN(minPrice)) {
+      vConditions.push(`v.latest_price_dome >= $${paramIdx++}`);
+      params.push(minPrice);
+    }
+    if (maxPrice != null && !Number.isNaN(maxPrice)) {
+      vConditions.push(`v.latest_price_dome <= $${paramIdx++}`);
+      params.push(maxPrice);
+    }
+
+    // Legal 상태
+    if (legalFilter) {
+      siConditions.push(`si.legal_status = $${paramIdx++}`);
+      params.push(legalFilter);
+    }
+
+    // IP 리스크
+    if (ipRiskFilter) {
+      siConditions.push(`si.ip_risk_level = $${paramIdx++}`);
+      params.push(ipRiskFilter);
+    }
+
+    // 마진율 최소값 — CASE 식을 WHERE 절에 직접 삽입
+    if (minMargin != null && !Number.isNaN(minMargin)) {
+      siConditions.push(
+        `CASE WHEN si.price_resale_recommend > 0 THEN
+          (si.price_resale_recommend - COALESCE(si.price_dome, v.latest_price_dome, 0)
+           - CASE WHEN si.deli_who != 'P' THEN COALESCE(si.deli_fee, 0)::numeric / GREATEST(COALESCE(si.moq, 1), 1) ELSE 0 END
+          )::numeric / si.price_resale_recommend * 100
+        ELSE NULL END >= $${paramIdx++}`,
+      );
+      params.push(minMargin);
     }
 
     const allConditions = [...vConditions, ...siConditions];
