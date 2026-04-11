@@ -77,11 +77,25 @@ export async function GET(req: NextRequest) {
 
   const where = `WHERE ${conditions.join(' AND ')}`;
 
-  // margin_rate_desc: 시장가 기반 마진율 계산 후 정렬
-  // (MARKETPLACE_FEE_RATE=0.12, LOGISTICS_FEE=3000, TAX_RATE=0.1 — costco-constants와 동일)
+  // margin_rate_desc: 단가 기반 환산 시장가 우선, fallback → market_lowest_price
+  // 상수: MARKETPLACE_FEE_RATE=0.10, LOGISTICS_FEE=3500, TAX_RATE=0.10
+  // 묶음 상품(예: 591ml×2)은 market_unit_price × total_quantity / divisor 로 환산하여
+  // 단품 가격을 그대로 비교하는 오류를 방지한다.
+  const effMarketExpr = `
+    COALESCE(
+      CASE
+        WHEN market_unit_price IS NOT NULL AND market_unit_price > 0
+             AND total_quantity  IS NOT NULL AND total_quantity  > 0
+        THEN market_unit_price * total_quantity /
+             CASE unit_type WHEN 'count' THEN 1.0 ELSE 100.0 END
+        ELSE NULL
+      END,
+      NULLIF(market_lowest_price, 0)
+    )
+  `;
   const marginExpr = `
-    CASE WHEN market_lowest_price IS NOT NULL AND market_lowest_price > 0
-      THEN ((market_lowest_price * (1 - 0.12) - price - 3000) / 1.1) / market_lowest_price * 100
+    CASE WHEN (${effMarketExpr}) IS NOT NULL
+      THEN ((${effMarketExpr}) * 0.90 - price - 3500.0) / 1.10 / (${effMarketExpr}) * 100
       ELSE NULL
     END
   `;
@@ -115,7 +129,7 @@ export async function GET(req: NextRequest) {
            market_lowest_price, market_price_source, market_price_updated_at,
            sourcing_score, demand_score, price_opp_score, urgency_score,
            seasonal_score, margin_score,
-           unit_type, unit_price, unit_price_label, market_unit_price, market_unit_title,
+           unit_type, total_quantity, unit_price, unit_price_label, market_unit_price, market_unit_title,
            collected_at
          FROM public.costco_products
          ${where}

@@ -112,6 +112,10 @@ export interface SalesAnalysisItem {
   // IP(지식재산권) 리스크 필드 — KIPRIS 검증 결과
   ipRiskLevel: 'low' | 'medium' | 'high' | null;
   ipCheckedAt: string | null;
+  // 네이버 쇼핑 시장 최저가
+  marketLowestPrice: number | null;
+  marketPriceSource: 'naver_api' | 'manual' | null;
+  marketPriceUpdatedAt: string | null;
   // 수량별 가격 티어
   priceTiers: PriceTiers;
 }

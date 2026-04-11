@@ -7,6 +7,22 @@
     {
       "path": "/api/niche/cron",
       "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/sourcing/costco/cron",
+      "schedule": "0 21 * * *"
+    },
+    {
+      "path": "/api/sourcing/costco/seasonal",
+      "schedule": "0 22 1 * *"
+    },
+    {
+      "path": "/api/sourcing/costco/naver-prices",
+      "schedule": "0 22 * * *"
+    },
+    {
+      "path": "/api/sourcing/naver-prices",
+      "schedule": "0 23 * * *"
     }
   ]
 }

@@ -108,6 +108,8 @@ export interface CostcoProductRow {
 
   /** 단위 유형: 무게/부피/개수 */
   unit_type?: 'weight' | 'volume' | 'count' | null;
+  /** 총 수량 (g / ml / 개) — 마진 환산에 사용 */
+  total_quantity?: number | null;
   /** 코스트코 단가 (100g당/100ml당/1개당) */
   unit_price?: number | null;
   /** 단가 레이블 (예: '100g당', '100ml당', '1개당') */

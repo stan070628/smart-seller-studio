@@ -35,6 +35,7 @@ const ALLOWED_SORT_COLUMNS = new Set([
   'margin_rate',
   'moq',
   'legal_status',
+  'market_lowest_price',
 ]);
 
 const DEFAULT_SORT = 'sales_7d';
@@ -81,6 +82,10 @@ function toSalesAnalysisItem(row: Record<string, unknown>): SalesAnalysisItem {
     // IP 리스크 필드 — KIPRIS 검증 결과
     ipRiskLevel: (row.ip_risk_level as 'low' | 'medium' | 'high' | null) ?? null,
     ipCheckedAt: (row.ip_checked_at as string) ?? null,
+    // 네이버 쇼핑 시장 최저가
+    marketLowestPrice: (row.market_lowest_price as number) ?? null,
+    marketPriceSource: (row.market_price_source as 'naver_api' | 'manual' | null) ?? null,
+    marketPriceUpdatedAt: (row.market_price_updated_at as string) ?? null,
     priceTiers: { dome: [], supply: [], resale: [] },
   } as SalesAnalysisItem;
 }
@@ -104,7 +109,7 @@ export async function GET(request: NextRequest) {
       'latest_inventory', 'latest_price_dome', 'latest_price_supply',
       'item_no', 'title', 'latest_date',
     ]);
-    const SI_COLUMNS = new Set(['moq', 'legal_status']);
+    const SI_COLUMNS = new Set(['moq', 'legal_status', 'market_lowest_price']);
     const sortColumn = VIEW_COLUMNS.has(validatedSort)
       ? `v.${validatedSort}`
       : SI_COLUMNS.has(validatedSort)
@@ -252,6 +257,9 @@ export async function GET(request: NextRequest) {
          si.legal_checked_at,
          si.ip_risk_level,
          si.ip_checked_at,
+         si.market_lowest_price,
+         si.market_price_source,
+         si.market_price_updated_at,
          CASE
            WHEN si.price_resale_recommend > 0
              THEN ROUND(

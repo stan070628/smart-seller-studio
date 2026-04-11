@@ -102,6 +102,7 @@ const SORTABLE_COLUMNS: { key: string; label: string; align?: 'left' | 'right' |
   { key: 'sales_7d', label: '7일판매', align: 'right', tooltip: '7일 전 재고 − 오늘 재고 (누적 추정 판매량)' },
   { key: 'avg_daily_sales', label: '일평균', align: 'right', tooltip: '7일 판매량 ÷ 경과일수 (하루 평균 판매 추정)' },
   { key: 'latest_price_dome', label: '도매가', align: 'right', tooltip: '도매꾹 기준 매입가 (최근 스냅샷)' },
+  { key: 'market_lowest_price', label: '시장최저가', align: 'right', tooltip: '네이버 쇼핑 자동 수집 시장 최저가 (클릭하여 수동 수정)' },
   { key: 'margin_rate', label: '마진율', align: 'right', tooltip: '(추천판매가 − 도매가) ÷ 추천판매가 × 100' },
   { key: 'moq', label: 'MOQ', align: 'right', tooltip: '최소주문수량 (Minimum Order Quantity)' },
   { key: 'legal_status', label: 'Legal', align: 'center', tooltip: 'KC인증 / 금지어 / 상표권 법적 검토 상태' },
@@ -1111,6 +1112,40 @@ interface TableRowProps {
 
 function TableRow({ item, index, onNavigate, ipVerifyingId, onVerifyIp, onOpenCalc }: TableRowProps) {
   const [hovered, setHovered] = React.useState(false);
+  const [marketPrice, setMarketPrice] = React.useState<number | null>(item.marketLowestPrice ?? null);
+  const [marketSource, setMarketSource] = React.useState<string | null>(item.marketPriceSource ?? null);
+  const [editingMarket, setEditingMarket] = React.useState(false);
+  const [marketInputVal, setMarketInputVal] = React.useState('');
+  const [savingMarket, setSavingMarket] = React.useState(false);
+  const marketInputRef = React.useRef<HTMLInputElement>(null);
+
+  const startMarketEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setMarketInputVal(marketPrice ? String(marketPrice) : '');
+    setEditingMarket(true);
+    setTimeout(() => marketInputRef.current?.focus(), 0);
+  };
+
+  const saveMarketPrice = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const num = parseInt(marketInputVal.replace(/[^0-9]/g, ''), 10);
+    if (isNaN(num) || num <= 0) { setEditingMarket(false); return; }
+    setSavingMarket(true);
+    try {
+      const res = await fetch('/api/sourcing/market-price', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemId: item.id, marketPrice: num }),
+      });
+      if (res.ok) {
+        setMarketPrice(num);
+        setMarketSource('manual');
+      }
+    } finally {
+      setSavingMarket(false);
+      setEditingMarket(false);
+    }
+  };
 
   return (
     <tr
@@ -1233,6 +1268,59 @@ function TableRow({ item, index, onNavigate, ipVerifyingId, onVerifyIp, onOpenCa
             <Calculator size={13} />
           </button>
         </div>
+      </td>
+
+      {/* 시장최저가 (인라인 편집) */}
+      <td
+        style={{ padding: '11px 16px', textAlign: 'right' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {editingMarket ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end' }}>
+            <input
+              ref={marketInputRef}
+              value={marketInputVal}
+              onChange={(e) => setMarketInputVal(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') saveMarketPrice(e as unknown as React.MouseEvent); if (e.key === 'Escape') setEditingMarket(false); }}
+              style={{ width: '80px', padding: '2px 6px', fontSize: '12px', border: `1px solid ${C.border}`, borderRadius: '4px', textAlign: 'right' }}
+              placeholder="시장가"
+            />
+            <button
+              onClick={saveMarketPrice}
+              disabled={savingMarket}
+              style={{ padding: '2px 6px', fontSize: '11px', backgroundColor: C.accent, color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+            >
+              {savingMarket ? '…' : '저장'}
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); setEditingMarket(false); }}
+              style={{ padding: '2px 6px', fontSize: '11px', backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: '4px', cursor: 'pointer', color: C.textSub }}
+            >
+              ✕
+            </button>
+          </div>
+        ) : (
+          <div
+            style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', cursor: 'pointer' }}
+            onClick={startMarketEdit}
+            title={marketSource === 'naver_api' ? '네이버 자동 수집 (클릭하여 수동 수정)' : '클릭하여 시장가 입력'}
+          >
+            {marketPrice != null ? (
+              <>
+                <span style={{ fontWeight: 600, color: C.text }}>{formatNumber(marketPrice)}원</span>
+                <span style={{
+                  fontSize: '9px', fontWeight: 600, padding: '1px 4px', borderRadius: '3px',
+                  backgroundColor: marketSource === 'naver_api' ? '#e8f9ee' : '#f0f0f0',
+                  color: marketSource === 'naver_api' ? '#03c75a' : C.textSub,
+                }}>
+                  {marketSource === 'naver_api' ? 'N' : '수동'}
+                </span>
+              </>
+            ) : (
+              <span style={{ color: '#c4c4c4', fontSize: '11px' }}>-</span>
+            )}
+          </div>
+        )}
       </td>
 
       {/* 마진율 */}
