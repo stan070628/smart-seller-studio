@@ -1,8 +1,8 @@
 import {
   DOMEGGOOK_API_BASE_URL,
   DOMEGGOOK_API_KEY,
-  PROXY_URL,
-  PROXY_SECRET,
+  DOMEGGOOK_PROXY_URL,
+  DOMEGGOOK_PROXY_SECRET,
   API_CALL_DELAY_MS,
 } from './constants';
 import type {
@@ -15,13 +15,13 @@ import type {
 // 지정된 ms 만큼 대기
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-// PROXY_URL이 설정되어 있으면 Vercel Tokyo 프록시를 경유해 호출
+// DOMEGGOOK_PROXY_URL이 설정되어 있으면 Vultr Seoul 프록시를 경유해 호출 (한국 IP 우회)
 async function domeggookFetch(url: string): Promise<Response> {
-  if (PROXY_URL && PROXY_SECRET) {
-    return fetch(`${PROXY_URL}/proxy`, {
+  if (DOMEGGOOK_PROXY_URL && DOMEGGOOK_PROXY_SECRET) {
+    return fetch(`${DOMEGGOOK_PROXY_URL}/proxy`, {
       method: 'GET',
       headers: {
-        'x-proxy-secret': PROXY_SECRET,
+        'x-proxy-secret': DOMEGGOOK_PROXY_SECRET,
         'x-target-url': url,
       },
     });

@@ -5,10 +5,10 @@ export const DOMEGGOOK_API_BASE_URL =
 // 도매꾹 API 인증 키
 export const DOMEGGOOK_API_KEY = process.env.DOMEGGOOK_API_KEY || '';
 
-// Vercel Tokyo 프록시 설정 — 설정 시 도매꾹 API 요청을 /api/proxy(hnd1)를 경유해 전송
-// PROXY_URL: e.g. https://smartsellerstudio.vercel.app/api/proxy
-export const PROXY_URL = process.env.PROXY_URL || '';
-export const PROXY_SECRET = process.env.PROXY_SECRET || '';
+// 도매꾹 전용 프록시 설정 (한국 IP 우회용) — Vultr Seoul 서버
+// DOMEGGOOK_PROXY_URL: e.g. http://141.164.55.191:3001
+export const DOMEGGOOK_PROXY_URL = process.env.DOMEGGOOK_PROXY_URL || '';
+export const DOMEGGOOK_PROXY_SECRET = process.env.DOMEGGOOK_PROXY_SECRET || '';
 
 // API 호출 간 딜레이 (ms) — Rate Limiting 방지
 export const API_CALL_DELAY_MS = 200;
