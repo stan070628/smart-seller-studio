@@ -2,18 +2,22 @@
 
 /**
  * CostcoTab.tsx
- * 코스트코 소싱 탭 — 단가 경쟁력 중심 재설계
+ * 코스트코 소싱 탭 — 단위 가격 기반 경쟁력 분석
  *
- * 핵심 가치: "코스트코 단가 vs 네이버 단가" 비교로 가격 경쟁력을 한눈에
+ * 컬럼: 매입가 | 단위가격(코스트코) | 단위가격(네이버) | 단가절감율 | 추천판매가 | 스코어 | 재고 | 링크
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Loader2, RefreshCw, Search, X, ExternalLink,
-  ChevronDown, Edit2, Check, ShoppingCart, TrendingDown, TrendingUp,
+  ChevronDown, ShoppingCart, Pencil, Check, Ban,
 } from 'lucide-react';
 import type { CostcoProductRow, CostcoSortKey } from '@/types/costco';
-import { STOCK_STATUS_LABELS, MARGIN_CONSTANTS } from '@/lib/sourcing/costco-constants';
+import { STOCK_STATUS_LABELS } from '@/lib/sourcing/costco-constants';
+import {
+  calcRecommendedPrice, calcGrade, getWeightKgFromProduct,
+  GRADE_COLORS, type SourcingGrade,
+} from '@/lib/sourcing/costco-pricing';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 색상 상수
@@ -34,13 +38,10 @@ const C = {
   red: '#dc2626',
   redBg: '#fef2f2',
   blue: '#2563eb',
-  blueBg: '#eff6ff',
-  savingHigh: '#15803d',    // 절감율 30%+
-  savingMid: '#ca8a04',     // 절감율 15-30%
-  savingLow: '#6b7280',     // 절감율 0-15%
-  expensiveHigh: '#dc2626', // 비쌈 30%+
-  expensiveMid: '#ea580c',  // 비쌈 15-30%
-  expensiveLow: '#6b7280',  // 비쌈 0-15%
+  naver: '#03c75a',
+  naverBg: '#e8f9ee',
+  coupang: '#e52222',
+  coupangBg: '#fff0f0',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -56,178 +57,211 @@ const fmtDate = (iso: string | null) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 };
 
-/** 마진율 계산 (시장가 기반) */
-function calcMarginRate(purchasePrice: number, marketPrice: number | null): number | null {
-  if (!marketPrice || marketPrice <= 0) return null;
-  const { MARKETPLACE_FEE_RATE, LOGISTICS_FEE, TAX_RATE } = MARGIN_CONSTANTS;
-  const net = (marketPrice * (1 - MARKETPLACE_FEE_RATE) - purchasePrice - LOGISTICS_FEE) / (1 + TAX_RATE);
-  return net / marketPrice * 100;
-}
-
-function fmtMarginRate(rate: number | null): string {
-  if (rate == null) return '-';
-  return `${rate.toFixed(1)}%`;
-}
-
-function marginColor(rate: number | null): string {
-  if (rate == null) return C.textSub;
-  if (rate >= 20) return C.green;
-  if (rate >= 10) return C.orange;
-  if (rate > 0) return '#ca8a04';
-  return C.red;
-}
-
-function marginBg(rate: number | null): string {
-  if (rate == null) return 'transparent';
-  if (rate >= 20) return C.greenBg;
-  if (rate >= 10) return C.orangeBg;
-  if (rate > 0) return '#fffbeb';
-  return C.redBg;
-}
-
-/** 소싱 스코어 색상 */
 function scoreColor(score: number): string {
   if (score >= 70) return C.green;
   if (score >= 40) return C.orange;
   return C.textSub;
 }
 
-/** 재고 상태 색상 */
 function stockColor(status: string): string {
   if (status === 'inStock') return C.green;
   if (status === 'lowStock') return C.orange;
   return C.red;
 }
 
-/** 단가 절감율/비쌈 색상 */
-function savingColor(rate: number | null): string {
-  if (rate == null) return C.textSub;
-  // 코스트코가 저렴한 경우 (양수)
-  if (rate >= 30) return C.savingHigh;
-  if (rate >= 15) return C.savingMid;
-  if (rate >= 0) return C.savingLow;
-  // 코스트코가 비싼 경우 (음수)
-  if (rate <= -30) return C.expensiveHigh;
-  if (rate <= -15) return C.expensiveMid;
-  return C.expensiveLow;
-}
-
-function savingBg(rate: number | null): string {
-  if (rate == null) return 'transparent';
-  if (rate >= 30) return '#f0fdf4';
-  if (rate >= 15) return '#fefce8';
-  if (rate >= 0) return '#f9fafb';
-  if (rate <= -30) return '#fef2f2';
-  if (rate <= -15) return '#fff7ed';
-  return '#f9fafb';
-}
-
-/**
- * 단가 절감율 계산 헬퍼
- * costcoUnit 대비 naverUnit이 얼마나 비싼지 퍼센트로 반환 (소수점 1자리)
- * 양수면 코스트코가 저렴, 음수면 코스트코가 더 비쌈
- */
-function calcUnitSavingRate(costcoUnit: number | null | undefined, naverUnit: number | null | undefined): number | null {
-  if (!costcoUnit || !naverUnit || costcoUnit <= 0) return null;
-  return Math.round((naverUnit / costcoUnit - 1) * 1000) / 10;
+function marginColor(rate: number): string {
+  if (rate >= 0.25) return C.green;
+  if (rate >= 0.15) return C.orange;
+  if (rate > 0)     return C.textSub;
+  return C.red;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 단가 절감율/비쌈 뱃지
+// 채널 추천가 셀 (네이버 / 쿠팡)
 // ─────────────────────────────────────────────────────────────────────────────
-function SavingBadge({ rate }: { rate: number | null }) {
-  if (rate == null) return <span style={{ color: '#c4c4c4', fontSize: '11px' }}>-</span>;
+function ChannelPriceCell({
+  product,
+  channel,
+}: {
+  product: CostcoProductRow;
+  channel: 'naver' | 'coupang';
+}) {
+  const weightKg    = getWeightKgFromProduct(product);
+  const marketPrice = product.market_lowest_price ?? null;
+  const pricing     = calcRecommendedPrice(
+    product.price,
+    product.category_name,
+    channel,
+    weightKg,
+    marketPrice,
+  );
 
-  const color = savingColor(rate);
-  const bg = savingBg(rate);
-  const isCheaper = rate >= 0;
-  const absRate = Math.abs(rate);
+  const channelColor = channel === 'naver' ? C.naver : C.coupang;
+  const channelBg    = channel === 'naver' ? C.naverBg : C.coupangBg;
 
   return (
-    <div
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: '3px',
-        padding: '3px 7px', borderRadius: '12px',
-        backgroundColor: bg,
-        border: `1px solid ${color}30`,
-      }}
-    >
-      {isCheaper
-        ? <TrendingDown size={10} color={color} />
-        : <TrendingUp size={10} color={color} />
-      }
-      <span style={{ fontSize: '12px', fontWeight: 700, color }}>
-        {isCheaper ? '▼' : '▲'}{absRate.toFixed(1)}%
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-end' }}>
+      <span style={{ fontWeight: 700, color: pricing.isOverprice ? C.red : C.text }}>
+        {fmtPrice(pricing.recommendedPrice)}
       </span>
-      <span style={{ fontSize: '10px', color, opacity: 0.8 }}>
-        {isCheaper ? '저렴' : '비쌈'}
+      <span style={{ fontSize: '10px', color: marginColor(pricing.realMarginRate), fontWeight: 600 }}>
+        {(pricing.realMarginRate * 100).toFixed(1)}% 마진
       </span>
+      {pricing.vsMarket != null && (
+        <span
+          style={{
+            fontSize: '9px', fontWeight: 700, padding: '1px 5px',
+            borderRadius: '8px', backgroundColor: channelBg, color: channelColor,
+          }}
+        >
+          {pricing.isOverprice
+            ? `시장가 +${Math.abs(pricing.vsMarket).toFixed(1)}% 초과`
+            : `시장가 -${Math.abs(pricing.vsMarket).toFixed(1)}%`}
+        </span>
+      )}
+      {!marketPrice && (
+        <span style={{ fontSize: '9px', color: '#c4c4c4' }}>시장가 없음</span>
+      )}
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 단가 비교 셀
+// 실질마진율 셀
 // ─────────────────────────────────────────────────────────────────────────────
-function UnitPriceCell({ product }: { product: CostcoProductRow }) {
-  const costcoUnitPrice = product.unit_price ?? null;
-  const naverUnitPrice = product.market_unit_price ?? null;
-  const unitLabel = product.unit_price_label ?? null;
-
-  if (costcoUnitPrice == null && !unitLabel) {
-    return <span style={{ color: '#c4c4c4', fontSize: '11px' }}>단위 미확인</span>;
-  }
+function MarginRateCell({ product }: { product: CostcoProductRow }) {
+  const weightKg    = getWeightKgFromProduct(product);
+  const marketPrice = product.market_lowest_price ?? null;
+  const naver       = calcRecommendedPrice(product.price, product.category_name, 'naver', weightKg, marketPrice);
+  const coupang     = calcRecommendedPrice(product.price, product.category_name, 'coupang', weightKg, marketPrice);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: '110px' }}>
-      {/* 코스트코 단가 */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-end' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-        <span
-          style={{
-            fontSize: '9px', fontWeight: 700, padding: '1px 4px', borderRadius: '3px',
-            backgroundColor: C.accent + '14', color: C.accent, flexShrink: 0,
-          }}
-        >
-          코C
+        <span style={{ fontSize: '9px', color: C.naver, fontWeight: 700 }}>N</span>
+        <span style={{ fontSize: '12px', fontWeight: 600, color: marginColor(naver.realMarginRate) }}>
+          {(naver.realMarginRate * 100).toFixed(1)}%
         </span>
-        <span style={{ fontSize: '12px', fontWeight: 600, color: C.text }}>
-          {costcoUnitPrice != null ? fmtPrice(costcoUnitPrice) : '-'}
-        </span>
-        {unitLabel && (
-          <span style={{ fontSize: '10px', color: C.textSub }}>/{unitLabel}</span>
-        )}
       </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+        <span style={{ fontSize: '9px', color: C.coupang, fontWeight: 700 }}>C</span>
+        <span style={{ fontSize: '12px', fontWeight: 600, color: marginColor(coupang.realMarginRate) }}>
+          {(coupang.realMarginRate * 100).toFixed(1)}%
+        </span>
+      </div>
+    </div>
+  );
+}
 
-      {/* 네이버 단가 */}
-      {naverUnitPrice != null && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <span
-            style={{
-              fontSize: '9px', fontWeight: 700, padding: '1px 4px', borderRadius: '3px',
-              backgroundColor: '#e8f9ee', color: '#03c75a', flexShrink: 0,
-            }}
-          >
-            N
-          </span>
-          <span style={{ fontSize: '12px', color: C.textSub }}>
-            {fmtPrice(naverUnitPrice)}
-          </span>
-          {unitLabel && (
-            <span style={{ fontSize: '10px', color: C.textSub }}>/{unitLabel}</span>
-          )}
-        </div>
-      )}
+// ─────────────────────────────────────────────────────────────────────────────
+// 시장최저가 셀 (인라인 편집 + N/수동 뱃지)
+// ─────────────────────────────────────────────────────────────────────────────
+function MarketPriceCell({
+  product,
+  onSaved,
+}: {
+  product: CostcoProductRow;
+  onSaved: (productCode: string, newPrice: number) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [inputVal, setInputVal] = useState('');
+  const [saving, setSaving] = useState(false);
 
-      {/* 매칭된 네이버 상품명 (있을 경우) */}
-      {product.market_unit_title && (
-        <div
-          style={{ fontSize: '9px', color: C.textSub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' }}
-          title={product.market_unit_title}
-        >
-          {product.market_unit_title}
-        </div>
+  const startEdit = () => {
+    setInputVal(product.market_lowest_price ? String(product.market_lowest_price) : '');
+    setEditing(true);
+  };
+
+  const handleSave = async () => {
+    const price = parseInt(inputVal.replace(/[^0-9]/g, ''), 10);
+    if (isNaN(price) || price <= 0) { setEditing(false); return; }
+    setSaving(true);
+    try {
+      await fetch('/api/sourcing/costco/market-price', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productCode: product.product_code, marketPrice: price, source: 'manual' }),
+      });
+      onSaved(product.product_code, price);
+    } finally {
+      setSaving(false);
+      setEditing(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+        <input
+          type="text"
+          value={inputVal}
+          onChange={(e) => setInputVal(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setEditing(false); }}
+          autoFocus
+          style={{
+            width: '80px', height: '24px', padding: '0 4px',
+            border: `1px solid ${C.accent}`, borderRadius: '4px',
+            fontSize: '11px', textAlign: 'right',
+          }}
+        />
+        {saving
+          ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />
+          : <>
+              <button onClick={handleSave} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.green, padding: '2px' }}><Check size={12} /></button>
+              <button onClick={() => setEditing(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textSub, padding: '2px' }}><Ban size={12} /></button>
+            </>}
+      </div>
+    );
+  }
+
+  const price  = product.market_lowest_price;
+  const source = product.market_price_source;
+
+  return (
+    <div
+      style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-end', cursor: 'pointer' }}
+      onClick={startEdit}
+      title="클릭하여 시장 최저가 편집"
+    >
+      {price ? (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            {source === 'naver_api' && (
+              <span style={{ fontSize: '9px', fontWeight: 700, padding: '1px 4px', borderRadius: '4px', backgroundColor: C.naverBg, color: C.naver }}>N</span>
+            )}
+            {source === 'manual' && (
+              <span style={{ fontSize: '9px', fontWeight: 500, padding: '1px 4px', borderRadius: '4px', backgroundColor: '#f0f0f0', color: '#888' }}>수동</span>
+            )}
+            <span style={{ fontWeight: 600, color: C.text }}>{fmtPrice(price)}</span>
+            <Pencil size={9} color={C.textSub} />
+          </div>
+        </>
+      ) : (
+        <span style={{ fontSize: '11px', color: '#c4c4c4', display: 'flex', alignItems: 'center', gap: '3px' }}>
+          입력 <Pencil size={9} />
+        </span>
       )}
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 등급 뱃지
+// ─────────────────────────────────────────────────────────────────────────────
+function GradeBadge({ score }: { score: number }) {
+  const grade = calcGrade(score);
+  const { color, bg } = GRADE_COLORS[grade];
+  return (
+    <span
+      style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: '24px', height: '24px', borderRadius: '6px',
+        backgroundColor: bg, color, fontWeight: 800, fontSize: '13px',
+        border: `1px solid ${color}44`,
+      }}
+    >
+      {grade}
+    </span>
   );
 }
 
@@ -235,7 +269,7 @@ function UnitPriceCell({ product }: { product: CostcoProductRow }) {
 // 소싱 스코어 툴팁 뱃지
 // ─────────────────────────────────────────────────────────────────────────────
 function ScoreBadge({ product }: { product: CostcoProductRow }) {
-  const [show, setShow] = useState(false);
+  const [show, setShow]   = useState(false);
   const [above, setAbove] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -250,28 +284,28 @@ function ScoreBadge({ product }: { product: CostcoProductRow }) {
   return (
     <div
       ref={ref}
-      style={{ position: 'relative', display: 'inline-block' }}
+      style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={() => setShow(false)}
     >
+      <GradeBadge score={product.sourcing_score} />
       <div
         style={{
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          width: '38px', height: '22px', borderRadius: '11px',
+          height: '20px', padding: '0 6px', borderRadius: '10px',
           backgroundColor: scoreColor(product.sourcing_score) + '18',
           color: scoreColor(product.sourcing_score),
-          fontWeight: 700, fontSize: '12px', cursor: 'default',
+          fontWeight: 600, fontSize: '11px', cursor: 'default',
           border: `1px solid ${scoreColor(product.sourcing_score)}44`,
         }}
       >
         {product.sourcing_score}
       </div>
-
       {show && (
         <div
           style={{
             position: 'absolute',
-            ...(above ? { bottom: '28px' } : { top: '28px' }),
+            ...(above ? { bottom: '30px' } : { top: '30px' }),
             left: '50%', transform: 'translateX(-50%)',
             backgroundColor: '#1a1c1c', color: '#fff', borderRadius: '8px',
             padding: '10px 12px', fontSize: '11px', lineHeight: '1.7',
@@ -279,11 +313,11 @@ function ScoreBadge({ product }: { product: CostcoProductRow }) {
           }}
         >
           <div style={{ fontWeight: 700, marginBottom: '4px', color: '#f9f9f9' }}>소싱 스코어 분석</div>
-          <div>수요 점수 <span style={{ color: '#86efac', fontWeight: 600 }}>{product.demand_score}</span> / 100 × 25%</div>
+          <div>수요 점수 <span style={{ color: '#86efac', fontWeight: 600 }}>{product.demand_score}</span> / 100 × 20%</div>
           <div>가격 기회 <span style={{ color: '#86efac', fontWeight: 600 }}>{product.price_opp_score}</span> / 100 × 30%</div>
-          <div>긴급성     <span style={{ color: '#86efac', fontWeight: 600 }}>{product.urgency_score}</span> / 100 × 15%</div>
-          <div>계절성     <span style={{ color: '#86efac', fontWeight: 600 }}>{product.seasonal_score}</span> / 100 × 15%</div>
-          <div>마진       <span style={{ color: '#86efac', fontWeight: 600 }}>{product.margin_score}</span> / 100 × 15%</div>
+          <div>희소성     <span style={{ color: '#86efac', fontWeight: 600 }}>{product.urgency_score}</span> / 100 × 10%</div>
+          <div>경쟁 강도  <span style={{ color: '#86efac', fontWeight: 600 }}>{product.seasonal_score}</span> / 100 × 15%</div>
+          <div>마진       <span style={{ color: '#86efac', fontWeight: 600 }}>{product.margin_score}</span> / 100 × 25%</div>
           <div
             style={{
               borderTop: '1px solid rgba(255,255,255,0.15)', marginTop: '6px',
@@ -294,123 +328,6 @@ function ScoreBadge({ product }: { product: CostcoProductRow }) {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 시장가 인라인 편집 셀
-// ─────────────────────────────────────────────────────────────────────────────
-function MarketPriceCell({
-  product,
-  onUpdated,
-}: {
-  product: CostcoProductRow;
-  onUpdated: (productCode: string, marketPrice: number) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState('');
-  const [saving, setSaving] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const startEdit = () => {
-    setValue(product.market_lowest_price ? String(product.market_lowest_price) : '');
-    setEditing(true);
-    setTimeout(() => inputRef.current?.focus(), 0);
-  };
-
-  const save = async () => {
-    const num = parseInt(value.replace(/[^0-9]/g, ''), 10);
-    if (isNaN(num) || num <= 0) { setEditing(false); return; }
-    setSaving(true);
-    try {
-      const res = await fetch('/api/sourcing/costco/market-price', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productCode: product.product_code, marketPrice: num, source: 'manual' }),
-      });
-      if (res.ok) {
-        onUpdated(product.product_code, num);
-      }
-    } finally {
-      setSaving(false);
-      setEditing(false);
-    }
-  };
-
-  if (editing) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-        <input
-          ref={inputRef}
-          type="text"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') save();
-            if (e.key === 'Escape') setEditing(false);
-          }}
-          style={{
-            width: '90px', height: '26px', padding: '0 6px',
-            border: `1px solid ${C.accent}`, borderRadius: '4px',
-            fontSize: '12px', textAlign: 'right', outline: 'none',
-          }}
-          placeholder="시장가 입력"
-        />
-        <button
-          onClick={save}
-          disabled={saving}
-          style={{
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            width: '22px', height: '22px', border: 'none',
-            backgroundColor: C.accent, borderRadius: '4px',
-            color: '#fff', cursor: 'pointer',
-          }}
-        >
-          {saving ? <Loader2 size={10} style={{ animation: 'spin 1s linear infinite' }} /> : <Check size={10} />}
-        </button>
-        <button
-          onClick={() => setEditing(false)}
-          style={{
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            width: '22px', height: '22px', border: `1px solid ${C.border}`,
-            backgroundColor: C.card, borderRadius: '4px', cursor: 'pointer',
-          }}
-        >
-          <X size={10} color={C.textSub} />
-        </button>
-      </div>
-    );
-  }
-
-  const isNaverSource = product.market_price_source === 'naver_api';
-
-  return (
-    <div
-      style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
-      onClick={startEdit}
-      title={isNaverSource ? '네이버 자동 수집 (클릭하여 수동 수정)' : '클릭하여 시장가 입력'}
-    >
-      {product.market_lowest_price ? (
-        <>
-          <span style={{ fontWeight: 600, color: C.text }}>
-            {fmtPrice(product.market_lowest_price)}
-          </span>
-          <span
-            style={{
-              fontSize: '9px', fontWeight: 600, padding: '1px 4px', borderRadius: '3px',
-              backgroundColor: isNaverSource ? '#e8f9ee' : '#f0f0f0',
-              color: isNaverSource ? '#03c75a' : C.textSub,
-              flexShrink: 0,
-            }}
-          >
-            {isNaverSource ? 'N' : '수동'}
-          </span>
-        </>
-      ) : (
-        <span style={{ color: '#c4c4c4', fontSize: '11px' }}>입력 필요</span>
-      )}
-      <Edit2 size={10} color={C.textSub} style={{ flexShrink: 0 }} />
     </div>
   );
 }
@@ -428,27 +345,27 @@ interface ApiResponse {
   lastCollected: string | null;
 }
 
-/** 가격 경쟁력 필터 값 */
-type SavingFilter = 'all' | 'high' | 'mid' | 'any';
+type GradeFilter = 'all' | SourcingGrade;
 
 export default function CostcoTab() {
-  const [products, setProducts] = useState<CostcoProductRow[]>([]);
-  const [total, setTotal] = useState(0);
-  const [categories, setCategories] = useState<string[]>([]);
+  const [products, setProducts]           = useState<CostcoProductRow[]>([]);
+  const [total, setTotal]                 = useState(0);
+  const [categories, setCategories]       = useState<string[]>([]);
   const [lastCollected, setLastCollected] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isCollecting, setIsCollecting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [collectError, setCollectError] = useState<string | null>(null);
+  const [isLoading, setIsLoading]         = useState(false);
+  const [isCollecting, setIsCollecting]   = useState(false);
+  const [error, setError]                 = useState<string | null>(null);
+  const [collectError, setCollectError]   = useState<string | null>(null);
 
   // 필터 & 정렬
   const [categoryFilter, setCategoryFilter] = useState('');
-  const [stockFilter, setStockFilter] = useState<'all' | 'inStock' | 'lowStock' | 'outOfStock'>('all');
-  const [savingFilter, setSavingFilter] = useState<SavingFilter>('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [stockFilter, setStockFilter]       = useState<'all' | 'inStock' | 'lowStock' | 'outOfStock'>('all');
+  const [gradeFilter, setGradeFilter]       = useState<GradeFilter>('all');
+  const [overpriceOnly, setOverpriceOnly]   = useState(false);
+  const [searchQuery, setSearchQuery]       = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [sort, setSort] = useState<CostcoSortKey>('unit_saving_rate_desc');
-  const [page, setPage] = useState(1);
+  const [sort, setSort]                     = useState<CostcoSortKey>('sourcing_score_desc');
+  const [page, setPage]                     = useState(1);
   const PAGE_SIZE = 50;
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -464,10 +381,9 @@ export default function CostcoTab() {
     setError(null);
     try {
       const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE), sort });
-      if (categoryFilter) params.set('category', categoryFilter);
-      if (debouncedSearch) params.set('search', debouncedSearch);
-      if (stockFilter !== 'all') params.set('stockStatus', stockFilter);
-      if (savingFilter !== 'all') params.set('savingFilter', savingFilter);
+      if (categoryFilter)         params.set('category', categoryFilter);
+      if (debouncedSearch)        params.set('search', debouncedSearch);
+      if (stockFilter !== 'all')  params.set('stockStatus', stockFilter);
 
       const res = await fetch(`/api/sourcing/costco?${params}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -481,7 +397,7 @@ export default function CostcoTab() {
     } finally {
       setIsLoading(false);
     }
-  }, [categoryFilter, stockFilter, savingFilter, debouncedSearch, sort, page]);
+  }, [categoryFilter, stockFilter, debouncedSearch, sort, page]);
 
   useEffect(() => { fetchProducts(); }, [fetchProducts]);
 
@@ -506,28 +422,34 @@ export default function CostcoTab() {
     }
   };
 
-  // ── 시장가 업데이트 후 로컬 상태 갱신
-  const handleMarketPriceUpdated = (productCode: string, marketPrice: number) => {
+  // 시장최저가 인라인 업데이트 (리렌더 없이 로컬 반영)
+  const handleMarketPriceSaved = (productCode: string, newPrice: number) => {
     setProducts((prev) =>
       prev.map((p) =>
         p.product_code === productCode
-          ? { ...p, market_lowest_price: marketPrice, market_price_source: 'manual' }
+          ? { ...p, market_lowest_price: newPrice, market_price_source: 'manual' }
           : p,
       ),
     );
-    setTimeout(fetchProducts, 500);
   };
+
+  // 등급/시장가초과 필터는 프론트엔드에서 처리
+  const filteredProducts = products.filter((p) => {
+    if (gradeFilter !== 'all' && calcGrade(p.sourcing_score) !== gradeFilter) return false;
+    if (overpriceOnly) {
+      const wKg = getWeightKgFromProduct(p);
+      const mkt  = p.market_lowest_price ?? null;
+      const naver = calcRecommendedPrice(p.price, p.category_name, 'naver', wKg, mkt);
+      if (!naver.isOverprice) return false;
+    }
+    return true;
+  });
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
-  const hasFilter = !!(categoryFilter || debouncedSearch || stockFilter !== 'all' || savingFilter !== 'all');
+  const hasFilter  = !!(categoryFilter || debouncedSearch || stockFilter !== 'all' || gradeFilter !== 'all' || overpriceOnly);
 
-  // 정렬 헤더 클릭 핸들러
-  const handleSortClick = (key: CostcoSortKey) => {
-    setSort(key);
-    setPage(1);
-  };
+  const handleSortClick = (key: CostcoSortKey) => { setSort(key); setPage(1); };
 
-  // 정렬 아이콘
   const SortIcon = ({ col }: { col: CostcoSortKey }) => (
     sort === col
       ? <ChevronDown size={10} color={C.accent} />
@@ -553,7 +475,6 @@ export default function CostcoTab() {
             전체 <strong style={{ color: C.text }}>{total.toLocaleString()}</strong>개
           </span>
         </div>
-
         <button
           onClick={handleCollect}
           disabled={isCollecting}
@@ -628,23 +549,38 @@ export default function CostcoTab() {
           ))}
         </select>
 
-        {/* 가격 경쟁력 필터 — 핵심 신규 필터 */}
+        {/* 등급 필터 */}
         <select
-          value={savingFilter}
-          onChange={(e) => { setSavingFilter(e.target.value as SavingFilter); setPage(1); }}
+          value={gradeFilter}
+          onChange={(e) => { setGradeFilter(e.target.value as GradeFilter); setPage(1); }}
           style={{
             ...selectStyle,
-            // 선택된 경우 강조
-            borderColor: savingFilter !== 'all' ? C.savingHigh : C.border,
-            color: savingFilter !== 'all' ? C.savingHigh : C.text,
-            fontWeight: savingFilter !== 'all' ? 600 : 400,
+            borderColor: gradeFilter !== 'all' ? '#7c3aed' : C.border,
+            color:       gradeFilter !== 'all' ? '#7c3aed' : C.text,
+            fontWeight:  gradeFilter !== 'all' ? 600 : 400,
           }}
         >
-          <option value="all">단가 절감율 전체</option>
-          <option value="high">30% 이상 절감 (매력적)</option>
-          <option value="mid">15% 이상 절감 (양호)</option>
-          <option value="any">단가 비교 가능한 것만</option>
+          <option value="all">등급 전체</option>
+          <option value="S">S등급 (80점+)</option>
+          <option value="A">A등급 (65점+)</option>
+          <option value="B">B등급 (50점+)</option>
+          <option value="C">C등급 (35점+)</option>
+          <option value="D">D등급 (35점 미만)</option>
         </select>
+
+        {/* 시장가 초과 필터 */}
+        <button
+          onClick={() => { setOverpriceOnly((v) => !v); setPage(1); }}
+          style={{
+            height: '32px', padding: '0 10px',
+            border: `1px solid ${overpriceOnly ? C.red : C.border}`,
+            borderRadius: '6px', fontSize: '12px', cursor: 'pointer',
+            backgroundColor: overpriceOnly ? C.redBg : C.bg,
+            color: overpriceOnly ? C.red : C.textSub, fontWeight: overpriceOnly ? 600 : 400,
+          }}
+        >
+          시장가 초과만
+        </button>
 
         {/* 재고 상태 */}
         <select
@@ -661,12 +597,11 @@ export default function CostcoTab() {
         {/* 정렬 */}
         <select
           value={sort}
-          onChange={(e) => { handleSortClick(e.target.value as CostcoSortKey); }}
+          onChange={(e) => handleSortClick(e.target.value as CostcoSortKey)}
           style={selectStyle}
         >
-          <option value="unit_saving_rate_desc">단가 절감율 높은순</option>
-          <option value="margin_rate_desc">마진율 높은순</option>
           <option value="sourcing_score_desc">소싱스코어 높은순</option>
+          <option value="margin_rate_desc">마진율 높은순</option>
           <option value="price_asc">매입가 낮은순</option>
           <option value="price_desc">매입가 높은순</option>
           <option value="review_count_desc">리뷰 많은순</option>
@@ -681,7 +616,8 @@ export default function CostcoTab() {
               setSearchQuery('');
               setDebouncedSearch('');
               setStockFilter('all');
-              setSavingFilter('all');
+              setGradeFilter('all');
+              setOverpriceOnly(false);
               setPage(1);
             }}
             style={{
@@ -726,14 +662,14 @@ export default function CostcoTab() {
                 <thead>
                   <tr style={{ backgroundColor: C.tableHeader }}>
                     {/* 이미지 */}
-                    <th style={{ ...thStyle, width: '52px', textAlign: 'center' }}>이미지</th>
+                    <th style={{ ...thStyle, width: '52px', textAlign: 'center' }}></th>
 
                     {/* 상품명 */}
-                    <th style={{ ...thStyle, minWidth: '220px', textAlign: 'left' }}>상품명</th>
+                    <th style={{ ...thStyle, minWidth: '200px', textAlign: 'left' }}>상품명</th>
 
                     {/* 매입가 */}
                     <th
-                      style={{ ...thStyle, width: '100px', textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}
+                      style={{ ...thStyle, width: '95px', textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}
                       onClick={() => handleSortClick('price_asc')}
                       title="매입가 낮은순 정렬"
                     >
@@ -742,57 +678,53 @@ export default function CostcoTab() {
                       </span>
                     </th>
 
-                    {/* 단가 비교 — 핵심 신규 컬럼 */}
-                    <th style={{ ...thStyle, width: '180px', textAlign: 'left' }}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                        단가 비교
-                        <span
-                          style={{
-                            fontSize: '9px', fontWeight: 600, padding: '1px 4px', borderRadius: '3px',
-                            backgroundColor: '#dcfce7', color: C.savingHigh,
-                          }}
-                        >
-                          코C vs 네이버
+                    {/* 시장최저가 */}
+                    <th style={{ ...thStyle, width: '110px', textAlign: 'right' }}>
+                      <span style={{ display: 'inline-flex', flexDirection: 'column', gap: '1px' }}>
+                        <span>시장최저가</span>
+                        <span style={{ fontSize: '9px', color: '#aaa' }}>클릭 편집</span>
+                      </span>
+                    </th>
+
+                    {/* 추천가(네이버) */}
+                    <th style={{ ...thStyle, width: '120px', textAlign: 'right' }}>
+                      <span style={{ display: 'inline-flex', flexDirection: 'column', gap: '1px' }}>
+                        <span>추천가</span>
+                        <span style={{ fontSize: '9px', fontWeight: 600, padding: '0px 4px', borderRadius: '3px', backgroundColor: C.naverBg, color: C.naver }}>
+                          네이버 6%
                         </span>
                       </span>
                     </th>
 
-                    {/* 단가 절감율 — 핵심 신규 컬럼 */}
-                    <th
-                      style={{ ...thStyle, width: '120px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}
-                      onClick={() => handleSortClick('unit_saving_rate_desc')}
-                      title="단가 절감율 높은순 정렬"
-                    >
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
-                        단가 절감율 <SortIcon col="unit_saving_rate_desc" />
+                    {/* 추천가(쿠팡) */}
+                    <th style={{ ...thStyle, width: '120px', textAlign: 'right' }}>
+                      <span style={{ display: 'inline-flex', flexDirection: 'column', gap: '1px' }}>
+                        <span>추천가</span>
+                        <span style={{ fontSize: '9px', fontWeight: 600, padding: '0px 4px', borderRadius: '3px', backgroundColor: C.coupangBg, color: C.coupang }}>
+                          쿠팡 11%
+                        </span>
                       </span>
                     </th>
 
-                    {/* 시장가(네이버) */}
-                    <th style={{ ...thStyle, width: '120px', textAlign: 'right' }}>
-                      시장가
-                      <span style={{ fontWeight: 400, color: '#aaa', marginLeft: '3px' }}>(네이버)</span>
-                    </th>
-
-                    {/* 마진율 */}
+                    {/* 실질마진율 */}
                     <th
-                      style={{ ...thStyle, width: '72px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}
+                      style={{ ...thStyle, width: '90px', textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}
                       onClick={() => handleSortClick('margin_rate_desc')}
                       title="마진율 높은순 정렬"
                     >
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
-                        마진율 <SortIcon col="margin_rate_desc" />
+                        실질마진율 <SortIcon col="margin_rate_desc" />
                       </span>
                     </th>
 
-                    {/* 소싱 스코어 */}
+                    {/* 등급/스코어 */}
                     <th
-                      style={{ ...thStyle, width: '70px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}
+                      style={{ ...thStyle, width: '90px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}
                       onClick={() => handleSortClick('sourcing_score_desc')}
                       title="소싱 스코어 높은순 정렬"
                     >
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
-                        스코어 <SortIcon col="sourcing_score_desc" />
+                        등급/점수 <SortIcon col="sourcing_score_desc" />
                       </span>
                     </th>
 
@@ -804,13 +736,11 @@ export default function CostcoTab() {
                   </tr>
                 </thead>
                 <tbody>
-                  {products.map((product, idx) => {
-                    const bgColor = idx % 2 === 0 ? C.card : '#fafafa';
+                  {filteredProducts.map((product, idx) => {
+                    const bgColor    = idx % 2 === 0 ? C.card : '#fafafa';
                     const naverQuery = encodeURIComponent(product.title);
-                    const naverUrl = `https://search.shopping.naver.com/search/all?query=${naverQuery}`;
+                    const naverUrl   = `https://search.shopping.naver.com/search/all?query=${naverQuery}`;
                     const coupangUrl = `https://www.coupang.com/np/search?q=${naverQuery}`;
-                    const marginRate = calcMarginRate(product.price, product.market_lowest_price);
-                    const savingRate = calcUnitSavingRate(product.unit_price, product.market_unit_price);
 
                     return (
                       <tr
@@ -820,7 +750,7 @@ export default function CostcoTab() {
                         onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = bgColor)}
                       >
                         {/* 이미지 */}
-                        <td style={{ padding: '8px 8px', textAlign: 'center', verticalAlign: 'middle' }}>
+                        <td style={{ padding: '8px', textAlign: 'center', verticalAlign: 'middle' }}>
                           {product.image_url ? (
                             <img
                               src={product.image_url}
@@ -838,7 +768,7 @@ export default function CostcoTab() {
                         {/* 상품명 */}
                         <td style={{ padding: '8px 10px', verticalAlign: 'middle' }}>
                           <div
-                            style={{ fontWeight: 500, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '320px' }}
+                            style={{ fontWeight: 500, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '300px' }}
                             title={product.title}
                           >
                             {product.title}
@@ -848,12 +778,7 @@ export default function CostcoTab() {
                               <span style={{ fontSize: '10px', color: C.textSub }}>{product.brand}</span>
                             )}
                             {product.category_name && (
-                              <span
-                                style={{
-                                  fontSize: '9px', padding: '1px 5px', borderRadius: '3px',
-                                  backgroundColor: '#f3f3f3', color: C.textSub,
-                                }}
-                              >
+                              <span style={{ fontSize: '9px', padding: '1px 5px', borderRadius: '3px', backgroundColor: '#f3f3f3', color: C.textSub }}>
                                 {product.category_name}
                               </span>
                             )}
@@ -875,40 +800,27 @@ export default function CostcoTab() {
                           )}
                         </td>
 
-                        {/* 단가 비교 */}
-                        <td style={{ padding: '8px 10px', verticalAlign: 'middle' }}>
-                          <UnitPriceCell product={product} />
-                        </td>
-
-                        {/* 단가 절감율 */}
-                        <td style={{ padding: '8px 10px', textAlign: 'center', verticalAlign: 'middle' }}>
-                          <SavingBadge rate={savingRate ?? null} />
-                        </td>
-
-                        {/* 시장가 (인라인 입력) */}
+                        {/* 시장최저가 */}
                         <td style={{ padding: '8px 10px', textAlign: 'right', verticalAlign: 'middle' }}>
-                          <MarketPriceCell
-                            product={product}
-                            onUpdated={handleMarketPriceUpdated}
-                          />
+                          <MarketPriceCell product={product} onSaved={handleMarketPriceSaved} />
                         </td>
 
-                        {/* 마진율 */}
-                        <td style={{ padding: '6px 10px', textAlign: 'center', verticalAlign: 'middle' }}>
-                          <div
-                            style={{
-                              display: 'inline-block',
-                              padding: '3px 8px', borderRadius: '10px',
-                              backgroundColor: marginBg(marginRate),
-                              fontWeight: 600, fontSize: '12px',
-                              color: marginColor(marginRate),
-                            }}
-                          >
-                            {fmtMarginRate(marginRate)}
-                          </div>
+                        {/* 추천가(네이버) */}
+                        <td style={{ padding: '8px 10px', textAlign: 'right', verticalAlign: 'middle' }}>
+                          <ChannelPriceCell product={product} channel="naver" />
                         </td>
 
-                        {/* 소싱 스코어 */}
+                        {/* 추천가(쿠팡) */}
+                        <td style={{ padding: '8px 10px', textAlign: 'right', verticalAlign: 'middle' }}>
+                          <ChannelPriceCell product={product} channel="coupang" />
+                        </td>
+
+                        {/* 실질마진율 */}
+                        <td style={{ padding: '8px 10px', textAlign: 'right', verticalAlign: 'middle' }}>
+                          <MarginRateCell product={product} />
+                        </td>
+
+                        {/* 등급/스코어 */}
                         <td style={{ padding: '8px 10px', textAlign: 'center', verticalAlign: 'middle' }}>
                           <ScoreBadge product={product} />
                         </td>
@@ -1017,4 +929,5 @@ const pageBtn: React.CSSProperties = {
   fontSize: '12px',
   backgroundColor: '#ffffff',
   color: '#1a1c1c',
+  cursor: 'pointer',
 };

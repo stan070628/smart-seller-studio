@@ -29,6 +29,23 @@ export async function recalculateSourcingScores(pool: Pool): Promise<number> {
       FROM public.costco_seasonal_cache
       WHERE reference_month = DATE_TRUNC('month', CURRENT_DATE)::date
       GROUP BY keyword_group
+    ),
+    eff AS (
+      -- 단가 기반 환산가 계산
+      -- 코스트코 묶음 상품(예: 591ml×2)과 네이버 단품(591ml) 가격 비교 오류를 방지
+      -- market_unit_price(100g/100ml당)가 있으면 total_quantity로 환산해 실제 시장가를 복원
+      -- unit_type='count'이면 divisor=1, 그 외(g/ml 등)이면 divisor=100
+      SELECT
+        id,
+        CASE
+          WHEN market_unit_price IS NOT NULL AND market_unit_price > 0
+               AND total_quantity IS NOT NULL AND total_quantity > 0
+          THEN (market_unit_price * total_quantity /
+                CASE unit_type WHEN 'count' THEN 1.0 ELSE 100.0 END)::numeric
+          ELSE COALESCE(market_lowest_price, 0)::numeric
+        END AS eff_market
+      FROM public.costco_products
+      WHERE is_active = true
     )
     UPDATE public.costco_products cp
     SET
@@ -86,31 +103,35 @@ export async function recalculateSourcingScores(pool: Pool): Promise<number> {
         )
       ),
 
-      -- ── 마진 점수 (15점) ──────────────────────────────────────────────
-      -- 순이익률 = (0.90 × market_price - purchase_price - 3500) / 1.10 / market_price
-      -- >= 30%: 100 | >= 20%: 80 | >= 10%: 60 | >= 5%: 40 | > 0%: 20 | <= 0%: 0
+      -- ── 마진 점수 (25점) ──────────────────────────────────────────────
+      -- 채널: 네이버 스마트스토어 기준 (수수료 6%, 물류비 3500, 포장비 500, 부가세 10%)
+      -- 순이익 = (0.94 × eff_market - purchase_price - 4000) / 1.10
+      -- 순이익률 = 순이익 / eff_market
+      -- >= 25%: 100 | >= 18%: 80 | >= 12%: 60 | >= 6%: 40 | > 0%: 20 | <= 0%: 0
       margin_score = CASE
-        WHEN market_lowest_price IS NULL OR market_lowest_price <= 0 THEN 0
+        WHEN e.eff_market IS NULL OR e.eff_market <= 0 THEN 0
         ELSE
           CASE
-            WHEN (0.90 * market_lowest_price - price - 3500.0) / 1.10
-                 / market_lowest_price >= 0.30 THEN 100
-            WHEN (0.90 * market_lowest_price - price - 3500.0) / 1.10
-                 / market_lowest_price >= 0.20 THEN 80
-            WHEN (0.90 * market_lowest_price - price - 3500.0) / 1.10
-                 / market_lowest_price >= 0.10 THEN 60
-            WHEN (0.90 * market_lowest_price - price - 3500.0) / 1.10
-                 / market_lowest_price >= 0.05 THEN 40
-            WHEN (0.90 * market_lowest_price - price - 3500.0) / 1.10
-                 / market_lowest_price > 0     THEN 20
+            WHEN (0.94 * e.eff_market - cp.price - 4000.0) / 1.10
+                 / e.eff_market >= 0.25 THEN 100
+            WHEN (0.94 * e.eff_market - cp.price - 4000.0) / 1.10
+                 / e.eff_market >= 0.18 THEN 80
+            WHEN (0.94 * e.eff_market - cp.price - 4000.0) / 1.10
+                 / e.eff_market >= 0.12 THEN 60
+            WHEN (0.94 * e.eff_market - cp.price - 4000.0) / 1.10
+                 / e.eff_market >= 0.06 THEN 40
+            WHEN (0.94 * e.eff_market - cp.price - 4000.0) / 1.10
+                 / e.eff_market > 0     THEN 20
             ELSE 0
           END
       END,
 
       updated_at = now()
 
-    WHERE is_active = true
-    RETURNING id
+    FROM eff e
+    WHERE cp.id = e.id
+      AND cp.is_active = true
+    RETURNING cp.id
   `);
 
   // 종합 스코어를 서브 스코어 가중합으로 계산
@@ -144,6 +165,20 @@ export async function recalculateProductScore(
       FROM public.costco_seasonal_cache
       WHERE reference_month = DATE_TRUNC('month', CURRENT_DATE)::date
       GROUP BY keyword_group
+    ),
+    eff AS (
+      -- 단가 기반 환산가 계산 (단일 상품)
+      SELECT
+        id,
+        CASE
+          WHEN market_unit_price IS NOT NULL AND market_unit_price > 0
+               AND total_quantity IS NOT NULL AND total_quantity > 0
+          THEN (market_unit_price * total_quantity /
+                CASE unit_type WHEN 'count' THEN 1.0 ELSE 100.0 END)::numeric
+          ELSE COALESCE(market_lowest_price, 0)::numeric
+        END AS eff_market
+      FROM public.costco_products
+      WHERE product_code = $1
     )
     UPDATE public.costco_products cp
     SET
@@ -180,25 +215,27 @@ export async function recalculateProductScore(
           50
         )
       ),
+      -- 채널: 네이버 기준 순이익률로 계산 (수수료 6%, 물류+포장 4000, 부가세 10%)
       margin_score = CASE
-        WHEN market_lowest_price IS NULL OR market_lowest_price <= 0 THEN 0
+        WHEN e.eff_market IS NULL OR e.eff_market <= 0 THEN 0
         ELSE
           CASE
-            WHEN (0.90 * market_lowest_price - price - 3500.0) / 1.10
-                 / market_lowest_price >= 0.30 THEN 100
-            WHEN (0.90 * market_lowest_price - price - 3500.0) / 1.10
-                 / market_lowest_price >= 0.20 THEN 80
-            WHEN (0.90 * market_lowest_price - price - 3500.0) / 1.10
-                 / market_lowest_price >= 0.10 THEN 60
-            WHEN (0.90 * market_lowest_price - price - 3500.0) / 1.10
-                 / market_lowest_price >= 0.05 THEN 40
-            WHEN (0.90 * market_lowest_price - price - 3500.0) / 1.10
-                 / market_lowest_price > 0     THEN 20
+            WHEN (0.94 * e.eff_market - cp.price - 4000.0) / 1.10
+                 / e.eff_market >= 0.25 THEN 100
+            WHEN (0.94 * e.eff_market - cp.price - 4000.0) / 1.10
+                 / e.eff_market >= 0.18 THEN 80
+            WHEN (0.94 * e.eff_market - cp.price - 4000.0) / 1.10
+                 / e.eff_market >= 0.12 THEN 60
+            WHEN (0.94 * e.eff_market - cp.price - 4000.0) / 1.10
+                 / e.eff_market >= 0.06 THEN 40
+            WHEN (0.94 * e.eff_market - cp.price - 4000.0) / 1.10
+                 / e.eff_market > 0     THEN 20
             ELSE 0
           END
       END,
       updated_at = now()
-    WHERE product_code = $1
+    FROM eff e
+    WHERE cp.id = e.id
   `, [productCode]);
 
   await pool.query(`
