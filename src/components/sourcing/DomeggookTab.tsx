@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   ExternalLink,
   Search,
+  Plus,
 } from 'lucide-react';
 
 import { useSourcingStore, type CollectingProgress } from '@/store/useSourcingStore';
@@ -680,6 +681,43 @@ export default function DomeggookTab() {
   const [genderFilter, setGenderFilter] = useState<'all' | 'male_only' | 'male' | 'female' | 'neutral'>('all');
   const [hideBlocked, setHideBlocked] = useState(false);
 
+  // ── 단일 상품 추가 ─────────────────────────────────────────────────────────
+  const [addUrl, setAddUrl] = useState('');
+  const [addState, setAddState] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle');
+  const [addMsg, setAddMsg] = useState('');
+
+  const handleAddSingle = async () => {
+    const input = addUrl.trim();
+    if (!input) return;
+    setAddState('loading');
+    setAddMsg('');
+    try {
+      const res = await fetch('/api/sourcing/fetch-items/single', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: input }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setAddState('ok');
+        setAddMsg(`"${json.data.title}" ${json.data.isNew ? '추가' : '업데이트'} 완료`);
+        setAddUrl('');
+        // 목록 새로고침
+        setTimeout(() => {
+          fetchAnalysis();
+          setAddState('idle');
+          setAddMsg('');
+        }, 2000);
+      } else {
+        setAddState('error');
+        setAddMsg(json.error ?? '추가 실패');
+      }
+    } catch {
+      setAddState('error');
+      setAddMsg('네트워크 오류');
+    }
+  };
+
   // ── MOQ 시나리오 패널 ──────────────────────────────────────────────────────
   const [selectedItem, setSelectedItem] = useState<SalesAnalysisItem | null>(null);
 
@@ -966,6 +1004,49 @@ export default function DomeggookTab() {
             <Download size={12} />
             CSV
           </button>
+
+          {/* 단일 상품 URL 추가 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <input
+              type="text"
+              value={addUrl}
+              onChange={(e) => { setAddUrl(e.target.value); setAddState('idle'); setAddMsg(''); }}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddSingle()}
+              placeholder="도매꾹 URL 또는 상품번호"
+              disabled={addState === 'loading'}
+              style={{
+                fontSize: '12px',
+                padding: '5px 10px',
+                borderRadius: '6px',
+                border: `1px solid ${addState === 'error' ? '#dc2626' : addState === 'ok' ? '#16a34a' : C.border}`,
+                width: '220px',
+                outline: 'none',
+                color: C.text,
+                backgroundColor: C.card,
+              }}
+            />
+            <button
+              onClick={handleAddSingle}
+              disabled={!addUrl.trim() || addState === 'loading'}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '4px',
+                padding: '5px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600,
+                border: `1px solid ${C.border}`,
+                backgroundColor: addState === 'ok' ? '#16a34a' : C.btnSecondaryBg,
+                color: addState === 'ok' ? '#fff' : C.btnSecondaryText,
+                cursor: (!addUrl.trim() || addState === 'loading') ? 'not-allowed' : 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {addState === 'loading' ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Plus size={12} />}
+              {addState === 'loading' ? '추가 중...' : addState === 'ok' ? '완료' : '상품 추가'}
+            </button>
+            {addMsg && (
+              <span style={{ fontSize: '11px', color: addState === 'error' ? '#dc2626' : '#16a34a', whiteSpace: 'nowrap' }}>
+                {addMsg}
+              </span>
+            )}
+          </div>
 
           {/* 수집 버튼 */}
           <button
