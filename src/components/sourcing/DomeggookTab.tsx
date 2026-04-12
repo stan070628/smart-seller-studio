@@ -156,13 +156,7 @@ function getEffectiveBundleData(item: SalesAnalysisItem): {
   marginRate: number | null;
 } {
   const moq = item.moq ?? 1;
-
-  // MOQ >= 4 → 드롭쉬핑 불가
-  if (moq >= 4) {
-    return { strategy: null, bundlePrice: null, gapRate: null, marginRate: null };
-  }
-
-  const strategy = getMoqStrategy(moq);
+  const strategy = getMoqStrategy(moq); // MOQ >= 4 → null (드롭쉬핑 불가), 가격은 계속 계산
 
   // DB에 저장된 값 우선
   if (item.dropshipBundlePrice != null && item.dropshipPriceGapRate != null) {
@@ -1949,9 +1943,16 @@ export default function DomeggookTab() {
                     {/* 추천판매가 */}
                     <td style={{ padding: '10px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                       {bundleData.bundlePrice != null ? (
-                        <span style={{ fontWeight: 600, color: C.text }}>
-                          {formatNumber(bundleData.bundlePrice)}원
-                        </span>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '1px' }}>
+                          <span style={{ fontWeight: 600, color: C.text }}>
+                            {formatNumber(bundleData.bundlePrice)}원
+                          </span>
+                          {(item.moq ?? 1) >= 4 && (
+                            <span style={{ fontSize: '10px', color: C.textSub }}>
+                              최소 {item.moq}개
+                            </span>
+                          )}
+                        </div>
                       ) : (
                         <span style={{ color: C.textSub }}>-</span>
                       )}
