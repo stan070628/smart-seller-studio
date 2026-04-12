@@ -1,0 +1,41 @@
+name: 도매꾹 일일 수집
+
+on:
+  # 매일 KST 09:00 (UTC 00:00)
+  schedule:
+    - cron: '0 0 * * *'
+  # 수동 트리거 (GitHub Actions UI에서 "Run workflow" 버튼)
+  workflow_dispatch:
+
+jobs:
+  collect:
+    name: 도매꾹 상품 수집
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # 최대 6시간
+
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Node.js 20 설정
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 의존성 설치 (pg 패키지만 필요)
+        run: npm ci --ignore-scripts
+
+      - name: 도매꾹 수집 실행
+        run: node scripts/collect-domeggook.mjs
+        env:
+          SOURCING_DATABASE_URL:    ${{ secrets.SOURCING_DATABASE_URL }}
+          DOMEGGOOK_API_KEY:        ${{ secrets.DOMEGGOOK_API_KEY }}
+          DOMEGGOOK_API_BASE_URL:   ${{ vars.DOMEGGOOK_API_BASE_URL || 'https://domeggook.com/ssl/api/' }}
+          DOMEGGOOK_PROXY_URL:      ${{ secrets.DOMEGGOOK_PROXY_URL }}
+          DOMEGGOOK_PROXY_SECRET:   ${{ secrets.DOMEGGOOK_PROXY_SECRET }}
+
+      - name: 실패 시 Slack 알림 (선택)
+        if: failure()
+        run: |
+          echo "::error::도매꾹 수집 실패 — GitHub Actions 로그를 확인하세요."
