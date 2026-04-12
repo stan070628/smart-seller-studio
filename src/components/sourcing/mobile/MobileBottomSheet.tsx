@@ -66,7 +66,7 @@ export default function MobileBottomSheet({
     sheetRef.current.style.transition = animate
       ? 'transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)'
       : 'none';
-    sheetRef.current.style.transform = 'translateY(0)';
+    sheetRef.current.style.transform = 'translateY(0)';  // left/right:0 + margin:auto 방식이므로 translateX 불필요
   }, []);
 
   // ─── 터치 이벤트 핸들러 ───────────────────────────────────────────────────
@@ -153,8 +153,10 @@ export default function MobileBottomSheet({
         style={{
           position: 'fixed',
           bottom: 0,
-          left: '50%',
-          transform: isOpen ? 'translateX(-50%) translateY(0)' : 'translateX(-50%) translateY(100%)',
+          left: 0,
+          right: 0,
+          margin: '0 auto',
+          transform: isOpen ? 'translateY(0)' : 'translateY(100%)',
           width: '100%',
           maxWidth: '480px',
           maxHeight: `${maxHeight}vh`,
@@ -166,8 +168,6 @@ export default function MobileBottomSheet({
           transition: 'transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)',
           visibility: isOpen ? 'visible' : 'hidden',
           pointerEvents: isOpen ? 'auto' : 'none',
-          // 바텀시트 자체의 transform은 translateX + translateY 합산
-          // isOpen 토글 후 JS에서 덮어쓰지 않도록 초기값 설정
         }}
       >
         {/* 드래그 핸들 영역 — 터치 이벤트 수신 */}
