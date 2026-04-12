@@ -105,8 +105,8 @@ export async function POST(request: NextRequest) {
       ? now.getTime() - new Date(row.created_at).getTime() < THRESHOLD_MS
       : false;
 
-    // 재고 스냅샷 저장
-    if (inventory !== null && row) {
+    // 재고 스냅샷 저장 — inventory 없어도 0으로 저장 (sales_analysis_view INNER JOIN 통과 필수)
+    if (row) {
       const snapshotDate = new Date(Date.now() + 9 * 60 * 60 * 1000)
         .toISOString()
         .slice(0, 10);
@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
            (item_id, item_no, snapshot_date, inventory, price_dome, price_supply)
          VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (item_no, snapshot_date) DO NOTHING`,
-        [row.id, itemNo, snapshotDate, inventory, priceDome, detail.price?.supply ?? null],
+        [row.id, itemNo, snapshotDate, inventory ?? 0, priceDome, detail.price?.supply ?? null],
       );
     }
 
