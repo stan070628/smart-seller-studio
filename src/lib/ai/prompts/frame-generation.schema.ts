@@ -3,6 +3,7 @@
  */
 
 import { z } from 'zod';
+import { jsonrepair } from 'jsonrepair';
 import type { GeneratedFrame } from '@/types/frames';
 import { AiResponseParseError } from '../schemas';
 
@@ -39,11 +40,79 @@ export type FrameGenerationResponse = z.infer<typeof FrameGenerationResponseSche
 // 파싱 함수
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * JSON 문자열 내부의 raw 줄바꿈·탭을 이스케이프 시퀀스로 치환
+ *
+ * Claude가 JSON value 안에 literal newline/tab을 출력하는 경우 대응.
+ * "..." 쌍 사이에 있는 제어문자만 치환하므로 JSON 구조 자체는 유지.
+ */
+function sanitizeJsonStrings(text: string): string {
+  // JSON string 내부만 대상으로 개행·탭 이스케이프
+  // (외부 공백은 그대로 유지)
+  return text.replace(/"((?:[^"\\]|\\.)*)"/g, (_match, inner: string) => {
+    const escaped = inner
+      .replace(/\n/g, '\\n')
+      .replace(/\r/g, '\\r')
+      .replace(/\t/g, '\\t');
+    return `"${escaped}"`;
+  });
+}
+
+/**
+ * Claude 응답에서 JSON 객체만 추출 + 자동 복구
+ *
+ * 시도 순서:
+ * 1. 코드펜스 제거 + '{' ~ '}' 범위 잘라냄
+ * 2. JSON.parse 직접 시도
+ * 3. jsonrepair → 결과를 JSON.parse로 재검증
+ * 4. raw 줄바꿈 이스케이프 후 JSON.parse
+ * 5. 이스케이프 후 jsonrepair → 재검증
+ * 6. 모두 실패 시 원본 반환 (상위 catch에서 AiResponseParseError throw)
+ */
 function extractJson(rawText: string): string {
-  return rawText
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/\s*```\s*$/, '')
+  // 코드펜스 제거
+  let text = rawText
+    .replace(/^```(?:json)?\s*/im, '')
+    .replace(/\s*```\s*$/m, '')
     .trim();
+
+  // 첫 '{' ~ 마지막 '}' 추출
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start !== -1 && end !== -1 && end > start) {
+    text = text.slice(start, end + 1);
+  }
+
+  // 1차: 그대로 파싱
+  try {
+    JSON.parse(text);
+    return text;
+  } catch { /* continue */ }
+
+  // 2차: jsonrepair + 결과 검증
+  try {
+    const repaired = jsonrepair(text);
+    JSON.parse(repaired); // 복구 결과가 실제로 유효한지 확인
+    return repaired;
+  } catch { /* continue */ }
+
+  // 3차: raw 줄바꿈·탭 이스케이프 후 재시도
+  try {
+    const sanitized = sanitizeJsonStrings(text);
+    JSON.parse(sanitized);
+    return sanitized;
+  } catch { /* continue */ }
+
+  // 4차: 이스케이프 + jsonrepair + 결과 검증
+  try {
+    const sanitized = sanitizeJsonStrings(text);
+    const repaired = jsonrepair(sanitized);
+    JSON.parse(repaired);
+    return repaired;
+  } catch { /* continue */ }
+
+  // 모두 실패: 원본 반환 (상위에서 AiResponseParseError throw)
+  return text;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -120,8 +189,13 @@ export function parseFrameGenerationResponse(raw: string): GeneratedFrame[] {
   try {
     parsed = JSON.parse(extractJson(raw));
   } catch (e) {
+    // 디버그: 파싱 실패 시 응답 앞 300자와 오류 위치 로깅
+    const errMsg = e instanceof Error ? e.message : String(e);
+    console.error('[Claude 13-Frame] JSON 파싱 실패:', errMsg);
+    console.error('[Claude 13-Frame] 응답 앞 300자:', raw.slice(0, 300));
+    console.error('[Claude 13-Frame] 응답 뒤 300자:', raw.slice(-300));
     throw new AiResponseParseError(
-      `[Claude 13-Frame] JSON 파싱 실패: ${e instanceof Error ? e.message : String(e)}`,
+      `[Claude 13-Frame] JSON 파싱 실패: ${errMsg}`,
       raw
     );
   }

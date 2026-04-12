@@ -15,6 +15,12 @@ import ImageSection from './sections/ImageSection';
 import AIImageSection from './sections/AIImageSection';
 import ImageAdjustSection from './sections/ImageAdjustSection';
 import ExportSection from './sections/ExportSection';
+import SlotCaptionButton from './sections/SlotCaptionButton';
+import ThumbnailGenerateSection from './sections/ThumbnailGenerateSection';
+
+/** AI 캡션 자동 생성을 지원하는 프레임 타입 */
+const SLOT_CAPTION_FRAME_TYPES = ['custom_3col', 'custom_gallery'] as const;
+type SlotCaptionFrameType = (typeof SLOT_CAPTION_FRAME_TYPES)[number];
 
 // 구분선 컴포넌트
 const Divider = () => (
@@ -29,21 +35,25 @@ const Divider = () => (
 
 const InspectorPanel: React.FC = () => {
   const selectedFrameType = useEditorStore((s) => s.selectedFrameType);
+  const selectedFrameId = useEditorStore((s) => s.selectedFrameId);
   const frames = useEditorStore((s) => s.frames);
 
   // 활성 슬롯 키 — 기본값 'main'
   const [activeSlotKey, setActiveSlotKey] = useState('main');
 
-  // selectedFrameType이 바뀌면 첫 번째 슬롯으로 리셋
+  // selectedFrameId가 바뀌면 첫 번째 슬롯으로 리셋
   useEffect(() => {
     if (!selectedFrameType) return;
     const slots = getFrameSlots(selectedFrameType);
     setActiveSlotKey(slots.length > 0 ? slots[0].key : 'main');
-  }, [selectedFrameType]);
+  }, [selectedFrameId, selectedFrameType]);
 
-  // selectedFrameType에 해당하는 frame과 1-based 인덱스 탐색
-  const frameIndex = frames.findIndex((f) => f.frameType === selectedFrameType);
+  // selectedFrameId 기준으로 frame 탐색 (없으면 frameType fallback)
+  const frameIndex = selectedFrameId
+    ? frames.findIndex((f) => f.id === selectedFrameId)
+    : frames.findIndex((f) => f.frameType === selectedFrameType);
   const frame = frameIndex !== -1 ? frames[frameIndex] : null;
+  const frameId = frame?.id ?? frame?.frameType ?? '';
 
   return (
     <aside
@@ -66,23 +76,39 @@ const InspectorPanel: React.FC = () => {
           {/* 이미지 섹션 — 슬롯 인식 */}
           <ImageSection
             frame={frame}
+            frameId={frameId}
             activeSlotKey={activeSlotKey}
             onSlotChange={setActiveSlotKey}
           />
 
+          {/* AI 캡션 생성 버튼 — custom_3col / custom_gallery 전용 */}
+          {SLOT_CAPTION_FRAME_TYPES.includes(
+            selectedFrameType as SlotCaptionFrameType,
+          ) && (
+            <SlotCaptionButton
+              frameType={selectedFrameType as SlotCaptionFrameType}
+              frameId={frameId}
+            />
+          )}
+
           <Divider />
 
-          {/* AI 이미지 통합 섹션 */}
-          <div style={{ padding: '16px' }}>
-            <AIImageSection
-              frameType={selectedFrameType}
-              imagePrompt={frame.imagePrompt}
-              imageDirection={frame.imageDirection}
-              needsProductImage={frame.needsProductImage}
-              frame={frame}
-              activeSlotKey={activeSlotKey}
-            />
-          </div>
+          {/* thumbnail: AI 생성 섹션 / 그 외: 기존 AI 이미지 섹션 */}
+          {selectedFrameType === 'thumbnail' ? (
+            <ThumbnailGenerateSection frameType={selectedFrameType} frameId={frameId} />
+          ) : (
+            <div style={{ padding: '16px' }}>
+              <AIImageSection
+                frameType={selectedFrameType}
+                frameId={frameId}
+                imagePrompt={frame.imagePrompt}
+                imageDirection={frame.imageDirection}
+                needsProductImage={frame.needsProductImage}
+                frame={frame}
+                activeSlotKey={activeSlotKey}
+              />
+            </div>
+          )}
 
           <Divider />
 
@@ -90,6 +116,7 @@ const InspectorPanel: React.FC = () => {
           <div style={{ padding: '16px' }}>
             <ImageAdjustSection
               frameType={selectedFrameType}
+              frameId={frameId}
               activeSlotKey={activeSlotKey}
             />
           </div>

@@ -67,6 +67,9 @@ interface SourcingStore {
   clearError: () => void;
   triggerLegalCheck: () => Promise<void>;
   isLegalChecking: boolean;
+  // 단일 키워드 즉시 수집
+  collectKeyword: (keyword: string) => Promise<void>;
+  isKeywordCollecting: boolean;
   // IP 리스크 검증 — 개별 상품 단위
   verifyIp: (itemId: string, keyword: string) => Promise<void>;
   ipVerifyingId: string | null; // 현재 검증 중인 항목 ID
@@ -102,6 +105,7 @@ export const useSourcingStore = create<SourcingStore>()(
       page: 1,
       pageSize: 20,
       isLegalChecking: false,
+      isKeywordCollecting: false,
       ipVerifyingId: null,
 
       // ─── fetchAnalysis ───────────────────────────────────────────────────
@@ -384,12 +388,39 @@ export const useSourcingStore = create<SourcingStore>()(
         set({ error: null }, false, 'sourcing/clearError');
       },
 
+      // ─── collectKeyword: 단일 키워드 즉시 수집 ───────────────────────────
+      collectKeyword: async (keyword: string) => {
+        if (get().isKeywordCollecting || get().isCollecting) return;
+        set({ isKeywordCollecting: true, error: null }, false, 'sourcing/collectKeyword/start');
+        try {
+          const res = await fetch('/api/sourcing/fetch-items', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ keywords: [keyword] }),
+          });
+          const json = await res.json();
+          if (!res.ok || !json.success) {
+            throw new Error(json.error ?? '수집에 실패했습니다.');
+          }
+          const count = json.data?.totalFetched ?? 0;
+          if (count === 0) {
+            throw new Error(`"${keyword}"에 해당하는 상품이 도매꾹에 없습니다.`);
+          }
+          await get().fetchAnalysis();
+        } catch (err) {
+          const message = err instanceof Error ? err.message : '알 수 없는 오류';
+          set({ error: message }, false, 'sourcing/collectKeyword/error');
+        } finally {
+          set({ isKeywordCollecting: false }, false, 'sourcing/collectKeyword/done');
+        }
+      },
+
       triggerLegalCheck: async () => {
         if (get().isLegalChecking) return;
         set({ isLegalChecking: true, error: null }, false, 'sourcing/legalCheck/start');
 
         try {
-          const res = await fetch('/api/sourcing/costco/legal-check', { method: 'POST' });
+          const res = await fetch('/api/sourcing/domeggook/legal-check', { method: 'POST' });
           const json = await res.json();
           if (!res.ok || !json.success) {
             throw new Error(json.error ?? '법적 검토에 실패했습니다.');
@@ -409,7 +440,7 @@ export const useSourcingStore = create<SourcingStore>()(
         set({ ipVerifyingId: itemId, error: null }, false, 'sourcing/verifyIp/start');
 
         try {
-          const res = await fetch('/api/sourcing/costco/verify-ip', {
+          const res = await fetch('/api/sourcing/verify-ip', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ keyword, itemId }),

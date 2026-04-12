@@ -27,6 +27,8 @@ const BothRegisterSchema = z.object({
   // 공통 필드
   name: z.string().min(1).max(100),
   salePrice: z.number().int().min(100),
+  naverPrice: z.number().int().min(100).optional(),   // 네이버 전용 판매가 (미입력 시 salePrice 사용)
+  coupangPrice: z.number().int().min(100).optional(), // 쿠팡 전용 판매가 (미입력 시 salePrice 사용)
   originalPrice: z.number().int().min(100).optional(),
   stock: z.number().int().min(1).default(999),
   thumbnailImages: z.array(z.string().url()).min(1).max(10),
@@ -103,7 +105,8 @@ async function registerCoupang(d: BothRegisterInput): Promise<CoupangResult> {
 
   const common: CommonProductInput = {
     name: d.name,
-    salePrice: d.salePrice,
+    // coupangPrice 입력 시 우선 사용, 미입력 시 공통 salePrice 사용
+    salePrice: d.coupangPrice ?? d.salePrice,
     originalPrice: d.originalPrice,
     stock: d.stock,
     thumbnailImages: d.thumbnailImages,
@@ -138,7 +141,8 @@ async function registerNaver(d: BothRegisterInput): Promise<NaverResult> {
 
   const common: CommonProductInput = {
     name: d.name,
-    salePrice: d.salePrice,
+    // naverPrice 입력 시 우선 사용, 미입력 시 공통 salePrice 사용
+    salePrice: d.naverPrice ?? d.salePrice,
     originalPrice: d.originalPrice,
     stock: d.stock,
     thumbnailImages: d.thumbnailImages,

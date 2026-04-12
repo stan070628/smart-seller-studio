@@ -35,6 +35,7 @@ import {
   calcMarginRate,
   calcAllScenarios,
   getMoqStrategy,
+  getPriceCompStatus,
   STRATEGY_LABEL,
   type MoqStrategy,
 } from '@/lib/sourcing/domeggook-pricing';
@@ -87,6 +88,69 @@ function formatDate(iso: string): string {
 // ─────────────────────────────────────────────────────────────────────────────
 function formatNumber(n: number): string {
   return n.toLocaleString('ko-KR');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 가격 경쟁력 신호등
+// ─────────────────────────────────────────────────────────────────────────────
+const TRAFFIC_LIGHT_CONFIG = [
+  { key: 'red',    color: '#ef4444', activeFor: ['시장가 초과'] },
+  { key: 'yellow', color: '#eab308', activeFor: ['시장가 근접'] },
+  { key: 'green',  color: '#22c55e', activeFor: ['경쟁력 보통', '강력한 경쟁력'] },
+] as const;
+
+function TrafficLight({ gapRate }: { gapRate: number | null }) {
+  const status = getPriceCompStatus(gapRate);
+  const noData = gapRate === null;
+
+  return (
+    <div
+      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}
+      title={noData ? '시장가 데이터 없음' : `${status} (${gapRate! >= 0 ? '+' : ''}${gapRate}%)`}
+    >
+      {/* 신호등 하우징 */}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '2px',
+          backgroundColor: '#1c1c1c',
+          borderRadius: '5px',
+          padding: '3px 4px',
+        }}
+      >
+        {TRAFFIC_LIGHT_CONFIG.map(({ key, color, activeFor }) => {
+          const isActive = !noData && (activeFor as readonly string[]).includes(status);
+          return (
+            <div
+              key={key}
+              style={{
+                width: '7px',
+                height: '7px',
+                borderRadius: '50%',
+                backgroundColor: isActive ? color : 'rgba(255,255,255,0.12)',
+                boxShadow: isActive ? `0 0 5px ${color}` : 'none',
+              }}
+            />
+          );
+        })}
+      </div>
+      {/* 퍼센트 */}
+      {gapRate !== null && (
+        <span
+          style={{
+            fontSize: '10px',
+            fontWeight: 700,
+            lineHeight: 1,
+            color: gapRate >= 0 ? '#16a34a' : '#dc2626',
+          }}
+        >
+          {gapRate >= 0 ? '+' : ''}{gapRate}%
+        </span>
+      )}
+    </div>
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -163,7 +227,7 @@ function getEffectiveBundleData(item: SalesAnalysisItem): {
     let marginRate: number | null = null;
     if (item.marketLowestPrice) {
       const perUnit = calcPerUnitPrice(item.dropshipBundlePrice, moq);
-      marginRate = calcMarginRate(perUnit, item.marketLowestPrice);
+      marginRate = calcMarginRate(perUnit, item.marketLowestPrice, item.categoryName);
     }
     return {
       strategy,
@@ -183,6 +247,7 @@ function getEffectiveBundleData(item: SalesAnalysisItem): {
     deliWho: item.deliWho,
     deliFee: item.deliFee,
     moq,
+    categoryName: item.categoryName,
   });
   const perUnitPrice = calcPerUnitPrice(bundlePrice, moq);
 
@@ -191,7 +256,7 @@ function getEffectiveBundleData(item: SalesAnalysisItem): {
     : null;
 
   const marginRate = item.marketLowestPrice
-    ? calcMarginRate(perUnitPrice, item.marketLowestPrice)
+    ? calcMarginRate(perUnitPrice, item.marketLowestPrice, item.categoryName)
     : null;
 
   return { strategy, bundlePrice, gapRate, marginRate };
@@ -241,11 +306,14 @@ function getEffectiveSeasonBonus(item: SalesAnalysisItem): { bonus: number; labe
 
 /** 프론트엔드 차단 여부 (DB 값 우선, 없으면 즉시 계산) */
 function getEffectiveBlockedReason(item: SalesAnalysisItem): string | null {
-  if (item.blockedReason !== undefined) return item.blockedReason;
-  if (!item.title) return null;
+  // DB에 non-null 사유가 있으면 우선 반환 (null이면 폴백 로직 진행)
+  if (item.blockedReason != null) return item.blockedReason;
+  if (!item.title) return item.legalStatus === 'blocked' ? '법적 검토 차단' : null;
   const male = classifyMaleTarget(item.title, item.categoryName ?? '');
   if (male.legalBlocked) return '법적 통신판매 금지 키워드';
   if ((item.moq ?? 0) >= 4) return 'MOQ 4개 이상';
+  // legalStatus가 blocked인데 사유를 특정할 수 없는 경우 일반 메시지
+  if (item.legalStatus === 'blocked') return '법적 검토 차단';
   return null;
 }
 
@@ -326,6 +394,7 @@ function MoqScenarioPanel({
       item.deliWho,
       item.deliFee,
       item.marketLowestPrice,
+      item.categoryName,
     );
   }, [item]);
 
@@ -467,7 +536,7 @@ function MoqScenarioPanel({
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
               <thead>
                 <tr style={{ backgroundColor: C.tableHeader }}>
-                  {['전략', '묶음가', '개당단가', '단가격차', '마진'].map((h) => (
+                  {['전략', '묶음가', '개당단가', '가격 경쟁력', '마진'].map((h) => (
                     <th
                       key={h}
                       style={{
@@ -487,12 +556,6 @@ function MoqScenarioPanel({
               <tbody>
                 {scenarios.map((sc) => {
                   const isRec = recommended?.moq === sc.moq;
-                  const gapColor =
-                    sc.priceGapRate == null
-                      ? C.textSub
-                      : sc.priceGapRate >= 0
-                      ? '#16a34a'
-                      : '#dc2626';
 
                   return (
                     <tr
@@ -558,17 +621,15 @@ function MoqScenarioPanel({
                         {sc.perUnitPrice ? `${sc.perUnitPrice.toLocaleString('ko-KR')}원` : '-'}
                       </td>
 
-                      {/* 단가격차 */}
+                      {/* 가격 경쟁력 */}
                       <td
                         style={{
                           padding: '8px 8px',
-                          textAlign: 'right',
+                          textAlign: 'center',
                           borderBottom: `1px solid ${C.border}`,
-                          fontWeight: 600,
-                          color: gapColor,
                         }}
                       >
-                        {sc.priceGapRate != null ? `${sc.priceGapRate}%` : '-'}
+                        <TrafficLight gapRate={sc.priceGapRate ?? null} />
                       </td>
 
                       {/* 마진 */}
@@ -611,9 +672,9 @@ function MoqScenarioPanel({
                 {' '}(MOQ {recommended.moq})
               </p>
               <p style={{ fontSize: '11px', color: C.textSub, margin: '4px 0 0' }}>
-                단가격차{' '}
+                가격 경쟁력{' '}
                 <strong style={{ color: recommended.priceGapRate != null && recommended.priceGapRate >= 0 ? '#16a34a' : '#dc2626' }}>
-                  {recommended.priceGapRate != null ? `${recommended.priceGapRate}%` : '-'}
+                  {recommended.priceGapRate != null ? `${recommended.priceGapRate >= 0 ? '+' : ''}${recommended.priceGapRate}%` : '-'}
                 </strong>
                 {', '}마진{' '}
                 <strong>
@@ -674,6 +735,8 @@ export default function DomeggookTab() {
   const [minScore, setMinScore] = useState<number | ''>('');
   const [genderFilter, setGenderFilter] = useState<'all' | 'male_only' | 'male' | 'female' | 'neutral'>('all');
   const [hideBlocked, setHideBlocked] = useState(false);
+  // 가격 경쟁력 로컬 필터: all | below | normal | strong
+  const [priceCompFilter, setPriceCompFilter] = useState<'all' | 'below' | 'normal' | 'strong'>('all');
 
   // ── 단일 상품 추가 ─────────────────────────────────────────────────────────
   const [addUrl, setAddUrl] = useState('');
@@ -760,6 +823,8 @@ export default function DomeggookTab() {
     clearError,
     triggerLegalCheck,
     isLegalChecking,
+    collectKeyword,
+    isKeywordCollecting,
     verifyIp,
     ipVerifyingId,
   } = useSourcingStore();
@@ -843,9 +908,25 @@ export default function DomeggookTab() {
       // 차단 숨기기
       if (hideBlocked && getEffectiveBlockedReason(item) !== null) return false;
 
+      // 가격 경쟁력 필터 (로컬)
+      if (priceCompFilter !== 'all') {
+        const bundleData = getEffectiveBundleData(item);
+        const gapRate = bundleData.gapRate;
+        if (priceCompFilter === 'below') {
+          // 시장가 이하: gapRate >= 0 (단가 <= 시장가)
+          if (gapRate === null || gapRate < 0) return false;
+        } else if (priceCompFilter === 'normal') {
+          // 경쟁력 보통+: gapRate >= 5%
+          if (gapRate === null || gapRate < 5) return false;
+        } else if (priceCompFilter === 'strong') {
+          // 강력한 경쟁력: gapRate >= 15%
+          if (gapRate === null || gapRate < 15) return false;
+        }
+      }
+
       return true;
     });
-  }, [items, hideHighCsRisk, hideAboveMarket, hideBlockedUnchecked, minScore, genderFilter, hideBlocked]);
+  }, [items, hideHighCsRisk, hideAboveMarket, hideBlockedUnchecked, minScore, genderFilter, hideBlocked, priceCompFilter]);
 
   // ── 페이지네이션 ──────────────────────────────────────────────────────────
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
@@ -1073,44 +1154,18 @@ export default function DomeggookTab() {
       {/* ── 필터 툴바 ─────────────────────────────────────────────────────── */}
       <div
         style={{
-          padding: '12px 20px',
+          padding: '10px 20px',
           backgroundColor: C.card,
           borderBottom: `1px solid ${C.border}`,
           display: 'flex',
-          flexWrap: 'wrap',
-          gap: '10px',
-          alignItems: 'flex-end',
+          flexDirection: 'column',
+          gap: '8px',
         }}
       >
-        {/* 카테고리 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <label style={{ fontSize: '11px', color: C.textSub, fontWeight: 600 }}>카테고리</label>
-          <select
-            value={categoryFilter ?? ''}
-            onChange={(e) => setCategoryFilter(e.target.value || null)}
-            style={{
-              fontSize: '12px',
-              padding: '5px 8px',
-              borderRadius: '6px',
-              border: `1px solid ${C.border}`,
-              backgroundColor: C.card,
-              color: C.text,
-              cursor: 'pointer',
-              minWidth: '120px',
-            }}
-          >
-            <option value="">전체</option>
-            {categories.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* 1행: 핵심 필터 */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
 
-        {/* 검색 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <label style={{ fontSize: '11px', color: C.textSub, fontWeight: 600 }}>검색</label>
+          {/* 검색 */}
           <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
             <Search
               size={13}
@@ -1129,332 +1184,295 @@ export default function DomeggookTab() {
                 backgroundColor: C.card,
                 color: C.text,
                 width: '160px',
+                height: '30px',
               }}
             />
           </div>
-        </div>
 
-        {/* MOQ 최대값 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <label style={{ fontSize: '11px', color: C.textSub, fontWeight: 600 }}>MOQ 최대</label>
-          <select
-            value={moqFilter ?? ''}
-            onChange={(e) => setMoqFilter(e.target.value ? Number(e.target.value) : null)}
-            style={{
-              fontSize: '12px',
-              padding: '5px 8px',
-              borderRadius: '6px',
-              border: `1px solid ${C.border}`,
-              backgroundColor: C.card,
-              color: C.text,
-              cursor: 'pointer',
-            }}
-          >
-            <option value="">전체</option>
-            <option value="1">1개</option>
-            <option value="2">2개</option>
-            <option value="3">3개</option>
-          </select>
-        </div>
+          {/* 구분선 */}
+          <div style={{ width: '1px', height: '20px', backgroundColor: C.border }} />
 
-        {/* 무료배송만 */}
-        <label
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            fontSize: '12px',
-            color: C.text,
-            cursor: 'pointer',
-            userSelect: 'none',
-            paddingBottom: '1px',
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={freeDeliOnly}
-            onChange={(e) => setFreeDeliOnly(e.target.checked)}
-            style={{ cursor: 'pointer' }}
-          />
-          무료배송만
-        </label>
-
-        {/* 전일판매 최소 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <label style={{ fontSize: '11px', color: C.textSub, fontWeight: 600 }}>전일판매 ≥</label>
-          <input
-            type="number"
-            min={0}
-            value={minSales1d ?? ''}
-            onChange={(e) => setMinSales1d(e.target.value ? Number(e.target.value) : null)}
-            placeholder="0"
-            style={{
-              fontSize: '12px',
-              padding: '5px 8px',
-              borderRadius: '6px',
-              border: `1px solid ${C.border}`,
-              width: '72px',
-              color: C.text,
-            }}
-          />
-        </div>
-
-        {/* 7일판매 최소 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <label style={{ fontSize: '11px', color: C.textSub, fontWeight: 600 }}>7일판매 ≥</label>
-          <input
-            type="number"
-            min={0}
-            value={minSales7d ?? ''}
-            onChange={(e) => setMinSales7d(e.target.value ? Number(e.target.value) : null)}
-            placeholder="0"
-            style={{
-              fontSize: '12px',
-              padding: '5px 8px',
-              borderRadius: '6px',
-              border: `1px solid ${C.border}`,
-              width: '72px',
-              color: C.text,
-            }}
-          />
-        </div>
-
-        {/* 도매가 범위 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <label style={{ fontSize: '11px', color: C.textSub, fontWeight: 600 }}>도매가</label>
+          {/* MOQ 버튼 그룹 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <input
-              type="number"
-              min={0}
-              value={minPrice ?? ''}
-              onChange={(e) => setMinPrice(e.target.value ? Number(e.target.value) : null)}
-              placeholder="최소"
-              style={{
-                fontSize: '12px',
-                padding: '5px 8px',
-                borderRadius: '6px',
-                border: `1px solid ${C.border}`,
-                width: '72px',
-                color: C.text,
-              }}
-            />
-            <span style={{ fontSize: '11px', color: C.textSub }}>~</span>
-            <input
-              type="number"
-              min={0}
-              value={maxPrice ?? ''}
-              onChange={(e) => setMaxPrice(e.target.value ? Number(e.target.value) : null)}
-              placeholder="최대"
-              style={{
-                fontSize: '12px',
-                padding: '5px 8px',
-                borderRadius: '6px',
-                border: `1px solid ${C.border}`,
-                width: '72px',
-                color: C.text,
-              }}
-            />
+            <span style={{ fontSize: '11px', color: C.textSub, fontWeight: 600, marginRight: '2px' }}>MOQ</span>
+            {([
+              { label: '전체', value: null },
+              { label: '단품(1)', value: 1 },
+              { label: '1+1(2)', value: 2 },
+              { label: '2+1(3)', value: 3 },
+            ] as { label: string; value: number | null }[]).map(({ label, value }) => {
+              const isActive = moqFilter === value;
+              return (
+                <button
+                  key={String(value)}
+                  onClick={() => setMoqFilter(value)}
+                  style={{
+                    padding: '4px 9px',
+                    borderRadius: '5px',
+                    fontSize: '11px',
+                    fontWeight: isActive ? 700 : 500,
+                    border: isActive ? `1px solid ${C.accent}` : `1px solid ${C.border}`,
+                    backgroundColor: isActive ? C.accent : C.card,
+                    color: isActive ? '#fff' : C.text,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    height: '26px',
+                    lineHeight: 1,
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* 구분선 */}
+          <div style={{ width: '1px', height: '20px', backgroundColor: C.border }} />
+
+          {/* 전일판매 버튼 그룹 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: '11px', color: C.textSub, fontWeight: 600, marginRight: '2px' }}>전일판매</span>
+            {([
+              { label: '전체', value: null },
+              { label: '1개+', value: 1 },
+              { label: '3개+', value: 3 },
+              { label: '5개+', value: 5 },
+            ] as { label: string; value: number | null }[]).map(({ label, value }) => {
+              const isActive = minSales1d === value;
+              return (
+                <button
+                  key={String(value)}
+                  onClick={() => setMinSales1d(value)}
+                  style={{
+                    padding: '4px 9px',
+                    borderRadius: '5px',
+                    fontSize: '11px',
+                    fontWeight: isActive ? 700 : 500,
+                    border: isActive ? `1px solid ${C.accent}` : `1px solid ${C.border}`,
+                    backgroundColor: isActive ? C.accent : C.card,
+                    color: isActive ? '#fff' : C.text,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    height: '26px',
+                    lineHeight: 1,
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* 구분선 */}
+          <div style={{ width: '1px', height: '20px', backgroundColor: C.border }} />
+
+          {/* 7일판매 버튼 그룹 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: '11px', color: C.textSub, fontWeight: 600, marginRight: '2px' }}>7일판매</span>
+            {([
+              { label: '전체', value: null },
+              { label: '5개+', value: 5 },
+              { label: '10개+', value: 10 },
+              { label: '20개+', value: 20 },
+            ] as { label: string; value: number | null }[]).map(({ label, value }) => {
+              const isActive = minSales7d === value;
+              return (
+                <button
+                  key={String(value)}
+                  onClick={() => setMinSales7d(value)}
+                  style={{
+                    padding: '4px 9px',
+                    borderRadius: '5px',
+                    fontSize: '11px',
+                    fontWeight: isActive ? 700 : 500,
+                    border: isActive ? `1px solid ${C.accent}` : `1px solid ${C.border}`,
+                    backgroundColor: isActive ? C.accent : C.card,
+                    color: isActive ? '#fff' : C.text,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    height: '26px',
+                    lineHeight: 1,
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* 구분선 */}
+          <div style={{ width: '1px', height: '20px', backgroundColor: C.border }} />
+
+          {/* 가격 경쟁력 버튼 그룹 (로컬 필터) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: '11px', color: C.textSub, fontWeight: 600, marginRight: '2px' }}>가격 경쟁력</span>
+            {([
+              { label: '전체', key: 'all' },
+              { label: '시장가 이하', key: 'below' },
+              { label: '경쟁력 보통+', key: 'normal' },
+              { label: '강력한 경쟁력', key: 'strong' },
+            ] as { label: string; key: string }[]).map(({ label, key }) => {
+              const isActive = priceCompFilter === key;
+              return (
+                <button
+                  key={key}
+                  onClick={() => setPriceCompFilter(key as typeof priceCompFilter)}
+                  style={{
+                    padding: '4px 9px',
+                    borderRadius: '5px',
+                    fontSize: '11px',
+                    fontWeight: isActive ? 700 : 500,
+                    border: isActive ? `1px solid ${C.accent}` : `1px solid ${C.border}`,
+                    backgroundColor: isActive ? C.accent : C.card,
+                    color: isActive ? '#fff' : C.text,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    height: '26px',
+                    lineHeight: 1,
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {/* 마진율 최소 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <label style={{ fontSize: '11px', color: C.textSub, fontWeight: 600 }}>마진율 ≥ (%)</label>
-          <input
-            type="number"
-            value={minMargin ?? ''}
-            onChange={(e) => setMinMargin(e.target.value ? Number(e.target.value) : null)}
-            placeholder="0"
-            style={{
-              fontSize: '12px',
-              padding: '5px 8px',
-              borderRadius: '6px',
-              border: `1px solid ${C.border}`,
-              width: '72px',
-              color: C.text,
-            }}
-          />
-        </div>
-
-        {/* Legal 필터 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <label style={{ fontSize: '11px', color: C.textSub, fontWeight: 600 }}>Legal</label>
+        {/* 2행: 보조 필터 (시각적으로 약하게) */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
+          {/* 카테고리 */}
           <select
-            value={legalFilter ?? ''}
-            onChange={(e) => setLegalFilter(e.target.value || null)}
+            value={categoryFilter ?? ''}
+            onChange={(e) => setCategoryFilter(e.target.value || null)}
             style={{
-              fontSize: '12px',
-              padding: '5px 8px',
-              borderRadius: '6px',
+              fontSize: '11px',
+              padding: '3px 6px',
+              borderRadius: '5px',
               border: `1px solid ${C.border}`,
               backgroundColor: C.card,
-              color: C.text,
+              color: C.textSub,
               cursor: 'pointer',
+              height: '24px',
             }}
           >
-            <option value="">전체</option>
-            <option value="safe">안전</option>
-            <option value="warning">주의</option>
-            <option value="blocked">차단</option>
+            <option value="">카테고리 전체</option>
+            {categories.map((cat) => (
+              <option key={cat} value={cat}>{cat}</option>
+            ))}
           </select>
-        </div>
 
-        {/* IP리스크 필터 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <label style={{ fontSize: '11px', color: C.textSub, fontWeight: 600 }}>IP리스크</label>
-          <select
-            value={ipRiskFilter ?? ''}
-            onChange={(e) => setIpRiskFilter(e.target.value || null)}
+          {/* 무료배송만 */}
+          <label
             style={{
-              fontSize: '12px',
-              padding: '5px 8px',
-              borderRadius: '6px',
-              border: `1px solid ${C.border}`,
-              backgroundColor: C.card,
-              color: C.text,
-              cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: '4px',
+              fontSize: '11px', color: C.textSub, cursor: 'pointer', userSelect: 'none',
             }}
           >
-            <option value="">전체</option>
-            <option value="low">안전</option>
-            <option value="medium">주의</option>
-            <option value="high">위험</option>
-          </select>
-        </div>
-
-        {/* 구분선 */}
-        <div
-          style={{
-            width: '1px',
-            height: '30px',
-            backgroundColor: C.border,
-            alignSelf: 'flex-end',
-            marginBottom: '2px',
-          }}
-        />
-
-        {/* 신규: 고위험 CS 숨기기 */}
-        <label
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '5px',
-            fontSize: '12px',
-            color: C.text,
-            cursor: 'pointer',
-            userSelect: 'none',
-            paddingBottom: '1px',
-          }}
-          title="식품·유아·전기 등 고위험 CS 카테고리 숨기기"
-        >
-          <input
-            type="checkbox"
-            checked={hideHighCsRisk}
-            onChange={(e) => setHideHighCsRisk(e.target.checked)}
-            style={{ cursor: 'pointer' }}
-          />
-          고위험CS 숨기기
-        </label>
-
-        {/* 신규: 시장가 초과 숨기기 */}
-        <label
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '5px',
-            fontSize: '12px',
-            color: C.text,
-            cursor: 'pointer',
-            userSelect: 'none',
-            paddingBottom: '1px',
-          }}
-          title="단가격차 < 0 (시장가보다 비싼 경우) 숨기기"
-        >
-          <input
-            type="checkbox"
-            checked={hideAboveMarket}
-            onChange={(e) => setHideAboveMarket(e.target.checked)}
-            style={{ cursor: 'pointer' }}
-          />
-          시장가초과 숨기기
-        </label>
-
-        {/* 신규: 차단/미검사 숨기기 */}
-        <label
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '5px',
-            fontSize: '12px',
-            color: C.text,
-            cursor: 'pointer',
-            userSelect: 'none',
-            paddingBottom: '1px',
-          }}
-          title="Legal 상태가 차단 또는 미검사인 항목 숨기기"
-        >
-          <input
-            type="checkbox"
-            checked={hideBlockedUnchecked}
-            onChange={(e) => setHideBlockedUnchecked(e.target.checked)}
-            style={{ cursor: 'pointer' }}
-          />
-          차단/미검사 숨기기
-        </label>
-
-        {/* 신규: 타겟 성별 드롭다운 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <label style={{ fontSize: '11px', color: C.textSub, fontWeight: 600 }}>타겟 성별</label>
-          <select
-            value={genderFilter}
-            onChange={(e) => setGenderFilter(e.target.value as typeof genderFilter)}
-            style={{
-              height: '32px', padding: '0 8px', borderRadius: '6px',
-              border: `1px solid ${C.border}`, backgroundColor: C.card,
-              fontSize: '12px', color: C.text,
-            }}
-          >
-            <option value="all">전체</option>
-            <option value="male_only">🔵 남성타겟만</option>
-            <option value="male">🔵 남성친화 이상</option>
-            <option value="female">🚫 여성</option>
-            <option value="neutral">⚪ 중립</option>
-          </select>
-        </div>
-
-        {/* 신규: 차단 상품 숨기기 */}
-        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer' }}>
-          <input type="checkbox" checked={hideBlocked} onChange={(e) => setHideBlocked(e.target.checked)} />
-          차단 상품 숨기기
-        </label>
-
-        {/* 신규: 시즌 상품만 */}
-        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer' }}>
-          <input type="checkbox" checked={seasonOnly} onChange={(e) => setSeasonOnly(e.target.checked)} />
-          시즌 상품만
-        </label>
-
-        {/* 신규: 최소 종합점수 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <label style={{ fontSize: '11px', color: C.textSub, fontWeight: 600 }}>
-            종합점수 ≥
+            <input
+              type="checkbox"
+              checked={freeDeliOnly}
+              onChange={(e) => setFreeDeliOnly(e.target.checked)}
+              style={{ cursor: 'pointer', width: '12px', height: '12px' }}
+            />
+            무료배송만
           </label>
-          <input
-            type="number"
-            min={0}
-            max={100}
-            value={minScore}
-            onChange={(e) => setMinScore(e.target.value === '' ? '' : Number(e.target.value))}
-            placeholder="0"
+
+          {/* 차단/미검사 숨기기 */}
+          <label
             style={{
-              fontSize: '12px',
-              padding: '5px 8px',
-              borderRadius: '6px',
-              border: `1px solid ${C.border}`,
-              width: '72px',
-              color: C.text,
+              display: 'flex', alignItems: 'center', gap: '4px',
+              fontSize: '11px', color: C.textSub, cursor: 'pointer', userSelect: 'none',
             }}
-          />
+            title="Legal 상태가 차단 또는 미검사인 항목 숨기기"
+          >
+            <input
+              type="checkbox"
+              checked={hideBlockedUnchecked}
+              onChange={(e) => setHideBlockedUnchecked(e.target.checked)}
+              style={{ cursor: 'pointer', width: '12px', height: '12px' }}
+            />
+            차단/미검사 숨기기
+          </label>
+
+          {/* 차단 상품 숨기기 */}
+          <label
+            style={{
+              display: 'flex', alignItems: 'center', gap: '4px',
+              fontSize: '11px', color: C.textSub, cursor: 'pointer', userSelect: 'none',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={hideBlocked}
+              onChange={(e) => setHideBlocked(e.target.checked)}
+              style={{ cursor: 'pointer', width: '12px', height: '12px' }}
+            />
+            차단 상품 숨기기
+          </label>
+
+          {/* 고위험CS 숨기기 */}
+          <label
+            style={{
+              display: 'flex', alignItems: 'center', gap: '4px',
+              fontSize: '11px', color: C.textSub, cursor: 'pointer', userSelect: 'none',
+            }}
+            title="식품·유아·전기 등 고위험 CS 카테고리 숨기기"
+          >
+            <input
+              type="checkbox"
+              checked={hideHighCsRisk}
+              onChange={(e) => setHideHighCsRisk(e.target.checked)}
+              style={{ cursor: 'pointer', width: '12px', height: '12px' }}
+            />
+            고위험CS 숨기기
+          </label>
+
+          {/* 필터 활성 개수 표시 */}
+          {(() => {
+            const activeCount = [
+              moqFilter !== null,
+              minSales1d !== null,
+              minSales7d !== null,
+              priceCompFilter !== 'all',
+              searchQuery.trim() !== '',
+              categoryFilter !== null,
+              freeDeliOnly,
+              hideBlockedUnchecked,
+              hideBlocked,
+              hideHighCsRisk,
+            ].filter(Boolean).length;
+            if (activeCount === 0) return null;
+            return (
+              <button
+                onClick={() => {
+                  setMoqFilter(null);
+                  setMinSales1d(null);
+                  setMinSales7d(null);
+                  setPriceCompFilter('all');
+                  setSearchQuery('');
+                  setCategoryFilter(null);
+                  setFreeDeliOnly(false);
+                  setHideBlockedUnchecked(false);
+                  setHideBlocked(false);
+                  setHideHighCsRisk(false);
+                  fetchAnalysis();
+                }}
+                style={{
+                  marginLeft: 'auto',
+                  display: 'flex', alignItems: 'center', gap: '4px',
+                  padding: '3px 8px', borderRadius: '5px', fontSize: '11px',
+                  border: `1px solid rgba(190,0,20,0.3)`,
+                  backgroundColor: 'rgba(190,0,20,0.05)',
+                  color: C.accent,
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                }}
+              >
+                <X size={10} />
+                필터 초기화 ({activeCount})
+              </button>
+            );
+          })()}
         </div>
       </div>
 
@@ -1478,14 +1496,40 @@ export default function DomeggookTab() {
           <div
             style={{
               display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
               padding: '60px 20px',
+              gap: '14px',
               color: C.textSub,
               fontSize: '14px',
             }}
           >
-            조건에 맞는 상품이 없습니다.
+            <span>조건에 맞는 상품이 없습니다.</span>
+            {searchQuery.trim() && (
+              <button
+                onClick={() => collectKeyword(searchQuery.trim())}
+                disabled={isKeywordCollecting || isCollecting}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  padding: '8px 18px', borderRadius: '7px',
+                  fontSize: '13px', fontWeight: 600,
+                  border: 'none',
+                  backgroundColor: isKeywordCollecting ? 'rgba(190,0,20,0.5)' : C.btnPrimaryBg,
+                  color: C.btnPrimaryText,
+                  cursor: (isKeywordCollecting || isCollecting) ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {isKeywordCollecting ? (
+                  <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} />
+                ) : (
+                  <RefreshCw size={13} />
+                )}
+                {isKeywordCollecting
+                  ? '수집 중...'
+                  : `도매꾹에서 "${searchQuery.trim()}" 수집하기`}
+              </button>
+            )}
           </div>
         ) : (
           <table
@@ -1587,18 +1631,18 @@ export default function DomeggookTab() {
                   묶음전략
                 </th>
 
-                {/* 단가격차 */}
+                {/* 가격 경쟁력 */}
                 <th
                   style={{
                     padding: '9px 12px',
-                    textAlign: 'right',
+                    textAlign: 'center',
                     fontWeight: 700,
                     color: C.textSub,
                     borderBottom: `1px solid ${C.border}`,
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  단가격차
+                  가격 경쟁력
                 </th>
 
                 {/* 추천판매가 */}
@@ -1923,21 +1967,9 @@ export default function DomeggookTab() {
                       )}
                     </td>
 
-                    {/* 단가격차 */}
-                    <td style={{ padding: '10px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      {bundleData.gapRate != null ? (
-                        <span
-                          style={{
-                            fontWeight: 700,
-                            color: bundleData.gapRate >= 0 ? '#16a34a' : '#dc2626',
-                          }}
-                        >
-                          {bundleData.gapRate >= 0 ? '+' : ''}
-                          {bundleData.gapRate}%
-                        </span>
-                      ) : (
-                        <span style={{ color: C.textSub }}>-</span>
-                      )}
+                    {/* 가격 경쟁력 */}
+                    <td style={{ padding: '10px 12px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      <TrafficLight gapRate={bundleData.gapRate} />
                     </td>
 
                     {/* 추천판매가 */}
@@ -1983,21 +2015,28 @@ export default function DomeggookTab() {
 
                     {/* Legal */}
                     <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                      <span
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '3px',
-                          fontSize: '11px',
-                          padding: '2px 7px',
-                          borderRadius: '4px',
-                          fontWeight: 600,
-                          backgroundColor: legalBadge.bg,
-                          color: legalBadge.color,
-                        }}
-                      >
-                        {legalBadge.emoji} {legalBadge.label}
-                      </span>
+                      {(() => {
+                        const legalReason = getEffectiveBlockedReason(item);
+                        return (
+                          <span
+                            title={legalReason ?? undefined}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                              fontSize: '11px',
+                              padding: '2px 7px',
+                              borderRadius: '4px',
+                              fontWeight: 600,
+                              backgroundColor: legalBadge.bg,
+                              color: legalBadge.color,
+                              cursor: legalReason ? 'help' : 'default',
+                            }}
+                          >
+                            {legalBadge.emoji} {legalBadge.label}
+                          </span>
+                        );
+                      })()}
                     </td>
 
                     {/* IP리스크 */}

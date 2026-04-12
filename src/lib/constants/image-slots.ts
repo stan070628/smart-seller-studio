@@ -37,6 +37,11 @@ export const FRAME_IMAGE_SLOTS: Partial<Record<FrameType, ImageSlotDef[]>> = {
     { key: 'step2', label: 'Step 2 이미지', aspectHint: '160x180 portrait, step illustration' },
     { key: 'step3', label: 'Step 3 이미지', aspectHint: '160x180 portrait, step illustration' },
   ],
+  thumbnail: [
+    { key: 'ref1', label: '참조 사진 1', aspectHint: '780x780 square, product reference photo' },
+    { key: 'ref2', label: '참조 사진 2', aspectHint: '780x780 square, product reference photo' },
+    { key: 'ref3', label: '참조 사진 3', aspectHint: '780x780 square, product reference photo' },
+  ],
   // 텍스트 전용 프레임은 빈 배열
   solution: [],
   usp: [],

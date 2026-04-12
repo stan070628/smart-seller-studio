@@ -72,12 +72,6 @@ const HeroTemplate: React.FC<TemplateProps> = ({
             <ImagePlaceholder onImageAdd={onImageAdd} theme={theme} />
           </div>
         )}
-        {/* 그라디언트 오버레이 */}
-        <div style={{
-          position: 'absolute', inset: 0,
-          background: `linear-gradient(to bottom, transparent 40%, ${theme.bgDark} 100%)`,
-          pointerEvents: 'none',
-        }} />
         {/* 카테고리 배지 */}
         <div style={{
           position: 'absolute', top: '32px', left: '48px',

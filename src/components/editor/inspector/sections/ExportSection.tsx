@@ -17,10 +17,14 @@ import { useState } from 'react';
 import { Download, Image, Loader2 } from 'lucide-react';
 import type { FrameType } from '@/types/frames';
 import { useTemplateRefs } from '../TemplateRefContext';
+import useEditorStore from '@/store/useEditorStore';
+import { getDims } from '@/lib/constants/template-dimensions';
 
-// 템플릿 규격 상수
-const TEMPLATE_W = 780;
-const TEMPLATE_H = 1100;
+/** 편집 UI가 DOM에서 사라질 때까지 두 프레임 대기 */
+const waitForRender = () =>
+  new Promise<void>((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+  );
 
 interface ExportSectionProps {
   frameType: FrameType;
@@ -31,6 +35,10 @@ interface ExportSectionProps {
 const ExportSection: React.FC<ExportSectionProps> = ({ frameType, frameIndex }) => {
   const [isSaving, setIsSaving] = useState(false);
   const { getRef } = useTemplateRefs();
+  const setSelectedFrameType = useEditorStore((s) => s.setSelectedFrameType);
+
+  // frameType별 동적 치수
+  const { w: TEMPLATE_W, h: TEMPLATE_H } = getDims(frameType);
 
   // 파일명용 인덱스 레이블 (01, 02, ...)
   const indexLabel = String(frameIndex).padStart(2, '0');
@@ -46,6 +54,9 @@ const ExportSection: React.FC<ExportSectionProps> = ({ frameType, frameIndex }) 
     setIsSaving(true);
     try {
       const { toJpeg } = await import('html-to-image');
+      // 편집 UI 제거 후 캡처
+      setSelectedFrameType(null);
+      await waitForRender();
       const dataUrl = await toJpeg(node, {
         quality: 0.95,
         width: TEMPLATE_W,
@@ -53,12 +64,14 @@ const ExportSection: React.FC<ExportSectionProps> = ({ frameType, frameIndex }) 
         pixelRatio: 1,
         fontEmbedCSS: '', // Google Fonts CORS 방지
       });
+      setSelectedFrameType(frameType); // 선택 복원
       const link = document.createElement('a');
       link.download = `frame-${indexLabel}-${frameType}.jpg`;
       link.href = dataUrl;
       link.click();
     } catch (err) {
       console.error('[ExportSection] JPG 저장 오류:', err);
+      setSelectedFrameType(frameType); // 선택 복원
       window.alert('JPG 저장에 실패했습니다. 다시 시도해주세요.');
     } finally {
       setIsSaving(false);
@@ -76,6 +89,9 @@ const ExportSection: React.FC<ExportSectionProps> = ({ frameType, frameIndex }) 
     setIsSaving(true);
     try {
       const { toPng } = await import('html-to-image');
+      // 편집 UI 제거 후 캡처
+      setSelectedFrameType(null);
+      await waitForRender();
       const dataUrl = await toPng(node, {
         quality: 1,
         width: TEMPLATE_W,
@@ -83,12 +99,14 @@ const ExportSection: React.FC<ExportSectionProps> = ({ frameType, frameIndex }) 
         pixelRatio: 2,
         fontEmbedCSS: '', // Google Fonts CORS 방지
       });
+      setSelectedFrameType(frameType); // 선택 복원
       const link = document.createElement('a');
       link.download = `frame-${indexLabel}-${frameType}@2x.png`;
       link.href = dataUrl;
       link.click();
     } catch (err) {
       console.error('[ExportSection] 고해상도 PNG 저장 오류:', err);
+      setSelectedFrameType(frameType); // 선택 복원
       window.alert('저장에 실패했습니다. 다시 시도해주세요.');
     } finally {
       setIsSaving(false);
@@ -211,7 +229,7 @@ const ExportSection: React.FC<ExportSectionProps> = ({ frameType, frameIndex }) 
         )}
       </button>
 
-      {/* 해상도 안내 */}
+      {/* 해상도 안내 (frameType별 동적 치수 표시) */}
       <p
         style={{
           margin: 0,
@@ -221,7 +239,7 @@ const ExportSection: React.FC<ExportSectionProps> = ({ frameType, frameIndex }) 
           lineHeight: '1.5',
         }}
       >
-        JPG 780×1100 · PNG 1560×2200
+        JPG {TEMPLATE_W}×{TEMPLATE_H} · PNG {TEMPLATE_W * 2}×{TEMPLATE_H * 2}
       </p>
 
       {/* CSS 애니메이션 (spin) */}

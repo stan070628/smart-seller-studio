@@ -11,7 +11,9 @@ import type { PlatformId, ProductListing } from '@/types/listing';
 // 탭 이동 시에도 입력값이 유지되도록 공통 필드를 스토어에서 관리
 interface SharedDraft {
   name: string;
-  salePrice: string;         // input value는 string으로 관리
+  salePrice: string;         // 공통 판매가 — 채널별 가격 미입력 시 fallback
+  naverPrice: string;        // 네이버 전용 판매가 (선택, 입력 시 salePrice 대신 사용)
+  coupangPrice: string;      // 쿠팡 전용 판매가 (선택, 입력 시 salePrice 대신 사용)
   originalPrice: string;
   stock: string;
   thumbnailImages: string[]; // 상품 목록/상단 이미지 (최소 1개 필요)
@@ -26,6 +28,8 @@ interface SharedDraft {
 const SHARED_DRAFT_INITIAL: SharedDraft = {
   name: '',
   salePrice: '',
+  naverPrice: '',
+  coupangPrice: '',
   originalPrice: '',
   stock: '999',
   thumbnailImages: [],
@@ -151,6 +155,8 @@ interface ListingStore {
   registerBothProducts: (data: {
     name: string;
     salePrice: number;
+    naverPrice?: number;    // 네이버 전용 판매가 (미입력 시 salePrice 사용)
+    coupangPrice?: number;  // 쿠팡 전용 판매가 (미입력 시 salePrice 사용)
     originalPrice?: number;
     stock?: number;
     thumbnailImages: string[];

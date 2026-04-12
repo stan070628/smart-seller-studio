@@ -16,14 +16,19 @@
  *   MOQ >= 4 → 제외  (strategy: null)
  */
 
-/** 마켓플레이스 수수료율 (쿠팡/네이버 평균) */
-const MARKETPLACE_FEE_RATE = 0.10;
+import { getCategoryFeeRate } from '@/lib/sourcing/shared/channel-policy';
 
 /** VAT */
 const VAT_RATE = 0.10;
 
-/** 최소 묶음 판매가 산출에 사용하는 공제율 */
-const DEDUCTION_RATE = 1 - MARKETPLACE_FEE_RATE - VAT_RATE; // 0.80
+/**
+ * 공제율 계산 (카테고리별 수수료 반영)
+ * 기본값: 네이버 기준 = 1 - 0.06 - 0.10 = 0.84
+ */
+function getDeductionRate(categoryName?: string | null): number {
+  const feeRate = getCategoryFeeRate(categoryName, 'naver');
+  return 1 - feeRate - VAT_RATE;
+}
 
 export type MoqStrategy = 'single' | '1+1' | '2+1' | null;
 
@@ -68,15 +73,18 @@ export interface BundlePriceInput {
   deliFee: number | null;
   /** MOQ */
   moq: number;
+  /** 카테고리명 (카테고리별 수수료 적용). 없으면 기본값 사용 */
+  categoryName?: string | null;
 }
 
 /**
- * MOQ 기반 묶음 최소 판매가 계산
+ * MOQ 기반 묶음 최소 판매가 계산 (카테고리별 수수료 반영)
  */
 export function calcBundleMinPrice(input: BundlePriceInput): number {
-  const { priceDome, deliWho, deliFee, moq } = input;
+  const { priceDome, deliWho, deliFee, moq, categoryName } = input;
   const effectiveDeliF = deliWho === 'S' ? 0 : (deliFee ?? 0);
-  return Math.ceil((priceDome * moq + effectiveDeliF) / DEDUCTION_RATE);
+  const deductionRate = getDeductionRate(categoryName);
+  return Math.ceil((priceDome * moq + effectiveDeliF) / deductionRate);
 }
 
 /**
@@ -101,15 +109,20 @@ export function calcPriceGapRate(perUnitPrice: number, marketPrice: number): num
 /**
  * 판매자 측 마진율 계산 (개당 단가 기준)
  *
- * perUnitPrice는 break-even 최소판매가 = 실제원가 / DEDUCTION_RATE
- * → 실제원가 = perUnitPrice × DEDUCTION_RATE
+ * perUnitPrice는 break-even 최소판매가 = 실제원가 / deductionRate
+ * → 실제원가 = perUnitPrice × deductionRate
  *
  * 마진율 = (시장가 실수익 - 실제원가) / 시장가 × 100
- *        = (marketPrice × DEDUCTION_RATE - perUnitPrice × DEDUCTION_RATE) / marketPrice × 100
- *        = DEDUCTION_RATE × (marketPrice - perUnitPrice) / marketPrice × 100
+ *        = (marketPrice × deductionRate - perUnitPrice × deductionRate) / marketPrice × 100
+ *        = deductionRate × (marketPrice - perUnitPrice) / marketPrice × 100
  */
-export function calcMarginRate(perUnitPrice: number, marketPrice: number): number {
-  return Math.round((DEDUCTION_RATE * (marketPrice - perUnitPrice) / marketPrice) * 10000) / 100;
+export function calcMarginRate(
+  perUnitPrice: number,
+  marketPrice: number,
+  categoryName?: string | null,
+): number {
+  const deductionRate = getDeductionRate(categoryName);
+  return Math.round((deductionRate * (marketPrice - perUnitPrice) / marketPrice) * 10000) / 100;
 }
 
 /**
@@ -134,6 +147,7 @@ export function compareWithMarket(
   deliWho: string | null,
   deliFee: number | null,
   marketPrice: number | null,
+  categoryName?: string | null,
 ): {
   bundleMinPrice: number;
   perUnitPrice: number;
@@ -141,10 +155,10 @@ export function compareWithMarket(
   marginRate: number | null;
   status: PriceCompStatus;
 } {
-  const bundleMinPrice = calcBundleMinPrice({ priceDome, deliWho, deliFee, moq });
+  const bundleMinPrice = calcBundleMinPrice({ priceDome, deliWho, deliFee, moq, categoryName });
   const perUnitPrice = calcPerUnitPrice(bundleMinPrice, moq);
   const priceGapRate = marketPrice ? calcPriceGapRate(perUnitPrice, marketPrice) : null;
-  const marginRate = marketPrice ? calcMarginRate(perUnitPrice, marketPrice) : null;
+  const marginRate = marketPrice ? calcMarginRate(perUnitPrice, marketPrice, categoryName) : null;
   const status = getPriceCompStatus(priceGapRate);
   return { bundleMinPrice, perUnitPrice, priceGapRate, marginRate, status };
 }
@@ -170,13 +184,14 @@ export function calcAllScenarios(
   deliWho: string | null,
   deliFee: number | null,
   marketPrice: number | null,
+  categoryName?: string | null,
 ): MoqScenario[] {
   const scenarios: MoqScenario[] = [1, 2, 3].map((moq) => {
     const strategy = getMoqStrategy(moq);
-    const bundleMinPrice = calcBundleMinPrice({ priceDome, deliWho, deliFee, moq });
+    const bundleMinPrice = calcBundleMinPrice({ priceDome, deliWho, deliFee, moq, categoryName });
     const perUnitPrice = calcPerUnitPrice(bundleMinPrice, moq);
     const priceGapRate = marketPrice ? calcPriceGapRate(perUnitPrice, marketPrice) : null;
-    const marginRate = marketPrice ? calcMarginRate(perUnitPrice, marketPrice) : null;
+    const marginRate = marketPrice ? calcMarginRate(perUnitPrice, marketPrice, categoryName) : null;
     const priceCompStatus = getPriceCompStatus(priceGapRate);
     return { moq, strategy, bundleMinPrice, perUnitPrice, priceGapRate, marginRate, priceCompStatus };
   });

@@ -17,33 +17,51 @@ import type { UploadedImage } from '@/types/editor';
 import useEditorStore from '@/store/useEditorStore';
 import { getFrameSlots } from '@/lib/constants/image-slots';
 
+/** 이미지 설정 자동 적용 대상 프레임 */
+const AUTO_FIT_FRAME_TYPES: FrameType[] = ['custom_3col', 'custom_gallery'];
+
 interface ImageSectionProps {
   frame: GeneratedFrame;
+  /** 프레임 인스턴스 고유 ID */
+  frameId: string;
   activeSlotKey: string;
   onSlotChange: (slotKey: string) => void;
 }
 
-const ImageSection: React.FC<ImageSectionProps> = ({ frame, activeSlotKey, onSlotChange }) => {
+const ImageSection: React.FC<ImageSectionProps> = ({ frame, frameId, activeSlotKey, onSlotChange }) => {
   const uploadedImages = useEditorStore((s) => s.uploadedImages);
   const frameImages = useEditorStore((s) => s.frameImages);
   const addImage = useEditorStore((s) => s.addImage);
   const setFrameImage = useEditorStore((s) => s.setFrameImage);
+
+  const setFrameImageFit = useEditorStore((s) => s.setFrameImageFit);
+  const setFrameImageSettings = useEditorStore((s) => s.setFrameImageSettings);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const slots = getFrameSlots(frame.frameType as FrameType);
   if (slots.length === 0) return null;
 
-  const currentSlotImages = frameImages[frame.frameType as FrameType] ?? {};
+  const frameType = frame.frameType as FrameType;
+  const currentSlotImages = frameImages[frameId] ?? {};
   const customImageUrl = currentSlotImages[activeSlotKey] ?? null;
+
+  /** custom_3col / custom_gallery 슬롯 이미지 설정 시 fit/settings 자동 적용 */
+  const applyAutoFitIfNeeded = (ft: FrameType, slotKey: string) => {
+    if (AUTO_FIT_FRAME_TYPES.includes(ft)) {
+      setFrameImageFit(frameId, slotKey, 'cover');
+      setFrameImageSettings(frameId, slotKey, { scale: 1, x: 50, y: 50 });
+    }
+  };
 
   const handleSelectImage = (img: UploadedImage) => {
     const url = img.storageUrl ?? img.url;
-    setFrameImage(frame.frameType as FrameType, activeSlotKey, url);
+    setFrameImage(frameId, activeSlotKey, url);
+    applyAutoFitIfNeeded(frameType, activeSlotKey);
   };
 
   const handleReleaseImage = () => {
-    setFrameImage(frame.frameType as FrameType, activeSlotKey, null);
+    setFrameImage(frameId, activeSlotKey, null);
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -59,7 +77,8 @@ const ImageSection: React.FC<ImageSectionProps> = ({ frame, activeSlotKey, onSlo
       uploadStatus: 'done',
     };
     addImage(newImg);
-    setFrameImage(frame.frameType as FrameType, activeSlotKey, url);
+    setFrameImage(frameId, activeSlotKey, url);
+    applyAutoFitIfNeeded(frameType, activeSlotKey);
     e.target.value = '';
   };
 
@@ -94,80 +113,95 @@ const ImageSection: React.FC<ImageSectionProps> = ({ frame, activeSlotKey, onSlo
             const isActive = slot.key === activeSlotKey;
             const slotUrl = currentSlotImages[slot.key] ?? null;
             return (
-              <button
+              <div
                 key={slot.key}
-                onClick={() => onSlotChange(slot.key)}
-                style={{
-                  flex: 1,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '8px 4px',
-                  borderRadius: '10px',
-                  border: isActive ? '2px solid #6366f1' : '2px solid #eeeeee',
-                  backgroundColor: isActive ? 'rgba(99,102,241,0.08)' : '#f3f3f3',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s',
-                }}
+                style={{ flex: 1, position: 'relative' }}
               >
-                {/* 슬롯 썸네일 */}
-                <div
+                <button
+                  onClick={() => onSlotChange(slot.key)}
                   style={{
                     width: '100%',
-                    aspectRatio: '16/10',
-                    borderRadius: '6px',
-                    overflow: 'hidden',
-                    backgroundColor: '#eeeeee',
                     display: 'flex',
+                    flexDirection: 'column',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    position: 'relative',
+                    gap: '6px',
+                    padding: '8px 4px',
+                    borderRadius: '10px',
+                    border: isActive ? '2px solid #6366f1' : '2px solid #eeeeee',
+                    backgroundColor: isActive ? 'rgba(99,102,241,0.08)' : '#f3f3f3',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
                   }}
                 >
-                  {slotUrl ? (
-                    <>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                  {/* 슬롯 썸네일 */}
+                  <div
+                    style={{
+                      width: '100%',
+                      aspectRatio: '16/10',
+                      borderRadius: '6px',
+                      overflow: 'hidden',
+                      backgroundColor: '#eeeeee',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      position: 'relative',
+                    }}
+                  >
+                    {slotUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={slotUrl}
                         alt={slot.label}
                         style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                       />
-                      {/* 체크 뱃지 */}
-                      <div
-                        style={{
-                          position: 'absolute',
-                          top: '3px',
-                          right: '3px',
-                          width: '16px',
-                          height: '16px',
-                          borderRadius: '50%',
-                          backgroundColor: '#4ade80',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                      >
-                        <Check size={10} color="#064e3b" strokeWidth={3} />
-                      </div>
-                    </>
-                  ) : (
-                    <ImageIcon size={18} color="#926f6b" />
-                  )}
-                </div>
+                    ) : (
+                      <ImageIcon size={18} color="#926f6b" />
+                    )}
+                  </div>
 
-                {/* 슬롯 라벨 */}
-                <span
-                  style={{
-                    fontSize: '11px',
-                    fontWeight: isActive ? 600 : 400,
-                    color: isActive ? '#6366f1' : '#926f6b',
-                    lineHeight: 1,
-                  }}
-                >
-                  {slot.label}
-                </span>
-              </button>
+                  {/* 슬롯 라벨 */}
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      fontWeight: isActive ? 600 : 400,
+                      color: isActive ? '#6366f1' : '#926f6b',
+                      lineHeight: 1,
+                    }}
+                  >
+                    {slot.label}
+                  </span>
+                </button>
+
+                {/* 이미지 삭제 버튼 — 이미지가 있을 때만 표시 */}
+                {slotUrl && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setFrameImage(frameId, slot.key, null);
+                    }}
+                    title={`${slot.label} 삭제`}
+                    style={{
+                      position: 'absolute',
+                      top: '4px',
+                      right: '4px',
+                      width: '18px',
+                      height: '18px',
+                      borderRadius: '50%',
+                      border: 'none',
+                      backgroundColor: 'rgba(0,0,0,0.55)',
+                      color: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      padding: 0,
+                      zIndex: 1,
+                    }}
+                  >
+                    <X size={10} />
+                  </button>
+                )}
+              </div>
             );
           })}
         </div>

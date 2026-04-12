@@ -13,14 +13,23 @@ import { z } from 'zod';
 import { getDomeggookClient } from '@/lib/sourcing/domeggook-client';
 import { getSourcingPool } from '@/lib/sourcing/db';
 
-// URL에서 숫자 ID 추출 (예: "https://domeggook.com/60015467" → 60015467)
+// URL에서 숫자 ID 추출
+// 예: "https://domeggook.com/60015467"          → 60015467
+//     "https://domeggook.com/26794316?from=lstGen" → 26794316
 function parseItemNo(input: string): number | null {
   const trimmed = input.trim();
   // 순수 숫자
   if (/^\d+$/.test(trimmed)) return parseInt(trimmed, 10);
-  // URL 패턴: 마지막 경로 세그먼트가 숫자
-  const match = trimmed.match(/\/(\d+)\/?$/);
-  if (match) return parseInt(match[1], 10);
+  // URL 파싱: 쿼리스트링·해시 제거 후 마지막 경로 세그먼트에서 숫자 추출
+  try {
+    const pathname = new URL(trimmed).pathname;
+    const match = pathname.match(/\/(\d+)\/?$/);
+    if (match) return parseInt(match[1], 10);
+  } catch {
+    // URL 파싱 실패 시 정규식 fallback (쿼리스트링 포함 처리)
+    const match = trimmed.match(/\/(\d+)(?:[/?#]|$)/);
+    if (match) return parseInt(match[1], 10);
+  }
   return null;
 }
 

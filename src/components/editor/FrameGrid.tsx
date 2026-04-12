@@ -127,7 +127,7 @@ const FrameGrid = forwardRef<FrameGridHandle>((_, ref) => {
     >
       {activeFrames.map((frame, idx) => (
         <FrameCardPreview
-          key={frame.frameType}
+          key={frame.id ?? frame.frameType}
           frame={frame}
           defaultImageUrl={defaultImageUrl}
           uploadedImages={uploadedImages}

@@ -45,23 +45,14 @@ const Detail2Template: React.FC<TemplateProps> = ({
             { label: '방수', value: 'IPX5 생활 방수' },
           ];
 
-  // 미니 카드 2개: metadata.miniCards 또는 bulletPoints[4..5] 또는 기본값
+  // 미니 카드 2개: metadata.miniCards 우선, 없으면 빈 카드
   const miniCardsRaw = (frame.metadata as Record<string, unknown>)?.miniCards;
   const miniCards: { icon: string; title: string; desc: string }[] = Array.isArray(miniCardsRaw)
     ? (miniCardsRaw as { icon: string; title: string; desc: string }[]).slice(0, 2)
-    : bulletPoints.length > 4
-      ? bulletPoints.slice(4, 6).map((p) => {
-          const parts = p.split('|');
-          return {
-            icon: '✦',
-            title: parts[0]?.trim() || p,
-            desc: parts[1]?.trim() || '',
-          };
-        })
-      : [
-          { icon: '⚡', title: '빠른 충전', desc: '30분 만에 80% 충전' },
-          { icon: '🔊', title: '고음질 사운드', desc: '40mm 드라이버 탑재' },
-        ];
+    : [
+        { icon: '✦', title: '', desc: '' },
+        { icon: '✦', title: '', desc: '' },
+      ];
 
   // 동적 아이콘: metadata.icons 배열 우선
   const icons = Array.isArray((frame.metadata as Record<string, unknown>)?.icons)

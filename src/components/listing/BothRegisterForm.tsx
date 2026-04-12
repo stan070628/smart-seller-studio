@@ -12,6 +12,7 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { X, Check, Loader2 } from 'lucide-react';
 import { useListingStore } from '@/store/useListingStore';
+import ImageInputSection from './ImageInputSection';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 색상 상수 (ListingDashboard 동일)
@@ -79,76 +80,6 @@ interface NaverCategoryResult {
   id: string;
   name: string;
   path: string;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 이미지 썸네일 (ListingDashboard의 ImageThumb 재구현)
-// ─────────────────────────────────────────────────────────────────────────────
-function ImageThumb({ url, index }: { url: string; index: number }) {
-  const [failed, setFailed] = useState(false);
-  return (
-    <div
-      style={{
-        position: 'relative',
-        width: '56px',
-        height: '56px',
-        borderRadius: '6px',
-        overflow: 'hidden',
-        border: failed ? '2px solid #b91c1c' : `1px solid ${C.border}`,
-        flexShrink: 0,
-        backgroundColor: C.tableHeader,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      {failed ? (
-        <span style={{ fontSize: '10px', color: '#b91c1c', textAlign: 'center', padding: '4px' }}>
-          오류
-        </span>
-      ) : (
-        <img
-          src={url}
-          alt={`이미지 ${index + 1}`}
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          onError={() => setFailed(true)}
-        />
-      )}
-      {index === 0 && !failed && (
-        <span
-          style={{
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            fontSize: '9px',
-            textAlign: 'center',
-            backgroundColor: 'rgba(190,0,20,0.8)',
-            color: '#fff',
-            padding: '1px 0',
-          }}
-        >
-          대표
-        </span>
-      )}
-    </div>
-  );
-}
-
-function ImageUrlPreview({ urls }: { urls: string[] }) {
-  if (urls.length === 0) return null;
-  return (
-    <div style={{ marginTop: '8px' }}>
-      <div style={{ fontSize: '11px', fontWeight: 600, color: C.textSub, marginBottom: '6px' }}>
-        미리보기 ({urls.length}장)
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-        {urls.map((url, i) => (
-          <ImageThumb key={i} url={url} index={i} />
-        ))}
-      </div>
-    </div>
-  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -242,21 +173,9 @@ export default function BothRegisterForm({ onClose }: BothRegisterFormProps) {
     [updateSharedDraft],
   );
 
-  // ─── 이미지 URL 배열 ─────────────────────────────────────────────────────
-  const thumbnailImageLines = sharedDraft.thumbnailImages.join('\n');
-  const detailImageLines = sharedDraft.detailImages.join('\n');
+  // ─── 이미지 URL 배열 (store 슬라이스 별칭) ───────────────────────────────
   const thumbnailImageUrls = sharedDraft.thumbnailImages;
   const detailImageUrls = sharedDraft.detailImages;
-
-  const handleThumbnailImagesChange = (raw: string) => {
-    const urls = raw.split('\n').map((s) => s.trim()).filter(Boolean);
-    updateDraft({ thumbnailImages: urls });
-  };
-
-  const handleDetailImagesChange = (raw: string) => {
-    const urls = raw.split('\n').map((s) => s.trim()).filter(Boolean);
-    updateDraft({ detailImages: urls });
-  };
 
   // ─── 카테고리 병렬 검색 ──────────────────────────────────────────────────
   const searchCategories = (keyword: string) => {
@@ -315,8 +234,12 @@ export default function BothRegisterForm({ onClose }: BothRegisterFormProps) {
     const newErrors: Record<string, string> = {};
 
     if (!sharedDraft.name.trim()) newErrors.name = '상품명을 입력해 주세요.';
-    if (!sharedDraft.salePrice || Number(sharedDraft.salePrice) <= 0)
-      newErrors.salePrice = '올바른 판매가를 입력해 주세요.';
+    // 공통 판매가 또는 채널별 판매가 중 하나 이상 입력 필요
+    const hasCoupangPrice = sharedDraft.coupangPrice && Number(sharedDraft.coupangPrice) > 0;
+    const hasNaverPrice = sharedDraft.naverPrice && Number(sharedDraft.naverPrice) > 0;
+    const hasCommonPrice = sharedDraft.salePrice && Number(sharedDraft.salePrice) > 0;
+    if (!hasCommonPrice && !hasCoupangPrice && !hasNaverPrice)
+      newErrors.salePrice = '공통 판매가 또는 채널별 판매가를 1개 이상 입력해 주세요.';
     if (thumbnailImageUrls.length === 0) newErrors.images = '썸네일 이미지 URL을 1개 이상 입력해 주세요.';
     if (!sharedDraft.description.trim()) newErrors.description = '상세설명을 입력해 주세요.';
     if (!coupangCategoryCode) newErrors.coupangCategory = '쿠팡 카테고리를 선택해 주세요.';
@@ -335,7 +258,9 @@ export default function BothRegisterForm({ onClose }: BothRegisterFormProps) {
 
     await registerBothProducts({
       name: sharedDraft.name.trim(),
-      salePrice: Number(sharedDraft.salePrice),
+      salePrice: Number(sharedDraft.salePrice) || 100, // 채널별 가격만 입력 시 최소값 placeholder
+      naverPrice: sharedDraft.naverPrice ? Number(sharedDraft.naverPrice) : undefined,
+      coupangPrice: sharedDraft.coupangPrice ? Number(sharedDraft.coupangPrice) : undefined,
       originalPrice: sharedDraft.originalPrice ? Number(sharedDraft.originalPrice) : undefined,
       stock: sharedDraft.stock ? Number(sharedDraft.stock) : undefined,
       thumbnailImages: thumbnailImageUrls,
@@ -468,10 +393,14 @@ export default function BothRegisterForm({ onClose }: BothRegisterFormProps) {
               </div>
 
               {/* 가격 / 재고 행 */}
+              {/* 공통 판매가 */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={labelStyle}>
-                    판매가 <span style={{ color: C.accent }}>*</span>
+                    공통 판매가
+                    {!sharedDraft.coupangPrice && !sharedDraft.naverPrice && (
+                      <span style={{ color: C.accent }}> *</span>
+                    )}
                   </label>
                   <input
                     type="number"
@@ -485,7 +414,7 @@ export default function BothRegisterForm({ onClose }: BothRegisterFormProps) {
                       updateDraft({ salePrice: e.target.value });
                       if (errors.salePrice) setErrors((prev) => ({ ...prev, salePrice: '' }));
                     }}
-                    placeholder="판매 가격"
+                    placeholder="채널 공통 가격"
                   />
                   <FieldError message={errors.salePrice} />
                 </div>
@@ -511,49 +440,134 @@ export default function BothRegisterForm({ onClose }: BothRegisterFormProps) {
                 </div>
               </div>
 
-              {/* 썸네일 이미지 섹션 */}
+              {/* 채널별 판매가 (선택) */}
               <div>
-                <label style={labelStyle}>
-                  상품 이미지 (썸네일) <span style={{ color: C.accent }}>*</span>
-                </label>
-                <div style={{ fontSize: '11px', color: C.textSub, marginBottom: '6px' }}>
-                  URL을 줄바꿈으로 구분 · 첫 번째가 대표이미지 · 최대 10개
-                </div>
-                <textarea
+                <div
                   style={{
-                    ...inputStyle,
-                    height: '80px',
-                    resize: 'vertical',
-                    borderColor: errors.images ? '#b91c1c' : C.border,
+                    fontSize: '11px',
+                    color: '#71717a',
+                    marginBottom: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
                   }}
-                  value={thumbnailImageLines}
-                  onChange={(e) => {
-                    handleThumbnailImagesChange(e.target.value);
-                    if (errors.images) setErrors((prev) => ({ ...prev, images: '' }));
-                  }}
-                  placeholder={'https://example.com/image1.jpg\nhttps://example.com/image2.jpg'}
-                />
-                <FieldError message={errors.images} />
-                <ImageUrlPreview urls={thumbnailImageUrls} />
+                >
+                  <span>채널별 판매가 설정</span>
+                  <span
+                    style={{
+                      fontSize: '10px',
+                      backgroundColor: '#f3f3f3',
+                      color: '#71717a',
+                      padding: '1px 6px',
+                      borderRadius: '4px',
+                    }}
+                  >
+                    선택
+                  </span>
+                  <span style={{ color: '#a1a1aa' }}>— 입력 시 공통 판매가보다 우선 적용됩니다</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  {/* 쿠팡 전용 판매가 */}
+                  <div>
+                    <label
+                      style={{
+                        ...labelStyle,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          color: '#fff',
+                          backgroundColor: '#be0014',
+                          padding: '1px 6px',
+                          borderRadius: '4px',
+                        }}
+                      >
+                        쿠팡
+                      </span>
+                      판매가
+                    </label>
+                    <input
+                      type="number"
+                      min="100"
+                      style={inputStyle}
+                      value={sharedDraft.coupangPrice}
+                      onChange={(e) => {
+                        updateDraft({ coupangPrice: e.target.value });
+                        if (errors.salePrice) setErrors((prev) => ({ ...prev, salePrice: '' }));
+                      }}
+                      placeholder="미입력 시 공통 판매가 사용"
+                    />
+                  </div>
+                  {/* 네이버 전용 판매가 */}
+                  <div>
+                    <label
+                      style={{
+                        ...labelStyle,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          color: '#fff',
+                          backgroundColor: '#03c75a',
+                          padding: '1px 6px',
+                          borderRadius: '4px',
+                        }}
+                      >
+                        네이버
+                      </span>
+                      판매가
+                    </label>
+                    <input
+                      type="number"
+                      min="100"
+                      style={inputStyle}
+                      value={sharedDraft.naverPrice}
+                      onChange={(e) => {
+                        updateDraft({ naverPrice: e.target.value });
+                        if (errors.salePrice) setErrors((prev) => ({ ...prev, salePrice: '' }));
+                      }}
+                      placeholder="미입력 시 공통 판매가 사용"
+                    />
+                  </div>
+                </div>
               </div>
 
+              {/* 썸네일 이미지 섹션 */}
+              <ImageInputSection
+                label="상품 이미지 (썸네일)"
+                required
+                maxCount={10}
+                urls={thumbnailImageUrls}
+                onUrlsChange={(urls) => {
+                  updateDraft({ thumbnailImages: urls });
+                  if (errors.images) setErrors((prev) => ({ ...prev, images: '' }));
+                }}
+                usageContext="listing_thumbnail"
+                error={errors.images}
+              />
+
               {/* 상세페이지 이미지 섹션 */}
-              <div style={{ marginTop: '12px' }}>
-                <label style={labelStyle}>상세페이지 이미지</label>
+              <div style={{ marginTop: '4px' }}>
                 <div style={{ fontSize: '11px', color: C.textSub, marginBottom: '6px' }}>
-                  상품 상세설명 하단에 자동 삽입됩니다 · 최대 20개
+                  상세페이지 이미지는 상품 상세설명 하단에 자동 삽입됩니다.
                 </div>
-                <textarea
-                  style={{
-                    ...inputStyle,
-                    height: '80px',
-                    resize: 'vertical',
-                  }}
-                  value={detailImageLines}
-                  onChange={(e) => handleDetailImagesChange(e.target.value)}
-                  placeholder={'https://example.com/detail1.jpg\nhttps://example.com/detail2.jpg'}
+                <ImageInputSection
+                  label="상세페이지 이미지"
+                  maxCount={20}
+                  urls={detailImageUrls}
+                  onUrlsChange={(urls) => updateDraft({ detailImages: urls })}
+                  usageContext="listing_detail"
                 />
-                <ImageUrlPreview urls={detailImageUrls} />
               </div>
 
               {/* 상세설명 */}

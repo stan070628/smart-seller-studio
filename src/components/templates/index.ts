@@ -25,6 +25,7 @@ import CustomGalleryTemplate from './CustomGalleryTemplate';
 import NoticeTemplate from './NoticeTemplate';
 import ReturnNoticeTemplate from './ReturnNoticeTemplate';
 import PrivacyTemplate from './PrivacyTemplate';
+import ThumbnailTemplate from './ThumbnailTemplate';
 
 // 한국어 프레임 이름 매핑
 export const FRAME_LABEL_KO: Record<FrameType, string> = {
@@ -46,6 +47,7 @@ export const FRAME_LABEL_KO: Record<FrameType, string> = {
   custom_notice: '공지/안내 + 배송흐름도',
   custom_return_notice: '반품/교환 + CS운영시간',
   custom_privacy: '개인정보 동의',
+  thumbnail: '썸네일',
 };
 
 // frameType → 컴포넌트 매핑
@@ -68,6 +70,7 @@ export const TEMPLATE_MAP: Record<FrameType, ComponentType<TemplateProps>> = {
   custom_notice: NoticeTemplate,
   custom_return_notice: ReturnNoticeTemplate,
   custom_privacy: PrivacyTemplate,
+  thumbnail: ThumbnailTemplate,
 };
 
 // 개별 컴포넌트 re-export
@@ -90,6 +93,7 @@ export {
   NoticeTemplate,
   ReturnNoticeTemplate,
   PrivacyTemplate,
+  ThumbnailTemplate,
 };
 
 export type { TemplateProps };

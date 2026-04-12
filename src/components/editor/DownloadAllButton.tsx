@@ -15,6 +15,13 @@ import React, { useState } from 'react';
 import { Download, Loader2, PackageCheck } from 'lucide-react';
 import useEditorStore from '@/store/useEditorStore';
 import type { FrameGridHandle } from './FrameGrid';
+import { getDims } from '@/lib/constants/template-dimensions';
+
+/** 편집 UI가 DOM에서 사라질 때까지 두 프레임 대기 */
+const waitForRender = () =>
+  new Promise<void>((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+  );
 
 // ---------------------------------------------------------------------------
 // Props
@@ -32,6 +39,7 @@ interface DownloadAllButtonProps {
 const DownloadAllButton: React.FC<DownloadAllButtonProps> = ({ frameGridRef }) => {
   const frames = useEditorStore((s) => s.frames);
   const activeCount = frames.filter((f) => f.skip !== true).length;
+  const setSelectedFrameType = useEditorStore((s) => s.setSelectedFrameType);
 
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   const isDownloading = progress !== null;
@@ -46,6 +54,10 @@ const DownloadAllButton: React.FC<DownloadAllButtonProps> = ({ frameGridRef }) =
     }
 
     setProgress({ current: 0, total: activeFrames.length });
+
+    // 편집 UI 제거 후 캡처
+    setSelectedFrameType(null);
+    await waitForRender();
 
     try {
       // 동적 import (클라이언트 전용 라이브러리)
@@ -69,10 +81,12 @@ const DownloadAllButton: React.FC<DownloadAllButtonProps> = ({ frameGridRef }) =
         }
 
         try {
+          // frameType별 치수 적용 (thumbnail은 780×780, 나머지는 780×1100)
+          const { w, h } = getDims(frame.frameType);
           const dataUrl = await toJpeg(node, {
             quality: 0.95,
-            width: 780,
-            height: 1100,
+            width: w,
+            height: h,
             pixelRatio: 1,
             fontEmbedCSS: '',
           });
