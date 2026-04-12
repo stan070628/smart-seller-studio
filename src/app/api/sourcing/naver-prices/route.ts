@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
     const res = await pool.query<ItemRow>(
       `SELECT id, item_no, title
        FROM public.sourcing_items
-       WHERE status != '판매중지'
+       WHERE status IS DISTINCT FROM '판매중지'
          AND (
            market_price_source IS DISTINCT FROM 'naver_api'
            OR market_price_updated_at IS NULL
