@@ -55,7 +55,6 @@ pool.on('error', (err) => console.error('[DB] 풀 오류:', err));
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** KST 기준 오늘 날짜 (YYYY-MM-DD) */
 function kstToday() {
   return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
@@ -63,7 +62,7 @@ function kstToday() {
 function log(msg) { console.log(`[${new Date().toISOString()}] ${msg}`); }
 
 // ─────────────────────────────────────────────────────────────
-// 도매꾹 API fetch (프록시 경유 지원)
+// 도매꾹 API fetch
 // ─────────────────────────────────────────────────────────────
 
 async function domeFetch(url) {
@@ -76,10 +75,6 @@ async function domeFetch(url) {
   return fetch(url);
 }
 
-/**
- * getItemList 단일 페이지 호출
- * @returns {{ header, list: item[] }}
- */
 async function getItemList(keyword, page = 1) {
   const params = new URLSearchParams({
     ver: '4.1', mode: 'getItemList',
@@ -87,14 +82,13 @@ async function getItemList(keyword, page = 1) {
     sz: '200', pg: String(page), so: 'rd',
     kw: keyword,
   });
-  const url = `${API_BASE_URL}?${params}`;
-  const res = await domeFetch(url);
-  if (!res.ok) throw new Error(`[도매꾹] getItemList API 오류: ${res.status} ${res.statusText}`);
+  const res = await domeFetch(`${API_BASE_URL}?${params}`);
+  if (!res.ok) throw new Error(`[도매꾹] API 오류: ${res.status} ${res.statusText}`);
 
   const text = await res.text();
   let raw;
   try { raw = JSON.parse(text); }
-  catch (e) { throw new Error(`[도매꾹] JSON 파싱 실패 (길이 ${text.length}): ${e.message}`); }
+  catch (e) { throw new Error(`[도매꾹] JSON 파싱 실패: ${e.message}`); }
 
   const errors = raw.errors ?? raw.domeggook?.errors;
   if (errors) throw new Error(`[도매꾹] 응답 오류: ${JSON.stringify(errors)}`);
@@ -103,19 +97,13 @@ async function getItemList(keyword, page = 1) {
   const header = root.header;
   if (!header) throw new Error(`[도매꾹] header 누락`);
 
-  const items = Array.isArray(root.list?.item)
-    ? root.list.item
-    : root.list?.item
-      ? [root.list.item]
-      : Array.isArray(root.list) ? root.list : [];
+  const items = Array.isArray(root.list?.item) ? root.list.item
+    : root.list?.item ? [root.list.item]
+    : Array.isArray(root.list) ? root.list : [];
 
   return { header, items };
 }
 
-/**
- * 키워드 전체 페이지 순회 수집
- * 429 발생 시 60초 대기 후 1회 재시도
- */
 async function collectKeyword(keyword) {
   const collected = [];
   let page = 1;
@@ -125,21 +113,15 @@ async function collectKeyword(keyword) {
     try {
       const { header, items } = await getItemList(keyword, page);
       totalPages = header.numberOfPages ?? 1;
-
       collected.push(...items);
-
-      if (page === 1) {
-        log(`  키워드 "${keyword}" — 총 ${header.numberOfItems}건, ${totalPages}페이지`);
-      }
-
+      if (page === 1) log(`  키워드 "${keyword}" — 총 ${header.numberOfItems}건, ${totalPages}페이지`);
       page++;
-      if (page <= totalPages) await sleep(300); // 페이지 간 딜레이
+      if (page <= totalPages) await sleep(300);
     } catch (err) {
       const msg = err.message ?? String(err);
       if (msg.includes('429')) {
-        log(`  [경고] 429 Too Many Requests — 60초 대기 후 재시도 (키워드: "${keyword}", 페이지 ${page})`);
+        log(`  [경고] 429 — 60초 대기 후 재시도 (키워드: "${keyword}", 페이지 ${page})`);
         await sleep(60_000);
-        // 재시도 (루프 다시 실행, page 증가 없음)
         try {
           const { header, items } = await getItemList(keyword, page);
           totalPages = header.numberOfPages ?? 1;
@@ -147,11 +129,11 @@ async function collectKeyword(keyword) {
           page++;
           if (page <= totalPages) await sleep(300);
         } catch (retryErr) {
-          log(`  [오류] 재시도 실패 — 키워드 "${keyword}" 페이지 ${page} 건너뜀: ${retryErr.message}`);
-          break; // 재시도도 실패하면 해당 키워드 중단
+          log(`  [오류] 재시도 실패 — 페이지 ${page} 건너뜀: ${retryErr.message}`);
+          break;
         }
       } else {
-        log(`  [오류] 키워드 "${keyword}" 페이지 ${page} 실패: ${msg}`);
+        log(`  [오류] 페이지 ${page} 실패: ${msg}`);
         break;
       }
     }
@@ -161,16 +143,10 @@ async function collectKeyword(keyword) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 인라인 법적 체크 (Layer 1 KC + Layer 2 금지어)
+// 법적 체크 (Layer 1 KC + Layer 2 금지어)
 // ─────────────────────────────────────────────────────────────
 
-const KC_REQUIRED = [
-  '유아용','아기용','어린이용','키즈','유아','아동','장난감','젖병','젖꼭지',
-  '보행기','카시트','유모차','아기띠','충전기','어댑터','USB충전','전원코드',
-  '멀티탭','콘센트','전기장판','전기히터','가습기','제습기','선풍기','전기포트',
-  '전기밥솥','전자레인지','헤어드라이기','드라이어','다리미','헬멧','안전모',
-  '무릎보호대','보호장비','식품용기','밀폐용기','텀블러','물병','수저','도마',
-];
+const KC_REQUIRED = ['유아용','아기용','어린이용','키즈','유아','아동','장난감','젖병','젖꼭지','보행기','카시트','유모차','아기띠','충전기','어댑터','USB충전','전원코드','멀티탭','콘센트','전기장판','전기히터','가습기','제습기','선풍기','전기포트','전기밥솥','전자레인지','헤어드라이기','드라이어','다리미','헬멧','안전모','무릎보호대','보호장비','식품용기','밀폐용기','텀블러','물병','수저','도마'];
 const KC_WARN = ['LED','램프','조명','전구','보조배터리','이어폰','헤드폰','마우스','키보드','스피커','리모컨'];
 const ILLEGAL_KW = ['처방전','전문의약품','마약','대마','전자충격기','스턴건','도검','석궁','실탄','정품아님','레플리카','이미테이션','짝퉁','미승인건강기능식품','주민등록','신분증위조','해킹','염산','황산','질산','시안화'];
 const EXAG_PATTERNS = [/100%\s*(?:완치|치료|예방)/i,/암\s*(?:치료|예방|완치)/i,/(?:다이어트|살)\s*(?:100%|확실|보장)/i,/FDA\s*승인/i,/(?:세계\s*최초|국내\s*유일|업계\s*1위)/,/(?:기적|만능|만병통치|특효)/,/주름\s*(?:제거|완치|100%)/,/(?:미백|화이트닝)\s*(?:100%|완벽|확실)/,/(?:평생|영구)\s*(?:보증|보장|무료)/,/(?:절대|100%)\s*(?:안전|무해|무독)/];
@@ -179,109 +155,133 @@ const BRAND_PATTERNS = [/(?:다이슨|dyson)\s*(?:정품|순정)/i,/(?:애플|ap
 function runSyncLegalCheck(title) {
   const t = title.toLowerCase();
   const issues = [];
-
-  // KC Layer 1
   const kcReq = KC_REQUIRED.find((k) => t.includes(k.toLowerCase()));
   if (kcReq) issues.push({ layer:'kc', severity:'RED', code:'KC_REQUIRED_NO_CERT', message:`KC 인증 필수: ${kcReq}`, detail:{keyword:kcReq} });
   else {
     const kcWrn = KC_WARN.find((k) => t.includes(k.toLowerCase()));
     if (kcWrn) issues.push({ layer:'kc', severity:'YELLOW', code:'KC_RECOMMENDED', message:`KC 인증 권장: ${kcWrn}`, detail:{keyword:kcWrn} });
   }
-
-  // 금지어 Layer 2
   const illKw = ILLEGAL_KW.find((k) => t.includes(k.toLowerCase()));
   if (illKw) issues.push({ layer:'banned', severity:'RED', code:'ILLEGAL_ITEM', message:`판매 금지 품목: ${illKw}`, detail:{matched:illKw} });
-
   const exag = EXAG_PATTERNS.find((p) => p.test(title));
-  if (exag) {
-    const m = title.match(exag)?.[0] ?? '';
-    issues.push({ layer:'banned', severity:'YELLOW', code:'EXAGGERATION', message:`과장광고 의심: ${m}`, detail:{matched:m} });
-  }
-
+  if (exag) { const m = title.match(exag)?.[0] ?? ''; issues.push({ layer:'banned', severity:'YELLOW', code:'EXAGGERATION', message:`과장광고 의심: ${m}`, detail:{matched:m} }); }
   const brand = BRAND_PATTERNS.find((p) => p.test(title));
-  if (brand) {
-    const m = title.match(brand)?.[0] ?? '';
-    issues.push({ layer:'banned', severity:'YELLOW', code:'BRAND_ABUSE', message:`타브랜드 무단 사용 의심: ${m}`, detail:{matched:m} });
-  }
-
-  const status = issues.some((i) => i.severity === 'RED')
-    ? 'blocked'
-    : issues.some((i) => i.severity === 'YELLOW')
-      ? 'warning'
-      : 'safe';
-
+  if (brand) { const m = title.match(brand)?.[0] ?? ''; issues.push({ layer:'banned', severity:'YELLOW', code:'BRAND_ABUSE', message:`타브랜드 무단 사용 의심: ${m}`, detail:{matched:m} }); }
+  const status = issues.some((i) => i.severity === 'RED') ? 'blocked'
+    : issues.some((i) => i.severity === 'YELLOW') ? 'warning' : 'safe';
   return { status, issues };
 }
 
 // ─────────────────────────────────────────────────────────────
-// DB 저장 (배치 UPSERT)
+// DB 배치 저장 (1000건씩 한 번에 UPSERT)
+// 기존: 아이템 1건당 DB 쿼리 3번 → 개선: 1000건당 DB 쿼리 2번
 // ─────────────────────────────────────────────────────────────
 
-/**
- * allItems 배열을 DB에 저장하고 스냅샷까지 처리
- */
+const BATCH_SIZE = 1000;
+const COLS = 12; // UPSERT 컬럼 수
+
 async function saveToDb(allItems, snapshotDate) {
-  const THRESHOLD_MS = 5000;
-  const now = new Date();
-  let newItems = 0, updatedItems = 0, snapshotsSaved = 0;
-  const failedItems = [];
+  let totalNew = 0, totalUpdated = 0, totalSnapshots = 0;
+  const legalCheckedAt = new Date().toISOString();
+  const batchCount = Math.ceil(allItems.length / BATCH_SIZE);
 
-  for (const item of allItems) {
+  for (let i = 0; i < allItems.length; i += BATCH_SIZE) {
+    const batch = allItems.slice(i, i + BATCH_SIZE);
+    const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+
+    // JS에서 법적 체크 선계산
+    const rows = batch.map((item) => {
+      const { status: legalStatus, issues } = runSyncLegalCheck(item.title ?? '');
+      return {
+        item_no:       item.no,
+        title:         item.title ?? '',
+        seller_id:     item.id ?? null,
+        seller_nick:   item.nick ?? null,
+        image_url:     item.thumb ?? null,
+        dome_url:      item.url ?? null,
+        legalStatus,
+        legalIssues:   JSON.stringify(issues),
+        legalCheckedAt,
+        blockedReason: legalStatus === 'blocked' ? (issues[0]?.message ?? '법적 판매 금지') : null,
+        inventory:     item.qty?.inventory ?? null,
+        price:         item.price ?? null,
+      };
+    });
+
+    // ── sourcing_items 배치 UPSERT ─────────────────────────────────────────
+    const valuePlaceholders = rows.map((_, idx) => {
+      const b = idx * COLS;
+      return `($${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},$${b+7},$${b+8},$${b+9},$${b+10},$${b+11},$${b+12})`;
+    }).join(',');
+
+    const params = [];
+    rows.forEach((r) => params.push(
+      r.item_no, r.title, r.seller_id, r.seller_nick,
+      r.image_url, r.dome_url,
+      r.legalStatus, r.legalIssues, r.legalCheckedAt, r.blockedReason,
+      false, // needs_review
+      true,  // is_tracking
+    ));
+
+    let upsertRows = [];
     try {
-      // sourcing_items UPSERT
-      const upsertRes = await pool.query(
-        `INSERT INTO sourcing_items
-           (item_no, title, status, category_name, seller_id, seller_nick, image_url, dome_url, is_tracking)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-         ON CONFLICT (item_no) DO UPDATE SET
-           title       = EXCLUDED.title,
-           seller_id   = EXCLUDED.seller_id,
-           seller_nick = EXCLUDED.seller_nick,
-           image_url   = EXCLUDED.image_url,
-           dome_url    = EXCLUDED.dome_url,
-           is_tracking = EXCLUDED.is_tracking,
-           updated_at  = now()
-         RETURNING id, created_at`,
-        [
-          item.no, item.title, null, null,
-          item.id ?? null, item.nick ?? null,
-          item.thumb ?? null, item.url ?? null,
-          true,
-        ],
-      );
+      const res = await pool.query(`
+        INSERT INTO sourcing_items
+          (item_no, title, seller_id, seller_nick, image_url, dome_url,
+           legal_status, legal_issues, legal_checked_at, blocked_reason,
+           needs_review, is_tracking)
+        VALUES ${valuePlaceholders}
+        ON CONFLICT (item_no) DO UPDATE SET
+          title            = EXCLUDED.title,
+          seller_id        = EXCLUDED.seller_id,
+          seller_nick      = EXCLUDED.seller_nick,
+          image_url        = EXCLUDED.image_url,
+          dome_url         = EXCLUDED.dome_url,
+          legal_status     = EXCLUDED.legal_status,
+          legal_issues     = EXCLUDED.legal_issues,
+          legal_checked_at = EXCLUDED.legal_checked_at,
+          blocked_reason   = EXCLUDED.blocked_reason,
+          is_tracking      = EXCLUDED.is_tracking,
+          updated_at       = now()
+        RETURNING id, item_no, (xmax = 0) AS is_new
+      `, params);
 
-      const row = upsertRes.rows[0];
-      if (!row) continue;
-
-      const createdAt = new Date(row.created_at);
-      if (now.getTime() - createdAt.getTime() < THRESHOLD_MS) newItems++;
-      else updatedItems++;
-
-      // 법적 체크
-      const { status: legalStatus, issues: legalIssues } = runSyncLegalCheck(item.title);
-      await pool.query(
-        `UPDATE sourcing_items SET legal_status=$1, legal_issues=$2, legal_checked_at=now() WHERE id=$3`,
-        [legalStatus, JSON.stringify(legalIssues), row.id],
-      );
-
-      // 재고 스냅샷
-      const inventory = item.qty?.inventory;
-      if (inventory !== undefined) {
-        const snapRes = await pool.query(
-          `INSERT INTO inventory_snapshots
-             (item_id, item_no, snapshot_date, inventory, price_dome, price_supply)
-           VALUES ($1,$2,$3,$4,$5,$6)
-           ON CONFLICT (item_no, snapshot_date) DO NOTHING`,
-          [row.id, item.no, snapshotDate, inventory, item.price ?? null, null],
-        );
-        if ((snapRes.rowCount ?? 0) > 0) snapshotsSaved++;
-      }
+      upsertRows = res.rows;
+      totalNew     += upsertRows.filter((r) => r.is_new).length;
+      totalUpdated += upsertRows.filter((r) => !r.is_new).length;
     } catch (err) {
-      failedItems.push({ itemNo: item.no, error: err.message ?? String(err) });
+      log(`  [오류] 배치 ${batchNum}/${batchCount} UPSERT 실패: ${err.message}`);
+      continue;
     }
+
+    // ── inventory_snapshots 배치 INSERT ───────────────────────────────────
+    const idMap = Object.fromEntries(upsertRows.map((r) => [String(r.item_no), r.id]));
+    const snapRows = rows.filter((r) => r.inventory !== null && idMap[String(r.item_no)]);
+
+    if (snapRows.length > 0) {
+      const snapPlaceholders = snapRows.map((_, idx) => {
+        const b = idx * 5;
+        return `($${b+1},$${b+2},$${b+3},$${b+4},$${b+5})`;
+      }).join(',');
+      const snapParams = [];
+      snapRows.forEach((r) => snapParams.push(idMap[String(r.item_no)], r.item_no, snapshotDate, r.inventory, r.price));
+
+      try {
+        const snapRes = await pool.query(`
+          INSERT INTO inventory_snapshots (item_id, item_no, snapshot_date, inventory, price_dome)
+          VALUES ${snapPlaceholders}
+          ON CONFLICT (item_no, snapshot_date) DO NOTHING
+        `, snapParams);
+        totalSnapshots += snapRes.rowCount ?? 0;
+      } catch (err) {
+        log(`  [경고] 배치 ${batchNum} 스냅샷 저장 실패: ${err.message}`);
+      }
+    }
+
+    log(`  배치 ${batchNum}/${batchCount} 완료 — 신규 ${upsertRows.filter(r=>r.is_new).length}, 업데이트 ${upsertRows.filter(r=>!r.is_new).length}, 스냅샷 ${snapRows.length}`);
   }
 
-  return { newItems, updatedItems, snapshotsSaved, failedItems };
+  return { newItems: totalNew, updatedItems: totalUpdated, snapshotsSaved: totalSnapshots };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -299,7 +299,6 @@ async function main() {
   const snapshotDate = kstToday();
   log(`===== 도매꾹 수집 시작 (스냅샷 날짜: ${snapshotDate}) =====`);
 
-  // collection_logs 시작 기록
   let logId;
   try {
     const logRes = await pool.query(
@@ -314,7 +313,7 @@ async function main() {
     process.exit(1);
   }
 
-  // 키워드별 수집 (중복 제거)
+  // 키워드별 API 수집
   const allItems = [];
   const seenNos  = new Set();
   let   keywordErrors = 0;
@@ -327,43 +326,27 @@ async function main() {
       for (const item of items) {
         if (!seenNos.has(item.no)) { seenNos.add(item.no); allItems.push(item); added++; }
       }
-      log(`  완료 — 이번 키워드 ${items.length}건 수집, 신규 ${added}건 추가 (누적 ${allItems.length}건)`);
+      log(`  완료 — ${items.length}건 수집, 신규 ${added}건 추가 (누적 ${allItems.length}건)`);
     } catch (err) {
       log(`  [오류] "${kw}" 수집 실패: ${err.message}`);
       keywordErrors++;
     }
-    // 키워드 간 딜레이 — 429 방지
     if (KEYWORDS.indexOf(kw) < KEYWORDS.length - 1) await sleep(2000);
   }
 
-  log(`\n===== 수집 완료 — 총 ${allItems.length}건 DB 저장 시작 =====`);
+  log(`\n===== 수집 완료 — 총 ${allItems.length}건 배치 DB 저장 시작 =====`);
 
-  // DB 저장
-  let dbResult = { newItems: 0, updatedItems: 0, snapshotsSaved: 0, failedItems: [] };
+  let dbResult = { newItems: 0, updatedItems: 0, snapshotsSaved: 0 };
   if (allItems.length > 0) {
     dbResult = await saveToDb(allItems, snapshotDate);
-    log(`  신규: ${dbResult.newItems}, 업데이트: ${dbResult.updatedItems}, 스냅샷: ${dbResult.snapshotsSaved}, 실패: ${dbResult.failedItems.length}`);
+    log(`  신규: ${dbResult.newItems}, 업데이트: ${dbResult.updatedItems}, 스냅샷: ${dbResult.snapshotsSaved}`);
   }
 
-  // 상태 결정
-  const finalStatus = dbResult.failedItems.length > 0 || keywordErrors > 0 ? 'partial' : 'success';
+  const finalStatus = keywordErrors > 0 ? 'partial' : 'success';
 
-  // collection_logs 완료 업데이트
-  const allErrors = [
-    ...dbResult.failedItems,
-    // 키워드 오류는 로그에만 남기고 errors 필드는 아이템 실패만 기록
-  ];
   await pool.query(
-    `UPDATE collection_logs
-     SET status=$1, finished_at=now(), items_fetched=$2, snapshots_saved=$3, errors=$4
-     WHERE id=$5`,
-    [
-      finalStatus,
-      allItems.length,
-      dbResult.snapshotsSaved,
-      allErrors.length > 0 ? JSON.stringify(allErrors) : null,
-      logId,
-    ],
+    `UPDATE collection_logs SET status=$1, finished_at=now(), items_fetched=$2, snapshots_saved=$3 WHERE id=$4`,
+    [finalStatus, allItems.length, dbResult.snapshotsSaved, logId],
   );
 
   // 30일 이전 데이터 정리
@@ -375,19 +358,17 @@ async function main() {
       pool.query(`DELETE FROM niche_analyses WHERE created_at < NOW() - INTERVAL '30 days'`),
       pool.query(`DELETE FROM niche_cron_logs WHERE created_at < NOW() - INTERVAL '30 days'`),
     ]);
-    const cleaned = cleanups
-      .filter((r) => r.status === 'fulfilled')
-      .reduce((s, r) => s + (r.value.rowCount ?? 0), 0);
+    const cleaned = cleanups.filter(r => r.status==='fulfilled').reduce((s,r) => s+(r.value.rowCount??0), 0);
     if (cleaned > 0) log(`30일 이전 데이터 ${cleaned}건 삭제`);
   } catch (err) {
     log(`[경고] 데이터 정리 실패 (무시): ${err.message}`);
   }
 
   log(`\n===== 완료 — status: ${finalStatus} =====`);
-  log(`  총 수집: ${allItems.length}건 | 스냅샷: ${dbResult.snapshotsSaved}건 | 아이템 실패: ${dbResult.failedItems.length}건 | 키워드 오류: ${keywordErrors}건`);
+  log(`  총 수집: ${allItems.length}건 | 스냅샷: ${dbResult.snapshotsSaved}건 | 키워드 오류: ${keywordErrors}건`);
 
   await pool.end();
-  process.exit(finalStatus === 'success' || finalStatus === 'partial' ? 0 : 1);
+  process.exit(0);
 }
 
 main().catch(async (err) => {
