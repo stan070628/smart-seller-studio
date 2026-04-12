@@ -18,26 +18,28 @@ import useEditorStore from '@/store/useEditorStore';
 
 interface ImageAdjustSectionProps {
   frameType: FrameType;
+  /** 프레임 인스턴스 고유 ID */
+  frameId: string;
   activeSlotKey: string;
 }
 
-const ImageAdjustSection: React.FC<ImageAdjustSectionProps> = ({ frameType, activeSlotKey }) => {
+const ImageAdjustSection: React.FC<ImageAdjustSectionProps> = ({ frameType: _frameType, frameId, activeSlotKey }) => {
   const frameImageFit = useEditorStore((s) => s.frameImageFit);
   const setFrameImageFit = useEditorStore((s) => s.setFrameImageFit);
   const frameImageSettings = useEditorStore((s) => s.frameImageSettings);
   const setFrameImageSettings = useEditorStore((s) => s.setFrameImageSettings);
 
   // 현재 슬롯의 값 (기본값 적용)
-  const currentFit = frameImageFit[frameType]?.[activeSlotKey] ?? 'cover';
-  const currentSettings = frameImageSettings[frameType]?.[activeSlotKey] ?? { scale: 1, x: 50, y: 50 };
+  const currentFit = frameImageFit[frameId]?.[activeSlotKey] ?? 'cover';
+  const currentSettings = frameImageSettings[frameId]?.[activeSlotKey] ?? { scale: 1, x: 50, y: 50 };
   const scale = currentSettings.scale ?? 1;
   const x = currentSettings.x ?? 50;
   const y = currentSettings.y ?? 50;
 
   // 현재 슬롯만 리셋
   const handleReset = () => {
-    setFrameImageFit(frameType, activeSlotKey, 'cover');
-    setFrameImageSettings(frameType, activeSlotKey, { scale: 1, x: 50, y: 50 });
+    setFrameImageFit(frameId, activeSlotKey, 'cover');
+    setFrameImageSettings(frameId, activeSlotKey, { scale: 1, x: 50, y: 50 });
   };
 
   return (
@@ -83,7 +85,7 @@ const ImageAdjustSection: React.FC<ImageAdjustSectionProps> = ({ frameType, acti
             return (
               <button
                 key={fitOption}
-                onClick={() => setFrameImageFit(frameType, activeSlotKey, fitOption)}
+                onClick={() => setFrameImageFit(frameId, activeSlotKey, fitOption)}
                 style={{
                   flex: 1,
                   padding: '7px 0',
@@ -127,7 +129,7 @@ const ImageAdjustSection: React.FC<ImageAdjustSectionProps> = ({ frameType, acti
             step={0.1}
             value={scale}
             onChange={(e) =>
-              setFrameImageSettings(frameType, activeSlotKey, { scale: parseFloat(e.target.value) })
+              setFrameImageSettings(frameId, activeSlotKey, { scale: parseFloat(e.target.value) })
             }
             style={{ width: '100%', accentColor: '#6366f1', cursor: 'pointer' }}
           />
@@ -148,7 +150,7 @@ const ImageAdjustSection: React.FC<ImageAdjustSectionProps> = ({ frameType, acti
             step={1}
             value={x}
             onChange={(e) =>
-              setFrameImageSettings(frameType, activeSlotKey, { x: parseFloat(e.target.value) })
+              setFrameImageSettings(frameId, activeSlotKey, { x: parseFloat(e.target.value) })
             }
             style={{ width: '100%', accentColor: '#6366f1', cursor: 'pointer' }}
           />
@@ -169,7 +171,7 @@ const ImageAdjustSection: React.FC<ImageAdjustSectionProps> = ({ frameType, acti
             step={1}
             value={y}
             onChange={(e) =>
-              setFrameImageSettings(frameType, activeSlotKey, { y: parseFloat(e.target.value) })
+              setFrameImageSettings(frameId, activeSlotKey, { y: parseFloat(e.target.value) })
             }
             style={{ width: '100%', accentColor: '#6366f1', cursor: 'pointer' }}
           />

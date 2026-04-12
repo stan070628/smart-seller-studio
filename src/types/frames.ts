@@ -20,7 +20,8 @@ export type FrameType =
   | 'custom_gallery'       // 4이미지 갤러리
   | 'custom_notice'        // 공지/안내 + 배송흐름도
   | 'custom_return_notice' // 반품/교환 주의 + CS 운영시간
-  | 'custom_privacy';      // 개인정보제공 동의
+  | 'custom_privacy'       // 개인정보제공 동의
+  | 'thumbnail';           // 780×780 정사각형 썸네일
 
 export interface FrameMeta {
   type: FrameType;
@@ -43,6 +44,8 @@ export interface FrameCopy {
 }
 
 export interface GeneratedFrame {
+  /** 프레임 인스턴스 고유 ID (같은 frameType이 여러 개 있을 수 있음) */
+  id: string;
   frameType: FrameType;
   headline: string;
   subheadline?: string | null;

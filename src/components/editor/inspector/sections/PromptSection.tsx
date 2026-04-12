@@ -109,7 +109,7 @@ const PromptSection: React.FC<PromptSectionProps> = ({ frame }) => {
       <div style={{ padding: '0 16px 16px' }}>
         {frame.imagePrompt != null ? (
           <textarea
-            key={frame.frameType}
+            key={frame.id ?? frame.frameType}
             defaultValue={frame.imagePrompt}
             onChange={handleChange}
             onFocus={handleFocus}

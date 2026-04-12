@@ -82,6 +82,74 @@ export interface NicheScoreSnapshot {
   rawAvgPrice: number | null;
 }
 
+// ─────────────────────────────────────────────────────────────
+// 경쟁 상품 / 전일 판매 추적
+// ─────────────────────────────────────────────────────────────
+
+export type CompetitorPlatform = 'coupang' | 'naver' | 'gmarket' | 'auction' | 'etc';
+export type SnapshotInputMethod = 'manual' | 'bookmarklet' | 'extension' | 'api';
+
+// 경쟁 상품 마스터
+export interface NicheCompetitorProduct {
+  id: string;
+  keyword: string;
+  platform: CompetitorPlatform;
+  productUrl: string | null;
+  productId: string | null;
+  productName: string;
+  sellerName: string | null;
+  imageUrl: string | null;
+  isRocket: boolean;
+  isAd: boolean;
+  rankPosition: number | null;
+  isTracking: boolean;
+  memo: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// 일별 판매 스냅샷
+export interface NicheSalesSnapshot {
+  id: string;
+  competitorId: string;
+  keyword: string;
+  platform: string;
+  snapshotDate: string;
+  price: number | null;
+  originalPrice: number | null;
+  reviewCount: number | null;
+  rating: number | null;
+  salesCount: number | null;
+  reviewDelta: number | null;
+  salesRank: number | null;
+  rankPosition: number | null;
+  inputMethod: SnapshotInputMethod;
+  memo: string | null;
+  createdAt: string;
+}
+
+// 경쟁 현황 요약 (뷰 조회 결과)
+export interface NicheCompetitorSummary {
+  competitorId: string;
+  keyword: string;
+  platform: string;
+  productName: string;
+  sellerName: string | null;
+  productUrl: string | null;
+  isRocket: boolean;
+  isAd: boolean;
+  latestDate: string | null;
+  price: number | null;
+  reviewCount: number | null;
+  rating: number | null;
+  salesCount: number | null;
+  reviewDelta: number | null;
+  rankPosition: number | null;
+  prevPrice: number | null;
+  priceChange: number | null;
+  reviewChange: number | null;
+}
+
 // 알림
 export interface NicheAlert {
   id: string;

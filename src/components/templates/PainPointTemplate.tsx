@@ -32,13 +32,11 @@ const PainPointTemplate: React.FC<TemplateProps> = ({
 
   const painPoints = Array.isArray(frame.metadata?.painPoints)
     ? (frame.metadata.painPoints as string[]).slice(0, 3)
-    : [];
+    : ['', '', ''];
 
-  const displayPoints = painPoints.length > 0 ? painPoints : [
-    '기존 제품들은 내구성이 부족해 금방 망가집니다',
-    '사용법이 복잡해 매번 설명서를 찾아봐야 합니다',
-    '가격 대비 품질이 기대에 미치지 못합니다',
-  ];
+  const cardDescs = Array.isArray(frame.metadata?.cardDescs)
+    ? (frame.metadata.cardDescs as string[]).slice(0, 3)
+    : ['', '', ''];
 
   // imageUrls 슬롯에서 배경/카드 이미지 가져오기 (metadata fallback 제거)
   const bgImage = imageUrls?.background ?? imageUrl;
@@ -215,7 +213,7 @@ const PainPointTemplate: React.FC<TemplateProps> = ({
 
           {/* 제목 */}
           <EditableText
-            value={displayPoints[0]}
+            value={painPoints[0]}
             field="metadata.painPoints.0"
             isEditable={isEditable}
             onFieldChange={onFieldChange as ((f: string, v: string) => void) | undefined}
@@ -232,8 +230,8 @@ const PainPointTemplate: React.FC<TemplateProps> = ({
 
           {/* 설명 텍스트 */}
           <EditableText
-            value={displayPoints[1] || '기상 예보에도 없는 소나기, 아끼는 고가의 아우터가 손상되고 하루 종일 눅눅한 기분으로 보내야만 했습니다.'}
-            field="metadata.painPoints.1"
+            value={cardDescs[0]}
+            field="metadata.cardDescs.0"
             isEditable={isEditable}
             onFieldChange={onFieldChange as ((f: string, v: string) => void) | undefined}
             tag="p"
@@ -311,7 +309,7 @@ const PainPointTemplate: React.FC<TemplateProps> = ({
               {cardIcons[1]}
             </div>
             <EditableText
-              value={displayPoints[1] || '사용법이 복잡해 매번 설명서를 찾아봐야 합니다'}
+              value={painPoints[1]}
               field="metadata.painPoints.1"
               isEditable={isEditable}
               onFieldChange={onFieldChange as ((f: string, v: string) => void) | undefined}
@@ -326,8 +324,8 @@ const PainPointTemplate: React.FC<TemplateProps> = ({
               }}
             />
             <EditableText
-              value={frame.metadata?.cardDesc1 as string || '두꺼운 레인코트는 무겁고 일상복으로 활용하기엔 부담스러웠습니다.'}
-              field="metadata.cardDesc1"
+              value={cardDescs[1]}
+              field="metadata.cardDescs.1"
               isEditable={isEditable}
               onFieldChange={onFieldChange as ((f: string, v: string) => void) | undefined}
               tag="p"
@@ -365,7 +363,7 @@ const PainPointTemplate: React.FC<TemplateProps> = ({
               {cardIcons[2]}
             </div>
             <EditableText
-              value={displayPoints[2] || '가격 대비 품질이 기대에 미치지 못합니다'}
+              value={painPoints[2]}
               field="metadata.painPoints.2"
               isEditable={isEditable}
               onFieldChange={onFieldChange as ((f: string, v: string) => void) | undefined}
@@ -380,8 +378,8 @@ const PainPointTemplate: React.FC<TemplateProps> = ({
               }}
             />
             <EditableText
-              value={frame.metadata?.cardDesc2 as string || '트렌디한 실루엣과 고성능 소재를 동시에 갖춘 선택지는 없었습니다.'}
-              field="metadata.cardDesc2"
+              value={cardDescs[2]}
+              field="metadata.cardDescs.2"
               isEditable={isEditable}
               onFieldChange={onFieldChange as ((f: string, v: string) => void) | undefined}
               tag="p"

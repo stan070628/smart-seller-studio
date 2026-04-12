@@ -61,8 +61,8 @@ export default function FrameCardPreview({
   const frameImageFit = useEditorStore((s) => s.frameImageFit);
   const frameImageSettings = useEditorStore((s) => s.frameImageSettings);
   const generatingImageForFrame = useEditorStore((s) => s.generatingImageForFrame);
-  const selectedFrameType = useEditorStore((s) => s.selectedFrameType);
-  const setSelectedFrameType = useEditorStore((s) => s.setSelectedFrameType);
+  const selectedFrameId = useEditorStore((s) => s.selectedFrameId);
+  const setSelectedFrame = useEditorStore((s) => s.setSelectedFrame);
   const updateFrame = useEditorStore((s) => s.updateFrame);
   const addImage = useEditorStore((s) => s.addImage);
   const setFrameImage = useEditorStore((s) => s.setFrameImage);
@@ -70,8 +70,11 @@ export default function FrameCardPreview({
   // TemplateRefContext 연동
   const { registerRef } = useTemplateRefs();
 
+  // 프레임 인스턴스 ID (id가 없는 레거시 프레임은 frameType으로 fallback)
+  const frameId = frame.id ?? frame.frameType;
+
   // 슬롯 전체 맵 구성
-  const frameSlots = frameImages[frame.frameType as FrameType] ?? {};
+  const frameSlots = frameImages[frameId] ?? {};
   const assignedImageUrl = frameSlots['main'] ?? defaultImageUrl ?? null;
   const hasCustomImage = !!frameSlots['main'];
 
@@ -82,22 +85,25 @@ export default function FrameCardPreview({
   }
 
   // 슬롯별 이미지 설정 (fit, scale, offset)
-  const slotSettings = frameImageSettings[frame.frameType as FrameType] ?? {};
+  const slotSettings = frameImageSettings[frameId] ?? {};
 
   const TemplateComponent = TEMPLATE_MAP[frame.frameType];
   const labelKo = FRAME_LABEL_KO[frame.frameType] ?? frame.frameType;
   const indexLabel = String(frameIndex).padStart(2, '0');
 
-  // 선택 상태
-  const isSelected = selectedFrameType === frame.frameType;
+  // 선택 상태 (frameId 기준)
+  const isSelected = selectedFrameId === frameId;
 
   // AI 이미지 생성 진행 중 여부
-  const isGeneratingThisFrame = generatingImageForFrame === frame.frameType;
+  const isGeneratingThisFrame = generatingImageForFrame === frameId;
+
+  // 프레임 타입별 실제 템플릿 높이 (thumbnail은 정사각형 780px)
+  const templateH = frame.frameType === 'thumbnail' ? TEMPLATE_W : TEMPLATE_H;
 
   // 동적 scale 계산 (최대 0.55)
   const scale = Math.min(0.55, containerWidth / TEMPLATE_W);
   const previewWidth = Math.round(containerWidth);
-  const previewHeight = Math.round(TEMPLATE_H * scale);
+  const previewHeight = Math.round(templateH * scale);
 
   // -----------------------------------------------------------------------
   // ResizeObserver: 컨테이너 너비 측정
@@ -128,7 +134,7 @@ export default function FrameCardPreview({
   // -----------------------------------------------------------------------
   const handleImageAdd = () => {
     if (!isSelected) {
-      setSelectedFrameType(frame.frameType as FrameType);
+      setSelectedFrame(frame.frameType as FrameType, frameId);
     }
     imageInputRef.current?.click();
   };
@@ -145,7 +151,7 @@ export default function FrameCardPreview({
       uploadedAt: new Date().toISOString(),
       uploadStatus: 'done' as const,
     });
-    setFrameImage(frame.frameType as FrameType, 'main', url);
+    setFrameImage(frameId, 'main', url);
     e.target.value = '';
   };
 
@@ -153,7 +159,10 @@ export default function FrameCardPreview({
   // 카드 클릭: 선택 상태 토글
   // -----------------------------------------------------------------------
   const handleCardClick = () => {
-    setSelectedFrameType(isSelected ? null : (frame.frameType as FrameType));
+    setSelectedFrame(
+      isSelected ? null : (frame.frameType as FrameType),
+      isSelected ? null : frameId,
+    );
   };
 
   // -----------------------------------------------------------------------
@@ -298,7 +307,7 @@ export default function FrameCardPreview({
               transformOrigin: 'top left',
               transform: `scale(${scale})`,
               width: `${TEMPLATE_W}px`,
-              height: `${TEMPLATE_H}px`,
+              height: `${templateH}px`,
               // 선택된 프레임은 텍스트 편집 허용, 미선택은 클릭 이벤트 차단
               pointerEvents: isSelected ? 'auto' : 'none',
               userSelect: isSelected ? 'text' : 'none',
@@ -310,7 +319,7 @@ export default function FrameCardPreview({
                 templateRef.current = el;
                 registerRef(frame.frameType as FrameType, el);
               }}
-              style={{ width: `${TEMPLATE_W}px`, height: `${TEMPLATE_H}px` }}
+              style={{ width: `${TEMPLATE_W}px`, height: `${templateH}px` }}
             >
               <TemplateComponent
                 frame={frame}
@@ -320,7 +329,7 @@ export default function FrameCardPreview({
                 onFieldChange={isSelected ? handleFieldChange : undefined}
                 onImageAdd={isSelected ? handleImageAdd : undefined}
                 theme={theme}
-                imageFit={frameImageFit[frame.frameType as FrameType]?.['main'] ?? 'cover'}
+                imageFit={frameImageFit[frameId]?.['main'] ?? 'cover'}
                 imageScale={slotSettings['main']?.scale ?? 1}
                 imageOffsetX={slotSettings['main']?.x ?? 50}
                 imageOffsetY={slotSettings['main']?.y ?? 50}

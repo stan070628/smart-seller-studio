@@ -50,6 +50,8 @@ const TEXT_ONLY_FRAMES: FrameType[] = [
 
 interface AIImageSectionProps {
   frameType: FrameType;
+  /** 프레임 인스턴스 고유 ID */
+  frameId: string;
   imagePrompt?: string | null;
   imageDirection?: string | null;
   needsProductImage?: boolean;
@@ -61,6 +63,7 @@ interface AIImageSectionProps {
 
 const AIImageSection: React.FC<AIImageSectionProps> = ({
   frameType,
+  frameId,
   imagePrompt,
   imageDirection,
   needsProductImage,
@@ -95,8 +98,8 @@ const AIImageSection: React.FC<AIImageSectionProps> = ({
   const removePromptOutdated = useEditorStore((s) => s.removePromptOutdated);
   const setFrameImage = useEditorStore((s) => s.setFrameImage);
 
-  // 생성 상태 플래그
-  const isGeneratingThisFrame = generatingImageForFrame === frameType;
+  // 생성 상태 플래그 (frameId 기준)
+  const isGeneratingThisFrame = generatingImageForFrame === frameId;
   const isAnotherFrameGenerating = generatingImageForFrame !== null && !isGeneratingThisFrame;
   const hasPrompt = !!imagePrompt;
   const hasUploadedImages = uploadedImages.length > 0;
@@ -265,13 +268,13 @@ const AIImageSection: React.FC<AIImageSectionProps> = ({
     if (isGenDisabled) return;
     setAiGenError(null);
     try {
-      await generateFrameImage(frameType);
+      await generateFrameImage(frameId);
 
       // activeSlotKey가 'main'이 아니면 main → activeSlotKey로 복사
       if (activeSlotKey !== 'main') {
-        const mainUrl = useEditorStore.getState().frameImages[frameType]?.['main'];
+        const mainUrl = useEditorStore.getState().frameImages[frameId]?.['main'];
         if (mainUrl) {
-          setFrameImage(frameType, activeSlotKey, mainUrl);
+          setFrameImage(frameId, activeSlotKey, mainUrl);
         }
       }
 

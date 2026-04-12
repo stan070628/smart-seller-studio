@@ -8,7 +8,7 @@ import { devtools } from 'zustand/middleware';
 import type { SalesAnalysisItem } from '@/types/sourcing';
 
 export interface CollectingProgress {
-  phase: 'fetch' | 'snapshot';
+  phase: 'fetch' | 'snapshot' | 'market_price';
   label: string;
   current: number;
   total: number;
@@ -35,6 +35,14 @@ interface SourcingStore {
   searchQuery: string;
   moqFilter: number | null;    // null=전체, 10=10개 이하, 50=50개 이하
   freeDeliOnly: boolean;       // true=무료배송만 표시
+  minSales1d: number | null;
+  minSales7d: number | null;
+  minPrice: number | null;
+  maxPrice: number | null;
+  minMargin: number | null;
+  legalFilter: string | null;  // safe | warning | blocked
+  ipRiskFilter: string | null; // low | medium | high
+  seasonOnly: boolean;
   page: number;
   pageSize: number;            // 고정값: 20
 
@@ -47,10 +55,21 @@ interface SourcingStore {
   setSearchQuery: (q: string) => void;
   setMoqFilter: (moq: number | null) => void;
   setFreeDeliOnly: (v: boolean) => void;
+  setMinSales1d: (v: number | null) => void;
+  setMinSales7d: (v: number | null) => void;
+  setMinPrice: (v: number | null) => void;
+  setMaxPrice: (v: number | null) => void;
+  setMinMargin: (v: number | null) => void;
+  setLegalFilter: (v: string | null) => void;
+  setIpRiskFilter: (v: string | null) => void;
+  setSeasonOnly: (v: boolean) => void;
   setPage: (p: number) => void;
   clearError: () => void;
   triggerLegalCheck: () => Promise<void>;
   isLegalChecking: boolean;
+  // 단일 키워드 즉시 수집
+  collectKeyword: (keyword: string) => Promise<void>;
+  isKeywordCollecting: boolean;
   // IP 리스크 검증 — 개별 상품 단위
   verifyIp: (itemId: string, keyword: string) => Promise<void>;
   ipVerifyingId: string | null; // 현재 검증 중인 항목 ID
@@ -75,14 +94,27 @@ export const useSourcingStore = create<SourcingStore>()(
       searchQuery: '',
       moqFilter: null,
       freeDeliOnly: false,
+      minSales1d: null,
+      minSales7d: null,
+      minPrice: null,
+      maxPrice: null,
+      minMargin: null,
+      legalFilter: null,
+      ipRiskFilter: null,
+      seasonOnly: false,
       page: 1,
       pageSize: 20,
       isLegalChecking: false,
+      isKeywordCollecting: false,
       ipVerifyingId: null,
 
       // ─── fetchAnalysis ───────────────────────────────────────────────────
       fetchAnalysis: async () => {
-        const { sortField, sortOrder, categoryFilter, searchQuery, moqFilter, freeDeliOnly, page, pageSize } = get();
+        const {
+          sortField, sortOrder, categoryFilter, searchQuery, moqFilter, freeDeliOnly,
+          minSales1d, minSales7d, minPrice, maxPrice, minMargin, legalFilter, ipRiskFilter,
+          seasonOnly, page, pageSize,
+        } = get();
 
         set({ isLoading: true, error: null }, false, 'sourcing/fetchAnalysis/start');
 
@@ -98,6 +130,14 @@ export const useSourcingStore = create<SourcingStore>()(
           if (searchQuery.trim()) params.set('search', searchQuery.trim());
           if (moqFilter != null) params.set('moq', String(moqFilter));
           if (freeDeliOnly) params.set('freeDeliOnly', '1');
+          if (minSales1d != null) params.set('minSales1d', String(minSales1d));
+          if (minSales7d != null) params.set('minSales7d', String(minSales7d));
+          if (minPrice != null) params.set('minPrice', String(minPrice));
+          if (maxPrice != null) params.set('maxPrice', String(maxPrice));
+          if (minMargin != null) params.set('minMargin', String(minMargin));
+          if (legalFilter) params.set('legal', legalFilter);
+          if (ipRiskFilter) params.set('ipRisk', ipRiskFilter);
+          if (seasonOnly) params.set('seasonOnly', '1');
 
           const res = await fetch(`/api/sourcing/analyze?${params.toString()}`);
           const json = await res.json();
@@ -144,6 +184,7 @@ export const useSourcingStore = create<SourcingStore>()(
           '생활용품', '주방용품', '뷰티', '화장품',
           '건강', '디지털', '가전', '유아', '아동',
           '반려동물', '패션잡화', '식품',
+          '스포츠', '수영', '레저', '캠핑',
         ];
 
         set(
@@ -217,6 +258,44 @@ export const useSourcingStore = create<SourcingStore>()(
             'sourcing/triggerCollection/snapshot-done',
           );
 
+          // 3단계: 시장가 조회 (네이버 쇼핑 API) — 단가격차 계산에 필요
+          set(
+            {
+              collectingStep: '네이버 시장가 조회 중...',
+              collectingProgress: { phase: 'market_price', label: '시장가 수집', current: 0, total: 1 },
+            },
+            false,
+            'sourcing/triggerCollection/market-price-start',
+          );
+
+          // 50건씩 최대 3회 반복 (최대 150건) — Vercel 타임아웃 대비
+          let marketUpdated = 0;
+          for (let round = 0; round < 3; round++) {
+            const mpRes = await fetch('/api/sourcing/naver-prices', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ limit: 50 }),
+            });
+            if (!mpRes.ok) break;
+            const mpJson = await mpRes.json();
+            if (!mpJson.success) break;
+            marketUpdated += mpJson.updated ?? 0;
+            set(
+              {
+                collectingProgress: {
+                  phase: 'market_price',
+                  label: `시장가 수집 (${marketUpdated}건 완료)`,
+                  current: round + 1,
+                  total: 3,
+                },
+              },
+              false,
+              'sourcing/triggerCollection/market-price-progress',
+            );
+            // 업데이트된 건이 없으면 (= 남은 미수집 상품 없음) 조기 종료
+            if ((mpJson.updated ?? 0) === 0) break;
+          }
+
           // 완료 — 데이터 새로 고침
           set(
             { isCollecting: false, collectingStep: null, collectingProgress: null },
@@ -266,6 +345,40 @@ export const useSourcingStore = create<SourcingStore>()(
         get().fetchAnalysis();
       },
 
+      setMinSales1d: (v: number | null) => {
+        set({ minSales1d: v, page: 1 }, false, 'sourcing/setMinSales1d');
+        get().fetchAnalysis();
+      },
+      setMinSales7d: (v: number | null) => {
+        set({ minSales7d: v, page: 1 }, false, 'sourcing/setMinSales7d');
+        get().fetchAnalysis();
+      },
+      setMinPrice: (v: number | null) => {
+        set({ minPrice: v, page: 1 }, false, 'sourcing/setMinPrice');
+        get().fetchAnalysis();
+      },
+      setMaxPrice: (v: number | null) => {
+        set({ maxPrice: v, page: 1 }, false, 'sourcing/setMaxPrice');
+        get().fetchAnalysis();
+      },
+      setMinMargin: (v: number | null) => {
+        set({ minMargin: v, page: 1 }, false, 'sourcing/setMinMargin');
+        get().fetchAnalysis();
+      },
+      setLegalFilter: (v: string | null) => {
+        set({ legalFilter: v, page: 1 }, false, 'sourcing/setLegalFilter');
+        get().fetchAnalysis();
+      },
+      setIpRiskFilter: (v: string | null) => {
+        set({ ipRiskFilter: v, page: 1 }, false, 'sourcing/setIpRiskFilter');
+        get().fetchAnalysis();
+      },
+
+      setSeasonOnly: (v: boolean) => {
+        set({ seasonOnly: v, page: 1 }, false, 'sourcing/setSeasonOnly');
+        get().fetchAnalysis();
+      },
+
       setPage: (p: number) => {
         set({ page: p }, false, 'sourcing/setPage');
         get().fetchAnalysis();
@@ -275,12 +388,39 @@ export const useSourcingStore = create<SourcingStore>()(
         set({ error: null }, false, 'sourcing/clearError');
       },
 
+      // ─── collectKeyword: 단일 키워드 즉시 수집 ───────────────────────────
+      collectKeyword: async (keyword: string) => {
+        if (get().isKeywordCollecting || get().isCollecting) return;
+        set({ isKeywordCollecting: true, error: null }, false, 'sourcing/collectKeyword/start');
+        try {
+          const res = await fetch('/api/sourcing/fetch-items', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ keywords: [keyword] }),
+          });
+          const json = await res.json();
+          if (!res.ok || !json.success) {
+            throw new Error(json.error ?? '수집에 실패했습니다.');
+          }
+          const count = json.data?.totalFetched ?? 0;
+          if (count === 0) {
+            throw new Error(`"${keyword}"에 해당하는 상품이 도매꾹에 없습니다.`);
+          }
+          await get().fetchAnalysis();
+        } catch (err) {
+          const message = err instanceof Error ? err.message : '알 수 없는 오류';
+          set({ error: message }, false, 'sourcing/collectKeyword/error');
+        } finally {
+          set({ isKeywordCollecting: false }, false, 'sourcing/collectKeyword/done');
+        }
+      },
+
       triggerLegalCheck: async () => {
         if (get().isLegalChecking) return;
         set({ isLegalChecking: true, error: null }, false, 'sourcing/legalCheck/start');
 
         try {
-          const res = await fetch('/api/sourcing/legal-check', { method: 'POST' });
+          const res = await fetch('/api/sourcing/domeggook/legal-check', { method: 'POST' });
           const json = await res.json();
           if (!res.ok || !json.success) {
             throw new Error(json.error ?? '법적 검토에 실패했습니다.');

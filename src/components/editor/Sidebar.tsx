@@ -912,6 +912,16 @@ const Sidebar: React.FC = () => {
               <p className="text-xs text-gray-400">개인정보제공 동의 안내문</p>
             </div>
           </button>
+          <button
+            onClick={() => addCustomFrame('thumbnail')}
+            className="flex items-center gap-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-left text-sm font-medium text-indigo-500 transition-all hover:border-indigo-400 hover:text-indigo-800"
+          >
+            <span className="text-lg">🖼</span>
+            <div>
+              <p className="font-semibold text-indigo-800">대표 썸네일</p>
+              <p className="text-xs text-indigo-400">쿠팡·네이버 상품 목록 대표 이미지 (1:1)</p>
+            </div>
+          </button>
         </div>
       </section>
     </aside>

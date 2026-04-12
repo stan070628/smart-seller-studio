@@ -10,6 +10,11 @@ import type { GeneratedFrame, FrameType } from '@/types/frames';
 import { type Theme, type ThemeKey, THEMES, DEFAULT_THEME } from '@/lib/themes';
 import type { ProductExtractResult } from '@/lib/ai/prompts/product-extract';
 
+/** 고유 프레임 인스턴스 ID 생성 */
+function genFrameId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 interface EditorStore {
   uploadedImages: UploadedImage[];
   reviewText: string;
@@ -18,18 +23,20 @@ interface EditorStore {
   isGenerating: boolean;
   imageAnalysis: ImageAnalysisResult | null;
   isAnalyzing: boolean;
-  /** 프레임 타입 → (슬롯 키 → 이미지 URL) */
-  frameImages: Partial<Record<FrameType, Record<string, string>>>;
-  /** 프레임 타입 → (슬롯 키 → fit 모드) */
-  frameImageFit: Partial<Record<FrameType, Record<string, 'cover' | 'contain'>>>;
-  /** 프레임 타입 → (슬롯 키 → 위치·스케일 설정) */
-  frameImageSettings: Partial<Record<FrameType, Record<string, { scale: number; x: number; y: number }>>>;
+  /** 프레임 인스턴스 ID → (슬롯 키 → 이미지 URL) */
+  frameImages: Record<string, Record<string, string>>;
+  /** 프레임 인스턴스 ID → (슬롯 키 → fit 모드) */
+  frameImageFit: Record<string, Record<string, 'cover' | 'contain'>>;
+  /** 프레임 인스턴스 ID → (슬롯 키 → 위치·스케일 설정) */
+  frameImageSettings: Record<string, Record<string, { scale: number; x: number; y: number }>>;
   theme: Theme;
-  /** 현재 AI 이미지 생성 중인 프레임 타입 (없으면 null) */
-  generatingImageForFrame: FrameType | null;
+  /** 현재 AI 이미지 생성 중인 프레임 인스턴스 ID (없으면 null) */
+  generatingImageForFrame: string | null;
   /** 인스펙터 패널에서 편집 중인 프레임 타입 (없으면 null) */
   selectedFrameType: FrameType | null;
-  /** 텍스트 수정으로 인해 imagePrompt가 최신 텍스트와 다를 수 있는 프��임 목록 */
+  /** 인스펙터 패널에서 편집 중인 프레임 인스턴스 ID (없으면 null) */
+  selectedFrameId: string | null;
+  /** 텍스트 수정으로 인해 imagePrompt가 최신 텍스트와 다를 수 있는 프레임 목록 */
   promptOutdatedFrames: Set<FrameType>;
   /** URL에서 추출한 상품 정보 */
   productExtract: ProductExtractResult | null;
@@ -49,15 +56,19 @@ interface EditorStore {
   setIsGenerating: (value: boolean) => void;
   setImageAnalysis: (result: ImageAnalysisResult | null) => void;
   setIsAnalyzing: (value: boolean) => void;
-  /** imageUrl이 null이면 해당 슬롯 삭제, 있으면 설정 */
-  setFrameImage: (frameType: FrameType, slotKey: string, imageUrl: string | null) => void;
-  setFrameImageFit: (frameType: FrameType, slotKey: string, fit: 'cover' | 'contain') => void;
-  setFrameImageSettings: (frameType: FrameType, slotKey: string, settings: Partial<{ scale: number; x: number; y: number }>) => void;
+  /** imageUrl이 null이면 해당 슬롯 삭제, 있으면 설정 — frameId: 프레임 인스턴스 ID */
+  setFrameImage: (frameId: string, slotKey: string, imageUrl: string | null) => void;
+  setFrameImageFit: (frameId: string, slotKey: string, fit: 'cover' | 'contain') => void;
+  setFrameImageSettings: (frameId: string, slotKey: string, settings: Partial<{ scale: number; x: number; y: number }>) => void;
   setTheme: (key: ThemeKey) => void;
-  addCustomFrame: (frameType: 'custom_3col' | 'custom_gallery' | 'custom_notice' | 'custom_return_notice' | 'custom_privacy') => void;
+  addCustomFrame: (frameType: 'custom_3col' | 'custom_gallery' | 'custom_notice' | 'custom_return_notice' | 'custom_privacy' | 'thumbnail') => void;
   removeFrame: (frameType: FrameType) => void;
-  setGeneratingImageForFrame: (frameType: FrameType | null) => void;
-  generateFrameImage: (frameType: FrameType) => Promise<void>;
+  setGeneratingImageForFrame: (frameId: string | null) => void;
+  /** frameId: 프레임 인스턴스 ID */
+  generateFrameImage: (frameId: string) => Promise<void>;
+  /** frameType + frameId 동시 설정 */
+  setSelectedFrame: (frameType: FrameType | null, frameId: string | null) => void;
+  /** @deprecated setSelectedFrame 사용 권장 */
   setSelectedFrameType: (frameType: FrameType | null) => void;
   /** 프롬프트 outdated 프레임 추가 */
   addPromptOutdated: (frameType: FrameType) => void;
@@ -85,6 +96,7 @@ const useEditorStore = create<EditorStore>()(
       theme: DEFAULT_THEME,
       generatingImageForFrame: null,
       selectedFrameType: null,
+      selectedFrameId: null,
       promptOutdatedFrames: new Set<FrameType>(),
       productExtract: null,
       isExtracting: false,
@@ -116,7 +128,14 @@ const useEditorStore = create<EditorStore>()(
 
       setReviewText: (text) => set({ reviewText: text }, false, 'setReviewText'),
       setProductDescription: (text) => set({ productDescription: text }, false, 'setProductDescription'),
-      setFrames: (frames) => set({ frames }, false, 'setFrames'),
+      setFrames: (frames) =>
+        set(
+          {
+            frames: frames.map((f) => (f.id ? f : { ...f, id: genFrameId() })),
+          },
+          false,
+          'setFrames',
+        ),
 
       updateFrame: (frameType, updates) =>
         set(
@@ -133,39 +152,32 @@ const useEditorStore = create<EditorStore>()(
       setImageAnalysis: (result) => set({ imageAnalysis: result }, false, 'setImageAnalysis'),
       setIsAnalyzing: (value) => set({ isAnalyzing: value }, false, 'setIsAnalyzing'),
 
-      setFrameImage: (frameType, slotKey, imageUrl) =>
+      setFrameImage: (frameId, slotKey, imageUrl) =>
         set(
           (state) => {
-            // 기존 프레임 슬롯 맵 복사 (없으면 빈 객체로 초기화)
-            const prevSlots = state.frameImages[frameType] ?? {};
+            const prevSlots = state.frameImages[frameId] ?? {};
             const nextSlots = { ...prevSlots };
-
             if (imageUrl === null) {
-              // null이면 해당 슬롯 삭제
               delete nextSlots[slotKey];
             } else {
               nextSlots[slotKey] = imageUrl;
             }
-
             return {
-              frameImages: {
-                ...state.frameImages,
-                [frameType]: nextSlots,
-              },
+              frameImages: { ...state.frameImages, [frameId]: nextSlots },
             };
           },
           false,
           'setFrameImage',
         ),
 
-      setFrameImageFit: (frameType, slotKey, fit) =>
+      setFrameImageFit: (frameId, slotKey, fit) =>
         set(
           (state) => {
-            const prevSlots = state.frameImageFit[frameType] ?? {};
+            const prevSlots = state.frameImageFit[frameId] ?? {};
             return {
               frameImageFit: {
                 ...state.frameImageFit,
-                [frameType]: { ...prevSlots, [slotKey]: fit },
+                [frameId]: { ...prevSlots, [slotKey]: fit },
               },
             };
           },
@@ -173,15 +185,15 @@ const useEditorStore = create<EditorStore>()(
           'setFrameImageFit',
         ),
 
-      setFrameImageSettings: (frameType, slotKey, settings) =>
+      setFrameImageSettings: (frameId, slotKey, settings) =>
         set(
           (state) => {
-            const prevSlots = state.frameImageSettings[frameType] ?? {};
+            const prevSlots = state.frameImageSettings[frameId] ?? {};
             const prevSlotSettings = prevSlots[slotKey] ?? { scale: 1, x: 50, y: 50 };
             return {
               frameImageSettings: {
                 ...state.frameImageSettings,
-                [frameType]: {
+                [frameId]: {
                   ...prevSlots,
                   [slotKey]: { ...prevSlotSettings, ...settings },
                 },
@@ -201,19 +213,20 @@ const useEditorStore = create<EditorStore>()(
           'removeFrame',
         ),
 
-      setGeneratingImageForFrame: (frameType) =>
-        set({ generatingImageForFrame: frameType }, false, 'setGeneratingImageForFrame'),
+      setGeneratingImageForFrame: (frameId) =>
+        set({ generatingImageForFrame: frameId }, false, 'setGeneratingImageForFrame'),
 
-      generateFrameImage: async (frameType) => {
+      generateFrameImage: async (frameId) => {
         const state = get();
 
-        // 해당 프레임 조회
-        const frame = state.frames.find((f) => f.frameType === frameType);
+        // 해당 프레임 조회 (id 기준)
+        const frame = state.frames.find((f) => f.id === frameId);
         if (!frame?.imagePrompt) {
           throw new Error('imagePrompt가 없습니다');
         }
+        const frameType = frame.frameType;
 
-        set({ generatingImageForFrame: frameType }, false, 'generateFrameImage/start');
+        set({ generatingImageForFrame: frameId }, false, 'generateFrameImage/start');
 
         try {
           let productImageBase64: string | undefined;
@@ -306,11 +319,11 @@ const useEditorStore = create<EditorStore>()(
           const dataUrl = `data:${mimeType};base64,${imageBase64}`;
           set(
             (state) => {
-              const prevSlots = state.frameImages[frameType] ?? {};
+              const prevSlots = state.frameImages[frameId] ?? {};
               return {
                 frameImages: {
                   ...state.frameImages,
-                  [frameType]: { ...prevSlots, main: dataUrl },
+                  [frameId]: { ...prevSlots, main: dataUrl },
                 },
               };
             },
@@ -322,8 +335,11 @@ const useEditorStore = create<EditorStore>()(
         }
       },
 
+      setSelectedFrame: (frameType, frameId) =>
+        set({ selectedFrameType: frameType, selectedFrameId: frameId }, false, 'setSelectedFrame'),
+
       setSelectedFrameType: (frameType) =>
-        set({ selectedFrameType: frameType }, false, 'setSelectedFrameType'),
+        set({ selectedFrameType: frameType, selectedFrameId: null }, false, 'setSelectedFrameType'),
 
       addPromptOutdated: (frameType) =>
         set(
@@ -354,12 +370,14 @@ const useEditorStore = create<EditorStore>()(
         set(
           (state) => {
             const newFrame: GeneratedFrame = {
+              id: genFrameId(),
               frameType,
               headline:
                 frameType === 'custom_3col' ? '제품 라인업 소개' :
                 frameType === 'custom_notice' ? 'Notice' :
                 frameType === 'custom_return_notice' ? 'Return' :
                 frameType === 'custom_privacy' ? 'Privacy' :
+                frameType === 'thumbnail' ? '상품명을 입력하세요' :
                 '갤러리',
               subheadline: frameType === 'custom_3col' ? '피부타입과 고민에 따라 골라쓰는' : null,
               bodyText: null, ctaText: null,

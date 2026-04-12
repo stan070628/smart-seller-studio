@@ -65,6 +65,10 @@ export interface DomeggookItemDetail {
     inventory: number;
     domeMoq?: number;      // 최소주문수량
   };
+  deli?: {
+    who?: string;          // 'S'=무료, 'P'=선결제, 'B'=착불, 'C'=구매자선택
+    fee?: number;          // 배송비 (원)
+  };
   image?: {
     url?: string;
   };
@@ -112,8 +116,48 @@ export interface SalesAnalysisItem {
   // IP(지식재산권) 리스크 필드 — KIPRIS 검증 결과
   ipRiskLevel: 'low' | 'medium' | 'high' | null;
   ipCheckedAt: string | null;
+  // 네이버 쇼핑 시장 최저가
+  marketLowestPrice: number | null;
+  marketPriceSource: 'naver_api' | 'manual' | null;
+  marketPriceUpdatedAt: string | null;
   // 수량별 가격 티어
   priceTiers: PriceTiers;
+  // v2 드롭쉬핑 스코어링 필드 (023 migration)
+  scoreTotal: number | null;
+  scoreLegalIp: number | null;
+  scorePriceComp: number | null;
+  scoreCsSafety: number | null;
+  scoreMargin: number | null;
+  scoreDemand: number | null;
+  scoreSupply: number | null;
+  scoreMoqFit: number | null;
+  scoreCalculatedAt: string | null;
+  csRiskLevel: 'low' | 'medium' | 'high' | null;
+  csRiskReason: string | null;
+  dropshipMoqStrategy: 'single' | '1+1' | '2+1' | null;
+  dropshipBundlePrice: number | null;
+  dropshipPriceGapRate: number | null;
+  // v2 보너스·차단 필드 (024 migration)
+  maleTier: 'high' | 'mid' | 'neutral' | 'female' | null;
+  maleScore: number | null;
+  maleBonus: number | null;
+  seasonBonus: number | null;
+  seasonLabels: string | null;
+  blockedReason: string | null;
+  needsReview: boolean;
+  // 시장가 (024 migration)
+  naverLowestPrice: number | null;
+  naverAvgPrice: number | null;
+  naverSellerCount: number | null;
+  coupangLowestPrice: number | null;
+  hasRocket: boolean | null;
+  marketUpdatedAt: string | null;
+  // 드롭쉬핑 공급자
+  supportsDropship: boolean;
+  dropshipFee: number | null;
+  alternativeSellers: number | null;
+  sellerRating: number | null;
+  sellerYears: number | null;
 }
 
 export interface PriceTier {
