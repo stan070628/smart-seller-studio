@@ -118,7 +118,7 @@ export interface SalesAnalysisItem {
   marketPriceUpdatedAt: string | null;
   // 수량별 가격 티어
   priceTiers: PriceTiers;
-  // v2 드롭쉬핑 스코어링 필드
+  // v2 드롭쉬핑 스코어링 필드 (023 migration)
   scoreTotal: number | null;
   scoreLegalIp: number | null;
   scorePriceComp: number | null;
@@ -133,6 +133,27 @@ export interface SalesAnalysisItem {
   dropshipMoqStrategy: 'single' | '1+1' | '2+1' | null;
   dropshipBundlePrice: number | null;
   dropshipPriceGapRate: number | null;
+  // v2 보너스·차단 필드 (024 migration)
+  maleTier: 'high' | 'mid' | 'neutral' | 'female' | null;
+  maleScore: number | null;
+  maleBonus: number | null;
+  seasonBonus: number | null;
+  seasonLabels: string | null;
+  blockedReason: string | null;
+  needsReview: boolean;
+  // 시장가 (024 migration)
+  naverLowestPrice: number | null;
+  naverAvgPrice: number | null;
+  naverSellerCount: number | null;
+  coupangLowestPrice: number | null;
+  hasRocket: boolean | null;
+  marketUpdatedAt: string | null;
+  // 드롭쉬핑 공급자
+  supportsDropship: boolean;
+  dropshipFee: number | null;
+  alternativeSellers: number | null;
+  sellerRating: number | null;
+  sellerYears: number | null;
 }
 
 export interface PriceTier {

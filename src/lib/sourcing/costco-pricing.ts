@@ -1,33 +1,47 @@
 /**
- * costco-pricing.ts
- * 채널별 추천판매가 및 실질마진 계산
+ * costco-pricing.ts — v2
+ * 코스트코 사입 모델 추천판매가 및 마진 계산
+ *
+ * v1 대비 변경 사항:
+ *   - 1.4x 빠른판단 규칙 완전 제거 → 카테고리별 목표마진율 기반으로 대체
+ *   - shared/channel-policy.ts 통합 (CHANNEL_FEE, VAT_RATE 중복 제거)
+ *   - packQty(입수) 기반 개당 단가(perUnitPrice) 추가
+ *   - compareCostcoWithMarket() 5단계 경쟁력 판정 추가
+ *   - calcGrade / GRADE_COLORS → shared/grade.ts 위임 (하위 호환 re-export 유지)
  *
  * 공식:
- *   net_profit = (sell_price × (1 - channel_fee) - buy_price - shipping - packing) / 1.10
- *   real_margin_rate = net_profit / sell_price
- *
- * 채널 수수료:
- *   네이버 스마트스토어: 6%
- *   쿠팡:               11%
- *
- * 물류비 (무게 구간별):
- *   < 2 kg  → 3,500원
- *   < 5 kg  → 4,500원
- *   < 10 kg → 7,000원
- *   ≥ 10 kg → 9,000원
+ *   totalCost        = buyPrice + shippingCost + packingCost
+ *   targetProfit     = max(totalCost × categoryTargetRate, 2000)
+ *   recommendedPrice = ceil((totalCost + targetProfit) / (1 - channelFee - VAT_RATE) / 100) × 100
+ *   perUnitPrice     = round(recommendedPrice / packQty / 10) × 10
+ *   netProfit        = recommendedPrice × (1 - channelFee - VAT_RATE) - totalCost
+ *   realMarginRate   = netProfit / recommendedPrice × 100  (%)
  */
+
+import {
+  CHANNEL_FEE,
+  VAT_RATE,
+  COSTCO_TARGET_MARGIN_RATE,
+  calcNetProfit,
+  calcNetMarginRate,
+  type Channel,
+} from './shared/channel-policy';
+import { getGrade, GRADE_COLORS, type SourcingGrade } from './shared/grade';
+
+export type { Channel, SourcingGrade };
+export { GRADE_COLORS };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 상수
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const CHANNEL_FEES = { naver: 0.06, coupang: 0.11 } as const;
-export const PACKING_COST = 500;     // 포장비 (원)
-export const VAT_DIVISOR  = 1.10;   // 부가세 포함 나누기 계수
+/** 기본 포장비 (원) */
+export const PACKING_COST = 500;
 
-export type Channel = 'naver' | 'coupang';
-
-/** 카테고리별 목표 마진율 */
+/**
+ * 카테고리별 목표 마진율 (사입 모델 — 재고 리스크 반영)
+ * 미정의 카테고리는 COSTCO_TARGET_MARGIN_RATE(13%) 적용
+ */
 const CATEGORY_TARGET_RATES: Record<string, number> = {
   '식품':         0.13,
   '생활용품':     0.15,
@@ -42,29 +56,18 @@ const CATEGORY_TARGET_RATES: Record<string, number> = {
   '완구·스포츠': 0.20,
 };
 
-const DEFAULT_TARGET_RATE = 0.18;
-
 // ─────────────────────────────────────────────────────────────────────────────
-// 타입
-// ─────────────────────────────────────────────────────────────────────────────
-
-export interface ChannelPricingResult {
-  channel: Channel;
-  recommendedPrice: number;
-  netProfit: number;
-  realMarginRate: number;   // 0~1 (net_profit / recommended_price)
-  vsMarket: number | null;  // 양수 = 시장가보다 저렴한 정도 (%)
-  isOverprice: boolean;     // 추천가가 시장가 초과 여부
-  shippingCost: number;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 헬퍼
+// 배송비 헬퍼
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * 무게(kg) 기반 배송비 반환
+ * 무게(kg) 기반 배송비
  * null/0이면 기본 3,500원
+ *
+ * < 2 kg  → 3,500원
+ * < 5 kg  → 4,500원
+ * < 10 kg → 7,000원
+ * ≥ 10 kg → 9,000원
  */
 export function getShippingCost(weightKg: number | null): number {
   if (!weightKg || weightKg <= 0) return 3500;
@@ -75,66 +78,97 @@ export function getShippingCost(weightKg: number | null): number {
 }
 
 /**
- * 상품 total_quantity + unit_type 에서 무게(kg) 추정
+ * 상품 unit_type + total_quantity에서 무게(kg) 추정
  * unit_type = 'weight' 일 때만 유효 (total_quantity = 그램 단위)
  */
 export function getWeightKgFromProduct(product: {
   unit_type?: 'weight' | 'volume' | 'count' | null;
   total_quantity?: number | null;
 }): number | null {
-  if (product.unit_type === 'weight' && product.total_quantity && product.total_quantity > 0) {
+  if (
+    product.unit_type === 'weight' &&
+    product.total_quantity &&
+    product.total_quantity > 0
+  ) {
     return product.total_quantity / 1000;
   }
   return null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 핵심 계산
+// 타입
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface CostcoPriceInput {
+  /** 코스트코 매입가 (VAT 포함 구매가) */
+  buyPrice: number;
+  /** 입수 단위 (쉐이빙폼 6개입 → 6, 단품이면 1) */
+  packQty: number;
+  /** 카테고리명 (목표 마진율 결정) */
+  categoryName: string | null;
+  /** 판매 채널 */
+  channel: Channel;
+  /** 무게(kg) — null이면 3,500원 기본 배송비 */
+  weightKg?: number | null;
+  /** 포장비 — null이면 500원 기본값 */
+  packingCost?: number | null;
+  /** 시장 최저가 (null이면 vsMarket 계산 불가) */
+  marketPrice?: number | null;
+}
+
+export interface CostcoPriceResult {
+  channel: Channel;
+  /** 추천 판매가 (100원 단위 반올림) */
+  recommendedPrice: number;
+  /** 개당 단가 = recommendedPrice / packQty (10원 단위 반올림) */
+  perUnitPrice: number;
+  /** 원가 합계 (매입가 + 배송비 + 포장비) */
+  totalCost: number;
+  /** 순이익 (원) */
+  netProfit: number;
+  /** 순이익률 (%). netProfit / recommendedPrice × 100 */
+  realMarginRate: number;
+  /** 배송비 (원) */
+  shippingCost: number;
+  /** 시장가 대비 격차율 (%). 양수 = 추천가가 시장가보다 저렴. null = 데이터 없음 */
+  vsMarket: number | null;
+  /** 추천가가 시장가를 초과하는 여부 */
+  isOverprice: boolean;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 핵심 계산 함수
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * 채널별 추천판매가 및 마진 계산
+ * 코스트코 채널별 추천판매가 + 마진 계산 (v2)
  *
- * @param buyPrice      매입가 (코스트코 판매가)
- * @param categoryName  카테고리명 (목표 마진율 결정에 사용)
- * @param channel       판매 채널 ('naver' | 'coupang')
- * @param weightKg      상품 무게(kg) — null 이면 기본 배송비 적용
- * @param marketPrice   시장 최저가 (null 이면 vs_market 계산 불가)
+ * 1.4x 규칙 완전 제거.
+ * 카테고리별 목표마진율로 추천가를 역산하여 "사입 자본 회수"를 최우선으로 보장.
  */
-export function calcRecommendedPrice(
-  buyPrice: number,
-  categoryName: string | null,
-  channel: Channel,
-  weightKg: number | null,
-  marketPrice: number | null,
-): ChannelPricingResult {
-  const fee = CHANNEL_FEES[channel];
-  const shipping = getShippingCost(weightKg);
-  const costs = buyPrice + shipping + PACKING_COST;
-  const targetRate = CATEGORY_TARGET_RATES[categoryName ?? ''] ?? DEFAULT_TARGET_RATE;
+export function calcCostcoPrice(input: CostcoPriceInput): CostcoPriceResult {
+  const { buyPrice, packQty, categoryName, channel } = input;
+  const shipping   = getShippingCost(input.weightKg ?? null);
+  const packing    = input.packingCost ?? PACKING_COST;
+  const totalCost  = buyPrice + shipping + packing;
 
-  // 목표 마진율을 달성하는 최소 판매가:
-  //   real_margin_rate = net_profit / sell = (sell*(1-fee) - costs) / (VAT_DIVISOR * sell)
-  //   => sell * ((1-fee) - targetRate * VAT_DIVISOR) = costs
-  //   => sell = costs / ((1-fee) - targetRate * VAT_DIVISOR)
-  const divisor = (1 - fee) - targetRate * VAT_DIVISOR;
-  let recommendedPrice: number;
-  if (divisor <= 0) {
-    // 목표 마진율이 너무 높아 계산 불가 → 손실분기점 가격으로 fallback
-    recommendedPrice = Math.ceil((costs / (1 - fee)) / 100) * 100;
-  } else {
-    recommendedPrice = Math.ceil((costs / divisor) / 100) * 100;
-  }
+  const targetRate   = CATEGORY_TARGET_RATES[categoryName ?? ''] ?? COSTCO_TARGET_MARGIN_RATE;
+  const targetProfit = Math.max(Math.floor(totalCost * targetRate), 2000);
 
-  const netProfit = Math.round(
-    (recommendedPrice * (1 - fee) - costs) / VAT_DIVISOR,
-  );
-  const realMarginRate = recommendedPrice > 0 ? netProfit / recommendedPrice : 0;
+  const deductionRate = 1 - CHANNEL_FEE[channel] - VAT_RATE;
+  const raw = (totalCost + targetProfit) / deductionRate;
+  const recommendedPrice = Math.round(raw / 100) * 100;
 
+  const safePackQty  = Math.max(packQty, 1);
+  const perUnitPrice = Math.round(recommendedPrice / safePackQty / 10) * 10;
+
+  const netProfit      = calcNetProfit(recommendedPrice, totalCost, channel);
+  const realMarginRate = calcNetMarginRate(recommendedPrice, totalCost, channel);
+
+  const marketPrice = input.marketPrice ?? null;
   let vsMarket: number | null = null;
   let isOverprice = false;
   if (marketPrice && marketPrice > 0) {
-    // 양수 = 추천가가 시장가보다 저렴함 (소비자 입장에서 이점)
     vsMarket = Math.round(((marketPrice - recommendedPrice) / marketPrice) * 1000) / 10;
     isOverprice = recommendedPrice > marketPrice;
   }
@@ -142,40 +176,127 @@ export function calcRecommendedPrice(
   return {
     channel,
     recommendedPrice,
+    perUnitPrice,
+    totalCost,
     netProfit,
     realMarginRate,
+    shippingCost: shipping,
     vsMarket,
     isOverprice,
-    shippingCost: shipping,
+  };
+}
+
+/**
+ * 하위 호환 래퍼 (CostcoTab.tsx 기존 호출 시그니처 유지)
+ * 신규 코드에서는 calcCostcoPrice() 사용 권장
+ *
+ * @deprecated calcCostcoPrice() 사용 권장
+ */
+export function calcRecommendedPrice(
+  buyPrice: number,
+  categoryName: string | null,
+  channel: Channel,
+  weightKg: number | null,
+  marketPrice: number | null,
+): CostcoPriceResult {
+  return calcCostcoPrice({
+    buyPrice,
+    packQty: 1,
+    categoryName,
+    channel,
+    weightKg,
+    marketPrice,
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 시장가 경쟁력 5단계 판정
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 시장가 경쟁력 5단계
+ *   강력한 경쟁력: 시장가 대비 15%+ 저렴
+ *   경쟁력 보통:   10%+ 저렴
+ *   시장가 근접:   0~9% 저렴
+ *   시장가 초과:   추천가가 시장가 이상
+ *   데이터 없음:   시장가 미입력
+ */
+export type PriceCompStatus =
+  | '강력한 경쟁력'
+  | '경쟁력 보통'
+  | '시장가 근접'
+  | '시장가 초과'
+  | '데이터 없음';
+
+/**
+ * vsMarket(%) → 5단계 경쟁력 판정
+ * vsMarket = (시장가 - 추천가) / 시장가 × 100
+ */
+export function getPriceCompStatus(vsMarket: number | null): PriceCompStatus {
+  if (vsMarket === null) return '데이터 없음';
+  if (vsMarket >= 15)    return '강력한 경쟁력';
+  if (vsMarket >= 10)    return '경쟁력 보통';
+  if (vsMarket >= 0)     return '시장가 근접';
+  return '시장가 초과';
+}
+
+/** 경쟁력 상태별 색상 */
+export const PRICE_COMP_STYLE: Record<PriceCompStatus, { color: string; bg: string }> = {
+  '강력한 경쟁력': { color: '#16a34a', bg: 'rgba(22,163,74,0.08)' },
+  '경쟁력 보통':   { color: '#2563eb', bg: 'rgba(37,99,235,0.08)' },
+  '시장가 근접':   { color: '#d97706', bg: 'rgba(217,119,6,0.08)' },
+  '시장가 초과':   { color: '#dc2626', bg: 'rgba(220,38,38,0.08)' },
+  '데이터 없음':   { color: '#9ca3af', bg: 'rgba(156,163,175,0.08)' },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 채널 2개 동시 비교
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface MarketCompareResult {
+  naverResult: CostcoPriceResult;
+  coupangResult: CostcoPriceResult;
+  naverStatus: PriceCompStatus;
+  coupangStatus: PriceCompStatus;
+  /** 순이익률 기준 더 유리한 채널 */
+  betterChannel: Channel;
+}
+
+/**
+ * 네이버/쿠팡 추천가를 동시 계산하고 경쟁력 비교
+ *
+ * 코스트코 상품은 단품 판매가 기본 → packQty는 입수 단위 표시용
+ */
+export function compareCostcoWithMarket(
+  buyPrice: number,
+  packQty: number,
+  categoryName: string | null,
+  weightKg: number | null,
+  naverLowest: number | null,
+  coupangLowest: number | null,
+): MarketCompareResult {
+  const naverResult   = calcCostcoPrice({ buyPrice, packQty, categoryName, channel: 'naver',   weightKg, marketPrice: naverLowest });
+  const coupangResult = calcCostcoPrice({ buyPrice, packQty, categoryName, channel: 'coupang', weightKg, marketPrice: coupangLowest });
+
+  return {
+    naverResult,
+    coupangResult,
+    naverStatus:   getPriceCompStatus(naverResult.vsMarket),
+    coupangStatus: getPriceCompStatus(coupangResult.vsMarket),
+    betterChannel: naverResult.realMarginRate >= coupangResult.realMarginRate ? 'naver' : 'coupang',
   };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 등급 계산
+// 등급 — shared/grade.ts 위임 (CostcoTab.tsx 하위 호환)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type SourcingGrade = 'S' | 'A' | 'B' | 'C' | 'D';
-
 /**
- * 소싱 스코어(0~100) → 등급 (S/A/B/C/D)
- *   S: 80 이상
- *   A: 65 이상
- *   B: 50 이상
- *   C: 35 이상
- *   D: 35 미만
+ * 소싱 스코어 → 등급 문자 반환 (CostcoTab.tsx 하위 호환)
+ * 신규 코드에서는 shared/grade.ts의 getGrade() 직접 사용 권장
+ *
+ * @deprecated getGrade() 사용 권장
  */
 export function calcGrade(score: number): SourcingGrade {
-  if (score >= 80) return 'S';
-  if (score >= 65) return 'A';
-  if (score >= 50) return 'B';
-  if (score >= 35) return 'C';
-  return 'D';
+  return getGrade(score).grade;
 }
-
-export const GRADE_COLORS: Record<SourcingGrade, { color: string; bg: string }> = {
-  S: { color: '#7c3aed', bg: '#f3e8ff' },
-  A: { color: '#15803d', bg: '#f0fdf4' },
-  B: { color: '#2563eb', bg: '#eff6ff' },
-  C: { color: '#ca8a04', bg: '#fefce8' },
-  D: { color: '#9ca3af', bg: '#f9fafb' },
-};

@@ -20,7 +20,7 @@ export async function GET(
   try {
     const [productRes, priceLogsRes, marketLogsRes] = await Promise.all([
       pool.query(
-        `SELECT id, product_code, title, price, target_sell_price,
+        `SELECT id, product_code, title, price,
                 market_lowest_price, market_price_source, market_price_updated_at,
                 sourcing_score, demand_score, price_opp_score, urgency_score,
                 seasonal_score, margin_score

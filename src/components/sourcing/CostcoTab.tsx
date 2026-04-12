@@ -10,7 +10,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Loader2, RefreshCw, Search, X, ExternalLink,
-  ChevronDown, ShoppingCart, Pencil, Check, Ban, ShieldCheck,
+  ChevronDown, ShoppingCart, ShieldCheck,
 } from 'lucide-react';
 import type { CostcoProductRow, CostcoSortKey } from '@/types/costco';
 import { STOCK_STATUS_LABELS } from '@/lib/sourcing/costco-constants';
@@ -207,97 +207,6 @@ function ChannelPriceCell({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 시장최저가 셀 (인라인 편집 + N/수동 뱃지)
-// ─────────────────────────────────────────────────────────────────────────────
-function MarketPriceCell({
-  product,
-  onSaved,
-}: {
-  product: CostcoProductRow;
-  onSaved: (productCode: string, newPrice: number) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [inputVal, setInputVal] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  const startEdit = () => {
-    setInputVal(product.market_lowest_price ? String(product.market_lowest_price) : '');
-    setEditing(true);
-  };
-
-  const handleSave = async () => {
-    const price = parseInt(inputVal.replace(/[^0-9]/g, ''), 10);
-    if (isNaN(price) || price <= 0) { setEditing(false); return; }
-    setSaving(true);
-    try {
-      await fetch('/api/sourcing/costco/market-price', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productCode: product.product_code, marketPrice: price, source: 'manual' }),
-      });
-      onSaved(product.product_code, price);
-    } finally {
-      setSaving(false);
-      setEditing(false);
-    }
-  };
-
-  if (editing) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-        <input
-          type="text"
-          value={inputVal}
-          onChange={(e) => setInputVal(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setEditing(false); }}
-          autoFocus
-          style={{
-            width: '80px', height: '24px', padding: '0 4px',
-            border: `1px solid ${C.accent}`, borderRadius: '4px',
-            fontSize: '11px', textAlign: 'right',
-          }}
-        />
-        {saving
-          ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />
-          : <>
-              <button onClick={handleSave} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.green, padding: '2px' }}><Check size={12} /></button>
-              <button onClick={() => setEditing(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textSub, padding: '2px' }}><Ban size={12} /></button>
-            </>}
-      </div>
-    );
-  }
-
-  const price  = product.market_lowest_price;
-  const source = product.market_price_source;
-
-  return (
-    <div
-      style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-end', cursor: 'pointer' }}
-      onClick={startEdit}
-      title="클릭하여 시장 최저가 편집"
-    >
-      {price ? (
-        <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            {source === 'naver_api' && (
-              <span style={{ fontSize: '9px', fontWeight: 700, padding: '1px 4px', borderRadius: '4px', backgroundColor: C.naverBg, color: C.naver }}>N</span>
-            )}
-            {source === 'manual' && (
-              <span style={{ fontSize: '9px', fontWeight: 500, padding: '1px 4px', borderRadius: '4px', backgroundColor: '#f0f0f0', color: '#888' }}>수동</span>
-            )}
-            <span style={{ fontWeight: 600, color: C.text }}>{fmtPrice(price)}</span>
-            <Pencil size={9} color={C.textSub} />
-          </div>
-        </>
-      ) : (
-        <span style={{ fontSize: '11px', color: '#c4c4c4', display: 'flex', alignItems: 'center', gap: '3px' }}>
-          입력 <Pencil size={9} />
-        </span>
-      )}
-    </div>
-  );
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // 등급 뱃지
 // ─────────────────────────────────────────────────────────────────────────────
@@ -573,17 +482,6 @@ export default function CostcoTab({ externalGenderFilter }: CostcoTabProps = {})
     } finally {
       setIpVerifyingId(null);
     }
-  };
-
-  // 시장최저가 인라인 업데이트 (리렌더 없이 로컬 반영)
-  const handleMarketPriceSaved = (productCode: string, newPrice: number) => {
-    setProducts((prev) =>
-      prev.map((p) =>
-        p.product_code === productCode
-          ? { ...p, market_lowest_price: newPrice, market_price_source: 'manual' }
-          : p,
-      ),
-    );
   };
 
   // grade/asteriskOnly/genderFilter/seasonOnly는 서버에서 처리됨
@@ -927,14 +825,6 @@ export default function CostcoTab({ externalGenderFilter }: CostcoTabProps = {})
                       </span>
                     </th>
 
-                    {/* 시장최저가 */}
-                    <th style={{ ...thStyle, width: '110px', textAlign: 'right' }}>
-                      <span style={{ display: 'inline-flex', flexDirection: 'column', gap: '1px' }}>
-                        <span>시장최저가</span>
-                        <span style={{ fontSize: '9px', color: '#aaa' }}>클릭 편집</span>
-                      </span>
-                    </th>
-
                     {/* 추천가(네이버) */}
                     <th style={{ ...thStyle, width: '120px', textAlign: 'right' }}>
                       <span style={{ display: 'inline-flex', flexDirection: 'column', gap: '1px' }}>
@@ -1201,11 +1091,6 @@ export default function CostcoTab({ externalGenderFilter }: CostcoTabProps = {})
                               {fmtPrice(product.original_price)}
                             </div>
                           )}
-                        </td>
-
-                        {/* 시장최저가 */}
-                        <td style={{ padding: '8px 10px', textAlign: 'right', verticalAlign: 'middle' }}>
-                          <MarketPriceCell product={product} onSaved={handleMarketPriceSaved} />
                         </td>
 
                         {/* 추천가(네이버) */}

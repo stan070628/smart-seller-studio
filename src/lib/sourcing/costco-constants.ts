@@ -235,7 +235,6 @@ export const MARGIN_CONSTANTS = {
   MARKETPLACE_FEE_RATE: 0.10,
   LOGISTICS_FEE: 3500,
   TAX_RATE: 0.10,
-  QUICK_MULTIPLIER: 1.4,
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────

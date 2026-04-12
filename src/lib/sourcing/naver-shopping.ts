@@ -56,7 +56,7 @@ export function normalizeProductQuery(title: string): string {
   //    "x 24 x 3", "× 6", "X 2팩", "x3", "6개", "2팩", "24입", "3박스"
   //    숫자 + 단위 조합 (개|팩|박스|세트|입|묶음|통|병|캔|포|매|롤|장|켤레)
   const UNIT = '(개|팩|박스|세트|입|묶음|통|병|캔|포|매|롤|장|켤레|구|조각|피스|piece|pk|ct)';
-  q = q.replace(new RegExp(`[xX×]\\s*\\d+\\s*[xX×]\\s*\\d+`, 'gi'), ''); // x24x3
+  q = q.replace(new RegExp(`[xX×]\\s*\\d+\\s*[xX×]\\s*\\d+\\s*${UNIT}?`, 'gi'), ''); // x6x4팩
   q = q.replace(new RegExp(`[xX×]\\s*\\d+\\s*${UNIT}?`, 'gi'), '');       // x 6개, x3
   q = q.replace(new RegExp(`\\d+\\s*${UNIT}`, 'gi'), '');                  // 6개, 24입, 2팩
 

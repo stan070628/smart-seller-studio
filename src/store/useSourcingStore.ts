@@ -42,6 +42,7 @@ interface SourcingStore {
   minMargin: number | null;
   legalFilter: string | null;  // safe | warning | blocked
   ipRiskFilter: string | null; // low | medium | high
+  seasonOnly: boolean;
   page: number;
   pageSize: number;            // 고정값: 20
 
@@ -61,6 +62,7 @@ interface SourcingStore {
   setMinMargin: (v: number | null) => void;
   setLegalFilter: (v: string | null) => void;
   setIpRiskFilter: (v: string | null) => void;
+  setSeasonOnly: (v: boolean) => void;
   setPage: (p: number) => void;
   clearError: () => void;
   triggerLegalCheck: () => Promise<void>;
@@ -96,6 +98,7 @@ export const useSourcingStore = create<SourcingStore>()(
       minMargin: null,
       legalFilter: null,
       ipRiskFilter: null,
+      seasonOnly: false,
       page: 1,
       pageSize: 20,
       isLegalChecking: false,
@@ -106,7 +109,7 @@ export const useSourcingStore = create<SourcingStore>()(
         const {
           sortField, sortOrder, categoryFilter, searchQuery, moqFilter, freeDeliOnly,
           minSales1d, minSales7d, minPrice, maxPrice, minMargin, legalFilter, ipRiskFilter,
-          page, pageSize,
+          seasonOnly, page, pageSize,
         } = get();
 
         set({ isLoading: true, error: null }, false, 'sourcing/fetchAnalysis/start');
@@ -130,6 +133,7 @@ export const useSourcingStore = create<SourcingStore>()(
           if (minMargin != null) params.set('minMargin', String(minMargin));
           if (legalFilter) params.set('legal', legalFilter);
           if (ipRiskFilter) params.set('ipRisk', ipRiskFilter);
+          if (seasonOnly) params.set('seasonOnly', '1');
 
           const res = await fetch(`/api/sourcing/analyze?${params.toString()}`);
           const json = await res.json();
@@ -327,6 +331,11 @@ export const useSourcingStore = create<SourcingStore>()(
         get().fetchAnalysis();
       },
 
+      setSeasonOnly: (v: boolean) => {
+        set({ seasonOnly: v, page: 1 }, false, 'sourcing/setSeasonOnly');
+        get().fetchAnalysis();
+      },
+
       setPage: (p: number) => {
         set({ page: p }, false, 'sourcing/setPage');
         get().fetchAnalysis();
@@ -341,7 +350,7 @@ export const useSourcingStore = create<SourcingStore>()(
         set({ isLegalChecking: true, error: null }, false, 'sourcing/legalCheck/start');
 
         try {
-          const res = await fetch('/api/sourcing/legal-check', { method: 'POST' });
+          const res = await fetch('/api/sourcing/costco/legal-check', { method: 'POST' });
           const json = await res.json();
           if (!res.ok || !json.success) {
             throw new Error(json.error ?? '법적 검토에 실패했습니다.');
@@ -361,7 +370,7 @@ export const useSourcingStore = create<SourcingStore>()(
         set({ ipVerifyingId: itemId, error: null }, false, 'sourcing/verifyIp/start');
 
         try {
-          const res = await fetch('/api/sourcing/verify-ip', {
+          const res = await fetch('/api/sourcing/costco/verify-ip', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ keyword, itemId }),

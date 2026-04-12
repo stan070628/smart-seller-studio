@@ -28,7 +28,7 @@ export async function PUT(req: NextRequest) {
 
   // 상품 존재 확인
   const productRes = await pool.query(
-    `SELECT id, price, target_sell_price FROM public.costco_products WHERE product_code = $1`,
+    `SELECT id, price FROM public.costco_products WHERE product_code = $1`,
     [productCode],
   );
   if (!productRes.rows[0]) {
@@ -65,7 +65,7 @@ export async function PUT(req: NextRequest) {
     // 4. 업데이트된 스코어와 마진 정보 반환
     const updatedRes = await pool.query(
       `SELECT sourcing_score, demand_score, price_opp_score, urgency_score,
-              seasonal_score, margin_score, market_lowest_price, target_sell_price, price
+              seasonal_score, margin_score, market_lowest_price, price
        FROM public.costco_products
        WHERE product_code = $1`,
       [productCode],

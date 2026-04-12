@@ -17,6 +17,8 @@ import { NextRequest } from 'next/server';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { toParentCategory, getSubCategories } from '@/lib/sourcing/category-map';
 import type { SalesAnalysisItem } from '@/types/sourcing';
+import { logDiscoveryBatch, type DiscoveryLogEntry } from '@/lib/sourcing/analytics-logger';
+import { getActiveSeasonKeywords } from '@/lib/sourcing/shared/season-bonus';
 
 // ─────────────────────────────────────────
 // 허용 정렬 컬럼 화이트리스트 (SQL 인젝션 방지)
@@ -87,7 +89,7 @@ function toSalesAnalysisItem(row: Record<string, unknown>): SalesAnalysisItem {
     marketPriceSource: (row.market_price_source as 'naver_api' | 'manual' | null) ?? null,
     marketPriceUpdatedAt: (row.market_price_updated_at as string) ?? null,
     priceTiers: { dome: [], supply: [], resale: [] },
-    // v2 드롭쉬핑 스코어링 필드
+    // v2 드롭쉬핑 스코어링 필드 (023)
     scoreTotal: (row.score_total as number) ?? null,
     scoreLegalIp: (row.score_legal_ip as number) ?? null,
     scorePriceComp: (row.score_price_comp as number) ?? null,
@@ -102,6 +104,27 @@ function toSalesAnalysisItem(row: Record<string, unknown>): SalesAnalysisItem {
     dropshipMoqStrategy: (row.dropship_moq_strategy as 'single' | '1+1' | '2+1' | null) ?? null,
     dropshipBundlePrice: (row.dropship_bundle_price as number) ?? null,
     dropshipPriceGapRate: row.dropship_price_gap_rate != null ? Number(row.dropship_price_gap_rate) : null,
+    // v2 보너스·차단 필드 (024)
+    maleTier: (row.male_tier as 'high' | 'mid' | 'neutral' | 'female' | null) ?? null,
+    maleScore: (row.male_score as number) ?? null,
+    maleBonus: (row.male_bonus as number) ?? null,
+    seasonBonus: (row.season_bonus as number) ?? null,
+    seasonLabels: (row.season_labels as string) ?? null,
+    blockedReason: (row.blocked_reason as string) ?? null,
+    needsReview: (row.needs_review as boolean) ?? false,
+    // 시장가 (024)
+    naverLowestPrice: (row.naver_lowest_price as number) ?? null,
+    naverAvgPrice: (row.naver_avg_price as number) ?? null,
+    naverSellerCount: (row.naver_seller_count as number) ?? null,
+    coupangLowestPrice: (row.coupang_lowest_price as number) ?? null,
+    hasRocket: (row.has_rocket as boolean) ?? null,
+    marketUpdatedAt: (row.market_updated_at as string) ?? null,
+    // 드롭쉬핑 공급자 (024)
+    supportsDropship: (row.supports_dropship as boolean) ?? true,
+    dropshipFee: (row.dropship_fee as number) ?? null,
+    alternativeSellers: (row.alternative_sellers as number) ?? null,
+    sellerRating: row.seller_rating != null ? Number(row.seller_rating) : null,
+    sellerYears: (row.seller_years as number) ?? null,
   } as SalesAnalysisItem;
 }
 
@@ -154,6 +177,7 @@ export async function GET(request: NextRequest) {
     const minMargin = searchParams.get('minMargin') ? parseFloat(searchParams.get('minMargin')!) : null;
     const legalFilter = searchParams.get('legal') ?? null;
     const ipRiskFilter = searchParams.get('ipRisk') ?? null;
+    const seasonOnly = searchParams.get('seasonOnly') === '1';
 
     const pool = getSourcingPool();
 
@@ -225,6 +249,19 @@ export async function GET(request: NextRequest) {
     if (ipRiskFilter) {
       siConditions.push(`si.ip_risk_level = $${paramIdx++}`);
       params.push(ipRiskFilter);
+    }
+
+    // 시즌 상품 필터 — 현재 날짜 기준 활성 키워드 OR 조건
+    if (seasonOnly) {
+      const keywords = getActiveSeasonKeywords();
+      if (keywords.length > 0) {
+        const kParts = keywords.map((kw) => {
+          const p = `v.title ILIKE $${paramIdx++}`;
+          params.push(`%${kw}%`);
+          return p;
+        });
+        vConditions.push(`(${kParts.join(' OR ')})`);
+      }
     }
 
     // 마진율 최소값 — CASE 식을 WHERE 절에 직접 삽입
@@ -368,6 +405,10 @@ export async function GET(request: NextRequest) {
       catResult.rows.map((r) => toParentCategory(r.category_name)),
     )].sort();
 
+    // ── Layer 1 자동 로깅 (fire-and-forget) ────────────────────────────────
+    // 응답 반환과 무관하게 비동기 실행. 실패해도 호출자에게 영향 없음.
+    void _logDomeggookDiscovery(items);
+
     return Response.json({
       success: true,
       data: {
@@ -382,4 +423,43 @@ export async function GET(request: NextRequest) {
     const message = err instanceof Error ? err.message : '알 수 없는 오류';
     return Response.json({ success: false, error: message }, { status: 500 });
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Layer 1 로깅 헬퍼 — SalesAnalysisItem[] → DiscoveryLogEntry[] 변환 후 upsert
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function _logDomeggookDiscovery(items: SalesAnalysisItem[]): Promise<void> {
+  if (items.length === 0) return;
+
+  const entries: DiscoveryLogEntry[] = items.map((item) => ({
+    channelSource: 'domeggook' as const,
+    productId:     String(item.itemNo),
+    productName:   item.title,
+    category:      item.categoryName ?? null,
+
+    scoreTotal:     item.scoreTotal ?? null,
+    scoreBreakdown: (item.scoreLegalIp != null) ? {
+      legal:  item.scoreLegalIp  ?? 0,
+      price:  item.scorePriceComp  ?? 0,
+      cs:     item.scoreCsSafety   ?? 0,
+      margin: item.scoreMargin     ?? 0,
+      demand: item.scoreDemand     ?? 0,
+      supply: item.scoreSupply     ?? 0,
+      moq:    item.scoreMoqFit     ?? 0,
+    } : null,
+    grade: null, // logDiscoveryBatch 내부에서 scoreTotal 기반 계산
+
+    recommendedPriceNaver:   item.naverLowestPrice   ?? null,
+    recommendedPriceCoupang: item.coupangLowestPrice ?? null,
+
+    maleScore:    item.maleScore    ?? null,
+    maleTier:     item.maleTier     ?? null,
+    seasonBonus:  item.seasonBonus  ?? null,
+    seasonLabels: item.seasonLabels ? item.seasonLabels.split(',').filter(Boolean) : [],
+    needsReview:  item.needsReview  ?? false,
+    blockedReason: item.blockedReason ?? null,
+  }));
+
+  await logDiscoveryBatch(entries);
 }

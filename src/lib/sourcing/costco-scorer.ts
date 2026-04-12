@@ -62,7 +62,8 @@ export async function recalculateSourcingScores(pool: Pool): Promise<number> {
       --   시장 단가가 코스트코 단가보다 얼마나 비싼지를 점수화
       --   예: 시장 100g당 820원, 코스트코 450원 → (820/450-1)×100 ≈ 82점
       -- 우선순위 2: 단가 정보 없는 경우 → 총액 기준 fallback
-      --   (market_lowest_price / target_sell_price - 1) × 100
+      --   손익분기 최소 판매가 근사값: price * 1.3 (네이버 6% + VAT 9% + 포장/배송 포함)
+      --   (market_lowest_price / ROUND(price * 1.3) - 1) × 100
       price_opp_score = CASE
         WHEN market_unit_price IS NOT NULL AND market_unit_price > 0
              AND unit_price IS NOT NULL AND unit_price > 0
@@ -74,9 +75,9 @@ export async function recalculateSourcingScores(pool: Pool): Promise<number> {
               ))
             END
         WHEN market_lowest_price IS NULL OR market_lowest_price <= 0 THEN 0
-        WHEN market_lowest_price <= target_sell_price THEN 0
+        WHEN market_lowest_price <= ROUND(price * 1.3) THEN 0
         ELSE LEAST(100, ROUND(
-          (market_lowest_price::numeric / target_sell_price - 1) * 100
+          (market_lowest_price::numeric / ROUND(price * 1.3) - 1) * 100
         ))
       END,
 
@@ -197,9 +198,9 @@ export async function recalculateProductScore(
               ))
             END
         WHEN market_lowest_price IS NULL OR market_lowest_price <= 0 THEN 0
-        WHEN market_lowest_price <= target_sell_price THEN 0
+        WHEN market_lowest_price <= ROUND(price * 1.3) THEN 0
         ELSE LEAST(100, ROUND(
-          (market_lowest_price::numeric / target_sell_price - 1) * 100
+          (market_lowest_price::numeric / ROUND(price * 1.3) - 1) * 100
         ))
       END,
       urgency_score = CASE stock_status
