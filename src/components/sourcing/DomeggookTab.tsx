@@ -285,7 +285,7 @@ function CollectingProgressBar({ progress }: { progress: CollectingProgress }) {
             style={{ animation: 'spin 1s linear infinite', color: C.accent }}
           />
           <span style={{ fontSize: '12px', fontWeight: 600, color: C.text }}>
-            {progress.phase === 'fetch' ? '상품 수집' : '재고 스냅샷'}
+            {progress.phase === 'fetch' ? '상품 수집' : progress.phase === 'snapshot' ? '재고 스냅샷' : '시장가 조회'}
           </span>
           <span style={{ fontSize: '12px', color: C.textSub }}>{progress.label}</span>
         </div>

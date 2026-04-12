@@ -8,7 +8,7 @@ import { devtools } from 'zustand/middleware';
 import type { SalesAnalysisItem } from '@/types/sourcing';
 
 export interface CollectingProgress {
-  phase: 'fetch' | 'snapshot';
+  phase: 'fetch' | 'snapshot' | 'market_price';
   label: string;
   current: number;
   total: number;
@@ -253,6 +253,44 @@ export const useSourcingStore = create<SourcingStore>()(
             false,
             'sourcing/triggerCollection/snapshot-done',
           );
+
+          // 3단계: 시장가 조회 (네이버 쇼핑 API) — 단가격차 계산에 필요
+          set(
+            {
+              collectingStep: '네이버 시장가 조회 중...',
+              collectingProgress: { phase: 'market_price', label: '시장가 수집', current: 0, total: 1 },
+            },
+            false,
+            'sourcing/triggerCollection/market-price-start',
+          );
+
+          // 50건씩 최대 3회 반복 (최대 150건) — Vercel 타임아웃 대비
+          let marketUpdated = 0;
+          for (let round = 0; round < 3; round++) {
+            const mpRes = await fetch('/api/sourcing/naver-prices', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ limit: 50 }),
+            });
+            if (!mpRes.ok) break;
+            const mpJson = await mpRes.json();
+            if (!mpJson.success) break;
+            marketUpdated += mpJson.updated ?? 0;
+            set(
+              {
+                collectingProgress: {
+                  phase: 'market_price',
+                  label: `시장가 수집 (${marketUpdated}건 완료)`,
+                  current: round + 1,
+                  total: 3,
+                },
+              },
+              false,
+              'sourcing/triggerCollection/market-price-progress',
+            );
+            // 업데이트된 건이 없으면 (= 남은 미수집 상품 없음) 조기 종료
+            if ((mpJson.updated ?? 0) === 0) break;
+          }
 
           // 완료 — 데이터 새로 고침
           set(

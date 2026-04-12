@@ -44,6 +44,7 @@ async function runFetchAndSnapshot(): Promise<FetchAndSnapshotResult> {
     '생활용품', '주방용품', '뷰티', '화장품',
     '건강', '디지털', '가전', '유아', '아동',
     '반려동물', '패션잡화', '식품',
+    '스포츠', '수영', '레저', '캠핑',
   ];
   const allItems: DomeggookListItem[] = [];
   const seenNos = new Set<number>();

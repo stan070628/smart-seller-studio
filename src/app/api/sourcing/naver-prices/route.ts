@@ -37,13 +37,6 @@ function delay(ms: number): Promise<void> {
 }
 
 export async function POST(req: NextRequest) {
-  // 인증
-  const authHeader = req.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   const rawBody = await req.json().catch(() => ({}));
   const parsed = bodySchema.safeParse(rawBody);
   if (!parsed.success) {
