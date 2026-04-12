@@ -71,9 +71,11 @@ export async function POST(request: NextRequest) {
     const sellerNick = detail.seller?.nick ? String(detail.seller.nick) : null;
     const imageUrl = detail.image?.url ?? null;
     const domeUrl  = `https://domeggook.com/${itemNo}`;
-    const priceDome = detail.price?.dome ?? null;
-    const moq      = detail.qty?.domeMoq ?? null;
-    const inventory = detail.qty?.inventory ?? null;
+    const priceDome  = detail.price?.dome ?? null;
+    const moq        = detail.qty?.domeMoq ?? null;
+    const inventory  = detail.qty?.inventory ?? null;
+    const deliWho    = detail.deli?.who ?? null;
+    const deliFee    = detail.deli?.fee ?? null;
 
     const pool = getSourcingPool();
     const now = new Date();
@@ -82,8 +84,8 @@ export async function POST(request: NextRequest) {
     const result = await pool.query<{ id: string; created_at: string }>(
       `INSERT INTO sourcing_items
          (item_no, title, status, category_name, seller_id, seller_nick,
-          image_url, dome_url, is_tracking, price_dome, moq)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9, $10)
+          image_url, dome_url, is_tracking, price_dome, moq, deli_who, deli_fee)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9, $10, $11, $12)
        ON CONFLICT (item_no) DO UPDATE SET
          title        = EXCLUDED.title,
          status       = EXCLUDED.status,
@@ -94,10 +96,12 @@ export async function POST(request: NextRequest) {
          dome_url     = EXCLUDED.dome_url,
          price_dome   = COALESCE(EXCLUDED.price_dome, sourcing_items.price_dome),
          moq          = COALESCE(EXCLUDED.moq, sourcing_items.moq),
+         deli_who     = COALESCE(EXCLUDED.deli_who, sourcing_items.deli_who),
+         deli_fee     = COALESCE(EXCLUDED.deli_fee, sourcing_items.deli_fee),
          is_tracking  = true,
          updated_at   = now()
        RETURNING id, created_at`,
-      [itemNo, title, status, catName, sellerId, sellerNick, imageUrl, domeUrl, priceDome, moq],
+      [itemNo, title, status, catName, sellerId, sellerNick, imageUrl, domeUrl, priceDome, moq, deliWho, deliFee],
     );
 
     const row = result.rows[0];

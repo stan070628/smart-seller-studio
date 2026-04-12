@@ -65,6 +65,10 @@ export interface DomeggookItemDetail {
     inventory: number;
     domeMoq?: number;      // 최소주문수량
   };
+  deli?: {
+    who?: string;          // 'S'=무료, 'P'=선결제, 'B'=착불, 'C'=구매자선택
+    fee?: number;          // 배송비 (원)
+  };
   image?: {
     url?: string;
   };
