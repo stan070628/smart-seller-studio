@@ -150,7 +150,7 @@ export async function logDiscoveryBatch(
           needs_review, blocked_reason
         )
         VALUES ${placeholders.join(', ')}
-        ON CONFLICT (channel_source, product_id, (scanned_at::date))
+        ON CONFLICT (channel_source, product_id, scanned_date)
         DO UPDATE SET
           score_total               = EXCLUDED.score_total,
           grade                     = EXCLUDED.grade,
