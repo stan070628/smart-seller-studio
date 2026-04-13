@@ -72,6 +72,26 @@ export interface DomeggookItemDetail {
   image?: {
     url?: string;
   };
+  thumb?: {
+    small?: string;
+    large?: string;
+    original?: string;   // 대표이미지 원본 URL (760px)
+    smallPng?: string;
+    largePng?: string;
+  };
+  desc?: {
+    license?: {
+      usable?: string;   // "true" | "false" (문자열)
+      msg?: string;
+    };
+    contents?: {
+      item?: string;     // 상품상세 HTML
+      deli?: string;
+      event?: string;
+      otherItem?: string;
+    };
+  };
+  selectOpt?: string;    // 옵션 JSON 문자열
 }
 
 // getItemView (ver=4.5) 전체 응답
