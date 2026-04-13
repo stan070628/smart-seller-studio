@@ -137,7 +137,9 @@ export async function downloadImage(url: string): Promise<Buffer> {
   }
 
   const contentType = res.headers.get('content-type') ?? '';
-  if (!contentType.startsWith('image/')) {
+  // 도매꾹 CDN 등 일부 서버는 이미지를 application/octet-stream으로 반환
+  const allowedTypes = ['image/', 'application/octet-stream'];
+  if (!allowedTypes.some((t) => contentType.startsWith(t))) {
     throw new Error(`이미지가 아닌 응답: ${contentType} (${url})`);
   }
 
