@@ -1987,7 +1987,7 @@ export default function ListingDashboard() {
   const [showBothMode, setShowBothMode] = useState(false);
   const [showDomeggookPanel, setShowDomeggookPanel] = useState(false);
   const [domeggookPrefill, setDomeggookPrefill] = useState<
-    { thumbnailUrl: string; detailHtml: string; title: string; recommendedPrice: number } | undefined
+    { thumbnailUrl: string; detailHtml: string; title: string; naverPrice: number; coupangPrice: number } | undefined
   >(undefined);
 
   // 마운트 시 목록 조회

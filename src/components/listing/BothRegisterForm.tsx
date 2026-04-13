@@ -67,7 +67,8 @@ export interface DomeggookPrepareData {
   thumbnailUrl: string;     // 가공된 대표이미지 URL
   detailHtml: string;       // 가공된 상세 HTML
   title: string;            // 상품명
-  recommendedPrice: number; // 추천판매가
+  naverPrice: number;       // 네이버 추천판매가 (마진 10% 포함)
+  coupangPrice: number;     // 쿠팡 추천판매가 (마진 10% 포함)
 }
 
 interface BothRegisterFormProps {
@@ -152,7 +153,8 @@ export default function BothRegisterForm({ onClose, prefill }: BothRegisterFormP
         name: prefill.title,
         thumbnailImages: [prefill.thumbnailUrl],
         description: prefill.detailHtml,
-        salePrice: String(prefill.recommendedPrice),
+        naverPrice: String(prefill.naverPrice),
+        coupangPrice: String(prefill.coupangPrice),
       });
     }
   }, [prefill, updateSharedDraft]);

@@ -81,6 +81,12 @@ function saveSellerDefaults(vals: SellerDefaults) {
 // ─────────────────────────────────────────────────────────────────────────────
 // API 응답 타입
 // ─────────────────────────────────────────────────────────────────────────────
+interface ChannelPricing {
+  minPrice: number;
+  recommendedPrice: number;
+  feeRate: number;
+}
+
 interface PrepareResult {
   thumbnail: { processedUrl: string };
   detail: { processedHtml: string; failedImageCount: number };
@@ -88,11 +94,12 @@ interface PrepareResult {
   pricing: {
     priceDome: number;
     moq: number;
-    bundleMinPrice: number;
-    perUnitPrice: number;
+    costTotal: number;
     strategy: string | null;
     deliWho: string | null;
     deliFee: number | null;
+    naver: ChannelPricing;
+    coupang: ChannelPricing;
   };
 }
 
@@ -492,41 +499,65 @@ function ResultPanel({
             </div>
           </div>
           {/* 가격 정보 */}
-          <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-            <div>
-              <div style={{ fontSize: '11px', color: C.textSub, marginBottom: '2px' }}>도매가</div>
-              <div style={{ fontSize: '14px', fontWeight: 600, color: C.text }}>
-                {result.pricing.priceDome.toLocaleString()}원
-                {result.pricing.moq > 1 && (
-                  <span style={{ fontSize: '12px', color: C.textSub, fontWeight: 400, marginLeft: '4px' }}>
-                    (MOQ {result.pricing.moq}개)
-                  </span>
-                )}
-              </div>
-            </div>
-            <div>
-              <div style={{ fontSize: '11px', color: C.textSub, marginBottom: '2px' }}>추천 판매가</div>
-              <div style={{ fontSize: '16px', fontWeight: 700, color: C.accent }}>
-                {result.pricing.bundleMinPrice.toLocaleString()}원
-                {result.pricing.strategy && (
-                  <span style={{
-                    fontSize: '11px', fontWeight: 600, color: '#4a90e2',
-                    marginLeft: '6px', padding: '2px 6px',
-                    backgroundColor: '#e8f0fe', borderRadius: '4px',
-                  }}>
-                    {result.pricing.strategy}
-                  </span>
-                )}
-              </div>
-            </div>
-            {result.pricing.moq > 1 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {/* 원가 라인 */}
+            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
               <div>
-                <div style={{ fontSize: '11px', color: C.textSub, marginBottom: '2px' }}>개당 단가</div>
+                <div style={{ fontSize: '11px', color: C.textSub, marginBottom: '2px' }}>도매가</div>
                 <div style={{ fontSize: '14px', fontWeight: 600, color: C.text }}>
-                  {result.pricing.perUnitPrice.toLocaleString()}원
+                  {result.pricing.priceDome.toLocaleString()}원
+                  {result.pricing.moq > 1 && (
+                    <span style={{ fontSize: '12px', color: C.textSub, fontWeight: 400, marginLeft: '4px' }}>
+                      × {result.pricing.moq}개
+                    </span>
+                  )}
                 </div>
               </div>
-            )}
+              <div>
+                <div style={{ fontSize: '11px', color: C.textSub, marginBottom: '2px' }}>원가 합계 (배송비 포함)</div>
+                <div style={{ fontSize: '14px', fontWeight: 600, color: C.text }}>
+                  {result.pricing.costTotal.toLocaleString()}원
+                  {result.pricing.strategy && (
+                    <span style={{
+                      fontSize: '11px', fontWeight: 600, color: '#4a90e2',
+                      marginLeft: '6px', padding: '2px 6px',
+                      backgroundColor: '#e8f0fe', borderRadius: '4px',
+                    }}>
+                      {result.pricing.strategy}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+            {/* 채널별 추천가 */}
+            <div style={{
+              display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px',
+              padding: '12px', backgroundColor: '#f8f8f8', borderRadius: '8px',
+              border: `1px solid ${C.border}`,
+            }}>
+              <div>
+                <div style={{ fontSize: '11px', color: '#15803d', fontWeight: 600, marginBottom: '4px' }}>
+                  네이버 추천가 <span style={{ fontWeight: 400, color: C.textSub }}>(수수료 {(result.pricing.naver.feeRate * 100).toFixed(0)}%)</span>
+                </div>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: '#15803d' }}>
+                  {result.pricing.naver.recommendedPrice.toLocaleString()}원
+                </div>
+                <div style={{ fontSize: '11px', color: C.textSub, marginTop: '2px' }}>
+                  최소 {result.pricing.naver.minPrice.toLocaleString()}원
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '11px', color: '#6d28d9', fontWeight: 600, marginBottom: '4px' }}>
+                  쿠팡 추천가 <span style={{ fontWeight: 400, color: C.textSub }}>(수수료 {(result.pricing.coupang.feeRate * 100).toFixed(0)}%)</span>
+                </div>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: '#6d28d9' }}>
+                  {result.pricing.coupang.recommendedPrice.toLocaleString()}원
+                </div>
+                <div style={{ fontSize: '11px', color: C.textSub, marginTop: '2px' }}>
+                  최소 {result.pricing.coupang.minPrice.toLocaleString()}원
+                </div>
+              </div>
+            </div>
           </div>
 
           <div style={{ display: 'flex', gap: '12px' }}>
@@ -725,7 +756,8 @@ export interface DomeggookPrefillData {
   thumbnailUrl: string;
   detailHtml: string;
   title: string;
-  recommendedPrice: number;  // 추천판매가 (bundleMinPrice)
+  naverPrice: number;    // 네이버 추천판매가 (마진 포함)
+  coupangPrice: number;  // 쿠팡 추천판매가 (마진 포함)
 }
 
 interface DomeggookPreparePanelProps {
@@ -831,7 +863,8 @@ export default function DomeggookPreparePanel({ onClose, onContinueToRegister }:
       thumbnailUrl: res.thumbnail.processedUrl,
       detailHtml: res.detail.processedHtml,
       title: res.source.title,
-      recommendedPrice: res.pricing.bundleMinPrice,
+      naverPrice: res.pricing.naver.recommendedPrice,
+      coupangPrice: res.pricing.coupang.recommendedPrice,
     });
   };
 

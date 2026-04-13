@@ -16,7 +16,7 @@
  *   MOQ >= 4 → 제외  (strategy: null)
  */
 
-import { getCategoryFeeRate } from '@/lib/sourcing/shared/channel-policy';
+import { getCategoryFeeRate, type Channel } from '@/lib/sourcing/shared/channel-policy';
 
 /** VAT */
 const VAT_RATE = 0.10;
@@ -25,8 +25,8 @@ const VAT_RATE = 0.10;
  * 공제율 계산 (카테고리별 수수료 반영)
  * 기본값: 네이버 기준 = 1 - 0.06 - 0.10 = 0.84
  */
-function getDeductionRate(categoryName?: string | null): number {
-  const feeRate = getCategoryFeeRate(categoryName, 'naver');
+function getDeductionRate(categoryName?: string | null, channel: Channel = 'naver'): number {
+  const feeRate = getCategoryFeeRate(categoryName, channel);
   return 1 - feeRate - VAT_RATE;
 }
 

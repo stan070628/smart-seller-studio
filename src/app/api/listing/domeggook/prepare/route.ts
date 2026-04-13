@@ -22,8 +22,12 @@ import {
   replaceImageUrls,
 } from '@/lib/listing/html-sanitizer';
 import { renderAllCustomBlocks } from '@/lib/listing/detail-blocks';
-import { calcBundleMinPrice, calcPerUnitPrice } from '@/lib/sourcing/domeggook-pricing';
 import type { MoqStrategy } from '@/lib/sourcing/domeggook-pricing';
+import {
+  calcRecommendedSalePrice,
+  calcMinSalePrice,
+  DOMEGGOOK_TARGET_MARGIN_RATE,
+} from '@/lib/sourcing/shared/channel-policy';
 import {
   processMainImage,
   processDetailImage,
@@ -73,11 +77,20 @@ interface PrepareSuccessData {
   pricing: {
     priceDome: number;           // 도매가
     moq: number;                 // MOQ
-    bundleMinPrice: number;      // 묶음 최소판매가 (추천판매가)
-    perUnitPrice: number;        // 개당 단가
+    costTotal: number;           // 원가 합계 (도매가×MOQ + 배송비)
     strategy: string | null;     // 묶음 전략 (single/1+1/2+1)
     deliWho: string | null;
     deliFee: number | null;
+    naver: {
+      minPrice: number;          // 최소판매가 (break-even, 마진 0%)
+      recommendedPrice: number;  // 추천판매가 (마진 10% 포함)
+      feeRate: number;           // 적용 수수료율
+    };
+    coupang: {
+      minPrice: number;
+      recommendedPrice: number;
+      feeRate: number;
+    };
   };
 }
 
@@ -313,13 +326,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const moqStrategies: Record<number, MoqStrategy> = { 1: 'single', 2: '1+1', 3: '2+1' };
   const strategy: MoqStrategy = moqStrategies[moq] ?? null;
+  const effectiveDeliFee = deliWho === 'S' ? 0 : deliFee;
+  const costTotal = priceDome * moq + effectiveDeliFee;
+  const targetProfit = Math.ceil(costTotal * DOMEGGOOK_TARGET_MARGIN_RATE);
 
-  const bundleMinPrice = priceDome > 0
-    ? calcBundleMinPrice({ priceDome, deliWho, deliFee, moq })
-    : 0;
-  const perUnitPrice = bundleMinPrice > 0
-    ? calcPerUnitPrice(bundleMinPrice, moq)
-    : 0;
+  const naverMin = calcMinSalePrice(costTotal, 'naver');
+  const naverRecommended = calcRecommendedSalePrice(costTotal, targetProfit, 'naver');
+  const coupangMin = calcMinSalePrice(costTotal, 'coupang');
+  const coupangRecommended = calcRecommendedSalePrice(costTotal, targetProfit, 'coupang');
 
   // ─────────────────────────────────────
   // 7. 응답
@@ -347,11 +361,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     pricing: {
       priceDome,
       moq,
-      bundleMinPrice,
-      perUnitPrice,
+      costTotal,
       strategy,
       deliWho,
       deliFee,
+      naver: {
+        minPrice: naverMin,
+        recommendedPrice: naverRecommended,
+        feeRate: 0.06,
+      },
+      coupang: {
+        minPrice: coupangMin,
+        recommendedPrice: coupangRecommended,
+        feeRate: 0.11,
+      },
     },
   };
 
