@@ -10,6 +10,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { Layers } from 'lucide-react';
 import { useListingStore } from '@/store/useListingStore';
 import { PLATFORMS } from '@/types/listing';
@@ -1989,6 +1990,18 @@ export default function ListingDashboard() {
   const [domeggookPrefill, setDomeggookPrefill] = useState<
     { thumbnailUrl: string; detailHtml: string; title: string; naverPrice: number; coupangPrice: number } | undefined
   >(undefined);
+  const [initialItemNo, setInitialItemNo] = useState<string | undefined>(undefined);
+
+  // URL ?itemNo= 파라미터로 도매꾹 패널 자동 열기
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const itemNo = searchParams.get('itemNo');
+    if (itemNo) {
+      setInitialItemNo(itemNo);
+      setShowDomeggookPanel(true);
+      setShowBothMode(false);
+    }
+  }, [searchParams]);
 
   // 마운트 시 목록 조회
   useEffect(() => {
@@ -2119,12 +2132,17 @@ export default function ListingDashboard() {
         {/* 도매꾹 불러오기 패널 */}
         {showDomeggookPanel && (
           <DomeggookPreparePanel
-            onClose={() => setShowDomeggookPanel(false)}
+            onClose={() => {
+              setShowDomeggookPanel(false);
+              setInitialItemNo(undefined);
+            }}
             onContinueToRegister={(data) => {
               setDomeggookPrefill(data);
               setShowDomeggookPanel(false);
+              setInitialItemNo(undefined);
               setShowBothMode(true);
             }}
+            initialItemNo={initialItemNo}
           />
         )}
 

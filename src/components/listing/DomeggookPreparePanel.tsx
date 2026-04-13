@@ -763,6 +763,7 @@ export interface DomeggookPrefillData {
 interface DomeggookPreparePanelProps {
   onClose: () => void;
   onContinueToRegister: (data: DomeggookPrefillData) => void;
+  initialItemNo?: string;  // 소싱탭에서 넘겨받은 상품번호
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -770,11 +771,11 @@ interface DomeggookPreparePanelProps {
 // ─────────────────────────────────────────────────────────────────────────────
 type PanelStep = 'input' | 'loading' | 'result';
 
-export default function DomeggookPreparePanel({ onClose, onContinueToRegister }: DomeggookPreparePanelProps) {
+export default function DomeggookPreparePanel({ onClose, onContinueToRegister, initialItemNo }: DomeggookPreparePanelProps) {
   const defaults = loadSellerDefaults();
 
   const [form, setForm] = useState<FormState>({
-    itemNo: '',
+    itemNo: initialItemNo ?? '',
     sellerName: defaults.sellerName,
     sellerBrandName: defaults.sellerBrandName,
     csPhone: defaults.csPhone,
@@ -786,6 +787,22 @@ export default function DomeggookPreparePanel({ onClose, onContinueToRegister }:
   const [step, setStep] = useState<PanelStep>('input');
   const [result, setResult] = useState<PrepareResult | null>(null);
   const [errorCode, setErrorCode] = useState<string | undefined>(undefined);
+
+  // initialItemNo가 있고 셀러 정보가 채워져 있으면 자동 제출
+  const autoSubmitted = useRef(false);
+  useEffect(() => {
+    if (
+      initialItemNo &&
+      !autoSubmitted.current &&
+      defaults.sellerName &&
+      defaults.csPhone &&
+      defaults.csHours
+    ) {
+      autoSubmitted.current = true;
+      handleSubmit();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialItemNo]);
 
   // 셀러 정보 필드가 바뀌면 localStorage에 저장
   const handleFormChange = (key: keyof FormState, value: string) => {

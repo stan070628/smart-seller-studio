@@ -11,6 +11,7 @@
  */
 
 import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Loader2,
   ChevronUp,
@@ -23,6 +24,7 @@ import {
   ExternalLink,
   Search,
   Plus,
+  ShoppingCart,
 } from 'lucide-react';
 
 import { useSourcingStore, type CollectingProgress } from '@/store/useSourcingStore';
@@ -774,6 +776,9 @@ export default function DomeggookTab() {
       setAddMsg('네트워크 오류');
     }
   };
+
+  // ── 라우터 ─────────────────────────────────────────────────────────────────
+  const router = useRouter();
 
   // ── MOQ 시나리오 패널 ──────────────────────────────────────────────────────
   const [selectedItem, setSelectedItem] = useState<SalesAnalysisItem | null>(null);
@@ -1828,6 +1833,19 @@ export default function DomeggookTab() {
                 >
                   링크
                 </th>
+                {/* 등록 */}
+                <th
+                  style={{
+                    padding: '9px 12px',
+                    textAlign: 'center',
+                    fontWeight: 700,
+                    color: C.textSub,
+                    borderBottom: `1px solid ${C.border}`,
+                    width: '50px',
+                  }}
+                >
+                  등록
+                </th>
               </tr>
             </thead>
 
@@ -2203,6 +2221,41 @@ export default function DomeggookTab() {
                       ) : (
                         <span style={{ color: C.border }}>-</span>
                       )}
+                    </td>
+                    {/* 등록 */}
+                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          router.push(`/listing?itemNo=${item.itemNo}`);
+                        }}
+                        title="쿠팡/네이버 상품등록"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '28px',
+                          height: '28px',
+                          border: '1px solid #ddd',
+                          borderRadius: '6px',
+                          backgroundColor: '#fff',
+                          cursor: 'pointer',
+                          color: C.accent,
+                          transition: 'all 0.15s',
+                        }}
+                        onMouseEnter={(e) => {
+                          (e.currentTarget).style.backgroundColor = C.accent;
+                          (e.currentTarget).style.color = '#fff';
+                          (e.currentTarget).style.borderColor = C.accent;
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.currentTarget).style.backgroundColor = '#fff';
+                          (e.currentTarget).style.color = C.accent;
+                          (e.currentTarget).style.borderColor = '#ddd';
+                        }}
+                      >
+                        <ShoppingCart size={14} />
+                      </button>
                     </td>
                   </tr>
                 );
