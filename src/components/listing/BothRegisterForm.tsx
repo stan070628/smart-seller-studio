@@ -10,9 +10,10 @@
  */
 
 import React, { useState, useRef, useCallback } from 'react';
-import { X, Check, Loader2 } from 'lucide-react';
+import { X, Check, Loader2, Sparkles } from 'lucide-react';
 import { useListingStore } from '@/store/useListingStore';
 import ImageInputSection from './ImageInputSection';
+import OptionEditor from './OptionEditor';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 색상 상수 (ListingDashboard 동일)
@@ -69,6 +70,7 @@ export interface DomeggookPrepareData {
   title: string;            // 상품명
   naverPrice: number;       // 네이버 추천판매가 (마진 10% 포함)
   coupangPrice: number;     // 쿠팡 추천판매가 (마진 10% 포함)
+  itemNo?: number;          // 도매꾹 상품번호 (옵션 자동 불러오기용, 선택)
 }
 
 interface BothRegisterFormProps {
@@ -141,7 +143,7 @@ function FieldError({ message }: { message?: string }) {
 // 메인 컴포넌트
 // ─────────────────────────────────────────────────────────────────────────────
 export default function BothRegisterForm({ onClose, prefill }: BothRegisterFormProps) {
-  const { sharedDraft, updateSharedDraft, bothRegistration, registerBothProducts, resetBothRegistration } =
+  const { sharedDraft, updateSharedDraft, bothRegistration, registerBothProducts, resetBothRegistration, fetchOptions } =
     useListingStore();
 
   // 도매꾹 데이터 자동 채우기 (마운트 시 1회)
@@ -158,6 +160,15 @@ export default function BothRegisterForm({ onClose, prefill }: BothRegisterFormP
       });
     }
   }, [prefill, updateSharedDraft]);
+
+  // 도매꾹 itemNo가 있을 때 옵션 자동 불러오기 (마운트 시 1회)
+  const optionsFetchApplied = useRef(false);
+  React.useEffect(() => {
+    if (prefill?.itemNo && !optionsFetchApplied.current) {
+      optionsFetchApplied.current = true;
+      fetchOptions(prefill.itemNo);
+    }
+  }, [prefill?.itemNo, fetchOptions]);
 
   // ─── 플랫폼별 전용 상태 ─────────────────────────────────────────────────
   const [coupangCategoryCode, setCoupangCategoryCode] = useState('');
@@ -176,6 +187,34 @@ export default function BothRegisterForm({ onClose, prefill }: BothRegisterFormP
 
   // ─── 태그 입력 상태 ──────────────────────────────────────────────────────
   const [tagInput, setTagInput] = useState('');
+
+  // ─── AI 최적화 상태 ──────────────────────────────────────────────────────
+  const [isOptimizing, setIsOptimizing] = useState(false);
+
+  const handleOptimize = useCallback(async () => {
+    const name = sharedDraft.name.trim();
+    if (!name || isOptimizing) return;
+
+    setIsOptimizing(true);
+    try {
+      const res = await fetch('/api/ai/optimize-listing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ originalTitle: name }),
+      });
+      const json = await res.json();
+      if (json.success && json.data) {
+        updateSharedDraft({
+          name: json.data.optimizedTitle,
+          tags: json.data.tags,
+        });
+      }
+    } catch {
+      // 실패해도 기존 값 유지
+    } finally {
+      setIsOptimizing(false);
+    }
+  }, [sharedDraft.name, isOptimizing, updateSharedDraft]);
 
   // ─── 폼 검증 에러 ────────────────────────────────────────────────────────
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -302,6 +341,8 @@ export default function BothRegisterForm({ onClose, prefill }: BothRegisterFormP
         tags: sharedDraft.tags.length > 0 ? sharedDraft.tags : undefined,
         exchangeFee: naverExchangeFee ? Number(naverExchangeFee) : undefined,
       },
+      // 옵션이 있고 hasOptions=true인 경우에만 payload에 포함
+      options: sharedDraft.options?.hasOptions ? sharedDraft.options : undefined,
     });
   };
 
@@ -401,18 +442,45 @@ export default function BothRegisterForm({ onClose, prefill }: BothRegisterFormP
                 <label style={labelStyle}>
                   상품명 <span style={{ color: C.accent }}>*</span>
                 </label>
-                <input
-                  style={{
-                    ...inputStyle,
-                    borderColor: errors.name ? '#b91c1c' : C.border,
-                  }}
-                  value={sharedDraft.name}
-                  onChange={(e) => {
-                    updateDraft({ name: e.target.value });
-                    if (errors.name) setErrors((prev) => ({ ...prev, name: '' }));
-                  }}
-                  placeholder="상품명을 입력하세요"
-                />
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <input
+                    style={{
+                      ...inputStyle,
+                      flex: 1,
+                      borderColor: errors.name ? '#b91c1c' : C.border,
+                    }}
+                    value={sharedDraft.name}
+                    onChange={(e) => {
+                      updateDraft({ name: e.target.value });
+                      if (errors.name) setErrors((prev) => ({ ...prev, name: '' }));
+                    }}
+                    placeholder="상품명을 입력하세요"
+                  />
+                  <button
+                    type="button"
+                    disabled={!sharedDraft.name.trim() || isOptimizing}
+                    onClick={handleOptimize}
+                    title="AI로 상품명·태그 최적화"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '0 12px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      border: '1px solid #8b5cf6',
+                      borderRadius: '8px',
+                      backgroundColor: isOptimizing ? '#f3f3f3' : '#f5f3ff',
+                      color: isOptimizing ? C.textSub : '#7c3aed',
+                      cursor: !sharedDraft.name.trim() || isOptimizing ? 'not-allowed' : 'pointer',
+                      whiteSpace: 'nowrap',
+                      opacity: !sharedDraft.name.trim() ? 0.5 : 1,
+                    }}
+                  >
+                    {isOptimizing ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Sparkles size={14} />}
+                    {isOptimizing ? 'AI 최적화 중...' : 'AI 최적화'}
+                  </button>
+                </div>
                 <FieldError message={errors.name} />
               </div>
 
@@ -565,6 +633,9 @@ export default function BothRegisterForm({ onClose, prefill }: BothRegisterFormP
                   </div>
                 </div>
               </div>
+
+              {/* 옵션 편집 섹션 */}
+              <OptionEditor itemNo={prefill?.itemNo} />
 
               {/* 썸네일 이미지 섹션 */}
               <ImageInputSection
