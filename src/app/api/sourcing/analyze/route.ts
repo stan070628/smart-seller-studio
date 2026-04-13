@@ -38,6 +38,11 @@ const ALLOWED_SORT_COLUMNS = new Set([
   'moq',
   'legal_status',
   'market_lowest_price',
+  'score_total',
+  'score_price_comp',
+  'score_demand',
+  'score_margin',
+  'score_cs_safety',
 ]);
 
 const DEFAULT_SORT = 'sales_7d';
@@ -147,7 +152,10 @@ export async function GET(request: NextRequest) {
       'latest_inventory', 'latest_price_dome', 'latest_price_supply',
       'item_no', 'title', 'latest_date',
     ]);
-    const SI_COLUMNS = new Set(['moq', 'legal_status', 'market_lowest_price']);
+    const SI_COLUMNS = new Set([
+      'moq', 'legal_status', 'market_lowest_price',
+      'score_total', 'score_price_comp', 'score_demand', 'score_margin', 'score_cs_safety',
+    ]);
     const sortColumn = VIEW_COLUMNS.has(validatedSort)
       ? `v.${validatedSort}`
       : SI_COLUMNS.has(validatedSort)

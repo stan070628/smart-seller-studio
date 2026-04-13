@@ -1808,6 +1808,7 @@ export default function DomeggookTab() {
 
                 {/* 종합점수 */}
                 <th
+                  onClick={() => handleSortClick('score_total')}
                   style={{
                     padding: '9px 12px',
                     textAlign: 'center',
@@ -1815,9 +1816,12 @@ export default function DomeggookTab() {
                     color: C.textSub,
                     borderBottom: `1px solid ${C.border}`,
                     whiteSpace: 'nowrap',
+                    cursor: 'pointer',
+                    userSelect: 'none',
                   }}
                 >
                   종합점수
+                  <SortIcon columnKey="score_total" />
                 </th>
 
                 {/* 링크 */}

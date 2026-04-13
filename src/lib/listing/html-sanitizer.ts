@@ -64,6 +64,16 @@ const SANITIZE_PATTERNS: Array<{ pattern: RegExp; description: string }> = [
     pattern: /\d{3}-\d{2}-\d{5}/g,
     description: '사업자번호',
   },
+  // 도매꾹 공급사 추천상품 / 관련상품 영역
+  {
+    pattern: /(?:상품공급사|공급사|도매꾹)\s*추천상품[\s\S]*?(?=<hr|<div[^>]*style|$)/gi,
+    description: '공급사 추천상품 텍스트',
+  },
+  // zentrade/hgodo 등 도매 플랫폼 배너 이미지
+  {
+    pattern: /<img[^>]*(?:notice|banner|recommend|bnr)[^>]*>/gi,
+    description: '배너/공지 이미지',
+  },
 ];
 
 /**
