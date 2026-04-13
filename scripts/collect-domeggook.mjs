@@ -178,7 +178,7 @@ function runSyncLegalCheck(title) {
 // ─────────────────────────────────────────────────────────────
 
 const BATCH_SIZE = 1000;
-const COLS = 12; // UPSERT 컬럼 수
+const COLS = 13; // UPSERT 컬럼 수
 
 async function saveToDb(allItems, snapshotDate) {
   let totalNew = 0, totalUpdated = 0, totalSnapshots = 0;
@@ -203,7 +203,8 @@ async function saveToDb(allItems, snapshotDate) {
         legalIssues:   JSON.stringify(issues),
         legalCheckedAt,
         blockedReason: legalStatus === 'blocked' ? (issues[0]?.message ?? '법적 판매 금지') : null,
-        inventory:     item.qty?.inventory ?? null,
+        // getItemList(v4.1)에는 qty.inventory가 없음 — price만 존재
+        inventory:     item.qty?.inventory ?? 0,
         price:         item.price ?? null,
       };
     });
@@ -211,7 +212,7 @@ async function saveToDb(allItems, snapshotDate) {
     // ── sourcing_items 배치 UPSERT ─────────────────────────────────────────
     const valuePlaceholders = rows.map((_, idx) => {
       const b = idx * COLS;
-      return `($${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},$${b+7},$${b+8},$${b+9},$${b+10},$${b+11},$${b+12})`;
+      return `($${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},$${b+7},$${b+8},$${b+9},$${b+10},$${b+11},$${b+12},$${b+13})`;
     }).join(',');
 
     const params = [];
@@ -221,6 +222,7 @@ async function saveToDb(allItems, snapshotDate) {
       r.legalStatus, r.legalIssues, r.legalCheckedAt, r.blockedReason,
       false, // needs_review
       true,  // is_tracking
+      r.price != null ? parseInt(r.price, 10) : null, // price_dome
     ));
 
     let upsertRows = [];
@@ -229,7 +231,7 @@ async function saveToDb(allItems, snapshotDate) {
         INSERT INTO sourcing_items
           (item_no, title, seller_id, seller_nick, image_url, dome_url,
            legal_status, legal_issues, legal_checked_at, blocked_reason,
-           needs_review, is_tracking)
+           needs_review, is_tracking, price_dome)
         VALUES ${valuePlaceholders}
         ON CONFLICT (item_no) DO UPDATE SET
           title            = EXCLUDED.title,
@@ -242,6 +244,7 @@ async function saveToDb(allItems, snapshotDate) {
           legal_checked_at = EXCLUDED.legal_checked_at,
           blocked_reason   = EXCLUDED.blocked_reason,
           is_tracking      = EXCLUDED.is_tracking,
+          price_dome       = EXCLUDED.price_dome,
           updated_at       = now()
         RETURNING id, item_no, (xmax = 0) AS is_new
       `, params);
@@ -256,7 +259,7 @@ async function saveToDb(allItems, snapshotDate) {
 
     // ── inventory_snapshots 배치 INSERT ───────────────────────────────────
     const idMap = Object.fromEntries(upsertRows.map((r) => [String(r.item_no), r.id]));
-    const snapRows = rows.filter((r) => r.inventory !== null && idMap[String(r.item_no)]);
+    const snapRows = rows.filter((r) => idMap[String(r.item_no)] && r.price != null);
 
     if (snapRows.length > 0) {
       const snapPlaceholders = snapRows.map((_, idx) => {
