@@ -42,7 +42,7 @@ function escapeXml(str: string): string {
  */
 export async function processMainImage(
   inputBuffer: Buffer,
-  brandName: string,
+  brandName: string | null,
 ): Promise<Buffer> {
   // 1. 정방형 리사이즈 (흰 배경 패딩)
   const resized = await sharp(inputBuffer)
@@ -52,8 +52,15 @@ export async function processMainImage(
     })
     .toBuffer();
 
-  // 2. 워터마크 SVG 생성 (최대 200px 너비, 우하단)
-  const displayName = escapeXml(brandName.slice(0, 20)); // 너무 길면 잘라냄
+  // 2. 워터마크 없으면 리사이즈만 적용
+  if (!brandName) {
+    return sharp(resized)
+      .jpeg({ quality: JPEG_QUALITY, progressive: true })
+      .toBuffer();
+  }
+
+  // 3. 워터마크 SVG 생성 (최대 200px 너비, 우하단)
+  const displayName = escapeXml(brandName.slice(0, 20));
   const svgWatermark = `
     <svg xmlns="http://www.w3.org/2000/svg" width="220" height="44">
       <rect width="220" height="44" rx="4" fill="rgba(0,0,0,0.35)"/>
@@ -67,7 +74,7 @@ export async function processMainImage(
       >${displayName}</text>
     </svg>`;
 
-  // 3. 워터마크 합성 + JPEG 출력
+  // 4. 워터마크 합성 + JPEG 출력
   return sharp(resized)
     .composite([
       {

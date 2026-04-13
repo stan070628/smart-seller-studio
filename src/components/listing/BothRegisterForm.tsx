@@ -63,8 +63,15 @@ const sectionHeaderStyle: React.CSSProperties = {
 // ─────────────────────────────────────────────────────────────────────────────
 // Props
 // ─────────────────────────────────────────────────────────────────────────────
+export interface DomeggookPrepareData {
+  thumbnailUrl: string;     // 가공된 대표이미지 URL
+  detailHtml: string;       // 가공된 상세 HTML
+  title: string;            // 상품명
+}
+
 interface BothRegisterFormProps {
   onClose: () => void;
+  prefill?: DomeggookPrepareData;  // 도매꾹 불러오기에서 넘겨받는 데이터
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -131,9 +138,22 @@ function FieldError({ message }: { message?: string }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // 메인 컴포넌트
 // ─────────────────────────────────────────────────────────────────────────────
-export default function BothRegisterForm({ onClose }: BothRegisterFormProps) {
+export default function BothRegisterForm({ onClose, prefill }: BothRegisterFormProps) {
   const { sharedDraft, updateSharedDraft, bothRegistration, registerBothProducts, resetBothRegistration } =
     useListingStore();
+
+  // 도매꾹 데이터 자동 채우기 (마운트 시 1회)
+  const prefillApplied = useRef(false);
+  React.useEffect(() => {
+    if (prefill && !prefillApplied.current) {
+      prefillApplied.current = true;
+      updateSharedDraft({
+        name: prefill.title,
+        thumbnailImages: [prefill.thumbnailUrl],
+        description: prefill.detailHtml,
+      });
+    }
+  }, [prefill, updateSharedDraft]);
 
   // ─── 플랫폼별 전용 상태 ─────────────────────────────────────────────────
   const [coupangCategoryCode, setCoupangCategoryCode] = useState('');

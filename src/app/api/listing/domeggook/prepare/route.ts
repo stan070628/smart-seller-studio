@@ -36,7 +36,7 @@ import {
 const RequestSchema = z.object({
   itemNo: z.number().int().positive(),
   sellerName: z.string().min(1).max(50),
-  sellerBrandName: z.string().min(1).max(30),
+  sellerBrandName: z.string().max(30).optional(),
   csPhone: z.string().min(1).max(20),
   csHours: z.string().min(1).max(80),
   returnAddress: z.string().max(200).optional(),
@@ -176,6 +176,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const title = detail.basis.title ?? '';
   const licenseUsable = detail.desc?.license?.usable === 'true';
+  const supplierName = detail.seller?.nick || detail.seller?.id || null;
 
   // 4. 라이선스 확인 — false면 전체 중단
   if (!licenseUsable) {
@@ -207,7 +208,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   let processedThumbBuffer: Buffer;
   try {
-    processedThumbBuffer = await processMainImage(thumbBuffer, sellerBrandName);
+    processedThumbBuffer = await processMainImage(thumbBuffer, sellerBrandName || null);
   } catch (err) {
     console.error('[domeggook/prepare] 대표이미지 Sharp 처리 실패:', err);
     return errorResponse('IMAGE_PROCESSING_FAILED', '대표이미지 처리 중 오류가 발생했습니다.', 500);
@@ -275,6 +276,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const replacedHtml = replaceImageUrls(sanitized, urlMap);
   const customBlocks = renderAllCustomBlocks({
     sellerName,
+    supplierName: supplierName ?? undefined,
     csPhone,
     csHours,
     returnAddress,

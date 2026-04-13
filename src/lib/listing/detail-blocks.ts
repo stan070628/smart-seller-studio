@@ -28,12 +28,13 @@ const HIGHLIGHT = `background:#fff3cd;border:1px solid #ffc107;border-radius:4px
 // ─────────────────────────────────────────
 
 export interface ShippingNoticeBlockVars {
-  sellerName: string;      // "OO스토어"
+  sellerName: string;      // "OO스토어" (내 스토어명)
+  supplierName?: string;   // 도매꾹 판매자명 (위탁배송 발송자)
   shippingDays?: number;   // 배송 소요일 (기본 3)
 }
 
 export function renderShippingNoticeBlock(vars: ShippingNoticeBlockVars): string {
-  const { sellerName, shippingDays = 3 } = vars;
+  const { supplierName, shippingDays = 3 } = vars;
 
   return `
 <div style="${WRAP}">
@@ -41,7 +42,7 @@ export function renderShippingNoticeBlock(vars: ShippingNoticeBlockVars): string
     <h2 style="${H2}">📦 배송 안내</h2>
 
     <p style="margin:0 0 16px;font-size:14px;">
-      본 상품은 <strong>${sellerName}</strong>에서 직접 발송합니다.
+      본 상품은 <strong>${supplierName ?? '협력 업체'}</strong>에서 직접 발송합니다.
     </p>
 
     <!-- 배송 흐름도 -->

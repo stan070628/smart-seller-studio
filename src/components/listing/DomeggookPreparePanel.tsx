@@ -9,9 +9,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
-import { X, AlertTriangle, CheckCircle, RefreshCw, ChevronRight, Palette } from 'lucide-react';
-import useEditorStore from '@/store/useEditorStore';
+import { X, AlertTriangle, CheckCircle, RefreshCw, ChevronRight } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 색상 상수 (ListingDashboard 동일)
@@ -128,7 +126,6 @@ function InputForm({
   const isValid =
     form.itemNo.trim() !== '' &&
     form.sellerName.trim() !== '' &&
-    form.sellerBrandName.trim() !== '' &&
     form.csPhone.trim() !== '' &&
     form.csHours.trim() !== '';
 
@@ -223,13 +220,13 @@ function InputForm({
           {/* 브랜드명/워터마크 */}
           <div>
             <label style={labelStyle}>
-              브랜드명 / 워터마크 <span style={{ color: C.accent }}>*</span>
+              브랜드명 / 워터마크 <span style={{ color: '#999', fontWeight: 400 }}>(선택)</span>
             </label>
             <input
               style={inputStyle}
               value={form.sellerBrandName}
               onChange={(e) => onChange('sellerBrandName', e.target.value)}
-              placeholder="대표이미지 우하단에 삽입될 텍스트"
+              placeholder="비워두면 워터마크 없이 저장됩니다"
             />
           </div>
           {/* CS 연락처 */}
@@ -404,13 +401,11 @@ function LoadingPanel() {
 function ResultPanel({
   result,
   onContinue,
-  onOpenEditor,
   onRetry,
   onClose,
 }: {
   result: PrepareResult;
   onContinue: (result: PrepareResult) => void;
-  onOpenEditor: (result: PrepareResult) => void;
   onRetry: () => void;
   onClose: () => void;
 }) {
@@ -623,46 +618,25 @@ function ResultPanel({
             닫기
           </button>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button
-            onClick={() => onOpenEditor(result)}
-            style={{
-              padding: '10px 20px',
-              fontSize: '13px',
-              fontWeight: 700,
-              backgroundColor: '#4a90e2',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-            }}
-          >
-            <Palette size={15} />
-            에디터에서 편집하기
-          </button>
-          <button
-            onClick={() => onContinue(result)}
-            style={{
-              padding: '10px 20px',
-              fontSize: '13px',
-              fontWeight: 700,
-              backgroundColor: C.btnPrimaryBg,
-              color: C.btnPrimaryText,
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-            }}
-          >
-            쿠팡/네이버 등록으로 이어가기
-            <ChevronRight size={15} />
-          </button>
-        </div>
+        <button
+          onClick={() => onContinue(result)}
+          style={{
+            padding: '10px 24px',
+            fontSize: '13px',
+            fontWeight: 700,
+            backgroundColor: C.btnPrimaryBg,
+            color: C.btnPrimaryText,
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          쿠팡/네이버 등록으로 이어가기
+          <ChevronRight size={15} />
+        </button>
       </div>
     </div>
   );
@@ -700,8 +674,15 @@ function getErrorMessage(code: string | undefined): { message: string; isLicense
 // ─────────────────────────────────────────────────────────────────────────────
 // Props
 // ─────────────────────────────────────────────────────────────────────────────
+export interface DomeggookPrefillData {
+  thumbnailUrl: string;
+  detailHtml: string;
+  title: string;
+}
+
 interface DomeggookPreparePanelProps {
   onClose: () => void;
+  onContinueToRegister: (data: DomeggookPrefillData) => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -709,7 +690,7 @@ interface DomeggookPreparePanelProps {
 // ─────────────────────────────────────────────────────────────────────────────
 type PanelStep = 'input' | 'loading' | 'result';
 
-export default function DomeggookPreparePanel({ onClose }: DomeggookPreparePanelProps) {
+export default function DomeggookPreparePanel({ onClose, onContinueToRegister }: DomeggookPreparePanelProps) {
   const defaults = loadSellerDefaults();
 
   const [form, setForm] = useState<FormState>({
@@ -760,10 +741,10 @@ export default function DomeggookPreparePanel({ onClose }: DomeggookPreparePanel
       const body: Record<string, unknown> = {
         itemNo: parseInt(form.itemNo, 10),
         sellerName: form.sellerName.trim(),
-        sellerBrandName: form.sellerBrandName.trim(),
         csPhone: form.csPhone.trim(),
         csHours: form.csHours.trim(),
       };
+      if (form.sellerBrandName.trim()) body.sellerBrandName = form.sellerBrandName.trim();
       if (form.returnAddress.trim()) body.returnAddress = form.returnAddress.trim();
       if (form.shippingDays.trim()) body.shippingDays = parseInt(form.shippingDays, 10);
 
@@ -798,45 +779,11 @@ export default function DomeggookPreparePanel({ onClose }: DomeggookPreparePanel
 
   // "쿠팡/네이버 등록으로 이어가기"
   const handleContinue = (res: PrepareResult) => {
-    // TODO: processedUrl과 processedHtml을 BothRegisterForm으로 넘기는 연동 구현
-    console.log('[DomeggookPreparePanel] 등록으로 이어가기:', {
+    onContinueToRegister({
       thumbnailUrl: res.thumbnail.processedUrl,
       detailHtml: res.detail.processedHtml,
       title: res.source.title,
     });
-    alert(
-      '등록 연동 기능은 준비 중입니다.\n\n콘솔에 처리된 이미지 URL과 상세 HTML이 출력되었습니다.',
-    );
-  };
-
-  // "에디터에서 편집하기" — 썸네일 템플릿에 대표이미지를 주입하고 에디터로 이동
-  const router = useRouter();
-  const addCustomFrame = useEditorStore((s) => s.addCustomFrame);
-  const setFrameImage = useEditorStore((s) => s.setFrameImage);
-  const frames = useEditorStore((s) => s.frames);
-  const updateFrame = useEditorStore((s) => s.updateFrame);
-
-  const handleOpenEditor = (res: PrepareResult) => {
-    // 1. 썸네일 프레임이 있는지 확인, 없으면 추가
-    let thumbFrame = frames.find((f) => f.frameType === 'thumbnail');
-    if (!thumbFrame) {
-      addCustomFrame('thumbnail');
-    }
-
-    // addCustomFrame은 동기이므로 즉시 최신 frames 조회
-    const latestFrames = useEditorStore.getState().frames;
-    thumbFrame = latestFrames.find((f) => f.frameType === 'thumbnail');
-
-    if (thumbFrame) {
-      // 2. 대표이미지를 main 슬롯에 주입
-      setFrameImage(thumbFrame.id, 'main', res.thumbnail.processedUrl);
-
-      // 3. 상품명을 headline에 설정
-      updateFrame('thumbnail', { headline: res.source.title });
-    }
-
-    // 4. 에디터 페이지로 이동
-    router.push('/editor');
   };
 
   const errorInfo = errorCode !== undefined ? getErrorMessage(errorCode) : null;
@@ -1040,7 +987,6 @@ export default function DomeggookPreparePanel({ onClose }: DomeggookPreparePanel
         <ResultPanel
           result={result}
           onContinue={handleContinue}
-          onOpenEditor={handleOpenEditor}
           onRetry={handleRetry}
           onClose={onClose}
         />

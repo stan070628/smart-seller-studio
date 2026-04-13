@@ -1986,6 +1986,9 @@ export default function ListingDashboard() {
 
   const [showBothMode, setShowBothMode] = useState(false);
   const [showDomeggookPanel, setShowDomeggookPanel] = useState(false);
+  const [domeggookPrefill, setDomeggookPrefill] = useState<
+    { thumbnailUrl: string; detailHtml: string; title: string } | undefined
+  >(undefined);
 
   // 마운트 시 목록 조회
   useEffect(() => {
@@ -2115,12 +2118,25 @@ export default function ListingDashboard() {
       >
         {/* 도매꾹 불러오기 패널 */}
         {showDomeggookPanel && (
-          <DomeggookPreparePanel onClose={() => setShowDomeggookPanel(false)} />
+          <DomeggookPreparePanel
+            onClose={() => setShowDomeggookPanel(false)}
+            onContinueToRegister={(data) => {
+              setDomeggookPrefill(data);
+              setShowDomeggookPanel(false);
+              setShowBothMode(true);
+            }}
+          />
         )}
 
         {/* 동시 등록 모드 */}
         {!showDomeggookPanel && showBothMode && (
-          <BothRegisterForm onClose={() => setShowBothMode(false)} />
+          <BothRegisterForm
+            onClose={() => {
+              setShowBothMode(false);
+              setDomeggookPrefill(undefined);
+            }}
+            prefill={domeggookPrefill}
+          />
         )}
 
         {/* 단일 등록 모드 — showBothMode, showDomeggookPanel이 false일 때만 렌더 */}
