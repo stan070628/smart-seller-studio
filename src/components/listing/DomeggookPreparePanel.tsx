@@ -85,6 +85,15 @@ interface PrepareResult {
   thumbnail: { processedUrl: string };
   detail: { processedHtml: string; failedImageCount: number };
   source: { title: string; licenseUsable: boolean };
+  pricing: {
+    priceDome: number;
+    moq: number;
+    bundleMinPrice: number;
+    perUnitPrice: number;
+    strategy: string | null;
+    deliWho: string | null;
+    deliFee: number | null;
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -482,6 +491,44 @@ function ResultPanel({
               {source.title}
             </div>
           </div>
+          {/* 가격 정보 */}
+          <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontSize: '11px', color: C.textSub, marginBottom: '2px' }}>도매가</div>
+              <div style={{ fontSize: '14px', fontWeight: 600, color: C.text }}>
+                {result.pricing.priceDome.toLocaleString()}원
+                {result.pricing.moq > 1 && (
+                  <span style={{ fontSize: '12px', color: C.textSub, fontWeight: 400, marginLeft: '4px' }}>
+                    (MOQ {result.pricing.moq}개)
+                  </span>
+                )}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: '11px', color: C.textSub, marginBottom: '2px' }}>추천 판매가</div>
+              <div style={{ fontSize: '16px', fontWeight: 700, color: C.accent }}>
+                {result.pricing.bundleMinPrice.toLocaleString()}원
+                {result.pricing.strategy && (
+                  <span style={{
+                    fontSize: '11px', fontWeight: 600, color: '#4a90e2',
+                    marginLeft: '6px', padding: '2px 6px',
+                    backgroundColor: '#e8f0fe', borderRadius: '4px',
+                  }}>
+                    {result.pricing.strategy}
+                  </span>
+                )}
+              </div>
+            </div>
+            {result.pricing.moq > 1 && (
+              <div>
+                <div style={{ fontSize: '11px', color: C.textSub, marginBottom: '2px' }}>개당 단가</div>
+                <div style={{ fontSize: '14px', fontWeight: 600, color: C.text }}>
+                  {result.pricing.perUnitPrice.toLocaleString()}원
+                </div>
+              </div>
+            )}
+          </div>
+
           <div style={{ display: 'flex', gap: '12px' }}>
             <div
               style={{
@@ -678,6 +725,7 @@ export interface DomeggookPrefillData {
   thumbnailUrl: string;
   detailHtml: string;
   title: string;
+  recommendedPrice: number;  // 추천판매가 (bundleMinPrice)
 }
 
 interface DomeggookPreparePanelProps {
@@ -783,6 +831,7 @@ export default function DomeggookPreparePanel({ onClose, onContinueToRegister }:
       thumbnailUrl: res.thumbnail.processedUrl,
       detailHtml: res.detail.processedHtml,
       title: res.source.title,
+      recommendedPrice: res.pricing.bundleMinPrice,
     });
   };
 

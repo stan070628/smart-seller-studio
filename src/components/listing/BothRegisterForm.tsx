@@ -67,6 +67,7 @@ export interface DomeggookPrepareData {
   thumbnailUrl: string;     // 가공된 대표이미지 URL
   detailHtml: string;       // 가공된 상세 HTML
   title: string;            // 상품명
+  recommendedPrice: number; // 추천판매가
 }
 
 interface BothRegisterFormProps {
@@ -151,6 +152,7 @@ export default function BothRegisterForm({ onClose, prefill }: BothRegisterFormP
         name: prefill.title,
         thumbnailImages: [prefill.thumbnailUrl],
         description: prefill.detailHtml,
+        salePrice: String(prefill.recommendedPrice),
       });
     }
   }, [prefill, updateSharedDraft]);

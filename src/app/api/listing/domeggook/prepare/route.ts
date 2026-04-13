@@ -22,6 +22,8 @@ import {
   replaceImageUrls,
 } from '@/lib/listing/html-sanitizer';
 import { renderAllCustomBlocks } from '@/lib/listing/detail-blocks';
+import { calcBundleMinPrice, calcPerUnitPrice } from '@/lib/sourcing/domeggook-pricing';
+import type { MoqStrategy } from '@/lib/sourcing/domeggook-pricing';
 import {
   processMainImage,
   processDetailImage,
@@ -67,6 +69,15 @@ interface PrepareSuccessData {
     itemNo: number;
     title: string;
     licenseUsable: boolean;
+  };
+  pricing: {
+    priceDome: number;           // 도매가
+    moq: number;                 // MOQ
+    bundleMinPrice: number;      // 묶음 최소판매가 (추천판매가)
+    perUnitPrice: number;        // 개당 단가
+    strategy: string | null;     // 묶음 전략 (single/1+1/2+1)
+    deliWho: string | null;
+    deliFee: number | null;
   };
 }
 
@@ -285,7 +296,33 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const finalHtml = replacedHtml + '\n' + customBlocks;
 
   // ─────────────────────────────────────
-  // 6. 응답
+  // 6. 추천판매가 계산
+  // ─────────────────────────────────────
+
+  const priceDome = typeof detail.price?.dome === 'string'
+    ? parseInt(detail.price.dome, 10)
+    : (detail.price?.dome ?? 0);
+  const moq = typeof detail.qty?.domeMoq === 'string'
+    ? parseInt(detail.qty.domeMoq as unknown as string, 10)
+    : (detail.qty?.domeMoq ?? 1);
+  const deliWho = typeof detail.deli?.who === 'string' ? detail.deli.who : null;
+  const rawDeliFee = (detail.deli as Record<string, unknown>)?.dome;
+  const deliFee = rawDeliFee && typeof rawDeliFee === 'object' && rawDeliFee !== null
+    ? parseInt((rawDeliFee as Record<string, string>).fee ?? '0', 10)
+    : (typeof detail.deli?.fee === 'string' ? parseInt(detail.deli.fee, 10) : (detail.deli?.fee ?? 0));
+
+  const moqStrategies: Record<number, MoqStrategy> = { 1: 'single', 2: '1+1', 3: '2+1' };
+  const strategy: MoqStrategy = moqStrategies[moq] ?? null;
+
+  const bundleMinPrice = priceDome > 0
+    ? calcBundleMinPrice({ priceDome, deliWho, deliFee, moq })
+    : 0;
+  const perUnitPrice = bundleMinPrice > 0
+    ? calcPerUnitPrice(bundleMinPrice, moq)
+    : 0;
+
+  // ─────────────────────────────────────
+  // 7. 응답
   // ─────────────────────────────────────
 
   const responseData: PrepareSuccessData = {
@@ -306,6 +343,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       itemNo,
       title,
       licenseUsable,
+    },
+    pricing: {
+      priceDome,
+      moq,
+      bundleMinPrice,
+      perUnitPrice,
+      strategy,
+      deliWho,
+      deliFee,
     },
   };
 
