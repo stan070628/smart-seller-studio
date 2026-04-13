@@ -15,6 +15,7 @@ import { useListingStore } from '@/store/useListingStore';
 import { PLATFORMS } from '@/types/listing';
 import type { PlatformId, ListingStatus, ProductListing } from '@/types/listing';
 import BothRegisterForm from '@/components/listing/BothRegisterForm';
+import DomeggookPreparePanel from '@/components/listing/DomeggookPreparePanel';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 색상 상수
@@ -343,11 +344,15 @@ function PlatformTabs({
   onSelect,
   showBothMode,
   onToggleBothMode,
+  showDomeggookPanel,
+  onToggleDomeggookPanel,
 }: {
   activePlatform: PlatformId;
   onSelect: (id: PlatformId) => void;
   showBothMode: boolean;
   onToggleBothMode: () => void;
+  showDomeggookPanel: boolean;
+  onToggleDomeggookPanel: () => void;
 }) {
   return (
     <div
@@ -407,26 +412,50 @@ function PlatformTabs({
         })}
       </div>
 
-      {/* 동시 등록 버튼 */}
-      <button
-        onClick={onToggleBothMode}
-        style={{
-          padding: '6px 14px',
-          borderRadius: '8px',
-          border: '1px solid rgba(190,0,20,0.3)',
-          backgroundColor: showBothMode ? '#be0014' : 'rgba(190,0,20,0.07)',
-          color: showBothMode ? '#ffffff' : '#be0014',
-          fontSize: '13px',
-          fontWeight: 600,
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-        }}
-      >
-        <Layers size={14} />
-        {showBothMode ? '단일 등록으로' : '동시 등록'}
-      </button>
+      {/* 우측 버튼 그룹 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {/* 도매꾹 불러오기 버튼 */}
+        <button
+          onClick={onToggleDomeggookPanel}
+          style={{
+            padding: '6px 14px',
+            borderRadius: '8px',
+            border: '1px solid #d1a800',
+            backgroundColor: showDomeggookPanel ? '#f5c800' : 'rgba(245,200,0,0.1)',
+            color: showDomeggookPanel ? '#1a1c1c' : '#a07c00',
+            fontSize: '13px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+          }}
+        >
+          🏪
+          {showDomeggookPanel ? '불러오기 닫기' : '도매꾹 불러오기'}
+        </button>
+
+        {/* 동시 등록 버튼 */}
+        <button
+          onClick={onToggleBothMode}
+          style={{
+            padding: '6px 14px',
+            borderRadius: '8px',
+            border: '1px solid rgba(190,0,20,0.3)',
+            backgroundColor: showBothMode ? '#be0014' : 'rgba(190,0,20,0.07)',
+            color: showBothMode ? '#ffffff' : '#be0014',
+            fontSize: '13px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+          }}
+        >
+          <Layers size={14} />
+          {showBothMode ? '단일 등록으로' : '동시 등록'}
+        </button>
+      </div>
     </div>
   );
 }
@@ -1956,6 +1985,7 @@ export default function ListingDashboard() {
     useListingStore();
 
   const [showBothMode, setShowBothMode] = useState(false);
+  const [showDomeggookPanel, setShowDomeggookPanel] = useState(false);
 
   // 마운트 시 목록 조회
   useEffect(() => {
@@ -2060,7 +2090,15 @@ export default function ListingDashboard() {
         activePlatform={activePlatform}
         onSelect={setActivePlatform}
         showBothMode={showBothMode}
-        onToggleBothMode={() => setShowBothMode((v) => !v)}
+        onToggleBothMode={() => {
+          setShowBothMode((v) => !v);
+          setShowDomeggookPanel(false);
+        }}
+        showDomeggookPanel={showDomeggookPanel}
+        onToggleDomeggookPanel={() => {
+          setShowDomeggookPanel((v) => !v);
+          setShowBothMode(false);
+        }}
       />
 
       {/* -------------------------------------------------------------------- */}
@@ -2075,19 +2113,24 @@ export default function ListingDashboard() {
           margin: '0 auto',
         }}
       >
+        {/* 도매꾹 불러오기 패널 */}
+        {showDomeggookPanel && (
+          <DomeggookPreparePanel onClose={() => setShowDomeggookPanel(false)} />
+        )}
+
         {/* 동시 등록 모드 */}
-        {showBothMode && (
+        {!showDomeggookPanel && showBothMode && (
           <BothRegisterForm onClose={() => setShowBothMode(false)} />
         )}
 
-        {/* 단일 등록 모드 — showBothMode가 false일 때만 렌더 */}
-        {!showBothMode && isCoupang && <CoupangTabContent />}
+        {/* 단일 등록 모드 — showBothMode, showDomeggookPanel이 false일 때만 렌더 */}
+        {!showDomeggookPanel && !showBothMode && isCoupang && <CoupangTabContent />}
 
         {/* 네이버 탭 */}
-        {!showBothMode && isNaver && <NaverTabContent />}
+        {!showDomeggookPanel && !showBothMode && isNaver && <NaverTabContent />}
 
         {/* 기타 플랫폼 — 기존 로직 */}
-        {!showBothMode && !isCoupang && !isNaver && (
+        {!showDomeggookPanel && !showBothMode && !isCoupang && !isNaver && (
           <>
             {/* 로딩 */}
             {isLoading && (
