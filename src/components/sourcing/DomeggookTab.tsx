@@ -856,7 +856,15 @@ export default function DomeggookTab() {
   // ── 정렬 헤더 클릭 ────────────────────────────────────────────────────────
   const handleSortClick = useCallback(
     (key: string) => {
-      if (sortField === key) {
+      if (CLIENT_SORT_FIELDS.has(key)) {
+        // 프론트엔드 전용 정렬 — API 재호출 없이 상태만 변경
+        if (sortField === key) {
+          const next = useSourcingStore.getState().sortOrder === 'desc' ? 'asc' : 'desc';
+          useSourcingStore.setState({ sortOrder: next, page: 1 });
+        } else {
+          useSourcingStore.setState({ sortField: key, sortOrder: 'desc', page: 1 });
+        }
+      } else if (sortField === key) {
         useSourcingStore.getState().toggleSortOrder();
       } else {
         setSortField(key);
@@ -932,6 +940,25 @@ export default function DomeggookTab() {
       return true;
     });
   }, [items, hideHighCsRisk, hideAboveMarket, hideBlockedUnchecked, minScore, genderFilter, hideBlocked, priceCompFilter]);
+
+  // ── 프론트엔드 정렬 (score_total 등 DB에 값이 없는 컬럼) ──────────────────
+  const CLIENT_SORT_FIELDS = new Set(['score_total']);
+
+  const sortedItems = useMemo(() => {
+    if (!CLIENT_SORT_FIELDS.has(sortField)) return filteredItems;
+
+    const sorted = [...filteredItems].sort((a, b) => {
+      if (sortField === 'score_total') {
+        const scoreA = getEffectiveScore(a).total;
+        const scoreB = getEffectiveScore(b).total;
+        return scoreB - scoreA; // 기본 내림차순
+      }
+      return 0;
+    });
+
+    return sortOrder === 'asc' ? sorted.reverse() : sorted;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredItems, sortField, sortOrder]);
 
   // ── 페이지네이션 ──────────────────────────────────────────────────────────
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
@@ -1497,7 +1524,7 @@ export default function DomeggookTab() {
             <Loader2 size={20} style={{ animation: 'spin 1s linear infinite', color: C.accent }} />
             <span style={{ fontSize: '14px' }}>데이터 불러오는 중...</span>
           </div>
-        ) : filteredItems.length === 0 ? (
+        ) : sortedItems.length === 0 ? (
           <div
             style={{
               display: 'flex',
@@ -1854,7 +1881,7 @@ export default function DomeggookTab() {
             </thead>
 
             <tbody>
-              {filteredItems.map((item, idx) => {
+              {sortedItems.map((item, idx) => {
                 const bundleData = getEffectiveBundleData(item);
                 const scoreData = getEffectiveScore(item);
                 const legalBadge = LEGAL_BADGE[item.legalStatus] ?? LEGAL_BADGE.unchecked;

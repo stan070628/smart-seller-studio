@@ -88,7 +88,7 @@ export const useSourcingStore = create<SourcingStore>()(
       collectingStep: null,
       collectingProgress: null,
       error: null,
-      sortField: 'score_total',
+      sortField: 'sales_7d',
       sortOrder: 'desc',
       categoryFilter: null,
       searchQuery: '',
