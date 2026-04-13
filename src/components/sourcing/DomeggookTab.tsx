@@ -856,15 +856,7 @@ export default function DomeggookTab() {
   // ── 정렬 헤더 클릭 ────────────────────────────────────────────────────────
   const handleSortClick = useCallback(
     (key: string) => {
-      if (CLIENT_SORT_FIELDS.has(key)) {
-        // 프론트엔드 전용 정렬 — API 재호출 없이 상태만 변경
-        if (sortField === key) {
-          const next = useSourcingStore.getState().sortOrder === 'desc' ? 'asc' : 'desc';
-          useSourcingStore.setState({ sortOrder: next, page: 1 });
-        } else {
-          useSourcingStore.setState({ sortField: key, sortOrder: 'desc', page: 1 });
-        }
-      } else if (sortField === key) {
+      if (sortField === key) {
         useSourcingStore.getState().toggleSortOrder();
       } else {
         setSortField(key);
@@ -941,23 +933,20 @@ export default function DomeggookTab() {
     });
   }, [items, hideHighCsRisk, hideAboveMarket, hideBlockedUnchecked, minScore, genderFilter, hideBlocked, priceCompFilter]);
 
-  // ── 프론트엔드 정렬 (score_total 등 DB에 값이 없는 컬럼) ──────────────────
-  const CLIENT_SORT_FIELDS = new Set(['score_total']);
-
+  // ── 프론트엔드 보조 정렬 (DB에 값이 없는 경우 fallback) ──────────────────
   const sortedItems = useMemo(() => {
-    if (!CLIENT_SORT_FIELDS.has(sortField)) return filteredItems;
-
-    const sorted = [...filteredItems].sort((a, b) => {
-      if (sortField === 'score_total') {
-        const scoreA = getEffectiveScore(a).total;
-        const scoreB = getEffectiveScore(b).total;
-        return scoreB - scoreA; // 기본 내림차순
+    // score_total은 DB에 값이 있으면 서버 정렬, 없으면 클라이언트 정렬
+    if (sortField === 'score_total') {
+      const hasDbScore = filteredItems.some((item) => item.scoreTotal != null);
+      if (!hasDbScore) {
+        // DB에 점수 없음 → 클라이언트에서 실시간 계산 정렬
+        const sorted = [...filteredItems].sort((a, b) => {
+          return getEffectiveScore(b).total - getEffectiveScore(a).total;
+        });
+        return sortOrder === 'asc' ? sorted.reverse() : sorted;
       }
-      return 0;
-    });
-
-    return sortOrder === 'asc' ? sorted.reverse() : sorted;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }
+    return filteredItems;
   }, [filteredItems, sortField, sortOrder]);
 
   // ── 페이지네이션 ──────────────────────────────────────────────────────────

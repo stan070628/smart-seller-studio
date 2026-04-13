@@ -173,12 +173,46 @@ function runSyncLegalCheck(title) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// 종합 점수 계산 (domeggook-scoring.ts 인라인 포팅)
+// 수집 시점에 계산 가능한 항목만 반영 (수요·재고 = 0)
+// ─────────────────────────────────────────────────────────────
+
+const HIGH_RISK_CAT = ['식품','식음료','과자','음료','주류','유제품','육류','수산물','농산물','의약품','의료기기','건강기능','건강식품','영양제','비타민','유아','아기','신생아','육아','완구','장난감','전기용품','생활가전','주방가전'];
+const MED_RISK_CAT = ['의류','패션','의복','패딩','자켓','코트','셔츠','바지','치마','화장품','뷰티','스킨케어','헤어케어','메이크업','스포츠','헬스','운동','속옷','수영복'];
+
+function getCsRiskLevel(catName) {
+  if (!catName) return 'low';
+  const c = catName.toLowerCase();
+  if (HIGH_RISK_CAT.some(k => c.includes(k.toLowerCase()))) return 'high';
+  if (MED_RISK_CAT.some(k => c.includes(k.toLowerCase()))) return 'medium';
+  return 'low';
+}
+
+function calcScoreTotal(legalStatus, moq, csRisk) {
+  // 법적·IP (IP 미확인 = 2점) → max 20
+  const legalIp = (legalStatus === 'safe' ? 12 : legalStatus === 'warning' ? 6 : legalStatus === 'unchecked' ? 3 : 0) + 2;
+  // 가격경쟁력 → 수집 시점에 시장가 없음 → 5점 (데이터 없음 기본값)
+  const priceComp = 5;
+  // CS 안전성
+  const csSafety = csRisk === 'low' ? 15 : csRisk === 'medium' ? 8 : 0;
+  // 마진 → 시장가 없음 → 3점 (기본값)
+  const margin = 3;
+  // 수요 → 스냅샷 없음 → 0점
+  const demand = 0;
+  // 공급 → inventory 없음 → 0점
+  const supply = 0;
+  // MOQ 적합성
+  const moqFit = moq === 1 ? 5 : (moq != null && moq <= 3) ? 3 : 0;
+
+  return Math.min(legalIp + priceComp + csSafety + margin + demand + supply + moqFit, 110);
+}
+
+// ─────────────────────────────────────────────────────────────
 // DB 배치 저장 (1000건씩 한 번에 UPSERT)
-// 기존: 아이템 1건당 DB 쿼리 3번 → 개선: 1000건당 DB 쿼리 2번
 // ─────────────────────────────────────────────────────────────
 
 const BATCH_SIZE = 1000;
-const COLS = 13; // UPSERT 컬럼 수
+const COLS = 17; // UPSERT 컬럼 수
 
 async function saveToDb(allItems, snapshotDate) {
   let totalNew = 0, totalUpdated = 0, totalSnapshots = 0;
@@ -192,6 +226,11 @@ async function saveToDb(allItems, snapshotDate) {
     // JS에서 법적 체크 선계산
     const rows = batch.map((item) => {
       const { status: legalStatus, issues } = runSyncLegalCheck(item.title ?? '');
+      const moqRaw = item.qty?.domeMoq ?? item.unitQty ?? null;
+      const moq = moqRaw != null ? parseInt(moqRaw, 10) : null;
+      const csRisk = getCsRiskLevel(null); // getItemList에는 카테고리 없음
+      const scoreTotal = calcScoreTotal(legalStatus, moq, csRisk);
+
       return {
         item_no:       item.no,
         title:         item.title ?? '',
@@ -203,16 +242,19 @@ async function saveToDb(allItems, snapshotDate) {
         legalIssues:   JSON.stringify(issues),
         legalCheckedAt,
         blockedReason: legalStatus === 'blocked' ? (issues[0]?.message ?? '법적 판매 금지') : null,
-        // getItemList(v4.1)에는 qty.inventory가 없음 — price만 존재
         inventory:     item.qty?.inventory ?? 0,
         price:         item.price ?? null,
+        moq,
+        scoreTotal,
+        csRisk,
+        scoreMoqFit:   moq === 1 ? 5 : (moq != null && moq <= 3) ? 3 : 0,
       };
     });
 
     // ── sourcing_items 배치 UPSERT ─────────────────────────────────────────
     const valuePlaceholders = rows.map((_, idx) => {
       const b = idx * COLS;
-      return `($${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},$${b+7},$${b+8},$${b+9},$${b+10},$${b+11},$${b+12},$${b+13})`;
+      return `($${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},$${b+7},$${b+8},$${b+9},$${b+10},$${b+11},$${b+12},$${b+13},$${b+14},$${b+15},$${b+16},$${b+17})`;
     }).join(',');
 
     const params = [];
@@ -223,6 +265,10 @@ async function saveToDb(allItems, snapshotDate) {
       false, // needs_review
       true,  // is_tracking
       r.price != null ? parseInt(r.price, 10) : null, // price_dome
+      r.moq,           // moq
+      r.scoreTotal,    // score_total
+      r.csRisk,        // cs_risk_level
+      r.scoreMoqFit,   // score_moq_fit
     ));
 
     let upsertRows = [];
@@ -231,7 +277,8 @@ async function saveToDb(allItems, snapshotDate) {
         INSERT INTO sourcing_items
           (item_no, title, seller_id, seller_nick, image_url, dome_url,
            legal_status, legal_issues, legal_checked_at, blocked_reason,
-           needs_review, is_tracking, price_dome)
+           needs_review, is_tracking, price_dome,
+           moq, score_total, cs_risk_level, score_moq_fit)
         VALUES ${valuePlaceholders}
         ON CONFLICT (item_no) DO UPDATE SET
           title            = EXCLUDED.title,
@@ -245,6 +292,10 @@ async function saveToDb(allItems, snapshotDate) {
           blocked_reason   = EXCLUDED.blocked_reason,
           is_tracking      = EXCLUDED.is_tracking,
           price_dome       = EXCLUDED.price_dome,
+          moq              = EXCLUDED.moq,
+          score_total      = EXCLUDED.score_total,
+          cs_risk_level    = EXCLUDED.cs_risk_level,
+          score_moq_fit    = EXCLUDED.score_moq_fit,
           updated_at       = now()
         RETURNING id, item_no, (xmax = 0) AS is_new
       `, params);
