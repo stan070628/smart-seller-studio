@@ -3,6 +3,7 @@
  * 서버 컴포넌트: metadata 설정 후 ListingDashboard 클라이언트 컴포넌트를 렌더
  */
 
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import ListingDashboard from '@/components/listing/ListingDashboard';
 
@@ -12,5 +13,9 @@ export const metadata: Metadata = {
 };
 
 export default function ListingPage() {
-  return <ListingDashboard />;
+  return (
+    <Suspense>
+      <ListingDashboard />
+    </Suspense>
+  );
 }
