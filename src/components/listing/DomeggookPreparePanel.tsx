@@ -421,15 +421,54 @@ function ResultPanel({
   onClose,
 }: {
   result: PrepareResult;
-  onContinue: (result: PrepareResult) => void;
+  onContinue: (result: PrepareResult, overrideThumbnailUrl?: string) => void;
   onRetry: () => void;
   onClose: () => void;
 }) {
   const { thumbnail, detail, source } = result;
   const sanitized = sanitizeHtml(detail.processedHtml);
 
+  // AI 이미지 수정 로컬 상태
+  const [isEditingThumbnail, setIsEditingThumbnail] = useState(false);
+  const [editPrompt, setEditPrompt] = useState('');
+  const [isAiProcessing, setIsAiProcessing] = useState(false);
+  const [originalThumbnailUrl, setOriginalThumbnailUrl] = useState<string | null>(null);
+  const [currentThumbnailUrl, setCurrentThumbnailUrl] = useState(thumbnail.processedUrl);
+
+  // AI 이미지 수정 API 호출
+  const handleAiEdit = async () => {
+    if (!editPrompt.trim() || isAiProcessing) return;
+    setIsAiProcessing(true);
+    try {
+      const res = await fetch('/api/ai/edit-thumbnail', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl: currentThumbnailUrl, prompt: editPrompt.trim() }),
+      });
+      const json = await res.json();
+      if (res.ok && json.success && json.data?.editedUrl) {
+        // 최초 수정 시에만 원본 URL 보존
+        if (!originalThumbnailUrl) setOriginalThumbnailUrl(currentThumbnailUrl);
+        setCurrentThumbnailUrl(json.data.editedUrl);
+        setIsEditingThumbnail(false);
+        setEditPrompt('');
+      }
+    } catch { /* 에러 무시 — 이미지 유지 */ } finally {
+      setIsAiProcessing(false);
+    }
+  };
+
+  // 프리셋 퀵 액션 목록
+  const presets = [
+    { label: '흰 배경', prompt: '배경을 깨끗한 흰색으로 변경해주세요' },
+    { label: '밝게', prompt: '이미지를 더 밝고 선명하게 보정해주세요' },
+    { label: '그림자 추가', prompt: '상품 아래에 자연스러운 그림자를 추가해주세요' },
+  ];
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {/* 스피너 키프레임 — 인라인 스타일 한계 보완 */}
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       {/* 실패 이미지 경고 배너 */}
       {detail.failedImageCount > 0 && (
         <div
@@ -469,22 +508,176 @@ function ResultPanel({
           <div style={{ fontSize: '12px', fontWeight: 600, color: C.textSub, marginBottom: '8px' }}>
             대표이미지
           </div>
-          <div
+          {/* 썸네일 + 스피너 오버레이 */}
+          <div style={{ position: 'relative', width: '200px', marginBottom: '8px' }}>
+            <div
+              style={{
+                width: '200px',
+                height: '200px',
+                borderRadius: '8px',
+                border: `1px solid ${C.border}`,
+                overflow: 'hidden',
+                backgroundColor: C.tableHeader,
+              }}
+            >
+              <img
+                src={currentThumbnailUrl}
+                alt="대표이미지"
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
+            </div>
+            {/* AI 처리 중 스피너 오버레이 */}
+            {isAiProcessing && (
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  borderRadius: '8px',
+                  backgroundColor: 'rgba(255,255,255,0.75)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                }}
+              >
+                {/* CSS 스피너 */}
+                <div
+                  style={{
+                    width: '28px',
+                    height: '28px',
+                    border: `3px solid ${C.border}`,
+                    borderTopColor: C.accent,
+                    borderRadius: '50%',
+                    animation: 'spin 0.8s linear infinite',
+                  }}
+                />
+                <span style={{ fontSize: '11px', color: C.textSub, fontWeight: 600 }}>AI 수정 중...</span>
+              </div>
+            )}
+          </div>
+
+          {/* 되돌리기 링크 (원본이 저장된 경우에만) */}
+          {originalThumbnailUrl && (
+            <div style={{ marginBottom: '6px' }}>
+              <button
+                onClick={() => {
+                  setCurrentThumbnailUrl(originalThumbnailUrl);
+                  setOriginalThumbnailUrl(null);
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  padding: 0,
+                  fontSize: '11px',
+                  color: C.textSub,
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                }}
+              >
+                ↩ 되돌리기
+              </button>
+            </div>
+          )}
+
+          {/* AI 수정 버튼 */}
+          <button
+            onClick={() => setIsEditingThumbnail((v) => !v)}
+            disabled={isAiProcessing}
             style={{
               width: '200px',
-              height: '200px',
-              borderRadius: '8px',
+              padding: '7px 0',
+              fontSize: '12px',
+              fontWeight: 600,
+              backgroundColor: C.btnSecondaryBg,
+              color: C.btnSecondaryText,
               border: `1px solid ${C.border}`,
-              overflow: 'hidden',
-              backgroundColor: C.tableHeader,
+              borderRadius: '7px',
+              cursor: isAiProcessing ? 'not-allowed' : 'pointer',
+              textAlign: 'center',
             }}
           >
-            <img
-              src={thumbnail.processedUrl}
-              alt="대표이미지"
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            />
-          </div>
+            ✨ AI 수정
+          </button>
+
+          {/* 인라인 수정 패널 */}
+          {isEditingThumbnail && (
+            <div
+              style={{
+                marginTop: '10px',
+                width: '200px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+              }}
+            >
+              {/* 프리셋 칩 버튼 */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                {presets.map((p) => (
+                  <button
+                    key={p.label}
+                    onClick={() => setEditPrompt(p.prompt)}
+                    style={{
+                      padding: '3px 8px',
+                      fontSize: '11px',
+                      fontWeight: 500,
+                      backgroundColor: editPrompt === p.prompt ? C.accent : C.tableHeader,
+                      color: editPrompt === p.prompt ? '#fff' : C.text,
+                      border: `1px solid ${editPrompt === p.prompt ? C.accent : C.border}`,
+                      borderRadius: '100px',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.15s, color 0.15s',
+                    }}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+              {/* 프롬프트 입력 */}
+              <input
+                style={{ ...inputStyle, fontSize: '12px', padding: '7px 10px' }}
+                value={editPrompt}
+                onChange={(e) => setEditPrompt(e.target.value)}
+                placeholder="예: 배경을 흰색으로 변경"
+                onKeyDown={(e) => { if (e.key === 'Enter') handleAiEdit(); }}
+              />
+              {/* 수정하기 / 취소 버튼 */}
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button
+                  onClick={handleAiEdit}
+                  disabled={!editPrompt.trim()}
+                  style={{
+                    flex: 1,
+                    padding: '7px 0',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    backgroundColor: editPrompt.trim() ? C.btnPrimaryBg : '#e0e0e0',
+                    color: editPrompt.trim() ? C.btnPrimaryText : '#999',
+                    border: 'none',
+                    borderRadius: '7px',
+                    cursor: editPrompt.trim() ? 'pointer' : 'not-allowed',
+                  }}
+                >
+                  수정하기
+                </button>
+                <button
+                  onClick={() => { setIsEditingThumbnail(false); setEditPrompt(''); }}
+                  style={{
+                    padding: '7px 10px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    backgroundColor: C.btnSecondaryBg,
+                    color: C.btnSecondaryText,
+                    border: `1px solid ${C.border}`,
+                    borderRadius: '7px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  취소
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 상품 정보 요약 */}
@@ -697,7 +890,7 @@ function ResultPanel({
           </button>
         </div>
         <button
-          onClick={() => onContinue(result)}
+          onClick={() => onContinue(result, currentThumbnailUrl)}
           style={{
             padding: '10px 24px',
             fontSize: '13px',
@@ -756,8 +949,11 @@ export interface DomeggookPrefillData {
   thumbnailUrl: string;
   detailHtml: string;
   title: string;
-  naverPrice: number;    // 네이버 추천판매가 (마진 포함)
-  coupangPrice: number;  // 쿠팡 추천판매가 (마진 포함)
+  naverPrice: number;       // 네이버 추천판매가 (마진 포함)
+  coupangPrice: number;     // 쿠팡 추천판매가 (마진 포함)
+  itemNo: number;           // 도매꾹 상품번호 (옵션 자동 불러오기용)
+  costBase: number;         // 순수 원가 (도매가 × MOQ, 배송비 제외)
+  effectiveDeliFee: number; // 실효 배송비 (판매자 선불 시 0, 구매자 부담 시 실제 금액)
 }
 
 interface DomeggookPreparePanelProps {
@@ -875,13 +1071,17 @@ export default function DomeggookPreparePanel({ onClose, onContinueToRegister, i
   };
 
   // "쿠팡/네이버 등록으로 이어가기"
-  const handleContinue = (res: PrepareResult) => {
+  const handleContinue = (res: PrepareResult, overrideThumbnailUrl?: string) => {
+    const effectiveDeliFee = res.pricing.deliWho === 'S' ? 0 : (res.pricing.deliFee ?? 0);
     onContinueToRegister({
-      thumbnailUrl: res.thumbnail.processedUrl,
+      thumbnailUrl: overrideThumbnailUrl ?? res.thumbnail.processedUrl,
       detailHtml: res.detail.processedHtml,
       title: res.source.title,
       naverPrice: res.pricing.naver.recommendedPrice,
       coupangPrice: res.pricing.coupang.recommendedPrice,
+      itemNo: parseInt(form.itemNo, 10),
+      costBase: res.pricing.priceDome * res.pricing.moq,
+      effectiveDeliFee,
     });
   };
 

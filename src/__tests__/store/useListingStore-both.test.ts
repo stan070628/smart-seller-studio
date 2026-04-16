@@ -48,6 +48,11 @@ function resetStore() {
       deliveryChargeType: 'FREE',
       returnCharge: '5000',
       tags: [],
+      naverPrice: '',
+      coupangPrice: '',
+      options: null,
+      optionsLoading: false,
+      optionsError: null,
     },
     bothRegistration: {
       coupang: { status: 'idle' },

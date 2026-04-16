@@ -88,25 +88,18 @@ export async function POST(request: NextRequest) {
   try {
     const client = getCoupangClient();
 
-    // 출고지/반품지 코드 조회 (미지정 시 자동 조회)
-    let outboundCode = d.outboundShippingPlaceCode ?? '';
-    let returnCode = d.returnCenterCode ?? '';
+    // 출고지/반품지 코드 (명시적 전달 → 환경변수 → 에러)
+    const outboundCode = d.outboundShippingPlaceCode || client.getOutboundShippingPlaceCode();
+    const returnCode = d.returnCenterCode || client.getReturnCenterCode();
 
-    if (!outboundCode || !returnCode) {
-      const [outbound, returns] = await Promise.all([
-        client.getOutboundShippingPlaces(),
-        client.getReturnShippingCenters(),
-      ]);
+    const contents = d.detailImages.length > 0
+      ? d.detailImages.map((url: string) => ({
+          contentsType: 'IMAGE' as const,
+          contentDetails: [{ content: url, detailType: 'IMAGE' as const }],
+        }))
+      : [{ contentsType: 'TEXT' as const, contentDetails: [{ content: d.description || d.sellerProductName, detailType: 'TEXT' as const }] }];
 
-      if (!outboundCode && outbound.length > 0) {
-        outboundCode = String((outbound[0] as Record<string, unknown>).outboundShippingPlaceCode ?? '');
-      }
-      if (!returnCode && returns.length > 0) {
-        returnCode = String((returns[0] as Record<string, unknown>).returnCenterCode ?? '');
-      }
-    }
-
-    const payload = {
+    const payload: import('@/lib/listing/coupang-client').CoupangProductPayload = {
       displayCategoryCode: d.displayCategoryCode,
       sellerProductName: d.sellerProductName,
       vendorId: client.vendor,
@@ -114,18 +107,25 @@ export async function POST(request: NextRequest) {
       saleEndedAt: '2099-12-31T23:59:59',
       brand: d.brand,
       generalProductName: d.sellerProductName,
-      deliveryInfo: {
-        deliveryType: 'NORMAL',
-        deliveryAttributeType: 'NORMAL',
-        deliveryCompanyCode: 'CJGLS',
-        deliveryChargeType: d.deliveryChargeType,
-        deliveryCharge: d.deliveryCharge,
-        freeShipOverAmount: 0,
-        deliveryChargeOnReturn: d.returnCharge,
-        returnCenterCode: returnCode,
-        outboundShippingPlaceCode: outboundCode,
-      },
+      deliveryMethod: 'SEQUENCIAL',
+      deliveryCompanyCode: 'CJGLS',
+      deliveryChargeType: d.deliveryCharge === 0 ? 'FREE' : 'NOT_FREE',
+      deliveryCharge: d.deliveryCharge,
+      freeShipOverAmount: 0,
+      deliveryChargeOnReturn: d.returnCharge,
+      deliverySurcharge: 0,
+      remoteAreaDeliverable: 'N',
+      bundlePackingDelivery: 0,
+      unionDeliveryType: 'NOT_UNION_DELIVERY',
+      returnCenterCode: returnCode,
+      outboundShippingPlaceCode: outboundCode,
+      returnChargeName: process.env.COUPANG_RETURN_NAME ?? '',
+      companyContactNumber: process.env.COUPANG_CONTACT_NUMBER ?? '',
+      returnZipCode: process.env.COUPANG_RETURN_ZIPCODE ?? '',
+      returnAddress: process.env.COUPANG_RETURN_ADDRESS ?? '',
+      returnAddressDetail: process.env.COUPANG_RETURN_ADDRESS_DETAIL ?? '',
       returnCharge: d.returnCharge,
+      vendorUserId: process.env.COUPANG_VENDOR_USER_ID ?? '',
       items: [
         {
           itemName: d.sellerProductName,
@@ -133,53 +133,27 @@ export async function POST(request: NextRequest) {
           salePrice: d.salePrice,
           maximumBuyCount: d.maximumBuyCount,
           maximumBuyForPerson: d.maximumBuyForPerson,
+          maximumBuyForPersonPeriod: 1,
+          outboundShippingTimeDay: 3,
           unitCount: 1,
-          images: d.thumbnailImages.map((url, i) => ({
-            imageOrder: i,
-            imageType: i === 0 ? 'REPRESENTATIVE' : 'DETAIL',
-            vendorPath: url,
-          })),
+          adultOnly: 'EVERYONE',
+          taxType: 'TAX',
+          overseasPurchased: 'NOT_OVERSEAS_PURCHASED',
+          images: [
+            ...d.thumbnailImages.map((url, i) => ({
+              imageOrder: i,
+              imageType: i === 0 ? 'REPRESENTATION' as const : 'DETAIL' as const,
+              vendorPath: url,
+            })),
+            ...d.detailImages.map((url: string, i: number) => ({
+              imageOrder: d.thumbnailImages.length + i,
+              imageType: 'DETAIL' as const,
+              vendorPath: url,
+            })),
+          ],
           attributes: [],
-          contents: [
-            {
-              contentsType: 'HTML',
-              contentDetails: [
-                {
-                  // detailImages가 있으면 description 끝에 이미지 태그를 추가한다
-                  content: d.description + (
-                    d.detailImages.length > 0
-                      ? d.detailImages
-                          .map(url => `<img src="${url}" style="width:100%;display:block;" />`)
-                          .join('')
-                      : ''
-                  ),
-                  detailType: 'HTML',
-                },
-              ],
-            },
-          ],
-          notices: [
-            {
-              noticeCategoryName: '기타 재화',
-              noticeCategoryDetailName: '품명 및 모델명',
-              content: d.sellerProductName,
-            },
-            {
-              noticeCategoryName: '기타 재화',
-              noticeCategoryDetailName: '제조국(원산지)',
-              content: '상세페이지 참조',
-            },
-            {
-              noticeCategoryName: '기타 재화',
-              noticeCategoryDetailName: '법에 의한 인증·허가 등을 받았음을 확인할 수 있는 경우 그에 대한 사항',
-              content: '해당사항 없음',
-            },
-            {
-              noticeCategoryName: '기타 재화',
-              noticeCategoryDetailName: 'A/S 책임자와 전화번호',
-              content: '판매자 문의',
-            },
-          ],
+          contents,
+          notices: [],
         },
       ],
     };

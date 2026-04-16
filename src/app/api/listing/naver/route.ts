@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
 
     const payload = {
       originProduct: {
-        statusType: 'WAIT',
+        statusType: 'SALE',
         saleType: 'NEW',
         leafCategoryId: d.leafCategoryId,
         name: d.name,
@@ -123,6 +123,7 @@ export async function POST(request: NextRequest) {
         deliveryInfo: {
           deliveryType: 'DELIVERY',
           deliveryAttributeType: 'NORMAL',
+          deliveryCompany: 'CJGLS',
           deliveryFee: {
             deliveryFeeType: d.deliveryFee === 0 ? 'FREE' : 'PAID',
             baseFee: d.deliveryFee,

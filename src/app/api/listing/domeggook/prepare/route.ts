@@ -28,6 +28,7 @@ import {
   calcMinSalePrice,
   DOMEGGOOK_TARGET_MARGIN_RATE,
 } from '@/lib/sourcing/shared/channel-policy';
+import { parseEffectiveDeliFee } from '@/lib/sourcing/deli-parser';
 import {
   processMainImage,
   processDetailImage,
@@ -318,15 +319,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const moq = typeof detail.qty?.domeMoq === 'string'
     ? parseInt(detail.qty.domeMoq as unknown as string, 10)
     : (detail.qty?.domeMoq ?? 1);
-  const deliWho = typeof detail.deli?.who === 'string' ? detail.deli.who : null;
-  const rawDeliFee = (detail.deli as Record<string, unknown>)?.dome;
-  const deliFee = rawDeliFee && typeof rawDeliFee === 'object' && rawDeliFee !== null
-    ? parseInt((rawDeliFee as Record<string, string>).fee ?? '0', 10)
-    : (typeof detail.deli?.fee === 'string' ? parseInt(detail.deli.fee, 10) : (detail.deli?.fee ?? 0));
+
+  const effectiveDeliFee = parseEffectiveDeliFee(detail.deli);
+  // 응답용: 원본 fee 값 (deliWho 판단용)
+  const deliRaw = detail.deli as Record<string, unknown> | undefined;
+  const deliWho = (deliRaw?.who as string | undefined) ?? (deliRaw?.pay as string | undefined) ?? null;
+  const deliFee = effectiveDeliFee;
 
   const moqStrategies: Record<number, MoqStrategy> = { 1: 'single', 2: '1+1', 3: '2+1' };
   const strategy: MoqStrategy = moqStrategies[moq] ?? null;
-  const effectiveDeliFee = deliWho === 'S' ? 0 : deliFee;
   const costTotal = priceDome * moq + effectiveDeliFee;
   const targetProfit = Math.ceil(costTotal * DOMEGGOOK_TARGET_MARGIN_RATE);
 

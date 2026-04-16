@@ -344,6 +344,7 @@ export default function CostcoTab({ externalGenderFilter }: CostcoTabProps = {})
   const [isCollecting, setIsCollecting]     = useState(false);
   const [error, setError]                   = useState<string | null>(null);
   const [collectError, setCollectError]     = useState<string | null>(null);
+  const [collectResult, setCollectResult]   = useState<{ totalFetched: number; errorCount: number } | null>(null);
   const [isLegalChecking, setIsLegalChecking] = useState(false);
   const [legalCheckResult, setLegalCheckResult] = useState<{ checkedCount: number; blockedCount: number; warningCount: number } | null>(null);
   // IP 검증 상태: 현재 검증 중인 product_code, 완료된 결과 맵
@@ -419,6 +420,7 @@ export default function CostcoTab({ externalGenderFilter }: CostcoTabProps = {})
     if (isCollecting) return;
     setIsCollecting(true);
     setCollectError(null);
+    setCollectResult(null);
     try {
       const res = await fetch('/api/sourcing/costco', {
         method: 'POST',
@@ -427,6 +429,23 @@ export default function CostcoTab({ externalGenderFilter }: CostcoTabProps = {})
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+
+      const totalFetched: number = data.data?.totalFetched ?? 0;
+      const errors: { category: string; message: string }[] = data.data?.errors ?? [];
+
+      setCollectResult({ totalFetched, errorCount: errors.length });
+
+      if (totalFetched === 0) {
+        const firstErr = errors[0];
+        setCollectError(
+          firstErr
+            ? `수집된 상품 없음 — ${firstErr.category}: ${firstErr.message}`
+            : '수집된 상품이 없습니다. 코스트코 API 상태를 확인해 주세요.',
+        );
+      } else if (errors.length > 0) {
+        setCollectError(`일부 카테고리 오류 (${errors.length}건): ${errors[0].category} — ${errors[0].message}`);
+      }
+
       await fetchProducts();
     } catch (e) {
       setCollectError(e instanceof Error ? e.message : '수집 실패');
@@ -572,6 +591,31 @@ export default function CostcoTab({ externalGenderFilter }: CostcoTabProps = {})
           </button>
         </div>
       </div>
+
+      {/* ── 수집 결과 배너 */}
+      {collectResult && collectResult.totalFetched > 0 && !collectError && (
+        <div
+          style={{
+            margin: '12px 24px 0', padding: '10px 14px',
+            backgroundColor: 'rgba(21,128,61,0.06)',
+            border: '1px solid rgba(21,128,61,0.2)', borderRadius: '6px',
+            fontSize: '13px', color: '#15803d',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          }}
+        >
+          <span>
+            ✅ {collectResult.totalFetched.toLocaleString()}개 수집 완료
+            {collectResult.errorCount > 0 && (
+              <span style={{ color: '#b45309', marginLeft: '8px' }}>
+                (일부 카테고리 오류 {collectResult.errorCount}건)
+              </span>
+            )}
+          </span>
+          <button onClick={() => setCollectResult(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#15803d' }}>
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       {/* ── 에러 배너 */}
       {collectError && (

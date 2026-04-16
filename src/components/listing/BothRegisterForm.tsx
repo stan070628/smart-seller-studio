@@ -65,12 +65,14 @@ const sectionHeaderStyle: React.CSSProperties = {
 // Props
 // ─────────────────────────────────────────────────────────────────────────────
 export interface DomeggookPrepareData {
-  thumbnailUrl: string;     // 가공된 대표이미지 URL
-  detailHtml: string;       // 가공된 상세 HTML
-  title: string;            // 상품명
-  naverPrice: number;       // 네이버 추천판매가 (마진 10% 포함)
-  coupangPrice: number;     // 쿠팡 추천판매가 (마진 10% 포함)
-  itemNo?: number;          // 도매꾹 상품번호 (옵션 자동 불러오기용, 선택)
+  thumbnailUrl: string;       // 가공된 대표이미지 URL
+  detailHtml: string;         // 가공된 상세 HTML
+  title: string;              // 상품명
+  naverPrice: number;         // 네이버 추천판매가 (마진 10% 포함)
+  coupangPrice: number;       // 쿠팡 추천판매가 (마진 10% 포함)
+  itemNo?: number;            // 도매꾹 상품번호 (옵션 자동 불러오기용, 선택)
+  costBase?: number;          // 순수 원가 (도매가 × MOQ, 배송비 제외) — 가격 자동 재계산용
+  effectiveDeliFee?: number;  // 실효 배송비 (판매자 선불 시 0) — 가격 자동 재계산용
 }
 
 interface BothRegisterFormProps {
@@ -187,6 +189,37 @@ export default function BothRegisterForm({ onClose, prefill }: BothRegisterFormP
 
   // ─── 태그 입력 상태 ──────────────────────────────────────────────────────
   const [tagInput, setTagInput] = useState('');
+
+  // ─── 배송비 기반 판매가 자동 재계산 ─────────────────────────────────────
+  /**
+   * costBase + effectiveDeliFee 가 있을 때 배송비 설정에 따라 채널별 판매가 재계산
+   * 공식: adjustedCost = costBase + max(effectiveDeliFee - buyerDeliveryCharge, 0)
+   *       salePrice = round((adjustedCost * 1.10) / (1 - fee - VAT) / 10) * 10
+   */
+  const recalcChannelPrices = useCallback(
+    (chargeType: 'FREE' | 'NOT_FREE' | 'CHARGE_RECEIVED', chargeAmount: number) => {
+      if (prefill?.costBase === undefined || prefill?.effectiveDeliFee === undefined) return;
+
+      const { costBase, effectiveDeliFee } = prefill;
+      const buyerDelivery = chargeType === 'NOT_FREE' ? chargeAmount : 0;
+      const netDeliFee = Math.max(effectiveDeliFee - buyerDelivery, 0);
+      const adjustedCost = costBase + netDeliFee;
+      const targetProfit = Math.ceil(adjustedCost * 0.10);
+
+      const VAT = 10 / 110;
+      const naverRate = 1 - 0.06 - VAT;
+      const coupangRate = 1 - 0.11 - VAT;
+
+      const newNaverPrice = Math.round((adjustedCost + targetProfit) / naverRate / 10) * 10;
+      const newCoupangPrice = Math.round((adjustedCost + targetProfit) / coupangRate / 10) * 10;
+
+      updateSharedDraft({
+        naverPrice: String(newNaverPrice),
+        coupangPrice: String(newCoupangPrice),
+      });
+    },
+    [prefill, updateSharedDraft],
+  );
 
   // ─── AI 최적화 상태 ──────────────────────────────────────────────────────
   const [isOptimizing, setIsOptimizing] = useState(false);
@@ -312,38 +345,68 @@ export default function BothRegisterForm({ onClose, prefill }: BothRegisterFormP
     return Object.keys(newErrors).length === 0;
   };
 
+  // ─── 공통 payload 생성 ─────────────────────────────────────────────────
+  const buildPayloadData = () => ({
+    name: sharedDraft.name.trim(),
+    salePrice: Number(sharedDraft.salePrice) || 100,
+    naverPrice: sharedDraft.naverPrice ? Number(sharedDraft.naverPrice) : undefined,
+    coupangPrice: sharedDraft.coupangPrice ? Number(sharedDraft.coupangPrice) : undefined,
+    originalPrice: sharedDraft.originalPrice ? Number(sharedDraft.originalPrice) : undefined,
+    stock: sharedDraft.stock ? Number(sharedDraft.stock) : undefined,
+    thumbnailImages: thumbnailImageUrls,
+    detailImages: detailImageUrls.length > 0 ? detailImageUrls : undefined,
+    description: sharedDraft.description,
+    deliveryCharge: Number(sharedDraft.deliveryCharge),
+    deliveryChargeType: sharedDraft.deliveryChargeType,
+    returnCharge: Number(sharedDraft.returnCharge),
+    coupang: {
+      displayCategoryCode: Number(coupangCategoryCode),
+      brand: brand.trim() || undefined,
+    },
+    naver: {
+      leafCategoryId: naverCategoryId,
+      tags: sharedDraft.tags.length > 0 ? sharedDraft.tags : undefined,
+      exchangeFee: naverExchangeFee ? Number(naverExchangeFee) : undefined,
+    },
+    options: sharedDraft.options?.hasOptions ? sharedDraft.options : undefined,
+  });
+
+  // ─── 미리보기 ───────────────────────────────────────────────────────────
+  const [previewData, setPreviewData] = useState<{ coupang: unknown; naver: unknown } | null>(null);
+  const [isPreviewing, setIsPreviewing] = useState(false);
+
+  const handlePreview = async () => {
+    if (!validate()) return;
+    setIsPreviewing(true);
+    setPreviewData(null);
+    try {
+      const res = await fetch('/api/listing/both', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...buildPayloadData(), preview: true }),
+      });
+      const json = await res.json();
+      if (json.success && json.preview) {
+        setPreviewData(json.data);
+      } else {
+        window.alert('미리보기 실패: ' + (json.error ?? '알 수 없는 오류'));
+      }
+    } catch (e) {
+      window.alert('미리보기 요청 실패');
+    } finally {
+      setIsPreviewing(false);
+    }
+  };
+
   // ─── 등록 실행 ───────────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     resetBothRegistration();
+    setPreviewData(null);
 
     if (!validate()) return;
 
-    await registerBothProducts({
-      name: sharedDraft.name.trim(),
-      salePrice: Number(sharedDraft.salePrice) || 100, // 채널별 가격만 입력 시 최소값 placeholder
-      naverPrice: sharedDraft.naverPrice ? Number(sharedDraft.naverPrice) : undefined,
-      coupangPrice: sharedDraft.coupangPrice ? Number(sharedDraft.coupangPrice) : undefined,
-      originalPrice: sharedDraft.originalPrice ? Number(sharedDraft.originalPrice) : undefined,
-      stock: sharedDraft.stock ? Number(sharedDraft.stock) : undefined,
-      thumbnailImages: thumbnailImageUrls,
-      detailImages: detailImageUrls.length > 0 ? detailImageUrls : undefined,
-      description: sharedDraft.description,
-      deliveryCharge: Number(sharedDraft.deliveryCharge),
-      deliveryChargeType: sharedDraft.deliveryChargeType,
-      returnCharge: Number(sharedDraft.returnCharge),
-      coupang: {
-        displayCategoryCode: Number(coupangCategoryCode),
-        brand: brand.trim() || undefined,
-      },
-      naver: {
-        leafCategoryId: naverCategoryId,
-        tags: sharedDraft.tags.length > 0 ? sharedDraft.tags : undefined,
-        exchangeFee: naverExchangeFee ? Number(naverExchangeFee) : undefined,
-      },
-      // 옵션이 있고 hasOptions=true인 경우에만 payload에 포함
-      options: sharedDraft.options?.hasOptions ? sharedDraft.options : undefined,
-    });
+    await registerBothProducts(buildPayloadData());
   };
 
   // ─── 닫기 핸들러 ─────────────────────────────────────────────────────────
@@ -694,14 +757,11 @@ export default function BothRegisterForm({ onClose, prefill }: BothRegisterFormP
                   <select
                     style={inputStyle}
                     value={sharedDraft.deliveryChargeType}
-                    onChange={(e) =>
-                      updateDraft({
-                        deliveryChargeType: e.target.value as
-                          | 'FREE'
-                          | 'NOT_FREE'
-                          | 'CHARGE_RECEIVED',
-                      })
-                    }
+                    onChange={(e) => {
+                      const newType = e.target.value as 'FREE' | 'NOT_FREE' | 'CHARGE_RECEIVED';
+                      updateDraft({ deliveryChargeType: newType });
+                      recalcChannelPrices(newType, Number(sharedDraft.deliveryCharge));
+                    }}
                   >
                     <option value="FREE">무료배송</option>
                     <option value="NOT_FREE">유료배송</option>
@@ -709,13 +769,23 @@ export default function BothRegisterForm({ onClose, prefill }: BothRegisterFormP
                   </select>
                 </div>
                 <div>
-                  <label style={labelStyle}>배송비 (원)</label>
+                  <label style={labelStyle}>
+                    배송비 (원)
+                    {prefill?.effectiveDeliFee !== undefined && prefill.effectiveDeliFee > 0 && (
+                      <span style={{ fontWeight: 400, color: C.textSub, marginLeft: '4px' }}>
+                        — 도매꾹 {prefill.effectiveDeliFee.toLocaleString()}원
+                      </span>
+                    )}
+                  </label>
                   <input
                     type="number"
                     min="0"
                     style={inputStyle}
                     value={sharedDraft.deliveryCharge}
-                    onChange={(e) => updateDraft({ deliveryCharge: e.target.value })}
+                    onChange={(e) => {
+                      updateDraft({ deliveryCharge: e.target.value });
+                      recalcChannelPrices(sharedDraft.deliveryChargeType, Number(e.target.value));
+                    }}
                   />
                 </div>
                 <div>
@@ -1315,6 +1385,33 @@ export default function BothRegisterForm({ onClose, prefill }: BothRegisterFormP
               취소
             </button>
             <button
+              type="button"
+              onClick={handlePreview}
+              disabled={isPreviewing || isRegistering}
+              style={{
+                padding: '10px 24px',
+                fontSize: '13px',
+                fontWeight: 600,
+                backgroundColor: isPreviewing ? '#d4d4d8' : '#f0f0f0',
+                color: '#333',
+                border: `1px solid ${C.border}`,
+                borderRadius: '8px',
+                cursor: (isPreviewing || isRegistering) ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              {isPreviewing ? (
+                <>
+                  <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                  확인 중...
+                </>
+              ) : (
+                '미리보기'
+              )}
+            </button>
+            <button
               type="submit"
               disabled={isRegistering}
               style={{
@@ -1343,6 +1440,39 @@ export default function BothRegisterForm({ onClose, prefill }: BothRegisterFormP
           </div>
         </div>
       </form>
+
+      {/* ── 미리보기 결과 ──────────────────────────────────────────── */}
+      {previewData && (
+        <div style={{ padding: '16px 24px', borderTop: `1px solid ${C.border}` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <span style={{ fontSize: '14px', fontWeight: 700, color: C.text }}>
+              미리보기 (실제 등록 전 payload)
+            </span>
+            <button
+              type="button"
+              onClick={() => setPreviewData(null)}
+              style={{ fontSize: '12px', color: C.textSub, background: 'none', border: 'none', cursor: 'pointer' }}
+            >
+              닫기
+            </button>
+          </div>
+          {(['coupang', 'naver'] as const).map((platform) => (
+            <details key={platform} style={{ marginBottom: '8px' }}>
+              <summary style={{ fontSize: '13px', fontWeight: 600, color: platform === 'coupang' ? '#be0014' : '#03c75a', cursor: 'pointer', padding: '6px 0' }}>
+                {platform === 'coupang' ? '쿠팡' : '네이버'} payload
+              </summary>
+              <pre style={{
+                fontSize: '11px', lineHeight: '1.5',
+                backgroundColor: '#f5f5f5', borderRadius: '6px',
+                padding: '12px', overflow: 'auto', maxHeight: '400px',
+                border: `1px solid ${C.border}`,
+              }}>
+                {JSON.stringify(previewData[platform], null, 2)}
+              </pre>
+            </details>
+          ))}
+        </div>
+      )}
 
       {/* 스피너 키프레임 */}
       <style>{`

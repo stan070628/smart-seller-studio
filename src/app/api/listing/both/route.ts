@@ -17,6 +17,7 @@ import {
   type CommonProductInput,
   type CoupangSpecificInput,
   type NaverSpecificInput,
+  type OptionsInput,
 } from '@/lib/listing/payload-mappers';
 
 // ─────────────────────────────────────────────────────────────
@@ -53,6 +54,32 @@ const BothRegisterSchema = z.object({
     exchangeFee: z.number().int().min(0).default(8000),
     returnFee: z.number().int().min(0).optional(),
   }),
+  // 미리보기 모드 — true면 실제 등록하지 않고 payload만 반환
+  preview: z.boolean().optional().default(false),
+  // 옵션(variants) — 없으면 단일 상품으로 등록
+  options: z
+    .object({
+      groups: z.array(
+        z.object({
+          groupName: z.string().min(1),
+          values: z.array(z.string()),
+        }),
+      ),
+      variants: z.array(
+        z.object({
+          optionValues: z.array(z.string()),
+          sourceHash: z.string().nullable(),
+          costPrice: z.number(),
+          salePrices: z.object({
+            coupang: z.number().int().min(100),
+            naver: z.number().int().min(100),
+          }),
+          stock: z.number().int().min(0),
+          enabled: z.boolean(),
+        }),
+      ),
+    })
+    .optional(),
 });
 
 type BothRegisterInput = z.infer<typeof BothRegisterSchema>;
@@ -78,30 +105,15 @@ interface NaverResult {
 // 쿠팡 등록 처리
 // ─────────────────────────────────────────────────────────────
 
-async function registerCoupang(d: BothRegisterInput): Promise<CoupangResult> {
+async function registerCoupang(
+  d: BothRegisterInput,
+  options?: OptionsInput,
+): Promise<CoupangResult> {
   const client = getCoupangClient();
 
-  // 출고지/반품지 코드 조회 (미지정 시 자동 조회)
-  let outboundCode = d.coupang.outboundShippingPlaceCode ?? '';
-  let returnCode = d.coupang.returnCenterCode ?? '';
-
-  if (!outboundCode || !returnCode) {
-    const [outbound, returns] = await Promise.all([
-      client.getOutboundShippingPlaces(),
-      client.getReturnShippingCenters(),
-    ]);
-
-    if (!outboundCode && outbound.length > 0) {
-      outboundCode = String(
-        (outbound[0] as Record<string, unknown>).outboundShippingPlaceCode ?? '',
-      );
-    }
-    if (!returnCode && returns.length > 0) {
-      returnCode = String(
-        (returns[0] as Record<string, unknown>).returnCenterCode ?? '',
-      );
-    }
-  }
+  // 출고지/반품지 코드 (명시적 전달 → 환경변수 → 에러)
+  const outboundCode = d.coupang.outboundShippingPlaceCode || client.getOutboundShippingPlaceCode();
+  const returnCode = d.coupang.returnCenterCode || client.getReturnCenterCode();
 
   const common: CommonProductInput = {
     name: d.name,
@@ -126,7 +138,24 @@ async function registerCoupang(d: BothRegisterInput): Promise<CoupangResult> {
     returnCenterCode: returnCode,
   };
 
-  const payload = buildCoupangPayload(common, specific, client.vendor);
+  // 카테고리 메타에서 고시정보 자동 생성 (첫 번째 noticeCategory의 "기타 재화" 우선, 없으면 첫 항목)
+  let autoNotices: { noticeCategoryName: string; noticeCategoryDetailName: string; content: string }[] = [];
+  try {
+    const meta = await client.getCategoryMeta(d.coupang.displayCategoryCode);
+    const cats = meta.noticeCategories as { noticeCategoryName: string; noticeCategoryDetailNames: { noticeCategoryDetailName: string }[] }[] | undefined;
+    if (cats && cats.length > 0) {
+      const chosen = cats.find((c) => c.noticeCategoryName === '기타 재화') ?? cats[0];
+      autoNotices = chosen.noticeCategoryDetailNames.map((det) => ({
+        noticeCategoryName: chosen.noticeCategoryName,
+        noticeCategoryDetailName: det.noticeCategoryDetailName,
+        content: '상세페이지 참조',
+      }));
+    }
+  } catch (e) {
+    console.warn('[registerCoupang] 카테고리 메타 조회 실패, 고시정보 빈 배열:', e);
+  }
+
+  const payload = buildCoupangPayload(common, specific, client.vendor, options, autoNotices);
   const result = await client.registerProduct(payload);
 
   return { success: true, sellerProductId: result.sellerProductId };
@@ -136,17 +165,26 @@ async function registerCoupang(d: BothRegisterInput): Promise<CoupangResult> {
 // 네이버 등록 처리
 // ─────────────────────────────────────────────────────────────
 
-async function registerNaver(d: BothRegisterInput): Promise<NaverResult> {
+async function registerNaver(
+  d: BothRegisterInput,
+  options?: OptionsInput,
+): Promise<NaverResult> {
   const client = getNaverCommerceClient();
+
+  // 네이버는 외부 URL 직접 사용 불가 → 이미지 업로드 API로 변환
+  console.info('[registerNaver] 이미지 업로드 시작:', d.thumbnailImages.length, '장');
+  const naverThumbnails = await client.uploadImagesFromUrls(d.thumbnailImages);
+  if (naverThumbnails.length === 0) {
+    throw new Error('네이버 이미지 업로드에 모두 실패했습니다. 이미지 URL을 확인해주세요.');
+  }
 
   const common: CommonProductInput = {
     name: d.name,
-    // naverPrice 입력 시 우선 사용, 미입력 시 공통 salePrice 사용
     salePrice: d.naverPrice ?? d.salePrice,
     originalPrice: d.originalPrice,
     stock: d.stock,
-    thumbnailImages: d.thumbnailImages,
-    detailImages: d.detailImages,
+    thumbnailImages: naverThumbnails,
+    detailImages: d.detailImages,  // 상세 이미지는 HTML 내 img 태그로 삽입되므로 업로드 불필요
     description: d.description,
     deliveryCharge: d.deliveryCharge,
     deliveryChargeType: d.deliveryChargeType,
@@ -160,7 +198,8 @@ async function registerNaver(d: BothRegisterInput): Promise<NaverResult> {
     returnFee: d.naver.returnFee,
   };
 
-  const payload = buildNaverPayload(common, specific);
+  const payload = buildNaverPayload(common, specific, options);
+  console.info('[registerNaver] payload:', JSON.stringify(payload).slice(0, 2000));
   const result = await client.registerProduct(payload);
 
   return {
@@ -201,10 +240,68 @@ export async function POST(request: NextRequest) {
 
   const d = parseResult.data;
 
+  // options가 있으면 OptionsInput 형태로 변환 (없으면 undefined 전달)
+  const optionsInput: OptionsInput | undefined = d.options;
+
+  // ── 미리보기 모드: payload만 생성하여 반환, 실제 등록 안 함 ──
+  if (d.preview) {
+    const client = getCoupangClient();
+    const outboundCode = d.coupang.outboundShippingPlaceCode || client.getOutboundShippingPlaceCode();
+    const returnCode = d.coupang.returnCenterCode || client.getReturnCenterCode();
+
+    // 쿠팡 고시정보 자동 조회
+    let autoNotices: { noticeCategoryName: string; noticeCategoryDetailName: string; content: string }[] = [];
+    try {
+      const meta = await client.getCategoryMeta(d.coupang.displayCategoryCode);
+      const cats = meta.noticeCategories as { noticeCategoryName: string; noticeCategoryDetailNames: { noticeCategoryDetailName: string }[] }[] | undefined;
+      if (cats && cats.length > 0) {
+        const chosen = cats.find((c) => c.noticeCategoryName === '기타 재화') ?? cats[0];
+        autoNotices = chosen.noticeCategoryDetailNames.map((det) => ({
+          noticeCategoryName: chosen.noticeCategoryName,
+          noticeCategoryDetailName: det.noticeCategoryDetailName,
+          content: '상세페이지 참조',
+        }));
+      }
+    } catch { /* ignore */ }
+
+    const coupangCommon: CommonProductInput = {
+      name: d.name, salePrice: d.coupangPrice ?? d.salePrice,
+      originalPrice: d.originalPrice, stock: d.stock,
+      thumbnailImages: d.thumbnailImages, detailImages: d.detailImages,
+      description: d.description, deliveryCharge: d.deliveryCharge,
+      deliveryChargeType: d.deliveryChargeType, returnCharge: d.returnCharge,
+    };
+    const coupangSpecific: CoupangSpecificInput = {
+      displayCategoryCode: d.coupang.displayCategoryCode, brand: d.coupang.brand,
+      maximumBuyCount: d.coupang.maximumBuyCount, maximumBuyForPerson: d.coupang.maximumBuyForPerson,
+      outboundShippingPlaceCode: outboundCode, returnCenterCode: returnCode,
+    };
+    const coupangPayload = buildCoupangPayload(coupangCommon, coupangSpecific, client.vendor, optionsInput, autoNotices);
+
+    const naverCommon: CommonProductInput = {
+      name: d.name, salePrice: d.naverPrice ?? d.salePrice,
+      originalPrice: d.originalPrice, stock: d.stock,
+      thumbnailImages: d.thumbnailImages, detailImages: d.detailImages,
+      description: d.description, deliveryCharge: d.deliveryCharge,
+      deliveryChargeType: d.deliveryChargeType, returnCharge: d.returnCharge,
+    };
+    const naverSpecific: NaverSpecificInput = {
+      leafCategoryId: d.naver.leafCategoryId, tags: d.naver.tags,
+      exchangeFee: d.naver.exchangeFee, returnFee: d.naver.returnFee,
+    };
+    const naverPayload = buildNaverPayload(naverCommon, naverSpecific, optionsInput);
+
+    return Response.json({
+      success: true,
+      preview: true,
+      data: { coupang: coupangPayload, naver: naverPayload },
+    });
+  }
+
   // 두 플랫폼 병렬 등록 (한 쪽 실패가 다른 쪽에 영향 없음)
   const [coupangSettled, naverSettled] = await Promise.allSettled([
-    registerCoupang(d),
-    registerNaver(d),
+    registerCoupang(d, optionsInput),
+    registerNaver(d, optionsInput),
   ]);
 
   const coupangResult: CoupangResult =

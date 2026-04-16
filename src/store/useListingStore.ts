@@ -6,6 +6,7 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import type { PlatformId, ProductListing } from '@/types/listing';
+import type { ProductOptions } from '@/types/product-option';
 
 // ─── SharedDraft 타입 ────────────────────────────────────────────────────────
 // 탭 이동 시에도 입력값이 유지되도록 공통 필드를 스토어에서 관리
@@ -23,6 +24,10 @@ interface SharedDraft {
   deliveryChargeType: 'FREE' | 'NOT_FREE' | 'CHARGE_RECEIVED';
   returnCharge: string;
   tags: string[];            // 공통 태그 (네이버에서 주로 사용)
+  // 도매꾹 옵션 상태
+  options: ProductOptions | null;
+  optionsLoading: boolean;
+  optionsError: string | null;
 }
 
 const SHARED_DRAFT_INITIAL: SharedDraft = {
@@ -39,6 +44,9 @@ const SHARED_DRAFT_INITIAL: SharedDraft = {
   deliveryChargeType: 'FREE',
   returnCharge: '5000',
   tags: [],
+  options: null,
+  optionsLoading: false,
+  optionsError: null,
 };
 
 // ─── BothRegistration 타입 ───────────────────────────────────────────────────
@@ -149,6 +157,11 @@ interface ListingStore {
   sharedDraft: SharedDraft;
   updateSharedDraft: (patch: Partial<SharedDraft>) => void;
   resetSharedDraft: () => void;
+  // 도매꾹 옵션 액션
+  fetchOptions: (itemNo: number) => Promise<void>;
+  updateVariantPrice: (variantId: string, platform: 'coupang' | 'naver', price: number) => void;
+  toggleVariant: (variantId: string) => void;
+  toggleAllVariants: (enabled: boolean) => void;
 
   // ─── BothRegistration 액션 ──────────────────────────────────────────────────
   bothRegistration: BothRegistrationState;
@@ -176,6 +189,7 @@ interface ListingStore {
       tags?: string[];
       exchangeFee?: number;
     };
+    options?: ProductOptions | null;
   }) => Promise<{ coupangSuccess: boolean; naverSuccess: boolean }>;
   resetBothRegistration: () => void;
 }
@@ -413,6 +427,123 @@ export const useListingStore = create<ListingStore>()(
 
       resetSharedDraft: () =>
         set({ sharedDraft: SHARED_DRAFT_INITIAL }, false, 'listing/resetSharedDraft'),
+
+      // ─── 도매꾹 옵션 액션 ──────────────────────────────────────────────────
+
+      fetchOptions: async (itemNo: number) => {
+        set(
+          (s) => ({ sharedDraft: { ...s.sharedDraft, optionsLoading: true, optionsError: null } }),
+          false,
+          'listing/fetchOptions/start',
+        );
+        try {
+          const res = await fetch('/api/sourcing/prepare-options', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ itemNo }),
+          });
+          const json = await res.json();
+          if (!res.ok || !json.success) {
+            throw new Error(json.error ?? `옵션 조회 실패 (${res.status})`);
+          }
+          set(
+            (s) => ({
+              sharedDraft: {
+                ...s.sharedDraft,
+                options: json.data as ProductOptions,
+                optionsLoading: false,
+                optionsError: null,
+              },
+            }),
+            false,
+            'listing/fetchOptions/success',
+          );
+        } catch (err) {
+          set(
+            (s) => ({
+              sharedDraft: {
+                ...s.sharedDraft,
+                optionsLoading: false,
+                optionsError: err instanceof Error ? err.message : '옵션 조회 오류',
+              },
+            }),
+            false,
+            'listing/fetchOptions/error',
+          );
+        }
+      },
+
+      updateVariantPrice: (variantId, platform, price) =>
+        set(
+          (s) => {
+            const opts = s.sharedDraft.options;
+            if (!opts) return {};
+            return {
+              sharedDraft: {
+                ...s.sharedDraft,
+                options: {
+                  ...opts,
+                  variants: opts.variants.map((v) =>
+                    v.variantId === variantId
+                      ? {
+                          ...v,
+                          salePrices: {
+                            ...v.salePrices,
+                            [platform]: price,
+                          },
+                        }
+                      : v,
+                  ),
+                },
+              },
+            };
+          },
+          false,
+          'listing/updateVariantPrice',
+        ),
+
+      toggleVariant: (variantId) =>
+        set(
+          (s) => {
+            const opts = s.sharedDraft.options;
+            if (!opts) return {};
+            return {
+              sharedDraft: {
+                ...s.sharedDraft,
+                options: {
+                  ...opts,
+                  variants: opts.variants.map((v) =>
+                    v.variantId === variantId ? { ...v, enabled: !v.enabled } : v,
+                  ),
+                },
+              },
+            };
+          },
+          false,
+          'listing/toggleVariant',
+        ),
+
+      toggleAllVariants: (enabled) =>
+        set(
+          (s) => {
+            const opts = s.sharedDraft.options;
+            if (!opts) return {};
+            return {
+              sharedDraft: {
+                ...s.sharedDraft,
+                options: {
+                  ...opts,
+                  // 품절(soldOut) 행은 강제 비활성 유지
+                  variants: opts.variants.map((v) =>
+                    v.soldOut ? v : { ...v, enabled },
+                  ),
+                },
+              },
+            };
+          },
+          false,
+          'listing/toggleAllVariants',
+        ),
 
       // ─── BothRegistration 초기값 및 액션 ───────────────────────────────────
       bothRegistration: BOTH_REGISTRATION_INITIAL,

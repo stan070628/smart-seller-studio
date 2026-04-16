@@ -135,14 +135,88 @@ export class NaverCommerceClient {
       let errMsg: string;
       try {
         const errJson = JSON.parse(text);
-        errMsg = errJson.message || errJson.error || text;
+        // invalidInputs 필드가 있으면 상세 필드별 오류 표시
+        const details = errJson.invalidInputs
+          ? errJson.invalidInputs.map((i: { name?: string; message?: string }) => `${i.name}: ${i.message}`).join(', ')
+          : '';
+        errMsg = (errJson.message || errJson.error || text) + (details ? ` [${details}]` : '');
       } catch {
         errMsg = text;
       }
+      console.error('[네이버 API] 에러 응답 전문:', text.slice(0, 1000));
       throw new Error(`[네이버 API] ${res.status}: ${errMsg}`);
     }
 
     return text ? JSON.parse(text) as T : {} as T;
+  }
+
+  // ─── 이미지 업로드 (multipart/form-data) ────────────────────
+
+  /**
+   * 외부 이미지 URL을 네이버 CDN에 업로드하고 네이버 이미지 URL을 반환한다.
+   * 네이버 상품 등록 시 반드시 이 URL을 사용해야 함 (외부 URL 직접 사용 불가).
+   */
+  async uploadImageFromUrl(imageUrl: string): Promise<string> {
+    // 1. 외부 이미지 다운로드
+    const imgRes = await fetch(imageUrl, { signal: AbortSignal.timeout(15_000) });
+    if (!imgRes.ok) throw new Error(`이미지 다운로드 실패: ${imageUrl} (${imgRes.status})`);
+    const buffer = Buffer.from(await imgRes.arrayBuffer());
+
+    // 파일명 추출
+    const urlPath = new URL(imageUrl).pathname;
+    const filename = urlPath.split('/').pop() || 'image.jpg';
+
+    // 2. 네이버 이미지 업로드 API 호출
+    const token = await this.getToken();
+    const boundary = `----NaverImageUpload${Date.now()}`;
+
+    const bodyParts: Buffer[] = [];
+    // multipart form field: imageFiles
+    const header = `--${boundary}\r\nContent-Disposition: form-data; name="imageFiles"; filename="${filename}"\r\nContent-Type: image/jpeg\r\n\r\n`;
+    bodyParts.push(Buffer.from(header, 'utf-8'));
+    bodyParts.push(buffer);
+    bodyParts.push(Buffer.from(`\r\n--${boundary}--\r\n`, 'utf-8'));
+
+    const multipartBody = Buffer.concat(bodyParts);
+
+    const res = await proxyFetch(`${API_HOST}/external/v1/product-images/upload`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Content-Length': String(multipartBody.length),
+      },
+      body: multipartBody,
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    const text = await res.text();
+    if (!res.ok) {
+      console.error('[네이버 이미지 업로드] 에러:', text.slice(0, 500));
+      throw new Error(`[네이버] 이미지 업로드 실패: ${res.status}`);
+    }
+
+    const json = JSON.parse(text);
+    const naverUrl = json.images?.[0]?.url;
+    if (!naverUrl) throw new Error('[네이버] 이미지 업로드 응답에 URL 없음');
+
+    return naverUrl;
+  }
+
+  /**
+   * 여러 이미지를 순차 업로드하고 네이버 URL 배열을 반환한다.
+   */
+  async uploadImagesFromUrls(imageUrls: string[]): Promise<string[]> {
+    const results: string[] = [];
+    for (const url of imageUrls) {
+      try {
+        const naverUrl = await this.uploadImageFromUrl(url);
+        results.push(naverUrl);
+      } catch (e) {
+        console.warn('[네이버 이미지 업로드] 스킵:', url, e);
+      }
+    }
+    return results;
   }
 
   // ─── 인증 테스트 ───────────────────────────────────────────
