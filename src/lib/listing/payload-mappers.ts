@@ -9,6 +9,32 @@
 import type { CoupangProductPayload } from '@/lib/listing/coupang-client';
 
 // ─────────────────────────────────────────────────────────────
+// 옵션(variants) 입력 타입 — ProductOptions 에서 필요한 필드만 추출
+// ─────────────────────────────────────────────────────────────
+
+/** payload mapper에 전달하는 단일 옵션 그룹 */
+export interface OptionGroupInput {
+  groupName: string;   // "색상", "사이즈"
+  values: string[];    // 해당 그룹의 옵션값 목록 (표시 용도로만 사용)
+}
+
+/** payload mapper에 전달하는 단일 variant (SKU) */
+export interface OptionVariantInput {
+  optionValues: string[];              // ["블랙", "XL"] — group order 순
+  sourceHash: string | null;
+  costPrice: number;
+  salePrices: { coupang: number; naver: number };
+  stock: number;
+  enabled: boolean;                    // false면 payload에서 제외
+}
+
+/** payload mapper에 전달하는 옵션 전체 묶음 */
+export interface OptionsInput {
+  groups: OptionGroupInput[];
+  variants: OptionVariantInput[];
+}
+
+// ─────────────────────────────────────────────────────────────
 // 공통 입력 타입
 // ─────────────────────────────────────────────────────────────
 
@@ -56,14 +82,103 @@ export interface NaverSpecificInput {
 /**
  * 쿠팡 상품 등록 payload를 조립한다.
  * outboundShippingPlaceCode / returnCenterCode 는 호출 전에 채워서 전달해야 한다.
+ * options가 없거나 enabled variant가 없으면 기존 단일 item 로직으로 동작한다.
  */
 export function buildCoupangPayload(
   common: CommonProductInput,
   specific: CoupangSpecificInput,
   vendorId: string,
+  options?: OptionsInput,
+  overrideNotices?: { noticeCategoryName: string; noticeCategoryDetailName: string; content: string }[],
 ): CoupangProductPayload {
   const maximumBuyCount = specific.maximumBuyCount ?? 999;
   const maximumBuyForPerson = specific.maximumBuyForPerson ?? 0;
+
+  // 상세 내용 — TEXT(설명) + IMAGE(상세이미지) 분리
+  // 쿠팡은 TEXT 타입에서 HTML을 렌더링하지 않으므로 이미지는 IMAGE 타입으로 전달
+  const contents: { contentsType: 'TEXT' | 'IMAGE'; contentDetails: { content: string; detailType: 'TEXT' | 'IMAGE' }[] }[] = [
+    {
+      contentsType: 'TEXT',
+      contentDetails: [{ content: common.description || common.name, detailType: 'TEXT' }],
+    },
+    ...common.detailImages.map((url) => ({
+      contentsType: 'IMAGE' as const,
+      contentDetails: [{ content: url, detailType: 'IMAGE' as const }],
+    })),
+  ];
+
+  // 고시정보 — overrideNotices가 전달되면 사용, 없으면 빈 배열
+  const notices = overrideNotices ?? [];
+
+  // 이미지 배열 — 썸네일 + 상세 이미지를 함께 포함
+  // (쿠팡은 vendorPath에 외부 URL 허용, contents IMAGE는 거부함)
+  const images = [
+    ...common.thumbnailImages.map((url, i) => ({
+      imageOrder: i,
+      imageType: i === 0 ? 'REPRESENTATION' as const : 'DETAIL' as const,
+      vendorPath: url,
+    })),
+    ...common.detailImages.map((url, i) => ({
+      imageOrder: common.thumbnailImages.length + i,
+      imageType: 'DETAIL' as const,
+      vendorPath: url,
+    })),
+  ];
+
+  // enabled variant가 1개 이상이면 variant별 item 생성, 없으면 단일 item
+  const enabledVariants = options?.variants.filter((v) => v.enabled) ?? [];
+
+  const items =
+    enabledVariants.length > 0
+      ? enabledVariants.map((variant) => {
+          // 옵션값 조합명: "블랙/XL"
+          const variantLabel = variant.optionValues.join('/');
+          // group 순서에 따라 attributes 생성
+          const attributes = options!.groups.map((group, idx) => ({
+            attributeTypeName: group.groupName,
+            attributeValueName: variant.optionValues[idx] ?? '',
+          }));
+
+          return {
+            itemName: variantLabel,
+            originalPrice: common.originalPrice ?? variant.salePrices.coupang,
+            salePrice: variant.salePrices.coupang,
+            maximumBuyCount,
+            maximumBuyForPerson,
+            maximumBuyForPersonPeriod: 1,
+            outboundShippingTimeDay: 3,
+            unitCount: 1,
+            adultOnly: 'EVERYONE' as const,
+            taxType: 'TAX' as const,
+            overseasPurchased: 'NOT_OVERSEAS_PURCHASED' as const,
+            parallelImported: 'NOT_PARALLEL_IMPORTED' as const,
+            images,
+            attributes,
+            contents,
+            notices,
+          };
+        })
+      : [
+          // 옵션 없는 기존 단일 item
+          {
+            itemName: common.name,
+            originalPrice: common.originalPrice ?? common.salePrice,
+            salePrice: common.salePrice,
+            maximumBuyCount,
+            maximumBuyForPerson,
+            maximumBuyForPersonPeriod: 1,
+            outboundShippingTimeDay: 3,
+            unitCount: 1,
+            adultOnly: 'EVERYONE' as const,
+            taxType: 'TAX' as const,
+            overseasPurchased: 'NOT_OVERSEAS_PURCHASED' as const,
+            parallelImported: 'NOT_PARALLEL_IMPORTED' as const,
+            images,
+            attributes: [],
+            contents,
+            notices,
+          },
+        ];
 
   return {
     displayCategoryCode: specific.displayCategoryCode,
@@ -73,74 +188,26 @@ export function buildCoupangPayload(
     saleEndedAt: '2099-12-31T23:59:59',
     brand: specific.brand,
     generalProductName: common.name,
-    deliveryInfo: {
-      deliveryType: 'NORMAL',
-      deliveryAttributeType: 'NORMAL',
-      deliveryCompanyCode: 'CJGLS',
-      deliveryChargeType: common.deliveryChargeType,
-      deliveryCharge: common.deliveryCharge,
-      freeShipOverAmount: 0,
-      deliveryChargeOnReturn: common.returnCharge,
-      returnCenterCode: specific.returnCenterCode,
-      outboundShippingPlaceCode: specific.outboundShippingPlaceCode,
-    },
+    deliveryMethod: 'SEQUENCIAL',
+    deliveryCompanyCode: 'CJGLS',
+    deliveryChargeType: common.deliveryCharge === 0 ? 'FREE' : 'NOT_FREE',
+    deliveryCharge: common.deliveryCharge,
+    freeShipOverAmount: 0,
+    deliveryChargeOnReturn: common.returnCharge,
+    deliverySurcharge: 0,
+    remoteAreaDeliverable: 'N',
+    bundlePackingDelivery: 0,
+    unionDeliveryType: 'NOT_UNION_DELIVERY',
+    returnCenterCode: specific.returnCenterCode,
+    outboundShippingPlaceCode: specific.outboundShippingPlaceCode,
+    returnChargeName: process.env.COUPANG_RETURN_NAME ?? '',
+    companyContactNumber: process.env.COUPANG_CONTACT_NUMBER ?? '',
+    returnZipCode: process.env.COUPANG_RETURN_ZIPCODE ?? '',
+    returnAddress: process.env.COUPANG_RETURN_ADDRESS ?? '',
+    returnAddressDetail: process.env.COUPANG_RETURN_ADDRESS_DETAIL ?? '',
     returnCharge: common.returnCharge,
-    items: [
-      {
-        itemName: common.name,
-        originalPrice: common.originalPrice ?? common.salePrice,
-        salePrice: common.salePrice,
-        maximumBuyCount,
-        maximumBuyForPerson,
-        unitCount: 1,
-        images: common.thumbnailImages.map((url, i) => ({
-          imageOrder: i,
-          imageType: i === 0 ? 'REPRESENTATIVE' : 'DETAIL',
-          vendorPath: url,
-        })),
-        attributes: [],
-        contents: [
-          {
-            contentsType: 'HTML',
-            contentDetails: [
-              {
-                // detailImages가 있으면 description 끝에 이미지 태그를 추가한다
-                content: common.description + (
-                  common.detailImages.length > 0
-                    ? common.detailImages
-                        .map(url => `<img src="${url}" style="width:100%;display:block;" />`)
-                        .join('')
-                    : ''
-                ),
-                detailType: 'HTML',
-              },
-            ],
-          },
-        ],
-        notices: [
-          {
-            noticeCategoryName: '기타 재화',
-            noticeCategoryDetailName: '품명 및 모델명',
-            content: common.name,
-          },
-          {
-            noticeCategoryName: '기타 재화',
-            noticeCategoryDetailName: '제조국(원산지)',
-            content: '상세페이지 참조',
-          },
-          {
-            noticeCategoryName: '기타 재화',
-            noticeCategoryDetailName: '법에 의한 인증·허가 등을 받았음을 확인할 수 있는 경우 그에 대한 사항',
-            content: '해당사항 없음',
-          },
-          {
-            noticeCategoryName: '기타 재화',
-            noticeCategoryDetailName: 'A/S 책임자와 전화번호',
-            content: '판매자 문의',
-          },
-        ],
-      },
-    ],
+    vendorUserId: process.env.COUPANG_VENDOR_USER_ID ?? '',
+    items,
   };
 }
 
@@ -150,17 +217,60 @@ export function buildCoupangPayload(
 
 /**
  * 네이버 스마트스토어 상품 등록 payload를 조립한다.
+ * options가 없거나 enabled variant가 없으면 기존 단일 상품 로직으로 동작한다.
  */
 export function buildNaverPayload(
   common: CommonProductInput,
   specific: NaverSpecificInput,
+  options?: OptionsInput,
 ): Record<string, unknown> {
   const exchangeFee = specific.exchangeFee ?? 8000;
   const returnFee = specific.returnFee ?? common.returnCharge;
 
+  // enabled variant 목록
+  const enabledVariants = options?.variants.filter((v) => v.enabled) ?? [];
+
+  // 옵션 정보 조립 (enabled variant가 있을 때만)
+  let optionInfo: Record<string, unknown> = { simpleOptionSortType: 'CREATE' };
+  if (enabledVariants.length > 0 && options) {
+    // 그룹명 키: optionGroupName1 ~ optionGroupName4 (최대 4개)
+    const groupNames: Record<string, string> = {};
+    options.groups.slice(0, 4).forEach((group, idx) => {
+      groupNames[`optionGroupName${idx + 1}`] = group.groupName;
+    });
+
+    // 조합 목록
+    const optionCombinations = enabledVariants.map((variant, i) => {
+      // 추가금액: variant 네이버 가격 - 기본 판매가 (음수면 0으로 보정)
+      const additionalPrice = Math.max(
+        0,
+        variant.salePrices.naver - common.salePrice,
+      );
+
+      // optionName1 ~ optionName4
+      const nameFields: Record<string, string> = {};
+      variant.optionValues.slice(0, 4).forEach((val, idx) => {
+        nameFields[`optionName${idx + 1}`] = val;
+      });
+
+      return {
+        ...nameFields,
+        stockQuantity: variant.stock,
+        price: additionalPrice,
+        usable: true,
+      };
+    });
+
+    optionInfo = {
+      simpleOptionSortType: 'CREATE',
+      optionCombinationGroupNames: groupNames,
+      optionCombinations,
+    };
+  }
+
   const payload: Record<string, unknown> = {
     originProduct: {
-      statusType: 'WAIT',
+      statusType: 'SALE',
       saleType: 'NEW',
       leafCategoryId: specific.leafCategoryId,
       name: common.name,
@@ -173,15 +283,28 @@ export function buildNaverPayload(
           manufacturerName: '상세페이지 참조',
         },
         afterServiceInfo: {
-          afterServiceTelephoneNumber: '판매자 문의',
+          afterServiceTelephoneNumber: process.env.NAVER_AS_PHONE ?? '010-0000-0000',
           afterServiceGuideContent: '판매자에게 문의해주세요.',
+        },
+        productInfoProvidedNotice: {
+          productInfoProvidedNoticeType: 'ETC',
+          etc: {
+            itemName: common.name,
+            modelName: '상세페이지 참조',
+            manufacturer: '상세페이지 참조',
+            returnCostReason: '전자상거래법에 의한 반품 시 반품배송비 부담',
+            noRefundReason: '상세페이지 참조',
+            qualityAssuranceStandard: '소비자분쟁해결기준에 따름',
+            compensationProcedure: '소비자분쟁해결기준에 따름',
+            troubleShootingContents: '판매자 문의',
+          },
         },
         originAreaInfo: {
           originAreaCode: '00',
           content: '상세페이지 참조',
         },
         sellerCodeInfo: {},
-        optionInfo: { simpleOptionSortType: 'CREATE' },
+        optionInfo,
         minorPurchasable: true,
         seoInfo: {},
       },
@@ -191,6 +314,7 @@ export function buildNaverPayload(
       deliveryInfo: {
         deliveryType: 'DELIVERY',
         deliveryAttributeType: 'NORMAL',
+        deliveryCompany: 'CJGLS',
         deliveryFee: {
           deliveryFeeType: common.deliveryCharge === 0 ? 'FREE' : 'PAID',
           baseFee: common.deliveryCharge,

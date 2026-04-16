@@ -104,12 +104,14 @@ async function getItemList(keyword, page = 1) {
   return { header, items };
 }
 
+const MAX_PAGES_PER_KEYWORD = 6; // 키워드당 최대 6페이지(1,200건) — DB 용량 관리
+
 async function collectKeyword(keyword) {
   const collected = [];
   let page = 1;
   let totalPages = 1;
 
-  while (page <= totalPages) {
+  while (page <= totalPages && page <= MAX_PAGES_PER_KEYWORD) {
     try {
       const { header, items } = await getItemList(keyword, page);
       totalPages = header.numberOfPages ?? 1;

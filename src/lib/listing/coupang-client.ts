@@ -91,19 +91,30 @@ export interface CoupangProductPayload {
   saleEndedAt: string;
   brand: string;
   generalProductName: string;
-  deliveryInfo: {
-    deliveryType: string;           // ROCKET | NORMAL
-    deliveryAttributeType: string;  // OVERSEA_DELIVERY | COLD_FRESH | ...
-    deliveryCompanyCode: string;
-    deliveryChargeType: string;     // FREE | NOT_FREE | ...
-    deliveryCharge: number;
-    freeShipOverAmount: number;
-    deliveryChargeOnReturn: number;
-    returnCenterCode: string;
-    outboundShippingPlaceCode: string;
-  };
+  // 배송 정보 (최상위 레벨 — 쿠팡 v2 API 구조)
+  deliveryMethod: string;            // SEQUENCIAL | VENDOR_DIRECT
+  deliveryCompanyCode: string;
+  deliveryChargeType: string;        // FREE | NOT_FREE
+  deliveryCharge: number;
+  freeShipOverAmount: number;
+  deliveryChargeOnReturn: number;
+  deliverySurcharge: number;
+  remoteAreaDeliverable: string;     // Y | N
+  bundlePackingDelivery: number;     // 0 | 1
+  unionDeliveryType: string;         // NOT_UNION_DELIVERY | UNION_DELIVERY
+  returnCenterCode: string;
+  outboundShippingPlaceCode: string;
+  returnChargeName: string;
+  companyContactNumber: string;
+  returnZipCode: string;
+  returnAddress: string;
+  returnAddressDetail: string;
   returnCharge: number;
+  vendorUserId: string;
   items: CoupangProductItem[];
+  // 하위 호환용 (이전 코드 참조 시)
+  deliveryInfo?: Record<string, unknown>;
+  [key: string]: unknown;
 }
 
 export interface CoupangProductItem {
@@ -112,7 +123,13 @@ export interface CoupangProductItem {
   salePrice: number;
   maximumBuyCount: number;
   maximumBuyForPerson: number;
+  maximumBuyForPersonPeriod?: number;
+  outboundShippingTimeDay?: number;
   unitCount: number;
+  adultOnly?: string;            // EVERYONE | ADULT_ONLY
+  taxType?: string;              // TAX | FREE
+  overseasPurchased?: string;    // NOT_OVERSEAS_PURCHASED | OVERSEAS_PURCHASED
+  parallelImported?: string;     // NOT_PARALLEL_IMPORTED | PARALLEL_IMPORTED
   images: { imageOrder: number; imageType: string; vendorPath: string }[];
   attributes: { attributeTypeName: string; attributeValueName: string }[];
   contents: { contentsType: string; contentDetails: { content: string; detailType: string }[] }[];
@@ -228,6 +245,14 @@ export class CoupangClient {
     };
   }
 
+  // ─── 카테고리 메타 (고시정보 등) ────────────────────────────
+
+  async getCategoryMeta(displayCategoryCode: number): Promise<Record<string, unknown>> {
+    const url = `/v2/providers/seller_api/apis/api/v1/marketplace/meta/category-related-metas/display-category-codes/${displayCategoryCode}`;
+    const res = await this.request<Record<string, unknown>>('GET', url);
+    return (res.data ?? {}) as Record<string, unknown>;
+  }
+
   // ─── 카테고리 조회 ─────────────────────────────────────────
 
   async getCategoryTree(): Promise<unknown> {
@@ -283,16 +308,35 @@ export class CoupangClient {
 
   // ─── 출고지/반품지 조회 ────────────────────────────────────
 
-  async getOutboundShippingPlaces(): Promise<unknown[]> {
-    const url = `/v2/providers/openapi/apis/api/v4/vendors/${this.vendorId}/outboundShippingCenters`;
-    const res = await this.request<unknown[]>('GET', url);
-    return res.data ?? [];
+  /**
+   * 출고지 코드 반환.
+   * 쿠팡 v4 GET 목록 API 폐기(410), v5에 GET 없음.
+   * → 환경변수 COUPANG_OUTBOUND_CODE에서 조회. 미설정 시 에러.
+   */
+  getOutboundShippingPlaceCode(): string {
+    const code = process.env.COUPANG_OUTBOUND_CODE ?? '';
+    if (!code) {
+      throw new Error(
+        '[쿠팡] COUPANG_OUTBOUND_CODE 환경변수를 설정해주세요. ' +
+        '쿠팡 Wing > 배송/반품 관리 > 출고지 관리에서 확인 가능합니다.',
+      );
+    }
+    return code;
   }
 
-  async getReturnShippingCenters(): Promise<unknown[]> {
-    const url = `/v2/providers/openapi/apis/api/v4/vendors/${this.vendorId}/returnShippingCenters`;
-    const res = await this.request<unknown[]>('GET', url);
-    return res.data ?? [];
+  /**
+   * 반품지 코드 반환.
+   * → 환경변수 COUPANG_RETURN_CENTER_CODE에서 조회.
+   */
+  getReturnCenterCode(): string {
+    const code = process.env.COUPANG_RETURN_CENTER_CODE ?? '';
+    if (!code) {
+      throw new Error(
+        '[쿠팡] COUPANG_RETURN_CENTER_CODE 환경변수를 설정해주세요. ' +
+        '쿠팡 Wing > 배송/반품 관리 > 반품지 관리에서 확인 가능합니다.',
+      );
+    }
+    return code;
   }
 
   // ─── 주문 목록 조회 ────────────────────────────────────────

@@ -215,7 +215,7 @@ export const useSourcingStore = create<SourcingStore>()(
             const fetchRes = await fetch('/api/sourcing/fetch-items', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ keywords: [kw] }),
+              body: JSON.stringify({ keywords: [kw], maxPages: 6 }),
             });
             const fetchJson = await fetchRes.json();
             if (!fetchRes.ok || !fetchJson.success) {
