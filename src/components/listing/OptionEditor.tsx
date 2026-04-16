@@ -34,10 +34,10 @@ const C = {
   successText: '#15803d',
 };
 
-// ─── 마진율 계산 헬퍼 ───────────────────────────────────────────────────────
+// ─── 할인율 계산 헬퍼 (정가 대비 판매가 할인율) ─────────────────────────────
 function calcMargin(salePrice: number, costPrice: number): number | null {
-  if (salePrice <= 0) return null;
-  return ((salePrice - costPrice) / salePrice) * 100;
+  if (costPrice <= 0) return null;
+  return ((costPrice - salePrice) / costPrice) * 100;
 }
 
 // ─── 마진율로 역산한 판매가 ─────────────────────────────────────────────────
@@ -143,6 +143,7 @@ export default function OptionEditor({ itemNo }: OptionEditorProps) {
       if (isNaN(marginPct) || marginPct <= 0 || marginPct >= 100) return;
       if (!options) return;
       options.variants.forEach((v) => {
+        if (v.soldOut) return; // 품절 variant는 스킵
         const newPrice = priceFromMargin(v.costPrice, marginPct);
         updateVariantPrice(v.variantId, platform, newPrice);
       });
@@ -523,9 +524,9 @@ function TableHead({ allChecked, someChecked, onToggleAll, disabled }: TableHead
         <th style={thStyle}>옵션</th>
         <th style={{ ...thStyle, textAlign: 'right' }}>원가</th>
         <th style={{ ...thStyle, textAlign: 'right' }}>쿠팡가</th>
-        <th style={{ ...thStyle, textAlign: 'right' }}>마진율 (쿠)</th>
+        <th style={{ ...thStyle, textAlign: 'right' }}>할인율 (쿠)</th>
         <th style={{ ...thStyle, textAlign: 'right' }}>네이버가</th>
-        <th style={{ ...thStyle, textAlign: 'right' }}>마진율 (네)</th>
+        <th style={{ ...thStyle, textAlign: 'right' }}>할인율 (네)</th>
         <th style={{ ...thStyle, textAlign: 'right' }}>재고</th>
         <th style={{ ...thStyle, textAlign: 'center' }}>상태</th>
       </tr>
@@ -547,7 +548,7 @@ function VariantRow({ variant, onToggle, onPriceChange }: VariantRowProps) {
   const naverMargin = calcMargin(variant.salePrices.naver, variant.costPrice);
 
   const marginStyle = (m: number | null): React.CSSProperties => ({
-    color: m === null ? C.textSub : m < 10 ? C.lowMarginText : C.successText,
+    color: m === null ? C.textSub : m < 30 ? C.lowMarginText : C.successText,
     fontWeight: 600,
     fontSize: '12px',
   });

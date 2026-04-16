@@ -7,6 +7,8 @@
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { getNaverCommerceClient } from '@/lib/listing/naver-commerce-client';
+import { buildNaverPayload } from '@/lib/listing/payload-mappers';
+import type { CommonProductInput, NaverSpecificInput } from '@/lib/listing/payload-mappers';
 
 // ─── GET — 상품 목록 ─────────────────────────────────────────
 
@@ -90,70 +92,37 @@ export async function POST(request: NextRequest) {
   try {
     const client = getNaverCommerceClient();
 
-    const payload = {
-      originProduct: {
-        statusType: 'SALE',
-        saleType: 'NEW',
-        leafCategoryId: d.leafCategoryId,
-        name: d.name,
-        images: {
-          representativeImage: { url: d.thumbnailImages[0] },
-          optionalImages: d.thumbnailImages.slice(1).map((url) => ({ url })),
-        },
-        detailAttribute: {
-          naverShoppingSearchInfo: {
-            manufacturerName: '상세페이지 참조',
-          },
-          afterServiceInfo: {
-            afterServiceTelephoneNumber: '판매자 문의',
-            afterServiceGuideContent: '판매자에게 문의해주세요.',
-          },
-          originAreaInfo: {
-            originAreaCode: '00',
-            content: '상세페이지 참조',
-          },
-          sellerCodeInfo: {},
-          optionInfo: { simpleOptionSortType: 'CREATE' },
-          minorPurchasable: true,
-          seoInfo: {},
-        },
-        customerBenefit: {},
-        salePrice: d.salePrice,
-        stockQuantity: d.stockQuantity,
-        deliveryInfo: {
-          deliveryType: 'DELIVERY',
-          deliveryAttributeType: 'NORMAL',
-          deliveryCompany: 'CJGLS',
-          deliveryFee: {
-            deliveryFeeType: d.deliveryFee === 0 ? 'FREE' : 'PAID',
-            baseFee: d.deliveryFee,
-          },
-          claimDeliveryInfo: {
-            returnDeliveryFee: d.returnFee,
-            exchangeDeliveryFee: d.exchangeFee,
-          },
-        },
-        // detailImages가 있으면 detailContent 끝에 이미지 태그를 추가한다
-        detailContent: `<div>${d.detailContent}${
-          d.detailImages.length > 0
-            ? d.detailImages
-                .map(url => `<img src="${url}" style="width:100%;display:block;" />`)
-                .join('')
-            : ''
-        }</div>`,
-      },
-      smartstoreChannelProduct: {
-        naverShoppingRegistration: true,
-        channelProductDisplayStatusType: 'ON',
-      },
-    };
-
-    // 태그 추가
-    if (d.tags && d.tags.length > 0) {
-      (payload.originProduct.detailAttribute as Record<string, unknown>).sellerTags =
-        d.tags.map((text) => ({ text }));
+    // 네이버는 외부 URL 직접 사용 불가 → 이미지 업로드 API로 변환
+    console.info('[POST /api/listing/naver] 이미지 업로드 시작:', d.thumbnailImages.length, '장');
+    const naverThumbnails = await client.uploadImagesFromUrls(d.thumbnailImages);
+    if (naverThumbnails.length === 0) {
+      return Response.json(
+        { success: false, error: '네이버 이미지 업로드에 모두 실패했습니다. 이미지 URL을 확인해주세요.' },
+        { status: 422 },
+      );
     }
 
+    const common: CommonProductInput = {
+      name: d.name,
+      salePrice: d.salePrice,
+      stock: d.stockQuantity,
+      thumbnailImages: naverThumbnails,
+      detailImages: d.detailImages,
+      description: d.detailContent,
+      deliveryCharge: d.deliveryFee,
+      deliveryChargeType: d.deliveryFee === 0 ? 'FREE' : 'NOT_FREE',
+      returnCharge: d.returnFee,
+    };
+
+    const specific: NaverSpecificInput = {
+      leafCategoryId: d.leafCategoryId,
+      tags: d.tags,
+      exchangeFee: d.exchangeFee,
+      returnFee: d.returnFee,
+    };
+
+    const payload = buildNaverPayload(common, specific);
+    console.info('[POST /api/listing/naver] payload:', JSON.stringify(payload).slice(0, 2000));
     const result = await client.registerProduct(payload);
 
     return Response.json({

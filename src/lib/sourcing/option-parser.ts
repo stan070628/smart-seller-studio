@@ -125,6 +125,13 @@ export function parseDomeggookOptions(
     const costPrice = baseDomePrice + addPrice;
     const costTotal = costPrice + deliveryFee;
 
+    // 채널별 추천 판매가
+    const coupangPrice = calcOptionRecommendedPrice(costTotal, categoryName, 'coupang');
+    const naverPrice = calcOptionRecommendedPrice(costTotal, categoryName, 'naver');
+
+    // 원가(정가)는 판매가 중 높은 값의 130% → 구매자에게 30%+ 할인처럼 보임
+    const displayCostPrice = Math.ceil(Math.max(coupangPrice, naverPrice) * 1.3 / 100) * 100;
+
     // 재고/상태
     const stock = parseInt(d.qty, 10) || 0;
     const soldOut = d.hid === '2';
@@ -134,10 +141,10 @@ export function parseDomeggookOptions(
       variantId: `v_${key}`,
       optionValues,
       sourceHash: d.hash || null,
-      costPrice: costTotal,
+      costPrice: displayCostPrice,
       salePrices: {
-        coupang: calcOptionRecommendedPrice(costTotal, categoryName, 'coupang'),
-        naver: calcOptionRecommendedPrice(costTotal, categoryName, 'naver'),
+        coupang: coupangPrice,
+        naver: naverPrice,
       },
       stock,
       soldOut,

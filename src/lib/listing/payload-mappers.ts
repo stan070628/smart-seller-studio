@@ -184,12 +184,12 @@ export function buildCoupangPayload(
     displayCategoryCode: specific.displayCategoryCode,
     sellerProductName: common.name,
     vendorId,
-    saleStartedAt: '2099-01-01T00:00:00',
-    saleEndedAt: '2099-12-31T23:59:59',
+    saleStartedAt: '1970-01-01T00:00:00',
+    saleEndedAt: '2999-01-01T00:00:00',
     brand: specific.brand,
     generalProductName: common.name,
     deliveryMethod: 'SEQUENCIAL',
-    deliveryCompanyCode: 'CJGLS',
+    deliveryCompanyCode: 'LOTTE',
     deliveryChargeType: common.deliveryCharge === 0 ? 'FREE' : 'NOT_FREE',
     deliveryCharge: common.deliveryCharge,
     freeShipOverAmount: 0,
@@ -270,7 +270,7 @@ export function buildNaverPayload(
 
   const payload: Record<string, unknown> = {
     originProduct: {
-      statusType: 'SALE',
+      statusType: 'SUSPENSION',
       saleType: 'NEW',
       leafCategoryId: specific.leafCategoryId,
       name: common.name,
@@ -292,6 +292,7 @@ export function buildNaverPayload(
             itemName: common.name,
             modelName: '상세페이지 참조',
             manufacturer: '상세페이지 참조',
+            afterServiceDirector: process.env.NAVER_AS_PHONE ?? '010-0000-0000',
             returnCostReason: '전자상거래법에 의한 반품 시 반품배송비 부담',
             noRefundReason: '상세페이지 참조',
             qualityAssuranceStandard: '소비자분쟁해결기준에 따름',
@@ -299,6 +300,15 @@ export function buildNaverPayload(
             troubleShootingContents: '판매자 문의',
           },
         },
+        productCertificationInfos: [
+          {
+            certificationKindType: 'NOT_REQUIRED',
+            name: '해당없음',
+            certificationNumber: '해당없음',
+            certificationMark: false,
+            complianceStandards: [],
+          },
+        ],
         originAreaInfo: {
           originAreaCode: '00',
           content: '상세페이지 참조',

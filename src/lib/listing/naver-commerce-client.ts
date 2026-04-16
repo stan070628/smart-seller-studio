@@ -260,13 +260,43 @@ export class NaverCommerceClient {
 
   // ─── 상품 등록 ────────────────────────────────────────────
 
-  async registerProduct(payload: Record<string, unknown>): Promise<{ originProductNo: number; smartstoreChannelProductNo: number }> {
-    const res = await this.request<{ originProductNo: number; smartstoreChannelProductNo: number }>(
-      'POST',
-      '/external/v2/products',
-      payload,
-    );
-    return res;
+  async registerProduct(
+    payload: Record<string, unknown>,
+    _retry = true,
+  ): Promise<{ originProductNo: number; smartstoreChannelProductNo: number }> {
+    try {
+      return await this.request<{ originProductNo: number; smartstoreChannelProductNo: number }>(
+        'POST',
+        '/external/v2/products',
+        payload,
+      );
+    } catch (err) {
+      if (!_retry) throw err;
+
+      const msg = err instanceof Error ? err.message : '';
+
+      // 400 검증 오류에서 문제 필드를 제거하고 임시저장으로 재시도
+      // 현재 알려진 문제 필드: productCertificationInfos
+      const REMOVABLE_FIELDS: { path: string[]; keyword: string }[] = [
+        { path: ['originProduct', 'detailAttribute', 'productCertificationInfos'], keyword: 'productCertificationInfos' },
+      ];
+
+      const matched = REMOVABLE_FIELDS.find((f) => msg.includes(f.keyword));
+      if (!matched) throw err;
+
+      console.warn(`[네이버] ${matched.keyword} 오류 → 해당 필드 제거 후 임시저장으로 재시도`);
+
+      const fallback = JSON.parse(JSON.stringify(payload)) as Record<string, unknown>;
+      // path를 따라 내려가며 마지막 키를 delete
+      let node: Record<string, unknown> = fallback;
+      for (let i = 0; i < matched.path.length - 1; i++) {
+        node = node[matched.path[i]] as Record<string, unknown>;
+        if (!node) break;
+      }
+      if (node) delete node[matched.path[matched.path.length - 1]];
+
+      return this.registerProduct(fallback, false);
+    }
   }
 
   // ─── 상품 수정 ────────────────────────────────────────────

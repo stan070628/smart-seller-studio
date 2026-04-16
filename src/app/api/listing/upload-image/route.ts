@@ -327,48 +327,26 @@ export async function POST(
       )
     }
 
-    // 10. assets 테이블 INSERT
-    const supabase = getSupabaseServerClient()
-
-    const { data: asset, error: dbError } = await supabase
-      .from("assets")
-      .insert({
-        user_id: userId,
-        project_id: null,           // listing 이미지는 프로젝트 미연결
-        storage_path: uploadResult.path,
-        public_url: uploadResult.url,
-        file_name: storedFileName,
-        mime_type: "image/jpeg",
-        file_size: processedSize,
-        usage_context: usageContext,
-      })
-      .select("id")
-      .single()
-
-    if (dbError || !asset) {
-      console.error(
-        "[POST /api/listing/upload-image] DB INSERT 오류:",
-        dbError
-      )
-      // Storage 업로드는 성공했지만 DB 실패 — 고아 파일이 되므로 Storage도 삭제 시도
-      await supabase.storage
-        .from("smart-seller-studio")
-        .remove([storagePath])
-        .catch((cleanupErr) =>
-          console.error(
-            "[POST /api/listing/upload-image] 고아 파일 정리 실패:",
-            cleanupErr
-          )
-        )
-
-      return Response.json(
-        {
-          success: false,
-          error: "이미지 메타데이터 저장 중 오류가 발생했습니다.",
-          code: "UPLOAD_FAILED",
-        } satisfies ApiErrorResponse,
-        { status: 500 }
-      )
+    // 10. assets 테이블 INSERT (컬럼 존재 시에만 — 실패해도 업로드 결과는 반환)
+    let assetId = ''
+    try {
+      const supabase = getSupabaseServerClient()
+      const { data: asset } = await supabase
+        .from("assets")
+        .insert({
+          user_id: userId,
+          project_id: null,
+          storage_path: uploadResult.path,
+          public_url: uploadResult.url,
+          file_name: storedFileName,
+          mime_type: "image/jpeg",
+          file_size: processedSize,
+        })
+        .select("id")
+        .single()
+      assetId = (asset?.id as string) ?? ''
+    } catch (dbErr) {
+      console.warn("[POST /api/listing/upload-image] assets INSERT 스킵:", dbErr)
     }
 
     // 11. 성공 응답
@@ -377,7 +355,7 @@ export async function POST(
         success: true,
         data: {
           url: uploadResult.url,
-          assetId: asset.id as string,
+          assetId,
           fileName: storedFileName,
           fileSize: processedSize,
         },

@@ -8,15 +8,16 @@
  * 스타일: 인라인 style 사용 (밝은 테마)
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Layers } from 'lucide-react';
+import { Layers, Sparkles, Loader2 } from 'lucide-react';
 import { useListingStore } from '@/store/useListingStore';
 import { PLATFORMS } from '@/types/listing';
 import type { PlatformId, ListingStatus, ProductListing } from '@/types/listing';
 import BothRegisterForm from '@/components/listing/BothRegisterForm';
 import DomeggookPreparePanel from '@/components/listing/DomeggookPreparePanel';
+import ImageInputSection from '@/components/listing/ImageInputSection';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 색상 상수
@@ -802,47 +803,40 @@ function CoupangRegisterForm({ onClose }: { onClose: () => void }) {
   const defaults = loadCoupangDefaults();
 
   const [form, setForm] = useState({
-    // 판매방식
-    fulfillmentType: 'VENDOR',  // VENDOR=판매자배송, ROCKET=로켓그로스
-    // 기본 정보
+    fulfillmentType: 'VENDOR',
     sellerProductName: sharedDraft.name || '',
     displayCategoryCode: '',
     categoryPath: '',
     brand: defaults.brand,
     noBrand: false,
-    // 가격/재고
-    salePrice: sharedDraft.salePrice || '',
+    // 추천가 우선 적용
+    salePrice: sharedDraft.coupangPrice || sharedDraft.salePrice || '',
     originalPrice: '',
     stock: sharedDraft.stock || '999',
     maximumBuyForPerson: '0',
-    // 이미지
-    thumbnailImages: sharedDraft.thumbnailImages.join('\n') || '',
-    detailImages: sharedDraft.detailImages.join('\n') || '',
-    // 상세설명
     description: sharedDraft.description || '',
-    // 검색어
-    searchTags: '',
-    // 상품정보제공고시
+    searchTags: sharedDraft.tags.join(', ') || '',
     noticeCategory: '기타 재화',
     noticeModelName: '',
     noticeOrigin: '상세페이지 참조',
     noticeManufacturer: '상세페이지 참조',
-    // 배송
-    deliveryCompany: 'CJGLS',
+    deliveryCompany: 'LOTTE',
     deliveryChargeType: sharedDraft.deliveryChargeType || defaults.deliveryChargeType,
     deliveryCharge: sharedDraft.deliveryCharge || defaults.deliveryCharge,
     freeShipOverAmount: '0',
-    // 반품/교환
     returnCharge: sharedDraft.returnCharge || defaults.returnCharge,
     exchangeCharge: '5000',
   });
+
+  // 이미지 배열은 sharedDraft에서 직접 관리
+  const thumbnailImages = sharedDraft.thumbnailImages;
+  const detailImages = sharedDraft.detailImages;
 
   const [options, setOptions] = useState<OptionRow[]>([]);
 
   const update = (key: string, value: string | boolean) => {
     setForm((prev) => {
       const next = { ...prev, [key]: value };
-      // 저장 대상 필드일 때 localStorage 동기화
       if (['brand', 'deliveryChargeType', 'deliveryCharge', 'returnCharge'].includes(key)) {
         saveCoupangDefaults({
           brand: key === 'brand' ? String(value) : next.brand,
@@ -851,7 +845,6 @@ function CoupangRegisterForm({ onClose }: { onClose: () => void }) {
           returnCharge: key === 'returnCharge' ? String(value) : next.returnCharge,
         });
       }
-      // sharedDraft 공통 필드 동기화
       const sharedFieldMap: Record<string, keyof typeof sharedDraft> = {
         sellerProductName: 'name',
         salePrice: 'salePrice',
@@ -864,22 +857,103 @@ function CoupangRegisterForm({ onClose }: { onClose: () => void }) {
       if (key in sharedFieldMap) {
         updateSharedDraft({ [sharedFieldMap[key]]: String(value) } as Parameters<typeof updateSharedDraft>[0]);
       }
-      if (key === 'thumbnailImages') {
-        updateSharedDraft({ thumbnailImages: String(value).split('\n').map((s) => s.trim()).filter(Boolean) });
-      }
-      if (key === 'detailImages') {
-        updateSharedDraft({ detailImages: String(value).split('\n').map((s) => s.trim()).filter(Boolean) });
+      if (key === 'searchTags') {
+        updateSharedDraft({ tags: String(value).split(',').map((s) => s.trim()).filter(Boolean) });
       }
       return next;
     });
   };
 
+  // ─── AI 상품명·태그 최적화 ─────────────────────────────────────────────────
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const handleOptimize = useCallback(async () => {
+    const name = form.sellerProductName.trim();
+    if (!name || isOptimizing) return;
+    setIsOptimizing(true);
+    try {
+      const body: Record<string, string> = { originalTitle: name };
+      if (form.description.trim()) body.detailHtml = form.description;
+      const res = await fetch('/api/ai/optimize-listing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (json.success && json.data) {
+        const optimizedTags = json.data.tags.join(', ');
+        setForm((p) => ({ ...p, sellerProductName: json.data.optimizedTitle, searchTags: optimizedTags }));
+        updateSharedDraft({ name: json.data.optimizedTitle, tags: json.data.tags });
+      }
+    } catch { /* 실패 시 기존 값 유지 */ } finally {
+      setIsOptimizing(false);
+    }
+  }, [form.sellerProductName, form.description, isOptimizing, updateSharedDraft]);
+
+  // ─── 대표이미지 AI 편집 ────────────────────────────────────────────────────
+  const [isEditingThumbnail, setIsEditingThumbnail] = useState(false);
+  const [editPrompt, setEditPrompt] = useState('');
+  const [isAiProcessing, setIsAiProcessing] = useState(false);
+  const [aiEditError, setAiEditError] = useState<string | null>(null);
+  const [originalFirstThumb, setOriginalFirstThumb] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const aiPresets = [
+    { label: '흰 배경', prompt: '배경을 깨끗한 흰색으로 변경해주세요' },
+    { label: '밝게', prompt: '이미지를 더 밝고 선명하게 보정해주세요' },
+    { label: '그림자 추가', prompt: '상품 아래에 자연스러운 그림자를 추가해주세요' },
+  ];
+
+  const handleAiEdit = async () => {
+    const targetUrl = thumbnailImages[0];
+    if (!editPrompt.trim() || isAiProcessing || !targetUrl) return;
+    setIsAiProcessing(true);
+    setAiEditError(null);
+    try {
+      const res = await fetch('/api/ai/edit-thumbnail', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl: targetUrl, prompt: editPrompt.trim() }),
+      });
+      const json = await res.json();
+      if (res.ok && json.success && json.data?.editedUrl) {
+        if (!originalFirstThumb) setOriginalFirstThumb(targetUrl);
+        updateSharedDraft({ thumbnailImages: [json.data.editedUrl, ...thumbnailImages.slice(1)] });
+        setIsEditingThumbnail(false);
+        setEditPrompt('');
+      } else {
+        setAiEditError(json.error ?? 'AI 수정에 실패했습니다. 다시 시도해주세요.');
+      }
+    } catch {
+      setAiEditError('네트워크 오류가 발생했습니다. 다시 시도해주세요.');
+    } finally {
+      setIsAiProcessing(false);
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !file.type.startsWith('image/') || file.size > 10 * 1024 * 1024) return;
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('usageContext', 'listing_thumbnail');
+      const res = await fetch('/api/listing/upload-image', { method: 'POST', body: formData });
+      const json = await res.json();
+      if (res.ok && json.success && json.data?.url) {
+        if (!originalFirstThumb && thumbnailImages[0]) setOriginalFirstThumb(thumbnailImages[0]);
+        updateSharedDraft({ thumbnailImages: [json.data.url, ...thumbnailImages.slice(1)] });
+      }
+    } catch { /* 무시 */ } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError();
-
-    const thumbnailImages = form.thumbnailImages.split('\n').map((s) => s.trim()).filter(Boolean);
-    const detailImages = form.detailImages.split('\n').map((s) => s.trim()).filter(Boolean);
     if (thumbnailImages.length === 0) return;
 
     const result = await registerCoupangProduct({
@@ -905,6 +979,7 @@ function CoupangRegisterForm({ onClose }: { onClose: () => void }) {
 
   return (
     <div style={{ marginBottom: '24px' }}>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         marginBottom: '16px',
@@ -975,7 +1050,7 @@ function CoupangRegisterForm({ onClose }: { onClose: () => void }) {
           />
         </Section>
 
-        {/* ── 3. 노출상품명 ───────────────────────────────────────── */}
+        {/* ── 3. 노출상품명 + AI 최적화 ───────────────────────────── */}
         <Section title="노출상품명" required>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <label style={{ ...labelStyle, marginBottom: 0, flexShrink: 0, width: '50px' }}>브랜드</label>
@@ -1002,14 +1077,37 @@ function CoupangRegisterForm({ onClose }: { onClose: () => void }) {
                 {(form.sellerProductName || '').length}/100
               </span>
             </label>
-            <input
-              style={inputStyle}
-              value={form.sellerProductName}
-              onChange={(e) => update('sellerProductName', e.target.value.slice(0, 100))}
-              placeholder="상품 모델명 시리 + 상품 규격 + 핵심 특징"
-              required
-              maxLength={100}
-            />
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <input
+                style={{ ...inputStyle, flex: 1 }}
+                value={form.sellerProductName}
+                onChange={(e) => update('sellerProductName', e.target.value.slice(0, 100))}
+                placeholder="상품 모델명 시리 + 상품 규격 + 핵심 특징"
+                required
+                maxLength={100}
+              />
+              <button
+                type="button"
+                disabled={!form.sellerProductName.trim() || isOptimizing}
+                onClick={handleOptimize}
+                title="AI로 상품명·태그 최적화"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '4px',
+                  padding: '0 12px', fontSize: '12px', fontWeight: 600,
+                  border: '1px solid #8b5cf6', borderRadius: '8px',
+                  backgroundColor: isOptimizing ? '#f3f3f3' : '#f5f3ff',
+                  color: isOptimizing ? C.textSub : '#7c3aed',
+                  cursor: !form.sellerProductName.trim() || isOptimizing ? 'not-allowed' : 'pointer',
+                  whiteSpace: 'nowrap',
+                  opacity: !form.sellerProductName.trim() ? 0.5 : 1,
+                }}
+              >
+                {isOptimizing
+                  ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                  : <Sparkles size={14} />}
+                {isOptimizing ? 'AI 최적화 중...' : 'AI 최적화'}
+              </button>
+            </div>
             <div style={{ fontSize: '11px', color: C.textSub, marginTop: '4px' }}>
               등록상품명(판매자관리용)은 노출상품명과 동일하게 자동 설정됩니다.
             </div>
@@ -1024,41 +1122,106 @@ function CoupangRegisterForm({ onClose }: { onClose: () => void }) {
           <OptionEditor options={options} onChange={setOptions} />
         </Section>
 
-        {/* ── 5. 상품이미지 ───────────────────────────────────────── */}
+        {/* ── 5. 상품이미지 — PC 업로드 + AI 수정 ─────────────────── */}
         <Section title="상품이미지" required>
-          {/* 썸네일 이미지 섹션 */}
-          <div>
-            <label style={labelStyle}>
-              상품 이미지 (썸네일) <span style={{ color: C.accent }}>*</span>
-            </label>
-            <div style={{ fontSize: '11px', color: C.textSub, marginBottom: '6px' }}>
-              URL을 줄바꿈으로 구분 · 첫 번째가 대표이미지 · 최대 10개
+          {/* 대표이미지 AI 수정 패널 */}
+          {thumbnailImages.length > 0 && (
+            <div style={{ marginBottom: '12px', padding: '12px', backgroundColor: '#f8f8f8', borderRadius: '8px', border: `1px solid ${C.border}` }}>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                <img
+                  src={thumbnailImages[0]}
+                  alt="대표이미지"
+                  style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '6px', border: `1px solid ${C.border}`, flexShrink: 0 }}
+                />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '12px', fontWeight: 600, color: C.text, marginBottom: '6px' }}>대표이미지</div>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileUpload} />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading}
+                      style={{ padding: '5px 10px', fontSize: '11px', fontWeight: 600, backgroundColor: '#fff', color: C.text, border: `1px solid ${C.border}`, borderRadius: '6px', cursor: isUploading ? 'not-allowed' : 'pointer' }}
+                    >
+                      {isUploading ? '업로드 중...' : 'PC에서 교체'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setIsEditingThumbnail((v) => !v); setAiEditError(null); }}
+                      style={{ padding: '5px 10px', fontSize: '11px', fontWeight: 600, backgroundColor: isEditingThumbnail ? '#f5f3ff' : '#fff', color: isEditingThumbnail ? '#7c3aed' : C.text, border: `1px solid ${isEditingThumbnail ? '#8b5cf6' : C.border}`, borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                    >
+                      <Sparkles size={12} />AI 이미지 수정
+                    </button>
+                    {originalFirstThumb && (
+                      <button
+                        type="button"
+                        onClick={() => { updateSharedDraft({ thumbnailImages: [originalFirstThumb, ...thumbnailImages.slice(1)] }); setOriginalFirstThumb(null); }}
+                        style={{ padding: '5px 10px', fontSize: '11px', fontWeight: 600, backgroundColor: '#fff', color: '#b91c1c', border: '1px solid #fca5a5', borderRadius: '6px', cursor: 'pointer' }}
+                      >
+                        원본 복원
+                      </button>
+                    )}
+                  </div>
+                  {isEditingThumbnail && (
+                    <div style={{ marginTop: '8px' }}>
+                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '6px' }}>
+                        {aiPresets.map((preset) => (
+                          <button
+                            key={preset.label}
+                            type="button"
+                            onClick={() => setEditPrompt(preset.prompt)}
+                            style={{ padding: '3px 8px', fontSize: '11px', backgroundColor: editPrompt === preset.prompt ? '#f5f3ff' : '#fff', color: editPrompt === preset.prompt ? '#7c3aed' : C.textSub, border: `1px solid ${editPrompt === preset.prompt ? '#8b5cf6' : C.border}`, borderRadius: '100px', cursor: 'pointer' }}
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <input
+                          style={{ ...inputStyle, flex: 1, fontSize: '12px', padding: '7px 10px' }}
+                          value={editPrompt}
+                          onChange={(e) => setEditPrompt(e.target.value)}
+                          placeholder="수정 지시사항 입력 (예: 배경을 흰색으로)"
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAiEdit(); } }}
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAiEdit}
+                          disabled={!editPrompt.trim() || isAiProcessing}
+                          style={{ padding: '7px 14px', fontSize: '12px', fontWeight: 600, backgroundColor: isAiProcessing ? '#f3f3f3' : '#7c3aed', color: isAiProcessing ? C.textSub : '#fff', border: 'none', borderRadius: '6px', cursor: isAiProcessing || !editPrompt.trim() ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}
+                        >
+                          {isAiProcessing
+                            ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> 처리 중...</>
+                            : <><Sparkles size={13} /> 수정</>}
+                        </button>
+                      </div>
+                      {aiEditError && (
+                        <div style={{ marginTop: '6px', padding: '8px 10px', backgroundColor: '#fee2e2', borderRadius: '6px', fontSize: '12px', color: '#b91c1c' }}>
+                          {aiEditError}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-            <textarea
-              style={{ ...inputStyle, height: '80px', resize: 'vertical' }}
-              value={form.thumbnailImages}
-              onChange={(e) => update('thumbnailImages', e.target.value)}
-              placeholder={'https://example.com/image1.jpg\nhttps://example.com/image2.jpg'}
-              required
-            />
-            <ImageUrlPreview
-              urls={form.thumbnailImages.split('\n').map((s) => s.trim()).filter(Boolean)}
-            />
-          </div>
-          {/* 상세페이지 이미지 섹션 */}
+          )}
+
+          <ImageInputSection
+            label="상품 이미지 (썸네일)"
+            required
+            maxCount={10}
+            urls={thumbnailImages}
+            onUrlsChange={(urls) => updateSharedDraft({ thumbnailImages: urls })}
+            usageContext="listing_thumbnail"
+          />
           <div style={{ marginTop: '12px' }}>
-            <label style={labelStyle}>상세페이지 이미지</label>
-            <div style={{ fontSize: '11px', color: C.textSub, marginBottom: '6px' }}>
-              상품 상세설명 하단에 자동 삽입됩니다 · 최대 20개
-            </div>
-            <textarea
-              style={{ ...inputStyle, height: '80px', resize: 'vertical' }}
-              value={form.detailImages}
-              onChange={(e) => update('detailImages', e.target.value)}
-              placeholder={'https://example.com/detail1.jpg\nhttps://example.com/detail2.jpg'}
-            />
-            <ImageUrlPreview
-              urls={form.detailImages.split('\n').map((s) => s.trim()).filter(Boolean)}
+            <ImageInputSection
+              label="상세페이지 이미지"
+              maxCount={20}
+              urls={detailImages}
+              onUrlsChange={(urls) => updateSharedDraft({ detailImages: urls })}
+              usageContext="listing_detail"
             />
           </div>
         </Section>
@@ -1153,11 +1316,11 @@ function CoupangRegisterForm({ onClose }: { onClose: () => void }) {
             <div>
               <label style={labelStyle}>택배사</label>
               <select style={inputStyle} value={form.deliveryCompany} onChange={(e) => update('deliveryCompany', e.target.value)}>
+                <option value="LOTTE">롯데택배 (쿠팡제휴)</option>
                 <option value="CJGLS">CJ대한통운</option>
                 <option value="KGB">로젠택배</option>
                 <option value="EPOST">우체국택배</option>
                 <option value="HANJIN">한진택배</option>
-                <option value="HYUNDAI">롯데택배</option>
               </select>
             </div>
             <div>
@@ -1515,11 +1678,11 @@ function CoupangEditForm({ onClose }: { onClose: () => void }) {
             <div>
               <label style={labelStyle}>택배사</label>
               <select style={inputStyle} value={form.deliveryCompany} onChange={(e) => update('deliveryCompany', e.target.value)}>
+                <option value="LOTTE">롯데택배 (쿠팡제휴)</option>
                 <option value="CJGLS">CJ대한통운</option>
                 <option value="KGB">로젠택배</option>
                 <option value="EPOST">우체국택배</option>
                 <option value="HANJIN">한진택배</option>
-                <option value="HYUNDAI">롯데택배</option>
               </select>
             </div>
             <div>
@@ -1723,16 +1886,20 @@ function NaverRegisterForm({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState({
     name: sharedDraft.name || '',
     leafCategoryId: '', categoryPath: '',
-    salePrice: sharedDraft.salePrice || '',
+    // 네이버 추천가 우선 적용
+    salePrice: sharedDraft.naverPrice || sharedDraft.salePrice || '',
     stockQuantity: sharedDraft.stock || '999',
-    thumbnailImages: sharedDraft.thumbnailImages.join('\n') || '',
-    detailImages: sharedDraft.detailImages.join('\n') || '',
     detailContent: sharedDraft.description || '',
     deliveryFee: sharedDraft.deliveryCharge || naverDefaults.deliveryFee,
     returnFee: sharedDraft.returnCharge || naverDefaults.returnFee,
     exchangeFee: naverDefaults.exchangeFee,
     tags: sharedDraft.tags.join(', ') || '',
   });
+
+  // 이미지 배열은 sharedDraft에서 직접 관리
+  const thumbnailImages = sharedDraft.thumbnailImages;
+  const detailImages = sharedDraft.detailImages;
+
   const update = (k: string, v: string) => {
     setForm((p) => {
       const next = { ...p, [k]: v };
@@ -1743,7 +1910,6 @@ function NaverRegisterForm({ onClose }: { onClose: () => void }) {
           exchangeFee: k === 'exchangeFee' ? v : next.exchangeFee,
         });
       }
-      // sharedDraft 공통 필드 동기화
       const sharedFieldMap: Record<string, keyof typeof sharedDraft> = {
         name: 'name',
         salePrice: 'salePrice',
@@ -1755,12 +1921,6 @@ function NaverRegisterForm({ onClose }: { onClose: () => void }) {
       if (k in sharedFieldMap) {
         updateSharedDraft({ [sharedFieldMap[k]]: v } as Parameters<typeof updateSharedDraft>[0]);
       }
-      if (k === 'thumbnailImages') {
-        updateSharedDraft({ thumbnailImages: v.split('\n').map((s) => s.trim()).filter(Boolean) });
-      }
-      if (k === 'detailImages') {
-        updateSharedDraft({ detailImages: v.split('\n').map((s) => s.trim()).filter(Boolean) });
-      }
       if (k === 'tags') {
         updateSharedDraft({ tags: v.split(',').map((s) => s.trim()).filter(Boolean) });
       }
@@ -1768,10 +1928,99 @@ function NaverRegisterForm({ onClose }: { onClose: () => void }) {
     });
   };
 
+  // ─── AI 상품명·태그 최적화 ─────────────────────────────────────────────────
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const handleOptimize = useCallback(async () => {
+    const name = form.name.trim();
+    if (!name || isOptimizing) return;
+    setIsOptimizing(true);
+    try {
+      const body: Record<string, string> = { originalTitle: name };
+      if (form.detailContent.trim()) body.detailHtml = form.detailContent;
+      const res = await fetch('/api/ai/optimize-listing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (json.success && json.data) {
+        const optimizedTags = json.data.tags.join(', ');
+        setForm((p) => ({ ...p, name: json.data.optimizedTitle, tags: optimizedTags }));
+        updateSharedDraft({ name: json.data.optimizedTitle, tags: json.data.tags });
+      }
+    } catch { /* 실패 시 기존 값 유지 */ } finally {
+      setIsOptimizing(false);
+    }
+  }, [form.name, form.detailContent, isOptimizing, updateSharedDraft]);
+
+  // ─── 대표이미지 AI 편집 ────────────────────────────────────────────────────
+  const [isEditingThumbnail, setIsEditingThumbnail] = useState(false);
+  const [editPrompt, setEditPrompt] = useState('');
+  const [isAiProcessing, setIsAiProcessing] = useState(false);
+  const [aiEditError, setAiEditError] = useState<string | null>(null);
+  const [originalFirstThumb, setOriginalFirstThumb] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const aiPresets = [
+    { label: '흰 배경', prompt: '배경을 깨끗한 흰색으로 변경해주세요' },
+    { label: '밝게', prompt: '이미지를 더 밝고 선명하게 보정해주세요' },
+    { label: '그림자 추가', prompt: '상품 아래에 자연스러운 그림자를 추가해주세요' },
+  ];
+
+  const handleAiEdit = async () => {
+    const targetUrl = thumbnailImages[0];
+    if (!editPrompt.trim() || isAiProcessing || !targetUrl) return;
+    setIsAiProcessing(true);
+    setAiEditError(null);
+    try {
+      const res = await fetch('/api/ai/edit-thumbnail', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl: targetUrl, prompt: editPrompt.trim() }),
+      });
+      const json = await res.json();
+      if (res.ok && json.success && json.data?.editedUrl) {
+        if (!originalFirstThumb) setOriginalFirstThumb(targetUrl);
+        const nextUrls = [json.data.editedUrl, ...thumbnailImages.slice(1)];
+        updateSharedDraft({ thumbnailImages: nextUrls });
+        setIsEditingThumbnail(false);
+        setEditPrompt('');
+      } else {
+        setAiEditError(json.error ?? 'AI 수정에 실패했습니다. 다시 시도해주세요.');
+      }
+    } catch {
+      setAiEditError('네트워크 오류가 발생했습니다. 다시 시도해주세요.');
+    } finally {
+      setIsAiProcessing(false);
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) return;
+    if (file.size > 10 * 1024 * 1024) return;
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('usageContext', 'listing_thumbnail');
+      const res = await fetch('/api/listing/upload-image', { method: 'POST', body: formData });
+      const json = await res.json();
+      if (res.ok && json.success && json.data?.url) {
+        if (!originalFirstThumb && thumbnailImages[0]) setOriginalFirstThumb(thumbnailImages[0]);
+        const nextUrls = [json.data.url, ...thumbnailImages.slice(1)];
+        updateSharedDraft({ thumbnailImages: nextUrls });
+      }
+    } catch { /* 무시 */ } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); clearError();
-    const thumbnailImages = form.thumbnailImages.split('\n').map((s) => s.trim()).filter(Boolean);
-    const detailImages = form.detailImages.split('\n').map((s) => s.trim()).filter(Boolean);
     if (!thumbnailImages.length) return;
     const tags = form.tags.split(',').map((s) => s.trim()).filter(Boolean);
     const result = await registerNaverProduct({
@@ -1788,6 +2037,7 @@ function NaverRegisterForm({ onClose }: { onClose: () => void }) {
 
   return (
     <div style={{ marginBottom: '24px' }}>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
         <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: C.text }}>네이버 스마트스토어 상품 등록</h3>
         <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '18px', color: C.textSub, cursor: 'pointer' }}>x</button>
@@ -1797,62 +2047,174 @@ function NaverRegisterForm({ onClose }: { onClose: () => void }) {
         <Section title="카테고리" required>
           <NaverCategoryPicker value={form.leafCategoryId} onChange={(id, path) => { update('leafCategoryId', id); setForm((p) => ({ ...p, categoryPath: path })); }} />
         </Section>
+
+        {/* 상품명 + AI 최적화 */}
         <Section title="상품명" required>
-          <input style={inputStyle} value={form.name} onChange={(e) => update('name', e.target.value.slice(0, 100))} placeholder="상품명 (최대 100자)" required maxLength={100} />
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <input
+              style={{ ...inputStyle, flex: 1 }}
+              value={form.name}
+              onChange={(e) => update('name', e.target.value.slice(0, 100))}
+              placeholder="상품명 (최대 100자)"
+              required
+              maxLength={100}
+            />
+            <button
+              type="button"
+              disabled={!form.name.trim() || isOptimizing}
+              onClick={handleOptimize}
+              title="AI로 상품명·태그 최적화"
+              style={{
+                display: 'flex', alignItems: 'center', gap: '4px',
+                padding: '0 12px', fontSize: '12px', fontWeight: 600,
+                border: '1px solid #8b5cf6', borderRadius: '8px',
+                backgroundColor: isOptimizing ? '#f3f3f3' : '#f5f3ff',
+                color: isOptimizing ? C.textSub : '#7c3aed',
+                cursor: !form.name.trim() || isOptimizing ? 'not-allowed' : 'pointer',
+                whiteSpace: 'nowrap',
+                opacity: !form.name.trim() ? 0.5 : 1,
+              }}
+            >
+              {isOptimizing
+                ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                : <Sparkles size={14} />}
+              {isOptimizing ? 'AI 최적화 중...' : 'AI 최적화'}
+            </button>
+          </div>
           <div style={{ fontSize: '11px', color: C.textSub, marginTop: '2px' }}>{form.name.length}/100</div>
         </Section>
+
         <Section title="가격/재고" required>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div><label style={labelStyle}>판매가 *</label><input style={inputStyle} value={form.salePrice} onChange={(e) => update('salePrice', e.target.value)} type="number" min="100" required /></div>
             <div><label style={labelStyle}>재고</label><input style={inputStyle} value={form.stockQuantity} onChange={(e) => update('stockQuantity', e.target.value)} type="number" min="0" /></div>
           </div>
         </Section>
+
+        {/* 상품이미지 — PC 업로드 + URL 입력 + AI 수정 */}
         <Section title="상품이미지" required>
-          {/* 썸네일 이미지 섹션 */}
-          <div>
-            <label style={labelStyle}>
-              상품 이미지 (썸네일) <span style={{ color: C.accent }}>*</span>
-            </label>
-            <div style={{ fontSize: '11px', color: C.textSub, marginBottom: '6px' }}>
-              URL을 줄바꿈으로 구분 · 첫 번째가 대표이미지 · 최대 10개
+          {/* 대표이미지 AI 수정 패널 */}
+          {thumbnailImages.length > 0 && (
+            <div style={{ marginBottom: '12px', padding: '12px', backgroundColor: '#f8f8f8', borderRadius: '8px', border: `1px solid ${C.border}` }}>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                <img
+                  src={thumbnailImages[0]}
+                  alt="대표이미지"
+                  style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '6px', border: `1px solid ${C.border}`, flexShrink: 0 }}
+                />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '12px', fontWeight: 600, color: C.text, marginBottom: '6px' }}>대표이미지</div>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {/* PC 업로드 */}
+                    <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileUpload} />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading}
+                      style={{ padding: '5px 10px', fontSize: '11px', fontWeight: 600, backgroundColor: '#fff', color: C.text, border: `1px solid ${C.border}`, borderRadius: '6px', cursor: isUploading ? 'not-allowed' : 'pointer' }}
+                    >
+                      {isUploading ? '업로드 중...' : 'PC에서 교체'}
+                    </button>
+                    {/* AI 수정 토글 */}
+                    <button
+                      type="button"
+                      onClick={() => { setIsEditingThumbnail((v) => !v); setAiEditError(null); }}
+                      style={{ padding: '5px 10px', fontSize: '11px', fontWeight: 600, backgroundColor: isEditingThumbnail ? '#f5f3ff' : '#fff', color: isEditingThumbnail ? '#7c3aed' : C.text, border: `1px solid ${isEditingThumbnail ? '#8b5cf6' : C.border}`, borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                    >
+                      <Sparkles size={12} />
+                      AI 이미지 수정
+                    </button>
+                    {/* 원본 복원 */}
+                    {originalFirstThumb && (
+                      <button
+                        type="button"
+                        onClick={() => { updateSharedDraft({ thumbnailImages: [originalFirstThumb, ...thumbnailImages.slice(1)] }); setOriginalFirstThumb(null); }}
+                        style={{ padding: '5px 10px', fontSize: '11px', fontWeight: 600, backgroundColor: '#fff', color: '#b91c1c', border: '1px solid #fca5a5', borderRadius: '6px', cursor: 'pointer' }}
+                      >
+                        원본 복원
+                      </button>
+                    )}
+                  </div>
+                  {/* AI 수정 입력 패널 */}
+                  {isEditingThumbnail && (
+                    <div style={{ marginTop: '8px' }}>
+                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '6px' }}>
+                        {aiPresets.map((preset) => (
+                          <button
+                            key={preset.label}
+                            type="button"
+                            onClick={() => setEditPrompt(preset.prompt)}
+                            style={{ padding: '3px 8px', fontSize: '11px', backgroundColor: editPrompt === preset.prompt ? '#f5f3ff' : '#fff', color: editPrompt === preset.prompt ? '#7c3aed' : C.textSub, border: `1px solid ${editPrompt === preset.prompt ? '#8b5cf6' : C.border}`, borderRadius: '100px', cursor: 'pointer' }}
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <input
+                          style={{ ...inputStyle, flex: 1, fontSize: '12px', padding: '7px 10px' }}
+                          value={editPrompt}
+                          onChange={(e) => setEditPrompt(e.target.value)}
+                          placeholder="수정 지시사항 입력 (예: 배경을 흰색으로)"
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAiEdit(); } }}
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAiEdit}
+                          disabled={!editPrompt.trim() || isAiProcessing}
+                          style={{ padding: '7px 14px', fontSize: '12px', fontWeight: 600, backgroundColor: isAiProcessing ? '#f3f3f3' : '#7c3aed', color: isAiProcessing ? C.textSub : '#fff', border: 'none', borderRadius: '6px', cursor: isAiProcessing || !editPrompt.trim() ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}
+                        >
+                          {isAiProcessing
+                            ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> 처리 중...</>
+                            : <><Sparkles size={13} /> 수정</>}
+                        </button>
+                      </div>
+                      {aiEditError && (
+                        <div style={{ marginTop: '6px', padding: '8px 10px', backgroundColor: '#fee2e2', borderRadius: '6px', fontSize: '12px', color: '#b91c1c' }}>
+                          {aiEditError}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-            <textarea
-              style={{ ...inputStyle, height: '80px', resize: 'vertical' }}
-              value={form.thumbnailImages}
-              onChange={(e) => update('thumbnailImages', e.target.value)}
-              placeholder={'https://example.com/image1.jpg\nhttps://example.com/image2.jpg'}
-              required
-            />
-            <ImageUrlPreview
-              urls={form.thumbnailImages.split('\n').map((s) => s.trim()).filter(Boolean)}
-            />
-          </div>
-          {/* 상세페이지 이미지 섹션 */}
+          )}
+
+          {/* 썸네일 이미지 — PC 업로드 + URL 입력 */}
+          <ImageInputSection
+            label="상품 이미지 (썸네일)"
+            required
+            maxCount={10}
+            urls={thumbnailImages}
+            onUrlsChange={(urls) => updateSharedDraft({ thumbnailImages: urls })}
+            usageContext="listing_thumbnail"
+          />
+
+          {/* 상세페이지 이미지 */}
           <div style={{ marginTop: '12px' }}>
-            <label style={labelStyle}>상세페이지 이미지</label>
-            <div style={{ fontSize: '11px', color: C.textSub, marginBottom: '6px' }}>
-              상품 상세설명 하단에 자동 삽입됩니다 · 최대 20개
-            </div>
-            <textarea
-              style={{ ...inputStyle, height: '80px', resize: 'vertical' }}
-              value={form.detailImages}
-              onChange={(e) => update('detailImages', e.target.value)}
-              placeholder={'https://example.com/detail1.jpg\nhttps://example.com/detail2.jpg'}
-            />
-            <ImageUrlPreview
-              urls={form.detailImages.split('\n').map((s) => s.trim()).filter(Boolean)}
+            <ImageInputSection
+              label="상세페이지 이미지"
+              maxCount={20}
+              urls={detailImages}
+              onUrlsChange={(urls) => updateSharedDraft({ detailImages: urls })}
+              usageContext="listing_detail"
             />
           </div>
         </Section>
+
         <Section title="상세설명" required>
           <textarea style={{ ...inputStyle, minHeight: '150px', resize: 'vertical' }} value={form.detailContent} onChange={(e) => update('detailContent', e.target.value)} placeholder="상품 상세 설명 (HTML 지원)" required />
         </Section>
+
+        {/* 검색어(태그) + AI 최적화로 자동 채워짐 */}
         <Section title="검색어(태그)" defaultOpen={true}>
           <div style={{ fontSize: '12px', color: C.textSub, marginBottom: '4px' }}>
             네이버 검색 노출에 직접 영향을 미칩니다. 쉼표(,)로 구분하여 최대 10개 입력하세요.
           </div>
           <input style={inputStyle} value={form.tags} onChange={(e) => update('tags', e.target.value)} placeholder="쉼표 구분 (예: 무선고데기, 미니고데기, 여행용)" />
         </Section>
+
         <Section title="배송" required>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
             <div><label style={labelStyle}>배송비</label><input style={inputStyle} value={form.deliveryFee} onChange={(e) => update('deliveryFee', e.target.value)} type="number" min="0" /><div style={{ fontSize: '10px', color: C.textSub, marginTop: '2px' }}>0 = 무료배송</div></div>
@@ -1860,6 +2222,7 @@ function NaverRegisterForm({ onClose }: { onClose: () => void }) {
             <div><label style={labelStyle}>교환 배송비</label><input style={inputStyle} value={form.exchangeFee} onChange={(e) => update('exchangeFee', e.target.value)} type="number" min="0" /></div>
           </div>
         </Section>
+
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px', padding: '16px 0', borderTop: `1px solid ${C.border}` }}>
           <button type="button" onClick={onClose} style={{ padding: '10px 24px', fontSize: '13px', fontWeight: 600, backgroundColor: C.btnSecondaryBg, color: C.btnSecondaryText, border: `1px solid ${C.border}`, borderRadius: '8px', cursor: 'pointer' }}>취소</button>
           <button type="submit" disabled={isRegistering} style={{ padding: '10px 32px', fontSize: '13px', fontWeight: 600, backgroundColor: isRegistering ? '#ccc' : '#03c75a', color: '#fff', border: 'none', borderRadius: '8px', cursor: isRegistering ? 'not-allowed' : 'pointer' }}>{isRegistering ? '등록 중...' : '판매 등록'}</button>
@@ -1982,7 +2345,7 @@ function NaverTabContent() {
 const CONNECTED_PLATFORMS = new Set<PlatformId>(['coupang', 'naver']);
 
 export default function ListingDashboard() {
-  const { activePlatform, listings, isLoading, setActivePlatform, fetchListings } =
+  const { activePlatform, listings, isLoading, setActivePlatform, fetchListings, updateSharedDraft } =
     useListingStore();
 
   const [showBothMode, setShowBothMode] = useState(false);
@@ -1991,6 +2354,10 @@ export default function ListingDashboard() {
     { thumbnailUrl: string; detailHtml: string; title: string; naverPrice: number; coupangPrice: number; itemNo: number; costBase: number; effectiveDeliFee: number } | undefined
   >(undefined);
   const [initialItemNo, setInitialItemNo] = useState<string | undefined>(undefined);
+
+  // 개별 등록 모드 (도매꾹에서 넘어온 경우)
+  const [showCoupangOnlyMode, setShowCoupangOnlyMode] = useState(false);
+  const [showNaverOnlyMode, setShowNaverOnlyMode] = useState(false);
 
   // URL ?itemNo= 파라미터로 도매꾹 패널 자동 열기
   const searchParams = useSearchParams();
@@ -2136,11 +2503,27 @@ export default function ListingDashboard() {
               setShowDomeggookPanel(false);
               setInitialItemNo(undefined);
             }}
-            onContinueToRegister={(data) => {
-              setDomeggookPrefill(data);
+            onContinueToRegister={(data, mode) => {
+              // sharedDraft에 도매꾹 데이터 먼저 주입
+              updateSharedDraft({
+                name: data.title,
+                thumbnailImages: [data.thumbnailUrl],
+                description: data.detailHtml,
+                naverPrice: String(data.naverPrice),
+                coupangPrice: String(data.coupangPrice),
+              });
               setShowDomeggookPanel(false);
               setInitialItemNo(undefined);
-              setShowBothMode(true);
+
+              if (mode === 'both') {
+                setDomeggookPrefill(data);
+                setShowBothMode(true);
+              } else if (mode === 'coupang') {
+                setShowCoupangOnlyMode(true);
+              } else {
+                // mode === 'naver'
+                setShowNaverOnlyMode(true);
+              }
             }}
             initialItemNo={initialItemNo}
           />
@@ -2157,14 +2540,24 @@ export default function ListingDashboard() {
           />
         )}
 
-        {/* 단일 등록 모드 — showBothMode, showDomeggookPanel이 false일 때만 렌더 */}
-        {!showDomeggookPanel && !showBothMode && isCoupang && <CoupangTabContent />}
+        {/* 쿠팡 단독 등록 모드 (도매꾹에서 넘어온 경우) */}
+        {!showDomeggookPanel && !showBothMode && showCoupangOnlyMode && (
+          <CoupangRegisterForm onClose={() => setShowCoupangOnlyMode(false)} />
+        )}
+
+        {/* 네이버 단독 등록 모드 (도매꾹에서 넘어온 경우) */}
+        {!showDomeggookPanel && !showBothMode && !showCoupangOnlyMode && showNaverOnlyMode && (
+          <NaverRegisterForm onClose={() => setShowNaverOnlyMode(false)} />
+        )}
+
+        {/* 단일 등록 모드 — 모든 오버레이 모드가 false일 때만 렌더 */}
+        {!showDomeggookPanel && !showBothMode && !showCoupangOnlyMode && !showNaverOnlyMode && isCoupang && <CoupangTabContent />}
 
         {/* 네이버 탭 */}
-        {!showDomeggookPanel && !showBothMode && isNaver && <NaverTabContent />}
+        {!showDomeggookPanel && !showBothMode && !showCoupangOnlyMode && !showNaverOnlyMode && isNaver && <NaverTabContent />}
 
         {/* 기타 플랫폼 — 기존 로직 */}
-        {!showDomeggookPanel && !showBothMode && !isCoupang && !isNaver && (
+        {!showDomeggookPanel && !showBothMode && !showCoupangOnlyMode && !showNaverOnlyMode && !isCoupang && !isNaver && (
           <>
             {/* 로딩 */}
             {isLoading && (

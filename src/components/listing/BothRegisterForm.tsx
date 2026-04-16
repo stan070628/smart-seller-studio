@@ -230,10 +230,13 @@ export default function BothRegisterForm({ onClose, prefill }: BothRegisterFormP
 
     setIsOptimizing(true);
     try {
+      const body: Record<string, string> = { originalTitle: name };
+      if (sharedDraft.description.trim()) body.detailHtml = sharedDraft.description;
+
       const res = await fetch('/api/ai/optimize-listing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ originalTitle: name }),
+        body: JSON.stringify(body),
       });
       const json = await res.json();
       if (json.success && json.data) {

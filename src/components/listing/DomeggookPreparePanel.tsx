@@ -9,7 +9,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, AlertTriangle, CheckCircle, RefreshCw, ChevronRight } from 'lucide-react';
+import { X, AlertTriangle, CheckCircle, RefreshCw, ChevronRight, Upload } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 색상 상수 (ListingDashboard 동일)
@@ -421,7 +421,7 @@ function ResultPanel({
   onClose,
 }: {
   result: PrepareResult;
-  onContinue: (result: PrepareResult, overrideThumbnailUrl?: string) => void;
+  onContinue: (result: PrepareResult, overrideThumbnailUrl: string | undefined, mode: 'both' | 'coupang' | 'naver') => void;
   onRetry: () => void;
   onClose: () => void;
 }) {
@@ -432,6 +432,7 @@ function ResultPanel({
   const [isEditingThumbnail, setIsEditingThumbnail] = useState(false);
   const [editPrompt, setEditPrompt] = useState('');
   const [isAiProcessing, setIsAiProcessing] = useState(false);
+  const [aiEditError, setAiEditError] = useState<string | null>(null);
   const [originalThumbnailUrl, setOriginalThumbnailUrl] = useState<string | null>(null);
   const [currentThumbnailUrl, setCurrentThumbnailUrl] = useState(thumbnail.processedUrl);
 
@@ -439,6 +440,7 @@ function ResultPanel({
   const handleAiEdit = async () => {
     if (!editPrompt.trim() || isAiProcessing) return;
     setIsAiProcessing(true);
+    setAiEditError(null);
     try {
       const res = await fetch('/api/ai/edit-thumbnail', {
         method: 'POST',
@@ -452,9 +454,46 @@ function ResultPanel({
         setCurrentThumbnailUrl(json.data.editedUrl);
         setIsEditingThumbnail(false);
         setEditPrompt('');
+      } else {
+        setAiEditError(json.error ?? 'AI 수정에 실패했습니다. 다시 시도해주세요.');
       }
-    } catch { /* 에러 무시 — 이미지 유지 */ } finally {
+    } catch {
+      setAiEditError('네트워크 오류가 발생했습니다. 다시 시도해주세요.');
+    } finally {
       setIsAiProcessing(false);
+    }
+  };
+
+  // PC 이미지 첨부용 ref
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // 파일 유효성 검사
+    if (!file.type.startsWith('image/')) return;
+    if (file.size > 10 * 1024 * 1024) return; // 10MB 제한
+
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('usageContext', 'listing_thumbnail');
+
+      const res = await fetch('/api/listing/upload-image', {
+        method: 'POST',
+        body: formData,
+      });
+      const json = await res.json();
+      if (res.ok && json.success && json.data?.url) {
+        if (!originalThumbnailUrl) setOriginalThumbnailUrl(currentThumbnailUrl);
+        setCurrentThumbnailUrl(json.data.url);
+      }
+    } catch { /* 에러 무시 */ } finally {
+      setIsUploading(false);
+      // input 초기화 (같은 파일 재선택 가능)
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -600,6 +639,39 @@ function ResultPanel({
             ✨ AI 수정
           </button>
 
+          {/* PC 이미지 첨부 버튼 */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            style={{ display: 'none' }}
+            onChange={handleFileUpload}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isAiProcessing || isUploading}
+            style={{
+              width: '200px',
+              padding: '7px 0',
+              fontSize: '12px',
+              fontWeight: 600,
+              backgroundColor: C.btnSecondaryBg,
+              color: C.btnSecondaryText,
+              border: `1px solid ${C.border}`,
+              borderRadius: '7px',
+              cursor: isAiProcessing || isUploading ? 'not-allowed' : 'pointer',
+              textAlign: 'center',
+              marginTop: '4px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+            }}
+          >
+            <Upload size={13} />
+            {isUploading ? '업로드 중...' : 'PC에서 이미지 변경'}
+          </button>
+
           {/* 인라인 수정 패널 */}
           {isEditingThumbnail && (
             <div
@@ -641,6 +713,12 @@ function ResultPanel({
                 placeholder="예: 배경을 흰색으로 변경"
                 onKeyDown={(e) => { if (e.key === 'Enter') handleAiEdit(); }}
               />
+              {/* AI 에러 메시지 */}
+              {aiEditError && (
+                <div style={{ fontSize: '11px', color: C.accent, padding: '4px 6px', backgroundColor: '#fee2e2', borderRadius: '4px', lineHeight: 1.4 }}>
+                  {aiEditError}
+                </div>
+              )}
               {/* 수정하기 / 취소 버튼 */}
               <div style={{ display: 'flex', gap: '6px' }}>
                 <button
@@ -851,6 +929,8 @@ function ResultPanel({
           alignItems: 'center',
           padding: '16px 0',
           borderTop: `1px solid ${C.border}`,
+          flexWrap: 'wrap',
+          gap: '8px',
         }}
       >
         <div style={{ display: 'flex', gap: '8px' }}>
@@ -889,25 +969,66 @@ function ResultPanel({
             닫기
           </button>
         </div>
-        <button
-          onClick={() => onContinue(result, currentThumbnailUrl)}
-          style={{
-            padding: '10px 24px',
-            fontSize: '13px',
-            fontWeight: 700,
-            backgroundColor: C.btnPrimaryBg,
-            color: C.btnPrimaryText,
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-          }}
-        >
-          쿠팡/네이버 등록으로 이어가기
-          <ChevronRight size={15} />
-        </button>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {/* 쿠팡 단독 등록 */}
+          <button
+            onClick={() => onContinue(result, currentThumbnailUrl, 'coupang')}
+            style={{
+              padding: '9px 20px',
+              fontSize: '13px',
+              fontWeight: 600,
+              backgroundColor: '#fff',
+              color: C.btnPrimaryBg,
+              border: `2px solid ${C.btnPrimaryBg}`,
+              borderRadius: '8px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            쿠팡만 등록
+          </button>
+          {/* 네이버 단독 등록 */}
+          <button
+            onClick={() => onContinue(result, currentThumbnailUrl, 'naver')}
+            style={{
+              padding: '9px 20px',
+              fontSize: '13px',
+              fontWeight: 600,
+              backgroundColor: '#fff',
+              color: '#03c75a',
+              border: '2px solid #03c75a',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            네이버만 등록
+          </button>
+          {/* 동시 등록 (기존) */}
+          <button
+            onClick={() => onContinue(result, currentThumbnailUrl, 'both')}
+            style={{
+              padding: '10px 24px',
+              fontSize: '13px',
+              fontWeight: 700,
+              backgroundColor: C.btnPrimaryBg,
+              color: C.btnPrimaryText,
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            쿠팡+네이버 동시등록
+            <ChevronRight size={15} />
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -958,7 +1079,7 @@ export interface DomeggookPrefillData {
 
 interface DomeggookPreparePanelProps {
   onClose: () => void;
-  onContinueToRegister: (data: DomeggookPrefillData) => void;
+  onContinueToRegister: (data: DomeggookPrefillData, mode: 'both' | 'coupang' | 'naver') => void;
   initialItemNo?: string;  // 소싱탭에서 넘겨받은 상품번호
 }
 
@@ -1070,8 +1191,8 @@ export default function DomeggookPreparePanel({ onClose, onContinueToRegister, i
     setStep('input');
   };
 
-  // "쿠팡/네이버 등록으로 이어가기"
-  const handleContinue = (res: PrepareResult, overrideThumbnailUrl?: string) => {
+  // "등록으로 이어가기" — mode에 따라 단독/동시 등록 분기
+  const handleContinue = (res: PrepareResult, overrideThumbnailUrl: string | undefined, mode: 'both' | 'coupang' | 'naver') => {
     const effectiveDeliFee = res.pricing.deliWho === 'S' ? 0 : (res.pricing.deliFee ?? 0);
     onContinueToRegister({
       thumbnailUrl: overrideThumbnailUrl ?? res.thumbnail.processedUrl,
@@ -1082,7 +1203,7 @@ export default function DomeggookPreparePanel({ onClose, onContinueToRegister, i
       itemNo: parseInt(form.itemNo, 10),
       costBase: res.pricing.priceDome * res.pricing.moq,
       effectiveDeliFee,
-    });
+    }, mode);
   };
 
   const errorInfo = errorCode !== undefined ? getErrorMessage(errorCode) : null;
