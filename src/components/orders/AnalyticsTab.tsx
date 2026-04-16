@@ -11,10 +11,11 @@ interface OrderItem {
   orderPrice: number;
 }
 
-interface CoupangOrder {
-  orderId: number;
+// 쿠팡/네이버 공통으로 처리할 수 있는 최소 주문 타입
+interface UnifiedAnalyticsOrder {
   status: string;
   orderedAt: string;
+  platform: 'coupang' | 'naver';
   orderItems: OrderItem[];
 }
 
@@ -25,22 +26,37 @@ interface Analytics {
   cancelCount: number;
   avgOrderValue: number;
   topProducts: { name: string; sold: number; revenue: number }[];
+  coupangRevenue: number;
+  naverRevenue: number;
+  coupangOrders: number;
+  naverOrders: number;
 }
 
 // ─── 유틸 ──────────────────────────────────────────────────────────────────
 
-const CANCELLED = new Set(['CANCEL_REQUEST', 'CANCEL_DONE', 'RETURN_REQUEST', 'RETURN_DONE']);
+// 취소/반품 상태 집합 (쿠팡 + 네이버)
+const CANCELLED = new Set([
+  'CANCEL_REQUEST', 'CANCEL_DONE', 'RETURN_REQUEST', 'RETURN_DONE', // 쿠팡
+  'CANCELED', 'RETURNED',                                             // 네이버
+]);
 
 function toDateStr(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
-function computeAnalytics(orders: CoupangOrder[]): Analytics {
+function computeAnalytics(orders: UnifiedAnalyticsOrder[]): Analytics {
   const active = orders.filter((o) => !CANCELLED.has(o.status));
+
   const totalRevenue = active.reduce((s, o) => s + o.orderItems.reduce((is, i) => is + i.orderPrice, 0), 0);
   const totalItems = active.reduce((s, o) => s + o.orderItems.reduce((is, i) => is + i.shippingCount, 0), 0);
   const cancelCount = orders.filter((o) => CANCELLED.has(o.status)).length;
   const avgOrderValue = active.length > 0 ? Math.round(totalRevenue / active.length) : 0;
+
+  // 채널별 매출
+  const coupangActive = active.filter((o) => o.platform === 'coupang');
+  const naverActive = active.filter((o) => o.platform === 'naver');
+  const coupangRevenue = coupangActive.reduce((s, o) => s + o.orderItems.reduce((is, i) => is + i.orderPrice, 0), 0);
+  const naverRevenue = naverActive.reduce((s, o) => s + o.orderItems.reduce((is, i) => is + i.orderPrice, 0), 0);
 
   // 상품별 집계
   const productMap = new Map<string, { sold: number; revenue: number }>();
@@ -56,7 +72,18 @@ function computeAnalytics(orders: CoupangOrder[]): Analytics {
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, 5);
 
-  return { totalRevenue, totalOrders: active.length, totalItems, cancelCount, avgOrderValue, topProducts };
+  return {
+    totalRevenue,
+    totalOrders: active.length,
+    totalItems,
+    cancelCount,
+    avgOrderValue,
+    topProducts,
+    coupangRevenue,
+    naverRevenue,
+    coupangOrders: coupangActive.length,
+    naverOrders: naverActive.length,
+  };
 }
 
 function changePct(curr: number, prev: number): number | null {
@@ -64,7 +91,37 @@ function changePct(curr: number, prev: number): number | null {
   return Math.round(((curr - prev) / prev) * 1000) / 10;
 }
 
-// ─── 컴포넌트 ──────────────────────────────────────────────────────────────
+// ─── 주문 패치 (쿠팡 + 네이버 병렬) ───────────────────────────────────────
+
+async function fetchOrdersForPeriod(from: string, to: string): Promise<UnifiedAnalyticsOrder[]> {
+  const params = new URLSearchParams({ from, to });
+
+  const [coupangResult, naverResult] = await Promise.allSettled([
+    fetch(`/api/orders/coupang?${params.toString()}`).then(async (res) => {
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error ?? '쿠팡 주문 조회 실패');
+      return (json.data?.items ?? []) as Array<{ status: string; orderedAt: string; orderItems: OrderItem[] }>;
+    }),
+    fetch(`/api/orders/naver?${params.toString()}`).then(async (res) => {
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error ?? '네이버 주문 조회 실패');
+      return (json.data?.items ?? []) as Array<{ status: string; orderedAt: string; orderItems: OrderItem[] }>;
+    }),
+  ]);
+
+  const unified: UnifiedAnalyticsOrder[] = [];
+
+  if (coupangResult.status === 'fulfilled') {
+    unified.push(...coupangResult.value.map((o) => ({ ...o, platform: 'coupang' as const })));
+  }
+  if (naverResult.status === 'fulfilled') {
+    unified.push(...naverResult.value.map((o) => ({ ...o, platform: 'naver' as const })));
+  }
+
+  return unified;
+}
+
+// ─── 하위 컴포넌트 ─────────────────────────────────────────────────────────
 
 function MetricCard({
   label, value, change, sub,
@@ -91,14 +148,6 @@ function MetricCard({
   );
 }
 
-async function fetchOrdersForPeriod(from: string, to: string): Promise<CoupangOrder[]> {
-  const params = new URLSearchParams({ from, to });
-  const res = await fetch(`/api/orders/coupang?${params.toString()}`);
-  const json = await res.json();
-  if (!res.ok || !json.success) throw new Error(json.error ?? '주문 조회 실패');
-  return json.data?.items ?? [];
-}
-
 const PERIODS = [
   { label: '1개월', months: 1 },
   { label: '3개월', months: 3 },
@@ -112,6 +161,8 @@ function getPeriodDates(months: number): { from: string; to: string } {
   from.setMonth(from.getMonth() - months);
   return { from: toDateStr(from), to: toDateStr(to) };
 }
+
+// ─── 컴포넌트 ──────────────────────────────────────────────────────────────
 
 export default function AnalyticsTab() {
   const [selectedMonths, setSelectedMonths] = useState<number>(1);
@@ -184,7 +235,7 @@ export default function AnalyticsTab() {
           <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
           새로고침
         </button>
-        <span style={{ fontSize: '12px', color: '#a1a1aa' }}>* 쿠팡 주문 기준 · 전기 대비 = 동일 기간 이전</span>
+        <span style={{ fontSize: '12px', color: '#a1a1aa' }}>* 쿠팡 + 네이버 합산 · 전기 대비 = 동일 기간 이전</span>
       </div>
 
       {/* 에러 */}
@@ -227,23 +278,39 @@ export default function AnalyticsTab() {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            {/* 채널별 매출 (현재 쿠팡만 연동됨) */}
+            {/* 채널별 매출 */}
             <div style={{ backgroundColor: '#fff', borderRadius: '14px', border: '1px solid #e5e5e5', padding: '20px' }}>
               <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#18181b', margin: '0 0 16px' }}>채널별 매출</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 {/* 쿠팡 */}
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 500, color: '#18181b' }}>쿠팡</span>
-                    <span style={{ fontSize: '12px', color: '#71717a' }}>{fmt(current.totalRevenue)}원 · {current.totalOrders}건</span>
-                  </div>
-                  <div style={{ height: '8px', borderRadius: '4px', backgroundColor: '#f4f4f5' }}>
-                    <div style={{ height: '100%', borderRadius: '4px', backgroundColor: '#be0014', width: '100%' }} />
-                  </div>
-                </div>
-                <p style={{ fontSize: '12px', color: '#a1a1aa', margin: '4px 0 0' }}>
-                  네이버·11번가 등 다른 채널 연동 시 자동 집계됩니다.
-                </p>
+                {(() => {
+                  const total = current.coupangRevenue + current.naverRevenue;
+                  const coupangRatio = total > 0 ? (current.coupangRevenue / total) * 100 : 0;
+                  const naverRatio = total > 0 ? (current.naverRevenue / total) * 100 : 0;
+                  return (
+                    <>
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                          <span style={{ fontSize: '13px', fontWeight: 500, color: '#18181b' }}>쿠팡</span>
+                          <span style={{ fontSize: '12px', color: '#71717a' }}>{fmt(current.coupangRevenue)}원 · {current.coupangOrders}건</span>
+                        </div>
+                        <div style={{ height: '8px', borderRadius: '4px', backgroundColor: '#f4f4f5' }}>
+                          <div style={{ height: '100%', borderRadius: '4px', backgroundColor: '#be0014', width: `${coupangRatio}%` }} />
+                        </div>
+                      </div>
+                      {/* 네이버 */}
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                          <span style={{ fontSize: '13px', fontWeight: 500, color: '#18181b' }}>네이버</span>
+                          <span style={{ fontSize: '12px', color: '#71717a' }}>{fmt(current.naverRevenue)}원 · {current.naverOrders}건</span>
+                        </div>
+                        <div style={{ height: '8px', borderRadius: '4px', backgroundColor: '#f4f4f5' }}>
+                          <div style={{ height: '100%', borderRadius: '4px', backgroundColor: '#03c75a', width: `${naverRatio}%` }} />
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             </div>
 

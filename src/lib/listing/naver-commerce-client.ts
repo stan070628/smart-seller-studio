@@ -56,6 +56,32 @@ export interface NaverCategory {
   last: boolean;
 }
 
+export interface NaverOrder {
+  productOrderId: string;
+  orderId: string;
+  orderDate: string;
+  payDate: string;
+  productOrderStatus: string;
+  claimStatus: string | null;
+  productName: string;
+  productId: string;
+  quantity: number;
+  unitPrice: number;
+  totalPaymentAmount: number;
+  deliveryFeeAmount: number;
+  ordererName: string;
+  ordererTel: string | null;
+  shippingAddress: {
+    name: string;
+    tel1: string | null;
+    baseAddress: string;
+    detailAddress: string;
+    zipCode: string;
+  } | null;
+  deliveryCompany: string | null;
+  trackingNumber: string | null;
+}
+
 // ─────────────────────────────────────────────────────────────
 // 클라이언트
 // ─────────────────────────────────────────────────────────────
@@ -306,6 +332,29 @@ export class NaverCommerceClient {
       'PUT',
       `/external/v2/products/origin-products/${originProductNo}`,
       payload,
+    );
+  }
+
+  // ─── 주문 목록 조회 ───────────────────────────────────────────
+
+  async getOrders(params: {
+    lastChangedFrom: string;  // "2024-01-01T00:00:00"
+    lastChangedTo: string;
+    lastChangedType?: string;
+    moreSequence?: string;
+    limitCount?: number;
+  }): Promise<{ contents: NaverOrder[]; moreSequence: string | null }> {
+    const query = new URLSearchParams({
+      lastChangedFrom: params.lastChangedFrom,
+      lastChangedTo: params.lastChangedTo,
+      lastChangedType: params.lastChangedType ?? 'ALL',
+      limitCount: String(params.limitCount ?? 300),
+    });
+    if (params.moreSequence) query.set('moreSequence', params.moreSequence);
+
+    return this.request<{ contents: NaverOrder[]; moreSequence: string | null }>(
+      'GET',
+      `/external/v1/pay-order/seller/orders?${query.toString()}`,
     );
   }
 
