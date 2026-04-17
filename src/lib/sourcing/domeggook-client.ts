@@ -41,8 +41,10 @@ export interface GetItemListOptions {
   page?: number;
   /** 페이지당 수 (기본: 200, 최대: 200) */
   pageSize?: number;
-  /** 정렬 기준 (기본: 'rd') */
+  /** 정렬 기준 (기본: 'rd' = 등록일 최신순) */
   sort?: string;
+  /** getAllItems에서 수집할 최대 페이지 수 (미설정 시 전체 페이지 수집) */
+  maxPages?: number;
 }
 
 // ────────────────────────────────────────────
@@ -210,8 +212,9 @@ export class DomeggookClient {
     allItems.push(...firstPage.list);
 
     const totalPages = firstPage.header.numberOfPages;
+    const maxPages = options?.maxPages ?? totalPages;
 
-    for (let page = 2; page <= totalPages; page++) {
+    for (let page = 2; page <= Math.min(totalPages, maxPages); page++) {
       const pageData = await this.getItemList({ ...options, page });
       if (pageData.list.length === 0) break;
       allItems.push(...pageData.list);

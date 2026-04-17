@@ -38,7 +38,7 @@ interface FetchAndSnapshotResult {
   failedItems: { itemNo: number; error: string }[];
 }
 
-async function runFetchAndSnapshot(): Promise<FetchAndSnapshotResult> {
+async function runFetchAndSnapshot(recentOnly = false): Promise<FetchAndSnapshotResult> {
   const client = getDomeggookClient();
   const pool = getSourcingPool();
 
@@ -58,7 +58,8 @@ async function runFetchAndSnapshot(): Promise<FetchAndSnapshotResult> {
 
   for (const kw of KEYWORDS) {
     try {
-      const items = await client.getAllItems({ keyword: kw });
+      // recentOnly=true 시 1페이지만 수집 (키워드당 최신 200개)
+      const items = await client.getAllItems({ keyword: kw, maxPages: recentOnly ? 1 : undefined });
       for (const item of items) {
         if (!seenNos.has(item.no)) {
           seenNos.add(item.no);
@@ -304,9 +305,12 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // recentOnly=true → 키워드당 1페이지(최신 200개)만 수집, false → 전체 수집
+    const recentOnly = request.nextUrl.searchParams.get('recentOnly') === 'true';
+
     // Step 1: getItemList v4.1 — 상품 수집
-    console.info('[cron] fetch-and-snapshot 시작');
-    const result = await runFetchAndSnapshot();
+    console.info(`[cron] fetch-and-snapshot 시작 (recentOnly=${recentOnly})`);
+    const result = await runFetchAndSnapshot(recentOnly);
     console.info('[cron] fetch-and-snapshot 완료:', result);
 
     // Step 2: getItemView 배치 → 재고 스냅샷 저장
