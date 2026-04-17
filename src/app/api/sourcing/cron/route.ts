@@ -5,7 +5,7 @@
  * 인증: Authorization: Bearer <CRON_SECRET>
  * 파이프라인:
  *   1. collection_logs 시작 기록 (status='running')
- *   2. runFetchAndSnapshot — getItemList (v4.1) 전체 수집 (목록 API에 qty.inventory 미포함)
+ *   2. runFetchAndSnapshot — getItemList (v4.1) 최신 등록순, MOQ≤3 필터, 키워드당 최대 10페이지
  *   3. runInventorySnapshot — 기존 스냅샷 보유 아이템에 대해 getItemView 병렬 호출 → 재고 저장
  *   4. collection_logs 완료 업데이트 (success / partial / failed)
  *
@@ -24,6 +24,10 @@ import { runSyncLegalCheck } from '@/lib/sourcing/legal';
 const SNAPSHOT_BATCH_LIMIT = 5000;
 // getItemView 병렬 동시 호출 수
 const SNAPSHOT_CONCURRENCY = 20;
+// 키워드당 수집 최대 페이지 수 (200건/페이지 × 10페이지 = 2,000건/키워드, 16키워드 합산 ~2만건)
+const MAX_PAGES_PER_KEYWORD = 10;
+// 수집 대상 MOQ 상한 (unitQty > 이 값이면 제외)
+const MOQ_MAX = 3;
 
 // ─────────────────────────────────────────
 // 내부 헬퍼: 상품 수집 + 재고 스냅샷 통합 처리
@@ -38,7 +42,7 @@ interface FetchAndSnapshotResult {
   failedItems: { itemNo: number; error: string }[];
 }
 
-async function runFetchAndSnapshot(recentOnly = false): Promise<FetchAndSnapshotResult> {
+async function runFetchAndSnapshot(): Promise<FetchAndSnapshotResult> {
   const client = getDomeggookClient();
   const pool = getSourcingPool();
 
@@ -47,6 +51,7 @@ async function runFetchAndSnapshot(recentOnly = false): Promise<FetchAndSnapshot
   const snapshotDate = kstNow.toISOString().slice(0, 10); // 'YYYY-MM-DD'
 
   // 다중 키워드 순회 수집 (중복 제거)
+  // 정렬: 최신 등록순(so=rd) — 키워드당 MAX_PAGES_PER_KEYWORD 페이지만 수집
   const KEYWORDS = [
     '생활용품', '주방용품', '뷰티', '화장품',
     '건강', '디지털', '가전', '유아', '아동',
@@ -58,16 +63,20 @@ async function runFetchAndSnapshot(recentOnly = false): Promise<FetchAndSnapshot
 
   for (const kw of KEYWORDS) {
     try {
-      // recentOnly=true 시 7페이지만 수집 (키워드당 최신 1,400개, 16키워드 합산 ~2만개)
-      // 미설정 시 전체 페이지 수집
-      const items = await client.getAllItems({ keyword: kw, maxPages: recentOnly ? 7 : undefined });
+      const items = await client.getAllItems({ keyword: kw, maxPages: MAX_PAGES_PER_KEYWORD });
+      let kwAdded = 0;
       for (const item of items) {
+        // MOQ 필터: unitQty > MOQ_MAX인 상품 제외
+        const moq = parseInt(String(item.unitQty ?? 1), 10);
+        if (moq > MOQ_MAX) continue;
+
         if (!seenNos.has(item.no)) {
           seenNos.add(item.no);
           allItems.push(item);
+          kwAdded++;
         }
       }
-      console.info(`[sourcing-cron] 키워드 "${kw}" 수집 완료 (누적 ${allItems.length}건)`);
+      console.info(`[sourcing-cron] 키워드 "${kw}" 수집 완료: ${kwAdded}건 추가 (누적 ${allItems.length}건)`);
     } catch (err) {
       console.warn(`[sourcing-cron] 키워드 "${kw}" 수집 실패:`, err);
     }
@@ -306,12 +315,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // recentOnly=true → 키워드당 1페이지(최신 200개)만 수집, false → 전체 수집
-    const recentOnly = request.nextUrl.searchParams.get('recentOnly') === 'true';
-
-    // Step 1: getItemList v4.1 — 상품 수집
-    console.info(`[cron] fetch-and-snapshot 시작 (recentOnly=${recentOnly})`);
-    const result = await runFetchAndSnapshot(recentOnly);
+    // Step 1: getItemList v4.1 — 최신 등록순, MOQ≤3 필터, 키워드당 MAX_PAGES_PER_KEYWORD 페이지
+    console.info('[cron] fetch-and-snapshot 시작');
+    const result = await runFetchAndSnapshot();
     console.info('[cron] fetch-and-snapshot 완료:', result);
 
     // Step 2: getItemView 배치 → 재고 스냅샷 저장
