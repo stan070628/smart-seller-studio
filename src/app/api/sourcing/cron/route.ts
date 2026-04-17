@@ -58,8 +58,9 @@ async function runFetchAndSnapshot(recentOnly = false): Promise<FetchAndSnapshot
 
   for (const kw of KEYWORDS) {
     try {
-      // recentOnly=true 시 1페이지만 수집 (키워드당 최신 200개)
-      const items = await client.getAllItems({ keyword: kw, maxPages: recentOnly ? 1 : undefined });
+      // recentOnly=true 시 7페이지만 수집 (키워드당 최신 1,400개, 16키워드 합산 ~2만개)
+      // 미설정 시 전체 페이지 수집
+      const items = await client.getAllItems({ keyword: kw, maxPages: recentOnly ? 7 : undefined });
       for (const item of items) {
         if (!seenNos.has(item.no)) {
           seenNos.add(item.no);
