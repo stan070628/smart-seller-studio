@@ -5,6 +5,10 @@
       "schedule": "0 1 * * *"
     },
     {
+      "path": "/api/sourcing/cron/snapshot",
+      "schedule": "0 15 * * *"
+    },
+    {
       "path": "/api/sourcing/costco/cron",
       "schedule": "0 21 * * *"
     },

@@ -158,32 +158,40 @@ export class DomeggookClient {
   }
 
   // ────────────────────────────────────────────
-  // 배치 상세 조회 — API_CALL_DELAY_MS 간격으로 순차 호출
-  // getItemList의 qty.inventory로 충분하지 않을 때만 사용 권장
-  // onProgress: 진행 콜백 (현재 인덱스, 전체 수)
+  // 배치 상세 조회 — concurrency 개씩 병렬 호출
+  // concurrency 기본값: 1 (순차), 스냅샷 수집 시 10~20 권장
+  // onProgress: 진행 콜백 (완료 건수, 전체 수)
   // ────────────────────────────────────────────
   async getItemViewBatch(
     itemNos: number[],
     onProgress?: (current: number, total: number) => void,
+    concurrency = 1,
   ): Promise<BatchResult> {
     const success: DomeggookItemDetail[] = [];
     const failed: { itemNo: number; error: string }[] = [];
+    let completed = 0;
 
-    for (let i = 0; i < itemNos.length; i++) {
-      try {
-        const detail = await this.getItemView(itemNos[i]);
-        success.push(detail);
-      } catch (err) {
-        failed.push({
-          itemNo: itemNos[i],
-          error: err instanceof Error ? err.message : String(err),
-        });
+    // concurrency 개씩 슬라이딩 윈도우로 처리
+    for (let i = 0; i < itemNos.length; i += concurrency) {
+      const chunk = itemNos.slice(i, i + concurrency);
+      const results = await Promise.allSettled(
+        chunk.map((no) => this.getItemView(no)),
+      );
+      for (let j = 0; j < results.length; j++) {
+        const r = results[j];
+        if (r.status === 'fulfilled') {
+          success.push(r.value);
+        } else {
+          failed.push({
+            itemNo: chunk[j],
+            error: r.reason instanceof Error ? r.reason.message : String(r.reason),
+          });
+        }
+        completed++;
+        onProgress?.(completed, itemNos.length);
       }
-
-      onProgress?.(i + 1, itemNos.length);
-
-      // 마지막 항목 이후에는 딜레이 불필요
-      if (i < itemNos.length - 1) {
+      // 청크 간 딜레이 (rate limit 방어)
+      if (i + concurrency < itemNos.length) {
         await sleep(API_CALL_DELAY_MS);
       }
     }

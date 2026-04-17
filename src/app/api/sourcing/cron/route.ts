@@ -5,18 +5,25 @@
  * 인증: Authorization: Bearer <CRON_SECRET>
  * 파이프라인:
  *   1. collection_logs 시작 기록 (status='running')
- *   2. runFetchAndSnapshot — getItemList (v4.1) 전체 수집 + 재고 스냅샷 동시 저장
- *   3. collection_logs 완료 업데이트 (success / partial / failed)
+ *   2. runFetchAndSnapshot — getItemList (v4.1) 전체 수집 (목록 API에 qty.inventory 미포함)
+ *   3. runInventorySnapshot — 기존 스냅샷 보유 아이템에 대해 getItemView 병렬 호출 → 재고 저장
+ *   4. collection_logs 완료 업데이트 (success / partial / failed)
  *
- * v4.1부터 qty.inventory가 목록에 포함되므로 별도 getItemView 배치 호출 없이
- * 단일 API 순회로 상품 정보와 재고 스냅샷을 모두 처리한다.
+ * 도매꾹 목록 API(v4.1)에 qty.inventory가 포함되지 않으므로,
+ * 별도 getItemView 배치 호출로 재고 스냅샷을 수집한다.
+ * 타임아웃 방어: 스냅샷 대상은 기존 스냅샷 보유 아이템 최대 SNAPSHOT_BATCH_LIMIT개로 제한.
  */
 
 import { NextRequest } from 'next/server';
 import { getDomeggookClient } from '@/lib/sourcing/domeggook-client';
 import { getSourcingPool } from '@/lib/sourcing/db';
-import type { DomeggookListItem } from '@/types/sourcing';
+import type { DomeggookListItem, DomeggookItemDetail } from '@/types/sourcing';
 import { runSyncLegalCheck } from '@/lib/sourcing/legal';
+
+// 1회 크론당 스냅샷 수집 최대 아이템 수 (동시성 20 × 처리시간 ~300ms → ~5000건/분)
+const SNAPSHOT_BATCH_LIMIT = 5000;
+// getItemView 병렬 동시 호출 수
+const SNAPSHOT_CONCURRENCY = 20;
 
 // ─────────────────────────────────────────
 // 내부 헬퍼: 상품 수집 + 재고 스냅샷 통합 처리
@@ -170,6 +177,90 @@ async function runFetchAndSnapshot(): Promise<FetchAndSnapshotResult> {
 }
 
 // ─────────────────────────────────────────
+// 내부 헬퍼: getItemView 병렬 호출 → 재고 스냅샷 저장
+// 대상: 이미 스냅샷이 존재하는 아이템 (오늘 날짜 제외, 최대 SNAPSHOT_BATCH_LIMIT건)
+// ─────────────────────────────────────────
+
+interface InventorySnapshotResult {
+  snapshotDate: string;
+  attempted: number;
+  snapshotsSaved: number;
+  failedItems: { itemNo: number; error: string }[];
+}
+
+async function runInventorySnapshot(): Promise<InventorySnapshotResult> {
+  const pool = getSourcingPool();
+  const client = getDomeggookClient();
+
+  const kstNow = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  const snapshotDate = kstNow.toISOString().slice(0, 10);
+
+  // 이미 스냅샷이 있는 아이템 중 오늘 스냅샷이 없는 것만 선택
+  const targetResult = await pool.query<{ id: string; item_no: number }>(
+    `SELECT si.id, si.item_no
+     FROM sourcing_items si
+     WHERE EXISTS (
+       SELECT 1 FROM inventory_snapshots s WHERE s.item_no = si.item_no
+     )
+     AND NOT EXISTS (
+       SELECT 1 FROM inventory_snapshots s WHERE s.item_no = si.item_no AND s.snapshot_date = $1
+     )
+     ORDER BY si.item_no
+     LIMIT $2`,
+    [snapshotDate, SNAPSHOT_BATCH_LIMIT],
+  );
+
+  const targets = targetResult.rows;
+  if (targets.length === 0) {
+    return { snapshotDate, attempted: 0, snapshotsSaved: 0, failedItems: [] };
+  }
+
+  const itemIdMap = new Map<number, string>(targets.map((r) => [r.item_no, r.id]));
+  const itemNos = Array.from(itemIdMap.keys());
+
+  console.info(`[cron/snapshot] ${itemNos.length}건 getItemView 병렬 수집 시작 (동시성: ${SNAPSHOT_CONCURRENCY})`);
+
+  const batchResult = await client.getItemViewBatch(
+    itemNos,
+    (current, total) => {
+      if (current % 500 === 0) console.info(`[cron/snapshot] 진행: ${current}/${total}`);
+    },
+    SNAPSHOT_CONCURRENCY,
+  );
+
+  let snapshotsSaved = 0;
+  for (const detail of batchResult.success as DomeggookItemDetail[]) {
+    const itemId = itemIdMap.get(detail.basis.no);
+    if (!itemId) continue;
+
+    const inventory = detail.qty?.inventory ?? 0;
+    const priceDome = parseInt(String(detail.price?.dome ?? '0'), 10) || null;
+    const priceSupply = parseInt(String(detail.price?.supply ?? '0'), 10) || null;
+
+    const result = await pool.query(
+      `INSERT INTO inventory_snapshots
+         (item_id, item_no, snapshot_date, inventory, price_dome, price_supply)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (item_no, snapshot_date) DO UPDATE SET
+         inventory    = EXCLUDED.inventory,
+         price_dome   = COALESCE(EXCLUDED.price_dome, inventory_snapshots.price_dome),
+         price_supply = COALESCE(EXCLUDED.price_supply, inventory_snapshots.price_supply)`,
+      [itemId, detail.basis.no, snapshotDate, inventory, priceDome, priceSupply],
+    );
+    if ((result.rowCount ?? 0) > 0) snapshotsSaved++;
+  }
+
+  console.info(`[cron/snapshot] 완료: ${snapshotsSaved}건 저장, 실패 ${batchResult.failed.length}건`);
+
+  return {
+    snapshotDate,
+    attempted: itemNos.length,
+    snapshotsSaved,
+    failedItems: batchResult.failed,
+  };
+}
+
+// ─────────────────────────────────────────
 // GET 핸들러
 // ─────────────────────────────────────────
 
@@ -213,13 +304,18 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // getItemList v4.1 — 상품 수집 + 재고 스냅샷 통합 처리
+    // Step 1: getItemList v4.1 — 상품 수집
     console.info('[cron] fetch-and-snapshot 시작');
     const result = await runFetchAndSnapshot();
     console.info('[cron] fetch-and-snapshot 완료:', result);
 
-    // 실패 항목 유무에 따라 상태 결정
-    const finalStatus = result.failedItems.length > 0 ? 'partial' : 'success';
+    // Step 2: getItemView 배치 → 재고 스냅샷 저장
+    console.info('[cron] inventory-snapshot 시작');
+    const snapshotResult = await runInventorySnapshot();
+    console.info('[cron] inventory-snapshot 완료:', snapshotResult);
+
+    const allFailed = [...result.failedItems, ...snapshotResult.failedItems];
+    const finalStatus = allFailed.length > 0 ? 'partial' : 'success';
 
     // collection_logs 완료 업데이트
     await pool.query(
@@ -233,8 +329,8 @@ export async function GET(request: NextRequest) {
       [
         finalStatus,
         result.totalFetched,
-        result.snapshotsSaved,
-        result.failedItems.length > 0 ? JSON.stringify(result.failedItems) : null,
+        snapshotResult.snapshotsSaved,
+        allFailed.length > 0 ? JSON.stringify(allFailed) : null,
         logId,
       ],
     );
@@ -259,12 +355,13 @@ export async function GET(request: NextRequest) {
       data: {
         logId,
         status: finalStatus,
-        snapshotDate: result.snapshotDate,
+        snapshotDate: snapshotResult.snapshotDate,
         totalFetched: result.totalFetched,
         newItems: result.newItems,
         updatedItems: result.updatedItems,
-        snapshotsSaved: result.snapshotsSaved,
-        failedItems: result.failedItems,
+        snapshotsSaved: snapshotResult.snapshotsSaved,
+        snapshotAttempted: snapshotResult.attempted,
+        failedItems: allFailed,
         cleaned,
       },
     });
