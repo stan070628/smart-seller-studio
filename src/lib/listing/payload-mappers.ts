@@ -232,6 +232,13 @@ export function buildNaverPayload(
 
   // 옵션 정보 조립 (enabled variant가 있을 때만)
   let optionInfo: Record<string, unknown> = { simpleOptionSortType: 'CREATE' };
+  // 옵션 있을 때의 실효 기본 판매가: enabled variant 최저가를 salePrice로 사용
+  // (네이버 정책: optionCombinations 중 추가금액=0인 항목이 1개 이상 필수)
+  const naverBaseSalePrice =
+    enabledVariants.length > 0
+      ? Math.min(...enabledVariants.map((v) => v.salePrices.naver))
+      : common.salePrice;
+
   if (enabledVariants.length > 0 && options) {
     // 그룹명 키: optionGroupName1 ~ optionGroupName4 (최대 4개)
     const groupNames: Record<string, string> = {};
@@ -240,12 +247,9 @@ export function buildNaverPayload(
     });
 
     // 조합 목록
-    const optionCombinations = enabledVariants.map((variant, i) => {
-      // 추가금액: variant 네이버 가격 - 기본 판매가 (음수면 0으로 보정)
-      const additionalPrice = Math.max(
-        0,
-        variant.salePrices.naver - common.salePrice,
-      );
+    const optionCombinations = enabledVariants.map((variant) => {
+      // 추가금액: variant 네이버 가격 - 최저 옵션가 (네이버: 최소 1개는 추가금액=0 필수)
+      const additionalPrice = Math.max(0, variant.salePrices.naver - naverBaseSalePrice);
 
       // optionName1 ~ optionName4
       const nameFields: Record<string, string> = {};
@@ -300,15 +304,7 @@ export function buildNaverPayload(
             troubleShootingContents: '판매자 문의',
           },
         },
-        productCertificationInfos: [
-          {
-            certificationKindType: 'NOT_REQUIRED',
-            name: '해당없음',
-            certificationNumber: '해당없음',
-            certificationMark: false,
-            complianceStandards: [],
-          },
-        ],
+        productCertificationInfos: [],
         originAreaInfo: {
           originAreaCode: '00',
           content: '상세페이지 참조',
@@ -319,7 +315,8 @@ export function buildNaverPayload(
         seoInfo: {},
       },
       customerBenefit: {},
-      salePrice: common.salePrice,
+      // 옵션 있을 때는 최저 옵션가를 기본 판매가로 설정 (추가금액=0 조건 충족)
+      salePrice: naverBaseSalePrice,
       stockQuantity: common.stock,
       deliveryInfo: {
         deliveryType: 'DELIVERY',
