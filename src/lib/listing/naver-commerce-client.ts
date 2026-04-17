@@ -340,71 +340,74 @@ export class NaverCommerceClient {
   // ─── 주문 목록 조회 ───────────────────────────────────────────
 
   /**
-   * 네이버 주문 조회.
-   * lastChangedType은 특정 값만 허용하므로 주요 상태별로 병렬 조회 후 합산한다.
-   * 유효한 값: PAYED | DISPATCHED | DELIVERING | DELIVERED | PURCHASE_DECIDED |
-   *            CANCELED | RETURNED | EXCHANGED | ABSENTED | CLAIMED | CLAIM_REJECTED_BY_SELLER
+   * 네이버 주문 조회 — 2단계 프로세스
+   *
+   * Step 1: last-changed-statuses → productOrderId 목록 수집
+   *   - 엔드포인트: GET /external/v1/pay-order/seller/product-orders/last-changed-statuses
+   *   - 24시간 단위만 허용 → 날짜별로 순차 조회
+   *   - 유효한 lastChangedType: PAYED | DISPATCHED | PURCHASE_DECIDED |
+   *                              EXCHANGED | CANCELED | RETURNED | ABSENTED | CLAIMED | CLAIM_REJECTED_BY_SELLER
+   *   - DELIVERING / DELIVERED 는 유효하지 않음
+   *
+   * Step 2: product-orders/query → 상세 정보 조회
+   *   - 엔드포인트: POST /external/v1/pay-order/seller/product-orders/query
    */
   async getOrders(params: {
-    lastChangedFrom: string;  // "2024-01-01T00:00:00"
-    lastChangedTo: string;
-    limitCount?: number;
+    fromDate: string;  // "2024-01-01" (YYYY-MM-DD)
+    toDate: string;    // "2024-01-07"
   }): Promise<{ contents: NaverOrder[] }> {
-    const STATUSES = [
+    const VALID_STATUSES = [
       'PAYED',
       'DISPATCHED',
-      'DELIVERING',
-      'DELIVERED',
       'PURCHASE_DECIDED',
+      'EXCHANGED',
       'CANCELED',
       'RETURNED',
     ];
 
-    const results = await Promise.allSettled(
-      STATUSES.map((type) => {
-        const query = new URLSearchParams({
-          lastChangedFrom: params.lastChangedFrom,
-          lastChangedTo: params.lastChangedTo,
-          lastChangedType: type,
-          limitCount: String(params.limitCount ?? 300),
-        });
-        return this.request<Record<string, unknown>>(
-          'GET',
-          `/external/v1/pay-order/seller/orders?${query.toString()}`,
-        );
-      }),
+    const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+    // 날짜 범위를 하루씩 순회
+    const from = new Date(params.fromDate);
+    const to   = new Date(params.toDate);
+    const productOrderIds = new Set<string>();
+
+    for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
+      const dateStr = d.toISOString().slice(0, 10);
+      for (const status of VALID_STATUSES) {
+        await sleep(120); // rate limit 방지
+        try {
+          const query = new URLSearchParams({
+            lastChangedFrom: `${dateStr}T00:00:00.000+09:00`,
+            lastChangedTo:   `${dateStr}T23:59:59.000+09:00`,
+            lastChangedType: status,
+          });
+          const res = await this.request<{ data?: { productOrderIds?: string[] } }>(
+            'GET',
+            `/external/v1/pay-order/seller/product-orders/last-changed-statuses?${query.toString()}`,
+          );
+          const ids = res.data?.productOrderIds ?? [];
+          ids.forEach((id) => productOrderIds.add(id));
+        } catch (err) {
+          console.warn(`[네이버 주문] ${dateStr} ${status} 조회 실패:`, err instanceof Error ? err.message : err);
+        }
+      }
+    }
+
+    if (productOrderIds.size === 0) {
+      console.info('[네이버 주문] 해당 기간 주문 없음');
+      return { contents: [] };
+    }
+
+    // Step 2: 상세 조회
+    console.info(`[네이버 주문] 상세 조회: ${productOrderIds.size}건`);
+    const detail = await this.request<{ data?: { contents?: NaverOrder[] } }>(
+      'POST',
+      '/external/v1/pay-order/seller/product-orders/query',
+      { productOrderIds: Array.from(productOrderIds) },
     );
 
-    // 실패한 요청 로그
-    results.forEach((r, i) => {
-      if (r.status === 'rejected') {
-        console.error(`[네이버 주문] ${STATUSES[i]} 조회 실패:`, r.reason);
-      }
-    });
-
-    // 네이버 주문 API 응답 구조: { data: { contents: [...] } } 또는 { contents: [...] }
-    const contents = results.flatMap((r) => {
-      if (r.status !== 'fulfilled') return [];
-      const val = r.value;
-      // data 래퍼가 있는 경우
-      const inner = (val.data as Record<string, unknown> | undefined) ?? val;
-      const list = inner.contents;
-      if (!Array.isArray(list)) {
-        console.warn('[네이버 주문] 예상치 못한 응답 구조:', JSON.stringify(val).slice(0, 500));
-        return [];
-      }
-      return list as NaverOrder[];
-    });
-
-    // productOrderId 기준 중복 제거
-    const seen = new Set<string>();
-    const unique = contents.filter((o) => {
-      if (seen.has(o.productOrderId)) return false;
-      seen.add(o.productOrderId);
-      return true;
-    });
-
-    return { contents: unique };
+    return { contents: detail.data?.contents ?? [] };
   }
 
   // ─── 카테고리 조회 ────────────────────────────────────────

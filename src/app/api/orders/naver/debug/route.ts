@@ -28,14 +28,16 @@ export async function GET(request: NextRequest) {
     // @ts-expect-error private 접근
     const token: string = await client.getToken();
 
+    // last-changed-statuses 엔드포인트는 24시간 이내 범위만 허용
+    // from~to를 당일로 맞추기 위해 to를 from 당일 23:59:59로 설정
     const query = new URLSearchParams({
       lastChangedFrom: `${from}T00:00:00.000+09:00`,
-      lastChangedTo:   `${to}T23:59:59.000+09:00`,
+      lastChangedTo:   `${from}T23:59:59.000+09:00`,
       lastChangedType: type,
-      limitCount: '10',
     });
 
-    const url = `${API_HOST}/external/v1/pay-order/seller/orders?${query.toString()}`;
+    const apiPath = sp.get('path') ?? '/external/v1/pay-order/seller/orders';
+    const url = `${API_HOST}${apiPath}?${query.toString()}`;
     const res = await proxyFetch(url, {
       method: 'GET',
       headers: {

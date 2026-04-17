@@ -6,11 +6,6 @@
 import { NextRequest } from 'next/server';
 import { getNaverCommerceClient } from '@/lib/listing/naver-commerce-client';
 
-function toISOStr(dateStr: string, endOfDay = false): string {
-  // 네이버 주문 API는 KST 타임존 포함 형식 요구: 2024-01-01T00:00:00.000+09:00
-  return `${dateStr}T${endOfDay ? '23:59:59' : '00:00:00'}.000+09:00`;
-}
-
 function toDateStr(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
@@ -23,16 +18,12 @@ export async function GET(request: NextRequest) {
   defaultFrom.setDate(defaultFrom.getDate() - 7);
 
   const from = sp.get('from') ?? toDateStr(defaultFrom);
-  const to = sp.get('to') ?? toDateStr(today);
+  const to   = sp.get('to')   ?? toDateStr(today);
 
   try {
     const client = getNaverCommerceClient();
 
-    const result = await client.getOrders({
-      lastChangedFrom: toISOStr(from),
-      lastChangedTo: toISOStr(to, true),
-      limitCount: 300,
-    });
+    const result = await client.getOrders({ fromDate: from, toDate: to });
 
     // 네이버 주문을 프론트엔드 공통 포맷으로 변환
     const CANCELLED_STATUSES = new Set(['CANCELED', 'RETURNED', 'EXCHANGED']);
