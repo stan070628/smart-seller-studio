@@ -30,7 +30,6 @@ export async function GET(request: NextRequest) {
     const result = await client.getOrders({
       lastChangedFrom: toISOStr(from),
       lastChangedTo: toISOStr(to, true),
-      lastChangedType: 'ALL',
       limitCount: 300,
     });
 
@@ -59,7 +58,7 @@ export async function GET(request: NextRequest) {
     // 주문일시 내림차순 정렬
     items.sort((a, b) => new Date(b.orderedAt).getTime() - new Date(a.orderedAt).getTime());
 
-    return Response.json({ success: true, data: { items, moreSequence: result.moreSequence } });
+    return Response.json({ success: true, data: { items } });
   } catch (err) {
     console.error('[GET /api/orders/naver]', err);
     const message = err instanceof Error ? err.message : '알 수 없는 오류';

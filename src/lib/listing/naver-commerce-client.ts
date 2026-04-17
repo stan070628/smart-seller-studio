@@ -337,25 +337,55 @@ export class NaverCommerceClient {
 
   // ─── 주문 목록 조회 ───────────────────────────────────────────
 
+  /**
+   * 네이버 주문 조회.
+   * lastChangedType은 특정 값만 허용하므로 주요 상태별로 병렬 조회 후 합산한다.
+   * 유효한 값: PAYED | DISPATCHED | DELIVERING | DELIVERED | PURCHASE_DECIDED |
+   *            CANCELED | RETURNED | EXCHANGED | ABSENTED | CLAIMED | CLAIM_REJECTED_BY_SELLER
+   */
   async getOrders(params: {
     lastChangedFrom: string;  // "2024-01-01T00:00:00"
     lastChangedTo: string;
-    lastChangedType?: string;
-    moreSequence?: string;
     limitCount?: number;
-  }): Promise<{ contents: NaverOrder[]; moreSequence: string | null }> {
-    const query = new URLSearchParams({
-      lastChangedFrom: params.lastChangedFrom,
-      lastChangedTo: params.lastChangedTo,
-      lastChangedType: params.lastChangedType ?? 'ALL',
-      limitCount: String(params.limitCount ?? 300),
-    });
-    if (params.moreSequence) query.set('moreSequence', params.moreSequence);
+  }): Promise<{ contents: NaverOrder[] }> {
+    const STATUSES = [
+      'PAYED',
+      'DISPATCHED',
+      'DELIVERING',
+      'DELIVERED',
+      'PURCHASE_DECIDED',
+      'CANCELED',
+      'RETURNED',
+    ];
 
-    return this.request<{ contents: NaverOrder[]; moreSequence: string | null }>(
-      'GET',
-      `/external/v1/pay-order/seller/orders?${query.toString()}`,
+    const results = await Promise.allSettled(
+      STATUSES.map((type) => {
+        const query = new URLSearchParams({
+          lastChangedFrom: params.lastChangedFrom,
+          lastChangedTo: params.lastChangedTo,
+          lastChangedType: type,
+          limitCount: String(params.limitCount ?? 300),
+        });
+        return this.request<{ contents: NaverOrder[] }>(
+          'GET',
+          `/external/v1/pay-order/seller/orders?${query.toString()}`,
+        );
+      }),
     );
+
+    const contents = results.flatMap((r) =>
+      r.status === 'fulfilled' ? (r.value.contents ?? []) : [],
+    );
+
+    // productOrderId 기준 중복 제거
+    const seen = new Set<string>();
+    const unique = contents.filter((o) => {
+      if (seen.has(o.productOrderId)) return false;
+      seen.add(o.productOrderId);
+      return true;
+    });
+
+    return { contents: unique };
   }
 
   // ─── 카테고리 조회 ────────────────────────────────────────
