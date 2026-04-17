@@ -60,17 +60,19 @@ export interface NaverOrder {
   productOrderId: string;
   orderId: string;
   orderDate: string;
-  payDate: string;
+  paymentDate?: string;   // 실제 네이버 API 필드명
+  payDate?: string;       // 혹시 다른 버전에서 사용할 수 있는 필드
   productOrderStatus: string;
   claimStatus: string | null;
   productName: string;
   productId: string;
-  quantity: number;
-  unitPrice: number;
-  totalPaymentAmount: number;
-  deliveryFeeAmount: number;
-  ordererName: string;
-  ordererTel: string | null;
+  productQuantity?: number;  // 실제 네이버 API 필드명
+  quantity?: number;          // 대체 필드명 대비
+  productPayAmount?: number;  // 실제 네이버 API 필드명 (결제금액)
+  totalPaymentAmount?: number; // 대체 필드명 대비
+  deliveryFeeAmount?: number;
+  ordererName?: string;
+  ordererTel?: string | null;
   shippingAddress: {
     name: string;
     tel1: string | null;
@@ -366,16 +368,26 @@ export class NaverCommerceClient {
           lastChangedType: type,
           limitCount: String(params.limitCount ?? 300),
         });
-        return this.request<{ contents: NaverOrder[] }>(
+        return this.request<Record<string, unknown>>(
           'GET',
           `/external/v1/pay-order/seller/orders?${query.toString()}`,
         );
       }),
     );
 
-    const contents = results.flatMap((r) =>
-      r.status === 'fulfilled' ? (r.value.contents ?? []) : [],
-    );
+    // 네이버 주문 API 응답 구조: { data: { contents: [...] } } 또는 { contents: [...] }
+    const contents = results.flatMap((r) => {
+      if (r.status !== 'fulfilled') return [];
+      const val = r.value;
+      // data 래퍼가 있는 경우
+      const inner = (val.data as Record<string, unknown> | undefined) ?? val;
+      const list = inner.contents;
+      if (!Array.isArray(list)) {
+        console.warn('[네이버 주문] 예상치 못한 응답 구조:', JSON.stringify(val).slice(0, 300));
+        return [];
+      }
+      return list as NaverOrder[];
+    });
 
     // productOrderId 기준 중복 제거
     const seen = new Set<string>();
