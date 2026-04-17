@@ -7,7 +7,8 @@ import { NextRequest } from 'next/server';
 import { getNaverCommerceClient } from '@/lib/listing/naver-commerce-client';
 
 function toISOStr(dateStr: string, endOfDay = false): string {
-  return `${dateStr}T${endOfDay ? '23:59:59' : '00:00:00'}`;
+  // 네이버 주문 API는 KST 타임존 포함 형식 요구: 2024-01-01T00:00:00.000+09:00
+  return `${dateStr}T${endOfDay ? '23:59:59' : '00:00:00'}.000+09:00`;
 }
 
 function toDateStr(d: Date): string {
@@ -64,6 +65,7 @@ export async function GET(request: NextRequest) {
     // 주문일시 내림차순 정렬
     items.sort((a, b) => new Date(b.orderedAt).getTime() - new Date(a.orderedAt).getTime());
 
+    console.info(`[GET /api/orders/naver] 조회 완료: ${items.length}건 (${from} ~ ${to})`);
     return Response.json({ success: true, data: { items } });
   } catch (err) {
     console.error('[GET /api/orders/naver]', err);

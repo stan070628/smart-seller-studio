@@ -375,6 +375,13 @@ export class NaverCommerceClient {
       }),
     );
 
+    // 실패한 요청 로그
+    results.forEach((r, i) => {
+      if (r.status === 'rejected') {
+        console.error(`[네이버 주문] ${STATUSES[i]} 조회 실패:`, r.reason);
+      }
+    });
+
     // 네이버 주문 API 응답 구조: { data: { contents: [...] } } 또는 { contents: [...] }
     const contents = results.flatMap((r) => {
       if (r.status !== 'fulfilled') return [];
@@ -383,7 +390,7 @@ export class NaverCommerceClient {
       const inner = (val.data as Record<string, unknown> | undefined) ?? val;
       const list = inner.contents;
       if (!Array.isArray(list)) {
-        console.warn('[네이버 주문] 예상치 못한 응답 구조:', JSON.stringify(val).slice(0, 300));
+        console.warn('[네이버 주문] 예상치 못한 응답 구조:', JSON.stringify(val).slice(0, 500));
         return [];
       }
       return list as NaverOrder[];
