@@ -28,30 +28,24 @@ export async function GET(request: NextRequest) {
     // 네이버 주문을 프론트엔드 공통 포맷으로 변환
     const CANCELLED_STATUSES = new Set(['CANCELED', 'RETURNED', 'EXCHANGED']);
 
-    const items = (result.contents ?? []).map((o) => {
-      // 네이버 API는 버전에 따라 필드명이 다를 수 있음 — 두 가지 모두 대응
-      const qty = o.productQuantity ?? o.quantity ?? 1;
-      const amount = o.productPayAmount ?? o.totalPaymentAmount ?? 0;
-
-      return {
-        orderId: o.orderId,
-        productOrderId: o.productOrderId,
-        status: o.productOrderStatus,
-        claimStatus: o.claimStatus,
-        orderedAt: o.orderDate,
-        receiverName: o.shippingAddress?.name ?? null,
-        orderItems: [
-          {
-            sellerProductName: o.productName,
-            sellerProductItemName: '',
-            shippingCount: qty,
-            orderPrice: amount,
-            salesPrice: qty > 0 ? Math.round(amount / qty) : amount,
-            canceled: CANCELLED_STATUSES.has(o.productOrderStatus),
-          },
-        ],
-      };
-    });
+    const items = (result.contents ?? []).map((o) => ({
+      orderId: o.orderId,
+      productOrderId: o.productOrderId,
+      status: o.productOrderStatus,
+      claimStatus: o.claimStatus,
+      orderedAt: o.orderDate,
+      receiverName: o.shippingAddress?.name ?? null,
+      orderItems: [
+        {
+          sellerProductName: o.productName + (o.productOption ? ` (${o.productOption})` : ''),
+          sellerProductItemName: o.productOption ?? '',
+          shippingCount: o.quantity,
+          orderPrice: o.totalPaymentAmount,
+          salesPrice: o.quantity > 0 ? Math.round(o.totalPaymentAmount / o.quantity) : o.totalPaymentAmount,
+          canceled: CANCELLED_STATUSES.has(o.productOrderStatus),
+        },
+      ],
+    }));
 
     // 주문일시 내림차순 정렬
     items.sort((a, b) => new Date(b.orderedAt).getTime() - new Date(a.orderedAt).getTime());

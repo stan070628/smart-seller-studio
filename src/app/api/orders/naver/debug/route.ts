@@ -1,7 +1,6 @@
 /**
  * GET /api/orders/naver/debug
  * 네이버 주문 API 원본 응답 확인용 디버그 엔드포인트
- * 실제 운영에서는 제거하거나 인증 추가 필요
  */
 
 import { NextRequest } from 'next/server';
@@ -10,58 +9,63 @@ import { proxyFetch } from '@/lib/proxy-fetch';
 
 const API_HOST = 'https://api.commerce.naver.com';
 
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
-  const from = sp.get('from') ?? '2026-04-01';
-  const to   = sp.get('to')   ?? '2026-04-17';
-  const type = sp.get('type') ?? 'PAYED';
 
   try {
-    // 1. 토큰 발급 확인
     const client = getNaverCommerceClient();
-    const isValid = await client.validateCredentials();
-    if (!isValid) {
-      return Response.json({ step: 'auth', error: '토큰 발급 실패 — API 키 확인 필요' }, { status: 500 });
-    }
-
-    // 2. 주문 API 원본 응답 확인 (단일 상태, 토큰 직접 사용)
     // @ts-expect-error private 접근
     const token: string = await client.getToken();
 
-    // last-changed-statuses 엔드포인트는 24시간 이내 범위만 허용
-    // from~to를 당일로 맞추기 위해 to를 from 당일 23:59:59로 설정
-    const query = new URLSearchParams({
-      lastChangedFrom: `${from}T00:00:00.000+09:00`,
-      lastChangedTo:   `${from}T23:59:59.000+09:00`,
-      lastChangedType: type,
-    });
+    const call = async (method: string, path: string, body?: unknown) => {
+      const res = await proxyFetch(`${API_HOST}${path}`, {
+        method,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(15_000),
+      });
+      const text = await res.text();
+      let json: unknown;
+      try { json = JSON.parse(text); } catch { json = text; }
+      return { status: res.status, ok: res.ok, body: json };
+    };
 
-    const apiPath = sp.get('path') ?? '/external/v1/pay-order/seller/orders';
-    const url = `${API_HOST}${apiPath}?${query.toString()}`;
-    const res = await proxyFetch(url, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      signal: AbortSignal.timeout(15_000),
-    });
+    // mode=query: productOrderId 직접 조회
+    const productOrderId = sp.get('productOrderId');
+    if (productOrderId) {
+      const result = await call(
+        'POST',
+        '/external/v1/pay-order/seller/product-orders/query',
+        { productOrderIds: [productOrderId] },
+      );
+      return Response.json({ mode: 'query', productOrderId, ...result });
+    }
 
-    const rawText = await res.text();
-    let rawJson: unknown;
-    try { rawJson = JSON.parse(rawText); } catch { rawJson = rawText; }
+    // mode=statuses: 날짜+상태별 productOrderId 목록 조회
+    const from = sp.get('from') ?? '2026-04-16';
+    const type = sp.get('type') ?? 'PAYED';
+    const VALID_STATUSES = ['PAYED', 'DISPATCHED', 'PURCHASE_DECIDED', 'EXCHANGED', 'CANCELED', 'RETURNED'];
+    const statuses = type === 'ALL' ? VALID_STATUSES : [type];
 
-    return Response.json({
-      step: 'orders',
-      url,
-      statusCode: res.status,
-      statusOk: res.ok,
-      rawResponse: rawJson,
-    });
+    const statusResults: Record<string, unknown> = {};
+    for (const s of statuses) {
+      await sleep(150);
+      const q = new URLSearchParams({
+        lastChangedFrom: `${from}T00:00:00.000+09:00`,
+        lastChangedTo:   `${from}T23:59:59.000+09:00`,
+        lastChangedType: s,
+      });
+      const r = await call('GET', `/external/v1/pay-order/seller/product-orders/last-changed-statuses?${q}`);
+      statusResults[s] = r;
+    }
+
+    return Response.json({ mode: 'statuses', from, statusResults });
   } catch (err) {
-    return Response.json({
-      step: 'exception',
-      error: err instanceof Error ? err.message : String(err),
-    }, { status: 500 });
+    return Response.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }
 }

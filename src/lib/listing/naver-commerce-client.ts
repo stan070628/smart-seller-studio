@@ -56,32 +56,91 @@ export interface NaverCategory {
   last: boolean;
 }
 
+// product-orders/query API 실제 응답 구조 (data 배열의 각 원소)
+interface NaverOrderRawItem {
+  order: {
+    orderId: string;
+    orderDate: string;
+    ordererName?: string;
+    ordererTel?: string;
+    paymentDate?: string;
+  };
+  productOrder: {
+    productOrderId: string;
+    productName: string;
+    productId?: string;
+    quantity: number;
+    totalPaymentAmount: number;
+    productOrderStatus: string;
+    deliveryFeeAmount?: number;
+    unitPrice?: number;
+    productOption?: string;
+    shippingAddress?: {
+      name: string;
+      tel1?: string;
+      baseAddress: string;
+      detailedAddress?: string;
+      zipCode: string;
+    } | null;
+  };
+  delivery?: {
+    deliveryCompany?: string;
+    trackingNumber?: string;
+    deliveryStatus?: string;
+  };
+  claim?: {
+    claimStatus?: string;
+  } | null;
+}
+
+// 내부 정규화 타입 (route.ts에서 사용)
 export interface NaverOrder {
   productOrderId: string;
   orderId: string;
   orderDate: string;
-  paymentDate?: string;   // 실제 네이버 API 필드명
-  payDate?: string;       // 혹시 다른 버전에서 사용할 수 있는 필드
   productOrderStatus: string;
   claimStatus: string | null;
   productName: string;
-  productId: string;
-  productQuantity?: number;  // 실제 네이버 API 필드명
-  quantity?: number;          // 대체 필드명 대비
-  productPayAmount?: number;  // 실제 네이버 API 필드명 (결제금액)
-  totalPaymentAmount?: number; // 대체 필드명 대비
-  deliveryFeeAmount?: number;
-  ordererName?: string;
-  ordererTel?: string | null;
+  quantity: number;
+  totalPaymentAmount: number;
+  deliveryFeeAmount: number;
+  productOption: string | null;
   shippingAddress: {
     name: string;
     tel1: string | null;
     baseAddress: string;
-    detailAddress: string;
+    detailedAddress: string;
     zipCode: string;
   } | null;
   deliveryCompany: string | null;
   trackingNumber: string | null;
+}
+
+function normalizeNaverOrder(raw: NaverOrderRawItem): NaverOrder {
+  const { order, productOrder, delivery, claim } = raw;
+  return {
+    productOrderId: productOrder.productOrderId,
+    orderId: order.orderId,
+    orderDate: order.orderDate,
+    productOrderStatus: productOrder.productOrderStatus,
+    claimStatus: claim?.claimStatus ?? null,
+    productName: productOrder.productName,
+    quantity: productOrder.quantity,
+    totalPaymentAmount: productOrder.totalPaymentAmount,
+    deliveryFeeAmount: productOrder.deliveryFeeAmount ?? 0,
+    productOption: productOrder.productOption ?? null,
+    shippingAddress: productOrder.shippingAddress
+      ? {
+          name: productOrder.shippingAddress.name,
+          tel1: productOrder.shippingAddress.tel1 ?? null,
+          baseAddress: productOrder.shippingAddress.baseAddress,
+          detailedAddress: productOrder.shippingAddress.detailedAddress ?? '',
+          zipCode: productOrder.shippingAddress.zipCode,
+        }
+      : null,
+    deliveryCompany: delivery?.deliveryCompany ?? null,
+    trackingNumber: delivery?.trackingNumber ?? null,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -356,18 +415,12 @@ export class NaverCommerceClient {
     fromDate: string;  // "2024-01-01" (YYYY-MM-DD)
     toDate: string;    // "2024-01-07"
   }): Promise<{ contents: NaverOrder[] }> {
-    const VALID_STATUSES = [
-      'PAYED',
-      'DISPATCHED',
-      'PURCHASE_DECIDED',
-      'EXCHANGED',
-      'CANCELED',
-      'RETURNED',
-    ];
+    // 실제 유효한 lastChangedType (EXCHANGED/CANCELED/RETURNED 는 400 반환으로 제외)
+    const VALID_STATUSES = ['PAYED', 'DISPATCHED', 'PURCHASE_DECIDED'];
 
     const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-    // 날짜 범위를 하루씩 순회
+    // 날짜 범위를 하루씩 순회 (24시간 단위 제한)
     const from = new Date(params.fromDate);
     const to   = new Date(params.toDate);
     const productOrderIds = new Set<string>();
@@ -375,19 +428,22 @@ export class NaverCommerceClient {
     for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
       const dateStr = d.toISOString().slice(0, 10);
       for (const status of VALID_STATUSES) {
-        await sleep(120); // rate limit 방지
+        await sleep(500); // rate limit 방지 (Naver API: 429 방어)
         try {
           const query = new URLSearchParams({
             lastChangedFrom: `${dateStr}T00:00:00.000+09:00`,
             lastChangedTo:   `${dateStr}T23:59:59.000+09:00`,
             lastChangedType: status,
           });
-          const res = await this.request<{ data?: { productOrderIds?: string[] } }>(
+          // 실제 응답: { data: { lastChangeStatuses: [{ productOrderId, ... }], count } }
+          const res = await this.request<{
+            data?: { lastChangeStatuses?: { productOrderId: string }[] };
+          }>(
             'GET',
             `/external/v1/pay-order/seller/product-orders/last-changed-statuses?${query.toString()}`,
           );
-          const ids = res.data?.productOrderIds ?? [];
-          ids.forEach((id) => productOrderIds.add(id));
+          const statuses = res.data?.lastChangeStatuses ?? [];
+          statuses.forEach(({ productOrderId: id }) => productOrderIds.add(id));
         } catch (err) {
           console.warn(`[네이버 주문] ${dateStr} ${status} 조회 실패:`, err instanceof Error ? err.message : err);
         }
@@ -400,14 +456,16 @@ export class NaverCommerceClient {
     }
 
     // Step 2: 상세 조회
+    // 실제 응답: { data: [ { order:{}, productOrder:{}, delivery:{} }, ... ] }
     console.info(`[네이버 주문] 상세 조회: ${productOrderIds.size}건`);
-    const detail = await this.request<{ data?: { contents?: NaverOrder[] } }>(
+    const detail = await this.request<{ data?: NaverOrderRawItem[] }>(
       'POST',
       '/external/v1/pay-order/seller/product-orders/query',
       { productOrderIds: Array.from(productOrderIds) },
     );
 
-    return { contents: detail.data?.contents ?? [] };
+    const rawItems = detail.data ?? [];
+    return { contents: rawItems.map(normalizeNaverOrder) };
   }
 
   // ─── 카테고리 조회 ────────────────────────────────────────
