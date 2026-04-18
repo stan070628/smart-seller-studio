@@ -13,7 +13,8 @@ import { getSourcingPool } from '@/lib/sourcing/db';
 import type { DomeggookItemDetail } from '@/types/sourcing';
 
 const SNAPSHOT_BATCH_LIMIT = 5000;
-const SNAPSHOT_CONCURRENCY = 20;
+// 도매꾹 rate limit 대응: 동시성 5로 제한
+const SNAPSHOT_CONCURRENCY = 5;
 
 export async function GET(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;

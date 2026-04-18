@@ -20,10 +20,10 @@ import { getSourcingPool } from '@/lib/sourcing/db';
 import type { DomeggookListItem, DomeggookItemDetail } from '@/types/sourcing';
 import { runSyncLegalCheck } from '@/lib/sourcing/legal';
 
-// 1회 크론당 스냅샷 수집 최대 아이템 수 (동시성 20 × 처리시간 ~300ms → ~5000건/분)
+// 1회 크론당 스냅샷 수집 최대 아이템 수
 const SNAPSHOT_BATCH_LIMIT = 5000;
-// getItemView 병렬 동시 호출 수
-const SNAPSHOT_CONCURRENCY = 20;
+// getItemView 병렬 동시 호출 수 (도매꾹 rate limit 대응: 5로 제한)
+const SNAPSHOT_CONCURRENCY = 5;
 // 키워드당 수집 최대 페이지 수 (200건/페이지 × 10페이지 = 2,000건/키워드, 16키워드 합산 ~2만건)
 const MAX_PAGES_PER_KEYWORD = 10;
 // 수집 대상 MOQ 상한 (unitQty > 이 값이면 제외)
