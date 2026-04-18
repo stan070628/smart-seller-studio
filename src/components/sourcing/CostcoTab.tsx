@@ -12,6 +12,7 @@ import {
   Loader2, RefreshCw, Search, X, ExternalLink,
   ChevronDown, ShoppingCart, ShieldCheck,
 } from 'lucide-react';
+import { C as BASE_C } from '@/lib/design-tokens';
 import type { CostcoProductRow, CostcoSortKey } from '@/types/costco';
 import { STOCK_STATUS_LABELS } from '@/lib/sourcing/costco-constants';
 import {
@@ -24,29 +25,23 @@ import { getCsRisk } from '@/lib/sourcing/domeggook-cs-filter';
 import { COSTCO_SCORE_MAX, COSTCO_SCORE_LABELS } from '@/lib/sourcing/costco-scoring';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 색상 상수
+// 색상 상수 (공통 토큰 + 코스트코 탭 전용 확장)
 // ─────────────────────────────────────────────────────────────────────────────
 const C = {
-  bg: '#f9f9f9',
-  card: '#ffffff',
-  border: '#eeeeee',
-  text: '#1a1c1c',
-  textSub: '#926f6b',
-  accent: '#be0014',
-  tableHeader: '#f3f3f3',
-  rowHover: '#fef7f7',
-  green: '#16a34a',
-  greenBg: '#f0fdf4',
-  orange: '#ea580c',
-  orangeBg: '#fff7ed',
-  red: '#dc2626',
-  redBg: '#fef2f2',
-  blue: '#2563eb',
-  naver: '#03c75a',
-  naverBg: '#e8f9ee',
-  coupang: '#e52222',
-  coupangBg: '#fff0f0',
-};
+  ...BASE_C,
+  rowHover:   '#fef7f7', // 코스트코 탭 전용 hover 색상 (기본값 오버라이드)
+  green:      '#16a34a',
+  greenBg:    '#f0fdf4',
+  orange:     '#ea580c',
+  orangeBg:   '#fff7ed',
+  red:        '#dc2626',
+  redBg:      '#fef2f2',
+  blue:       '#2563eb',
+  naver:      '#03c75a',
+  naverBg:    '#e8f9ee',
+  coupang:    '#e52222',
+  coupangBg:  '#fff0f0',
+} as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // v2 소싱 스코어 상수
@@ -88,7 +83,7 @@ function getEffectiveSeasonBonus(p: CostcoProductRow): { bonus: number; seasons:
 
 /** blocked_reason 우선, 없으면 실시간 판정 */
 function getEffectiveBlockedReason(p: CostcoProductRow): string | null {
-  if (p.blocked_reason !== undefined) return p.blocked_reason;
+  if (p.blocked_reason != null) return p.blocked_reason;
   const male = classifyMaleTarget(p.title, p.category_name ?? '');
   if (male.legalBlocked) return '법적 통신판매 금지 키워드 포함';
   const cs = getCsRisk(p.category_name);
@@ -547,7 +542,10 @@ export default function CostcoTab({ externalGenderFilter }: CostcoTabProps = {})
             마지막 수집: <strong style={{ color: C.text }}>{fmtDate(lastCollected)}</strong>
           </span>
           <span style={{ fontSize: '13px', color: C.textSub }}>
-            전체 <strong style={{ color: C.text }}>{total.toLocaleString()}</strong>개
+            표시 <strong style={{ color: C.text }}>{filteredProducts.length.toLocaleString()}</strong>개
+            {filteredProducts.length !== total && (
+              <span style={{ color: C.textSub }}> / 전체 {total.toLocaleString()}개</span>
+            )}
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

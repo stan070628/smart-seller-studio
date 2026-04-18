@@ -11,6 +11,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { RefreshCw, Calculator, Search } from 'lucide-react';
+import { C } from '@/lib/design-tokens';
 
 // 니치소싱 탭
 import NicheTab from '@/components/niche/NicheTab';
@@ -32,24 +33,6 @@ import ShopeeTab from '@/components/calculator/tabs/ShopeeTab';
 import CompareMode from '@/components/calculator/CompareMode';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 색상 상수
-// ─────────────────────────────────────────────────────────────────────────────
-const C = {
-  bg: '#f9f9f9',
-  card: '#ffffff',
-  border: '#eeeeee',
-  text: '#1a1c1c',
-  textSub: '#926f6b',
-  accent: '#be0014',
-  tableHeader: '#f3f3f3',
-  rowHover: '#f5f5f5',
-  btnPrimaryBg: '#be0014',
-  btnPrimaryText: '#ffffff',
-  btnSecondaryBg: '#f3f3f3',
-  btnSecondaryText: '#1a1c1c',
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
 // 유틸: 날짜 포맷
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -57,9 +40,7 @@ const C = {
 // 메인 컴포넌트
 // ─────────────────────────────────────────────────────────────────────────────
 export default function SourcingDashboard() {
-  const [sourcingSubTab, setSourcingSubTab] = useState<'tracking' | 'calculator' | 'niche' | 'costco'>('tracking');
-  // 코스트코 성별 타겟 서브메뉴
-  const [costcoGenderView, setCostcoGenderView] = useState<'all' | 'male_friendly' | 'female'>('all');
+  const [sourcingSubTab, setSourcingSubTab] = useState<'tracking' | 'calculator' | 'niche' | 'costco'>('niche');
 
   // 니치소싱 읽지 않은 알림 수
   const unreadAlertCount = useNicheStore((s) => s.unreadAlertCount);
@@ -183,44 +164,6 @@ export default function SourcingDashboard() {
         ))}
       </div>
 
-      {/* 코스트코 서브메뉴 (코스트코 탭 활성 시만 표시) */}
-      {sourcingSubTab === 'costco' && (
-        <div
-          style={{
-            display: 'flex', alignItems: 'center', gap: '2px',
-            padding: '0 24px',
-            backgroundColor: '#fafafa',
-            borderBottom: `1px solid ${C.border}`,
-          }}
-        >
-          {([
-            { id: 'all' as const,           label: '전체' },
-            { id: 'male_friendly' as const, label: '🔵 남성 타겟' },
-            { id: 'female' as const,        label: '🚫 여성 타겟' },
-          ] as const).map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setCostcoGenderView(item.id)}
-              style={{
-                padding: '7px 14px',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: '12px',
-                fontWeight: costcoGenderView === item.id ? 600 : 400,
-                color: costcoGenderView === item.id ? C.accent : C.textSub,
-                backgroundColor: 'transparent',
-                borderBottom: costcoGenderView === item.id
-                  ? `2px solid ${C.accent}`
-                  : '2px solid transparent',
-                transition: 'all 0.15s',
-              }}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      )}
-
       {/* 마진계산기 서브탭 콘텐츠 */}
       {sourcingSubTab === 'calculator' && (
         <SourcingCalculator />
@@ -233,7 +176,7 @@ export default function SourcingDashboard() {
 
       {/* 코스트코 서브탭 콘텐츠 */}
       {sourcingSubTab === 'costco' && (
-        <CostcoTab externalGenderFilter={costcoGenderView} />
+        <CostcoTab />
       )}
 
       {/* 도매꾹 v2 서브탭 */}

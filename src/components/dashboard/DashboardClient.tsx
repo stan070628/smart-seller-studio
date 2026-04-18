@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
+import { C as BASE_C } from '@/lib/design-tokens';
 import {
   LayoutDashboard,
   TrendingUp,
@@ -17,23 +18,24 @@ import {
   Store,
 } from 'lucide-react';
 
-// ─── 색상 상수 (기존 스타일 유지) ─────────────────────────────────
+// ─── 색상 상수 (공통 토큰 + 대시보드 전용 오버라이드/확장) ──────────
 const C = {
-  bg: '#f5f5f7',
-  card: '#ffffff',
-  border: '#e5e5e5',
-  text: '#18181b',
-  textSub: '#71717a',
-  textMuted: '#a1a1aa',
-  accent: '#be0014',
-  accentBg: 'rgba(190,0,20,0.07)',
-  accentBorder: 'rgba(190,0,20,0.15)',
-  green: '#16a34a',
-  blue: '#2563eb',
-  purple: '#7c3aed',
-  orange: '#d97706',
-  red: '#dc2626',
-};
+  ...BASE_C,
+  // 대시보드는 약간 다른 배경/보더 톤 사용
+  bg:          '#f5f5f7',
+  border:      '#e5e5e5',
+  text:        '#18181b',
+  textSub:     '#71717a',
+  // 대시보드 전용 추가 키
+  textMuted:   '#a1a1aa',
+  accentBg:    'rgba(190,0,20,0.07)',
+  accentBorder:'rgba(190,0,20,0.15)',
+  green:       '#16a34a',
+  blue:        '#2563eb',
+  purple:      '#7c3aed',
+  orange:      '#d97706',
+  red:         '#dc2626',
+} as const;
 
 // ─── 공통 네비게이션 ─────────────────────────────────────────
 const NAV_ITEMS = [

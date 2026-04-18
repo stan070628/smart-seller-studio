@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 
 import { useSourcingStore, type CollectingProgress } from '@/store/useSourcingStore';
+import { C as BASE_C } from '@/lib/design-tokens';
 import type { SalesAnalysisItem } from '@/types/sourcing';
 
 import {
@@ -48,22 +49,19 @@ import { classifyMaleTarget, type MaleTier } from '@/lib/sourcing/shared/male-cl
 import { getSeasonBonus } from '@/lib/sourcing/shared/season-bonus';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 색상 상수 (SourcingDashboard와 동일)
+// 색상 상수 (공통 토큰 + 도매꾹 탭 전용 확장)
 // ─────────────────────────────────────────────────────────────────────────────
 const C = {
-  bg: '#f9f9f9',
-  card: '#ffffff',
-  border: '#eeeeee',
-  text: '#1a1c1c',
-  textSub: '#926f6b',
-  accent: '#be0014',
-  tableHeader: '#f3f3f3',
-  rowHover: '#f5f5f5',
-  btnPrimaryBg: '#be0014',
-  btnPrimaryText: '#ffffff',
-  btnSecondaryBg: '#f3f3f3',
+  ...BASE_C,
+  btnPrimaryBg:     '#be0014',
+  btnPrimaryText:   '#ffffff',
+  btnSecondaryBg:   '#f3f3f3',
   btnSecondaryText: '#1a1c1c',
-};
+} as const;
+
+// 순번(#) 컬럼 너비 = width(40) + padding-left(12) + padding-right(12) = 64px
+// 상품명 sticky left 오프셋이 이 값에 의존하므로 반드시 함께 변경
+const NUM_COL_W = 64;
 
 const MALE_TIER_BADGE: Record<MaleTier, { label: string; color: string; bg: string }> = {
   high:    { label: '🔵 남성', color: '#2563eb', bg: 'rgba(37,99,235,0.08)' },
@@ -733,10 +731,10 @@ export default function DomeggookTab() {
   // ── 로컬 신규 필터 상태 ────────────────────────────────────────────────────
   const [hideHighCsRisk, setHideHighCsRisk] = useState(false);
   const [hideAboveMarket, setHideAboveMarket] = useState(false);
+  // 차단/미검사/문제 상품 통합 숨기기 (legalStatus blocked/unchecked + computed blockedReason 모두 포함)
   const [hideBlockedUnchecked, setHideBlockedUnchecked] = useState(false);
   const [minScore, setMinScore] = useState<number | ''>('');
   const [genderFilter, setGenderFilter] = useState<'all' | 'male_only' | 'male' | 'female' | 'neutral'>('all');
-  const [hideBlocked, setHideBlocked] = useState(false);
   // 가격 경쟁력 로컬 필터: all | below | normal | strong
   const [priceCompFilter, setPriceCompFilter] = useState<'all' | 'below' | 'normal' | 'strong'>('all');
 
@@ -888,9 +886,10 @@ export default function DomeggookTab() {
         if (bundleData.gapRate != null && bundleData.gapRate < 0) return false;
       }
 
-      // 차단/미검사 숨기기
+      // 차단/미검사/문제 상품 숨기기 (legal status + computed blocked reason 통합)
       if (hideBlockedUnchecked) {
         if (item.legalStatus === 'blocked' || item.legalStatus === 'unchecked') return false;
+        if (getEffectiveBlockedReason(item) !== null) return false;
       }
 
       // 최소 종합점수 필터
@@ -910,9 +909,6 @@ export default function DomeggookTab() {
         if (genderFilter === 'female' && tier !== 'female') return false;
         if (genderFilter === 'neutral' && tier !== 'neutral') return false;
       }
-      // 차단 숨기기
-      if (hideBlocked && getEffectiveBlockedReason(item) !== null) return false;
-
       // 가격 경쟁력 필터 (로컬)
       if (priceCompFilter !== 'all') {
         const bundleData = getEffectiveBundleData(item);
@@ -931,7 +927,7 @@ export default function DomeggookTab() {
 
       return true;
     });
-  }, [items, hideHighCsRisk, hideAboveMarket, hideBlockedUnchecked, minScore, genderFilter, hideBlocked, priceCompFilter]);
+  }, [items, hideHighCsRisk, hideAboveMarket, hideBlockedUnchecked, minScore, genderFilter, priceCompFilter]);
 
   // ── 프론트엔드 보조 정렬 (DB에 값이 없는 경우 fallback) ──────────────────
   const sortedItems = useMemo(() => {
@@ -1036,21 +1032,6 @@ export default function DomeggookTab() {
         >
           추적 상품 {formatNumber(totalCount)}개
         </span>
-        {/* v2 실시간 계산 뱃지 */}
-        <span
-          style={{
-            fontSize: '11px',
-            padding: '2px 8px',
-            borderRadius: '12px',
-            fontWeight: 700,
-            backgroundColor: 'rgba(124, 58, 237, 0.08)',
-            color: '#7c3aed',
-            border: '1px solid rgba(124, 58, 237, 0.2)',
-          }}
-        >
-          v2 스코어 계산: 프론트엔드 실시간
-        </span>
-
         {/* 액션 버튼들 */}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           {/* 법적 검토 버튼 */}
@@ -1415,22 +1396,6 @@ export default function DomeggookTab() {
             차단/미검사 숨기기
           </label>
 
-          {/* 차단 상품 숨기기 */}
-          <label
-            style={{
-              display: 'flex', alignItems: 'center', gap: '4px',
-              fontSize: '11px', color: C.textSub, cursor: 'pointer', userSelect: 'none',
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={hideBlocked}
-              onChange={(e) => setHideBlocked(e.target.checked)}
-              style={{ cursor: 'pointer', width: '12px', height: '12px' }}
-            />
-            차단 상품 숨기기
-          </label>
-
           {/* 고위험CS 숨기기 */}
           <label
             style={{
@@ -1459,7 +1424,6 @@ export default function DomeggookTab() {
               categoryFilter !== null,
               freeDeliOnly,
               hideBlockedUnchecked,
-              hideBlocked,
               hideHighCsRisk,
             ].filter(Boolean).length;
             if (activeCount === 0) return null;
@@ -1474,7 +1438,6 @@ export default function DomeggookTab() {
                   setCategoryFilter(null);
                   setFreeDeliOnly(false);
                   setHideBlockedUnchecked(false);
-                  setHideBlocked(false);
                   setHideHighCsRisk(false);
                   fetchAnalysis();
                 }}
@@ -1573,6 +1536,11 @@ export default function DomeggookTab() {
                     borderBottom: `1px solid ${C.border}`,
                     whiteSpace: 'nowrap',
                     width: '40px',
+                    position: 'sticky',
+                    left: 0,
+                    zIndex: 2,
+                    backgroundColor: C.tableHeader,
+                    overflow: 'hidden',
                   }}
                 >
                   #
@@ -1590,6 +1558,11 @@ export default function DomeggookTab() {
                     cursor: 'pointer',
                     userSelect: 'none',
                     whiteSpace: 'nowrap',
+                    position: 'sticky',
+                    left: `${NUM_COL_W}px`,
+                    zIndex: 2,
+                    backgroundColor: C.tableHeader,
+                    overflow: 'hidden',
                   }}
                 >
                   <span style={{ display: 'inline-flex', alignItems: 'center' }}>
@@ -1598,27 +1571,7 @@ export default function DomeggookTab() {
                   </span>
                 </th>
 
-                {/* 도매가 */}
-                <th
-                  onClick={() => handleSortClick('latest_price_dome')}
-                  style={{
-                    padding: '9px 12px',
-                    textAlign: 'right',
-                    fontWeight: 700,
-                    color: sortField === 'latest_price_dome' ? C.accent : C.textSub,
-                    borderBottom: `1px solid ${C.border}`,
-                    cursor: 'pointer',
-                    userSelect: 'none',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                    도매가
-                    <SortIcon columnKey="latest_price_dome" />
-                  </span>
-                </th>
-
-                {/* MOQ/배송 */}
+                {/* 묶음전략 */}
                 <th
                   onClick={() => handleSortClick('moq')}
                   style={{
@@ -1627,76 +1580,14 @@ export default function DomeggookTab() {
                     fontWeight: 700,
                     color: sortField === 'moq' ? C.accent : C.textSub,
                     borderBottom: `1px solid ${C.border}`,
+                    whiteSpace: 'nowrap',
                     cursor: 'pointer',
                     userSelect: 'none',
-                    whiteSpace: 'nowrap',
                   }}
                 >
                   <span style={{ display: 'inline-flex', alignItems: 'center' }}>
-                    MOQ/배송
+                    묶음전략
                     <SortIcon columnKey="moq" />
-                  </span>
-                </th>
-
-                {/* 묶음전략 */}
-                <th
-                  style={{
-                    padding: '9px 12px',
-                    textAlign: 'center',
-                    fontWeight: 700,
-                    color: C.textSub,
-                    borderBottom: `1px solid ${C.border}`,
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  묶음전략
-                </th>
-
-                {/* 가격 경쟁력 */}
-                <th
-                  style={{
-                    padding: '9px 12px',
-                    textAlign: 'center',
-                    fontWeight: 700,
-                    color: C.textSub,
-                    borderBottom: `1px solid ${C.border}`,
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  가격 경쟁력
-                </th>
-
-                {/* 추천판매가 */}
-                <th
-                  style={{
-                    padding: '9px 12px',
-                    textAlign: 'right',
-                    fontWeight: 700,
-                    color: C.textSub,
-                    borderBottom: `1px solid ${C.border}`,
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  추천판매가
-                </th>
-
-                {/* 재고 */}
-                <th
-                  onClick={() => handleSortClick('latest_inventory')}
-                  style={{
-                    padding: '9px 12px',
-                    textAlign: 'right',
-                    fontWeight: 700,
-                    color: sortField === 'latest_inventory' ? C.accent : C.textSub,
-                    borderBottom: `1px solid ${C.border}`,
-                    cursor: 'pointer',
-                    userSelect: 'none',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                    재고
-                    <SortIcon columnKey="latest_inventory" />
                   </span>
                 </th>
 
@@ -1737,6 +1628,94 @@ export default function DomeggookTab() {
                   <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
                     7일판매
                     <SortIcon columnKey="sales_7d" />
+                  </span>
+                </th>
+
+                {/* 마진율 */}
+                <th
+                  onClick={() => handleSortClick('score_margin')}
+                  style={{
+                    padding: '9px 12px',
+                    textAlign: 'center',
+                    fontWeight: 700,
+                    color: sortField === 'score_margin' ? C.accent : C.textSub,
+                    borderBottom: `1px solid ${C.border}`,
+                    whiteSpace: 'nowrap',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                  }}
+                >
+                  <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                    마진율
+                    <SortIcon columnKey="score_margin" />
+                  </span>
+                </th>
+
+                {/* 도매가 */}
+                <th
+                  onClick={() => handleSortClick('latest_price_dome')}
+                  style={{
+                    padding: '9px 12px',
+                    textAlign: 'right',
+                    fontWeight: 700,
+                    color: sortField === 'latest_price_dome' ? C.accent : C.textSub,
+                    borderBottom: `1px solid ${C.border}`,
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                    도매가
+                    <SortIcon columnKey="latest_price_dome" />
+                  </span>
+                </th>
+
+                {/* MOQ/배송 */}
+                <th
+                  style={{
+                    padding: '9px 12px',
+                    textAlign: 'center',
+                    fontWeight: 700,
+                    color: C.textSub,
+                    borderBottom: `1px solid ${C.border}`,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  MOQ/배송
+                </th>
+
+                {/* 추천판매가 */}
+                <th
+                  style={{
+                    padding: '9px 12px',
+                    textAlign: 'right',
+                    fontWeight: 700,
+                    color: C.textSub,
+                    borderBottom: `1px solid ${C.border}`,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  추천판매가
+                </th>
+
+                {/* 재고 */}
+                <th
+                  onClick={() => handleSortClick('latest_inventory')}
+                  style={{
+                    padding: '9px 12px',
+                    textAlign: 'right',
+                    fontWeight: 700,
+                    color: sortField === 'latest_inventory' ? C.accent : C.textSub,
+                    borderBottom: `1px solid ${C.border}`,
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                    재고
+                    <SortIcon columnKey="latest_inventory" />
                   </span>
                 </th>
 
@@ -1902,13 +1881,18 @@ export default function DomeggookTab() {
                         textAlign: 'center',
                         color: C.textSub,
                         fontSize: '11px',
+                        position: 'sticky',
+                        left: 0,
+                        zIndex: 1,
+                        backgroundColor: C.card,
+                        overflow: 'hidden',
                       }}
                     >
                       {rowNumber}
                     </td>
 
                     {/* 상품명 + 카테고리 */}
-                    <td style={{ padding: '10px 12px', maxWidth: '260px' }}>
+                    <td style={{ padding: '10px 12px', maxWidth: '260px', position: 'sticky', left: `${NUM_COL_W}px`, zIndex: 1, backgroundColor: C.card, overflow: 'hidden' }}>
                       <p
                         style={{
                           margin: 0,
@@ -1938,6 +1922,52 @@ export default function DomeggookTab() {
                           {item.categoryName}
                         </p>
                       )}
+                    </td>
+
+                    {/* 묶음전략 */}
+                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                      {bundleData.strategy != null ? (
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            padding: '2px 7px',
+                            borderRadius: '4px',
+                            fontWeight: 700,
+                            backgroundColor: STRATEGY_BADGE[bundleData.strategy]?.bg ?? C.tableHeader,
+                            color: STRATEGY_BADGE[bundleData.strategy]?.color ?? C.text,
+                          }}
+                        >
+                          {STRATEGY_LABEL[bundleData.strategy] ?? bundleData.strategy}
+                        </span>
+                      ) : (
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            padding: '2px 7px',
+                            borderRadius: '4px',
+                            fontWeight: 600,
+                            backgroundColor: 'rgba(156, 163, 175, 0.1)',
+                            color: '#9ca3af',
+                          }}
+                        >
+                          제외
+                        </span>
+                      )}
+                    </td>
+
+                    {/* 전일판매 */}
+                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                      <SalesCell value={item.sales1d} />
+                    </td>
+
+                    {/* 7일판매 */}
+                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                      <SalesCell value={item.sales7d} />
+                    </td>
+
+                    {/* 마진율 (가격 경쟁력 신호등) */}
+                    <td style={{ padding: '10px 12px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      <TrafficLight gapRate={bundleData.gapRate} />
                     </td>
 
                     {/* 도매가 */}
@@ -1974,42 +2004,6 @@ export default function DomeggookTab() {
                       </div>
                     </td>
 
-                    {/* 묶음전략 */}
-                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                      {bundleData.strategy != null ? (
-                        <span
-                          style={{
-                            fontSize: '11px',
-                            padding: '2px 7px',
-                            borderRadius: '4px',
-                            fontWeight: 700,
-                            backgroundColor: STRATEGY_BADGE[bundleData.strategy]?.bg ?? C.tableHeader,
-                            color: STRATEGY_BADGE[bundleData.strategy]?.color ?? C.text,
-                          }}
-                        >
-                          {STRATEGY_LABEL[bundleData.strategy] ?? bundleData.strategy}
-                        </span>
-                      ) : (
-                        <span
-                          style={{
-                            fontSize: '11px',
-                            padding: '2px 7px',
-                            borderRadius: '4px',
-                            fontWeight: 600,
-                            backgroundColor: 'rgba(156, 163, 175, 0.1)',
-                            color: '#9ca3af',
-                          }}
-                        >
-                          제외
-                        </span>
-                      )}
-                    </td>
-
-                    {/* 가격 경쟁력 */}
-                    <td style={{ padding: '10px 12px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                      <TrafficLight gapRate={bundleData.gapRate} />
-                    </td>
-
                     {/* 추천판매가 */}
                     <td style={{ padding: '10px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                       {bundleData.bundlePrice != null ? (
@@ -2039,16 +2033,6 @@ export default function DomeggookTab() {
                       }}
                     >
                       {formatNumber(item.latestInventory)}
-                    </td>
-
-                    {/* 전일판매 */}
-                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                      <SalesCell value={item.sales1d} />
-                    </td>
-
-                    {/* 7일판매 */}
-                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                      <SalesCell value={item.sales7d} />
                     </td>
 
                     {/* Legal */}

@@ -38,8 +38,8 @@ const getQuerySchema = z.object({
   stockStatus: z.enum(['all', 'inStock', 'outOfStock', 'lowStock']).optional().default('all'),
   /** 단가 절감율 필터: high=30%+, mid=15%+, any=단가비교 가능한 것만 */
   savingFilter: z.enum(['all', 'high', 'mid', 'any']).optional().default('all'),
-  /** 성별 타겟 필터: male_high=남성타겟만, male_friendly=남성친화 이상, female=여성타겟 */
-  genderFilter: z.enum(['all', 'male_high', 'male_friendly', 'female']).optional().default('all'),
+  /** 성별 타겟 필터: male_high=남성타겟만, male_friendly=남성친화 이상, neutral=중립, female=여성타겟 */
+  genderFilter: z.enum(['all', 'male_high', 'male_friendly', 'neutral', 'female']).optional().default('all'),
   /** 시즌 상품만: true이면 현재 날짜 기준 활성 키워드 포함 상품만 조회 */
   seasonOnly: z.coerce.boolean().optional().default(false),
   /** 소싱 등급 필터 (grade.ts 기준): S=80+, A=65+, B=50+, C=35+, D=미만 */
@@ -111,6 +111,7 @@ export async function GET(req: NextRequest) {
   }
 
   // 시즌 상품 필터 — 현재 날짜 기준 활성 키워드 OR 조건
+  // 활성 시즌 키워드가 없으면 빈 결과 반환 (필터가 무력화되어 전체 반환되는 버그 방지)
   if (seasonOnly) {
     const keywords = getActiveSeasonKeywords();
     if (keywords.length > 0) {
@@ -120,6 +121,8 @@ export async function GET(req: NextRequest) {
         return p;
       });
       conditions.push(`(${kParts.join(' OR ')})`);
+    } else {
+      conditions.push('false');
     }
   }
 
@@ -142,7 +145,9 @@ export async function GET(req: NextRequest) {
   const where = `WHERE ${conditions.join(' AND ')}`;
 
   // margin_rate_desc: 단가 기반 환산 시장가 우선, fallback → market_lowest_price
-  // 상수: MARKETPLACE_FEE_RATE=0.10, LOGISTICS_FEE=3500, TAX_RATE=0.10
+  // 공식: channel-policy.ts 기준 — 네이버 수수료 6%(0.94), VAT 10/110
+  // net_profit = market * (1 - 0.06 - 10/110) - cost - logistics
+  // margin_rate = net_profit / market * 100
   // 묶음 상품(예: 591ml×2)은 market_unit_price × total_quantity / divisor 로 환산하여
   // 단품 가격을 그대로 비교하는 오류를 방지한다.
   const effMarketExpr = `
@@ -159,7 +164,7 @@ export async function GET(req: NextRequest) {
   `;
   const marginExpr = `
     CASE WHEN (${effMarketExpr}) IS NOT NULL
-      THEN ((${effMarketExpr}) * 0.90 - price - 3500.0) / 1.10 / (${effMarketExpr}) * 100
+      THEN ((${effMarketExpr}) * (1.0 - 0.06 - 10.0/110.0) - price - 3500.0) / (${effMarketExpr}) * 100
       ELSE NULL
     END
   `;
@@ -393,18 +398,38 @@ async function upsertProduct(pool: Pool, product: CostcoApiProduct) {
 }
 
 async function logPrices(pool: Pool, products: CostcoApiProduct[]) {
-  for (const product of products) {
-    const idRes = await pool.query(
-      `SELECT id FROM public.costco_products WHERE product_code = $1`,
-      [product.productCode],
-    );
-    if (!idRes.rows[0]) continue;
+  if (products.length === 0) return;
 
+  // product_code → id 매핑을 한 번의 IN 쿼리로 일괄 조회
+  const codes = products.map((p) => p.productCode);
+  const idRes = await pool.query(
+    `SELECT id, product_code FROM public.costco_products WHERE product_code = ANY($1)`,
+    [codes],
+  );
+  const codeToId: Record<string, string> = {};
+  for (const row of idRes.rows) codeToId[row.product_code] = row.id;
+
+  // 유효한 상품만 필터링
+  const validProducts = products.filter((p) => codeToId[p.productCode]);
+  if (validProducts.length === 0) return;
+
+  // VALUES ($1,$2,$3,CURRENT_DATE), ... 로 bulk insert — PostgreSQL 65535 파라미터 한도
+  // 파라미터 3개/행 → 배치당 최대 5000행 (안전 마진 포함)
+  const BATCH_SIZE = 5000;
+  for (let start = 0; start < validProducts.length; start += BATCH_SIZE) {
+    const batch = validProducts.slice(start, start + BATCH_SIZE);
+    const valuePlaceholders: string[] = [];
+    const values: unknown[] = [];
+    batch.forEach((p, i) => {
+      const base = i * 3;
+      valuePlaceholders.push(`($${base + 1},$${base + 2},$${base + 3},CURRENT_DATE)`);
+      values.push(codeToId[p.productCode], p.productCode, p.price);
+    });
     await pool.query(
       `INSERT INTO public.costco_price_logs (product_id, product_code, price, logged_at)
-       VALUES ($1, $2, $3, CURRENT_DATE)
+       VALUES ${valuePlaceholders.join(',')}
        ON CONFLICT (product_code, logged_at) DO UPDATE SET price = EXCLUDED.price`,
-      [idRes.rows[0].id, product.productCode, product.price],
+      values,
     );
   }
 }
