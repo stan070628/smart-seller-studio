@@ -311,9 +311,10 @@ export async function POST(
     images.map(async (img, idx) => {
       try {
         const buffer = Buffer.from(img.imageBase64, "base64");
+        const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
         const ext = img.mimeType === "image/png" ? "png" : img.mimeType === "image/webp" ? "webp" : "jpg";
         const path = `detail-pages/${Date.now()}-${idx}.${ext}`;
-        const result = await uploadToStorage(path, buffer, img.mimeType, buffer.byteLength);
+        const result = await uploadToStorage(path, arrayBuffer, img.mimeType, buffer.byteLength);
         return { ...img, publicUrl: result.url };
       } catch {
         return img;
