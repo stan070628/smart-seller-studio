@@ -212,8 +212,89 @@ export async function GET(request: NextRequest) {
     }
 
     if (search) {
-      vConditions.push(`v.title ILIKE $${paramIdx++}`);
-      params.push(`%${search}%`);
+      const BRAND_ALIAS: Record<string, string> = {
+        '커클랜드': 'Kirkland', '컬클랜드': 'Kirkland', '커크랜드': 'Kirkland', '컬크랜드': 'Kirkland',
+        '캘빈클라인': 'Calvin Klein', '캘빈 클라인': 'Calvin Klein',
+        '나이키': 'Nike', '아디다스': 'Adidas', '뉴발란스': 'New Balance',
+        '언더아머': 'Under Armour', '노스페이스': 'The North Face', '콜롬비아': 'Columbia',
+      };
+      const SYNONYMS: string[][] = [
+        ['건전지', '배터리', '충전지', '충전배터리', 'battery', 'batteries'],
+        ['세제', '세탁세제', '세탁비누', '빨래', '섬유유연제', '유연제', 'detergent', 'laundry'],
+        ['샴푸', '린스', '컨디셔너', '헤어트리트먼트', 'shampoo', 'conditioner'],
+        ['기저귀', '팸퍼스', '아기기저귀', '신생아기저귀', 'diaper', 'pampers'],
+        ['물티슈', '아기물티슈', '아기티슈', '베이비물티슈', 'wipes'],
+        ['화장지', '휴지', '두루마리휴지', '롤화장지', 'tissue', 'toilet paper'],
+        ['종이타올', '키친타올', '주방타올', '핸드타올', 'paper towel', 'kitchen towel'],
+        ['치약', '칫솔', '구강청결제', '가글', '구강케어', 'toothpaste', 'toothbrush', 'oral'],
+        ['면도기', '면도날', '쉐이빙', '쉐이빙폼', '면도크림', '질레트', 'razor', 'shave', 'gillette'],
+        ['주방세제', '설거지세제', '주방클리너', '주방용세제', 'dish soap', 'dish wash'],
+        ['바디워시', '샤워젤', '바디클렌저', '비누', '샤워비누', 'body wash', 'shower gel', 'soap'],
+        ['로션', '바디로션', '크림', '바디크림', '보습크림', '핸드크림', 'lotion', 'cream', 'moisturizer'],
+        ['마스크', '마스크팩', '페이스마스크', '미용마스크', 'mask', 'sheet mask'],
+        ['썬크림', '선크림', '자외선차단제', '선스크린', 'sunscreen', 'sunblock', 'spf'],
+        ['견과류', '너트', '아몬드', '호두', '캐슈넛', '피스타치오', '땅콩', '혼합견과', 'nut', 'almond', 'walnut', 'cashew'],
+        ['올리브유', '올리브오일', '엑스트라버진', 'olive oil', 'olive'],
+        ['식용유', '카놀라유', '포도씨유', '해바라기유', '콩기름', 'canola oil', 'vegetable oil'],
+        ['커피', '원두', '캡슐커피', '믹스커피', '드립커피', '인스턴트커피', 'coffee', 'espresso', 'latte'],
+        ['생수', '물', '미네랄워터', '탄산수', 'water', 'mineral water'],
+        ['음료', '주스', '과일주스', '오렌지주스', '이온음료', '스포츠음료', 'juice', 'drink', 'beverage'],
+        ['과자', '스낵', '칩', '크래커', '쿠키', '비스킷', '팝콘', 'chip', 'snack', 'cracker', 'cookie', 'biscuit'],
+        ['비타민', '영양제', '오메가3', '오메가', '프로바이오틱스', '유산균', '루테인', '콜라겐', 'vitamin', 'omega', 'probiotics', 'supplement'],
+        ['냉동식품', '냉동', '피자', '만두', '냉동만두', '냉동피자', '냉동치킨', '핫도그', 'pizza', 'frozen', 'dumpling'],
+        ['고기', '소고기', '돼지고기', '닭고기', '삼겹살', '스테이크', '갈비', 'beef', 'pork', 'chicken', 'steak'],
+        ['빵', '식빵', '베이커리', '머핀', '크루아상', '도넛', 'bread', 'bakery', 'muffin', 'croissant'],
+        ['치즈', '슬라이스치즈', '체다', '모짜렐라', 'cheese', 'cheddar', 'mozzarella'],
+        ['라면', '컵라면', '봉지라면', '즉석면', 'ramen', 'noodle', 'instant noodle'],
+        ['조미료', '소금', '설탕', '후추', '간장', '케첩', '마요네즈', '소스', 'seasoning', 'sauce'],
+        ['공구', '드릴', '렌치', '드라이버', '망치', '전동공구', 'tool', 'drill', 'wrench', 'hardware'],
+        ['자동차', '세차', '타이어', '자동차용품', '카케어', '워셔액', 'car', 'auto', 'tire', 'vehicle'],
+        ['골프', '골프채', '골프공', '골프백', '골프장갑', 'golf', 'club', 'golf ball'],
+        ['낚시', '낚싯대', '루어', '낚시용품', '릴', 'fishing', 'rod', 'lure'],
+        ['캠핑', '텐트', '랜턴', '침낭', '버너', '코펠', '아웃도어', 'camping', 'tent', 'lantern', 'sleeping bag'],
+        ['프로틴', '단백질', '헬스', '보충제', '근육', '웨이', 'protein', 'whey', 'muscle', 'creatine'],
+        ['맥주', '위스키', '양주', '와인', '소주', '막걸리', '주류', 'beer', 'whiskey', 'wine', 'alcohol'],
+        ['등산', '트레킹', '하이킹', '등산화', '등산복', 'hiking', 'trekking', 'outdoor'],
+        ['모자', '볼캡', '비니', '버킷햇', '스냅백', '야구모자', 'hat', 'cap', 'beanie', 'bucket hat'],
+        ['양말', '스포츠양말', '발목양말', '장양말', 'socks', 'ankle socks'],
+        ['속옷', '팬티', '런닝', '언더웨어', '박서', 'underwear', 'boxer', 'briefs'],
+        ['운동화', '스니커즈', '러닝화', '트레이닝화', 'sneakers', 'running shoes', 'shoes'],
+        ['반팔', '티셔츠', '폴로', '남성티', '남성상의', 't-shirt', 'polo', 'tee'],
+        ['점퍼', '자켓', '바람막이', '플리스', '후드', '후드티', 'jacket', 'fleece', 'hoodie', 'windbreaker'],
+        ['바지', '청바지', '반바지', '트레이닝바지', '조거팬츠', 'pants', 'jeans', 'shorts', 'jogger'],
+      ];
+
+      const normalizedSearch = search.replace(/\s/g, '').toLowerCase();
+      const aliasKey = Object.keys(BRAND_ALIAS).find((k) =>
+        normalizedSearch.includes(k.replace(/\s/g, '').toLowerCase()),
+      );
+      const synonymGroup = SYNONYMS.find((group) =>
+        group.some((term) => normalizedSearch.includes(term.replace(/\s/g, '').toLowerCase())),
+      );
+
+      if (aliasKey) {
+        const englishAlias = BRAND_ALIAS[aliasKey];
+        const krVariants = Object.entries(BRAND_ALIAS)
+          .filter(([, en]) => en === englishAlias)
+          .map(([kr]) => kr);
+        const allTerms = [...krVariants, englishAlias];
+        const parts = allTerms.map((term) => {
+          const p = `v.title ILIKE $${paramIdx++}`;
+          params.push(`%${term}%`);
+          return p;
+        });
+        vConditions.push(`(${parts.join(' OR ')})`);
+      } else if (synonymGroup) {
+        const parts = synonymGroup.map((term) => {
+          const p = `v.title ILIKE $${paramIdx++}`;
+          params.push(`%${term}%`);
+          return p;
+        });
+        vConditions.push(`(${parts.join(' OR ')})`);
+      } else {
+        vConditions.push(`v.title ILIKE $${paramIdx++}`);
+        params.push(`%${search}%`);
+      }
     }
 
     if (moqMax != null && !Number.isNaN(moqMax)) {

@@ -154,7 +154,7 @@ export default function MobileCostcoList({ initialSearch }: MobileCostcoListProp
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="상품명 검색..."
+            placeholder="상품명 또는 브랜드명 검색..."
             style={{
               flex: 1,
               height: '36px',
@@ -258,7 +258,11 @@ export default function MobileCostcoList({ initialSearch }: MobileCostcoListProp
         {!isLoading && isEmpty && (
           <MobileEmptyState
             hasFilter={activeFilterCount > 0}
-            onResetFilter={() => setFilters(DEFAULT_FILTER_STATE)}
+            searchTerm={debouncedSearch || undefined}
+            onResetFilter={() => {
+              setFilters(DEFAULT_FILTER_STATE);
+              setSearch('');
+            }}
           />
         )}
 

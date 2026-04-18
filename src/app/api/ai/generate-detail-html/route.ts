@@ -14,10 +14,11 @@ import {
   parseDetailPageResponse,
   type ProductImageAnalysis,
 } from "@/lib/ai/prompts/detail-page";
-import { buildDetailPageHtml } from "@/lib/detail-page/html-builder";
+import { buildDetailPageHtml, buildDetailPageSnippet } from "@/lib/detail-page/html-builder";
 import { checkRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { requireAuth } from "@/lib/supabase/auth";
 import { withRetry } from "@/lib/ai/resilience";
+import { uploadToStorage } from "@/lib/supabase/server";
 
 // ─────────────────────────────────────────
 // 상수
@@ -148,6 +149,7 @@ async function analyzeImages(
 interface ApiSuccessResponse {
   success: true;
   html: string;
+  snippet: string;
 }
 
 interface ApiErrorResponse {
@@ -304,10 +306,27 @@ export async function POST(
     );
   }
 
+  // 이미지를 Supabase Storage에 업로드하여 공개 URL 확보
+  const imagesWithUrls = await Promise.all(
+    images.map(async (img, idx) => {
+      try {
+        const buffer = Buffer.from(img.imageBase64, "base64");
+        const ext = img.mimeType === "image/png" ? "png" : img.mimeType === "image/webp" ? "webp" : "jpg";
+        const path = `detail-pages/${Date.now()}-${idx}.${ext}`;
+        const result = await uploadToStorage(path, buffer, img.mimeType, buffer.byteLength);
+        return { ...img, publicUrl: result.url };
+      } catch {
+        return img;
+      }
+    })
+  );
+
   // HTML 생성
   let html: string;
+  let snippet: string;
   try {
-    html = buildDetailPageHtml(content, images);
+    html = buildDetailPageHtml(content, imagesWithUrls);
+    snippet = buildDetailPageSnippet(content, imagesWithUrls);
   } catch (error) {
     console.error("[/api/ai/generate-detail-html] HTML 빌드 실패:", error);
     return NextResponse.json(
@@ -322,5 +341,5 @@ export async function POST(
     );
   }
 
-  return NextResponse.json({ success: true, html }, { status: 200 });
+  return NextResponse.json({ success: true, html, snippet }, { status: 200 });
 }

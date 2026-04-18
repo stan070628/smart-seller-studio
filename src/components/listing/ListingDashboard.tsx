@@ -2442,6 +2442,7 @@ export default function ListingDashboard() {
               { href: '/dashboard', label: '대시보드' },
               { href: '/sourcing', label: '소싱' },
               { href: '/editor', label: '에디터' },
+              { href: '/detail', label: '상세페이지' },
               { href: '/listing', label: '상품등록', active: true },
               { href: '/orders', label: '주문/매출' },
             ].map((item) => (

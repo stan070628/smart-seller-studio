@@ -166,13 +166,14 @@ export function useCostcoProducts({
   const filteredProducts = useMemo(() => {
     let result = products;
 
-    if (filters.hideHighCs) {
+    // 검색 중에는 CS 필터 무시 (검색 결과가 카테고리 제한으로 안 보이는 문제 방지)
+    if (filters.hideHighCs && !search) {
       result = result.filter(
         (p) => getCsRisk(p.category_name).level !== 'high',
       );
     }
 
-    if (filters.hideBlocked) {
+    if (filters.hideBlocked && !search) {
       // blocked_reason이 undefined(DB 미반환)이면 통과, null이어야 blocked 아닌 것으로 판단
       result = result.filter((p) => {
         if (p.blocked_reason === undefined) return true;
@@ -181,7 +182,7 @@ export function useCostcoProducts({
     }
 
     return result;
-  }, [products, filters.hideHighCs, filters.hideBlocked]);
+  }, [products, filters.hideHighCs, filters.hideBlocked, search]);
 
   const isEmpty = !isLoading && products.length === 0;
   const hasMore = products.length < total;

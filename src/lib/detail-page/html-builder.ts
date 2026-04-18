@@ -7,6 +7,7 @@ import type { DetailPageContent } from "@/lib/ai/prompts/detail-page";
 interface ImageInput {
   imageBase64: string;
   mimeType: string;
+  publicUrl?: string;
 }
 
 // ─────────────────────────────────────────
@@ -14,6 +15,7 @@ interface ImageInput {
 // ─────────────────────────────────────────
 
 function toDataUrl(img: ImageInput): string {
+  if (img.publicUrl) return img.publicUrl;
   return `data:${img.mimeType};base64,${img.imageBase64}`;
 }
 
@@ -188,14 +190,11 @@ function buildCtaSection(content: DetailPageContent): string {
 // 메인 빌더
 // ─────────────────────────────────────────
 
-export function buildDetailPageHtml(
-  content: DetailPageContent,
-  images: ImageInput[]
-): string {
+function buildSections(content: DetailPageContent, images: ImageInput[]): string {
   const heroImage = images[0];
   const galleryImages = images.slice(1);
 
-  const sections = [
+  return [
     buildHeroSection(content, heroImage),
     buildSellingPointsSection(content),
     galleryImages.length > 0 ? buildGallerySection(galleryImages) : "",
@@ -207,6 +206,23 @@ export function buildDetailPageHtml(
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+/** 쿠팡 상세 페이지 에디터에 붙여넣을 HTML snippet (body 내용만) */
+export function buildDetailPageSnippet(
+  content: DetailPageContent,
+  images: ImageInput[]
+): string {
+  const sections = buildSections(content, images);
+  return `<div style="max-width:800px;margin:0 auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden;">\n${sections}\n</div>`;
+}
+
+/** 미리보기용 전체 HTML 문서 */
+export function buildDetailPageHtml(
+  content: DetailPageContent,
+  images: ImageInput[]
+): string {
+  const sections = buildSections(content, images);
 
   return `<!DOCTYPE html>
 <html lang="ko">

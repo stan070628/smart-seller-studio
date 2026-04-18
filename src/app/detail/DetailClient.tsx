@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useRef, useState } from 'react';
+import Link from 'next/link';
 import { Upload, X, Download, Copy, Loader2, CheckCheck, AlertCircle } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -103,8 +104,10 @@ const DetailClient: React.FC = () => {
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedHtml, setGeneratedHtml] = useState<string | null>(null);
+  const [generatedSnippet, setGeneratedSnippet] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [snippetCopied, setSnippetCopied] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const MAX_IMAGES = 5;
@@ -188,7 +191,7 @@ const DetailClient: React.FC = () => {
         body: JSON.stringify({
           images: imagePayloads,
           productName: productName.trim() || undefined,
-          price: price.trim() || undefined,
+          price: price.trim() ? parseInt(price.trim(), 10) : undefined,
         }),
       });
 
@@ -200,6 +203,7 @@ const DetailClient: React.FC = () => {
       }
 
       setGeneratedHtml(data.html);
+      setGeneratedSnippet(data.snippet ?? null);
     } catch {
       setError('네트워크 오류가 발생했습니다. 다시 시도해주세요.');
     } finally {
@@ -238,6 +242,17 @@ const DetailClient: React.FC = () => {
     }
   };
 
+  const handleSnippetCopy = async () => {
+    if (!generatedSnippet) return;
+    try {
+      await navigator.clipboard.writeText(generatedSnippet);
+      setSnippetCopied(true);
+      setTimeout(() => setSnippetCopied(false), 2000);
+    } catch {
+      setError('클립보드 복사에 실패했습니다.');
+    }
+  };
+
   // -------------------------------------------------------------------------
   // 렌더
   // -------------------------------------------------------------------------
@@ -245,13 +260,42 @@ const DetailClient: React.FC = () => {
   return (
     <div className="flex min-h-screen flex-col bg-gray-50">
       {/* 헤더 */}
-      <header className="flex h-14 items-center border-b border-gray-200 bg-white px-6">
-        <span className="text-sm font-semibold text-gray-800">
-          Smart Seller Studio
-          <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
-            상세 페이지 생성
+      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '56px', padding: '0 24px', backgroundColor: '#fff', borderBottom: '1px solid #e5e5e5' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Link href="/dashboard" style={{ textDecoration: 'none', fontSize: '14px', fontWeight: 700, color: '#18181b', letterSpacing: '-0.3px' }}>
+            Smart<span style={{ color: '#be0014' }}>Seller</span>Studio
+          </Link>
+          <span style={{ backgroundColor: 'rgba(190,0,20,0.07)', color: '#be0014', fontSize: '11px', fontWeight: 600, padding: '2px 9px', borderRadius: '100px', border: '1px solid rgba(190,0,20,0.2)' }}>
+            Beta
           </span>
-        </span>
+        </div>
+        <nav style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          {[
+            { href: '/dashboard', label: '대시보드' },
+            { href: '/sourcing', label: '소싱' },
+            { href: '/editor', label: '에디터' },
+            { href: '/detail', label: '상세페이지', active: true },
+            { href: '/listing', label: '상품등록' },
+            { href: '/orders', label: '주문/매출' },
+          ].map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              style={{
+                padding: '5px 12px',
+                borderRadius: '6px',
+                fontSize: '13px',
+                fontWeight: item.active ? 600 : 500,
+                color: item.active ? '#be0014' : '#71717a',
+                textDecoration: 'none',
+                backgroundColor: item.active ? 'rgba(190,0,20,0.07)' : 'transparent',
+                border: item.active ? '1px solid rgba(190,0,20,0.15)' : '1px solid transparent',
+              }}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </nav>
       </header>
 
       {/* 본문 */}
@@ -459,6 +503,40 @@ const DetailClient: React.FC = () => {
               </div>
             )}
           </div>
+
+          {/* 쿠팡 붙여넣기용 HTML 코드 */}
+          {generatedSnippet && (
+            <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+              <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3.5">
+                <div>
+                  <h2 className="text-sm font-semibold text-gray-700">쿠팡 상세 페이지 HTML 코드</h2>
+                  <p className="mt-0.5 text-xs text-gray-400">아래 코드를 복사해 쿠팡 상품 등록 &gt; 상세 설명 HTML 에디터에 붙여넣으세요</p>
+                </div>
+                <button
+                  onClick={handleSnippetCopy}
+                  className="flex items-center gap-1.5 rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white transition-all hover:bg-gray-700 active:scale-95"
+                >
+                  {snippetCopied ? (
+                    <>
+                      <CheckCheck size={13} className="text-green-400" />
+                      복사됨
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={13} />
+                      코드 복사
+                    </>
+                  )}
+                </button>
+              </div>
+              <textarea
+                readOnly
+                value={generatedSnippet}
+                className="w-full resize-none rounded-b-xl bg-gray-950 p-4 font-mono text-xs text-green-400 outline-none"
+                style={{ height: 240 }}
+              />
+            </div>
+          )}
         </section>
       </main>
     </div>
