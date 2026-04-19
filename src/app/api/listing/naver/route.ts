@@ -156,6 +156,7 @@ export async function POST(request: NextRequest) {
 
     // 카테고리 권한 오류 → 임시저장 폴백
     if (isPermissionError(message)) {
+      let draftId: string | undefined;
       try {
         const payload = buildNaverPayload(
           {
@@ -171,16 +172,16 @@ export async function POST(request: NextRequest) {
           },
           { leafCategoryId: d.leafCategoryId, tags: d.tags, exchangeFee: d.exchangeFee, returnFee: d.returnFee },
         );
-        const draftId = await saveNaverDraft(d.name, payload, message);
-        return Response.json({
-          success: false,
-          draft: true,
-          draftId,
-          error: `[네이버] 카테고리 판매 권한이 없어 임시저장했습니다. 스마트스토어센터에서 권한 신청 후 수기 등록해주세요.`,
-        }, { status: 200 });
+        draftId = await saveNaverDraft(d.name, payload, message);
       } catch (draftErr) {
-        console.error('[POST /api/listing/naver] 임시저장 실패', draftErr);
+        console.error('[POST /api/listing/naver] 임시저장 실패 (테이블 미생성):', draftErr);
       }
+      return Response.json({
+        success: false,
+        draft: true,
+        draftId,
+        error: `[네이버] 카테고리 판매 권한이 없습니다. 스마트스토어센터에서 권한 신청 후 수기 등록해주세요.`,
+      }, { status: 200 });
     }
 
     return Response.json({ success: false, error: message }, { status: 500 });

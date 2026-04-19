@@ -231,13 +231,18 @@ async function registerNaver(
   } catch (err) {
     const message = err instanceof Error ? err.message : '알 수 없는 오류';
     if (isNaverPermissionError(message)) {
-      console.warn('[registerNaver] 카테고리 권한 없음 → 임시저장:', message);
-      const draftId = await saveNaverDraft(d.name, payload, message);
+      console.warn('[registerNaver] 카테고리 권한 없음 → 임시저장 시도:', message);
+      let draftId: string | undefined;
+      try {
+        draftId = await saveNaverDraft(d.name, payload, message);
+      } catch (draftErr) {
+        console.error('[registerNaver] 임시저장 실패 (테이블 미생성):', draftErr);
+      }
       return {
         success: false,
         draft: true,
         draftId,
-        error: '카테고리 판매 권한이 없어 임시저장되었습니다. 스마트스토어센터에서 권한 신청 후 수기 등록해주세요.',
+        error: '카테고리 판매 권한이 없습니다. 스마트스토어센터에서 권한 신청 후 수기 등록해주세요.',
       };
     }
     throw err;
