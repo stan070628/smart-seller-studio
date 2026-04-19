@@ -9,6 +9,24 @@ import { z } from 'zod';
 import { getNaverCommerceClient } from '@/lib/listing/naver-commerce-client';
 import { buildNaverPayload } from '@/lib/listing/payload-mappers';
 import type { CommonProductInput, NaverSpecificInput } from '@/lib/listing/payload-mappers';
+import { getSupabaseServerClient } from '@/lib/supabase/server';
+
+const PERMISSION_ERROR_KEYWORDS = ['등록권한', '권한이 있어야', '판매가 가능합니다', 'SALE_PROHIBITION'];
+
+function isPermissionError(message: string): boolean {
+  return PERMISSION_ERROR_KEYWORDS.some((kw) => message.includes(kw));
+}
+
+async function saveNaverDraft(productName: string, payload: Record<string, unknown>, errorMessage: string) {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('listing_drafts')
+    .insert({ platform: 'naver', product_name: productName, payload, error_message: errorMessage })
+    .select('id')
+    .single();
+  if (error) throw new Error(`임시저장 실패: ${error.message}`);
+  return data.id as string;
+}
 
 // ─── GET — 상품 목록 ─────────────────────────────────────────
 
@@ -135,6 +153,36 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     console.error('[POST /api/listing/naver]', err);
     const message = err instanceof Error ? err.message : '알 수 없는 오류';
+
+    // 카테고리 권한 오류 → 임시저장 폴백
+    if (isPermissionError(message)) {
+      try {
+        const payload = buildNaverPayload(
+          {
+            name: d.name,
+            salePrice: d.salePrice,
+            stock: d.stockQuantity,
+            thumbnailImages: d.thumbnailImages,
+            detailImages: d.detailImages,
+            description: d.detailContent,
+            deliveryCharge: d.deliveryFee,
+            deliveryChargeType: d.deliveryFee === 0 ? 'FREE' : 'NOT_FREE',
+            returnCharge: d.returnFee,
+          },
+          { leafCategoryId: d.leafCategoryId, tags: d.tags, exchangeFee: d.exchangeFee, returnFee: d.returnFee },
+        );
+        const draftId = await saveNaverDraft(d.name, payload, message);
+        return Response.json({
+          success: false,
+          draft: true,
+          draftId,
+          error: `[네이버] 카테고리 판매 권한이 없어 임시저장했습니다. 스마트스토어센터에서 권한 신청 후 수기 등록해주세요.`,
+        }, { status: 200 });
+      } catch (draftErr) {
+        console.error('[POST /api/listing/naver] 임시저장 실패', draftErr);
+      }
+    }
+
     return Response.json({ success: false, error: message }, { status: 500 });
   }
 }

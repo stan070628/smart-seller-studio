@@ -273,7 +273,8 @@ export default function BothRegisterForm({ onClose, prefill }: BothRegisterFormP
     bothRegistration.coupang.status === 'success' ||
     bothRegistration.coupang.status === 'error' ||
     bothRegistration.naver.status === 'success' ||
-    bothRegistration.naver.status === 'error';
+    bothRegistration.naver.status === 'error' ||
+    bothRegistration.naver.status === 'draft';
 
   const isRegistering =
     bothRegistration.coupang.status === 'loading' ||
@@ -1322,7 +1323,9 @@ export default function BothRegisterForm({ onClose, prefill }: BothRegisterFormP
                       ? 'rgba(21,128,61,0.06)'
                       : bothRegistration.naver.status === 'error'
                         ? '#fee2e2'
-                        : C.tableHeader,
+                        : bothRegistration.naver.status === 'draft'
+                          ? 'rgba(234,179,8,0.08)'
+                          : C.tableHeader,
                 }}
               >
                 <span
@@ -1349,6 +1352,16 @@ export default function BothRegisterForm({ onClose, prefill }: BothRegisterFormP
                         <strong style={{ color: '#15803d' }}>
                           {bothRegistration.naver.channelProductNo}
                         </strong>
+                      </span>
+                    )}
+                  </span>
+                )}
+                {bothRegistration.naver.status === 'draft' && (
+                  <span style={{ fontSize: '13px', color: '#92400e' }}>
+                    ⚠️ 임시저장 완료 — 카테고리 판매 권한 필요. 스마트스토어센터에서 권한 신청 후 수기 등록해주세요.
+                    {bothRegistration.naver.draftId && (
+                      <span style={{ color: C.textSub, fontSize: '11px', display: 'block', marginTop: '2px' }}>
+                        임시저장 ID: {bothRegistration.naver.draftId}
                       </span>
                     )}
                   </span>

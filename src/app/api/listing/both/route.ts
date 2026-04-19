@@ -19,6 +19,24 @@ import {
   type NaverSpecificInput,
   type OptionsInput,
 } from '@/lib/listing/payload-mappers';
+import { getSupabaseServerClient } from '@/lib/supabase/server';
+
+const NAVER_PERMISSION_KEYWORDS = ['등록권한', '권한이 있어야', '판매가 가능합니다', 'SALE_PROHIBITION'];
+
+function isNaverPermissionError(msg: string) {
+  return NAVER_PERMISSION_KEYWORDS.some((kw) => msg.includes(kw));
+}
+
+async function saveNaverDraft(name: string, payload: Record<string, unknown>, errorMessage: string): Promise<string> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('listing_drafts')
+    .insert({ platform: 'naver', product_name: name, payload, error_message: errorMessage })
+    .select('id')
+    .single();
+  if (error) throw new Error(`임시저장 실패: ${error.message}`);
+  return data.id as string;
+}
 
 // ─────────────────────────────────────────────────────────────
 // Zod 스키마
@@ -96,6 +114,8 @@ interface CoupangResult {
 
 interface NaverResult {
   success: boolean;
+  draft?: boolean;
+  draftId?: string;
   originProductNo?: number;
   channelProductNo?: number;
   error?: string;
@@ -200,13 +220,28 @@ async function registerNaver(
 
   const payload = buildNaverPayload(common, specific, options);
   console.info('[registerNaver] payload:', JSON.stringify(payload).slice(0, 2000));
-  const result = await client.registerProduct(payload);
 
-  return {
-    success: true,
-    originProductNo: result.originProductNo,
-    channelProductNo: result.smartstoreChannelProductNo,
-  };
+  try {
+    const result = await client.registerProduct(payload);
+    return {
+      success: true,
+      originProductNo: result.originProductNo,
+      channelProductNo: result.smartstoreChannelProductNo,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : '알 수 없는 오류';
+    if (isNaverPermissionError(message)) {
+      console.warn('[registerNaver] 카테고리 권한 없음 → 임시저장:', message);
+      const draftId = await saveNaverDraft(d.name, payload, message);
+      return {
+        success: false,
+        draft: true,
+        draftId,
+        error: '카테고리 판매 권한이 없어 임시저장되었습니다. 스마트스토어센터에서 권한 신청 후 수기 등록해주세요.',
+      };
+    }
+    throw err;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────

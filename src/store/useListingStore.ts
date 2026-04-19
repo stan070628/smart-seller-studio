@@ -91,7 +91,7 @@ const SHARED_DRAFT_INITIAL: SharedDraft = {
 
 // ─── BothRegistration 타입 ───────────────────────────────────────────────────
 // 동시 등록 진행 상태
-type PlatformStatus = 'idle' | 'loading' | 'success' | 'error';
+type PlatformStatus = 'idle' | 'loading' | 'success' | 'error' | 'draft';
 
 interface BothRegistrationState {
   coupang: {
@@ -103,6 +103,7 @@ interface BothRegistrationState {
     status: PlatformStatus;
     originProductNo?: number;
     channelProductNo?: number;
+    draftId?: string;
     error?: string;
   };
 }
@@ -640,7 +641,9 @@ export const useListingStore = create<ListingStore>()(
                   : { status: 'error', error: coupang.error },
                 naver: naver.success
                   ? { status: 'success', originProductNo: naver.originProductNo, channelProductNo: naver.channelProductNo }
-                  : { status: 'error', error: naver.error },
+                  : naver.draft
+                    ? { status: 'draft', draftId: naver.draftId, error: naver.error }
+                    : { status: 'error', error: naver.error },
               },
             }),
             false,
