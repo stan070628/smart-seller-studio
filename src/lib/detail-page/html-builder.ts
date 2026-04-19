@@ -186,6 +186,20 @@ function buildCtaSection(content: DetailPageContent): string {
     </section>`;
 }
 
+const RETURN_NOTICE_URL =
+  'https://mvergrjqfjuwndveztts.supabase.co/storage/v1/object/public/smart-seller-studio/static/return-notice.jpg';
+
+function buildReturnNoticeSection(): string {
+  return `
+    <section style="width:100%;padding:0;">
+      <img
+        src="${RETURN_NOTICE_URL}"
+        alt="교환/반품 안내"
+        style="width:100%;display:block;"
+      />
+    </section>`;
+}
+
 // ─────────────────────────────────────────
 // 메인 빌더
 // ─────────────────────────────────────────
@@ -203,6 +217,7 @@ function buildSections(content: DetailPageContent, images: ImageInput[]): string
     buildUsageSection(content),
     buildWarningsSection(content),
     buildCtaSection(content),
+    buildReturnNoticeSection(),
   ]
     .filter(Boolean)
     .join("\n");
