@@ -18,6 +18,10 @@ import type { PlatformId, ListingStatus, ProductListing } from '@/types/listing'
 import BothRegisterForm from '@/components/listing/BothRegisterForm';
 import DomeggookPreparePanel from '@/components/listing/DomeggookPreparePanel';
 import ImageInputSection from '@/components/listing/ImageInputSection';
+import StepIndicator from '@/components/listing/workflow/StepIndicator';
+import Step1SourceSelect from '@/components/listing/workflow/Step1SourceSelect';
+import Step2Processing from '@/components/listing/workflow/Step2Processing';
+import Step3ReviewRegister from '@/components/listing/workflow/Step3ReviewRegister';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 색상 상수
@@ -2345,41 +2349,17 @@ function NaverTabContent() {
 const CONNECTED_PLATFORMS = new Set<PlatformId>(['coupang', 'naver']);
 
 export default function ListingDashboard() {
-  const { activePlatform, listings, isLoading, setActivePlatform, fetchListings, updateSharedDraft } =
-    useListingStore();
+  const { sharedDraft, setCurrentStep } = useListingStore();
+  const { currentStep } = sharedDraft;
 
-  const [showBothMode, setShowBothMode] = useState(false);
-  const [showDomeggookPanel, setShowDomeggookPanel] = useState(false);
-  const [domeggookPrefill, setDomeggookPrefill] = useState<
-    { thumbnailUrl: string; detailHtml: string; title: string; naverPrice: number; coupangPrice: number; itemNo: number; costBase: number; effectiveDeliFee: number } | undefined
-  >(undefined);
-  const [initialItemNo, setInitialItemNo] = useState<string | undefined>(undefined);
-
-  // 개별 등록 모드 (도매꾹에서 넘어온 경우)
-  const [showCoupangOnlyMode, setShowCoupangOnlyMode] = useState(false);
-  const [showNaverOnlyMode, setShowNaverOnlyMode] = useState(false);
-
-  // URL ?itemNo= 파라미터로 도매꾹 패널 자동 열기
+  // URL ?step= 파라미터로 특정 step 진입 지원 (예: /listing?step=2)
   const searchParams = useSearchParams();
   useEffect(() => {
-    const itemNo = searchParams.get('itemNo');
-    if (itemNo) {
-      setInitialItemNo(itemNo);
-      setShowDomeggookPanel(true);
-      setShowBothMode(false);
-    }
-  }, [searchParams]);
-
-  // 마운트 시 목록 조회
-  useEffect(() => {
-    fetchListings();
-  }, [fetchListings]);
-
-  const activeMeta = PLATFORMS.find((p) => p.id === activePlatform)!;
-  const isConnected = CONNECTED_PLATFORMS.has(activePlatform);
-  const filteredListings = listings.filter((l) => l.platformId === activePlatform);
-  const isCoupang = activePlatform === 'coupang';
-  const isNaver = activePlatform === 'naver';
+    const stepParam = searchParams.get('step');
+    if (stepParam === '2') setCurrentStep(2);
+    else if (stepParam === '3') setCurrentStep(3);
+    // step=1은 기본값이므로 별도 처리 불필요
+  }, [searchParams, setCurrentStep]);
 
   return (
     <div
@@ -2442,7 +2422,6 @@ export default function ListingDashboard() {
               { href: '/dashboard', label: '대시보드' },
               { href: '/sourcing', label: '소싱' },
               { href: '/editor', label: '에디터' },
-              { href: '/detail', label: '상세페이지' },
               { href: '/listing', label: '상품등록', active: true },
               { href: '/orders', label: '주문/매출' },
             ].map((item) => (
@@ -2468,148 +2447,29 @@ export default function ListingDashboard() {
       </header>
 
       {/* -------------------------------------------------------------------- */}
-      {/* 플랫폼 탭                                                              */}
-      {/* -------------------------------------------------------------------- */}
-      <PlatformTabs
-        activePlatform={activePlatform}
-        onSelect={setActivePlatform}
-        showBothMode={showBothMode}
-        onToggleBothMode={() => {
-          setShowBothMode((v) => !v);
-          setShowDomeggookPanel(false);
-        }}
-        showDomeggookPanel={showDomeggookPanel}
-        onToggleDomeggookPanel={() => {
-          setShowDomeggookPanel((v) => !v);
-          setShowBothMode(false);
-        }}
-      />
-
-      {/* -------------------------------------------------------------------- */}
       {/* 본문                                                                   */}
       {/* -------------------------------------------------------------------- */}
       <main
         style={{
           flex: 1,
           padding: '24px',
-          maxWidth: '1200px',
+          maxWidth: '1100px',
           width: '100%',
           margin: '0 auto',
         }}
       >
-        {/* 도매꾹 불러오기 패널 */}
-        {showDomeggookPanel && (
-          <DomeggookPreparePanel
-            onClose={() => {
-              setShowDomeggookPanel(false);
-              setInitialItemNo(undefined);
-            }}
-            onContinueToRegister={(data, mode) => {
-              // sharedDraft에 도매꾹 데이터 먼저 주입
-              updateSharedDraft({
-                name: data.title,
-                thumbnailImages: [data.thumbnailUrl],
-                description: data.detailHtml,
-                naverPrice: String(data.naverPrice),
-                coupangPrice: String(data.coupangPrice),
-              });
-              setShowDomeggookPanel(false);
-              setInitialItemNo(undefined);
+        {/* Step Indicator */}
+        <StepIndicator
+          currentStep={currentStep}
+          onStepClick={(step) => {
+            if (step < currentStep) setCurrentStep(step);
+          }}
+        />
 
-              if (mode === 'both') {
-                setDomeggookPrefill(data);
-                setShowBothMode(true);
-              } else if (mode === 'coupang') {
-                setShowCoupangOnlyMode(true);
-              } else {
-                // mode === 'naver'
-                setShowNaverOnlyMode(true);
-              }
-            }}
-            initialItemNo={initialItemNo}
-          />
-        )}
-
-        {/* 동시 등록 모드 */}
-        {!showDomeggookPanel && showBothMode && (
-          <BothRegisterForm
-            onClose={() => {
-              setShowBothMode(false);
-              setDomeggookPrefill(undefined);
-            }}
-            prefill={domeggookPrefill}
-          />
-        )}
-
-        {/* 쿠팡 단독 등록 모드 (도매꾹에서 넘어온 경우) */}
-        {!showDomeggookPanel && !showBothMode && showCoupangOnlyMode && (
-          <CoupangRegisterForm onClose={() => setShowCoupangOnlyMode(false)} />
-        )}
-
-        {/* 네이버 단독 등록 모드 (도매꾹에서 넘어온 경우) */}
-        {!showDomeggookPanel && !showBothMode && !showCoupangOnlyMode && showNaverOnlyMode && (
-          <NaverRegisterForm onClose={() => setShowNaverOnlyMode(false)} />
-        )}
-
-        {/* 단일 등록 모드 — 모든 오버레이 모드가 false일 때만 렌더 */}
-        {!showDomeggookPanel && !showBothMode && !showCoupangOnlyMode && !showNaverOnlyMode && isCoupang && <CoupangTabContent />}
-
-        {/* 네이버 탭 */}
-        {!showDomeggookPanel && !showBothMode && !showCoupangOnlyMode && !showNaverOnlyMode && isNaver && <NaverTabContent />}
-
-        {/* 기타 플랫폼 — 기존 로직 */}
-        {!showDomeggookPanel && !showBothMode && !showCoupangOnlyMode && !showNaverOnlyMode && !isCoupang && !isNaver && (
-          <>
-            {/* 로딩 */}
-            {isLoading && (
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  padding: '80px 24px',
-                  color: C.textSub,
-                  fontSize: '14px',
-                }}
-              >
-                불러오는 중...
-              </div>
-            )}
-
-            {/* 연동 전 빈 상태 */}
-            {!isLoading && !isConnected && (
-              <EmptyConnectState platformLabel={activeMeta.label} />
-            )}
-
-            {/* 연동 후 데이터 없음 */}
-            {!isLoading && isConnected && filteredListings.length === 0 && (
-              <EmptyListState />
-            )}
-
-            {/* 등록 상품 테이블 */}
-            {!isLoading && isConnected && filteredListings.length > 0 && (
-              <>
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    marginBottom: '16px',
-                  }}
-                >
-                  <span style={{ fontSize: '13px', color: C.textSub }}>
-                    총{' '}
-                    <strong style={{ color: C.text, fontWeight: 600 }}>
-                      {filteredListings.length}
-                    </strong>
-                    개 상품
-                  </span>
-                </div>
-                <ListingTable listings={filteredListings} />
-              </>
-            )}
-          </>
-        )}
+        {/* Step 라우팅 */}
+        {currentStep === 1 && <Step1SourceSelect />}
+        {currentStep === 2 && <Step2Processing />}
+        {currentStep === 3 && <Step3ReviewRegister />}
       </main>
     </div>
   );

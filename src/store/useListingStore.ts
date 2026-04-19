@@ -28,6 +28,18 @@ interface SharedDraft {
   options: ProductOptions | null;
   optionsLoading: boolean;
   optionsError: string | null;
+
+  // ─── 워크플로우 메타 ────────────────────────────────────────────────────────
+  currentStep: 1 | 2 | 3;
+  selectedPlatform: 'coupang' | 'naver' | 'both';
+
+  // ─── AI 상세페이지 관련 ─────────────────────────────────────────────────────
+  rawImageFiles: File[];
+  detailPageFullHtml: string | null;
+  detailPageSnippet: string | null;
+  detailPageStatus: 'idle' | 'analyzing' | 'generating' | 'done' | 'error';
+  detailPageError: string | null;
+  detailPageSkipped: boolean;
 }
 
 const SHARED_DRAFT_INITIAL: SharedDraft = {
@@ -47,6 +59,16 @@ const SHARED_DRAFT_INITIAL: SharedDraft = {
   options: null,
   optionsLoading: false,
   optionsError: null,
+  // 워크플로우 메타
+  currentStep: 1,
+  selectedPlatform: 'both',
+  // AI 상세페이지 관련
+  rawImageFiles: [],
+  detailPageFullHtml: null,
+  detailPageSnippet: null,
+  detailPageStatus: 'idle',
+  detailPageError: null,
+  detailPageSkipped: false,
 };
 
 // ─── BothRegistration 타입 ───────────────────────────────────────────────────
@@ -162,6 +184,14 @@ interface ListingStore {
   updateVariantPrice: (variantId: string, platform: 'coupang' | 'naver', price: number) => void;
   toggleVariant: (variantId: string) => void;
   toggleAllVariants: (enabled: boolean) => void;
+
+  // ─── 워크플로우 액션 ────────────────────────────────────────────────────────
+  goNextStep: () => void;
+  goPrevStep: () => void;
+  setCurrentStep: (step: 1 | 2 | 3) => void;
+  skipDetailPage: () => void;
+  generateDetailPage: () => Promise<void>;
+  resetWorkflow: () => void;
 
   // ─── BothRegistration 액션 ──────────────────────────────────────────────────
   bothRegistration: BothRegistrationState;
@@ -626,6 +656,184 @@ export const useListingStore = create<ListingStore>()(
           () => ({ bothRegistration: BOTH_REGISTRATION_INITIAL }),
           false,
           'listing/resetBothRegistration',
+        ),
+
+      // ─── 워크플로우 액션 ────────────────────────────────────────────────────
+      goNextStep: () =>
+        set(
+          (s) => {
+            const cur = s.sharedDraft.currentStep;
+            if (cur < 3) {
+              return { sharedDraft: { ...s.sharedDraft, currentStep: (cur + 1) as 1 | 2 | 3 } };
+            }
+            return {};
+          },
+          false,
+          'listing/goNextStep',
+        ),
+
+      goPrevStep: () =>
+        set(
+          (s) => {
+            const cur = s.sharedDraft.currentStep;
+            if (cur > 1) {
+              return { sharedDraft: { ...s.sharedDraft, currentStep: (cur - 1) as 1 | 2 | 3 } };
+            }
+            return {};
+          },
+          false,
+          'listing/goPrevStep',
+        ),
+
+      setCurrentStep: (step) =>
+        set(
+          (s) => ({ sharedDraft: { ...s.sharedDraft, currentStep: step } }),
+          false,
+          'listing/setCurrentStep',
+        ),
+
+      skipDetailPage: () =>
+        set(
+          (s) => ({
+            sharedDraft: {
+              ...s.sharedDraft,
+              detailPageSkipped: true,
+              currentStep: 3,
+            },
+          }),
+          false,
+          'listing/skipDetailPage',
+        ),
+
+      generateDetailPage: async () => {
+        // 브라우저 환경이 아니면 실행하지 않음
+        if (typeof window === 'undefined') return;
+
+        const { sharedDraft } = get();
+        if (sharedDraft.rawImageFiles.length === 0) return;
+
+        // 이미지 base64 변환 유틸
+        const readFileAsDataURL = (file: File): Promise<string> =>
+          new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(file);
+          });
+
+        const compressImage = (dataUrl: string, maxDimension = 1280, quality = 0.8): Promise<string> =>
+          new Promise((resolve) => {
+            const img = new window.Image();
+            img.onload = () => {
+              let { width, height } = img;
+              if (width > maxDimension || height > maxDimension) {
+                if (width >= height) {
+                  height = Math.round((height * maxDimension) / width);
+                  width = maxDimension;
+                } else {
+                  width = Math.round((width * maxDimension) / height);
+                  height = maxDimension;
+                }
+              }
+              const canvas = document.createElement('canvas');
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext('2d')!;
+              ctx.drawImage(img, 0, 0, width, height);
+              resolve(canvas.toDataURL('image/jpeg', quality));
+            };
+            img.src = dataUrl;
+          });
+
+        // analyzing 단계 시작
+        set(
+          (s) => ({
+            sharedDraft: {
+              ...s.sharedDraft,
+              detailPageStatus: 'analyzing',
+              detailPageError: null,
+            },
+          }),
+          false,
+          'listing/generateDetailPage/analyzing',
+        );
+
+        try {
+          // 이미지 base64 변환 + 압축
+          const imagePayloads = await Promise.all(
+            sharedDraft.rawImageFiles.map(async (file) => {
+              const dataUrl = await readFileAsDataURL(file);
+              const compressed = await compressImage(dataUrl);
+              return {
+                imageBase64: compressed,
+                mimeType: 'image/jpeg' as const,
+              };
+            }),
+          );
+
+          // generating 단계
+          set(
+            (s) => ({
+              sharedDraft: {
+                ...s.sharedDraft,
+                detailPageStatus: 'generating',
+              },
+            }),
+            false,
+            'listing/generateDetailPage/generating',
+          );
+
+          const currentDraft = get().sharedDraft;
+          const res = await fetch('/api/ai/generate-detail-html', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              images: imagePayloads,
+              productName: currentDraft.name || undefined,
+              price: currentDraft.salePrice ? parseInt(currentDraft.salePrice, 10) : undefined,
+            }),
+          });
+
+          const data = await res.json();
+
+          if (!res.ok || !data.html) {
+            throw new Error(data.error ?? '생성에 실패했습니다.');
+          }
+
+          // 성공: done 상태, description 자동 매핑
+          set(
+            (s) => ({
+              sharedDraft: {
+                ...s.sharedDraft,
+                detailPageFullHtml: data.html,
+                detailPageSnippet: data.snippet ?? null,
+                detailPageStatus: 'done',
+                description: data.snippet ?? s.sharedDraft.description,
+              },
+            }),
+            false,
+            'listing/generateDetailPage/done',
+          );
+        } catch (err) {
+          set(
+            (s) => ({
+              sharedDraft: {
+                ...s.sharedDraft,
+                detailPageStatus: 'error',
+                detailPageError: err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.',
+              },
+            }),
+            false,
+            'listing/generateDetailPage/error',
+          );
+        }
+      },
+
+      resetWorkflow: () =>
+        set(
+          { sharedDraft: SHARED_DRAFT_INITIAL },
+          false,
+          'listing/resetWorkflow',
         ),
     }),
     { name: 'ListingStore' },
