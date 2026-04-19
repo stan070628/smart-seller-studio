@@ -11,6 +11,7 @@ import { Upload, X, ChevronRight, AlertTriangle, CheckCircle, RefreshCw, Loader2
 import { useListingStore } from '@/store/useListingStore';
 import { C } from '@/lib/design-tokens';
 import { calcCoupangWing, calcNaver } from '@/lib/calculator/calculate';
+import { getCoupangFeeFromPath } from '@/lib/calculator/fees';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 스타일 상수
@@ -592,17 +593,23 @@ function PriceWithMarginCalc() {
   const costPrice = Number(sharedDraft.costPrice) || 0;
   const targetMargin = sharedDraft.targetMarginRate;
 
+  // Step 2에서 선택된 카테고리 경로로 수수료율 자동 결정
+  const coupangFee = useMemo(
+    () => getCoupangFeeFromPath(sharedDraft.coupangCategoryPath || ''),
+    [sharedDraft.coupangCategoryPath],
+  );
+
   const rec = useMemo(() => {
     if (!costPrice) return null;
-    const coupangPrice = calcRecommendedPrice(costPrice, shippingFee, 0.108, targetMargin);
+    const coupangPrice = calcRecommendedPrice(costPrice, shippingFee, coupangFee.rate, targetMargin);
     const naverPrice   = calcRecommendedPrice(costPrice, shippingFee, 0.036, targetMargin);
-    const cr = calcCoupangWing({ costPrice, sellingPrice: coupangPrice, category: '생활용품', shippingFee, adCost: 0 });
+    const cr = calcCoupangWing({ costPrice, sellingPrice: coupangPrice, category: coupangFee.categoryName, shippingFee, adCost: 0 });
     const nr = calcNaver({ costPrice, sellingPrice: naverPrice, shippingFee, grade: '일반', inflow: '네이버쇼핑', adCost: 0 });
     return {
       coupang: { price: coupangPrice, margin: cr.marginRate, profit: cr.netProfit },
       naver:   { price: naverPrice,   margin: nr.marginRate, profit: nr.netProfit },
     };
-  }, [costPrice, shippingFee, targetMargin]);
+  }, [costPrice, shippingFee, targetMargin, coupangFee]);
 
   const numInputStyle: React.CSSProperties = { ...inputStyle, paddingRight: '28px' };
 
@@ -667,7 +674,7 @@ function PriceWithMarginCalc() {
       {rec ? (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
           {([
-            { key: 'coupang', label: '쿠팡 윙', sub: '수수료 10.8% 기준', data: rec.coupang, priceField: 'coupangPrice' as const },
+            { key: 'coupang', label: '쿠팡 윙', sub: `${coupangFee.categoryName} · 수수료 ${(coupangFee.rate * 100).toFixed(1)}%${sharedDraft.coupangCategoryPath ? '' : ' (기본값)'}`, data: rec.coupang, priceField: 'coupangPrice' as const },
             { key: 'naver',   label: '네이버 스마트스토어', sub: '수수료 3.6% 기준', data: rec.naver,   priceField: 'naverPrice' as const },
           ]).map(({ key, label, sub, data, priceField }) => (
             <div key={key} style={{ background: '#fff', border: `1.5px solid ${C.border}`, borderRadius: '10px', padding: '14px 16px' }}>
@@ -728,7 +735,9 @@ function PriceWithMarginCalc() {
       </div>
 
       <p style={{ margin: 0, fontSize: '11px', color: C.textSub }}>
-        * 생활용품 기준. 수수료는 카테고리·판매방식에 따라 다를 수 있습니다.
+        {sharedDraft.coupangCategoryPath
+          ? `✓ 카테고리 "${sharedDraft.coupangCategoryPath.split('>').slice(-1)[0].trim()}" 수수료 자동 적용됨`
+          : '* 다음 단계(AI 처리)에서 카테고리를 선택하면 수수료율이 자동으로 반영됩니다.'}
       </p>
     </div>
   );

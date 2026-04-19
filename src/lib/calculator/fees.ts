@@ -29,6 +29,33 @@ export const COUPANG_WING = {
   serverFeeThreshold: 1_000_000,
 } as const;
 
+/**
+ * 카테고리 경로 문자열로 쿠팡 윙 수수료율과 카테고리명을 반환합니다.
+ * 경로 예시: "가전디지털 > 생활가전 > 공기청정기"
+ */
+export function getCoupangFeeFromPath(categoryPath: string): { rate: number; categoryName: string } {
+  const p = categoryPath.toLowerCase();
+
+  if (/디지털|가전|컴퓨터|노트북|스마트폰|태블릿|tv|모니터|음향|카메라|캠코더/.test(p))
+    return { rate: 0.04, categoryName: '디지털/가전' };
+  if (/식품|먹|건강기능식품|농산|수산|축산|간식|음료|커피|차|과자/.test(p))
+    return { rate: 0.065, categoryName: '식품' };
+  if (/패션|의류|잡화|가방|지갑|신발|모자|벨트|패딩|코트|청바지/.test(p))
+    return { rate: 0.108, categoryName: '패션의류' };
+  if (/뷰티|화장품|스킨케어|헤어|네일|향수|미용/.test(p))
+    return { rate: 0.108, categoryName: '뷰티/화장품' };
+  if (/주방|조리|냄비|프라이팬|식기|칼|도마/.test(p))
+    return { rate: 0.108, categoryName: '주방용품' };
+  if (/가구|인테리어|소파|침대|책상|선반|조명|커튼/.test(p))
+    return { rate: 0.108, categoryName: '가구/인테리어' };
+  if (/욕실|샤워|비누|치약|칫솔|면도/.test(p))
+    return { rate: 0.108, categoryName: '욕실용품' };
+  if (/청소|세탁|세제|빨래|진공청소/.test(p))
+    return { rate: 0.108, categoryName: '청소/세탁용품' };
+
+  return { rate: 0.108, categoryName: '생활용품' }; // 기본값
+}
+
 // ─── 쿠팡 로켓그로스 ──────────────────────────────────────────
 export type RocketSize = '극소형' | '소형' | '중형' | '대형' | '특대형' | '초대형';
 
