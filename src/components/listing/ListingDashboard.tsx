@@ -1409,16 +1409,21 @@ function CoupangProductTable({ onEdit }: { onEdit: (id: number) => void }) {
   const { coupangProducts, coupangNextToken, isLoading, fetchCoupangProducts } = useListingStore();
 
   useEffect(() => {
-    if (coupangProducts.length === 0) {
-      fetchCoupangProducts(true);
-    }
-  }, [coupangProducts.length, fetchCoupangProducts]);
+    fetchCoupangProducts(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const statusColors: Record<string, { bg: string; text: string }> = {
+    // 한글 표기 (쿠팡 API 응답)
     '승인완료': { bg: '#dcfce7', text: '#15803d' },
     '승인대기': { bg: '#fef9c3', text: '#92400e' },
     '반려': { bg: '#fee2e2', text: '#b91c1c' },
     '판매중지': { bg: '#f3f3f3', text: '#71717a' },
+    // 영문 표기 (API가 영문 반환 시 대비)
+    'APPROVED':     { bg: '#dcfce7', text: '#15803d' },
+    'SUSPENSION':   { bg: '#f3f4f6', text: '#6b7280' },
+    'UNDER_REVIEW': { bg: '#fef9c3', text: '#92400e' },
+    'REJECTED':     { bg: '#fee2e2', text: '#b91c1c' },
   };
 
   return (

@@ -12,23 +12,34 @@ import { getCoupangClient } from '@/lib/listing/coupang-client';
 // GET — 판매자 상품 목록
 // ─────────────────────────────────────────────────────────────
 
+// 쿠팡 판매자 상품 status 목록
+const ALL_PRODUCT_STATUSES = ['APPROVED', 'SUSPENSION', 'UNDER_REVIEW', 'REJECTED'];
+
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
-  const status = sp.get('status') ?? 'APPROVED';
-  const maxPerPage = parseInt(sp.get('maxPerPage') ?? '20', 10);
+  const status = sp.get('status') ?? '';          // 빈 문자열 = 전체
+  const maxPerPage = parseInt(sp.get('maxPerPage') ?? '50', 10);
   const nextToken = sp.get('nextToken') ?? '';
 
   try {
     const client = getCoupangClient();
-    const result = await client.getSellerProducts(status, maxPerPage, nextToken);
 
-    return Response.json({
-      success: true,
-      data: {
-        items: result.items,
-        nextToken: result.nextToken,
-      },
-    });
+    if (status) {
+      // 특정 상태만 조회
+      const result = await client.getSellerProducts(status, maxPerPage, nextToken);
+      return Response.json({ success: true, data: { items: result.items, nextToken: result.nextToken } });
+    }
+
+    // 전체 상태 병렬 조회 후 합산
+    const results = await Promise.allSettled(
+      ALL_PRODUCT_STATUSES.map((s) => client.getSellerProducts(s, maxPerPage, ''))
+    );
+
+    const items = results.flatMap((r) => r.status === 'fulfilled' ? r.value.items : []);
+    // 최신 등록순 정렬
+    items.sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
+
+    return Response.json({ success: true, data: { items, nextToken: null } });
   } catch (err) {
     console.error('[GET /api/listing/coupang]', err);
     const message = err instanceof Error ? err.message : '알 수 없는 오류';
