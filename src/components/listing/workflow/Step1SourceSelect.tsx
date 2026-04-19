@@ -6,10 +6,11 @@
  * + 상품 기본 정보 (상품명, 판매가, 플랫폼 선택)
  */
 
-import React, { useCallback, useRef, useState } from 'react';
-import { Upload, X, ChevronRight, AlertTriangle, CheckCircle, RefreshCw, Loader2 } from 'lucide-react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { Upload, X, ChevronRight, AlertTriangle, CheckCircle, RefreshCw, Loader2, Calculator, ChevronDown, ChevronUp } from 'lucide-react';
 import { useListingStore } from '@/store/useListingStore';
 import { C } from '@/lib/design-tokens';
+import { calcCoupangWing, calcNaver } from '@/lib/calculator/calculate';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 스타일 상수
@@ -518,21 +519,9 @@ export default function Step1SourceSelect() {
             />
           </div>
 
-          {/* 판매가 */}
-          <div>
-            <label style={labelStyle}>판매가</label>
-            <div style={{ position: 'relative' }}>
-              <input
-                style={{ ...inputStyle, paddingRight: '28px' }}
-                type="number"
-                value={sharedDraft.salePrice}
-                onChange={(e) => updateSharedDraft({ salePrice: e.target.value })}
-                placeholder="0"
-                min={0}
-              />
-              <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '12px', color: C.textSub }}>원</span>
-            </div>
-          </div>
+          {/* 판매가 + 마진 계산기 */}
+          <PriceWithMarginCalc />
+
 
           {/* 플랫폼 선택 */}
           <div>
@@ -574,6 +563,7 @@ export default function Step1SourceSelect() {
 
       {/* 하단 버튼 */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+
         {!canProceed && (
           <p style={{ fontSize: '12px', color: C.textSub, margin: 0 }}>
             사진을 1장 이상 업로드하거나 도매꾹 상품번호를 불러와 주세요.
@@ -601,6 +591,177 @@ export default function Step1SourceSelect() {
           <ChevronRight size={16} />
         </button>
       </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 서브 컴포넌트: 판매가 + 추천가 계산기
+// ─────────────────────────────────────────────────────────────────────────────
+
+// 목표 마진율로 역산한 추천 판매가 계산
+// 쿠팡 윙: commission(10.8%) + shippingCommission(배송비×3.3%) + shippingFee
+// → sellingPrice = (costPrice + shippingFee × 1.033) / (1 - commissionRate - targetMargin/100)
+function calcRecommendedPrice(costPrice: number, shippingFee: number, commissionRate: number, targetMarginRate: number): number {
+  const denominator = 1 - commissionRate - targetMarginRate / 100;
+  if (denominator <= 0) return 0;
+  const raw = (costPrice + shippingFee * 1.033) / denominator;
+  return Math.ceil(raw / 100) * 100; // 100원 단위 올림
+}
+
+function PriceWithMarginCalc() {
+  const { sharedDraft, updateSharedDraft } = useListingStore();
+  const [open, setOpen] = useState(false);
+  const [shippingFee, setShippingFee] = useState(3000);
+
+  const costPrice = Number(sharedDraft.costPrice) || 0;
+  const targetMargin = sharedDraft.targetMarginRate;
+
+  const recommendations = useMemo(() => {
+    if (!costPrice) return null;
+
+    const coupangPrice = calcRecommendedPrice(costPrice, shippingFee, 0.108, targetMargin);
+    const naverPrice = calcRecommendedPrice(costPrice, shippingFee, 0.036, targetMargin);
+
+    // 실제 마진율 검증
+    const coupangResult = calcCoupangWing({ costPrice, sellingPrice: coupangPrice, category: '생활용품', shippingFee, adCost: 0 });
+    const naverResult = calcNaver({ costPrice, sellingPrice: naverPrice, shippingFee, grade: '일반', inflow: '네이버쇼핑', adCost: 0 });
+
+    return {
+      coupang: { price: coupangPrice, margin: coupangResult.marginRate },
+      naver: { price: naverPrice, margin: naverResult.marginRate },
+    };
+  }, [costPrice, shippingFee, targetMargin]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      {/* 판매가 직접 입력 */}
+      <div>
+        <label style={labelStyle}>판매가</label>
+        <div style={{ position: 'relative' }}>
+          <input
+            style={{ ...inputStyle, paddingRight: '28px' }}
+            type="number"
+            value={sharedDraft.salePrice}
+            onChange={(e) => updateSharedDraft({ salePrice: e.target.value })}
+            placeholder="0"
+            min={0}
+          />
+          <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '12px', color: C.textSub }}>원</span>
+        </div>
+      </div>
+
+      {/* 마진 계산기 토글 */}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: '5px',
+          fontSize: '12px', fontWeight: 600, color: C.accent,
+          background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+        }}
+      >
+        <Calculator size={13} />
+        추천 판매가 계산
+        {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+      </button>
+
+      {open && (
+        <div style={{ background: '#f7f8fa', border: `1px solid ${C.border}`, borderRadius: '10px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {/* 입력 행 */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+            <div>
+              <label style={labelStyle}>원가 (공급가)</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  style={{ ...inputStyle, paddingRight: '24px', backgroundColor: '#fff' }}
+                  type="number"
+                  value={sharedDraft.costPrice}
+                  onChange={(e) => updateSharedDraft({ costPrice: e.target.value })}
+                  placeholder="0"
+                  min={0}
+                />
+                <span style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', fontSize: '11px', color: C.textSub }}>원</span>
+              </div>
+            </div>
+            <div>
+              <label style={labelStyle}>배송비</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  style={{ ...inputStyle, paddingRight: '24px', backgroundColor: '#fff' }}
+                  type="number"
+                  value={shippingFee}
+                  onChange={(e) => setShippingFee(Number(e.target.value))}
+                  min={0}
+                />
+                <span style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', fontSize: '11px', color: C.textSub }}>원</span>
+              </div>
+            </div>
+            <div>
+              <label style={labelStyle}>목표 마진율</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  style={{ ...inputStyle, paddingRight: '24px', backgroundColor: '#fff' }}
+                  type="number"
+                  value={targetMargin}
+                  onChange={(e) => updateSharedDraft({ targetMarginRate: Number(e.target.value) })}
+                  min={1}
+                  max={80}
+                />
+                <span style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', fontSize: '11px', color: C.textSub }}>%</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 추천가 결과 */}
+          {recommendations ? (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              {[
+                { label: '쿠팡 (윙·생활용품)', price: recommendations.coupang.price, margin: recommendations.coupang.margin, platform: 'coupang' as const },
+                { label: '네이버 스마트스토어', price: recommendations.naver.price, margin: recommendations.naver.margin, platform: 'naver' as const },
+              ].map((item) => (
+                <div
+                  key={item.platform}
+                  style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: '8px', padding: '10px 12px' }}
+                >
+                  <div style={{ fontSize: '11px', color: C.textSub, marginBottom: '4px' }}>{item.label}</div>
+                  <div style={{ fontSize: '16px', fontWeight: 700, color: C.text }}>
+                    {item.price.toLocaleString()}원
+                  </div>
+                  <div style={{ fontSize: '11px', color: item.margin >= targetMargin - 1 ? '#16a34a' : '#ef4444', marginBottom: '8px' }}>
+                    마진율 {item.margin.toFixed(1)}%
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const patch: Record<string, string> = {
+                        salePrice: String(item.price),
+                        [`${item.platform}Price`]: String(item.price),
+                      };
+                      updateSharedDraft(patch as Parameters<typeof updateSharedDraft>[0]);
+                    }}
+                    style={{
+                      fontSize: '11px', fontWeight: 600, color: C.accent,
+                      background: 'rgba(190,0,20,0.06)', border: `1px solid rgba(190,0,20,0.2)`,
+                      borderRadius: '5px', padding: '4px 10px', cursor: 'pointer',
+                    }}
+                  >
+                    이 가격으로 설정
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ fontSize: '12px', color: C.textSub, margin: 0, textAlign: 'center' }}>
+              원가를 입력하면 플랫폼별 추천 판매가를 계산합니다
+            </p>
+          )}
+
+          <p style={{ fontSize: '11px', color: C.textSub, margin: 0 }}>
+            * 쿠팡 수수료 10.8%(생활용품 기준), 네이버 수수료 3.6% 기준. 실제 수수료와 다를 수 있습니다.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

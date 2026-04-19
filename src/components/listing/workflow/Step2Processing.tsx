@@ -5,8 +5,8 @@
  * Step 2 — AI 생성 진행 상황 패널 + 병렬 입력 패널
  */
 
-import React, { useEffect } from 'react';
-import { CheckCircle, AlertTriangle, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { CheckCircle, AlertTriangle, Loader2, ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { useListingStore } from '@/store/useListingStore';
 import { C } from '@/lib/design-tokens';
 
@@ -295,37 +295,8 @@ export default function Step2Processing() {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {/* 쿠팡 카테고리 코드 */}
-            <div>
-              <label style={labelStyle}>쿠팡 카테고리 코드</label>
-              <input
-                style={inputStyle}
-                type="number"
-                placeholder="예: 15690227"
-                onChange={() => {
-                  // Step 3에서 BothRegisterForm으로 처리, 여기서는 안내만
-                }}
-              />
-              <p style={{ fontSize: '11px', color: C.textSub, margin: '4px 0 0' }}>
-                Step 3에서 카테고리 검색 기능으로 설정할 수 있습니다.
-              </p>
-            </div>
-
-            {/* 네이버 카테고리 코드 */}
-            <div>
-              <label style={labelStyle}>네이버 카테고리 ID</label>
-              <input
-                style={inputStyle}
-                type="text"
-                placeholder="예: 50000008"
-                onChange={() => {
-                  // Step 3에서 BothRegisterForm으로 처리
-                }}
-              />
-              <p style={{ fontSize: '11px', color: C.textSub, margin: '4px 0 0' }}>
-                Step 3에서 카테고리 검색 기능으로 설정할 수 있습니다.
-              </p>
-            </div>
+            {/* 카테고리 키워드 검색 */}
+            <CategorySearch />
 
             {/* 재고 수량 */}
             <div>
@@ -338,21 +309,6 @@ export default function Step2Processing() {
                 min={0}
                 placeholder="999"
               />
-            </div>
-
-            {/* 안내 박스 */}
-            <div
-              style={{
-                padding: '12px 14px',
-                backgroundColor: 'rgba(190,0,20,0.04)',
-                border: '1px solid rgba(190,0,20,0.12)',
-                borderRadius: '8px',
-                fontSize: '12px',
-                color: C.text,
-                lineHeight: 1.6,
-              }}
-            >
-              <strong style={{ color: C.accent }}>TIP</strong> 카테고리는 Step 3에서 키워드로 검색할 수 있습니다. AI가 완성되면 바로 등록할 수 있도록 미리 준비해두세요.
             </div>
           </div>
         </div>
@@ -435,6 +391,141 @@ export default function Step2Processing() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 서브 컴포넌트: 카테고리 키워드 검색 (쿠팡 + 네이버 동시)
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface CoupangCat { code: number; name: string; path: string; }
+interface NaverCat { id: string; name: string; path: string; }
+
+function CategorySearch() {
+  const { sharedDraft, updateSharedDraft } = useListingStore();
+  const [keyword, setKeyword] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [coupangResults, setCoupangResults] = useState<CoupangCat[]>([]);
+  const [naverResults, setNaverResults] = useState<NaverCat[]>([]);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const search = (kw: string) => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (!kw.trim()) { setCoupangResults([]); setNaverResults([]); return; }
+
+    timerRef.current = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const enc = encodeURIComponent(kw.trim());
+        const [cr, nr] = await Promise.all([
+          fetch(`/api/listing/coupang/categories?keyword=${enc}`),
+          fetch(`/api/listing/naver/categories?keyword=${enc}`),
+        ]);
+        const [cj, nj] = await Promise.all([cr.json(), nr.json()]);
+        setCoupangResults(cj.success ? (cj.data as CoupangCat[]).slice(0, 6) : []);
+        setNaverResults(nj.success ? (nj.data as NaverCat[]).slice(0, 6) : []);
+      } catch {
+        setCoupangResults([]);
+        setNaverResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 350);
+  };
+
+  const rowStyle = (selected: boolean): React.CSSProperties => ({
+    padding: '7px 10px',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '12px',
+    lineHeight: 1.4,
+    backgroundColor: selected ? 'rgba(190,0,20,0.07)' : 'transparent',
+    border: selected ? `1px solid rgba(190,0,20,0.25)` : '1px solid transparent',
+    color: C.text,
+  });
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <label style={labelStyle}>카테고리 검색 (쿠팡 + 네이버 동시)</label>
+
+      {/* 검색 input */}
+      <div style={{ position: 'relative' }}>
+        <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: C.textSub }} />
+        <input
+          style={{ ...inputStyle, paddingLeft: '30px', paddingRight: isSearching ? '30px' : '12px' }}
+          type="text"
+          placeholder="예: 고데기, 등산가방, 블루투스 이어폰"
+          value={keyword}
+          onChange={(e) => { setKeyword(e.target.value); search(e.target.value); }}
+        />
+        {isSearching && (
+          <Loader2 size={14} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: C.textSub, animation: 'spin 1s linear infinite' }} />
+        )}
+      </div>
+
+      {/* 선택된 카테고리 요약 */}
+      {(sharedDraft.coupangCategoryCode || sharedDraft.naverCategoryId) && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          {sharedDraft.coupangCategoryCode && (
+            <div style={{ fontSize: '11px', color: '#16a34a', background: '#dcfce7', borderRadius: '5px', padding: '4px 8px' }}>
+              쿠팡 ✓ {sharedDraft.coupangCategoryPath.split(' > ').slice(-2).join(' > ')}
+            </div>
+          )}
+          {sharedDraft.naverCategoryId && (
+            <div style={{ fontSize: '11px', color: '#1d4ed8', background: '#dbeafe', borderRadius: '5px', padding: '4px 8px' }}>
+              네이버 ✓ {sharedDraft.naverCategoryPath.split('>').slice(-2).join(' > ')}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 결과 2컬럼 */}
+      {(coupangResults.length > 0 || naverResults.length > 0) && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+          {/* 쿠팡 */}
+          <div>
+            <div style={{ fontSize: '11px', fontWeight: 600, color: C.textSub, marginBottom: '4px' }}>쿠팡</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxHeight: '200px', overflowY: 'auto' }}>
+              {coupangResults.length === 0
+                ? <div style={{ fontSize: '12px', color: C.textSub, padding: '8px 0' }}>결과 없음</div>
+                : coupangResults.map((item) => (
+                  <button
+                    key={item.code}
+                    type="button"
+                    onClick={() => updateSharedDraft({ coupangCategoryCode: String(item.code), coupangCategoryPath: item.path })}
+                    style={rowStyle(String(item.code) === sharedDraft.coupangCategoryCode)}
+                  >
+                    <div style={{ fontWeight: 600 }}>{item.name}</div>
+                    <div style={{ fontSize: '10px', color: C.textSub, marginTop: '1px' }}>{item.path}</div>
+                  </button>
+                ))
+              }
+            </div>
+          </div>
+
+          {/* 네이버 */}
+          <div>
+            <div style={{ fontSize: '11px', fontWeight: 600, color: C.textSub, marginBottom: '4px' }}>네이버</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxHeight: '200px', overflowY: 'auto' }}>
+              {naverResults.length === 0
+                ? <div style={{ fontSize: '12px', color: C.textSub, padding: '8px 0' }}>결과 없음</div>
+                : naverResults.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => updateSharedDraft({ naverCategoryId: item.id, naverCategoryPath: item.path })}
+                    style={rowStyle(item.id === sharedDraft.naverCategoryId)}
+                  >
+                    <div style={{ fontWeight: 600 }}>{item.name}</div>
+                    <div style={{ fontSize: '10px', color: C.textSub, marginTop: '1px' }}>{item.path}</div>
+                  </button>
+                ))
+              }
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

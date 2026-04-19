@@ -40,6 +40,16 @@ interface SharedDraft {
   detailPageStatus: 'idle' | 'analyzing' | 'generating' | 'done' | 'error';
   detailPageError: string | null;
   detailPageSkipped: boolean;
+
+  // ─── 마진 계산기 ────────────────────────────────────────────────────────────
+  costPrice: string;
+  targetMarginRate: number;
+
+  // ─── 카테고리 ───────────────────────────────────────────────────────────────
+  coupangCategoryCode: string;
+  coupangCategoryPath: string;
+  naverCategoryId: string;
+  naverCategoryPath: string;
 }
 
 const SHARED_DRAFT_INITIAL: SharedDraft = {
@@ -69,6 +79,14 @@ const SHARED_DRAFT_INITIAL: SharedDraft = {
   detailPageStatus: 'idle',
   detailPageError: null,
   detailPageSkipped: false,
+  // 마진 계산기
+  costPrice: '',
+  targetMarginRate: 20,
+  // 카테고리
+  coupangCategoryCode: '',
+  coupangCategoryPath: '',
+  naverCategoryId: '',
+  naverCategoryPath: '',
 };
 
 // ─── BothRegistration 타입 ───────────────────────────────────────────────────

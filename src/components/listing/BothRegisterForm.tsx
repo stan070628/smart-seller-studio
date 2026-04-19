@@ -173,10 +173,23 @@ export default function BothRegisterForm({ onClose, prefill }: BothRegisterFormP
   }, [prefill?.itemNo, fetchOptions]);
 
   // ─── 플랫폼별 전용 상태 ─────────────────────────────────────────────────
-  const [coupangCategoryCode, setCoupangCategoryCode] = useState('');
-  const [coupangCategoryPath, setCoupangCategoryPath] = useState('');
-  const [naverCategoryId, setNaverCategoryId] = useState('');
-  const [naverCategoryPath, setNaverCategoryPath] = useState('');
+  const [coupangCategoryCode, setCoupangCategoryCode] = useState(sharedDraft.coupangCategoryCode);
+  const [coupangCategoryPath, setCoupangCategoryPath] = useState(sharedDraft.coupangCategoryPath);
+  const [naverCategoryId, setNaverCategoryId] = useState(sharedDraft.naverCategoryId);
+  const [naverCategoryPath, setNaverCategoryPath] = useState(sharedDraft.naverCategoryPath);
+
+  // Step 2에서 선택한 카테고리가 있으면 마운트 시 동기화
+  React.useEffect(() => {
+    if (sharedDraft.coupangCategoryCode && !coupangCategoryCode) {
+      setCoupangCategoryCode(sharedDraft.coupangCategoryCode);
+      setCoupangCategoryPath(sharedDraft.coupangCategoryPath);
+    }
+    if (sharedDraft.naverCategoryId && !naverCategoryId) {
+      setNaverCategoryId(sharedDraft.naverCategoryId);
+      setNaverCategoryPath(sharedDraft.naverCategoryPath);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [brand, setBrand] = useState('');
   const [naverExchangeFee, setNaverExchangeFee] = useState('5000');
 
@@ -999,6 +1012,7 @@ export default function BothRegisterForm({ onClose, prefill }: BothRegisterFormP
                         onClick={() => {
                           setCoupangCategoryCode(String(item.code));
                           setCoupangCategoryPath(item.path);
+                          updateSharedDraft({ coupangCategoryCode: String(item.code), coupangCategoryPath: item.path });
                           if (errors.coupangCategory)
                             setErrors((prev) => ({ ...prev, coupangCategory: '' }));
                         }}
@@ -1150,6 +1164,7 @@ export default function BothRegisterForm({ onClose, prefill }: BothRegisterFormP
                         onClick={() => {
                           setNaverCategoryId(item.id);
                           setNaverCategoryPath(item.path);
+                          updateSharedDraft({ naverCategoryId: item.id, naverCategoryPath: item.path });
                           if (errors.naverCategory)
                             setErrors((prev) => ({ ...prev, naverCategory: '' }));
                         }}
