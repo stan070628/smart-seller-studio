@@ -409,6 +409,7 @@ function CategorySearch() {
   const [coupangResults, setCoupangResults] = useState<CoupangCat[]>([]);
   const [naverResults, setNaverResults] = useState<NaverCat[]>([]);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isComposingRef = useRef(false); // 한글 IME 조합 중 여부
 
   const search = (kw: string) => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -457,7 +458,17 @@ function CategorySearch() {
           type="text"
           placeholder="예: 고데기, 등산가방, 블루투스 이어폰"
           value={keyword}
-          onChange={(e) => { setKeyword(e.target.value); search(e.target.value); }}
+          onCompositionStart={() => { isComposingRef.current = true; }}
+          onCompositionEnd={(e) => {
+            isComposingRef.current = false;
+            const v = (e.target as HTMLInputElement).value;
+            setKeyword(v);
+            search(v);
+          }}
+          onChange={(e) => {
+            setKeyword(e.target.value);
+            if (!isComposingRef.current) search(e.target.value);
+          }}
         />
         {isSearching && (
           <Loader2 size={14} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: C.textSub, animation: 'spin 1s linear infinite' }} />
