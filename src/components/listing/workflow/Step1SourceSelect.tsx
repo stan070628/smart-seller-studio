@@ -7,7 +7,7 @@
  */
 
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { Upload, X, ChevronRight, AlertTriangle, CheckCircle, RefreshCw, Loader2, Calculator, Wand2 } from 'lucide-react';
+import { Upload, X, ChevronRight, AlertTriangle, CheckCircle, RefreshCw, Loader2, Calculator, Wand2, Link } from 'lucide-react';
 import { useListingStore } from '@/store/useListingStore';
 import { C } from '@/lib/design-tokens';
 import { calcCoupangWing, calcNaver } from '@/lib/calculator/calculate';
@@ -230,6 +230,13 @@ export default function Step1SourceSelect() {
   const [domeggookError, setDomeggookError] = useState<string | null>(null);
   const [domeggookSuccess, setDomeggookSuccess] = useState(false);
 
+  // ─── URL 불러오기 로컬 상태 ──────────────────────────────────────────────────
+  const [urlInput, setUrlInput] = useState('');
+  const [urlLoading, setUrlLoading] = useState(false);
+  const [urlError, setUrlError] = useState<string | null>(null);
+  const [urlSuccess, setUrlSuccess] = useState(false);
+  const [urlExtractedPrice, setUrlExtractedPrice] = useState<number | null>(null);
+
   const handleDomeggookFetch = async () => {
     if (!itemNoInput.trim() || domeggookLoading) return;
 
@@ -304,6 +311,51 @@ export default function Step1SourceSelect() {
       setDomeggookError('네트워크 오류가 발생했습니다. 다시 시도해주세요.');
     } finally {
       setDomeggookLoading(false);
+    }
+  };
+
+  // ─── URL 불러오기 핸들러 ─────────────────────────────────────────────────────
+  const handleUrlFetch = async () => {
+    if (!urlInput.trim() || urlLoading) return;
+
+    setUrlLoading(true);
+    setUrlError(null);
+    setUrlSuccess(false);
+
+    try {
+      const res = await fetch('/api/listing/url-scrape', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: urlInput.trim() }),
+      });
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        setUrlError(json.error ?? '상품을 불러오지 못했습니다. URL을 확인해주세요.');
+        return;
+      }
+
+      const data = json.data;
+
+      updateSharedDraft({
+        name: data.title || '',
+        thumbnailImages: data.thumbnail?.processedUrl ? [data.thumbnail.processedUrl] : [],
+        description: data.detailHtml,
+        rawImageFiles: [],
+        detailPageSkipped: true,
+        ...(data.extractedPrice ? {
+          salePrice: String(data.extractedPrice),
+          coupangPrice: String(data.extractedPrice),
+          naverPrice: String(data.extractedPrice),
+        } : {}),
+      });
+
+      setUrlExtractedPrice(data.extractedPrice);
+      setUrlSuccess(true);
+    } catch {
+      setUrlError('네트워크 오류가 발생했습니다. 다시 시도해주세요.');
+    } finally {
+      setUrlLoading(false);
     }
   };
 
@@ -586,6 +638,122 @@ export default function Step1SourceSelect() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* URL로 가져오기 카드 */}
+      <div style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: '12px', padding: '20px 24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: 700, color: C.text }}>
+            <Link size={15} color={C.accent} />
+            URL로 가져오기
+          </div>
+          <span style={{ fontSize: '11px', color: C.textSub, backgroundColor: C.tableHeader, padding: '2px 8px', borderRadius: '100px', border: `1px solid ${C.border}` }}>선택 사항</span>
+        </div>
+        <div style={{ fontSize: '12px', color: C.textSub, marginBottom: '16px' }}>
+          상품 페이지 URL을 입력하면 이미지와 정보를 가져와 AI가 상세페이지를 생성합니다.
+        </div>
+
+        {/* 입력 행 */}
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+          <input
+            style={{ ...inputStyle, flex: 1 }}
+            type="url"
+            value={urlInput}
+            onChange={(e) => setUrlInput(e.target.value)}
+            placeholder="https://www.costco.co.kr/..."
+            onKeyDown={(e) => { if (e.key === 'Enter') handleUrlFetch(); }}
+            disabled={urlSuccess}
+          />
+          <button
+            onClick={handleUrlFetch}
+            disabled={!urlInput.trim() || urlLoading || urlSuccess}
+            style={{
+              padding: '9px 16px',
+              fontSize: '13px',
+              fontWeight: 600,
+              backgroundColor: urlInput.trim() && !urlLoading && !urlSuccess ? C.accent : '#ccc',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: urlInput.trim() && !urlLoading && !urlSuccess ? 'pointer' : 'not-allowed',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+            }}
+          >
+            {urlLoading ? (
+              <>
+                <div style={{ width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                분석 중...
+              </>
+            ) : (
+              <>
+                <ChevronRight size={14} />
+                가져오기
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* 로딩 상태 */}
+        {urlLoading && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', fontSize: '12px', color: '#1d4ed8', marginBottom: '12px' }}>
+            <div style={{ width: '14px', height: '14px', border: '2px solid rgba(29,78,216,0.3)', borderTopColor: '#1d4ed8', borderRadius: '50%', flexShrink: 0, animation: 'spin 0.8s linear infinite' }} />
+            페이지를 분석하고 AI 상세페이지를 생성 중입니다...
+          </div>
+        )}
+
+        {/* 에러 */}
+        {urlError && (
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '10px 12px', backgroundColor: '#fee2e2', border: '1px solid #fca5a5', borderRadius: '8px', fontSize: '12px', color: '#b91c1c', marginBottom: '12px' }}>
+            <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: '1px' }} />
+            {urlError}
+          </div>
+        )}
+
+        {/* 성공 */}
+        {urlSuccess && sharedDraft.thumbnailImages.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', backgroundColor: '#dcfce7', border: '1px solid #86efac', borderRadius: '8px', fontSize: '12px', color: '#15803d' }}>
+              <CheckCircle size={14} />
+              <span>URL 불러오기 완료</span>
+            </div>
+
+            {/* 불러온 상품 미리보기 */}
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '10px', backgroundColor: C.tableHeader, borderRadius: '8px' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={sharedDraft.thumbnailImages[0]}
+                alt="대표이미지"
+                style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '6px', flexShrink: 0 }}
+              />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: '13px', fontWeight: 600, color: C.text, margin: '0 0 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {sharedDraft.name}
+                </p>
+                {urlExtractedPrice && (
+                  <p style={{ fontSize: '12px', color: C.textSub, margin: 0 }}>
+                    가격: {urlExtractedPrice.toLocaleString()}원
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => {
+                  setUrlSuccess(false);
+                  setUrlInput('');
+                  setUrlExtractedPrice(null);
+                  updateSharedDraft({ thumbnailImages: [], name: '', description: '', rawImageFiles: [], detailPageSkipped: false });
+                }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textSub, padding: '2px' }}
+                title="초기화"
+              >
+                <RefreshCw size={14} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 상세이미지 카드 */}
