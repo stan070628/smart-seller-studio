@@ -2,20 +2,18 @@
 
 /**
  * Step1SourceSelect.tsx
- * Step 1 — 소스 선택 (이미지 업로드 OR 도매꾹 상품번호 OR URL 가져오기)
- * + 상품 기본 정보 (상품명, 판매가, 플랫폼 선택)
+ * Step 1 — 썸네일 만들기 / 상품 상세 만들기 / 상품 기본 정보
  *
- * UX 개선 (2026-04-21):
- * - 세 소스를 "1단계: 소스 선택" 섹션에 라디오 카드 방식으로 통합
- * - 선택된 소스의 입력 UI만 펼쳐 표시 (Progressive Disclosure)
- * - 소스별 결과 경로(Step2 이동 vs Step3 바로 이동) 안내 뱃지 추가
- * - "다음 단계" 버튼 비활성화 사유 명시
+ * 섹션 구조:
+ * ① 썸네일 만들기 — 1장 업로드 + AI 편집 인라인 프롬프트
+ * ② 상품 상세 만들기 — [이미지로 만들기] / [URL로 가져오기] 탭
+ * ③ 상품 기본 정보 — PriceWithMarginCalc 유지
  */
 
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   Upload, X, ChevronRight, AlertTriangle, CheckCircle, RefreshCw,
-  Calculator, Wand2, Link, Image, Hash,
+  Calculator, Wand2, Link,
 } from 'lucide-react';
 import { useListingStore } from '@/store/useListingStore';
 import { C } from '@/lib/design-tokens';
@@ -49,16 +47,6 @@ const labelStyle: React.CSSProperties = {
 // ─────────────────────────────────────────────────────────────────────────────
 // 타입
 // ─────────────────────────────────────────────────────────────────────────────
-type SourceType = 'upload' | 'domeggook' | 'url';
-
-interface PreviewImage {
-  id: string;
-  url: string;
-  name: string;
-  size: number;
-  file: File;
-}
-
 interface DetailImage {
   id: string;
   url: string;
@@ -110,327 +98,116 @@ function loadDomeggookSellerDefaults() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 서브: 썸네일 카드
-// ─────────────────────────────────────────────────────────────────────────────
-function ThumbnailCard({ image, onRemove }: { image: PreviewImage; onRemove: (id: string) => void }) {
-  return (
-    <div
-      style={{
-        position: 'relative',
-        borderRadius: '8px',
-        border: `1px solid ${C.border}`,
-        backgroundColor: C.tableHeader,
-        overflow: 'hidden',
-      }}
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={image.url} alt={image.name} style={{ width: '100%', height: '80px', objectFit: 'cover', display: 'block' }} />
-      <button
-        onClick={() => onRemove(image.id)}
-        style={{
-          position: 'absolute', top: '4px', right: '4px',
-          width: '20px', height: '20px', borderRadius: '50%',
-          backgroundColor: 'rgba(0,0,0,0.6)', border: 'none', cursor: 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}
-        title="삭제"
-      >
-        <X size={11} color="#fff" />
-      </button>
-      <div style={{ padding: '4px 6px' }}>
-        <p style={{ fontSize: '10px', color: C.text, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{image.name}</p>
-        <p style={{ fontSize: '10px', color: C.textSub, margin: '1px 0 0' }}>{formatFileSize(image.size)}</p>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 서브: 소스 선택 라디오 카드
-// ─────────────────────────────────────────────────────────────────────────────
-interface SourceCardProps {
-  type: SourceType;
-  selected: SourceType;
-  onSelect: (t: SourceType) => void;
-  icon: React.ReactNode;
-  label: string;
-  description: string;
-  badge: string;
-  badgeColor: string;
-}
-
-function SourceCard({ type, selected, onSelect, icon, label, description, badge, badgeColor }: SourceCardProps) {
-  const isSelected = selected === type;
-  return (
-    <button
-      onClick={() => onSelect(type)}
-      style={{
-        display: 'flex',
-        alignItems: 'flex-start',
-        gap: '14px',
-        padding: '16px 18px',
-        borderRadius: '10px',
-        border: `2px solid ${isSelected ? C.accent : C.border}`,
-        backgroundColor: isSelected ? 'rgba(190,0,20,0.03)' : C.card,
-        cursor: 'pointer',
-        textAlign: 'left',
-        transition: 'border-color 0.15s, background-color 0.15s',
-        width: '100%',
-      }}
-    >
-      {/* 라디오 원 */}
-      <div
-        style={{
-          flexShrink: 0,
-          marginTop: '2px',
-          width: '18px',
-          height: '18px',
-          borderRadius: '50%',
-          border: `2px solid ${isSelected ? C.accent : C.border}`,
-          backgroundColor: isSelected ? C.accent : '#fff',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        {isSelected && <div style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#fff' }} />}
-      </div>
-
-      {/* 아이콘 */}
-      <div
-        style={{
-          flexShrink: 0,
-          width: '38px',
-          height: '38px',
-          borderRadius: '10px',
-          backgroundColor: isSelected ? 'rgba(190,0,20,0.08)' : C.tableHeader,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          transition: 'background-color 0.15s',
-        }}
-      >
-        {icon}
-      </div>
-
-      {/* 텍스트 */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-          <span style={{ fontSize: '14px', fontWeight: 700, color: C.text }}>{label}</span>
-          <span
-            style={{
-              fontSize: '10px',
-              fontWeight: 700,
-              padding: '2px 7px',
-              borderRadius: '100px',
-              backgroundColor: badgeColor + '18',
-              color: badgeColor,
-              border: `1px solid ${badgeColor}40`,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {badge}
-          </span>
-        </div>
-        <p style={{ margin: 0, fontSize: '12px', color: C.textSub, lineHeight: 1.5 }}>{description}</p>
-      </div>
-    </button>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // 메인 컴포넌트
 // ─────────────────────────────────────────────────────────────────────────────
 export default function Step1SourceSelect() {
   const { sharedDraft, updateSharedDraft, goNextStep } = useListingStore();
 
-  // ─── 소스 선택 상태 ─────────────────────────────────────────────────────────
-  const [selectedSource, setSelectedSource] = useState<SourceType>('upload');
+  // ─── ① 썸네일 ──────────────────────────────────────────────────────────────
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
+  const [thumbnailPreviewUrl, setThumbnailPreviewUrl] = useState<string | null>(null);
+  const thumbInputRef = useRef<HTMLInputElement>(null);
+  const [showAiEdit, setShowAiEdit] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState('');
 
-  // 소스를 바꿀 때 이전 소스 결과 초기화
-  const handleSourceChange = (t: SourceType) => {
-    if (t === selectedSource) return;
-    setSelectedSource(t);
-    // 이전 소스 입력 결과 클리어
-    setPreviewImages([]);
-    setDomeggookSuccess(false);
-    setItemNoInput('');
-    setUrlSuccess(false);
-    setUrlInput('');
-    setUrlExtractedPrice(null);
-    updateSharedDraft({
-      thumbnailImages: [],
-      name: '',
-      description: '',
-      rawImageFiles: [],
-      detailPageSkipped: false,
-    });
-  };
+  // ─── ② 상세 탭 ─────────────────────────────────────────────────────────────
+  const [detailTab, setDetailTab] = useState<'image' | 'url'>('image');
 
-  // ─── 이미지 업로드 ──────────────────────────────────────────────────────────
-  const [previewImages, setPreviewImages] = useState<PreviewImage[]>([]);
-  const [isDragOver, setIsDragOver] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const MAX_IMAGES = 5;
-
-  const [selectedThumbnailIdx, setSelectedThumbnailIdx] = useState<number | null>(null);
-
-  const processFiles = useCallback(
-    (files: FileList | File[]) => {
-      const remaining = MAX_IMAGES - previewImages.length;
-      if (remaining <= 0) return;
-      const fileArr = Array.from(files)
-        .filter((f) => f.type.match(/^image\/(jpeg|png|webp)$/))
-        .slice(0, remaining);
-      const newImages: PreviewImage[] = fileArr.map((file) => ({
-        id: generateId(), url: URL.createObjectURL(file), name: file.name, size: file.size, file,
-      }));
-      setPreviewImages((prev) => {
-        const updated = [...prev, ...newImages];
-        updateSharedDraft({ rawImageFiles: updated.map((img) => img.file) });
-        return updated;
-      });
-    },
-    [previewImages.length, updateSharedDraft],
-  );
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) processFiles(e.target.files);
-    e.target.value = '';
-  };
-
-  const removeImage = (id: string) => {
-    setPreviewImages((prev) => {
-      const target = prev.find((img) => img.id === id);
-      if (target) URL.revokeObjectURL(target.url);
-      const updated = prev.filter((img) => img.id !== id);
-      updateSharedDraft({ rawImageFiles: updated.map((img) => img.file) });
-      return updated;
-    });
-  };
-
-  // ─── 상세이미지 ─────────────────────────────────────────────────────────────
+  // ─── ② 이미지 탭 ───────────────────────────────────────────────────────────
   const [detailImages, setDetailImages] = useState<DetailImage[]>([]);
   const [detailDragOver, setDetailDragOver] = useState(false);
   const detailFileInputRef = useRef<HTMLInputElement>(null);
   const MAX_DETAIL = 10;
 
-  // ─── AI 편집 모달 ───────────────────────────────────────────────────────────
-  const [aiEditModal, setAiEditModal] = useState<{
-    open: boolean;
-    imageUrl: string;
-    imageFile: File | null;
-    targetType: 'thumbnail' | 'detail';
-    targetId?: string;
-  } | null>(null);
-
-  // ─── 도매꾹 ─────────────────────────────────────────────────────────────────
-  const [itemNoInput, setItemNoInput] = useState('');
-  const [domeggookLoading, setDomeggookLoading] = useState(false);
-  const [domeggookError, setDomeggookError] = useState<string | null>(null);
-  const [domeggookSuccess, setDomeggookSuccess] = useState(false);
-
-  const handleDomeggookFetch = async () => {
-    if (!itemNoInput.trim() || domeggookLoading) return;
-    const defaults = loadDomeggookSellerDefaults();
-    const sellerName = defaults.sellerName || '셀러';
-    const csPhone = defaults.csPhone || '000-0000-0000';
-    const csHours = defaults.csHours || '평일 10:00~17:00';
-
-    setDomeggookLoading(true);
-    setDomeggookError(null);
-    setDomeggookSuccess(false);
-
-    try {
-      const body: Record<string, unknown> = { itemNo: parseInt(itemNoInput, 10), sellerName, csPhone, csHours };
-      if (defaults.sellerBrandName) body.sellerBrandName = defaults.sellerBrandName;
-      if (defaults.returnAddress) body.returnAddress = defaults.returnAddress;
-
-      const res = await fetch('/api/listing/domeggook/prepare', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const json = await res.json();
-
-      if (!res.ok || !json.success) {
-        setDomeggookError(json.error ?? '상품을 불러오지 못했습니다. 상품번호를 확인해주세요.');
-        return;
-      }
-
-      const data = json.data as DomeggookResult;
-      const effectiveDeliFee = data.pricing.deliWho === 'S' ? 0 : (data.pricing.deliFee ?? 0);
-
-      updateSharedDraft({
-        name: data.source.title,
-        thumbnailImages: [data.thumbnail.processedUrl],
-        description: data.detail.processedHtml,
-        naverPrice: String(data.pricing.naver.recommendedPrice),
-        coupangPrice: String(data.pricing.coupang.recommendedPrice),
-        salePrice: String(data.pricing.coupang.recommendedPrice),
-        rawImageFiles: [],
-        detailPageSkipped: true,
-      });
-
-      const { fetchOptions } = useListingStore.getState();
-      fetchOptions(parseInt(itemNoInput, 10));
-
-      if (effectiveDeliFee > 0) {
-        updateSharedDraft({ deliveryCharge: String(effectiveDeliFee), deliveryChargeType: 'NOT_FREE' });
-      } else {
-        updateSharedDraft({ deliveryChargeType: 'FREE', deliveryCharge: '0' });
-      }
-
-      setDomeggookSuccess(true);
-      setPreviewImages([]);
-    } catch {
-      setDomeggookError('네트워크 오류가 발생했습니다. 다시 시도해주세요.');
-    } finally {
-      setDomeggookLoading(false);
-    }
-  };
-
-  // ─── URL 가져오기 ───────────────────────────────────────────────────────────
+  // ─── ② URL 탭 (도매꾹 + 일반 URL 통합) ────────────────────────────────────
   const [urlInput, setUrlInput] = useState('');
   const [urlLoading, setUrlLoading] = useState(false);
   const [urlError, setUrlError] = useState<string | null>(null);
   const [urlSuccess, setUrlSuccess] = useState(false);
   const [urlExtractedPrice, setUrlExtractedPrice] = useState<number | null>(null);
 
-  const handleUrlFetch = async () => {
-    if (!urlInput.trim() || urlLoading) return;
+  // URL 입력값 타입 감지
+  const urlInputType = useMemo((): 'domeggook' | 'url' | 'empty' => {
+    const v = urlInput.trim();
+    if (!v) return 'empty';
+    if (/^\d+$/.test(v)) return 'domeggook';
+    if (v.startsWith('http://') || v.startsWith('https://')) return 'url';
+    return 'empty';
+  }, [urlInput]);
+
+  // ─── AI 편집 모달 ───────────────────────────────────────────────────────────
+  const [aiEditModal, setAiEditModal] = useState<{
+    open: boolean;
+    imageUrl: string;
+    imageFile: File | null;
+    initialPrompt?: string;
+  } | null>(null);
+
+  // ─── 통합 URL 가져오기 핸들러 ───────────────────────────────────────────────
+  const handleUnifiedFetch = async () => {
+    if (urlInputType === 'empty' || urlLoading || urlSuccess) return;
     setUrlLoading(true);
     setUrlError(null);
-    setUrlSuccess(false);
-
     try {
-      const res = await fetch('/api/listing/url-scrape', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: urlInput.trim() }),
-      });
-      const json = await res.json();
-
-      if (!res.ok || !json.success) {
-        setUrlError(json.error ?? '상품을 불러오지 못했습니다. URL을 확인해주세요.');
-        return;
+      if (urlInputType === 'domeggook') {
+        const defaults = loadDomeggookSellerDefaults();
+        const body = {
+          itemNo: parseInt(urlInput.trim(), 10),
+          sellerName: defaults.sellerName || '셀러',
+          csPhone: defaults.csPhone || '000-0000-0000',
+          csHours: defaults.csHours || '평일 10:00~17:00',
+          ...(defaults.sellerBrandName ? { sellerBrandName: defaults.sellerBrandName } : {}),
+          ...(defaults.returnAddress ? { returnAddress: defaults.returnAddress } : {}),
+        };
+        const res = await fetch('/api/listing/domeggook/prepare', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        });
+        const json = await res.json();
+        if (!res.ok || !json.success) { setUrlError(json.error ?? '상품을 불러오지 못했습니다.'); return; }
+        const data = json.data as DomeggookResult;
+        const effectiveDeliFee = data.pricing.deliWho === 'S' ? 0 : (data.pricing.deliFee ?? 0);
+        // 썸네일도 함께 채우기 (직접 업로드한 파일이 없을 때만)
+        if (!thumbnailFile) {
+          setThumbnailPreviewUrl(data.thumbnail.processedUrl);
+          updateSharedDraft({ thumbnailImages: [data.thumbnail.processedUrl] });
+        }
+        updateSharedDraft({
+          name: data.source.title,
+          description: data.detail.processedHtml,
+          rawImageFiles: [],
+          detailPageSkipped: true,
+          costPrice: String(data.pricing.priceDome),
+          naverPrice: String(data.pricing.naver.recommendedPrice),
+          coupangPrice: String(data.pricing.coupang.recommendedPrice),
+          salePrice: String(data.pricing.coupang.recommendedPrice),
+          ...(effectiveDeliFee > 0
+            ? { deliveryCharge: String(effectiveDeliFee), deliveryChargeType: 'NOT_FREE' as const }
+            : { deliveryChargeType: 'FREE' as const, deliveryCharge: '0' }),
+        });
+        setUrlExtractedPrice(data.pricing.priceDome);
+        const { fetchOptions } = useListingStore.getState();
+        fetchOptions(parseInt(urlInput.trim(), 10));
+      } else {
+        // 일반 URL 스크랩
+        const res = await fetch('/api/listing/url-scrape', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: urlInput.trim() }),
+        });
+        const json = await res.json();
+        if (!res.ok || !json.success) { setUrlError(json.error ?? '상품을 불러오지 못했습니다.'); return; }
+        const data = json.data;
+        if (!thumbnailFile && data.thumbnail?.processedUrl) {
+          setThumbnailPreviewUrl(data.thumbnail.processedUrl);
+          updateSharedDraft({ thumbnailImages: [data.thumbnail.processedUrl] });
+        }
+        updateSharedDraft({
+          name: data.title || '',
+          description: data.detailHtml,
+          rawImageFiles: [],
+          detailPageSkipped: true,
+          ...(data.extractedPrice ? { costPrice: String(data.extractedPrice) } : {}),
+        });
+        setUrlExtractedPrice(data.extractedPrice ?? null);
       }
-
-      const data = json.data;
-      updateSharedDraft({
-        name: data.title || '',
-        thumbnailImages: data.thumbnail?.processedUrl ? [data.thumbnail.processedUrl] : [],
-        description: data.detailHtml,
-        rawImageFiles: [],
-        detailPageSkipped: true,
-        ...(data.extractedPrice ? {
-          salePrice: String(data.extractedPrice),
-          coupangPrice: String(data.extractedPrice),
-          naverPrice: String(data.extractedPrice),
-        } : {}),
-      });
-
-      setUrlExtractedPrice(data.extractedPrice);
       setUrlSuccess(true);
     } catch {
       setUrlError('네트워크 오류가 발생했습니다. 다시 시도해주세요.');
@@ -440,15 +217,12 @@ export default function Step1SourceSelect() {
   };
 
   // ─── 다음 단계 활성 조건 ────────────────────────────────────────────────────
-  const canProceed = previewImages.length >= 1 || sharedDraft.thumbnailImages.length >= 1;
+  const canProceed =
+    thumbnailFile !== null ||
+    sharedDraft.thumbnailImages.length >= 1;
 
-  // 비활성화 사유 메시지
   const blockedReason = !canProceed
-    ? selectedSource === 'upload'
-      ? '사진을 1장 이상 업로드해 주세요.'
-      : selectedSource === 'domeggook'
-        ? '도매꾹 상품번호를 입력하고 불러오기를 완료해 주세요.'
-        : 'URL을 입력하고 가져오기를 완료해 주세요.'
+    ? '썸네일 이미지를 업로드하거나 URL로 상품을 가져와 주세요.'
     : null;
 
   const handleNext = () => {
@@ -463,17 +237,10 @@ export default function Step1SourceSelect() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
-      {/* ────────────────────────────────────────────────────────────────────── */}
-      {/* SECTION 1 — 소스 선택 */}
-      {/* ────────────────────────────────────────────────────────────────────── */}
-      <div
-        style={{
-          backgroundColor: C.card,
-          border: `1px solid ${C.border}`,
-          borderRadius: '12px',
-          padding: '20px 24px',
-        }}
-      >
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {/* 섹션 ① — 썸네일 만들기 */}
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      <div style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: '12px', padding: '20px 24px' }}>
         {/* 섹션 헤더 */}
         <div style={{ marginBottom: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
@@ -484,291 +251,404 @@ export default function Step1SourceSelect() {
                 backgroundColor: C.accent, color: '#fff', fontSize: '12px', fontWeight: 800, flexShrink: 0,
               }}
             >1</span>
-            <span style={{ fontSize: '15px', fontWeight: 800, color: C.text }}>상품 소스 선택</span>
+            <span style={{ fontSize: '15px', fontWeight: 800, color: C.text }}>썸네일 만들기</span>
+            {/* AI 편집 뱃지 */}
+            <span
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '3px',
+                fontSize: '10px', fontWeight: 700,
+                padding: '2px 7px', borderRadius: '100px',
+                backgroundColor: 'rgba(37,99,235,0.1)', color: '#2563eb',
+                border: '1px solid rgba(37,99,235,0.2)',
+              }}
+            >
+              <Wand2 size={10} /> AI 편집
+            </span>
           </div>
           <p style={{ margin: '0 0 0 30px', fontSize: '12px', color: C.textSub }}>
-            세 가지 방법 중 하나를 선택해 상품 정보를 불러오세요.
+            상품 대표 이미지를 업로드하세요. AI로 배경 제거, 색상 보정 등 편집이 가능합니다.
           </p>
         </div>
 
-        {/* 소스 선택 카드 3개 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <SourceCard
-            type="upload"
-            selected={selectedSource}
-            onSelect={handleSourceChange}
-            icon={<Image size={18} color={selectedSource === 'upload' ? C.accent : C.textSub} />}
-            label="사진 직접 업로드"
-            description="직접 촬영하거나 보유한 사진으로 AI가 상세페이지를 자동 생성합니다."
-            badge="AI 상세페이지 생성"
-            badgeColor="#2563eb"
-          />
-          <SourceCard
-            type="domeggook"
-            selected={selectedSource}
-            onSelect={handleSourceChange}
-            icon={<Hash size={18} color={selectedSource === 'domeggook' ? C.accent : C.textSub} />}
-            label="도매꾹 상품번호"
-            description="상품번호를 입력하면 이미지·상세페이지·가격이 자동으로 채워집니다."
-            badge="도매꾹 자동 완성"
-            badgeColor="#16a34a"
-          />
-          <SourceCard
-            type="url"
-            selected={selectedSource}
-            onSelect={handleSourceChange}
-            icon={<Link size={18} color={selectedSource === 'url' ? C.accent : C.textSub} />}
-            label="상품 페이지 URL"
-            description="코스트코 등 상품 페이지 URL을 입력하면 이미지와 정보를 가져와 상세페이지를 생성합니다."
-            badge="URL 스크랩"
-            badgeColor="#9333ea"
-          />
-        </div>
-
-        {/* ── 선택된 소스별 입력 UI (Accordion) ─────────────────────────── */}
-
-        {/* 업로드 패널 */}
-        {selectedSource === 'upload' && (
+        {/* 상태 A: 썸네일 없음 → 드롭존 */}
+        {!thumbnailFile && !sharedDraft.thumbnailImages[0] ? (
           <div
+            role="button"
+            tabIndex={0}
+            onClick={() => thumbInputRef.current?.click()}
+            onKeyDown={(e) => e.key === 'Enter' && thumbInputRef.current?.click()}
+            onDragOver={(e) => { e.preventDefault(); }}
+            onDrop={(e) => {
+              e.preventDefault();
+              const file = e.dataTransfer.files[0];
+              if (!file || !file.type.match(/^image\/(jpeg|png|webp)$/)) return;
+              if (thumbnailPreviewUrl) URL.revokeObjectURL(thumbnailPreviewUrl);
+              const objUrl = URL.createObjectURL(file);
+              setThumbnailFile(file);
+              setThumbnailPreviewUrl(objUrl);
+              updateSharedDraft({ thumbnailImages: [objUrl], rawImageFiles: [file] });
+            }}
             style={{
-              marginTop: '16px',
-              paddingTop: '16px',
-              borderTop: `1px solid ${C.border}`,
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              gap: '10px', padding: '32px 16px', borderRadius: '10px',
+              border: `2px dashed ${C.border}`,
+              backgroundColor: C.tableHeader,
+              cursor: 'pointer',
             }}
           >
-            {/* 드롭존 */}
-            {previewImages.length < MAX_IMAGES && (
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => fileInputRef.current?.click()}
-                onKeyDown={(e) => e.key === 'Enter' && fileInputRef.current?.click()}
-                onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
-                onDragLeave={() => setIsDragOver(false)}
-                onDrop={(e) => { e.preventDefault(); setIsDragOver(false); processFiles(e.dataTransfer.files); }}
-                style={{
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                  gap: '10px', padding: '32px 16px', borderRadius: '10px',
-                  border: `2px dashed ${isDragOver ? C.accent : C.border}`,
-                  backgroundColor: isDragOver ? 'rgba(190,0,20,0.03)' : C.tableHeader,
-                  cursor: 'pointer', transition: 'border-color 0.15s, background-color 0.15s',
-                }}
-              >
-                <Upload size={24} color={isDragOver ? C.accent : C.textSub} />
-                <div style={{ textAlign: 'center' }}>
-                  <p style={{ fontSize: '13px', color: C.textSub, margin: 0 }}>
-                    드래그하거나{' '}
-                    <span style={{ color: C.accent, fontWeight: 600 }}>클릭하여 선택</span>
-                  </p>
-                  <p style={{ fontSize: '11px', color: C.textSub, margin: '4px 0 0' }}>
-                    JPEG, PNG, WEBP — 최대 {MAX_IMAGES}장
-                  </p>
+            <Upload size={24} color={C.textSub} />
+            <div style={{ textAlign: 'center' }}>
+              <p style={{ fontSize: '13px', color: C.textSub, margin: 0 }}>
+                드래그하거나 <span style={{ color: C.accent, fontWeight: 600 }}>클릭하여 선택</span>
+              </p>
+              <p style={{ fontSize: '11px', color: C.textSub, margin: '4px 0 0' }}>JPEG, PNG, WEBP — 1장</p>
+            </div>
+          </div>
+        ) : (
+          /* 상태 B: 썸네일 있음 → 미리보기 */
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', backgroundColor: C.tableHeader, borderRadius: '10px', border: `1px solid ${C.border}` }}>
+              {/* 썸네일 미리보기 80×80 */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={thumbnailPreviewUrl || sharedDraft.thumbnailImages[0]}
+                alt="썸네일"
+                style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '8px', flexShrink: 0, border: `1px solid ${C.border}` }}
+              />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: '13px', fontWeight: 600, color: C.text, margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {thumbnailFile ? thumbnailFile.name : '외부 이미지'}
+                </p>
+                {thumbnailFile && (
+                  <p style={{ fontSize: '11px', color: C.textSub, margin: '0 0 8px' }}>{formatFileSize(thumbnailFile.size)}</p>
+                )}
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {/* AI로 편집 버튼 */}
+                  <button
+                    onClick={() => setShowAiEdit(v => !v)}
+                    style={{
+                      padding: '6px 12px', fontSize: '12px', fontWeight: 700,
+                      backgroundColor: showAiEdit ? 'rgba(37,99,235,0.12)' : 'rgba(37,99,235,0.07)',
+                      color: '#2563eb',
+                      border: `1px solid rgba(37,99,235,0.3)`,
+                      borderRadius: '7px', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', gap: '5px',
+                    }}
+                  >
+                    <Wand2 size={12} /> AI로 편집
+                  </button>
+                  {/* 변경 버튼 */}
+                  <button
+                    onClick={() => {
+                      if (thumbnailPreviewUrl) URL.revokeObjectURL(thumbnailPreviewUrl);
+                      setThumbnailFile(null);
+                      setThumbnailPreviewUrl(null);
+                      setShowAiEdit(false);
+                      setAiPrompt('');
+                      thumbInputRef.current?.click();
+                    }}
+                    style={{
+                      padding: '6px 12px', fontSize: '12px', fontWeight: 600,
+                      backgroundColor: '#fff', color: C.textSub,
+                      border: `1px solid ${C.border}`, borderRadius: '7px', cursor: 'pointer',
+                    }}
+                  >
+                    변경
+                  </button>
                 </div>
               </div>
+            </div>
+
+            {/* AI 편집 인라인 박스 */}
+            {showAiEdit && (thumbnailFile || sharedDraft.thumbnailImages[0]) && (
+              <div
+                style={{
+                  marginTop: '12px', padding: '14px 16px',
+                  background: 'rgba(37,99,235,0.04)',
+                  border: '1px solid rgba(37,99,235,0.2)',
+                  borderRadius: '10px',
+                }}
+              >
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#2563eb', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <Wand2 size={11} /> AI 편집 프롬프트
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    style={{ ...inputStyle, flex: 1, border: '1px solid rgba(37,99,235,0.3)' }}
+                    type="text"
+                    value={aiPrompt}
+                    onChange={(e) => setAiPrompt(e.target.value)}
+                    placeholder="예: 배경을 흰색으로 바꿔줘 / 그림자 제거 / 상품 밝기 높여줘"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        const url = thumbnailPreviewUrl || sharedDraft.thumbnailImages[0];
+                        if (url) setAiEditModal({ open: true, imageUrl: url, imageFile: thumbnailFile, initialPrompt: aiPrompt });
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      const url = thumbnailPreviewUrl || sharedDraft.thumbnailImages[0];
+                      if (url) setAiEditModal({ open: true, imageUrl: url, imageFile: thumbnailFile, initialPrompt: aiPrompt });
+                    }}
+                    style={{
+                      padding: '9px 16px', fontSize: '12px', fontWeight: 700,
+                      backgroundColor: '#2563eb', color: '#fff',
+                      border: 'none', borderRadius: '8px', cursor: 'pointer', whiteSpace: 'nowrap',
+                    }}
+                  >
+                    생성
+                  </button>
+                </div>
+                <p style={{ fontSize: '11px', color: '#93c5fd', marginTop: '6px' }}>
+                  자연어로 원하는 편집 내용을 입력하면 AI가 처리합니다.
+                </p>
+              </div>
             )}
+          </div>
+        )}
+
+        {/* hidden file input — 썸네일 1장 */}
+        <input
+          ref={thumbInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            if (thumbnailPreviewUrl) URL.revokeObjectURL(thumbnailPreviewUrl);
+            const objUrl = URL.createObjectURL(file);
+            setThumbnailFile(file);
+            setThumbnailPreviewUrl(objUrl);
+            setShowAiEdit(false);
+            setAiPrompt('');
+            updateSharedDraft({ thumbnailImages: [objUrl], rawImageFiles: [file] });
+            e.target.value = '';
+          }}
+        />
+      </div>
+
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {/* 섹션 ② — 상품 상세 만들기 */}
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      <div style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: '12px', padding: '20px 24px' }}>
+        {/* 섹션 헤더 */}
+        <div style={{ marginBottom: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <span
+              style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                width: '22px', height: '22px', borderRadius: '50%',
+                backgroundColor: '#2563eb', color: '#fff', fontSize: '12px', fontWeight: 800, flexShrink: 0,
+              }}
+            >2</span>
+            <span style={{ fontSize: '15px', fontWeight: 800, color: C.text }}>상품 상세 만들기</span>
+          </div>
+          <p style={{ margin: '0 0 0 30px', fontSize: '12px', color: C.textSub }}>
+            이미지를 직접 올리거나 URL을 입력하면 AI가 상세페이지를 생성합니다.
+          </p>
+        </div>
+
+        {/* 탭 2개 */}
+        <div style={{ display: 'flex', borderRadius: '10px', overflow: 'hidden', marginBottom: '16px', border: `1px solid ${C.border}` }}>
+          {(
+            [
+              { value: 'image' as const, label: '🖼 이미지로 만들기' },
+              { value: 'url' as const, label: '🔗 URL로 가져오기' },
+            ]
+          ).map((tab) => (
+            <button
+              key={tab.value}
+              onClick={() => setDetailTab(tab.value)}
+              style={{
+                flex: 1, padding: '10px 0', fontSize: '13px', fontWeight: 700,
+                border: 'none', cursor: 'pointer',
+                backgroundColor: detailTab === tab.value ? C.accent : C.tableHeader,
+                color: detailTab === tab.value ? '#fff' : C.textSub,
+                transition: 'background-color 0.15s, color 0.15s',
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* ── 이미지 탭 ──────────────────────────────────────────────────── */}
+        {detailTab === 'image' && (
+          <div>
+            <p style={{ fontSize: '12px', color: C.textSub, margin: '0 0 12px' }}>
+              상세페이지에 들어갈 이미지를 올려주세요. AI가 분석해 상세페이지를 자동 생성합니다 (최대 10장).
+            </p>
+
+            {/* 드롭존 */}
+            <div
+              onClick={() => detailFileInputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); setDetailDragOver(true); }}
+              onDragLeave={() => setDetailDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDetailDragOver(false);
+                const files = Array.from(e.dataTransfer.files).filter(f => f.type.match(/^image\/(jpeg|png|webp)$/));
+                const remaining = MAX_DETAIL - detailImages.length;
+                const toAdd: DetailImage[] = files.slice(0, remaining).map(file => ({ id: generateId(), url: URL.createObjectURL(file), file, name: file.name }));
+                setDetailImages(prev => {
+                  const updated = [...prev, ...toAdd];
+                  updateSharedDraft({ detailImageFiles: updated.map(d => d.file), detailPageSkipped: false });
+                  return updated;
+                });
+              }}
+              style={{
+                border: `2px dashed ${detailDragOver ? C.accent : C.border}`, borderRadius: '8px', padding: '16px',
+                textAlign: 'center', cursor: 'pointer',
+                backgroundColor: detailDragOver ? 'rgba(190,0,20,0.03)' : '#fafafa',
+                marginBottom: detailImages.length > 0 ? '12px' : 0,
+              }}
+            >
+              <p style={{ margin: 0, fontSize: '13px', color: C.textSub }}>
+                {detailImages.length >= MAX_DETAIL
+                  ? `최대 ${MAX_DETAIL}장 업로드 완료`
+                  : `클릭하거나 드래그하여 추가 (${detailImages.length}/${MAX_DETAIL}장)`}
+              </p>
+            </div>
 
             <input
-              ref={fileInputRef}
+              ref={detailFileInputRef}
               type="file"
               accept="image/jpeg,image/png,image/webp"
               multiple
               style={{ display: 'none' }}
-              onChange={handleFileChange}
+              onChange={(e) => {
+                if (!e.target.files) return;
+                const files = Array.from(e.target.files).filter(f => f.type.match(/^image\/(jpeg|png|webp)$/));
+                const remaining = MAX_DETAIL - detailImages.length;
+                const toAdd: DetailImage[] = files.slice(0, remaining).map(file => ({ id: generateId(), url: URL.createObjectURL(file), file, name: file.name }));
+                setDetailImages(prev => {
+                  const updated = [...prev, ...toAdd];
+                  updateSharedDraft({ detailImageFiles: updated.map(d => d.file), detailPageSkipped: false });
+                  return updated;
+                });
+                e.target.value = '';
+              }}
             />
 
-            {/* 썸네일 그리드 */}
-            {previewImages.length > 0 && (
-              <div style={{ marginTop: previewImages.length < MAX_IMAGES ? '12px' : '0' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px' }}>
-                  {previewImages.map((img) => (
-                    <ThumbnailCard key={img.id} image={img} onRemove={removeImage} />
-                  ))}
-                </div>
-                <p style={{ fontSize: '11px', color: C.textSub, textAlign: 'right', margin: '6px 0 0' }}>
-                  {previewImages.length} / {MAX_IMAGES}장
-                </p>
-              </div>
-            )}
-
-            {/* 대표 썸네일 설정 */}
-            {previewImages.length > 0 && (
-              <div style={{ marginTop: '16px', padding: '14px 16px', backgroundColor: '#f7f8fa', borderRadius: '10px', border: `1px solid ${C.border}` }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: C.text }}>대표 썸네일 설정</span>
-                  <span style={{ fontSize: '11px', color: C.textSub, backgroundColor: '#fff', padding: '2px 8px', borderRadius: '100px', border: `1px solid ${C.border}` }}>선택 사항</span>
-                </div>
-                <p style={{ fontSize: '12px', color: C.textSub, margin: '0 0 10px' }}>업로드한 사진 중 1장을 대표이미지로 지정하거나 AI로 편집하세요.</p>
-
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
-                  {previewImages.map((img, idx) => (
-                    <div
-                      key={img.id}
-                      onClick={() => { setSelectedThumbnailIdx(idx); updateSharedDraft({ thumbnailImages: [img.url] }); }}
-                      style={{
-                        position: 'relative', width: '60px', height: '60px', borderRadius: '8px',
-                        overflow: 'hidden', cursor: 'pointer',
-                        border: `2px solid ${selectedThumbnailIdx === idx ? C.accent : C.border}`,
-                      }}
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={img.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      {selectedThumbnailIdx === idx && (
-                        <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(190,0,20,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <span style={{ color: '#fff', fontSize: '16px' }}>✓</span>
-                        </div>
-                      )}
+            {/* 이미지 그리드 */}
+            {detailImages.length > 0 && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: '8px' }}>
+                {detailImages.map((img, idx) => (
+                  <div
+                    key={img.id}
+                    style={{ position: 'relative', borderRadius: '8px', border: `1px solid ${C.border}`, overflow: 'hidden', backgroundColor: C.tableHeader }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={img.url} alt="" style={{ width: '100%', height: '80px', objectFit: 'cover', display: 'block' }} />
+                    {/* 순번 배지 */}
+                    <div style={{ position: 'absolute', top: '4px', left: '4px', width: '18px', height: '18px', borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span style={{ fontSize: '10px', color: '#fff', fontWeight: 700 }}>{idx + 1}</span>
                     </div>
-                  ))}
-                </div>
-
-                {selectedThumbnailIdx !== null && (
-                  <button
-                    onClick={() => {
-                      const img = previewImages[selectedThumbnailIdx];
-                      setAiEditModal({ open: true, imageUrl: img.url, imageFile: img.file, targetType: 'thumbnail' });
-                    }}
-                    style={{
-                      padding: '6px 14px', fontSize: '12px', fontWeight: 600,
-                      backgroundColor: 'rgba(190,0,20,0.07)', color: C.accent,
-                      border: `1px solid rgba(190,0,20,0.3)`, borderRadius: '8px', cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', gap: '6px',
-                    }}
-                  >
-                    <Wand2 size={13} />
-                    AI로 썸네일 편집
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* 도매꾹 패널 */}
-        {selectedSource === 'domeggook' && (
-          <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: `1px solid ${C.border}` }}>
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-              <input
-                style={{ ...inputStyle, flex: 1 }}
-                type="number"
-                value={itemNoInput}
-                onChange={(e) => setItemNoInput(e.target.value)}
-                placeholder="도매꾹 상품번호 (숫자)"
-                min="1"
-                disabled={domeggookSuccess}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleDomeggookFetch(); }}
-              />
-              <button
-                onClick={handleDomeggookFetch}
-                disabled={!itemNoInput.trim() || domeggookLoading || domeggookSuccess}
-                style={{
-                  padding: '9px 16px', fontSize: '13px', fontWeight: 600,
-                  backgroundColor: itemNoInput.trim() && !domeggookLoading && !domeggookSuccess ? C.accent : '#ccc',
-                  color: '#fff', border: 'none', borderRadius: '8px',
-                  cursor: itemNoInput.trim() && !domeggookLoading && !domeggookSuccess ? 'pointer' : 'not-allowed',
-                  display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', flexShrink: 0,
-                }}
-              >
-                {domeggookLoading ? (
-                  <>
-                    <div style={{ width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-                    불러오는 중...
-                  </>
-                ) : (
-                  <><ChevronRight size={14} />불러오기</>
-                )}
-              </button>
-            </div>
-
-            {domeggookError && (
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '10px 12px', backgroundColor: '#fee2e2', border: '1px solid #fca5a5', borderRadius: '8px', fontSize: '12px', color: '#b91c1c', marginBottom: '12px' }}>
-                <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: '1px' }} />
-                {domeggookError}
-              </div>
-            )}
-
-            {domeggookSuccess && sharedDraft.thumbnailImages.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', backgroundColor: '#dcfce7', border: '1px solid #86efac', borderRadius: '8px', fontSize: '12px', color: '#15803d' }}>
-                  <CheckCircle size={14} />
-                  <span>도매꾹 상품 불러오기 완료 — 상품 기본 정보가 자동으로 채워졌습니다.</span>
-                </div>
-                <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '10px', backgroundColor: C.tableHeader, borderRadius: '8px' }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={sharedDraft.thumbnailImages[0]} alt="대표이미지" style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '6px', flexShrink: 0 }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: '13px', fontWeight: 600, color: C.text, margin: '0 0 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {sharedDraft.name}
-                    </p>
-                    <p style={{ fontSize: '12px', color: C.textSub, margin: 0 }}>
-                      쿠팡 {Number(sharedDraft.coupangPrice || 0).toLocaleString()}원 / 네이버 {Number(sharedDraft.naverPrice || 0).toLocaleString()}원
-                    </p>
+                    {/* 삭제 버튼 */}
+                    <button
+                      onClick={() => {
+                        URL.revokeObjectURL(img.url);
+                        setDetailImages(prev => {
+                          const updated = prev.filter(d => d.id !== img.id);
+                          updateSharedDraft({ detailImageFiles: updated.map(d => d.file), detailPageSkipped: false });
+                          return updated;
+                        });
+                      }}
+                      style={{ position: 'absolute', top: '4px', right: '4px', width: '18px', height: '18px', borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.55)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    >
+                      <X size={10} color="#fff" />
+                    </button>
+                    {/* AI 편집 버튼 */}
+                    <button
+                      onClick={() => setAiEditModal({ open: true, imageUrl: img.url, imageFile: img.file })}
+                      style={{ width: '100%', padding: '4px', fontSize: '10px', fontWeight: 600, backgroundColor: 'rgba(190,0,20,0.07)', color: C.accent, border: 'none', cursor: 'pointer', borderTop: `1px solid ${C.border}` }}
+                    >
+                      AI 편집
+                    </button>
                   </div>
-                  <button
-                    onClick={() => {
-                      setDomeggookSuccess(false);
-                      setItemNoInput('');
-                      updateSharedDraft({ thumbnailImages: [], name: '', description: '', naverPrice: '', coupangPrice: '', rawImageFiles: [], detailPageSkipped: false });
-                    }}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textSub, padding: '2px' }}
-                    title="초기화"
-                  >
-                    <RefreshCw size={14} />
-                  </button>
-                </div>
+                ))}
               </div>
-            ) : (
-              !domeggookError && (
-                <div style={{ fontSize: '11px', color: C.textSub, lineHeight: 1.5 }}>
-                  도매꾹 상품 상세 페이지 URL에서 상품번호를 확인하세요.
-                  <br />예: domeggook.com/goods/<strong>12345678</strong>
-                </div>
-              )
             )}
           </div>
         )}
 
-        {/* URL 패널 */}
-        {selectedSource === 'url' && (
-          <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: `1px solid ${C.border}` }}>
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+        {/* ── URL 탭 ─────────────────────────────────────────────────────── */}
+        {detailTab === 'url' && (
+          <div>
+            <p style={{ fontSize: '12px', color: C.textSub, margin: '0 0 12px' }}>
+              도매꾹 상품번호 또는 상품 페이지 URL을 입력하면 이미지와 정보를 자동으로 가져옵니다.
+            </p>
+
+            {/* 입력 필드 */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
               <input
-                style={{ ...inputStyle, flex: 1 }}
-                type="url"
+                style={{
+                  ...inputStyle,
+                  flex: 1,
+                  border: `1px solid ${urlInputType === 'domeggook' ? '#16a34a' : urlInputType === 'url' ? '#9333ea' : C.border}`,
+                  backgroundColor: urlInputType === 'domeggook' ? 'rgba(22,163,74,0.03)' : urlInputType === 'url' ? 'rgba(147,51,234,0.03)' : '#fff',
+                }}
+                type="text"
                 value={urlInput}
                 onChange={(e) => setUrlInput(e.target.value)}
-                placeholder="https://www.costco.co.kr/..."
+                placeholder="도매꾹 상품번호(숫자) 또는 https://... URL"
                 disabled={urlSuccess}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleUrlFetch(); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleUnifiedFetch(); }}
               />
               <button
-                onClick={handleUrlFetch}
-                disabled={!urlInput.trim() || urlLoading || urlSuccess}
+                onClick={handleUnifiedFetch}
+                disabled={urlInputType === 'empty' || urlLoading || urlSuccess}
                 style={{
                   padding: '9px 16px', fontSize: '13px', fontWeight: 600,
-                  backgroundColor: urlInput.trim() && !urlLoading && !urlSuccess ? C.accent : '#ccc',
+                  backgroundColor: (urlInputType !== 'empty' && !urlLoading && !urlSuccess) ? C.accent : '#ccc',
                   color: '#fff', border: 'none', borderRadius: '8px',
-                  cursor: urlInput.trim() && !urlLoading && !urlSuccess ? 'pointer' : 'not-allowed',
+                  cursor: (urlInputType !== 'empty' && !urlLoading && !urlSuccess) ? 'pointer' : 'not-allowed',
                   display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', flexShrink: 0,
                 }}
               >
                 {urlLoading ? (
                   <>
                     <div style={{ width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-                    분석 중...
+                    불러오는 중...
                   </>
                 ) : (
-                  <><ChevronRight size={14} />가져오기</>
+                  <><Link size={14} />가져오기</>
                 )}
               </button>
             </div>
 
-            {urlLoading && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', fontSize: '12px', color: '#1d4ed8', marginBottom: '12px' }}>
-                <div style={{ width: '14px', height: '14px', border: '2px solid rgba(29,78,216,0.3)', borderTopColor: '#1d4ed8', borderRadius: '50%', flexShrink: 0, animation: 'spin 0.8s linear infinite' }} />
-                페이지를 분석하고 AI 상세페이지를 생성 중입니다...
+            {/* 힌트 뱃지 (성공 전에만 표시) */}
+            {!urlSuccess && (
+              <div style={{ marginBottom: '12px' }}>
+                {urlInputType === 'empty' && (
+                  <span style={{ fontSize: '11px', color: C.textSub, padding: '3px 8px', backgroundColor: C.tableHeader, borderRadius: '100px', border: `1px solid ${C.border}` }}>
+                    숫자만 입력하면 도매꾹 · https://로 시작하면 URL 스크랩
+                  </span>
+                )}
+                {urlInputType === 'domeggook' && (
+                  <span style={{ fontSize: '11px', color: '#16a34a', padding: '3px 8px', backgroundColor: 'rgba(22,163,74,0.06)', borderRadius: '100px', border: '1px solid rgba(22,163,74,0.3)' }}>
+                    도매꾹 상품번호로 인식됩니다 · 이미지·상세페이지·가격 자동 완성
+                  </span>
+                )}
+                {urlInputType === 'url' && (
+                  <span style={{ fontSize: '11px', color: '#9333ea', padding: '3px 8px', backgroundColor: 'rgba(147,51,234,0.06)', borderRadius: '100px', border: '1px solid rgba(147,51,234,0.3)' }}>
+                    상품 URL로 인식됩니다 · 이미지 스크랩 후 AI 상세페이지 생성
+                  </span>
+                )}
               </div>
             )}
 
+            {/* 로딩 중 */}
+            {urlLoading && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', fontSize: '12px', color: '#1d4ed8', marginBottom: '12px' }}>
+                <div style={{ width: '14px', height: '14px', border: '2px solid rgba(29,78,216,0.3)', borderTopColor: '#1d4ed8', borderRadius: '50%', flexShrink: 0, animation: 'spin 0.8s linear infinite' }} />
+                페이지를 분석하고 상품 정보를 가져오는 중입니다...
+              </div>
+            )}
+
+            {/* 에러 */}
             {urlError && (
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '10px 12px', backgroundColor: '#fee2e2', border: '1px solid #fca5a5', borderRadius: '8px', fontSize: '12px', color: '#b91c1c', marginBottom: '12px' }}>
                 <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: '1px' }} />
@@ -776,166 +656,81 @@ export default function Step1SourceSelect() {
               </div>
             )}
 
-            {urlSuccess && sharedDraft.thumbnailImages.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {/* 성공 */}
+            {urlSuccess && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', backgroundColor: '#dcfce7', border: '1px solid #86efac', borderRadius: '8px', fontSize: '12px', color: '#15803d' }}>
                   <CheckCircle size={14} />
-                  <span>URL 가져오기 완료 — 상품 기본 정보가 자동으로 채워졌습니다.</span>
+                  <span>가져오기 완료 — 상품 기본 정보가 자동으로 채워졌습니다.</span>
                 </div>
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '10px', backgroundColor: C.tableHeader, borderRadius: '8px' }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={sharedDraft.thumbnailImages[0]} alt="대표이미지" style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '6px', flexShrink: 0 }} />
+                  {/* 썸네일 미리보기 */}
+                  {(thumbnailPreviewUrl || sharedDraft.thumbnailImages[0]) && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={thumbnailPreviewUrl || sharedDraft.thumbnailImages[0]}
+                      alt="대표이미지"
+                      style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '6px', flexShrink: 0 }}
+                    />
+                  )}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontSize: '13px', fontWeight: 600, color: C.text, margin: '0 0 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {sharedDraft.name}
+                      {sharedDraft.name || '—'}
+                    </p>
+                    <p style={{ fontSize: '12px', color: '#15803d', margin: '0 0 2px' }}>
+                      ✓ 이미지·상세페이지 자동 완성
                     </p>
                     {urlExtractedPrice && (
-                      <p style={{ fontSize: '12px', color: C.textSub, margin: 0 }}>
-                        가격: {urlExtractedPrice.toLocaleString()}원
+                      <p style={{ fontSize: '11px', color: '#f59e0b', margin: 0 }}>
+                        ⚠ 수집 가격 {urlExtractedPrice.toLocaleString()}원 → 구입가(원가)에 입력됨
                       </p>
                     )}
                   </div>
+                  {/* 초기화 버튼 */}
                   <button
                     onClick={() => {
                       setUrlSuccess(false);
                       setUrlInput('');
                       setUrlExtractedPrice(null);
-                      updateSharedDraft({ thumbnailImages: [], name: '', description: '', rawImageFiles: [], detailPageSkipped: false });
+                      setUrlError(null);
+                      // 직접 업로드한 썸네일이 없었던 경우(URL로 자동 채워진 경우)만 초기화
+                      if (!thumbnailFile) {
+                        setThumbnailPreviewUrl(null);
+                        updateSharedDraft({
+                          thumbnailImages: [],
+                          name: '', description: '', rawImageFiles: [], detailPageSkipped: false,
+                          costPrice: '', naverPrice: '', coupangPrice: '', salePrice: '',
+                        });
+                      } else {
+                        updateSharedDraft({
+                          name: '', description: '', rawImageFiles: [], detailPageSkipped: false,
+                          costPrice: '', naverPrice: '', coupangPrice: '', salePrice: '',
+                        });
+                      }
                     }}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textSub, padding: '2px' }}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textSub, padding: '2px', flexShrink: 0 }}
                     title="초기화"
                   >
                     <RefreshCw size={14} />
                   </button>
                 </div>
               </div>
-            ) : (
-              !urlError && !urlLoading && (
-                <div style={{ fontSize: '11px', color: C.textSub, lineHeight: 1.5 }}>
-                  코스트코, 이마트몰 등 상품 URL을 지원합니다.
-                </div>
-              )
             )}
           </div>
         )}
       </div>
 
-      {/* ────────────────────────────────────────────────────────────────────── */}
-      {/* SECTION 2 — 상세 이미지 등록 (선택 사항) */}
-      {/* ────────────────────────────────────────────────────────────────────── */}
-      <div style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: '12px', padding: '20px 24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span
-              style={{
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                width: '22px', height: '22px', borderRadius: '50%',
-                backgroundColor: C.tableHeader, color: C.textSub,
-                fontSize: '12px', fontWeight: 800, flexShrink: 0,
-                border: `1px solid ${C.border}`,
-              }}
-            >2</span>
-            <div>
-              <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: C.text }}>상세 이미지 등록</h3>
-              <p style={{ margin: '2px 0 0', fontSize: '12px', color: C.textSub }}>AI 상세페이지 생성 시 함께 분석됩니다 (미입력 시 소스 이미지만 사용)</p>
-            </div>
-          </div>
-          <span style={{ fontSize: '11px', color: C.textSub, backgroundColor: C.tableHeader, padding: '2px 8px', borderRadius: '100px', border: `1px solid ${C.border}`, whiteSpace: 'nowrap' }}>선택 사항</span>
-        </div>
-
-        <div
-          onClick={() => detailFileInputRef.current?.click()}
-          onDragOver={(e) => { e.preventDefault(); setDetailDragOver(true); }}
-          onDragLeave={() => setDetailDragOver(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDetailDragOver(false);
-            const files = Array.from(e.dataTransfer.files).filter(f => f.type.match(/^image\/(jpeg|png|webp)$/));
-            const remaining = MAX_DETAIL - detailImages.length;
-            const toAdd: DetailImage[] = files.slice(0, remaining).map(file => ({ id: generateId(), url: URL.createObjectURL(file), file, name: file.name }));
-            setDetailImages(prev => { const updated = [...prev, ...toAdd]; updateSharedDraft({ detailImageFiles: updated.map(d => d.file) }); return updated; });
-          }}
-          style={{
-            border: `2px dashed ${detailDragOver ? C.accent : C.border}`, borderRadius: '8px', padding: '16px',
-            textAlign: 'center', cursor: 'pointer',
-            backgroundColor: detailDragOver ? 'rgba(190,0,20,0.03)' : '#fafafa',
-            marginBottom: detailImages.length > 0 ? '12px' : 0,
-          }}
-        >
-          <p style={{ margin: 0, fontSize: '13px', color: C.textSub }}>
-            {detailImages.length >= MAX_DETAIL
-              ? `최대 ${MAX_DETAIL}장 업로드 완료`
-              : `클릭하거나 드래그하여 추가 (${detailImages.length}/${MAX_DETAIL}장)`}
-          </p>
-        </div>
-        <input
-          ref={detailFileInputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          multiple
-          style={{ display: 'none' }}
-          onChange={(e) => {
-            if (!e.target.files) return;
-            const files = Array.from(e.target.files).filter(f => f.type.match(/^image\/(jpeg|png|webp)$/));
-            const remaining = MAX_DETAIL - detailImages.length;
-            const toAdd: DetailImage[] = files.slice(0, remaining).map(file => ({ id: generateId(), url: URL.createObjectURL(file), file, name: file.name }));
-            setDetailImages(prev => { const updated = [...prev, ...toAdd]; updateSharedDraft({ detailImageFiles: updated.map(d => d.file) }); return updated; });
-            e.target.value = '';
-          }}
-        />
-
-        {detailImages.length > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: '8px' }}>
-            {detailImages.map((img, idx) => (
-              <div
-                key={img.id}
-                style={{ position: 'relative', borderRadius: '8px', border: `1px solid ${C.border}`, overflow: 'hidden', backgroundColor: C.tableHeader }}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={img.url} alt="" style={{ width: '100%', height: '80px', objectFit: 'cover', display: 'block' }} />
-                <div style={{ position: 'absolute', top: '4px', left: '4px', width: '18px', height: '18px', borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <span style={{ fontSize: '10px', color: '#fff', fontWeight: 700 }}>{idx + 1}</span>
-                </div>
-                <button
-                  onClick={() => {
-                    URL.revokeObjectURL(img.url);
-                    setDetailImages(prev => { const updated = prev.filter(d => d.id !== img.id); updateSharedDraft({ detailImageFiles: updated.map(d => d.file) }); return updated; });
-                  }}
-                  style={{ position: 'absolute', top: '4px', right: '4px', width: '18px', height: '18px', borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.55)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                >
-                  <X size={10} color="#fff" />
-                </button>
-                <button
-                  onClick={() => setAiEditModal({ open: true, imageUrl: img.url, imageFile: img.file, targetType: 'detail', targetId: img.id })}
-                  style={{ width: '100%', padding: '4px', fontSize: '10px', fontWeight: 600, backgroundColor: 'rgba(190,0,20,0.07)', color: C.accent, border: 'none', cursor: 'pointer', borderTop: `1px solid ${C.border}` }}
-                >
-                  AI 편집
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* ────────────────────────────────────────────────────────────────────── */}
-      {/* SECTION 3 — 상품 기본 정보 */}
-      {/* ────────────────────────────────────────────────────────────────────── */}
-      <div
-        style={{
-          backgroundColor: C.card,
-          border: `1px solid ${C.border}`,
-          borderRadius: '12px',
-          padding: '20px',
-        }}
-      >
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {/* 섹션 ③ — 상품 기본 정보 */}
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      <div style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: '12px', padding: '20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
           <span
             style={{
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
               width: '22px', height: '22px', borderRadius: '50%',
-              backgroundColor: C.tableHeader, color: C.textSub,
+              backgroundColor: '#f59e0b', color: '#fff',
               fontSize: '12px', fontWeight: 800, flexShrink: 0,
-              border: `1px solid ${C.border}`,
             }}
           >3</span>
           <span style={{ fontSize: '15px', fontWeight: 800, color: C.text }}>상품 기본 정보</span>
@@ -980,12 +775,12 @@ export default function Step1SourceSelect() {
         </div>
 
         {/* 2행: 가격 계산기 */}
-        <PriceWithMarginCalc />
+        <PriceWithMarginCalc urlSuccess={urlSuccess} urlExtractedPrice={urlExtractedPrice} />
       </div>
 
-      {/* ────────────────────────────────────────────────────────────────────── */}
+      {/* ────────────────────────────────────────────────────────────────── */}
       {/* 다음 단계 버튼 */}
-      {/* ────────────────────────────────────────────────────────────────────── */}
+      {/* ────────────────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
         {blockedReason && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: C.textSub }}>
@@ -1015,13 +810,12 @@ export default function Step1SourceSelect() {
         <AiEditModal
           imageUrl={aiEditModal.imageUrl}
           imageFile={aiEditModal.imageFile}
+          initialPrompt={aiEditModal.initialPrompt}
           onClose={() => setAiEditModal(null)}
           onSave={(resultUrl) => {
-            if (aiEditModal.targetType === 'thumbnail') {
-              updateSharedDraft({ thumbnailImages: [resultUrl] });
-            } else if (aiEditModal.targetType === 'detail' && aiEditModal.targetId) {
-              setDetailImages(prev => prev.map(d => d.id === aiEditModal.targetId ? { ...d, url: resultUrl } : d));
-            }
+            // 썸네일 AI 편집 결과 업데이트
+            setThumbnailPreviewUrl(resultUrl);
+            updateSharedDraft({ thumbnailImages: [resultUrl] });
             setAiEditModal(null);
           }}
         />
@@ -1040,7 +834,12 @@ function calcRecommendedPrice(costPrice: number, shippingFee: number, commission
   return Math.ceil((costPrice + shippingFee * 1.033) / denominator / 100) * 100;
 }
 
-function PriceWithMarginCalc() {
+interface PriceWithMarginCalcProps {
+  urlSuccess?: boolean;
+  urlExtractedPrice?: number | null;
+}
+
+function PriceWithMarginCalc({ urlSuccess, urlExtractedPrice }: PriceWithMarginCalcProps) {
   const { sharedDraft, updateSharedDraft } = useListingStore();
   const [shippingFee, setShippingFee] = useState(3000);
 
@@ -1080,6 +879,12 @@ function PriceWithMarginCalc() {
             <input style={{ ...numInputStyle, backgroundColor: '#fff' }} type="number" value={sharedDraft.costPrice} onChange={(e) => updateSharedDraft({ costPrice: e.target.value })} placeholder="0" min={0} />
             <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '11px', color: C.textSub }}>원</span>
           </div>
+          {/* URL 수집 가격 안내 */}
+          {urlSuccess && urlExtractedPrice && (
+            <p style={{ fontSize: '11px', color: '#f59e0b', marginTop: '4px' }}>
+              URL에서 수집한 가격 ({urlExtractedPrice.toLocaleString()}원)이 자동 입력되었습니다.
+            </p>
+          )}
         </div>
         <div>
           <label style={labelStyle}>배송비</label>

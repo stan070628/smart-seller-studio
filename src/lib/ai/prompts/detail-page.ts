@@ -91,7 +91,7 @@ export const DETAIL_PAGE_SYSTEM_PROMPT = `당신은 한국 이커머스 상세 �
 export function buildDetailPageUserPrompt(
   imageAnalysis: ProductImageAnalysis,
   productName?: string,
-  price?: number
+  productSpecs?: Array<{ label: string; value: string }>
 ): string {
   const lines: string[] = [];
 
@@ -99,15 +99,18 @@ export function buildDetailPageUserPrompt(
     lines.push(`상품명: ${productName}`);
   }
 
-  if (price !== undefined) {
-    lines.push(`가격: ${price.toLocaleString("ko-KR")}원`);
-  }
-
   lines.push(`\n[이미지 분석 결과]`);
   lines.push(`소재: ${imageAnalysis.material}`);
   lines.push(`형태: ${imageAnalysis.shape}`);
   lines.push(`색상: ${imageAnalysis.colors.join(", ")}`);
   lines.push(`주요 구성 요소: ${imageAnalysis.keyComponents.join(", ")}`);
+
+  if (productSpecs && productSpecs.length > 0) {
+    lines.push('\n[홈페이지 스펙 정보 — specs 필드에 반드시 반영할 것]');
+    productSpecs.forEach(({ label, value }) => {
+      lines.push(`${label}: ${value}`);
+    });
+  }
 
   lines.push(
     `\n위 상품 정보를 바탕으로 한국 이커머스 상세 페이지 콘텐츠를 JSON으로 생성해 주세요.`

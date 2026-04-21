@@ -34,16 +34,15 @@ function escapeHtml(str: string): string {
 
 function buildHeroSection(content: DetailPageContent, heroImage: ImageInput): string {
   return `
-    <section style="position:relative;width:100%;min-height:480px;display:flex;align-items:flex-end;overflow:hidden;">
+    <section style="width:100%;">
       <img
         src="${toDataUrl(heroImage)}"
         alt="${escapeHtml(content.headline)}"
-        style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;"
+        style="width:100%;height:auto;display:block;"
       />
-      <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,0.75) 0%,rgba(0,0,0,0.2) 60%,transparent 100%);"></div>
-      <div style="position:relative;z-index:1;padding:40px 24px 48px;width:100%;box-sizing:border-box;">
-        <h1 style="margin:0 0 12px;font-size:28px;font-weight:800;color:#fff;line-height:1.3;letter-spacing:-0.5px;">${escapeHtml(content.headline)}</h1>
-        <p style="margin:0;font-size:16px;color:rgba(255,255,255,0.88);line-height:1.6;">${escapeHtml(content.subheadline)}</p>
+      <div style="padding:28px 24px 32px;background:#fff;">
+        <h1 style="margin:0 0 10px;font-size:24px;font-weight:800;color:#1a1a1a;line-height:1.35;letter-spacing:-0.5px;">${escapeHtml(content.headline)}</h1>
+        <p style="margin:0;font-size:15px;color:#555;line-height:1.7;">${escapeHtml(content.subheadline)}</p>
       </div>
     </section>`;
 }
@@ -110,8 +109,10 @@ function buildFeaturesSection(content: DetailPageContent): string {
     </section>`;
 }
 
-function buildSpecsSection(content: DetailPageContent): string {
-  const rows = content.specs
+function buildSpecsSection(specs: Array<{ label: string; value: string }>): string {
+  if (specs.length === 0) return '';
+
+  const rows = specs
     .map(
       (s, idx) => `
         <tr style="background:${idx % 2 === 0 ? "#fff" : "#f7f8fa"};">
@@ -204,16 +205,24 @@ function buildReturnNoticeSection(): string {
 // 메인 빌더
 // ─────────────────────────────────────────
 
-function buildSections(content: DetailPageContent, images: ImageInput[]): string {
+function buildSections(
+  content: DetailPageContent,
+  images: ImageInput[],
+  specOverride?: Array<{ label: string; value: string }>
+): string {
   const heroImage = images[0];
   const galleryImages = images.slice(1);
+
+  // 외부에서 추출한 스펙이 있으면 우선 사용, 없으면 AI 생성 스펙 사용
+  const finalSpecs =
+    specOverride && specOverride.length > 0 ? specOverride : content.specs;
 
   return [
     buildHeroSection(content, heroImage),
     buildSellingPointsSection(content),
     galleryImages.length > 0 ? buildGallerySection(galleryImages) : "",
     buildFeaturesSection(content),
-    buildSpecsSection(content),
+    buildSpecsSection(finalSpecs),
     buildUsageSection(content),
     buildWarningsSection(content),
     buildCtaSection(content),
@@ -223,21 +232,27 @@ function buildSections(content: DetailPageContent, images: ImageInput[]): string
     .join("\n");
 }
 
-/** 쿠팡 상세 페이지 에디터에 붙여넣을 HTML snippet (body 내용만) */
+/** 상세 페이지 에디터에 붙여넣을 HTML snippet (body 내용만)
+ *  @param maxWidth 최대 너비(px) — 쿠팡: 780, 네이버: 860 (기본값 780) */
 export function buildDetailPageSnippet(
   content: DetailPageContent,
-  images: ImageInput[]
+  images: ImageInput[],
+  specOverride?: Array<{ label: string; value: string }>,
+  maxWidth = 780
 ): string {
-  const sections = buildSections(content, images);
-  return `<div style="max-width:780px;margin:0 auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden;">\n${sections}\n</div>`;
+  const sections = buildSections(content, images, specOverride);
+  return `<div style="max-width:${maxWidth}px;margin:0 auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden;">\n${sections}\n</div>`;
 }
 
-/** 미리보기용 전체 HTML 문서 */
+/** 미리보기용 전체 HTML 문서
+ *  @param maxWidth 최대 너비(px) — 쿠팡: 780, 네이버: 860 (기본값 780) */
 export function buildDetailPageHtml(
   content: DetailPageContent,
-  images: ImageInput[]
+  images: ImageInput[],
+  specOverride?: Array<{ label: string; value: string }>,
+  maxWidth = 780
 ): string {
-  const sections = buildSections(content, images);
+  const sections = buildSections(content, images, specOverride);
 
   return `<!DOCTYPE html>
 <html lang="ko">
@@ -255,7 +270,7 @@ export function buildDetailPageHtml(
       -webkit-font-smoothing: antialiased;
     }
     .page-wrapper {
-      max-width: 780px;
+      max-width: ${maxWidth}px;
       margin: 0 auto;
       background: #fff;
       overflow: hidden;

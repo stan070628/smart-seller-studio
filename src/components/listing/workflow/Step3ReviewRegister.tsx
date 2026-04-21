@@ -2,29 +2,48 @@
 
 /**
  * Step3ReviewRegister.tsx
- * Step 3 — 상세페이지 미리보기 + 등록 폼
+ * Step 3 — 상세페이지 미리보기 + AI 수정 패널 + 등록 폼
  */
 
-import React, { useState } from 'react';
-import { ChevronLeft, Copy, CheckCheck, Download, AlertCircle, Plus } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Copy, CheckCheck, Download, AlertCircle, Plus, Loader2 } from 'lucide-react';
 import { useListingStore } from '@/store/useListingStore';
 import { C } from '@/lib/design-tokens';
 import BothRegisterForm from '@/components/listing/BothRegisterForm';
 
+// AI 수정 예시 칩 목록
+const AI_EDIT_CHIPS = [
+  '감성적인 톤으로',
+  '특징 간결하게',
+  '가성비 강조',
+  '20대 여성 타겟',
+  '선물용 문구 추가',
+];
+
 export default function Step3ReviewRegister() {
-  const { sharedDraft, goPrevStep, resetWorkflow } = useListingStore();
+  const { sharedDraft, resetWorkflow, editDetailPage } = useListingStore();
   const {
     detailPageFullHtml,
     detailPageSnippet,
+    detailPageSnippetNaver,
     detailPageSkipped,
     description,
     name,
+    detailPageEditStatus,
+    detailPageEditError,
   } = sharedDraft;
 
   const [copied, setCopied] = useState(false);
   const [snippetCopied, setSnippetCopied] = useState(false);
+  const [snippetNaverCopied, setSnippetNaverCopied] = useState(false);
   const [registered, setRegistered] = useState(false);
   const [showRegisterForm, setShowRegisterForm] = useState(true);
+
+  // AI 수정 패널 상태
+  const [editInstruction, setEditInstruction] = useState('');
+  // 되돌리기용 이전 HTML 저장
+  const prevHtmlRef = useRef<string | null>(null);
+  const prevSnippetRef = useRef<string | null>(null);
 
   // HTML 복사
   const handleCopy = async () => {
@@ -37,13 +56,23 @@ export default function Step3ReviewRegister() {
     } catch { /* 무시 */ }
   };
 
-  // 스니펫 복사
+  // 스니펫 복사 (쿠팡)
   const handleSnippetCopy = async () => {
     if (!detailPageSnippet) return;
     try {
       await navigator.clipboard.writeText(detailPageSnippet);
       setSnippetCopied(true);
       setTimeout(() => setSnippetCopied(false), 2000);
+    } catch { /* 무시 */ }
+  };
+
+  // 스니펫 복사 (네이버)
+  const handleSnippetNaverCopy = async () => {
+    if (!detailPageSnippetNaver) return;
+    try {
+      await navigator.clipboard.writeText(detailPageSnippetNaver);
+      setSnippetNaverCopied(true);
+      setTimeout(() => setSnippetNaverCopied(false), 2000);
     } catch { /* 무시 */ }
   };
 
@@ -74,6 +103,33 @@ export default function Step3ReviewRegister() {
   // 새 상품 등록
   const handleNewProduct = () => {
     resetWorkflow();
+  };
+
+  // AI 수정 실행
+  const handleAiEdit = async () => {
+    if (!editInstruction.trim() || detailPageEditStatus === 'editing') return;
+    // 되돌리기용 이전 HTML 백업
+    prevHtmlRef.current = detailPageFullHtml;
+    prevSnippetRef.current = detailPageSnippet;
+    await editDetailPage(editInstruction.trim());
+  };
+
+  // 되돌리기 — 이전 HTML 복원
+  const handleUndo = () => {
+    if (prevHtmlRef.current === null) return;
+    useListingStore.setState((s) => ({
+      sharedDraft: {
+        ...s.sharedDraft,
+        detailPageFullHtml: prevHtmlRef.current,
+        detailPageSnippet: prevSnippetRef.current,
+        description: prevSnippetRef.current ?? s.sharedDraft.description,
+        detailPageEditStatus: 'idle',
+        detailPageEditError: null,
+      },
+    }));
+    prevHtmlRef.current = null;
+    prevSnippetRef.current = null;
+    setEditInstruction('');
   };
 
   const hasHtml = !!detailPageFullHtml;
@@ -129,8 +185,8 @@ export default function Step3ReviewRegister() {
       {/* 2컬럼 레이아웃 */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', alignItems: 'start' }}>
 
-        {/* ── 좌측: 미리보기 ────────────────────────────────────────────── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {/* ── 좌측: 미리보기 + AI 수정 패널 ───────────────────────────── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', position: 'sticky', top: '16px', alignSelf: 'start' }}>
 
           {/* 상세설명 없음 경고 */}
           {detailPageSkipped && !hasDescription && (
@@ -212,7 +268,7 @@ export default function Step3ReviewRegister() {
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: `1px solid ${C.border}`, backgroundColor: C.tableHeader }}>
-                <span style={{ fontSize: '13px', fontWeight: 700, color: C.text }}>도매꾹 상세페이지</span>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: C.text }}>상세페이지</span>
                 <div style={{ display: 'flex', gap: '6px' }}>
                   <button
                     onClick={handleCopy}
@@ -260,8 +316,11 @@ export default function Step3ReviewRegister() {
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: `1px solid ${C.border}`, backgroundColor: C.tableHeader }}>
                 <div>
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: C.text }}>쿠팡 상세페이지 HTML 코드</span>
-                  <p style={{ fontSize: '11px', color: C.textSub, margin: '2px 0 0' }}>쿠팡 상품 등록 &gt; 상세설명 HTML 에디터에 붙여넣으세요</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: C.text }}>쿠팡 상세페이지 HTML</span>
+                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#fff', background: '#be0014', padding: '1px 6px', borderRadius: '4px' }}>780px</span>
+                  </div>
+                  <p style={{ fontSize: '11px', color: C.textSub, margin: '2px 0 0' }}>쿠팡 상품 등록 › 상세설명 HTML 에디터에 붙여넣기</p>
                 </div>
                 <button
                   onClick={handleSnippetCopy}
@@ -296,6 +355,57 @@ export default function Step3ReviewRegister() {
             </div>
           )}
 
+          {/* 네이버용 HTML 스니펫 */}
+          {detailPageSnippetNaver && (
+            <div
+              style={{
+                backgroundColor: C.card,
+                border: `1px solid ${C.border}`,
+                borderRadius: '12px',
+                overflow: 'hidden',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: `1px solid ${C.border}`, backgroundColor: C.tableHeader }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: C.text }}>네이버 상세페이지 HTML</span>
+                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#fff', background: '#03c75a', padding: '1px 6px', borderRadius: '4px' }}>860px</span>
+                  </div>
+                  <p style={{ fontSize: '11px', color: C.textSub, margin: '2px 0 0' }}>스마트스토어 › 상품 상세설명 HTML 에디터에 붙여넣기</p>
+                </div>
+                <button
+                  onClick={handleSnippetNaverCopy}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '4px',
+                    padding: '5px 10px', fontSize: '11px', fontWeight: 600,
+                    backgroundColor: C.text, color: '#fff',
+                    border: 'none', borderRadius: '6px', cursor: 'pointer',
+                  }}
+                >
+                  {snippetNaverCopied ? <><CheckCheck size={11} color="#4ade80" /> 복사됨</> : <><Copy size={11} /> 코드 복사</>}
+                </button>
+              </div>
+              <textarea
+                readOnly
+                value={detailPageSnippetNaver}
+                style={{
+                  width: '100%',
+                  height: '200px',
+                  padding: '12px',
+                  fontFamily: 'monospace',
+                  fontSize: '11px',
+                  color: '#4ade80',
+                  backgroundColor: '#0a1628',
+                  border: 'none',
+                  resize: 'none',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                  display: 'block',
+                }}
+              />
+            </div>
+          )}
+
           {/* 아무것도 없을 때 */}
           {!hasHtml && !hasDescription && !detailPageSkipped && (
             <div
@@ -319,13 +429,182 @@ export default function Step3ReviewRegister() {
               </p>
             </div>
           )}
+
+          {/* ── AI 수정 패널 (detailPageFullHtml이 있을 때만 표시) ── */}
+          {hasHtml && (
+            <div
+              style={{
+                backgroundColor: C.card,
+                border: `1px solid ${C.border}`,
+                borderRadius: '12px',
+                overflow: 'hidden',
+              }}
+            >
+              {/* 패널 헤더 */}
+              <div
+                style={{
+                  padding: '12px 16px',
+                  borderBottom: `1px solid ${C.border}`,
+                  backgroundColor: '#faf5ff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <div>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#7c3aed' }}>
+                    ✦ AI로 상세페이지 수정
+                  </span>
+                  <p style={{ fontSize: '11px', color: '#a78bfa', margin: '2px 0 0' }}>
+                    수정 요청을 입력하면 AI가 반영합니다
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {/* 예시 칩 */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {AI_EDIT_CHIPS.map((chip) => (
+                    <button
+                      key={chip}
+                      type="button"
+                      onClick={() => setEditInstruction(chip)}
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: '12px',
+                        fontWeight: 500,
+                        backgroundColor: editInstruction === chip ? '#ede9fe' : '#f5f3ff',
+                        color: '#7c3aed',
+                        border: `1px solid ${editInstruction === chip ? '#8b5cf6' : '#ddd6fe'}`,
+                        borderRadius: '100px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
+
+                {/* 텍스트 입력 */}
+                <textarea
+                  rows={3}
+                  value={editInstruction}
+                  onChange={(e) => setEditInstruction(e.target.value)}
+                  placeholder="수정 요청을 자유롭게 입력하세요"
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    fontSize: '13px',
+                    border: '1px solid #ddd6fe',
+                    borderRadius: '8px',
+                    outline: 'none',
+                    color: C.text,
+                    backgroundColor: '#fff',
+                    boxSizing: 'border-box',
+                    resize: 'vertical',
+                    fontFamily: 'inherit',
+                  }}
+                />
+
+                {/* AI 수정 버튼 */}
+                <button
+                  type="button"
+                  onClick={handleAiEdit}
+                  disabled={!editInstruction.trim() || detailPageEditStatus === 'editing'}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    padding: '10px 20px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    backgroundColor: !editInstruction.trim() || detailPageEditStatus === 'editing' ? '#ede9fe' : '#7c3aed',
+                    color: !editInstruction.trim() || detailPageEditStatus === 'editing' ? '#a78bfa' : '#fff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: !editInstruction.trim() || detailPageEditStatus === 'editing' ? 'not-allowed' : 'pointer',
+                    opacity: !editInstruction.trim() ? 0.6 : 1,
+                  }}
+                >
+                  {detailPageEditStatus === 'editing' ? (
+                    <>
+                      <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                      AI 수정 중...
+                    </>
+                  ) : (
+                    '✦ AI 수정 적용'
+                  )}
+                </button>
+
+                {/* 완료 메시지 */}
+                {detailPageEditStatus === 'done' && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '10px 14px',
+                      backgroundColor: '#dcfce7',
+                      border: '1px solid #86efac',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                    }}
+                  >
+                    <span style={{ color: '#15803d', fontWeight: 600 }}>
+                      <CheckCheck size={14} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'middle' }} />
+                      수정 완료!
+                    </span>
+                    {prevHtmlRef.current !== null && (
+                      <button
+                        type="button"
+                        onClick={handleUndo}
+                        style={{
+                          fontSize: '12px',
+                          color: '#15803d',
+                          background: 'none',
+                          border: '1px solid #86efac',
+                          borderRadius: '6px',
+                          padding: '3px 10px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        되돌리기
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* 에러 메시지 */}
+                {detailPageEditStatus === 'error' && (
+                  <div
+                    style={{
+                      padding: '10px 14px',
+                      backgroundColor: '#fee2e2',
+                      border: '1px solid #fca5a5',
+                      borderRadius: '8px',
+                      fontSize: '12px',
+                      color: '#b91c1c',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '6px',
+                    }}
+                  >
+                    <AlertCircle size={14} style={{ flexShrink: 0, marginTop: '1px' }} />
+                    <span>{detailPageEditError ?? '수정 중 오류가 발생했습니다.'}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── 우측: 등록 폼 ─────────────────────────────────────────────── */}
         <div>
           {showRegisterForm && !registered && (
             <BothRegisterForm
-              onClose={handleRegistered}
+              onSuccess={handleRegistered}
+              onCancel={() => {}}
             />
           )}
 
@@ -368,30 +647,13 @@ export default function Step3ReviewRegister() {
         </div>
       </div>
 
-      {/* 하단 버튼 */}
-      {!registered && (
-        <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-          <button
-            onClick={goPrevStep}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '10px 20px',
-              fontSize: '13px',
-              fontWeight: 600,
-              backgroundColor: '#fff',
-              color: C.textSub,
-              border: `1px solid ${C.border}`,
-              borderRadius: '8px',
-              cursor: 'pointer',
-            }}
-          >
-            <ChevronLeft size={15} />
-            이전
-          </button>
-        </div>
-      )}
+      {/* 스피너 키프레임 */}
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 }

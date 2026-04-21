@@ -82,6 +82,7 @@ interface ScrapeSuccessData {
   extractedPrice: number | null;
   detailHtml: string;
   snippet: string;
+  naverSnippet: string;
   imageCount: number;
 }
 
@@ -247,6 +248,56 @@ function extractImageUrls(html: string, baseUrl: string): string[] {
   }
 
   return urls.slice(0, MAX_IMAGES);
+}
+
+/**
+ * HTML에서 상품 스펙 테이블을 추출합니다.
+ * tr/th/td → dt/dd → li 콜론 패턴 순으로 시도합니다.
+ */
+function extractProductSpecs(html: string): Array<{ label: string; value: string }> {
+  const specs: Array<{ label: string; value: string }> = [];
+  const seen = new Set<string>();
+
+  // HTML 태그 제거 헬퍼
+  function stripTags(s: string): string {
+    return decodeHtmlEntities(s.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+  }
+
+  // 패턴 1: <tr><th>...</th><td>...</td></tr>
+  const trPattern = /<tr[^>]*>[\s\S]*?<th[^>]*>([\s\S]*?)<\/th>[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>[\s\S]*?<\/tr>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = trPattern.exec(html)) !== null) {
+    const label = stripTags(m[1]);
+    const value = stripTags(m[2]);
+    if (label && value && label.length < 40 && value.length < 200 && !seen.has(label)) {
+      seen.add(label);
+      specs.push({ label, value });
+    }
+  }
+
+  // 패턴 2: <dt>...</dt><dd>...</dd>
+  const dlPattern = /<dt[^>]*>([\s\S]*?)<\/dt>\s*<dd[^>]*>([\s\S]*?)<\/dd>/gi;
+  while ((m = dlPattern.exec(html)) !== null) {
+    const label = stripTags(m[1]);
+    const value = stripTags(m[2]);
+    if (label && value && label.length < 40 && value.length < 200 && !seen.has(label)) {
+      seen.add(label);
+      specs.push({ label, value });
+    }
+  }
+
+  // 패턴 3: "label: value" 형태의 <li> 또는 <p> (한국어 콜론 패턴)
+  const liPattern = /<(?:li|p)[^>]*>([^<:]{2,20})\s*[:：]\s*([^<]{2,100})<\/(?:li|p)>/gi;
+  while ((m = liPattern.exec(html)) !== null) {
+    const label = stripTags(m[1]);
+    const value = stripTags(m[2]);
+    if (label && value && !seen.has(label)) {
+      seen.add(label);
+      specs.push({ label, value });
+    }
+  }
+
+  return specs.slice(0, 12);
 }
 
 /**
@@ -529,10 +580,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   // 8. DetailPageContent 생성 (카피라이팅)
   const client = getAnthropicClient();
+  const rawSpecs = extractProductSpecs(html);
+
+  // A/S 책임자·전화번호·소비자상담 관련 항목은 항상 하드코딩 값으로 교체
+  const AS_OVERRIDE_LABELS = /A\/S|애프터서비스|서비스\s*책임자|소비자\s*상담|고객\s*센터|전화\s*번호|연락처/i;
+  const filteredSpecs = rawSpecs.filter(({ label }) => !AS_OVERRIDE_LABELS.test(label));
+  filteredSpecs.push(
+    { label: 'A/S 책임자', value: '청연코퍼레이션' },
+    { label: 'A/S 전화번호', value: '010-5169-2357' },
+  );
+  const extractedSpecs = filteredSpecs;
   const userMessage = buildDetailPageUserPrompt(
     imageAnalysis,
     extractedTitle || undefined,
-    extractedPrice ?? undefined,
+    extractedSpecs.length > 0 ? extractedSpecs : undefined,
   );
 
   let rawCopyText: string;
@@ -594,9 +655,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   let detailHtml: string;
   let snippet: string;
+  let naverSnippet: string;
+  const specArg = extractedSpecs.length > 0 ? extractedSpecs : undefined;
   try {
-    detailHtml = buildDetailPageHtml(content, imageInputs);
-    snippet = buildDetailPageSnippet(content, imageInputs);
+    detailHtml = buildDetailPageHtml(content, imageInputs, specArg);
+    snippet = buildDetailPageSnippet(content, imageInputs, specArg, 780);      // 쿠팡용
+    naverSnippet = buildDetailPageSnippet(content, imageInputs, specArg, 860); // 네이버용
   } catch (err) {
     console.error('[url-scrape] HTML 빌드 실패:', err);
     return errorResponse(
@@ -616,6 +680,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     extractedPrice,
     detailHtml,
     snippet,
+    naverSnippet,
     imageCount: processedImages.length,
   };
 

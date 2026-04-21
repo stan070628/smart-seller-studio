@@ -56,7 +56,7 @@ const BothRegisterSchema = z.object({
   deliveryCharge: z.number().int().min(0).default(0),
   deliveryChargeType: z.enum(['FREE', 'NOT_FREE', 'CHARGE_RECEIVED']).default('FREE'),
   returnCharge: z.number().int().min(0).default(5000),
-  // 쿠팡 전용 필드
+  // 쿠팡 전용 필드 (platform이 'naver'면 생략 가능)
   coupang: z.object({
     displayCategoryCode: z.number().int(),
     brand: z.string().default(''),
@@ -64,14 +64,16 @@ const BothRegisterSchema = z.object({
     maximumBuyForPerson: z.number().int().min(0).default(0),
     outboundShippingPlaceCode: z.string().optional(),
     returnCenterCode: z.string().optional(),
-  }),
-  // 네이버 전용 필드
+  }).optional(),
+  // 네이버 전용 필드 (platform이 'coupang'이면 생략 가능)
   naver: z.object({
     leafCategoryId: z.string().min(1),
     tags: z.array(z.string()).optional(),
     exchangeFee: z.number().int().min(0).default(8000),
     returnFee: z.number().int().min(0).optional(),
-  }),
+  }).optional(),
+  // 등록 플랫폼 선택
+  platform: z.enum(['both', 'coupang', 'naver']).default('both'),
   // 미리보기 모드 — true면 실제 등록하지 않고 payload만 반환
   preview: z.boolean().optional().default(false),
   // 옵션(variants) — 없으면 단일 상품으로 등록
@@ -101,6 +103,8 @@ const BothRegisterSchema = z.object({
 });
 
 type BothRegisterInput = z.infer<typeof BothRegisterSchema>;
+type WithCoupang = BothRegisterInput & { coupang: NonNullable<BothRegisterInput['coupang']> };
+type WithNaver   = BothRegisterInput & { naver:   NonNullable<BothRegisterInput['naver']>   };
 
 // ─────────────────────────────────────────────────────────────
 // 응답 타입
@@ -126,7 +130,7 @@ interface NaverResult {
 // ─────────────────────────────────────────────────────────────
 
 async function registerCoupang(
-  d: BothRegisterInput,
+  d: WithCoupang,
   options?: OptionsInput,
 ): Promise<CoupangResult> {
   const client = getCoupangClient();
@@ -186,7 +190,7 @@ async function registerCoupang(
 // ─────────────────────────────────────────────────────────────
 
 async function registerNaver(
-  d: BothRegisterInput,
+  d: WithNaver,
   options?: OptionsInput,
 ): Promise<NaverResult> {
   const client = getNaverCommerceClient();
@@ -285,51 +289,48 @@ export async function POST(request: NextRequest) {
 
   // ── 미리보기 모드: payload만 생성하여 반환, 실제 등록 안 함 ──
   if (d.preview) {
-    const client = getCoupangClient();
-    const outboundCode = d.coupang.outboundShippingPlaceCode || client.getOutboundShippingPlaceCode();
-    const returnCode = d.coupang.returnCenterCode || client.getReturnCenterCode();
-
-    // 쿠팡 고시정보 자동 조회
-    let autoNotices: { noticeCategoryName: string; noticeCategoryDetailName: string; content: string }[] = [];
-    try {
-      const meta = await client.getCategoryMeta(d.coupang.displayCategoryCode);
-      const cats = meta.noticeCategories as { noticeCategoryName: string; noticeCategoryDetailNames: { noticeCategoryDetailName: string }[] }[] | undefined;
-      if (cats && cats.length > 0) {
-        const chosen = cats.find((c) => c.noticeCategoryName === '기타 재화') ?? cats[0];
-        autoNotices = chosen.noticeCategoryDetailNames.map((det) => ({
-          noticeCategoryName: chosen.noticeCategoryName,
-          noticeCategoryDetailName: det.noticeCategoryDetailName,
-          content: '상세페이지 참조',
-        }));
-      }
-    } catch { /* ignore */ }
-
-    const coupangCommon: CommonProductInput = {
-      name: d.name, salePrice: d.coupangPrice ?? d.salePrice,
-      originalPrice: d.originalPrice, stock: d.stock,
+    const commonBase: CommonProductInput = {
+      name: d.name, originalPrice: d.originalPrice, stock: d.stock,
       thumbnailImages: d.thumbnailImages, detailImages: d.detailImages,
       description: d.description, deliveryCharge: d.deliveryCharge,
       deliveryChargeType: d.deliveryChargeType, returnCharge: d.returnCharge,
+      salePrice: d.salePrice,
     };
-    const coupangSpecific: CoupangSpecificInput = {
-      displayCategoryCode: d.coupang.displayCategoryCode, brand: d.coupang.brand,
-      maximumBuyCount: d.coupang.maximumBuyCount, maximumBuyForPerson: d.coupang.maximumBuyForPerson,
-      outboundShippingPlaceCode: outboundCode, returnCenterCode: returnCode,
-    };
-    const coupangPayload = buildCoupangPayload(coupangCommon, coupangSpecific, client.vendor, optionsInput, autoNotices);
 
-    const naverCommon: CommonProductInput = {
-      name: d.name, salePrice: d.naverPrice ?? d.salePrice,
-      originalPrice: d.originalPrice, stock: d.stock,
-      thumbnailImages: d.thumbnailImages, detailImages: d.detailImages,
-      description: d.description, deliveryCharge: d.deliveryCharge,
-      deliveryChargeType: d.deliveryChargeType, returnCharge: d.returnCharge,
-    };
-    const naverSpecific: NaverSpecificInput = {
-      leafCategoryId: d.naver.leafCategoryId, tags: d.naver.tags,
-      exchangeFee: d.naver.exchangeFee, returnFee: d.naver.returnFee,
-    };
-    const naverPayload = buildNaverPayload(naverCommon, naverSpecific, optionsInput);
+    let coupangPayload: unknown = null;
+    if (d.platform !== 'naver' && d.coupang) {
+      const client = getCoupangClient();
+      const outboundCode = d.coupang.outboundShippingPlaceCode || client.getOutboundShippingPlaceCode();
+      const returnCode = d.coupang.returnCenterCode || client.getReturnCenterCode();
+      let autoNotices: { noticeCategoryName: string; noticeCategoryDetailName: string; content: string }[] = [];
+      try {
+        const meta = await client.getCategoryMeta(d.coupang.displayCategoryCode);
+        const cats = meta.noticeCategories as { noticeCategoryName: string; noticeCategoryDetailNames: { noticeCategoryDetailName: string }[] }[] | undefined;
+        if (cats && cats.length > 0) {
+          const chosen = cats.find((c) => c.noticeCategoryName === '기타 재화') ?? cats[0];
+          autoNotices = chosen.noticeCategoryDetailNames.map((det) => ({
+            noticeCategoryName: chosen.noticeCategoryName,
+            noticeCategoryDetailName: det.noticeCategoryDetailName,
+            content: '상세페이지 참조',
+          }));
+        }
+      } catch { /* ignore */ }
+      const coupangSpecific: CoupangSpecificInput = {
+        displayCategoryCode: d.coupang.displayCategoryCode, brand: d.coupang.brand,
+        maximumBuyCount: d.coupang.maximumBuyCount, maximumBuyForPerson: d.coupang.maximumBuyForPerson,
+        outboundShippingPlaceCode: outboundCode, returnCenterCode: returnCode,
+      };
+      coupangPayload = buildCoupangPayload({ ...commonBase, salePrice: d.coupangPrice ?? d.salePrice }, coupangSpecific, client.vendor, optionsInput, autoNotices);
+    }
+
+    let naverPayload: unknown = null;
+    if (d.platform !== 'coupang' && d.naver) {
+      const naverSpecific: NaverSpecificInput = {
+        leafCategoryId: d.naver.leafCategoryId, tags: d.naver.tags,
+        exchangeFee: d.naver.exchangeFee, returnFee: d.naver.returnFee,
+      };
+      naverPayload = buildNaverPayload({ ...commonBase, salePrice: d.naverPrice ?? d.salePrice }, naverSpecific, optionsInput);
+    }
 
     return Response.json({
       success: true,
@@ -338,10 +339,14 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // 두 플랫폼 병렬 등록 (한 쪽 실패가 다른 쪽에 영향 없음)
+  // 플랫폼 분기 등록
+  const SKIPPED = { success: false, skipped: true } as const;
+  const runCoupang = d.platform !== 'naver' && !!d.coupang;
+  const runNaver   = d.platform !== 'coupang' && !!d.naver;
+
   const [coupangSettled, naverSettled] = await Promise.allSettled([
-    registerCoupang(d, optionsInput),
-    registerNaver(d, optionsInput),
+    runCoupang ? registerCoupang(d as WithCoupang, optionsInput) : Promise.resolve(SKIPPED),
+    runNaver   ? registerNaver(d as WithNaver, optionsInput)     : Promise.resolve(SKIPPED),
   ]);
 
   const coupangResult: CoupangResult =
@@ -366,15 +371,16 @@ export async function POST(request: NextRequest) {
               : '알 수 없는 오류',
         };
 
-  if (coupangResult.success === false) {
+  if (coupangResult.success === false && !('skipped' in coupangResult)) {
     console.error('[POST /api/listing/both] 쿠팡 등록 실패:', coupangResult.error);
   }
-  if (naverResult.success === false) {
+  if (naverResult.success === false && !('skipped' in naverResult)) {
     console.error('[POST /api/listing/both] 네이버 등록 실패:', naverResult.error);
   }
 
+  const ran = [runCoupang, runNaver].filter(Boolean).length;
   const totalSucceeded = [coupangResult, naverResult].filter((r) => r.success).length;
-  const totalFailed = 2 - totalSucceeded;
+  const totalFailed = ran - totalSucceeded;
 
   // 부분 성공 포함 항상 200 반환
   return Response.json({

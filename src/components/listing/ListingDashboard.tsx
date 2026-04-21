@@ -11,7 +11,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Layers, Sparkles, Loader2 } from 'lucide-react';
+import { Layers, Sparkles, Loader2, ChevronLeft } from 'lucide-react';
 import { useListingStore } from '@/store/useListingStore';
 import { PLATFORMS } from '@/types/listing';
 import type { PlatformId, ListingStatus, ProductListing } from '@/types/listing';
@@ -2355,7 +2355,7 @@ function NaverTabContent() {
 const CONNECTED_PLATFORMS = new Set<PlatformId>(['coupang', 'naver']);
 
 export default function ListingDashboard() {
-  const { sharedDraft, setCurrentStep, listingMode, setListingMode } = useListingStore();
+  const { sharedDraft, setCurrentStep, goPrevStep, listingMode, setListingMode } = useListingStore();
   const { currentStep } = sharedDraft;
 
   // URL ?step= 파라미터로 특정 step 진입 지원 (예: /listing?step=2)
@@ -2513,12 +2513,42 @@ export default function ListingDashboard() {
         {/* 모드 분기 */}
         {listingMode === 'register' ? (
           <>
-            <StepIndicator
-              currentStep={currentStep}
-              onStepClick={(step) => {
-                if (step < currentStep) setCurrentStep(step);
-              }}
-            />
+            {/* StepIndicator + 이전 단계로 버튼 행 */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0' }}>
+              <div style={{ flex: 1 }}>
+                <StepIndicator
+                  currentStep={currentStep}
+                  onStepClick={(step) => {
+                    if (step < currentStep) setCurrentStep(step);
+                  }}
+                />
+              </div>
+              {currentStep > 1 && (
+                <button
+                  type="button"
+                  onClick={goPrevStep}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '8px 16px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    backgroundColor: '#fff',
+                    color: '#71717a',
+                    border: '1px solid #e5e5e5',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    marginLeft: '12px',
+                    flexShrink: 0,
+                    alignSelf: 'flex-start',
+                  }}
+                >
+                  <ChevronLeft size={14} />
+                  이전 단계로
+                </button>
+              )}
+            </div>
             {currentStep === 1 && <Step1SourceSelect />}
             {currentStep === 2 && <Step2Processing />}
             {currentStep === 3 && <Step3ReviewRegister />}

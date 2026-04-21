@@ -21,14 +21,15 @@ const QUICK_PROMPTS = [
 ];
 
 interface AiEditModalProps {
-  imageUrl: string;       // blob URL 또는 공개 URL
-  imageFile: File | null; // 업로드할 File (blob URL인 경우)
+  imageUrl: string;           // blob URL 또는 공개 URL
+  imageFile: File | null;     // 업로드할 File (blob URL인 경우)
   onClose: () => void;
   onSave: (resultUrl: string) => void;
+  initialPrompt?: string;     // 인라인 입력창에서 미리 입력된 프롬프트
 }
 
-export default function AiEditModal({ imageUrl, imageFile, onClose, onSave }: AiEditModalProps) {
-  const [prompt, setPrompt] = useState('');
+export default function AiEditModal({ imageUrl, imageFile, onClose, onSave, initialPrompt }: AiEditModalProps) {
+  const [prompt, setPrompt] = useState(initialPrompt ?? '');
   const [uploading, setUploading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [publicUrl, setPublicUrl] = useState<string | null>(null);

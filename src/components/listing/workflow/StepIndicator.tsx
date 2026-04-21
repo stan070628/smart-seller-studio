@@ -16,7 +16,7 @@ interface StepIndicatorProps {
 const STEPS: { step: 1 | 2 | 3; label: string; sublabel: string }[] = [
   { step: 1, label: '소스 선택', sublabel: '이미지 업로드 / 도매꾹' },
   { step: 2, label: 'AI 처리', sublabel: '상세페이지 자동 생성' },
-  { step: 3, label: '확인 및 등록', sublabel: '미리보기 + 상품 등록' },
+  { step: 3, label: '등록 정보 입력', sublabel: '상세페이지 확인 + 등록' },
 ];
 
 export default function StepIndicator({ currentStep, onStepClick }: StepIndicatorProps) {

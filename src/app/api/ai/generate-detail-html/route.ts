@@ -149,7 +149,8 @@ async function analyzeImages(
 interface ApiSuccessResponse {
   success: true;
   html: string;
-  snippet: string;
+  snippet: string;      // 쿠팡용 780px
+  naverSnippet: string; // 네이버용 860px
 }
 
 interface ApiErrorResponse {
@@ -215,7 +216,7 @@ export async function POST(
     );
   }
 
-  const { images, productName, price } = parseResult.data;
+  const { images, productName } = parseResult.data;
 
   // 이미지 분석
   let imageAnalysis: ProductImageAnalysis;
@@ -237,7 +238,7 @@ export async function POST(
 
   // DetailPageContent 생성
   const client = getAnthropicClient();
-  const userMessage = buildDetailPageUserPrompt(imageAnalysis, productName, price);
+  const userMessage = buildDetailPageUserPrompt(imageAnalysis, productName);
 
   let rawCopyText: string;
   try {
@@ -325,9 +326,11 @@ export async function POST(
   // HTML 생성
   let html: string;
   let snippet: string;
+  let naverSnippet: string;
   try {
-    html = buildDetailPageHtml(content, imagesWithUrls);
-    snippet = buildDetailPageSnippet(content, imagesWithUrls);
+    html = buildDetailPageHtml(content, imagesWithUrls);                         // 780px 미리보기
+    snippet = buildDetailPageSnippet(content, imagesWithUrls, undefined, 780);   // 쿠팡용
+    naverSnippet = buildDetailPageSnippet(content, imagesWithUrls, undefined, 860); // 네이버용
   } catch (error) {
     console.error("[/api/ai/generate-detail-html] HTML 빌드 실패:", error);
     return NextResponse.json(
@@ -342,5 +345,5 @@ export async function POST(
     );
   }
 
-  return NextResponse.json({ success: true, html, snippet }, { status: 200 });
+  return NextResponse.json({ success: true, html, snippet, naverSnippet }, { status: 200 });
 }

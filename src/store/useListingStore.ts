@@ -38,6 +38,7 @@ interface SharedDraft {
   detailImageFiles: File[];   // 상세이미지 File 배열 (Step2 AI 생성 시 rawImageFiles와 합산)
   detailPageFullHtml: string | null;
   detailPageSnippet: string | null;
+  detailPageSnippetNaver: string | null;
   detailPageStatus: 'idle' | 'analyzing' | 'generating' | 'done' | 'error';
   detailPageError: string | null;
   detailPageSkipped: boolean;
@@ -51,6 +52,10 @@ interface SharedDraft {
   coupangCategoryPath: string;
   naverCategoryId: string;
   naverCategoryPath: string;
+
+  // ─── AI 상세페이지 수정 ─────────────────────────────────────────────────────
+  detailPageEditStatus: 'idle' | 'editing' | 'done' | 'error';
+  detailPageEditError: string | null;
 }
 
 const SHARED_DRAFT_INITIAL: SharedDraft = {
@@ -78,6 +83,7 @@ const SHARED_DRAFT_INITIAL: SharedDraft = {
   detailImageFiles: [],
   detailPageFullHtml: null,
   detailPageSnippet: null,
+  detailPageSnippetNaver: null,
   detailPageStatus: 'idle',
   detailPageError: null,
   detailPageSkipped: false,
@@ -89,6 +95,9 @@ const SHARED_DRAFT_INITIAL: SharedDraft = {
   coupangCategoryPath: '',
   naverCategoryId: '',
   naverCategoryPath: '',
+  // AI 상세페이지 수정
+  detailPageEditStatus: 'idle',
+  detailPageEditError: null,
 };
 
 // ─── BothRegistration 타입 ───────────────────────────────────────────────────
@@ -224,15 +233,17 @@ interface ListingStore {
   setCurrentStep: (step: 1 | 2 | 3) => void;
   skipDetailPage: () => void;
   generateDetailPage: () => Promise<void>;
+  editDetailPage: (instruction: string) => Promise<void>;
   resetWorkflow: () => void;
 
   // ─── BothRegistration 액션 ──────────────────────────────────────────────────
   bothRegistration: BothRegistrationState;
   registerBothProducts: (data: {
+    platform?: 'both' | 'coupang' | 'naver';
     name: string;
     salePrice: number;
-    naverPrice?: number;    // 네이버 전용 판매가 (미입력 시 salePrice 사용)
-    coupangPrice?: number;  // 쿠팡 전용 판매가 (미입력 시 salePrice 사용)
+    naverPrice?: number;
+    coupangPrice?: number;
     originalPrice?: number;
     stock?: number;
     thumbnailImages: string[];
@@ -241,13 +252,13 @@ interface ListingStore {
     deliveryCharge?: number;
     deliveryChargeType?: 'FREE' | 'NOT_FREE' | 'CHARGE_RECEIVED';
     returnCharge?: number;
-    coupang: {
+    coupang?: {
       displayCategoryCode: number;
       brand?: string;
       maximumBuyCount?: number;
       maximumBuyForPerson?: number;
     };
-    naver: {
+    naver?: {
       leafCategoryId: string;
       tags?: string[];
       exchangeFee?: number;
@@ -842,7 +853,6 @@ export const useListingStore = create<ListingStore>()(
             body: JSON.stringify({
               images: imagePayloads,
               productName: currentDraft.name || undefined,
-              price: currentDraft.salePrice ? parseInt(currentDraft.salePrice, 10) : undefined,
             }),
           });
 
@@ -859,6 +869,7 @@ export const useListingStore = create<ListingStore>()(
                 ...s.sharedDraft,
                 detailPageFullHtml: data.html,
                 detailPageSnippet: data.snippet ?? null,
+                detailPageSnippetNaver: data.naverSnippet ?? null,
                 detailPageStatus: 'done',
                 description: data.snippet ?? s.sharedDraft.description,
               },
@@ -877,6 +888,66 @@ export const useListingStore = create<ListingStore>()(
             }),
             false,
             'listing/generateDetailPage/error',
+          );
+        }
+      },
+
+      editDetailPage: async (instruction: string) => {
+        const { sharedDraft } = get();
+        // editing 상태로 전환
+        set(
+          (s) => ({
+            sharedDraft: {
+              ...s.sharedDraft,
+              detailPageEditStatus: 'editing',
+              detailPageEditError: null,
+            },
+          }),
+          false,
+          'listing/editDetailPage/start',
+        );
+        try {
+          const res = await fetch('/api/ai/edit-detail-html', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              currentHtml: sharedDraft.detailPageFullHtml,
+              currentSnippet: sharedDraft.detailPageSnippet,
+              instruction,
+              productName: sharedDraft.name,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.html) {
+            throw new Error(data.error ?? '수정에 실패했습니다.');
+          }
+          // 성공: HTML + snippet + description 업데이트
+          set(
+            (s) => ({
+              sharedDraft: {
+                ...s.sharedDraft,
+                detailPageFullHtml: data.html,
+                detailPageSnippet: data.snippet ?? s.sharedDraft.detailPageSnippet,
+                detailPageSnippetNaver: data.naverSnippet ?? s.sharedDraft.detailPageSnippetNaver,
+                description: data.snippet ?? s.sharedDraft.description,
+                detailPageEditStatus: 'done',
+                detailPageEditError: null,
+              },
+            }),
+            false,
+            'listing/editDetailPage/done',
+          );
+        } catch (err) {
+          set(
+            (s) => ({
+              sharedDraft: {
+                ...s.sharedDraft,
+                detailPageEditStatus: 'error',
+                detailPageEditError: err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.',
+              },
+            }),
+            false,
+            'listing/editDetailPage/error',
           );
         }
       },

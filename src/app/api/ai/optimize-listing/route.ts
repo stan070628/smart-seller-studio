@@ -1,10 +1,11 @@
 /**
  * POST /api/ai/optimize-listing
  *
- * 도매꾹 원본 상품명을 쿠팡/네이버용 후킹 상품명으로 변환하고
- * 검색 노출용 태그를 생성합니다.
+ * 1) 네이버 쇼핑 자동완성(인증 불필요)으로 실제 연관 검색어 수집
+ * 2) 네이버 쇼핑 검색으로 상위 판매 상품명 패턴 수집
+ * 3) Claude에게 시장 데이터 + 상세페이지를 함께 넘겨 정성껏 최적화
  *
- * Body: { originalTitle: string; categoryName?: string }
+ * Body: { originalTitle: string; categoryName?: string; detailHtml?: string }
  * Response: { optimizedTitle: string; tags: string[] }
  */
 
@@ -24,39 +25,75 @@ const RequestSchema = z.object({
 });
 
 // ─────────────────────────────────────────
-// 프롬프트
+// 시장 조사: 네이버 자동완성 (인증 불필요)
 // ─────────────────────────────────────────
 
-const SYSTEM_PROMPT = `당신은 쿠팡·네이버 스마트스토어에서 클릭률(CTR)이 높은 상품명과 검색 태그를 만드는 전문가입니다.
-상품 상세페이지 내용이 제공되면 반드시 분석하여 제품의 실제 특징·소재·용도·타겟을 파악하고, 이를 상품명과 태그에 반영하세요.
-
-## 상품명 작성 규칙
-1. 핵심 키워드를 앞에 배치 (검색 알고리즘 최적화)
-2. 고객이 실제 검색하는 단어 사용 (도매꾹 전문 용어 제거)
-3. 상세페이지에서 파악한 제품 특징(소재, 기능, 사이즈, 용도 등)을 반영
-4. 혜택/특장점을 포함 (대용량, 세트, 방수 등)
-5. 50자 내외 (너무 길면 잘림)
-6. 특수문자 최소화, 가독성 우선
-7. 도매꾹/공급사/도매 관련 단어 절대 포함 금지
-
-## 태그 작성 규칙
-1. 고객이 실제로 검색할 키워드 10~15개
-2. 대표 키워드 + 연관 키워드 + 롱테일 키워드 혼합
-3. 상세페이지에서 발견한 소재명, 기능, 용도, 타겟층 키워드 포함
-4. 각 태그는 1~3단어
-5. 중복/유사 태그 제거
-6. 브랜드명이 없으면 브랜드 태그 생략
-
-## 출력 형식
-반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트를 포함하지 마세요.
-\`\`\`json
-{
-  "optimizedTitle": "최적화된 상품명",
-  "tags": ["태그1", "태그2", ...]
+async function fetchNaverAutoComplete(query: string): Promise<string[]> {
+  try {
+    const params = new URLSearchParams({
+      q: query,
+      frm: 'shopping',
+      r_format: 'json',
+      r_enc: 'UTF-8',
+      r_unicode: '0',
+      t_koreng: '1',
+    });
+    const res = await fetch(`https://ac.shopping.naver.com/ac?${params}`, {
+      signal: AbortSignal.timeout(4_000),
+    });
+    if (!res.ok) return [];
+    const data = await res.json() as { ac?: unknown[][][] };
+    const suggestions: string[] = [];
+    if (Array.isArray(data.ac)) {
+      for (const group of data.ac) {
+        if (Array.isArray(group)) {
+          for (const pair of group) {
+            if (Array.isArray(pair) && typeof pair[0] === 'string') {
+              suggestions.push(pair[0]);
+            }
+          }
+        }
+      }
+    }
+    return suggestions.slice(0, 10);
+  } catch {
+    return [];
+  }
 }
-\`\`\``;
 
-/** HTML 태그·특수문자 제거 후 핵심 텍스트만 추출 (최대 3000자) */
+// ─────────────────────────────────────────
+// 시장 조사: 네이버 쇼핑 검색 상위 상품명
+// ─────────────────────────────────────────
+
+async function fetchNaverShoppingTitles(query: string): Promise<string[]> {
+  const clientId = process.env.NAVER_CLIENT_ID;
+  const clientSecret = process.env.NAVER_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return [];
+
+  try {
+    const params = new URLSearchParams({ query, display: '10', sort: 'sim' });
+    const res = await fetch(`https://openapi.naver.com/v1/search/shop.json?${params}`, {
+      headers: {
+        'X-Naver-Client-Id': clientId,
+        'X-Naver-Client-Secret': clientSecret,
+      },
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!res.ok) return [];
+    const data = await res.json() as { items?: { title: string }[] };
+    return (data.items ?? [])
+      .map((item) => item.title.replace(/<[^>]+>/g, '').trim())
+      .filter(Boolean)
+      .slice(0, 10);
+  } catch {
+    return [];
+  }
+}
+
+// ─────────────────────────────────────────
+// HTML → 핵심 텍스트 추출 (최대 3000자)
+// ─────────────────────────────────────────
+
 function extractTextFromHtml(html: string): string {
   return html
     .replace(/<style[\s\S]*?<\/style>/gi, '')
@@ -72,14 +109,61 @@ function extractTextFromHtml(html: string): string {
     .slice(0, 3000);
 }
 
-function buildUserPrompt(title: string, category?: string, detailText?: string): string {
-  let prompt = `원본 상품명: ${title}`;
-  if (category) prompt += `\n카테고리: ${category}`;
-  if (detailText) {
-    prompt += `\n\n--- 상품 상세페이지 내용 ---\n${detailText}\n--- 끝 ---`;
+// ─────────────────────────────────────────
+// 프롬프트
+// ─────────────────────────────────────────
+
+const SYSTEM_PROMPT = `당신은 쿠팡·네이버 스마트스토어 상품등록 전문가입니다.
+실제 시장 데이터(연관 검색어, 상위 판매 상품명)를 기반으로 클릭률이 높고 검색 상위 노출이 잘 되는 상품명과 태그를 만드세요.
+
+## 상품명 작성 규칙
+1. 연관 검색어와 상위 상품명에서 자주 쓰이는 핵심 키워드를 앞에 배치
+2. 고객이 실제 검색하는 단어 사용 (도매꾹·공급사·도매 관련 단어 절대 금지)
+3. 제품 특징(소재, 기능, 사이즈, 용도, 타겟)을 간결하게 포함
+4. 혜택/특장점 포함 (대용량, 세트, 방수 등 있을 때만)
+5. 50자 내외 (너무 길면 검색 결과에서 잘림)
+6. 특수문자 최소화
+7. 상위 상품명의 패턴을 참고하되, 복사하지 말고 더 매력적으로 작성
+
+## 태그 작성 규칙
+1. 연관 검색어 목록에서 관련성 높은 것을 우선 선택
+2. 대표 키워드 + 연관 키워드 + 롱테일 키워드 혼합해서 총 12~15개
+3. 각 태그는 1~3단어 (너무 긴 것은 분리)
+4. 중복/유사 태그 제거
+5. 브랜드명이 없으면 브랜드 태그 생략
+
+## 출력 형식
+반드시 아래 JSON 형식으로만 응답하세요.
+\`\`\`json
+{
+  "optimizedTitle": "최적화된 상품명",
+  "tags": ["태그1", "태그2", ...]
+}
+\`\`\``;
+
+function buildUserPrompt(
+  title: string,
+  autoComplete: string[],
+  marketTitles: string[],
+  category?: string,
+  detailText?: string,
+): string {
+  const lines: string[] = [];
+  lines.push(`[원본 상품명]\n${title}`);
+  if (category) lines.push(`[카테고리]\n${category}`);
+
+  if (autoComplete.length > 0) {
+    lines.push(`[네이버 쇼핑 연관 검색어 — 실제 구매자들이 검색하는 단어]\n${autoComplete.map((s, i) => `${i + 1}. ${s}`).join('\n')}`);
   }
-  prompt += `\n\n위 정보를 바탕으로 쿠팡/네이버용 상품명과 검색 태그를 생성해주세요.`;
-  return prompt;
+  if (marketTitles.length > 0) {
+    lines.push(`[네이버 쇼핑 상위 판매 상품명 — 경쟁 상품 패턴 참고]\n${marketTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}`);
+  }
+  if (detailText) {
+    lines.push(`[상품 상세페이지 내용 — 제품 특징 파악용]\n${detailText}`);
+  }
+
+  lines.push('\n위 시장 데이터를 충분히 반영해서 쿠팡/네이버용 상품명과 검색 태그를 정성껏 생성해주세요.');
+  return lines.join('\n\n');
 }
 
 // ─────────────────────────────────────────
@@ -92,14 +176,10 @@ const ResponseSchema = z.object({
 });
 
 function parseResponse(rawText: string) {
-  // JSON 블록 추출 (```json ... ``` 또는 순수 JSON)
   const jsonMatch = rawText.match(/```json\s*([\s\S]*?)```/) ?? rawText.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    throw new Error('JSON 응답을 찾을 수 없습니다.');
-  }
+  if (!jsonMatch) throw new Error('JSON 응답을 찾을 수 없습니다.');
   const jsonStr = jsonMatch[1] ?? jsonMatch[0];
-  const parsed = JSON.parse(jsonStr);
-  return ResponseSchema.parse(parsed);
+  return ResponseSchema.parse(JSON.parse(jsonStr));
 }
 
 // ─────────────────────────────────────────
@@ -111,6 +191,12 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { originalTitle, categoryName, detailHtml } = RequestSchema.parse(body);
 
+    // 시장 조사 — 네이버 자동완성 + 상위 상품명 병렬 수집
+    const [autoComplete, marketTitles] = await Promise.all([
+      fetchNaverAutoComplete(originalTitle),
+      fetchNaverShoppingTitles(originalTitle),
+    ]);
+
     const detailText = detailHtml ? extractTextFromHtml(detailHtml) : undefined;
 
     const client = getAnthropicClient();
@@ -121,7 +207,10 @@ export async function POST(request: NextRequest) {
           model: 'claude-sonnet-4-6',
           max_tokens: 1024,
           system: SYSTEM_PROMPT,
-          messages: [{ role: 'user', content: buildUserPrompt(originalTitle, categoryName, detailText) }],
+          messages: [{
+            role: 'user',
+            content: buildUserPrompt(originalTitle, autoComplete, marketTitles, categoryName, detailText),
+          }],
         }),
       { label: 'Claude optimizeListing' },
     );
@@ -133,7 +222,14 @@ export async function POST(request: NextRequest) {
 
     const result = parseResponse(rawText);
 
-    return NextResponse.json({ success: true, data: result });
+    return NextResponse.json({
+      success: true,
+      data: result,
+      _meta: {
+        autoCompleteCount: autoComplete.length,
+        marketTitlesCount: marketTitles.length,
+      },
+    });
   } catch (err) {
     console.error('[POST /api/ai/optimize-listing] 오류:', err);
     const message = err instanceof Error ? err.message : '알 수 없는 오류';

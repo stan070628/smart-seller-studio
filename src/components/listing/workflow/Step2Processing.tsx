@@ -6,7 +6,7 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { CheckCircle, AlertTriangle, Loader2, ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { CheckCircle, AlertTriangle, Loader2, ChevronLeft, ChevronRight, Search, ExternalLink, RefreshCw } from 'lucide-react';
 import { useListingStore } from '@/store/useListingStore';
 import { C } from '@/lib/design-tokens';
 
@@ -55,7 +55,7 @@ export default function Step2Processing() {
     skipDetailPage,
   } = useListingStore();
 
-  const { detailPageStatus, detailPageError, detailPageSkipped, rawImageFiles, detailImageFiles } = sharedDraft;
+  const { detailPageStatus, detailPageError, detailPageSkipped, rawImageFiles, detailImageFiles, description } = sharedDraft;
   // 실제 AI에 전달되는 이미지 총 수 (rawImageFiles 우선, 최대 5장)
   const totalImages = Math.min(rawImageFiles.length + detailImageFiles.length, 5);
 
@@ -118,12 +118,10 @@ export default function Step2Processing() {
               </div>
               <div>
                 <p style={{ fontSize: '14px', fontWeight: 600, color: C.text, margin: '0 0 4px' }}>
-                  도매꾹 상세페이지가 준비되었습니다.
+                  상세페이지가 준비되었습니다.
                 </p>
                 <p style={{ fontSize: '12px', color: C.textSub, margin: 0 }}>
-                  도매꾹 상품의 상세페이지를 사용합니다.
-                  <br />
-                  아래 &quot;결과 확인&quot; 버튼으로 다음 단계로 이동하세요.
+                  아래 미리보기를 확인하고 다음 단계로 이동하세요.
                 </p>
               </div>
             </div>
@@ -322,6 +320,86 @@ export default function Step2Processing() {
           </div>
         </div>
       </div>
+
+      {/* ── 미리보기 섹션 ── */}
+      {(detailPageStatus === 'done' || detailPageSkipped) && description && (
+        <div
+          style={{
+            backgroundColor: C.card,
+            border: `1px solid ${C.border}`,
+            borderRadius: '12px',
+            overflow: 'hidden',
+          }}
+        >
+          {/* 헤더 */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '16px 20px',
+              borderBottom: `1px solid ${C.border}`,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span
+                style={{
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  width: '22px', height: '22px', borderRadius: '50%',
+                  backgroundColor: '#16a34a', color: '#fff',
+                  fontSize: '12px', fontWeight: 800,
+                }}
+              >✓</span>
+              <span style={{ fontSize: '14px', fontWeight: 700, color: C.text }}>상세페이지 미리보기</span>
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {/* 재생성 버튼 — 이미지 경로(rawImageFiles > 0)일 때만 */}
+              {rawImageFiles.length > 0 && (
+                <button
+                  onClick={() => {
+                    updateSharedDraft({ detailPageStatus: 'idle', detailPageError: null, description: '' });
+                    generateDetailPage();
+                  }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '5px',
+                    padding: '6px 12px', fontSize: '12px', fontWeight: 600,
+                    backgroundColor: 'rgba(190,0,20,0.07)', color: C.accent,
+                    border: `1px solid rgba(190,0,20,0.2)`, borderRadius: '7px', cursor: 'pointer',
+                  }}
+                >
+                  <RefreshCw size={12} />
+                  재생성
+                </button>
+              )}
+              {/* 전체 미리보기 */}
+              <button
+                onClick={() => {
+                  const blob = new Blob([description], { type: 'text/html; charset=utf-8' });
+                  const url = URL.createObjectURL(blob);
+                  window.open(url, '_blank');
+                }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '5px',
+                  padding: '6px 12px', fontSize: '12px', fontWeight: 600,
+                  backgroundColor: '#fff', color: C.text,
+                  border: `1px solid ${C.border}`, borderRadius: '7px', cursor: 'pointer',
+                }}
+              >
+                <ExternalLink size={12} />
+                전체 미리보기
+              </button>
+            </div>
+          </div>
+
+          {/* iframe */}
+          <iframe
+            srcDoc={description}
+            style={{ width: '100%', height: '360px', border: 'none', display: 'block' }}
+            title="상세페이지 미리보기"
+            sandbox="allow-same-origin"
+          />
+        </div>
+      )}
 
       {/* 하단 버튼 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
