@@ -22,6 +22,7 @@ import StepIndicator from '@/components/listing/workflow/StepIndicator';
 import Step1SourceSelect from '@/components/listing/workflow/Step1SourceSelect';
 import Step2Processing from '@/components/listing/workflow/Step2Processing';
 import Step3ReviewRegister from '@/components/listing/workflow/Step3ReviewRegister';
+import BrowseMode from '@/components/listing/browse/BrowseMode';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 색상 상수
@@ -2354,7 +2355,7 @@ function NaverTabContent() {
 const CONNECTED_PLATFORMS = new Set<PlatformId>(['coupang', 'naver']);
 
 export default function ListingDashboard() {
-  const { sharedDraft, setCurrentStep } = useListingStore();
+  const { sharedDraft, setCurrentStep, listingMode, setListingMode } = useListingStore();
   const { currentStep } = sharedDraft;
 
   // URL ?step= 파라미터로 특정 step 진입 지원 (예: /listing?step=2)
@@ -2463,18 +2464,68 @@ export default function ListingDashboard() {
           margin: '0 auto',
         }}
       >
-        {/* Step Indicator */}
-        <StepIndicator
-          currentStep={currentStep}
-          onStepClick={(step) => {
-            if (step < currentStep) setCurrentStep(step);
+        {/* 모드 토글: 새 상품 등록 / 내 상품 조회 */}
+        <div
+          style={{
+            display: 'flex',
+            gap: '4px',
+            marginBottom: '20px',
+            padding: '4px',
+            backgroundColor: '#f3f3f3',
+            borderRadius: '10px',
+            width: 'fit-content',
           }}
-        />
+        >
+          <button
+            onClick={() => setListingMode('register')}
+            style={{
+              padding: '7px 18px',
+              fontSize: '13px',
+              fontWeight: listingMode === 'register' ? 700 : 500,
+              borderRadius: '7px',
+              border: 'none',
+              cursor: 'pointer',
+              backgroundColor: listingMode === 'register' ? '#fff' : 'transparent',
+              color: listingMode === 'register' ? C.text : C.textSub,
+              boxShadow: listingMode === 'register' ? '0 1px 4px rgba(0,0,0,0.1)' : 'none',
+            }}
+          >
+            + 새 상품 등록
+          </button>
+          <button
+            onClick={() => setListingMode('browse')}
+            style={{
+              padding: '7px 18px',
+              fontSize: '13px',
+              fontWeight: listingMode === 'browse' ? 700 : 500,
+              borderRadius: '7px',
+              border: 'none',
+              cursor: 'pointer',
+              backgroundColor: listingMode === 'browse' ? '#fff' : 'transparent',
+              color: listingMode === 'browse' ? C.text : C.textSub,
+              boxShadow: listingMode === 'browse' ? '0 1px 4px rgba(0,0,0,0.1)' : 'none',
+            }}
+          >
+            📋 내 상품 조회
+          </button>
+        </div>
 
-        {/* Step 라우팅 */}
-        {currentStep === 1 && <Step1SourceSelect />}
-        {currentStep === 2 && <Step2Processing />}
-        {currentStep === 3 && <Step3ReviewRegister />}
+        {/* 모드 분기 */}
+        {listingMode === 'register' ? (
+          <>
+            <StepIndicator
+              currentStep={currentStep}
+              onStepClick={(step) => {
+                if (step < currentStep) setCurrentStep(step);
+              }}
+            />
+            {currentStep === 1 && <Step1SourceSelect />}
+            {currentStep === 2 && <Step2Processing />}
+            {currentStep === 3 && <Step3ReviewRegister />}
+          </>
+        ) : (
+          <BrowseMode />
+        )}
       </main>
     </div>
   );

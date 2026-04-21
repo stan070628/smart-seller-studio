@@ -229,7 +229,7 @@ export function buildDetailPageSnippet(
   images: ImageInput[]
 ): string {
   const sections = buildSections(content, images);
-  return `<div style="max-width:800px;margin:0 auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden;">\n${sections}\n</div>`;
+  return `<div style="max-width:780px;margin:0 auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden;">\n${sections}\n</div>`;
 }
 
 /** 미리보기용 전체 HTML 문서 */
@@ -255,7 +255,7 @@ export function buildDetailPageHtml(
       -webkit-font-smoothing: antialiased;
     }
     .page-wrapper {
-      max-width: 800px;
+      max-width: 780px;
       margin: 0 auto;
       background: #fff;
       overflow: hidden;

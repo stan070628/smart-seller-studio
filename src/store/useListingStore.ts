@@ -165,10 +165,22 @@ interface ListingStore {
   isRegistering: boolean;
   error: string | null;
 
+  // ─── Browse 모드 ─────────────────────────────────────────────────────────
+  listingMode: 'register' | 'browse';
+  setListingMode: (mode: 'register' | 'browse') => void;
+  browsePlatform: 'coupang' | 'naver';
+  setBrowsePlatform: (p: 'coupang' | 'naver') => void;
+  browseFilters: {
+    coupangStatus: string;
+    naverStatus: string;
+    keyword: string;
+  };
+  updateBrowseFilters: (patch: Partial<{ coupangStatus: string; naverStatus: string; keyword: string }>) => void;
+
   // ─── 액션 ─────────────────────────────────────────────────────────────────
   setActivePlatform: (p: PlatformId) => void;
   fetchListings: () => Promise<void>;
-  fetchCoupangProducts: (reset?: boolean) => Promise<void>;
+  fetchCoupangProducts: (reset?: boolean, statusFilter?: string) => Promise<void>;
   fetchCoupangProductDetail: (sellerProductId: number) => Promise<CoupangProductDetail | null>;
   registerCoupangProduct: (data: {
     displayCategoryCode: number;
@@ -260,6 +272,16 @@ export const useListingStore = create<ListingStore>()(
       isRegistering: false,
       error: null,
 
+      // ─── Browse 모드 초기값 ────────────────────────────────────────────────
+      listingMode: 'register',
+      browsePlatform: 'coupang',
+      browseFilters: { coupangStatus: '', naverStatus: '', keyword: '' },
+
+      // ─── Browse 모드 액션 ─────────────────────────────────────────────────
+      setListingMode: (mode) => set({ listingMode: mode }, false, 'listing/setListingMode'),
+      setBrowsePlatform: (p) => set({ browsePlatform: p }, false, 'listing/setBrowsePlatform'),
+      updateBrowseFilters: (patch) => set((s) => ({ browseFilters: { ...s.browseFilters, ...patch } }), false, 'listing/updateBrowseFilters'),
+
       // ─── 활성 플랫폼 변경 ──────────────────────────────────────────────────
       setActivePlatform: (p) => set({ activePlatform: p }, false, 'listing/setActivePlatform'),
 
@@ -325,16 +347,17 @@ export const useListingStore = create<ListingStore>()(
       setEditingProduct: (product) => set({ editingProduct: product }, false, 'listing/setEditingProduct'),
 
       // ─── 쿠팡 상품 목록 조회 ───────────────────────────────────────────────
-      fetchCoupangProducts: async (reset = false) => {
+      fetchCoupangProducts: async (reset = false, statusFilter?: string) => {
         const state = get();
         if (state.isLoading) return;
 
         const nextToken = reset ? '' : (state.coupangNextToken ?? '');
+        const status = statusFilter ?? 'APPROVED';
         set({ isLoading: true, error: null }, false, 'listing/fetchCoupang/start');
 
         try {
           const res = await fetch(
-            `/api/listing/coupang?status=APPROVED&maxPerPage=20&nextToken=${encodeURIComponent(nextToken)}`,
+            `/api/listing/coupang?status=${encodeURIComponent(status)}&maxPerPage=20&nextToken=${encodeURIComponent(nextToken)}`,
           );
           const json = await res.json();
 
