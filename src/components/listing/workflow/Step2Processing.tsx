@@ -55,7 +55,9 @@ export default function Step2Processing() {
     skipDetailPage,
   } = useListingStore();
 
-  const { detailPageStatus, detailPageError, detailPageSkipped, rawImageFiles } = sharedDraft;
+  const { detailPageStatus, detailPageError, detailPageSkipped, rawImageFiles, detailImageFiles } = sharedDraft;
+  // 실제 AI에 전달되는 이미지 총 수 (rawImageFiles 우선, 최대 5장)
+  const totalImages = Math.min(rawImageFiles.length + detailImageFiles.length, 5);
 
   // Step 진입 시 자동 생성 트리거
   useEffect(() => {
@@ -129,6 +131,13 @@ export default function Step2Processing() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ fontSize: '12px', color: C.textSub, marginBottom: '4px' }}>
                 업로드한 사진 {rawImageFiles.length}장을 분석해 HTML 상세페이지를 생성합니다.
+                {totalImages > 0 && (
+                  <p style={{ fontSize: '12px', color: C.textSub, margin: '4px 0 0' }}>
+                    소스 이미지 {rawImageFiles.length}장
+                    {detailImageFiles.length > 0 && ` + 상세이미지 ${detailImageFiles.length}장`}
+                    {` = 총 ${totalImages}장으로 분석합니다`}
+                  </p>
+                )}
               </div>
 
               {/* 진행 단계 목록 */}

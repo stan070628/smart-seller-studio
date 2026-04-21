@@ -7,11 +7,12 @@
  */
 
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { Upload, X, ChevronRight, AlertTriangle, CheckCircle, RefreshCw, Loader2, Calculator } from 'lucide-react';
+import { Upload, X, ChevronRight, AlertTriangle, CheckCircle, RefreshCw, Loader2, Calculator, Wand2 } from 'lucide-react';
 import { useListingStore } from '@/store/useListingStore';
 import { C } from '@/lib/design-tokens';
 import { calcCoupangWing, calcNaver } from '@/lib/calculator/calculate';
 import { getCoupangFeeFromPath } from '@/lib/calculator/fees';
+import AiEditModal from '@/components/listing/AiEditModal';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 스타일 상수
@@ -138,6 +139,14 @@ function loadDomeggookSellerDefaults() {
 // ─────────────────────────────────────────────────────────────────────────────
 // 메인 컴포넌트
 // ─────────────────────────────────────────────────────────────────────────────
+// 상세이미지 타입
+interface DetailImage {
+  id: string;
+  url: string;
+  file: File;
+  name: string;
+}
+
 export default function Step1SourceSelect() {
   const { sharedDraft, updateSharedDraft, goNextStep } = useListingStore();
 
@@ -146,6 +155,24 @@ export default function Step1SourceSelect() {
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const MAX_IMAGES = 5;
+
+  // ─── 대표 썸네일 선택 상태 ──────────────────────────────────────────────────
+  const [selectedThumbnailIdx, setSelectedThumbnailIdx] = useState<number | null>(null);
+
+  // ─── 상세이미지 로컬 상태 ────────────────────────────────────────────────────
+  const [detailImages, setDetailImages] = useState<DetailImage[]>([]);
+  const [detailDragOver, setDetailDragOver] = useState(false);
+  const detailFileInputRef = useRef<HTMLInputElement>(null);
+  const MAX_DETAIL = 10;
+
+  // ─── AI 편집 모달 상태 ──────────────────────────────────────────────────────
+  const [aiEditModal, setAiEditModal] = useState<{
+    open: boolean;
+    imageUrl: string;
+    imageFile: File | null;
+    targetType: 'thumbnail' | 'detail';
+    targetId?: string;
+  } | null>(null);
 
   const processFiles = useCallback(
     (files: FileList | File[]) => {
@@ -373,6 +400,73 @@ export default function Step1SourceSelect() {
               </p>
             </div>
           )}
+
+          {/* 대표 썸네일 설정 섹션 */}
+          {previewImages.length > 0 && (
+            <div style={{ marginTop: '16px', padding: '14px 16px', backgroundColor: '#f7f8fa', borderRadius: '10px', border: `1px solid ${C.border}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: C.text }}>대표 썸네일 설정</span>
+                <span style={{ fontSize: '11px', color: C.textSub, backgroundColor: '#fff', padding: '2px 8px', borderRadius: '100px', border: `1px solid ${C.border}` }}>선택 사항</span>
+              </div>
+              <p style={{ fontSize: '12px', color: C.textSub, margin: '0 0 10px' }}>업로드한 사진 중 1장을 대표이미지로 지정하거나 AI로 편집하세요.</p>
+
+              {/* 이미지 선택 그리드 */}
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                {previewImages.map((img, idx) => (
+                  <div
+                    key={img.id}
+                    onClick={() => {
+                      setSelectedThumbnailIdx(idx);
+                      updateSharedDraft({ thumbnailImages: [img.url] });
+                    }}
+                    style={{
+                      position: 'relative',
+                      width: '60px',
+                      height: '60px',
+                      borderRadius: '8px',
+                      overflow: 'hidden',
+                      cursor: 'pointer',
+                      border: `2px solid ${selectedThumbnailIdx === idx ? C.accent : C.border}`,
+                    }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={img.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    {selectedThumbnailIdx === idx && (
+                      <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(190,0,20,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <span style={{ color: '#fff', fontSize: '16px' }}>✓</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* AI 편집 버튼 */}
+              {selectedThumbnailIdx !== null && (
+                <button
+                  onClick={() => {
+                    const img = previewImages[selectedThumbnailIdx];
+                    setAiEditModal({ open: true, imageUrl: img.url, imageFile: img.file, targetType: 'thumbnail' });
+                  }}
+                  style={{
+                    padding: '6px 14px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    backgroundColor: 'rgba(190,0,20,0.07)',
+                    color: C.accent,
+                    border: `1px solid rgba(190,0,20,0.3)`,
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <Wand2 size={13} />
+                  AI로 썸네일 편집
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* 우측: 도매꾹 카드 */}
@@ -494,6 +588,120 @@ export default function Step1SourceSelect() {
         </div>
       </div>
 
+      {/* 상세이미지 카드 */}
+      <div style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: '12px', padding: '20px 24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: C.text }}>상세 이미지 등록</h3>
+            <p style={{ margin: '4px 0 0', fontSize: '12px', color: C.textSub }}>AI 상세페이지 생성 시 함께 분석됩니다 (미입력 시 소스 이미지만 사용)</p>
+          </div>
+          <span style={{ fontSize: '11px', color: C.textSub, backgroundColor: C.tableHeader, padding: '2px 8px', borderRadius: '100px', border: `1px solid ${C.border}` }}>선택 사항</span>
+        </div>
+
+        {/* 드롭존 */}
+        <div
+          onClick={() => detailFileInputRef.current?.click()}
+          onDragOver={(e) => { e.preventDefault(); setDetailDragOver(true); }}
+          onDragLeave={() => setDetailDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDetailDragOver(false);
+            const files = Array.from(e.dataTransfer.files).filter(f => f.type.match(/^image\/(jpeg|png|webp)$/));
+            const remaining = MAX_DETAIL - detailImages.length;
+            const toAdd: DetailImage[] = files.slice(0, remaining).map(file => ({
+              id: generateId(), url: URL.createObjectURL(file), file, name: file.name,
+            }));
+            setDetailImages(prev => {
+              const updated = [...prev, ...toAdd];
+              updateSharedDraft({ detailImageFiles: updated.map(d => d.file) });
+              return updated;
+            });
+          }}
+          style={{
+            border: `2px dashed ${detailDragOver ? C.accent : C.border}`,
+            borderRadius: '8px',
+            padding: '16px',
+            textAlign: 'center',
+            cursor: 'pointer',
+            backgroundColor: detailDragOver ? 'rgba(190,0,20,0.03)' : '#fafafa',
+            marginBottom: detailImages.length > 0 ? '12px' : 0,
+          }}
+        >
+          <p style={{ margin: 0, fontSize: '13px', color: C.textSub }}>
+            {detailImages.length >= MAX_DETAIL
+              ? `최대 ${MAX_DETAIL}장 업로드 완료`
+              : `클릭하거나 드래그하여 추가 (${detailImages.length}/${MAX_DETAIL}장)`}
+          </p>
+        </div>
+        <input
+          ref={detailFileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          multiple
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            if (!e.target.files) return;
+            const files = Array.from(e.target.files).filter(f => f.type.match(/^image\/(jpeg|png|webp)$/));
+            const remaining = MAX_DETAIL - detailImages.length;
+            const toAdd: DetailImage[] = files.slice(0, remaining).map(file => ({
+              id: generateId(), url: URL.createObjectURL(file), file, name: file.name,
+            }));
+            setDetailImages(prev => {
+              const updated = [...prev, ...toAdd];
+              updateSharedDraft({ detailImageFiles: updated.map(d => d.file) });
+              return updated;
+            });
+            e.target.value = '';
+          }}
+        />
+
+        {/* 상세이미지 그리드 */}
+        {detailImages.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: '8px' }}>
+            {detailImages.map((img, idx) => (
+              <div
+                key={img.id}
+                style={{
+                  position: 'relative',
+                  borderRadius: '8px',
+                  border: `1px solid ${C.border}`,
+                  overflow: 'hidden',
+                  backgroundColor: C.tableHeader,
+                }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={img.url} alt="" style={{ width: '100%', height: '80px', objectFit: 'cover', display: 'block' }} />
+                {/* 순번 배지 */}
+                <div style={{ position: 'absolute', top: '4px', left: '4px', width: '18px', height: '18px', borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <span style={{ fontSize: '10px', color: '#fff', fontWeight: 700 }}>{idx + 1}</span>
+                </div>
+                {/* 삭제 버튼 */}
+                <button
+                  onClick={() => {
+                    URL.revokeObjectURL(img.url);
+                    setDetailImages(prev => {
+                      const updated = prev.filter(d => d.id !== img.id);
+                      updateSharedDraft({ detailImageFiles: updated.map(d => d.file) });
+                      return updated;
+                    });
+                  }}
+                  style={{ position: 'absolute', top: '4px', right: '4px', width: '18px', height: '18px', borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.55)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <X size={10} color="#fff" />
+                </button>
+                {/* AI 편집 버튼 */}
+                <button
+                  onClick={() => setAiEditModal({ open: true, imageUrl: img.url, imageFile: img.file, targetType: 'detail', targetId: img.id })}
+                  style={{ width: '100%', padding: '4px', fontSize: '10px', fontWeight: 600, backgroundColor: 'rgba(190,0,20,0.07)', color: C.accent, border: 'none', cursor: 'pointer', borderTop: `1px solid ${C.border}` }}
+                >
+                  AI 편집
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* 하단: 상품 기본 정보 */}
       <div
         style={{
@@ -572,6 +780,25 @@ export default function Step1SourceSelect() {
           <ChevronRight size={16} />
         </button>
       </div>
+
+      {/* AI 편집 모달 */}
+      {aiEditModal?.open && (
+        <AiEditModal
+          imageUrl={aiEditModal.imageUrl}
+          imageFile={aiEditModal.imageFile}
+          onClose={() => setAiEditModal(null)}
+          onSave={(resultUrl) => {
+            if (aiEditModal.targetType === 'thumbnail') {
+              updateSharedDraft({ thumbnailImages: [resultUrl] });
+            } else if (aiEditModal.targetType === 'detail' && aiEditModal.targetId) {
+              setDetailImages(prev =>
+                prev.map(d => d.id === aiEditModal.targetId ? { ...d, url: resultUrl } : d)
+              );
+            }
+            setAiEditModal(null);
+          }}
+        />
+      )}
     </div>
   );
 }

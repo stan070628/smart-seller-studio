@@ -35,6 +35,7 @@ interface SharedDraft {
 
   // ─── AI 상세페이지 관련 ─────────────────────────────────────────────────────
   rawImageFiles: File[];
+  detailImageFiles: File[];   // 상세이미지 File 배열 (Step2 AI 생성 시 rawImageFiles와 합산)
   detailPageFullHtml: string | null;
   detailPageSnippet: string | null;
   detailPageStatus: 'idle' | 'analyzing' | 'generating' | 'done' | 'error';
@@ -74,6 +75,7 @@ const SHARED_DRAFT_INITIAL: SharedDraft = {
   selectedPlatform: 'both',
   // AI 상세페이지 관련
   rawImageFiles: [],
+  detailImageFiles: [],
   detailPageFullHtml: null,
   detailPageSnippet: null,
   detailPageStatus: 'idle',
@@ -754,7 +756,7 @@ export const useListingStore = create<ListingStore>()(
         if (typeof window === 'undefined') return;
 
         const { sharedDraft } = get();
-        if (sharedDraft.rawImageFiles.length === 0) return;
+        if (sharedDraft.rawImageFiles.length === 0 && sharedDraft.detailImageFiles.length === 0) return;
 
         // 이미지 base64 변환 유틸
         const readFileAsDataURL = (file: File): Promise<string> =>
@@ -803,9 +805,15 @@ export const useListingStore = create<ListingStore>()(
         );
 
         try {
+          // rawImageFiles 우선, 남은 자리에 detailImageFiles 추가 (총 5장 상한)
+          const allFiles = [
+            ...sharedDraft.rawImageFiles,
+            ...sharedDraft.detailImageFiles,
+          ].slice(0, 5);
+
           // 이미지 base64 변환 + 압축
           const imagePayloads = await Promise.all(
-            sharedDraft.rawImageFiles.map(async (file) => {
+            allFiles.map(async (file) => {
               const dataUrl = await readFileAsDataURL(file);
               const compressed = await compressImage(dataUrl);
               return {
