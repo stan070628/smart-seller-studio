@@ -19,12 +19,14 @@ const C = {
 interface KeywordEntry {
   id: string;
   keyword: string;
-  searchVolume: number;    // 월 검색량
-  competitorCount: number; // 경쟁 상품 수
-  topReviewCount: number;  // 상위 상품 리뷰 수
-  domeggookNos: string;    // 매칭 도매꾹 상품번호 (쉼표 구분)
+  searchVolume: number;
+  competitorCount: number;
+  topReviewCount: number;
+  domeggookNos: string;
   memo: string;
-  createdAt: string;       // ISO 날짜
+  createdAt: string;
+  aiPass: boolean | null;
+  aiReasoning: string | null;
 }
 
 interface SuggestedKeyword {
@@ -32,21 +34,8 @@ interface SuggestedKeyword {
   reason: string;
   searchVolume: number | null;
   competitorCount: number | null;
-}
-
-type PassStatus = 'pass' | 'fail' | 'unknown';
-
-function judgeKeyword(entry: KeywordEntry): PassStatus {
-  if (!entry.searchVolume && !entry.competitorCount && !entry.topReviewCount) return 'unknown';
-  const volumeOk = entry.searchVolume >= 3000 && entry.searchVolume <= 30000;
-  const competitorOk = entry.competitorCount < 500;
-  const reviewOk = entry.topReviewCount < 50;
-  return volumeOk && competitorOk && reviewOk ? 'pass' : 'fail';
-}
-
-function isSuggestedPass(s: SuggestedKeyword): boolean {
-  if (s.searchVolume === null || s.competitorCount === null) return false;
-  return s.searchVolume >= 3000 && s.searchVolume <= 30000 && s.competitorCount < 500;
+  pass: boolean | null;
+  reasoning: string | null;
 }
 
 const STORAGE_KEY = 'plan_keywords';
@@ -101,23 +90,59 @@ export default function KeywordTrackerTab() {
     setEntries(loadKeywords());
   }, []);
 
-  function handleAdd() {
+  async function handleAdd() {
     if (!form.keyword.trim()) return;
+    const sv = Number(form.searchVolume) || 0;
+    const cc = Number(form.competitorCount) || 0;
+    const rv = Number(form.topReviewCount) || 0;
     const newEntry: KeywordEntry = {
       id: crypto.randomUUID(),
       keyword: form.keyword.trim(),
-      searchVolume: Number(form.searchVolume) || 0,
-      competitorCount: Number(form.competitorCount) || 0,
-      topReviewCount: Number(form.topReviewCount) || 0,
+      searchVolume: sv,
+      competitorCount: cc,
+      topReviewCount: rv,
       domeggookNos: form.domeggookNos.trim(),
       memo: form.memo.trim(),
       createdAt: new Date().toISOString(),
+      aiPass: null,
+      aiReasoning: null,
     };
     const updated = [newEntry, ...entries];
     setEntries(updated);
     saveKeywords(updated);
     setForm({ ...EMPTY_FORM });
     setShowForm(false);
+
+    if (sv > 0 && cc > 0) {
+      try {
+        const res = await fetch('/api/ai/keyword-evaluate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            keyword: newEntry.keyword,
+            searchVolume: sv,
+            competitorCount: cc,
+            ...(rv > 0 ? { topReviewCount: rv } : {}),
+          }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success) {
+            setEntries((prev) => {
+              const next = prev.map((e) =>
+                e.id === newEntry.id
+                  ? { ...e, aiPass: json.data.pass, aiReasoning: json.data.reasoning }
+                  : e,
+              );
+              saveKeywords(next);
+              return next;
+            });
+          }
+        }
+      } catch {
+        // aiPass stays null
+      }
+    }
   }
 
   async function handleSuggest() {
@@ -136,10 +161,8 @@ export default function KeywordTrackerTab() {
       if (!Array.isArray(json.data?.keywords)) throw new Error('잘못된 응답 형식입니다');
       const all = json.data.keywords as SuggestedKeyword[];
       const sorted = [...all].sort((a, b) => {
-        const aPass = isSuggestedPass(a);
-        const bPass = isSuggestedPass(b);
-        if (aPass && !bPass) return -1;
-        if (!aPass && bPass) return 1;
+        if (a.pass === true && b.pass !== true) return -1;
+        if (a.pass !== true && b.pass === true) return 1;
         return 0;
       });
       setSuggestResults(sorted);
@@ -157,12 +180,14 @@ export default function KeywordTrackerTab() {
       .map((s) => ({
         id: crypto.randomUUID(),
         keyword: s.keyword,
-        searchVolume: 0,
-        competitorCount: 0,
+        searchVolume: s.searchVolume ?? 0,
+        competitorCount: s.competitorCount ?? 0,
         topReviewCount: 0,
         domeggookNos: '',
         memo: s.reason,
         createdAt: new Date().toISOString(),
+        aiPass: s.pass ?? null,
+        aiReasoning: s.reasoning ?? null,
       }));
     if (toAdd.length === 0) return;
     const updated = [...toAdd, ...entries];
@@ -189,15 +214,15 @@ export default function KeywordTrackerTab() {
     saveKeywords(updated);
   }
 
-  const { passCount, failCount } = useMemo(() =>
+  const { passCount, failCount, nullCount } = useMemo(() =>
     entries.reduce(
       (acc, e) => {
-        const s = judgeKeyword(e);
-        if (s === 'pass') acc.passCount++;
-        else if (s === 'fail') acc.failCount++;
+        if (e.aiPass === true) acc.passCount++;
+        else if (e.aiPass === false) acc.failCount++;
+        else acc.nullCount++;
         return acc;
       },
-      { passCount: 0, failCount: 0 }
+      { passCount: 0, failCount: 0, nullCount: 0 }
     ),
     [entries]
   );
@@ -209,7 +234,7 @@ export default function KeywordTrackerTab() {
         <div>
           <h2 style={{ fontSize: 16, fontWeight: 700, color: C.text, margin: 0 }}>키워드 트래커</h2>
           <p style={{ fontSize: 12, color: C.textSub, margin: '4px 0 0' }}>
-            총 {entries.length}개 · 통과 {passCount}개 · 탈락 {failCount}개
+            총 {entries.length}개 · 통과 {passCount}개 · 탈락 {failCount}개 · 미평가 {nullCount}개
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -238,17 +263,6 @@ export default function KeywordTrackerTab() {
         </div>
       </div>
 
-      {/* 판정 기준 안내 */}
-      <div style={{
-        background: 'rgba(190,0,20,0.05)',
-        border: `1px solid rgba(190,0,20,0.15)`,
-        borderRadius: 8, padding: '10px 16px', marginBottom: 16, fontSize: 12, color: C.textSub,
-      }}>
-        ✅ 통과 조건: 월 검색량 <strong style={{ color: C.text }}>3,000~30,000</strong> &nbsp;·&nbsp;
-        경쟁 <strong style={{ color: C.text }}>500개 미만</strong> &nbsp;·&nbsp;
-        상위 리뷰 <strong style={{ color: C.text }}>50개 미만</strong> — 3개 모두 충족
-      </div>
-
       {/* AI 추천 모달 */}
       {showSuggestModal && (
         <div
@@ -267,12 +281,11 @@ export default function KeywordTrackerTab() {
             display: 'flex', flexDirection: 'column', gap: 16,
             boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
           }}>
-            {/* 모달 헤더 */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, margin: 0 }}>✨ AI 키워드 추천</h3>
                 <p style={{ fontSize: 12, color: C.textSub, margin: '4px 0 0' }}>
-                  Claude가 셀러 전략 기준(검색량·경쟁·리뷰)에 맞는 키워드 15개를 제안합니다
+                  Claude가 카테고리 맥락을 분석해 키워드 15개를 제안합니다
                 </p>
               </div>
               <button
@@ -281,7 +294,6 @@ export default function KeywordTrackerTab() {
               >×</button>
             </div>
 
-            {/* 힌트 입력 */}
             <div>
               <label style={{ fontSize: 12, fontWeight: 600, color: C.textSub, display: 'block', marginBottom: 6 }}>
                 카테고리 / 시즌 힌트 <span style={{ fontWeight: 400 }}>(선택 — 비워두면 AI가 자유롭게 추천)</span>
@@ -315,7 +327,6 @@ export default function KeywordTrackerTab() {
               </div>
             </div>
 
-            {/* 오류 메시지 */}
             {suggestError && (
               <div style={{
                 padding: '10px 14px', borderRadius: 8, fontSize: 13,
@@ -326,14 +337,12 @@ export default function KeywordTrackerTab() {
               </div>
             )}
 
-            {/* 로딩 */}
             {suggestLoading && (
               <div style={{ textAlign: 'center', padding: '32px 0', color: C.textSub, fontSize: 13 }}>
                 Claude 분석 + 네이버 검색량 조회 중...
               </div>
             )}
 
-            {/* 추천 결과 */}
             {!suggestLoading && suggestResults.length > 0 && (
               <>
                 <div style={{ overflowY: 'auto', maxHeight: 340, border: `1px solid ${C.border}`, borderRadius: 10 }}>
@@ -346,6 +355,7 @@ export default function KeywordTrackerTab() {
                         borderBottom: i < suggestResults.length - 1 ? `1px solid ${C.border}` : 'none',
                         cursor: 'pointer',
                         background: selectedIds.has(i) ? 'rgba(124,58,237,0.04)' : '#fff',
+                        opacity: s.pass === false ? 0.5 : 1,
                       }}
                     >
                       <input
@@ -357,13 +367,13 @@ export default function KeywordTrackerTab() {
                       <div style={{ flex: 1 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{s.keyword}</span>
-                          {s.searchVolume !== null && s.competitorCount !== null && (
+                          {s.pass !== null && (
                             <span style={{
                               fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20,
-                              background: isSuggestedPass(s) ? C.greenBg : C.redBg,
-                              color: isSuggestedPass(s) ? C.green : C.red,
+                              background: s.pass ? C.greenBg : C.redBg,
+                              color: s.pass ? C.green : C.red,
                             }}>
-                              {isSuggestedPass(s) ? '✅ 통과' : '❌ 탈락'}
+                              {s.pass ? '✅ 통과' : '❌ 탈락'}
                             </span>
                           )}
                         </div>
@@ -372,14 +382,21 @@ export default function KeywordTrackerTab() {
                             검색량 {s.searchVolume.toLocaleString()} · 경쟁 {s.competitorCount.toLocaleString()}개
                           </div>
                         )}
-                        <div style={{ fontSize: 11, color: C.textSub, marginTop: 2 }}>{s.reason}</div>
+                        {s.reasoning && (
+                          <div style={{ fontSize: 11, color: C.textSub, marginTop: 2, fontStyle: 'italic' }}>
+                            {s.reasoning}
+                          </div>
+                        )}
+                        {!s.reasoning && (
+                          <div style={{ fontSize: 11, color: C.textSub, marginTop: 2 }}>{s.reason}</div>
+                        )}
                       </div>
                     </label>
                   ))}
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: 12, color: C.textSub }}>
-                    {selectedIds.size}개 선택됨 · 숫자 필드는 아이템스카우트에서 직접 채우세요
+                    {selectedIds.size}개 선택됨
                   </span>
                   <button
                     onClick={handleAddSuggested}
@@ -397,7 +414,6 @@ export default function KeywordTrackerTab() {
               </>
             )}
 
-            {/* 초기 안내 */}
             {!suggestLoading && suggestResults.length === 0 && (
               <div style={{ textAlign: 'center', padding: '24px 0', color: C.textSub, fontSize: 13 }}>
                 힌트를 입력하거나 그냥 &ldquo;추천 받기&rdquo;를 눌러보세요
@@ -508,40 +524,45 @@ export default function KeywordTrackerTab() {
               </tr>
             </thead>
             <tbody>
-              {entries.map((entry, idx) => {
-                const status = judgeKeyword(entry);
-                return (
-                  <tr key={entry.id} style={{ background: idx % 2 === 0 ? '#fff' : C.bg, borderTop: `1px solid ${C.border}` }}>
-                    <td style={{ padding: '10px 16px', textAlign: 'center' }}>
-                      {status === 'pass' && <CheckCircle size={16} color={C.green} />}
-                      {status === 'fail' && <XCircle size={16} color={C.red} />}
-                      {status === 'unknown' && <span style={{ color: C.textSub, fontSize: 12 }}>—</span>}
-                    </td>
-                    <td style={{ padding: '10px 16px', fontWeight: 600, color: C.text }}>{entry.keyword}</td>
-                    <td style={{ padding: '10px 16px', textAlign: 'right', color: entry.searchVolume === 0 ? C.textSub : (entry.searchVolume >= 3000 && entry.searchVolume <= 30000 ? C.green : C.red) }}>
-                      {entry.searchVolume ? entry.searchVolume.toLocaleString() : '—'}
-                    </td>
-                    <td style={{ padding: '10px 16px', textAlign: 'right', color: entry.competitorCount === 0 ? C.textSub : (entry.competitorCount < 500 ? C.green : C.red) }}>
-                      {entry.competitorCount ? entry.competitorCount.toLocaleString() : '—'}
-                    </td>
-                    <td style={{ padding: '10px 16px', textAlign: 'right', color: entry.topReviewCount === 0 ? C.textSub : (entry.topReviewCount < 50 ? C.green : C.red) }}>
-                      {entry.topReviewCount ? entry.topReviewCount.toLocaleString() : '—'}
-                    </td>
-                    <td style={{ padding: '10px 16px', color: C.textSub, fontSize: 12, fontFamily: 'monospace' }}>
-                      {entry.domeggookNos || '—'}
-                    </td>
-                    <td style={{ padding: '10px 16px', color: C.textSub, fontSize: 12 }}>{entry.memo || '—'}</td>
-                    <td style={{ padding: '10px 16px' }}>
-                      <button
-                        onClick={() => handleDelete(entry.id)}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: C.textSub }}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
+              {entries.map((entry, idx) => (
+                <tr key={entry.id} style={{ background: idx % 2 === 0 ? '#fff' : C.bg, borderTop: `1px solid ${C.border}` }}>
+                  <td style={{ padding: '10px 16px', textAlign: 'center' }}>
+                    {entry.aiPass === true && (
+                      <span title={entry.aiReasoning ?? undefined} style={{ cursor: entry.aiReasoning ? 'help' : 'default' }}>
+                        <CheckCircle size={16} color={C.green} />
+                      </span>
+                    )}
+                    {entry.aiPass === false && (
+                      <span title={entry.aiReasoning ?? undefined} style={{ cursor: entry.aiReasoning ? 'help' : 'default' }}>
+                        <XCircle size={16} color={C.red} />
+                      </span>
+                    )}
+                    {entry.aiPass === null && <span style={{ color: C.textSub, fontSize: 12 }}>—</span>}
+                  </td>
+                  <td style={{ padding: '10px 16px', fontWeight: 600, color: C.text }}>{entry.keyword}</td>
+                  <td style={{ padding: '10px 16px', textAlign: 'right', color: entry.searchVolume === 0 ? C.textSub : C.text }}>
+                    {entry.searchVolume ? entry.searchVolume.toLocaleString() : '—'}
+                  </td>
+                  <td style={{ padding: '10px 16px', textAlign: 'right', color: entry.competitorCount === 0 ? C.textSub : C.text }}>
+                    {entry.competitorCount ? entry.competitorCount.toLocaleString() : '—'}
+                  </td>
+                  <td style={{ padding: '10px 16px', textAlign: 'right', color: entry.topReviewCount === 0 ? C.textSub : C.text }}>
+                    {entry.topReviewCount ? entry.topReviewCount.toLocaleString() : '—'}
+                  </td>
+                  <td style={{ padding: '10px 16px', color: C.textSub, fontSize: 12, fontFamily: 'monospace' }}>
+                    {entry.domeggookNos || '—'}
+                  </td>
+                  <td style={{ padding: '10px 16px', color: C.textSub, fontSize: 12 }}>{entry.memo || '—'}</td>
+                  <td style={{ padding: '10px 16px' }}>
+                    <button
+                      onClick={() => handleDelete(entry.id)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: C.textSub }}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
