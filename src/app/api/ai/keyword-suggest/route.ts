@@ -161,12 +161,16 @@ export async function POST(
   if (toEvaluate.length > 0) {
     await Promise.all(
       toEvaluate.map(async (k) => {
-        const result = await evaluateKeyword({
-          keyword: k.keyword,
-          searchVolume: k.searchVolume!,
-          competitorCount: k.competitorCount!,
-        });
-        evaluationMap.set(k.keyword, result);
+        try {
+          const result = await evaluateKeyword({
+            keyword: k.keyword,
+            searchVolume: k.searchVolume!,
+            competitorCount: k.competitorCount!,
+          });
+          evaluationMap.set(k.keyword, result);
+        } catch {
+          // graceful degradation: evaluation unavailable for this keyword
+        }
       }),
     );
   }

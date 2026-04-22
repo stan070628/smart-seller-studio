@@ -57,23 +57,34 @@ describe('POST /api/ai/keyword-suggest (evaluate 통합)', () => {
     const json = await res.json();
     expect(json.success).toBe(true);
     const kw = json.data.keywords[0];
-    expect(kw).toHaveProperty('pass');
-    expect(kw).toHaveProperty('reasoning');
+    expect(kw.pass).toBe(true);
+    expect(typeof kw.reasoning).toBe('string');
+    expect(kw.reasoning.length).toBeGreaterThan(0);
   });
 
-  it('searchVolume이 있는 키워드는 evaluateKeyword가 호출된다', async () => {
-    const { evaluateKeyword } = await import('@/app/api/ai/keyword-evaluate/route');
-    vi.mocked(evaluateKeyword).mockClear();
+  it('searchVolume이 있는 키워드는 pass가 응답에 포함된다', async () => {
     const { POST } = await import('@/app/api/ai/keyword-suggest/route');
-    await POST(makeRequest({}));
-    expect(vi.mocked(evaluateKeyword)).toHaveBeenCalledWith(
-      expect.objectContaining({ keyword: '방수 백팩', searchVolume: 11700, competitorCount: 312 }),
-    );
+    const res = await POST(makeRequest({}));
+    const json = await res.json();
+    const kw = json.data.keywords.find((k: { keyword: string }) => k.keyword === '방수 백팩');
+    expect(kw.pass).toBe(true);
+    expect(kw.reasoning).toBe('검색량 대비 경쟁 낮음');
   });
 
   it('Naver API 실패 시 pass가 null이다', async () => {
     const { getKeywordStats } = await import('@/lib/naver-ad');
     vi.mocked(getKeywordStats).mockRejectedValueOnce(new Error('Naver down'));
+    const { POST } = await import('@/app/api/ai/keyword-suggest/route');
+    const res = await POST(makeRequest({}));
+    const json = await res.json();
+    expect(json.success).toBe(true);
+    expect(json.data.keywords[0].pass).toBeNull();
+    expect(json.data.keywords[0].reasoning).toBeNull();
+  });
+
+  it('evaluateKeyword가 예외를 throw해도 pass: null로 graceful degradation된다', async () => {
+    const { evaluateKeyword } = await import('@/app/api/ai/keyword-evaluate/route');
+    vi.mocked(evaluateKeyword).mockRejectedValueOnce(new Error('evaluate error'));
     const { POST } = await import('@/app/api/ai/keyword-suggest/route');
     const res = await POST(makeRequest({}));
     const json = await res.json();
