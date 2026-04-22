@@ -7,6 +7,9 @@ import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import type { SalesAnalysisItem } from '@/types/sourcing';
 
+// 검색 debounce 타이머 — 텍스트 입력 시 과도한 API 호출 방지
+let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
 export interface CollectingProgress {
   phase: 'fetch' | 'snapshot' | 'market_price';
   label: string;
@@ -333,6 +336,10 @@ export const useSourcingStore = create<SourcingStore>()(
 
       setSearchQuery: (q: string) => {
         set({ searchQuery: q, page: 1 }, false, 'sourcing/setSearchQuery');
+        if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = setTimeout(() => {
+          get().fetchAnalysis();
+        }, 300);
       },
 
       setMoqFilter: (moq: number | null) => {
