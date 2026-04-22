@@ -14,9 +14,9 @@ interface ApiErrorResponse {
 
 export async function POST(
   request: NextRequest,
-): Promise<NextResponse<ApiSuccessResponse | ApiErrorResponse>> {
+): Promise<NextResponse<ApiSuccessResponse | ApiErrorResponse> | Response> {
   const authResult = await requireAuth(request);
-  if (authResult instanceof Response) return authResult as never;
+  if (authResult instanceof Response) return authResult;
 
   let body: unknown;
   try {

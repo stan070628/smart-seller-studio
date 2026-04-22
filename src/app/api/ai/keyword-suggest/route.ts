@@ -99,17 +99,25 @@ export async function POST(
 
   // 1단계: Claude 키워드 생성
   const client = getAnthropicClient();
-  const response = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 2048,
-    system: SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: buildUserPrompt(hint) }],
-  });
-
-  const rawText = response.content
-    .filter((b): b is TextBlock => b.type === 'text')
-    .map((b) => b.text)
-    .join('');
+  let rawText: string;
+  try {
+    const response = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2048,
+      system: SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: buildUserPrompt(hint) }],
+    });
+    rawText = response.content
+      .filter((b): b is TextBlock => b.type === 'text')
+      .map((b) => b.text)
+      .join('');
+  } catch (error) {
+    console.error('[keyword-suggest] Claude API error', error);
+    return NextResponse.json(
+      { success: false, error: '키워드 추천 중 오류가 발생했습니다.' },
+      { status: 502 },
+    );
+  }
 
   const baseKeywords = parseKeywordSuggestResponse(rawText);
   if (baseKeywords.length === 0) {
