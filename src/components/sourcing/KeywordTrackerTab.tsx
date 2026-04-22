@@ -93,7 +93,6 @@ export default function KeywordTrackerTab() {
   const [showSuggestModal, setShowSuggestModal] = useState(false);
   const [suggestHint, setSuggestHint] = useState('');
   const [suggestLoading, setSuggestLoading] = useState(false);
-  const [suggestPhase, setSuggestPhase] = useState<'idle' | 'claude' | 'naver' | 'done'>('idle');
   const [suggestResults, setSuggestResults] = useState<SuggestedKeyword[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [suggestError, setSuggestError] = useState<string | null>(null);
@@ -123,11 +122,9 @@ export default function KeywordTrackerTab() {
 
   async function handleSuggest() {
     setSuggestLoading(true);
-    setSuggestPhase('claude');
     setSuggestResults([]);
     setSuggestError(null);
     try {
-      setSuggestPhase('naver');
       const res = await fetch('/api/ai/keyword-suggest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -147,10 +144,8 @@ export default function KeywordTrackerTab() {
       });
       setSuggestResults(sorted);
       setSelectedIds(new Set(sorted.map((_, i) => i)));
-      setSuggestPhase('done');
     } catch (err) {
       setSuggestError(err instanceof Error ? err.message : '키워드 추천 중 오류가 발생했습니다');
-      setSuggestPhase('idle');
     } finally {
       setSuggestLoading(false);
     }
@@ -334,7 +329,7 @@ export default function KeywordTrackerTab() {
             {/* 로딩 */}
             {suggestLoading && (
               <div style={{ textAlign: 'center', padding: '32px 0', color: C.textSub, fontSize: 13 }}>
-                {suggestPhase === 'claude' ? 'Claude가 키워드를 분석하는 중...' : '네이버에서 검색량 조회 중...'}
+                Claude 분석 + 네이버 검색량 조회 중...
               </div>
             )}
 
