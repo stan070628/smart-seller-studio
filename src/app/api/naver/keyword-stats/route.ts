@@ -34,6 +34,9 @@ export async function POST(
   }
 
   const validKeywords = keywords.filter((k): k is string => typeof k === 'string' && k.trim().length > 0);
+  if (validKeywords.length === 0) {
+    return NextResponse.json({ success: false, error: '유효한 키워드가 없습니다.' }, { status: 400 });
+  }
 
   try {
     const stats = await getKeywordStats(validKeywords);
