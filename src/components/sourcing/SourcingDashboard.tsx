@@ -24,6 +24,9 @@ import { useNicheStore } from '@/store/useNicheStore';
 // 도매꾹 v2 탭
 import DomeggookTab from '@/components/sourcing/DomeggookTab';
 
+// 키워드 탭
+import KeywordTrackerTab from '@/components/sourcing/KeywordTrackerTab';
+
 // 마진계산기 컴포넌트 (서브탭용)
 import CoupangTab from '@/components/calculator/tabs/CoupangTab';
 import NaverTab from '@/components/calculator/tabs/NaverTab';
@@ -40,7 +43,7 @@ import CompareMode from '@/components/calculator/CompareMode';
 // 메인 컴포넌트
 // ─────────────────────────────────────────────────────────────────────────────
 export default function SourcingDashboard() {
-  const [sourcingSubTab, setSourcingSubTab] = useState<'tracking' | 'calculator' | 'niche' | 'costco'>('niche');
+  const [sourcingSubTab, setSourcingSubTab] = useState<'tracking' | 'calculator' | 'niche' | 'costco' | 'keywords'>('niche');
 
   // 니치소싱 읽지 않은 알림 수
   const unreadAlertCount = useNicheStore((s) => s.unreadAlertCount);
@@ -144,6 +147,7 @@ export default function SourcingDashboard() {
           { id: 'tracking' as const, label: '도매꾹', icon: <RefreshCw size={13} /> },
           { id: 'costco' as const, label: '코스트코', icon: <span style={{ fontSize: '13px' }}>🏬</span> },
           { id: 'calculator' as const, label: '마진계산기', icon: <Calculator size={13} /> },
+          { id: 'keywords' as const, label: '키워드 목록', icon: <Search size={13} /> },
         ]).map((tab) => (
           <button
             key={tab.id}
@@ -182,6 +186,9 @@ export default function SourcingDashboard() {
 
       {/* 도매꾹 v2 서브탭 */}
       {sourcingSubTab === 'tracking' && <DomeggookTab />}
+
+      {/* 키워드 목록 서브탭 콘텐츠 */}
+      {sourcingSubTab === 'keywords' && <KeywordTrackerTab />}
 
       {/* 마진계산기 모달 (레거시 — DomeggookTab 내부로 이전됨)                  */}
       {/* ─────────────────────────────────────────���────────────────────────── */}
