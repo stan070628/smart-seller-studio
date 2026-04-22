@@ -3,6 +3,7 @@ import { getAnthropicClient } from '@/lib/ai/claude';
 import { checkRateLimit, getRateLimitKey, RATE_LIMITS } from '@/lib/rate-limit';
 import { requireAuth } from '@/lib/supabase/auth';
 import { getKeywordStats } from '@/lib/naver-ad';
+import { evaluateKeyword } from '@/app/api/ai/keyword-evaluate/route';
 import type { TextBlock } from '@anthropic-ai/sdk/resources/messages';
 
 // ─── 타입 ────────────────────────────────────────────────────────────────────
@@ -12,6 +13,8 @@ export interface SuggestedKeyword {
   reason: string;
   searchVolume: number | null;
   competitorCount: number | null;
+  pass: boolean | null;
+  reasoning: string | null;
 }
 
 interface ApiSuccessResponse {
@@ -145,8 +148,37 @@ export async function POST(
       reason: k.reason,
       searchVolume: stats?.searchVolume ?? null,
       competitorCount: stats?.competitorCount ?? null,
+      pass: null,
+      reasoning: null,
     };
   });
 
-  return NextResponse.json({ success: true, data: { keywords } });
+  // 3단계: AI 평가 (searchVolume + competitorCount 있는 키워드만)
+  const evaluationMap = new Map<string, { pass: boolean | null; reasoning: string | null }>();
+  const toEvaluate = keywords.filter(
+    (k) => k.searchVolume !== null && k.competitorCount !== null,
+  );
+  if (toEvaluate.length > 0) {
+    await Promise.all(
+      toEvaluate.map(async (k) => {
+        const result = await evaluateKeyword({
+          keyword: k.keyword,
+          searchVolume: k.searchVolume!,
+          competitorCount: k.competitorCount!,
+        });
+        evaluationMap.set(k.keyword, result);
+      }),
+    );
+  }
+
+  const enrichedKeywords: SuggestedKeyword[] = keywords.map((k) => {
+    const ev = evaluationMap.get(k.keyword);
+    return {
+      ...k,
+      pass: ev?.pass ?? null,
+      reasoning: ev?.reasoning ?? null,
+    };
+  });
+
+  return NextResponse.json({ success: true, data: { keywords: enrichedKeywords } });
 }
