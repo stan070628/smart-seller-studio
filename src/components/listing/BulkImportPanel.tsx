@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Play, Square, Trash2 } from 'lucide-react';
 import { useImportQueue } from '@/hooks/useImportQueue';
+import { useListingStore } from '@/store/useListingStore';
 import DomeggookPreparePanel from '@/components/listing/DomeggookPreparePanel';
 import type { BulkImportItem, ImportItemStatus } from '@/types/bulkImport';
 
@@ -47,6 +48,17 @@ export default function BulkImportPanel() {
     readyCount,
     failedCount,
   } = useImportQueue();
+
+  const { pendingBulkItems, clearPendingBulkItems } = useListingStore();
+
+  useEffect(() => {
+    if (pendingBulkItems.length > 0) {
+      const count = initQueue(pendingBulkItems.join('\n'));
+      clearPendingBulkItems();
+      if (count > 0) setInitialized(true);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleInit() {
     const count = initQueue(rawInput);
