@@ -11,6 +11,8 @@ const C = {
   red: '#dc2626',
   redBg: 'rgba(220,38,38,0.07)',
   yellow: '#d97706',
+  purple: '#7c3aed',
+  purpleDisabled: '#a78bfa',
 };
 
 // ─── 타입 ────────────────────────────────────────────────────────────────────
@@ -86,6 +88,7 @@ export default function KeywordTrackerTab() {
   const [suggestLoading, setSuggestLoading] = useState(false);
   const [suggestResults, setSuggestResults] = useState<SuggestedKeyword[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [suggestError, setSuggestError] = useState<string | null>(null);
 
   useEffect(() => {
     setEntries(loadKeywords());
@@ -113,20 +116,22 @@ export default function KeywordTrackerTab() {
   async function handleSuggest() {
     setSuggestLoading(true);
     setSuggestResults([]);
+    setSuggestError(null);
     try {
       const res = await fetch('/api/ai/keyword-suggest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hint: suggestHint.trim() || undefined }),
       });
+      if (!res.ok) throw new Error(`서버 오류 (${res.status})`);
       const json = await res.json();
-      if (json.success) {
-        const all = json.data.keywords as SuggestedKeyword[];
-        setSuggestResults(all);
-        setSelectedIds(new Set(all.map((_, i) => i)));
-      }
-    } catch {
-      // 빈 결과 유지 — 사용자가 재시도 가능
+      if (!json.success) throw new Error(json.error ?? '알 수 없는 오류가 발생했습니다');
+      if (!Array.isArray(json.data?.keywords)) throw new Error('잘못된 응답 형식입니다');
+      const all = json.data.keywords as { keyword: string; reason: string }[];
+      setSuggestResults(all);
+      setSelectedIds(new Set(all.map((_, i) => i)));
+    } catch (err) {
+      setSuggestError(err instanceof Error ? err.message : '키워드 추천 중 오류가 발생했습니다');
     } finally {
       setSuggestLoading(false);
     }
@@ -199,7 +204,7 @@ export default function KeywordTrackerTab() {
             style={{
               display: 'flex', alignItems: 'center', gap: 6,
               padding: '8px 16px', fontSize: 13, fontWeight: 700,
-              background: '#7c3aed', color: '#fff',
+              background: C.purple, color: '#fff',
               border: 'none', borderRadius: 8, cursor: 'pointer',
             }}
           >
@@ -239,6 +244,8 @@ export default function KeywordTrackerTab() {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
           onClick={(e) => { if (e.target === e.currentTarget) setShowSuggestModal(false); }}
+          tabIndex={-1}
+          onKeyDown={(e) => { if (e.key === 'Escape') setShowSuggestModal(false); }}
         >
           <div style={{
             background: '#fff', borderRadius: 16, padding: 28,
@@ -276,13 +283,14 @@ export default function KeywordTrackerTab() {
                   value={suggestHint}
                   onChange={(e) => setSuggestHint(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && !suggestLoading) handleSuggest(); }}
+                  autoFocus
                 />
                 <button
                   onClick={handleSuggest}
                   disabled={suggestLoading}
                   style={{
                     padding: '8px 20px', fontSize: 13, fontWeight: 700,
-                    background: suggestLoading ? '#a78bfa' : '#7c3aed',
+                    background: suggestLoading ? C.purpleDisabled : C.purple,
                     color: '#fff', border: 'none', borderRadius: 8,
                     cursor: suggestLoading ? 'not-allowed' : 'pointer',
                     whiteSpace: 'nowrap',
@@ -292,6 +300,17 @@ export default function KeywordTrackerTab() {
                 </button>
               </div>
             </div>
+
+            {/* 오류 메시지 */}
+            {suggestError && (
+              <div style={{
+                padding: '10px 14px', borderRadius: 8, fontSize: 13,
+                background: 'rgba(220,38,38,0.07)', color: '#dc2626',
+                border: '1px solid rgba(220,38,38,0.2)',
+              }}>
+                ⚠️ {suggestError}
+              </div>
+            )}
 
             {/* 로딩 */}
             {suggestLoading && (
@@ -319,7 +338,7 @@ export default function KeywordTrackerTab() {
                         type="checkbox"
                         checked={selectedIds.has(i)}
                         onChange={() => toggleSelectId(i)}
-                        style={{ marginTop: 2, accentColor: '#7c3aed', flexShrink: 0 }}
+                        style={{ marginTop: 2, accentColor: C.purple, flexShrink: 0 }}
                       />
                       <div>
                         <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{s.keyword}</div>
@@ -337,7 +356,7 @@ export default function KeywordTrackerTab() {
                     disabled={selectedIds.size === 0}
                     style={{
                       padding: '8px 20px', fontSize: 13, fontWeight: 700,
-                      background: selectedIds.size > 0 ? '#7c3aed' : '#ccc',
+                      background: selectedIds.size > 0 ? C.purple : '#ccc',
                       color: '#fff', border: 'none', borderRadius: 8,
                       cursor: selectedIds.size > 0 ? 'pointer' : 'not-allowed',
                     }}
