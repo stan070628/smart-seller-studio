@@ -809,6 +809,7 @@ export default function DomeggookTab() {
     page,
     pageSize,
     fetchAnalysis,
+    cancelSearchDebounce,
     triggerCollection,
     setSortField,
     setCategoryFilter,
@@ -852,10 +853,11 @@ export default function DomeggookTab() {
     (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === 'Enter') {
         e.preventDefault();
+        cancelSearchDebounce();
         fetchAnalysis();
       }
     },
-    [fetchAnalysis],
+    [cancelSearchDebounce, fetchAnalysis],
   );
 
   // ── 정렬 헤더 클릭 ────────────────────────────────────────────────────────

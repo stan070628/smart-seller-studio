@@ -56,6 +56,7 @@ interface SourcingStore {
   toggleSortOrder: () => void;
   setCategoryFilter: (cat: string | null) => void;
   setSearchQuery: (q: string) => void;
+  cancelSearchDebounce: () => void;
   setMoqFilter: (moq: number | null) => void;
   setFreeDeliOnly: (v: boolean) => void;
   setMinSales1d: (v: number | null) => void;
@@ -340,6 +341,13 @@ export const useSourcingStore = create<SourcingStore>()(
         searchDebounceTimer = setTimeout(() => {
           get().fetchAnalysis();
         }, 300);
+      },
+
+      cancelSearchDebounce: () => {
+        if (searchDebounceTimer) {
+          clearTimeout(searchDebounceTimer);
+          searchDebounceTimer = null;
+        }
       },
 
       setMoqFilter: (moq: number | null) => {
