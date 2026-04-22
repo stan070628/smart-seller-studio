@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAnthropicClient } from '@/lib/ai/claude';
 import { checkRateLimit, getRateLimitKey, RATE_LIMITS } from '@/lib/rate-limit';
 import { requireAuth } from '@/lib/supabase/auth';
+import type { TextBlock } from '@anthropic-ai/sdk/resources/messages';
 
 // ─── 타입 ────────────────────────────────────────────────────────────────────
 
@@ -104,8 +105,8 @@ export async function POST(
     });
 
     const rawText = response.content
-      .filter((b) => b.type === 'text')
-      .map((b) => (b as { type: 'text'; text: string }).text)
+      .filter((b): b is TextBlock => b.type === 'text')
+      .map((b) => b.text)
       .join('');
 
     const keywords = parseKeywordSuggestResponse(rawText);
