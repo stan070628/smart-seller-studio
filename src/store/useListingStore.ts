@@ -188,6 +188,11 @@ interface ListingStore {
   };
   updateBrowseFilters: (patch: Partial<{ coupangStatus: string; naverStatus: string; keyword: string }>) => void;
 
+  // ─── 소싱탭 → 대량등록 연결 ─────────────────────────────────────────────
+  pendingBulkItems: string[];
+  addPendingBulkItems: (itemNos: string[]) => number;
+  clearPendingBulkItems: () => void;
+
   // ─── 액션 ─────────────────────────────────────────────────────────────────
   setActivePlatform: (p: PlatformId) => void;
   fetchListings: () => Promise<void>;
@@ -289,11 +294,27 @@ export const useListingStore = create<ListingStore>()(
       listingMode: 'register',
       browsePlatform: 'coupang',
       browseFilters: { coupangStatus: '', naverStatus: '', keyword: '' },
+      pendingBulkItems: [],
 
       // ─── Browse 모드 액션 ─────────────────────────────────────────────────
       setListingMode: (mode) => set({ listingMode: mode }, false, 'listing/setListingMode'),
       setBrowsePlatform: (p) => set({ browsePlatform: p }, false, 'listing/setBrowsePlatform'),
       updateBrowseFilters: (patch) => set((s) => ({ browseFilters: { ...s.browseFilters, ...patch } }), false, 'listing/updateBrowseFilters'),
+
+      addPendingBulkItems: (itemNos) => {
+        const existing = new Set(get().pendingBulkItems);
+        const toAdd = itemNos.filter((n) => !existing.has(n));
+        if (toAdd.length > 0) {
+          set(
+            (s) => ({ pendingBulkItems: [...s.pendingBulkItems, ...toAdd] }),
+            false,
+            'listing/addPendingBulkItems',
+          );
+        }
+        return toAdd.length;
+      },
+      clearPendingBulkItems: () =>
+        set({ pendingBulkItems: [] }, false, 'listing/clearPendingBulkItems'),
 
       // ─── 활성 플랫폼 변경 ──────────────────────────────────────────────────
       setActivePlatform: (p) => set({ activePlatform: p }, false, 'listing/setActivePlatform'),
