@@ -49,15 +49,14 @@ export default function BulkImportPanel() {
     failedCount,
   } = useImportQueue();
 
-  const { pendingBulkItems, clearPendingBulkItems } = useListingStore();
-
   useEffect(() => {
+    const { pendingBulkItems, clearPendingBulkItems } = useListingStore.getState();
     if (pendingBulkItems.length > 0) {
       const count = initQueue(pendingBulkItems.join('\n'));
       clearPendingBulkItems();
       if (count > 0) setInitialized(true);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // initQueue is a stable useCallback ref from useImportQueue
   }, []);
 
   function handleInit() {
