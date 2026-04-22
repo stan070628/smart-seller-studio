@@ -23,6 +23,7 @@ import Step1SourceSelect from '@/components/listing/workflow/Step1SourceSelect';
 import Step2Processing from '@/components/listing/workflow/Step2Processing';
 import Step3ReviewRegister from '@/components/listing/workflow/Step3ReviewRegister';
 import BrowseMode from '@/components/listing/browse/BrowseMode';
+import BulkImportPanel from '@/components/listing/BulkImportPanel';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 색상 상수
@@ -2508,6 +2509,26 @@ export default function ListingDashboard() {
           >
             📋 내 상품 조회
           </button>
+          {/* 대량 등록 탭 */}
+          <button
+            onClick={() => setListingMode('bulk')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '8px',
+              border: '1px solid rgba(190,0,20,0.3)',
+              backgroundColor: listingMode === 'bulk' ? '#be0014' : 'rgba(190,0,20,0.07)',
+              color: listingMode === 'bulk' ? '#ffffff' : '#be0014',
+              fontSize: '13px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <Layers size={14} />
+            대량 등록
+          </button>
         </div>
 
         {/* 모드 분기 */}
@@ -2553,6 +2574,8 @@ export default function ListingDashboard() {
             {currentStep === 2 && <Step2Processing />}
             {currentStep === 3 && <Step3ReviewRegister />}
           </>
+        ) : listingMode === 'bulk' ? (
+          <BulkImportPanel />
         ) : (
           <BrowseMode />
         )}

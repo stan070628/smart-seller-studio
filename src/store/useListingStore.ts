@@ -177,8 +177,8 @@ interface ListingStore {
   error: string | null;
 
   // ─── Browse 모드 ─────────────────────────────────────────────────────────
-  listingMode: 'register' | 'browse';
-  setListingMode: (mode: 'register' | 'browse') => void;
+  listingMode: 'register' | 'browse' | 'bulk';
+  setListingMode: (mode: 'register' | 'browse' | 'bulk') => void;
   browsePlatform: 'coupang' | 'naver';
   setBrowsePlatform: (p: 'coupang' | 'naver') => void;
   browseFilters: {
