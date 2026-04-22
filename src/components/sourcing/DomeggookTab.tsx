@@ -955,20 +955,27 @@ export default function DomeggookTab() {
     count: 0,
     visible: false,
   });
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const allCurrentSelected =
-    sortedItems.length > 0 && sortedItems.every((item) => selectedIds.has(item.id));
-  const selectedCount = sortedItems.filter((item) => selectedIds.has(item.id)).length;
+  const allCurrentSelected = useMemo(
+    () => sortedItems.length > 0 && sortedItems.every((item) => selectedIds.has(item.id)),
+    [sortedItems, selectedIds],
+  );
 
-  const handleSelectAll = () => {
+  const selectedCount = useMemo(
+    () => sortedItems.filter((item) => selectedIds.has(item.id)).length,
+    [sortedItems, selectedIds],
+  );
+
+  const handleSelectAll = useCallback(() => {
     if (allCurrentSelected) {
       setSelectedIds(new Set());
     } else {
       setSelectedIds(new Set(sortedItems.map((item) => item.id)));
     }
-  };
+  }, [allCurrentSelected, sortedItems]);
 
-  const handleCheckboxToggle = (id: string, e: React.MouseEvent) => {
+  const handleCheckboxToggle = useCallback((id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -976,22 +983,31 @@ export default function DomeggookTab() {
       else next.add(id);
       return next;
     });
-  };
+  }, []);
 
-  const handleBulkSend = () => {
+  const handleBulkSend = useCallback(() => {
     const itemNosToSend = sortedItems
       .filter((item) => selectedIds.has(item.id))
       .map((item) => String(item.itemNo));
     const added = addPendingBulkItems(itemNosToSend);
     setBulkToast({ count: added, visible: true });
     setSelectedIds(new Set());
-    setTimeout(() => setBulkToast((prev) => ({ ...prev, visible: false })), 3000);
-  };
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(
+      () => setBulkToast((prev) => ({ ...prev, visible: false })),
+      3000,
+    );
+  }, [sortedItems, selectedIds, addPendingBulkItems]);
 
-  const handleBulkToastNavigate = () => {
+  const handleBulkToastNavigate = useCallback(() => {
     setListingMode('bulk');
     router.push('/listing');
-  };
+  }, [setListingMode, router]);
+
+  // 페이지 변경 시 선택 초기화
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [page]);
 
   // ── 페이지네이션 ──────────────────────────────────────────────────────────
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
@@ -1660,8 +1676,8 @@ export default function DomeggookTab() {
                   <input
                     type="checkbox"
                     checked={allCurrentSelected}
-                    onChange={handleSelectAll}
-                    style={{ cursor: 'pointer', width: 14, height: 14 }}
+                    onChange={() => {}}
+                    style={{ cursor: 'pointer', width: 14, height: 14, pointerEvents: 'none' }}
                   />
                 </th>
                 {/* # */}
