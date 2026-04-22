@@ -15,8 +15,8 @@ export default defineConfig({
     // 글로벌 API (describe, it, expect 등) 자동 주입
     globals: true,
     // E2E 테스트 파일은 Playwright가 담당하므로 vitest 대상에서 제외
-    // .claude/worktrees/** 는 에이전트 작업 공간이므로 테스트 대상에서 제외
-    exclude: ['**/node_modules/**', '**/e2e/**', '**/.claude/worktrees/**'],
+    // .claude/worktrees/** 및 .worktrees/** 는 에이전트 작업 공간이므로 테스트 대상에서 제외
+    exclude: ['**/node_modules/**', '**/e2e/**', '**/.claude/worktrees/**', '**/.worktrees/**'],
     coverage: {
       // v8 기반 커버리지 수집
       provider: 'v8',

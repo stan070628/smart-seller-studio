@@ -1009,6 +1009,13 @@ export default function DomeggookTab() {
     setSelectedIds(new Set());
   }, [page]);
 
+  // 언마운트 시 토스트 타이머 정리
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, []);
+
   // ── 페이지네이션 ──────────────────────────────────────────────────────────
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
