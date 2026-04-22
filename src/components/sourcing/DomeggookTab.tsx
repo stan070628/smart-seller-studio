@@ -729,8 +729,6 @@ function MoqScenarioPanel({
 // 메인 DomeggookTab 컴포넌트
 // ─────────────────────────────────────────────────────────────────────────────
 export default function DomeggookTab() {
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   // ── 로컬 신규 필터 상태 ────────────────────────────────────────────────────
   const [hideHighCsRisk, setHideHighCsRisk] = useState(false);
   const [hideAboveMarket, setHideAboveMarket] = useState(false);
@@ -811,6 +809,7 @@ export default function DomeggookTab() {
     page,
     pageSize,
     fetchAnalysis,
+    cancelSearchDebounce,
     triggerCollection,
     setSortField,
     setCategoryFilter,
@@ -841,17 +840,24 @@ export default function DomeggookTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── 검색 debounce ──────────────────────────────────────────────────────────
+  // ── 검색 입력값 변경 ────────────────────────────────────────────────────────
   const handleSearchChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const q = e.target.value;
-      setSearchQuery(q);
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => {
-        fetchAnalysis();
-      }, 300);
+      setSearchQuery(e.target.value);
     },
-    [setSearchQuery, fetchAnalysis],
+    [setSearchQuery],
+  );
+
+  // ── 검색 Enter 키 즉시 검색 ─────────────────────────────────────────────────
+  const handleSearchKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        cancelSearchDebounce();
+        fetchAnalysis();
+      }
+    },
+    [cancelSearchDebounce, fetchAnalysis],
   );
 
   // ── 정렬 헤더 클릭 ────────────────────────────────────────────────────────
@@ -1317,6 +1323,7 @@ export default function DomeggookTab() {
               type="text"
               value={searchQuery}
               onChange={handleSearchChange}
+              onKeyDown={handleSearchKeyDown}
               placeholder="상품명 검색..."
               style={{
                 fontSize: '12px',
