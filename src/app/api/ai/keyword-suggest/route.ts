@@ -68,11 +68,11 @@ function buildUserPrompt(hint?: string): string {
 
 export async function POST(
   request: NextRequest
-): Promise<NextResponse<ApiSuccessResponse | ApiErrorResponse>> {
+): Promise<NextResponse<ApiSuccessResponse | ApiErrorResponse> | Response> {
   try {
     const authResult = await requireAuth(request);
     if (authResult instanceof Response) {
-      return authResult as unknown as NextResponse<ApiErrorResponse>;
+      return authResult;
     }
 
     const ip = request.headers.get('x-forwarded-for') ?? request.headers.get('x-real-ip') ?? 'unknown';
