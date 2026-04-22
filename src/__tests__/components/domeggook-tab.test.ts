@@ -4,9 +4,9 @@
  *
  * U4: 도매꾹 테이블 상품명 sticky 적용 검증
  *   - thead # th: position sticky + left 0 + zIndex 2
- *   - thead 상품명 th: position sticky + left '64px' + zIndex 2
+ *   - thead 상품명 th: position sticky + left '108px' + zIndex 2
  *   - tbody # td: position sticky + left 0 + zIndex 1
- *   - tbody 상품명+카테고리 td: position sticky + left '64px' + zIndex 1
+ *   - tbody 상품명+카테고리 td: position sticky + left '108px' + zIndex 1
  *   - thead zIndex(2) > tbody zIndex(1) 규칙 확인
  *
  * U3: 차단 체크박스 이중제어 통합 검증
@@ -75,23 +75,23 @@ describe('U4: 도매꾹 테이블 상품명 sticky 적용', () => {
 
   describe('thead 상품명 열 (상품명 헤더)', () => {
     it('thead 상품명 th에 position: sticky 가 있다', () => {
-      // left: '64px' + zIndex: 2 + C.tableHeader 조합
+      // left: `${CHECKBOX_COL_W + NUM_COL_W}px` + zIndex: 2 + C.tableHeader 조합
       const match = source.match(
-        /position:\s*['"]?sticky['"]?[\s\S]{0,200}left:\s*['"]64px['"][\s\S]{0,200}zIndex:\s*2[\s\S]{0,200}backgroundColor:\s*C\.tableHeader/
+        /position:\s*['"]?sticky['"]?[\s\S]{0,200}left:\s*[`'"].*(?:108px|CHECKBOX_COL_W)[^`'"]*[`'"][\s\S]{0,200}zIndex:\s*2[\s\S]{0,200}backgroundColor:\s*C\.tableHeader/
       );
       expect(match).not.toBeNull();
     });
 
-    it("thead 상품명 th의 left 값이 '64px' 이다", () => {
+    it("thead 상품명 th의 left 값이 '108px' (CHECKBOX_COL_W + NUM_COL_W) 이다", () => {
       const match = source.match(
-        /position:\s*['"]?sticky['"]?[\s\S]{0,200}left:\s*['"]64px['"][\s\S]{0,200}backgroundColor:\s*C\.tableHeader/
+        /position:\s*['"]?sticky['"]?[\s\S]{0,200}left:\s*[`'"].*(?:108px|CHECKBOX_COL_W)[^`'"]*[`'"][\s\S]{0,200}backgroundColor:\s*C\.tableHeader/
       );
       expect(match).not.toBeNull();
     });
 
     it('thead 상품명 th의 zIndex가 2 이다', () => {
       const match = source.match(
-        /left:\s*['"]64px['"][\s\S]{0,100}zIndex:\s*2[\s\S]{0,100}backgroundColor:\s*C\.tableHeader/
+        /left:\s*[`'"].*(?:108px|CHECKBOX_COL_W)[^`'"]*[`'"][\s\S]{0,100}zIndex:\s*2[\s\S]{0,100}backgroundColor:\s*C\.tableHeader/
       );
       expect(match).not.toBeNull();
     });
@@ -123,24 +123,24 @@ describe('U4: 도매꾹 테이블 상품명 sticky 적용', () => {
 
   describe("tbody 상품명+카테고리 열", () => {
     it("tbody 상품명 td에 position: sticky 가 있다", () => {
-      // 인라인 스타일로 left: '64px', zIndex: 1, backgroundColor: C.card 동시 포함
+      // 인라인 스타일로 left: `${CHECKBOX_COL_W + NUM_COL_W}px`, zIndex: 1, backgroundColor: C.card 동시 포함
       const match = source.match(
-        /position:\s*['"]?sticky['"]?[\s\S]{0,200}left:\s*['"]64px['"][\s\S]{0,200}zIndex:\s*1[\s\S]{0,200}backgroundColor:\s*C\.card/
+        /position:\s*['"]?sticky['"]?[\s\S]{0,200}left:\s*[`'"].*(?:108px|CHECKBOX_COL_W)[^`'"]*[`'"][\s\S]{0,200}zIndex:\s*1[\s\S]{0,200}backgroundColor:\s*C\.card/
       );
       expect(match).not.toBeNull();
     });
 
-    it("tbody 상품명 td의 left 값이 '64px' 이다", () => {
-      // 소스에서 직접 left: '64px'와 C.card를 포함하는 td 스타일 검색
+    it("tbody 상품명 td의 left 값이 '108px' (CHECKBOX_COL_W + NUM_COL_W) 이다", () => {
+      // 소스에서 직접 left: `${CHECKBOX_COL_W + NUM_COL_W}px`와 C.card를 포함하는 td 스타일 검색
       const inlineStyleMatch = source.match(
-        /position:\s*['"]?sticky['"]?[^}]{0,300}left:\s*['"]64px['"][^}]{0,300}backgroundColor:\s*C\.card/
+        /position:\s*['"]?sticky['"]?[\s\S]{0,300}left:\s*[`'"].*(?:108px|CHECKBOX_COL_W)[\s\S]{0,100}[`'"][\s\S]{0,300}backgroundColor:\s*C\.card/
       );
       expect(inlineStyleMatch).not.toBeNull();
     });
 
     it('tbody 상품명 td의 zIndex가 1 이다', () => {
       const match = source.match(
-        /left:\s*['"]64px['"][^}]{0,200}zIndex:\s*1[^}]{0,200}backgroundColor:\s*C\.card/
+        /left:\s*[`'"].*(?:108px|CHECKBOX_COL_W)[^`'"]*[`'"][^}]{0,200}zIndex:\s*1[^}]{0,200}backgroundColor:\s*C\.card/
       );
       expect(match).not.toBeNull();
     });

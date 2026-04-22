@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 
 import { useSourcingStore, type CollectingProgress } from '@/store/useSourcingStore';
+import { useListingStore } from '@/store/useListingStore';
 import { C as BASE_C } from '@/lib/design-tokens';
 import type { SalesAnalysisItem } from '@/types/sourcing';
 
@@ -62,6 +63,8 @@ const C = {
 // 순번(#) 컬럼 너비 = width(40) + padding-left(12) + padding-right(12) = 64px
 // 상품명 sticky left 오프셋이 이 값에 의존하므로 반드시 함께 변경
 const NUM_COL_W = 64;
+// 체크박스 컬럼 너비 (소싱→대량등록 선택용)
+const CHECKBOX_COL_W = 44;
 
 const MALE_TIER_BADGE: Record<MaleTier, { label: string; color: string; bg: string }> = {
   high:    { label: '🔵 남성', color: '#2563eb', bg: 'rgba(37,99,235,0.08)' },
@@ -945,6 +948,51 @@ export default function DomeggookTab() {
     return filteredItems;
   }, [filteredItems, sortField, sortOrder]);
 
+  // ── 소싱탭 → 대량등록 연결 ─────────────────────────────────────────────────
+  const { addPendingBulkItems, setListingMode } = useListingStore();
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkToast, setBulkToast] = useState<{ count: number; visible: boolean }>({
+    count: 0,
+    visible: false,
+  });
+
+  const allCurrentSelected =
+    sortedItems.length > 0 && sortedItems.every((item) => selectedIds.has(item.id));
+  const selectedCount = sortedItems.filter((item) => selectedIds.has(item.id)).length;
+
+  const handleSelectAll = () => {
+    if (allCurrentSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(sortedItems.map((item) => item.id)));
+    }
+  };
+
+  const handleCheckboxToggle = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkSend = () => {
+    const itemNosToSend = sortedItems
+      .filter((item) => selectedIds.has(item.id))
+      .map((item) => String(item.itemNo));
+    const added = addPendingBulkItems(itemNosToSend);
+    setBulkToast({ count: added, visible: true });
+    setSelectedIds(new Set());
+    setTimeout(() => setBulkToast((prev) => ({ ...prev, visible: false })), 3000);
+  };
+
+  const handleBulkToastNavigate = () => {
+    setListingMode('bulk');
+    router.push('/listing');
+  };
+
   // ── 페이지네이션 ──────────────────────────────────────────────────────────
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
@@ -969,6 +1017,52 @@ export default function DomeggookTab() {
         fontFamily: "'Noto Sans KR', sans-serif",
       }}
     >
+      {/* 소싱→대량등록 토스트 */}
+      {bulkToast.visible && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 16,
+            right: 16,
+            zIndex: 9999,
+            background: '#1e293b',
+            color: '#fff',
+            borderRadius: 10,
+            padding: '12px 16px',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            fontSize: 13,
+            minWidth: 240,
+          }}
+        >
+          <span>
+            {bulkToast.count > 0
+              ? `✓ ${bulkToast.count}개 큐에 추가됨`
+              : '모두 이미 큐에 있는 상품입니다'}
+          </span>
+          {bulkToast.count > 0 && (
+            <button
+              onClick={handleBulkToastNavigate}
+              style={{
+                background: '#3b82f6',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 6,
+                padding: '4px 10px',
+                fontSize: 12,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+              }}
+            >
+              등록탭 바로가기 →
+            </button>
+          )}
+        </div>
+      )}
+
       {/* ── 수집 진행률 배너 ───────────────────────────────────────────────── */}
       {collectingProgress && <CollectingProgressBar progress={collectingProgress} />}
 
@@ -1034,6 +1128,29 @@ export default function DomeggookTab() {
         </span>
         {/* 액션 버튼들 */}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {/* 대량등록 버튼 */}
+          <button
+            onClick={handleBulkSend}
+            disabled={selectedCount === 0}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px',
+              padding: '6px 12px',
+              borderRadius: '6px',
+              fontSize: '12px',
+              fontWeight: 700,
+              border: 'none',
+              backgroundColor: selectedCount > 0 ? C.btnPrimaryBg : C.btnSecondaryBg,
+              color: selectedCount > 0 ? C.btnPrimaryText : C.textSub,
+              cursor: selectedCount === 0 ? 'not-allowed' : 'pointer',
+              opacity: selectedCount === 0 ? 0.5 : 1,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <ShoppingCart size={12} />
+            {selectedCount > 0 ? `${selectedCount}개 대량등록` : '대량등록'}
+          </button>
           {/* 법적 검토 버튼 */}
           <button
             onClick={() => triggerLegalCheck()}
@@ -1526,6 +1643,27 @@ export default function DomeggookTab() {
           >
             <thead>
               <tr style={{ backgroundColor: C.tableHeader }}>
+                {/* 체크박스 (소싱→대량등록) */}
+                <th
+                  style={{
+                    padding: '9px 8px',
+                    textAlign: 'center',
+                    borderBottom: `1px solid ${C.border}`,
+                    width: `${CHECKBOX_COL_W}px`,
+                    position: 'sticky',
+                    left: 0,
+                    zIndex: 2,
+                    backgroundColor: C.tableHeader,
+                  }}
+                  onClick={(e) => { e.stopPropagation(); handleSelectAll(); }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={allCurrentSelected}
+                    onChange={handleSelectAll}
+                    style={{ cursor: 'pointer', width: 14, height: 14 }}
+                  />
+                </th>
                 {/* # */}
                 <th
                   style={{
@@ -1537,7 +1675,7 @@ export default function DomeggookTab() {
                     whiteSpace: 'nowrap',
                     width: '40px',
                     position: 'sticky',
-                    left: 0,
+                    left: CHECKBOX_COL_W,
                     zIndex: 2,
                     backgroundColor: C.tableHeader,
                     overflow: 'hidden',
@@ -1559,7 +1697,7 @@ export default function DomeggookTab() {
                     userSelect: 'none',
                     whiteSpace: 'nowrap',
                     position: 'sticky',
-                    left: `${NUM_COL_W}px`,
+                    left: `${CHECKBOX_COL_W + NUM_COL_W}px`,
                     zIndex: 2,
                     backgroundColor: C.tableHeader,
                     overflow: 'hidden',
@@ -1874,6 +2012,25 @@ export default function DomeggookTab() {
                       (e.currentTarget as HTMLTableRowElement).style.backgroundColor = 'transparent';
                     }}
                   >
+                    {/* 체크박스 */}
+                    <td
+                      style={{
+                        padding: '10px 8px',
+                        textAlign: 'center',
+                        position: 'sticky',
+                        left: 0,
+                        zIndex: 1,
+                        backgroundColor: C.card,
+                      }}
+                      onClick={(e) => handleCheckboxToggle(item.id, e)}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(item.id)}
+                        onChange={() => {}}
+                        style={{ cursor: 'pointer', width: 14, height: 14, pointerEvents: 'none' }}
+                      />
+                    </td>
                     {/* # 순번 */}
                     <td
                       style={{
@@ -1882,7 +2039,7 @@ export default function DomeggookTab() {
                         color: C.textSub,
                         fontSize: '11px',
                         position: 'sticky',
-                        left: 0,
+                        left: CHECKBOX_COL_W,
                         zIndex: 1,
                         backgroundColor: C.card,
                         overflow: 'hidden',
@@ -1892,7 +2049,7 @@ export default function DomeggookTab() {
                     </td>
 
                     {/* 상품명 + 카테고리 */}
-                    <td style={{ padding: '10px 12px', maxWidth: '260px', position: 'sticky', left: `${NUM_COL_W}px`, zIndex: 1, backgroundColor: C.card, overflow: 'hidden' }}>
+                    <td style={{ padding: '10px 12px', maxWidth: '260px', position: 'sticky', left: `${CHECKBOX_COL_W + NUM_COL_W}px`, zIndex: 1, backgroundColor: C.card, overflow: 'hidden' }}>
                       <p
                         style={{
                           margin: 0,
