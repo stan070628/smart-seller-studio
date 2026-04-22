@@ -303,7 +303,7 @@ export const useListingStore = create<ListingStore>()(
 
       addPendingBulkItems: (itemNos) => {
         const existing = new Set(get().pendingBulkItems);
-        const toAdd = itemNos.filter((n) => !existing.has(n));
+        const toAdd = [...new Set(itemNos)].filter((n) => !existing.has(n));
         if (toAdd.length > 0) {
           set(
             (s) => ({ pendingBulkItems: [...s.pendingBulkItems, ...toAdd] }),
