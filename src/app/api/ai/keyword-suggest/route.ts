@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAnthropicClient } from '@/lib/ai/claude';
 import { checkRateLimit, getRateLimitKey, RATE_LIMITS } from '@/lib/rate-limit';
+import { requireAuth } from '@/lib/supabase/auth';
 
 // ─── 타입 ────────────────────────────────────────────────────────────────────
 
@@ -68,6 +69,11 @@ export async function POST(
   request: NextRequest
 ): Promise<NextResponse<ApiSuccessResponse | ApiErrorResponse>> {
   try {
+    const authResult = await requireAuth(request);
+    if (authResult instanceof Response) {
+      return authResult as unknown as NextResponse<ApiErrorResponse>;
+    }
+
     const ip = request.headers.get('x-forwarded-for') ?? request.headers.get('x-real-ip') ?? 'unknown';
     const rateLimitResult = checkRateLimit(getRateLimitKey(ip, 'keyword-suggest'), RATE_LIMITS.AI_API);
     if (!rateLimitResult.allowed) {
@@ -99,7 +105,7 @@ export async function POST(
 
     const rawText = response.content
       .filter((b) => b.type === 'text')
-      .map((b) => b.text)
+      .map((b) => (b as { type: 'text'; text: string }).text)
       .join('');
 
     const keywords = parseKeywordSuggestResponse(rawText);
@@ -107,7 +113,7 @@ export async function POST(
     if (keywords.length === 0) {
       return NextResponse.json(
         { success: false, error: 'AI 응답을 파싱할 수 없습니다. 다시 시도해주세요.' },
-        { status: 500 }
+        { status: 502 }
       );
     }
 
