@@ -30,6 +30,8 @@ interface KeywordEntry {
 interface SuggestedKeyword {
   keyword: string;
   reason: string;
+  searchVolume: number | null;
+  competitorCount: number | null;
 }
 
 type PassStatus = 'pass' | 'fail' | 'unknown';
@@ -40,6 +42,11 @@ function judgeKeyword(entry: KeywordEntry): PassStatus {
   const competitorOk = entry.competitorCount < 500;
   const reviewOk = entry.topReviewCount < 50;
   return volumeOk && competitorOk && reviewOk ? 'pass' : 'fail';
+}
+
+function isSuggestedPass(s: SuggestedKeyword): boolean {
+  if (s.searchVolume === null || s.competitorCount === null) return false;
+  return s.searchVolume >= 3000 && s.searchVolume <= 30000 && s.competitorCount < 500;
 }
 
 const STORAGE_KEY = 'plan_keywords';
@@ -86,6 +93,7 @@ export default function KeywordTrackerTab() {
   const [showSuggestModal, setShowSuggestModal] = useState(false);
   const [suggestHint, setSuggestHint] = useState('');
   const [suggestLoading, setSuggestLoading] = useState(false);
+  const [suggestPhase, setSuggestPhase] = useState<'idle' | 'claude' | 'naver' | 'done'>('idle');
   const [suggestResults, setSuggestResults] = useState<SuggestedKeyword[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [suggestError, setSuggestError] = useState<string | null>(null);
@@ -115,9 +123,11 @@ export default function KeywordTrackerTab() {
 
   async function handleSuggest() {
     setSuggestLoading(true);
+    setSuggestPhase('claude');
     setSuggestResults([]);
     setSuggestError(null);
     try {
+      setSuggestPhase('naver');
       const res = await fetch('/api/ai/keyword-suggest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -127,11 +137,20 @@ export default function KeywordTrackerTab() {
       const json = await res.json();
       if (!json.success) throw new Error(json.error ?? '알 수 없는 오류가 발생했습니다');
       if (!Array.isArray(json.data?.keywords)) throw new Error('잘못된 응답 형식입니다');
-      const all = json.data.keywords as { keyword: string; reason: string }[];
-      setSuggestResults(all);
-      setSelectedIds(new Set(all.map((_, i) => i)));
+      const all = json.data.keywords as SuggestedKeyword[];
+      const sorted = [...all].sort((a, b) => {
+        const aPass = isSuggestedPass(a);
+        const bPass = isSuggestedPass(b);
+        if (aPass && !bPass) return -1;
+        if (!aPass && bPass) return 1;
+        return 0;
+      });
+      setSuggestResults(sorted);
+      setSelectedIds(new Set(sorted.map((_, i) => i)));
+      setSuggestPhase('done');
     } catch (err) {
       setSuggestError(err instanceof Error ? err.message : '키워드 추천 중 오류가 발생했습니다');
+      setSuggestPhase('idle');
     } finally {
       setSuggestLoading(false);
     }
@@ -315,7 +334,7 @@ export default function KeywordTrackerTab() {
             {/* 로딩 */}
             {suggestLoading && (
               <div style={{ textAlign: 'center', padding: '32px 0', color: C.textSub, fontSize: 13 }}>
-                Claude가 키워드를 분석하는 중...
+                {suggestPhase === 'claude' ? 'Claude가 키워드를 분석하는 중...' : '네이버에서 검색량 조회 중...'}
               </div>
             )}
 
@@ -340,8 +359,24 @@ export default function KeywordTrackerTab() {
                         onChange={() => toggleSelectId(i)}
                         style={{ marginTop: 2, accentColor: C.purple, flexShrink: 0 }}
                       />
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{s.keyword}</div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{s.keyword}</span>
+                          {s.searchVolume !== null && s.competitorCount !== null && (
+                            <span style={{
+                              fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20,
+                              background: isSuggestedPass(s) ? C.greenBg : C.redBg,
+                              color: isSuggestedPass(s) ? C.green : C.red,
+                            }}>
+                              {isSuggestedPass(s) ? '✅ 통과' : '❌ 탈락'}
+                            </span>
+                          )}
+                        </div>
+                        {s.searchVolume !== null && s.competitorCount !== null && (
+                          <div style={{ fontSize: 11, color: C.textSub, marginTop: 2 }}>
+                            검색량 {s.searchVolume.toLocaleString()} · 경쟁 {s.competitorCount.toLocaleString()}개
+                          </div>
+                        )}
                         <div style={{ fontSize: 11, color: C.textSub, marginTop: 2 }}>{s.reason}</div>
                       </div>
                     </label>
