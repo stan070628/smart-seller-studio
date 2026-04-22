@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 도매꾹 상품번호를 여러 개 입력하면 순차적으로 AI 처리(썸네일·상세페이지·가격 계산)하고, 결과를 테이블로 보여준 뒤 선택한 상품을 스마트스토어+쿠팡에 일괄 등록한다.
+**Goal:** 도매꾹 상품번호를 여러 개 입력하면 순차적으로 AI 처리(썸네일·상세페이지·가격 계산)하고, 결과를 테이블로 보여준 뒤 각 상품을 기존 등록 패널로 연결한다.
 
-**Architecture:** 기존 `/api/listing/domeggook/prepare` (단건 처리)와 `/api/listing/both` (양 플랫폼 등록)를 재사용한다. 프론트엔드에서 순차 큐(useImportQueue hook)를 관리하고 BulkImportPanel UI에서 진행 상황을 실시간 표시한다. 완료된 상품은 개별 "등록" 또는 "전체 등록" 버튼으로 일괄 처리한다.
+**Architecture:** 기존 `/api/listing/domeggook/prepare` (단건 처리)를 순차 큐로 반복 호출한다. `/api/listing/both`는 카테고리 코드 등 복잡한 필드가 필요하므로 직접 호출하지 않는다. 대신 "등록" 버튼 클릭 시 기존 DomeggookPreparePanel 모달을 `initialItemNo`로 열어 카테고리 선택 및 최종 등록은 기존 단건 흐름을 재사용한다. 이를 통해 UI 중복 없이 빠르게 구현한다.
 
 **Tech Stack:** Next.js 15 App Router, React, Zustand, TypeScript, 기존 `/api/listing/domeggook/prepare` + `/api/listing/both` API
 
@@ -58,8 +58,6 @@ export type ImportItemStatus =
   | 'pending'      // 대기
   | 'processing'   // AI 처리 중
   | 'ready'        // 처리 완료, 등록 대기
-  | 'registering'  // 플랫폼 등록 중
-  | 'done'         // 등록 완료
   | 'failed';      // 실패
 
 export interface BulkImportItem {
@@ -70,10 +68,7 @@ export interface BulkImportItem {
   thumbnailUrl?: string;
   recommendedPriceNaver?: number;
   recommendedPriceCoupang?: number;
-  detailHtml?: string;
   errorMessage?: string;
-  naverProductNo?: string;  // 등록 성공 후
-  coupangProductId?: string;
 }
 
 export interface SellerDefaults {
@@ -226,57 +221,18 @@ export function useImportQueue() {
     abortRef.current = true;
   }, []);
 
-  // 단건 플랫폼 등록
-  const registerItem = useCallback(async (id: string) => {
+  // 단건 등록: 기존 DomeggookPreparePanel 열기를 위해 itemNo 반환
+  // 실제 플랫폼 등록은 DomeggookPreparePanel이 처리 — /api/listing/both는 여기서 직접 호출하지 않음
+  const getItemNoForRegister = useCallback((id: string): number | null => {
     const item = items.find((it) => it.id === id);
-    if (!item || item.status !== 'ready') return;
+    return item?.status === 'ready' ? item.itemNo : null;
+  }, [items]);
 
-    updateItem(id, { status: 'registering' });
-
-    try {
-      const res = await fetch('/api/listing/both', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: item.title ?? `도매꾹 상품 ${item.itemNo}`,
-          salePrice: item.recommendedPriceNaver ?? 10000,
-          naverPrice: item.recommendedPriceNaver,
-          coupangPrice: item.recommendedPriceCoupang,
-          thumbnailUrl: item.thumbnailUrl ?? '',
-          detailHtml: item.detailHtml ?? '',
-        }),
-      });
-
-      const json = await res.json();
-      const naverOk = json.naver?.success;
-      const coupangOk = json.coupang?.success;
-
-      if (naverOk || coupangOk) {
-        updateItem(id, {
-          status: 'done',
-          naverProductNo: json.naver?.productNo,
-          coupangProductId: json.coupang?.productId,
-        });
-      } else {
-        updateItem(id, {
-          status: 'failed',
-          errorMessage: json.naver?.error ?? json.coupang?.error ?? '등록 실패',
-        });
-      }
-    } catch (err) {
-      updateItem(id, {
-        status: 'failed',
-        errorMessage: err instanceof Error ? err.message : '등록 중 오류',
-      });
-    }
-  }, [items, updateItem]);
-
-  const clearDone = useCallback(() => {
-    setItems((prev) => prev.filter((it) => it.status !== 'done'));
+  const clearFailed = useCallback(() => {
+    setItems((prev) => prev.filter((it) => it.status !== 'failed'));
   }, []);
 
   const readyCount = items.filter((it) => it.status === 'ready').length;
-  const doneCount = items.filter((it) => it.status === 'done').length;
   const failedCount = items.filter((it) => it.status === 'failed').length;
 
   return {
@@ -285,10 +241,9 @@ export function useImportQueue() {
     initQueue,
     startProcessing,
     stopProcessing,
-    registerItem,
-    clearDone,
+    getItemNoForRegister,
+    clearFailed,
     readyCount,
-    doneCount,
     failedCount,
   };
 }
@@ -323,8 +278,9 @@ git commit -m "feat: add useImportQueue hook for sequential bulk import"
 'use client';
 
 import React, { useState } from 'react';
-import { Play, Square, Trash2, ExternalLink } from 'lucide-react';
+import { Play, Square, Trash2 } from 'lucide-react';
 import { useImportQueue } from '@/hooks/useImportQueue';
+import DomeggookPreparePanel from '@/components/listing/DomeggookPreparePanel';
 import type { BulkImportItem, ImportItemStatus } from '@/types/bulkImport';
 
 const C = {
@@ -343,8 +299,6 @@ const STATUS_LABEL: Record<ImportItemStatus, string> = {
   pending: '대기',
   processing: '처리 중...',
   ready: '완료',
-  registering: '등록 중...',
-  done: '등록됨',
   failed: '실패',
 };
 
@@ -352,24 +306,23 @@ const STATUS_COLOR: Record<ImportItemStatus, string> = {
   pending: C.textSub,
   processing: C.yellow,
   ready: C.green,
-  registering: C.yellow,
-  done: C.accent,
   failed: C.red,
 };
 
 export default function BulkImportPanel() {
   const [rawInput, setRawInput] = useState('');
   const [initialized, setInitialized] = useState(false);
+  // 등록 모달: ready 항목 클릭 시 itemNo를 저장 → DomeggookPreparePanel 모달로 열기
+  const [registerItemNo, setRegisterItemNo] = useState<number | null>(null);
   const {
     items,
     isRunning,
     initQueue,
     startProcessing,
     stopProcessing,
-    registerItem,
-    clearDone,
+    getItemNoForRegister,
+    clearFailed,
     readyCount,
-    doneCount,
     failedCount,
   } = useImportQueue();
 
@@ -433,7 +386,7 @@ export default function BulkImportPanel() {
           flexWrap: 'wrap',
         }}>
           <span style={{ fontSize: 13, color: C.textSub }}>
-            총 {items.length}개 · 완료 {readyCount}개 · 등록됨 {doneCount}개 · 실패 {failedCount}개
+            총 {items.length}개 · 처리완료 {readyCount}개 · 실패 {failedCount}개
           </span>
           <div style={{ flex: 1 }} />
           {!isRunning ? (
@@ -462,9 +415,9 @@ export default function BulkImportPanel() {
               <Square size={14} /> 중지
             </button>
           )}
-          {doneCount > 0 && (
+          {failedCount > 0 && (
             <button
-              onClick={clearDone}
+              onClick={clearFailed}
               style={{
                 display: 'flex', alignItems: 'center', gap: 6,
                 padding: '8px 14px', fontSize: 12,
@@ -472,7 +425,7 @@ export default function BulkImportPanel() {
                 border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer',
               }}
             >
-              <Trash2 size={13} /> 완료 항목 제거
+              <Trash2 size={13} /> 실패 항목 제거
             </button>
           )}
           <button
@@ -485,6 +438,23 @@ export default function BulkImportPanel() {
           >
             새로 입력
           </button>
+        </div>
+      )}
+
+      {/* DomeggookPreparePanel 모달 — ready 항목 "등록" 클릭 시 열림 */}
+      {registerItemNo !== null && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          background: 'rgba(0,0,0,0.45)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{ width: '100%', maxWidth: 720, maxHeight: '90vh', overflowY: 'auto', borderRadius: 12 }}>
+            <DomeggookPreparePanel
+              onClose={() => setRegisterItemNo(null)}
+              onContinueToRegister={() => setRegisterItemNo(null)}
+              initialItemNo={String(registerItemNo)}
+            />
+          </div>
         </div>
       )}
 
@@ -507,7 +477,10 @@ export default function BulkImportPanel() {
                   key={item.id}
                   item={item}
                   isEven={idx % 2 === 0}
-                  onRegister={() => registerItem(item.id)}
+                  onRegister={() => {
+                    const no = getItemNoForRegister(item.id);
+                    if (no) setRegisterItemNo(no);
+                  }}
                 />
               ))}
             </tbody>
@@ -569,9 +542,6 @@ function BulkItemRow({
           >
             등록
           </button>
-        )}
-        {item.status === 'done' && (
-          <span style={{ fontSize: 12, color: C.green }}>✓</span>
         )}
       </td>
     </tr>
