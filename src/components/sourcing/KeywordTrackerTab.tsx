@@ -11,6 +11,8 @@ const C = {
   red: '#dc2626',
   redBg: 'rgba(220,38,38,0.07)',
   yellow: '#d97706',
+  purple: '#7c3aed',
+  purpleDisabled: '#a78bfa',
 };
 
 // ─── 타입 ────────────────────────────────────────────────────────────────────
@@ -23,6 +25,11 @@ interface KeywordEntry {
   domeggookNos: string;    // 매칭 도매꾹 상품번호 (쉼표 구분)
   memo: string;
   createdAt: string;       // ISO 날짜
+}
+
+interface SuggestedKeyword {
+  keyword: string;
+  reason: string;
 }
 
 type PassStatus = 'pass' | 'fail' | 'unknown';
@@ -76,6 +83,12 @@ export default function KeywordTrackerTab() {
   const [entries, setEntries] = useState<KeywordEntry[]>([]);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [showForm, setShowForm] = useState(false);
+  const [showSuggestModal, setShowSuggestModal] = useState(false);
+  const [suggestHint, setSuggestHint] = useState('');
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [suggestResults, setSuggestResults] = useState<SuggestedKeyword[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [suggestError, setSuggestError] = useState<string | null>(null);
 
   useEffect(() => {
     setEntries(loadKeywords());
@@ -98,6 +111,62 @@ export default function KeywordTrackerTab() {
     saveKeywords(updated);
     setForm({ ...EMPTY_FORM });
     setShowForm(false);
+  }
+
+  async function handleSuggest() {
+    setSuggestLoading(true);
+    setSuggestResults([]);
+    setSuggestError(null);
+    try {
+      const res = await fetch('/api/ai/keyword-suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hint: suggestHint.trim() || undefined }),
+      });
+      if (!res.ok) throw new Error(`서버 오류 (${res.status})`);
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error ?? '알 수 없는 오류가 발생했습니다');
+      if (!Array.isArray(json.data?.keywords)) throw new Error('잘못된 응답 형식입니다');
+      const all = json.data.keywords as { keyword: string; reason: string }[];
+      setSuggestResults(all);
+      setSelectedIds(new Set(all.map((_, i) => i)));
+    } catch (err) {
+      setSuggestError(err instanceof Error ? err.message : '키워드 추천 중 오류가 발생했습니다');
+    } finally {
+      setSuggestLoading(false);
+    }
+  }
+
+  function handleAddSuggested() {
+    const toAdd = suggestResults
+      .filter((_, i) => selectedIds.has(i))
+      .map((s) => ({
+        id: crypto.randomUUID(),
+        keyword: s.keyword,
+        searchVolume: 0,
+        competitorCount: 0,
+        topReviewCount: 0,
+        domeggookNos: '',
+        memo: s.reason,
+        createdAt: new Date().toISOString(),
+      }));
+    if (toAdd.length === 0) return;
+    const updated = [...toAdd, ...entries];
+    setEntries(updated);
+    saveKeywords(updated);
+    setShowSuggestModal(false);
+    setSuggestResults([]);
+    setSelectedIds(new Set());
+    setSuggestHint('');
+  }
+
+  function toggleSelectId(i: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
   }
 
   function handleDelete(id: string) {
@@ -129,17 +198,30 @@ export default function KeywordTrackerTab() {
             총 {entries.length}개 · 통과 {passCount}개 · 탈락 {failCount}개
           </p>
         </div>
-        <button
-          onClick={() => setShowForm((v) => !v)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '8px 16px', fontSize: 13, fontWeight: 700,
-            background: C.accent, color: '#fff',
-            border: 'none', borderRadius: 8, cursor: 'pointer',
-          }}
-        >
-          <Plus size={14} /> 키워드 추가
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={() => setShowSuggestModal(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '8px 16px', fontSize: 13, fontWeight: 700,
+              background: C.purple, color: '#fff',
+              border: 'none', borderRadius: 8, cursor: 'pointer',
+            }}
+          >
+            ✨ AI 추천
+          </button>
+          <button
+            onClick={() => setShowForm((v) => !v)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '8px 16px', fontSize: 13, fontWeight: 700,
+              background: C.accent, color: '#fff',
+              border: 'none', borderRadius: 8, cursor: 'pointer',
+            }}
+          >
+            <Plus size={14} /> 키워드 추가
+          </button>
+        </div>
       </div>
 
       {/* 판정 기준 안내 */}
@@ -152,6 +234,148 @@ export default function KeywordTrackerTab() {
         경쟁 <strong style={{ color: C.text }}>500개 미만</strong> &nbsp;·&nbsp;
         상위 리뷰 <strong style={{ color: C.text }}>50개 미만</strong> — 3개 모두 충족
       </div>
+
+      {/* AI 추천 모달 */}
+      {showSuggestModal && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(0,0,0,0.45)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowSuggestModal(false); }}
+          tabIndex={-1}
+          onKeyDown={(e) => { if (e.key === 'Escape') setShowSuggestModal(false); }}
+        >
+          <div style={{
+            background: '#fff', borderRadius: 16, padding: 28,
+            width: 560, maxWidth: '92vw', maxHeight: '85vh',
+            display: 'flex', flexDirection: 'column', gap: 16,
+            boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+          }}>
+            {/* 모달 헤더 */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, margin: 0 }}>✨ AI 키워드 추천</h3>
+                <p style={{ fontSize: 12, color: C.textSub, margin: '4px 0 0' }}>
+                  Claude가 셀러 전략 기준(검색량·경쟁·리뷰)에 맞는 키워드 15개를 제안합니다
+                </p>
+              </div>
+              <button
+                onClick={() => setShowSuggestModal(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: C.textSub, lineHeight: 1 }}
+              >×</button>
+            </div>
+
+            {/* 힌트 입력 */}
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: C.textSub, display: 'block', marginBottom: 6 }}>
+                카테고리 / 시즌 힌트 <span style={{ fontWeight: 400 }}>(선택 — 비워두면 AI가 자유롭게 추천)</span>
+              </label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  style={{
+                    flex: 1, padding: '8px 12px', fontSize: 13,
+                    border: `1px solid ${C.border}`, borderRadius: 8,
+                    outline: 'none', color: C.text,
+                  }}
+                  placeholder="예: 봄 시즌 / 주방용품 / 남성 데스크 소품"
+                  value={suggestHint}
+                  onChange={(e) => setSuggestHint(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !suggestLoading) handleSuggest(); }}
+                  autoFocus
+                />
+                <button
+                  onClick={handleSuggest}
+                  disabled={suggestLoading}
+                  style={{
+                    padding: '8px 20px', fontSize: 13, fontWeight: 700,
+                    background: suggestLoading ? C.purpleDisabled : C.purple,
+                    color: '#fff', border: 'none', borderRadius: 8,
+                    cursor: suggestLoading ? 'not-allowed' : 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {suggestLoading ? '추천 중...' : '추천 받기'}
+                </button>
+              </div>
+            </div>
+
+            {/* 오류 메시지 */}
+            {suggestError && (
+              <div style={{
+                padding: '10px 14px', borderRadius: 8, fontSize: 13,
+                background: 'rgba(220,38,38,0.07)', color: '#dc2626',
+                border: '1px solid rgba(220,38,38,0.2)',
+              }}>
+                ⚠️ {suggestError}
+              </div>
+            )}
+
+            {/* 로딩 */}
+            {suggestLoading && (
+              <div style={{ textAlign: 'center', padding: '32px 0', color: C.textSub, fontSize: 13 }}>
+                Claude가 키워드를 분석하는 중...
+              </div>
+            )}
+
+            {/* 추천 결과 */}
+            {!suggestLoading && suggestResults.length > 0 && (
+              <>
+                <div style={{ overflowY: 'auto', maxHeight: 340, border: `1px solid ${C.border}`, borderRadius: 10 }}>
+                  {suggestResults.map((s, i) => (
+                    <label
+                      key={i}
+                      style={{
+                        display: 'flex', alignItems: 'flex-start', gap: 10,
+                        padding: '10px 14px',
+                        borderBottom: i < suggestResults.length - 1 ? `1px solid ${C.border}` : 'none',
+                        cursor: 'pointer',
+                        background: selectedIds.has(i) ? 'rgba(124,58,237,0.04)' : '#fff',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(i)}
+                        onChange={() => toggleSelectId(i)}
+                        style={{ marginTop: 2, accentColor: C.purple, flexShrink: 0 }}
+                      />
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{s.keyword}</div>
+                        <div style={{ fontSize: 11, color: C.textSub, marginTop: 2 }}>{s.reason}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 12, color: C.textSub }}>
+                    {selectedIds.size}개 선택됨 · 숫자 필드는 아이템스카우트에서 직접 채우세요
+                  </span>
+                  <button
+                    onClick={handleAddSuggested}
+                    disabled={selectedIds.size === 0}
+                    style={{
+                      padding: '8px 20px', fontSize: 13, fontWeight: 700,
+                      background: selectedIds.size > 0 ? C.purple : '#ccc',
+                      color: '#fff', border: 'none', borderRadius: 8,
+                      cursor: selectedIds.size > 0 ? 'pointer' : 'not-allowed',
+                    }}
+                  >
+                    선택 추가 ({selectedIds.size}개)
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* 초기 안내 */}
+            {!suggestLoading && suggestResults.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '24px 0', color: C.textSub, fontSize: 13 }}>
+                힌트를 입력하거나 그냥 &ldquo;추천 받기&rdquo;를 눌러보세요
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 입력 폼 */}
       {showForm && (
