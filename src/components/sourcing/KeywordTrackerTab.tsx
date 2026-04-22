@@ -106,6 +106,7 @@ export default function KeywordTrackerTab() {
   }
 
   const passCount = entries.filter((e) => judgeKeyword(e) === 'pass').length;
+  const failCount = entries.filter((e) => judgeKeyword(e) === 'fail').length;
 
   return (
     <div style={{ padding: '20px 0' }}>
@@ -114,7 +115,7 @@ export default function KeywordTrackerTab() {
         <div>
           <h2 style={{ fontSize: 16, fontWeight: 700, color: C.text, margin: 0 }}>키워드 트래커</h2>
           <p style={{ fontSize: 12, color: C.textSub, margin: '4px 0 0' }}>
-            총 {entries.length}개 · 통과 {passCount}개 · 탈락 {entries.length - passCount}개
+            총 {entries.length}개 · 통과 {passCount}개 · 탈락 {failCount}개
           </p>
         </div>
         <button
