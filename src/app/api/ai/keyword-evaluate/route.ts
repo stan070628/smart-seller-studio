@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/supabase/auth';
 import { getAnthropicClient } from '@/lib/ai/claude';
+import { checkRateLimit, getRateLimitKey, RATE_LIMITS } from '@/lib/rate-limit';
 import type { TextBlock } from '@anthropic-ai/sdk/resources/messages';
 
-interface EvaluateParams {
+export interface EvaluateParams {
   keyword: string;
   searchVolume: number;
   competitorCount: number;
   topReviewCount?: number;
 }
 
-interface EvaluateResult {
+export interface EvaluateResult {
   pass: boolean | null;
   reasoning: string | null;
 }
@@ -75,6 +76,15 @@ export async function POST(
 ): Promise<NextResponse<ApiSuccessResponse | ApiErrorResponse> | Response> {
   const authResult = await requireAuth(request);
   if (authResult instanceof Response) return authResult;
+
+  const ip = request.headers.get('x-forwarded-for') ?? request.headers.get('x-real-ip') ?? 'unknown';
+  const rateLimitResult = checkRateLimit(getRateLimitKey(ip, 'keyword-evaluate'), RATE_LIMITS.AI_API);
+  if (!rateLimitResult.allowed) {
+    return NextResponse.json(
+      { success: false, error: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' },
+      { status: 429, headers: { 'X-RateLimit-Reset': rateLimitResult.resetAt.toString() } },
+    );
+  }
 
   let body: unknown;
   try {
