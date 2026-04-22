@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Trash2, CheckCircle, XCircle } from 'lucide-react';
 import { C as BASE_C } from '@/lib/design-tokens';
 
@@ -45,6 +45,7 @@ function loadKeywords(): KeywordEntry[] {
 }
 
 function saveKeywords(entries: KeywordEntry[]): void {
+  if (typeof window === 'undefined') return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
 }
 
@@ -105,8 +106,18 @@ export default function KeywordTrackerTab() {
     saveKeywords(updated);
   }
 
-  const passCount = entries.filter((e) => judgeKeyword(e) === 'pass').length;
-  const failCount = entries.filter((e) => judgeKeyword(e) === 'fail').length;
+  const { passCount, failCount } = useMemo(() =>
+    entries.reduce(
+      (acc, e) => {
+        const s = judgeKeyword(e);
+        if (s === 'pass') acc.passCount++;
+        else if (s === 'fail') acc.failCount++;
+        return acc;
+      },
+      { passCount: 0, failCount: 0 }
+    ),
+    [entries]
+  );
 
   return (
     <div style={{ padding: '20px 0' }}>
@@ -253,13 +264,13 @@ export default function KeywordTrackerTab() {
                       {status === 'unknown' && <span style={{ color: C.textSub, fontSize: 12 }}>—</span>}
                     </td>
                     <td style={{ padding: '10px 16px', fontWeight: 600, color: C.text }}>{entry.keyword}</td>
-                    <td style={{ padding: '10px 16px', textAlign: 'right', color: entry.searchVolume >= 3000 && entry.searchVolume <= 30000 ? C.green : C.red }}>
+                    <td style={{ padding: '10px 16px', textAlign: 'right', color: entry.searchVolume === 0 ? C.textSub : (entry.searchVolume >= 3000 && entry.searchVolume <= 30000 ? C.green : C.red) }}>
                       {entry.searchVolume ? entry.searchVolume.toLocaleString() : '—'}
                     </td>
-                    <td style={{ padding: '10px 16px', textAlign: 'right', color: entry.competitorCount && entry.competitorCount < 500 ? C.green : C.red }}>
+                    <td style={{ padding: '10px 16px', textAlign: 'right', color: entry.competitorCount === 0 ? C.textSub : (entry.competitorCount < 500 ? C.green : C.red) }}>
                       {entry.competitorCount ? entry.competitorCount.toLocaleString() : '—'}
                     </td>
-                    <td style={{ padding: '10px 16px', textAlign: 'right', color: entry.topReviewCount && entry.topReviewCount < 50 ? C.green : C.red }}>
+                    <td style={{ padding: '10px 16px', textAlign: 'right', color: entry.topReviewCount === 0 ? C.textSub : (entry.topReviewCount < 50 ? C.green : C.red) }}>
                       {entry.topReviewCount ? entry.topReviewCount.toLocaleString() : '—'}
                     </td>
                     <td style={{ padding: '10px 16px', color: C.textSub, fontSize: 12, fontFamily: 'monospace' }}>
