@@ -43,7 +43,13 @@ const STORAGE_KEY = 'plan_keywords';
 function loadKeywords(): KeywordEntry[] {
   try {
     const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
-    return raw ? (JSON.parse(raw) as KeywordEntry[]) : [];
+    return raw
+      ? (JSON.parse(raw) as KeywordEntry[]).map((e) => ({
+          ...e,
+          aiPass: e.aiPass ?? null,
+          aiReasoning: e.aiReasoning ?? null,
+        }))
+      : [];
   } catch { return []; }
 }
 

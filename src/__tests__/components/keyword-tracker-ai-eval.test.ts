@@ -64,4 +64,8 @@ describe('KeywordTrackerTab — AI 평가 기반', () => {
   it('통과/탈락 기준 안내 고정 텍스트가 제거되었다', () => {
     expect(src).not.toContain('월 검색량 3,000~30,000');
   });
+
+  it('AI 평가 결과 업데이트 시 functional setEntries를 사용한다', () => {
+    expect(src).toContain('setEntries((prev) =>');
+  });
 });
