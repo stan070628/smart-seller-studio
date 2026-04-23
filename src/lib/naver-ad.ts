@@ -159,3 +159,68 @@ export async function getKeywordStats(keywords: string[]): Promise<KeywordStat[]
     competitorCount: cMap.get(kw) ?? null,
   }));
 }
+
+// ─── 씨드 기반 키워드 확장 ──────────────────────────────────────────────────
+
+const AD_BATCH_SIZE = 5;
+
+/**
+ * 씨드 키워드를 hintKeywords로 전달해 Naver 검색광고 API가 반환하는
+ * 관련 키워드 전체(씨드 포함)를 검색량 + 경쟁상품수와 함께 반환한다.
+ */
+export async function expandKeywords(seeds: string[]): Promise<KeywordStat[]> {
+  const apiKey = process.env.NAVER_AD_API_KEY;
+  const secretKey = process.env.NAVER_AD_SECRET_KEY;
+  const customerId = process.env.NAVER_AD_CUSTOMER_ID;
+
+  if (!apiKey || !secretKey || !customerId) return [];
+
+  // 5개씩 배치로 나눠 검색광고 API 호출 → 모든 관련 키워드 수집
+  const batches: string[][] = [];
+  for (let i = 0; i < seeds.length; i += AD_BATCH_SIZE) {
+    batches.push(seeds.slice(i, i + AD_BATCH_SIZE));
+  }
+
+  const volumeMap = new Map<string, number>();
+  for (const batch of batches) {
+    const timestamp = Date.now().toString();
+    const path = '/keywordstool';
+    const signature = buildSignature(timestamp, 'GET', path, secretKey);
+    const query = batch.map(encodeURIComponent).join(',');
+
+    try {
+      const res = await fetch(
+        `https://api.searchad.naver.com${path}?hintKeywords=${query}&showDetail=1`,
+        {
+          headers: {
+            'X-Timestamp': timestamp,
+            'X-API-KEY': apiKey,
+            'X-Customer': customerId,
+            'X-Signature': signature,
+          },
+        },
+      );
+      if (!res.ok) continue;
+      const json = await res.json();
+      const stats = parseKeywordStats(json);
+      for (const s of stats) {
+        if (!volumeMap.has(s.keyword)) {
+          volumeMap.set(s.keyword, s.searchVolume);
+        }
+      }
+    } catch {
+      // 배치 실패는 건너뜀
+    }
+  }
+
+  if (volumeMap.size === 0) return [];
+
+  const relatedKeywords = Array.from(volumeMap.keys());
+  const competitorMap = await fetchCompetitorCounts(relatedKeywords);
+
+  return relatedKeywords.map((kw) => ({
+    keyword: kw,
+    searchVolume: volumeMap.get(kw) ?? null,
+    competitorCount: competitorMap.get(kw) ?? null,
+  }));
+}
