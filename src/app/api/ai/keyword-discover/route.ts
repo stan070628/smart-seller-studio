@@ -70,11 +70,11 @@ export async function POST(
       [today],
     );
     seeds = result.rows.map((r) => r.keyword);
-  } catch {
+  } catch (err) {
+    console.error('[keyword-discover] trend_seeds 조회 실패, 폴백 씨드 사용:', err);
     seeds = [];
   }
 
-  // 씨드가 없으면 폴백 씨드 사용
   if (seeds.length === 0) {
     seeds = FALLBACK_SEEDS;
   }
@@ -83,7 +83,8 @@ export async function POST(
   let expanded: Awaited<ReturnType<typeof expandKeywords>>;
   try {
     expanded = await expandKeywords(seeds);
-  } catch {
+  } catch (err) {
+    console.error('[keyword-discover] expandKeywords 실패:', err);
     expanded = [];
   }
 
