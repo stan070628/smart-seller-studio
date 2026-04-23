@@ -102,6 +102,7 @@ export default function KeywordTrackerTab() {
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [discoverResults, setDiscoverResults] = useState<DiscoveredKeyword[]>([]);
   const [showDiscoverModal, setShowDiscoverModal] = useState(false);
+  const [discoverError, setDiscoverError] = useState<string | null>(null);
 
   useEffect(() => {
     setEntries(loadKeywords());
@@ -194,15 +195,19 @@ export default function KeywordTrackerTab() {
   const handleDiscover = async () => {
     setIsDiscovering(true);
     setDiscoverResults([]);
+    setDiscoverError(null);
     try {
       const res = await fetch('/api/ai/keyword-discover', { method: 'POST' });
+      if (!res.ok) throw new Error('키워드 발굴 중 오류가 발생했습니다.');
       const json = await res.json();
       if (json.success) {
         setDiscoverResults(json.data.keywords);
         setShowDiscoverModal(true);
+      } else {
+        setDiscoverError(json.error ?? '키워드 발굴 중 오류가 발생했습니다.');
       }
-    } catch {
-      // silently fail
+    } catch (err) {
+      setDiscoverError(err instanceof Error ? err.message : '키워드 발굴 중 오류가 발생했습니다.');
     } finally {
       setIsDiscovering(false);
     }
@@ -286,9 +291,14 @@ export default function KeywordTrackerTab() {
           <button
             onClick={handleDiscover}
             disabled={isDiscovering}
-            className="px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '8px 16px', fontSize: 13, fontWeight: 700,
+              background: isDiscovering ? '#86efac' : C.green, color: '#fff',
+              border: 'none', borderRadius: 8, cursor: isDiscovering ? 'not-allowed' : 'pointer',
+            }}
           >
-            {isDiscovering ? '발굴 중...' : '키워드 발굴'}
+            {isDiscovering ? '발굴 중...' : '🔍 키워드 발굴'}
           </button>
           <button
             onClick={() => setShowForm((v) => !v)}
@@ -464,29 +474,61 @@ export default function KeywordTrackerTab() {
         </div>
       )}
 
+      {/* 키워드 발굴 에러 */}
+      {discoverError && (
+        <div style={{
+          background: '#fff5f5', border: '1px solid #fecaca',
+          borderRadius: 8, padding: '10px 14px', marginBottom: 12,
+          fontSize: 13, color: C.red, display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        }}>
+          ⚠️ {discoverError}
+          <button
+            onClick={() => setDiscoverError(null)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textSub, fontSize: 16, lineHeight: 1 }}
+          >✕</button>
+        </div>
+      )}
+
       {/* 키워드 발굴 모달 */}
       {showDiscoverModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">키워드 발굴 결과</h3>
-              <button onClick={() => setShowDiscoverModal(false)} className="text-gray-500 hover:text-gray-700">✕</button>
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50,
+        }}>
+          <div style={{
+            background: C.card, borderRadius: 12, padding: 24,
+            maxWidth: 672, width: '100%', maxHeight: '80vh', overflowY: 'auto',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, margin: 0 }}>🔍 키워드 발굴 결과</h3>
+              <button
+                onClick={() => setShowDiscoverModal(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: C.textSub, lineHeight: 1 }}
+              >✕</button>
             </div>
             {discoverResults.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">발굴된 키워드가 없습니다.</p>
+              <div style={{ textAlign: 'center', padding: '32px 0', color: C.textSub, fontSize: 13 }}>
+                발굴된 키워드가 없습니다.
+              </div>
             ) : (
-              <div className="space-y-2">
-                {discoverResults.map((kw) => (
-                  <div key={kw.keyword} className="flex items-center justify-between p-3 border rounded hover:bg-gray-50">
-                    <div className="flex items-center gap-3">
-                      <span className="font-medium">{kw.keyword}</span>
-                      <span className="text-xs text-gray-500">검색량 {kw.searchVolume.toLocaleString()}</span>
-                      <span className="text-xs text-gray-500">경쟁 {kw.competitorCount.toLocaleString()}</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {discoverResults.map((kw, i) => (
+                  <div key={i} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '10px 12px', border: `1px solid ${C.border}`, borderRadius: 8,
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{kw.keyword}</span>
+                      <span style={{ fontSize: 11, color: C.textSub }}>검색량 {kw.searchVolume.toLocaleString()}</span>
+                      <span style={{ fontSize: 11, color: C.textSub }}>경쟁 {kw.competitorCount.toLocaleString()}</span>
                       {kw.pass === true && (
-                        <span title={kw.reasoning ?? undefined} className="text-green-600 cursor-help">✅</span>
+                        <span title={kw.reasoning ?? undefined} style={{ cursor: 'help' }}>✅</span>
                       )}
                       {kw.pass === false && (
-                        <span title={kw.reasoning ?? undefined} className="text-red-500 cursor-help">❌</span>
+                        <span title={kw.reasoning ?? undefined} style={{ cursor: 'help' }}>❌</span>
+                      )}
+                      {kw.pass === null && (
+                        <span style={{ color: C.textSub, fontSize: 12 }}>—</span>
                       )}
                     </div>
                     <button
@@ -500,7 +542,7 @@ export default function KeywordTrackerTab() {
                         }));
                         setShowForm(true);
                       }}
-                      className="text-sm text-blue-600 hover:underline"
+                      style={{ fontSize: 12, color: C.purple, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
                     >
                       사용
                     </button>
