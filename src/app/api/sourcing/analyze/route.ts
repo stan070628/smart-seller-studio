@@ -20,6 +20,38 @@ import type { SalesAnalysisItem } from '@/types/sourcing';
 import { logDiscoveryBatch, type DiscoveryLogEntry } from '@/lib/sourcing/analytics-logger';
 import { getActiveSeasonKeywords } from '@/lib/sourcing/shared/season-bonus';
 
+// categories 결과 5분 메모리 캐시 — 거의 변하지 않는 데이터
+// pending 프로미스 공유로 동시 만료 시 DB 중복 조회(stampede) 방지
+interface CategoriesCache {
+  value: string[];
+  expiresAt: number;
+}
+let categoriesCache: CategoriesCache | null = null;
+let categoriesPending: Promise<string[]> | null = null;
+
+async function getCachedCategories(pool: ReturnType<typeof getSourcingPool>): Promise<string[]> {
+  const now = Date.now();
+  if (categoriesCache && categoriesCache.expiresAt > now) return categoriesCache.value;
+  if (categoriesPending) return categoriesPending;
+  categoriesPending = (async () => {
+    try {
+      const result = await pool.query<{ category_name: string }>(
+        `SELECT DISTINCT category_name FROM sourcing_items
+         WHERE category_name IS NOT NULL
+         ORDER BY category_name`,
+      );
+      const categories = [...new Set(
+        result.rows.map((r) => toParentCategory(r.category_name)),
+      )].sort();
+      categoriesCache = { value: categories, expiresAt: Date.now() + 5 * 60 * 1000 };
+      return categories;
+    } finally {
+      categoriesPending = null;
+    }
+  })();
+  return categoriesPending;
+}
+
 // ─────────────────────────────────────────
 // 허용 정렬 컬럼 화이트리스트 (SQL 인젝션 방지)
 // ─────────────────────────────────────────
@@ -371,87 +403,86 @@ export async function GET(request: NextRequest) {
     const finalWhereClause =
       allConditions.length > 0 ? `WHERE ${allConditions.join(' AND ')}` : '';
 
-    // 전체 건수 조회 (COUNT) — sourcing_items JOIN 포함
-    const countResult = await pool.query<{ total: string }>(
-      `SELECT COUNT(*) AS total
-       FROM sales_analysis_view v
-       JOIN sourcing_items si ON si.id = v.id
-       ${finalWhereClause}`,
-      params,
-    );
-    const total = parseInt(countResult.rows[0]?.total ?? '0', 10);
-
-    // 데이터 조회 — sortColumn과 orderDir은 화이트리스트 검증 완료로 직접 삽입
-    // sourcing_items의 마진율 관련 필드를 JOIN으로 함께 조회
+    // limit/offset 파라미터 인덱스를 병렬 시작 전에 확정
     const limitParam = paramIdx++;
     const offsetParam = paramIdx++;
-    const dataResult = await pool.query<Record<string, unknown>>(
-      `SELECT
-         v.*,
-         si.moq,
-         si.unit_qty,
-         si.deli_who,
-         si.deli_fee,
-         si.price_resale_recommend,
-         si.legal_status,
-         si.legal_issues,
-         si.legal_checked_at,
-         si.ip_risk_level,
-         si.ip_checked_at,
-         si.market_lowest_price,
-         si.market_price_source,
-         si.market_price_updated_at,
-         si.score_total,
-         si.score_legal_ip,
-         si.score_price_comp,
-         si.score_cs_safety,
-         si.score_margin,
-         si.score_demand,
-         si.score_supply,
-         si.score_moq_fit,
-         si.score_calculated_at,
-         si.cs_risk_level,
-         si.cs_risk_reason,
-         si.dropship_moq_strategy,
-         si.dropship_bundle_price,
-         si.dropship_price_gap_rate,
-         CASE
-           WHEN si.price_resale_recommend > 0
-             THEN ROUND(
-               (si.price_resale_recommend
-                 - COALESCE(si.price_dome, v.latest_price_dome, 0)
-                 - CASE WHEN si.deli_who != 'P'
-                     THEN COALESCE(si.deli_fee, 0)::numeric / GREATEST(COALESCE(si.moq, 1), 1)
-                     ELSE 0
-                   END
-               )::numeric
-               / si.price_resale_recommend * 100,
-               1
-             )
-           ELSE NULL
-         END AS margin_rate
-       FROM sales_analysis_view v
-       JOIN sourcing_items si ON si.id = v.id
-       ${finalWhereClause}
-       ORDER BY ${sortColumn} ${orderDir} NULLS LAST
-       LIMIT $${limitParam} OFFSET $${offsetParam}`,
-      [...params, limit, offset],
-    );
 
-    // 마지막 수집 시각 조회 (collection_logs 최신 성공 레코드)
-    const lastLogResult = await pool.query<{ started_at: string }>(
-      `SELECT started_at FROM collection_logs
-       WHERE status = 'success'
-       ORDER BY started_at DESC
-       LIMIT 1`,
-    );
+    // COUNT + data + lastLog + categories 병렬 실행
+    const [countResult, dataResult, lastLogResult, categories] = await Promise.all([
+      pool.query<{ total: string }>(
+        `SELECT COUNT(*) AS total
+         FROM sales_analysis_view v
+         JOIN sourcing_items si ON si.id = v.id
+         ${finalWhereClause}`,
+        params,
+      ),
+      // 데이터 조회 — sortColumn과 orderDir은 화이트리스트 검증 완료로 직접 삽입
+      // sourcing_items의 마진율 관련 필드를 JOIN으로 함께 조회
+      pool.query<Record<string, unknown>>(
+        `SELECT
+           v.*,
+           si.moq,
+           si.unit_qty,
+           si.deli_who,
+           si.deli_fee,
+           si.price_resale_recommend,
+           si.legal_status,
+           si.legal_issues,
+           si.legal_checked_at,
+           si.ip_risk_level,
+           si.ip_checked_at,
+           si.market_lowest_price,
+           si.market_price_source,
+           si.market_price_updated_at,
+           si.score_total,
+           si.score_legal_ip,
+           si.score_price_comp,
+           si.score_cs_safety,
+           si.score_margin,
+           si.score_demand,
+           si.score_supply,
+           si.score_moq_fit,
+           si.score_calculated_at,
+           si.cs_risk_level,
+           si.cs_risk_reason,
+           si.dropship_moq_strategy,
+           si.dropship_bundle_price,
+           si.dropship_price_gap_rate,
+           CASE
+             WHEN si.price_resale_recommend > 0
+               THEN ROUND(
+                 (si.price_resale_recommend
+                   - COALESCE(si.price_dome, v.latest_price_dome, 0)
+                   - CASE WHEN si.deli_who != 'P'
+                       THEN COALESCE(si.deli_fee, 0)::numeric / GREATEST(COALESCE(si.moq, 1), 1)
+                       ELSE 0
+                     END
+                 )::numeric
+                 / si.price_resale_recommend * 100,
+                 1
+               )
+             ELSE NULL
+           END AS margin_rate
+         FROM sales_analysis_view v
+         JOIN sourcing_items si ON si.id = v.id
+         ${finalWhereClause}
+         ORDER BY ${sortColumn} ${orderDir} NULLS LAST
+         LIMIT $${limitParam} OFFSET $${offsetParam}`,
+        [...params, limit, offset],
+      ),
+      // 마지막 수집 시각 조회 (collection_logs 최신 성공 레코드)
+      pool.query<{ started_at: string }>(
+        `SELECT started_at FROM collection_logs
+         WHERE status = 'success'
+         ORDER BY started_at DESC
+         LIMIT 1`,
+      ),
+      // 전체 카테고리 목록 조회 (5분 메모리 캐시 적용)
+      getCachedCategories(pool),
+    ]);
 
-    // 전체 카테고리 목록 조회
-    const catResult = await pool.query<{ category_name: string }>(
-      `SELECT DISTINCT category_name FROM sourcing_items
-       WHERE category_name IS NOT NULL
-       ORDER BY category_name`,
-    );
+    const total = parseInt(countResult.rows[0]?.total ?? '0', 10);
+    const lastCollectedAt = lastLogResult.rows[0]?.started_at ?? null;
 
     const rawItems = dataResult.rows.map(toSalesAnalysisItem);
 
@@ -487,12 +518,6 @@ export async function GET(request: NextRequest) {
       ...item,
       priceTiers: tiersMap[item.id] ?? { dome: [], supply: [], resale: [] },
     }));
-
-    const lastCollectedAt = lastLogResult.rows[0]?.started_at ?? null;
-    // 세분류 → 상위 카테고리 변환 후 중복 제거 + 정렬
-    const categories = [...new Set(
-      catResult.rows.map((r) => toParentCategory(r.category_name)),
-    )].sort();
 
     // ── Layer 1 자동 로깅 (fire-and-forget) ────────────────────────────────
     // 응답 반환과 무관하게 비동기 실행. 실패해도 호출자에게 영향 없음.
