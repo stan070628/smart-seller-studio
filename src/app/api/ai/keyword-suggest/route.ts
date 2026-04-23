@@ -3,6 +3,7 @@ import { getAnthropicClient } from '@/lib/ai/claude';
 import { checkRateLimit, getRateLimitKey, RATE_LIMITS } from '@/lib/rate-limit';
 import { requireAuth } from '@/lib/supabase/auth';
 import { getKeywordStats } from '@/lib/naver-ad';
+import { evaluateKeyword } from '@/app/api/ai/keyword-evaluate/route';
 import type { TextBlock } from '@anthropic-ai/sdk/resources/messages';
 
 // ─── 타입 ────────────────────────────────────────────────────────────────────
@@ -12,6 +13,8 @@ export interface SuggestedKeyword {
   reason: string;
   searchVolume: number | null;
   competitorCount: number | null;
+  pass: boolean | null;
+  reasoning: string | null;
 }
 
 interface ApiSuccessResponse {
@@ -48,9 +51,8 @@ export function parseKeywordSuggestResponse(raw: string): { keyword: string; rea
 const SYSTEM_PROMPT = `당신은 한국 온라인 쇼핑몰(네이버 스마트스토어, 쿠팡) 상품 키워드 전문가입니다.
 
 셀러 전략 기준:
-- 월 검색량: 3,000 ~ 30,000 (너무 크면 레드오션, 너무 작으면 수요 없음)
-- 경쟁 상품 수: 500개 미만 (틈새시장)
-- 상위 상품 리뷰 수: 50개 미만 (신규 진입 가능)
+- 수요 대비 공급 비율이 적절한 키워드 (과포화 시장 제외)
+- 신규 셀러가 광고 없이 자연 노출 가능한 경쟁 강도
 - 가격대: 8,000원 ~ 50,000원
 - 소형 상품, 연중 수요 안정, 브랜드 로열티 낮은 카테고리
 
@@ -145,8 +147,41 @@ export async function POST(
       reason: k.reason,
       searchVolume: stats?.searchVolume ?? null,
       competitorCount: stats?.competitorCount ?? null,
+      pass: null,
+      reasoning: null,
     };
   });
 
-  return NextResponse.json({ success: true, data: { keywords } });
+  // 3단계: AI 평가 (searchVolume + competitorCount 있는 키워드만)
+  const evaluationMap = new Map<string, { pass: boolean | null; reasoning: string | null }>();
+  const toEvaluate = keywords.filter(
+    (k) => k.searchVolume !== null && k.competitorCount !== null,
+  );
+  if (toEvaluate.length > 0) {
+    await Promise.all(
+      toEvaluate.map(async (k) => {
+        try {
+          const result = await evaluateKeyword({
+            keyword: k.keyword,
+            searchVolume: k.searchVolume!,
+            competitorCount: k.competitorCount!,
+          });
+          evaluationMap.set(k.keyword, result);
+        } catch {
+          // graceful degradation: evaluation unavailable for this keyword
+        }
+      }),
+    );
+  }
+
+  const enrichedKeywords: SuggestedKeyword[] = keywords.map((k) => {
+    const ev = evaluationMap.get(k.keyword);
+    return {
+      ...k,
+      pass: ev?.pass ?? null,
+      reasoning: ev?.reasoning ?? null,
+    };
+  });
+
+  return NextResponse.json({ success: true, data: { keywords: enrichedKeywords } });
 }
