@@ -34,17 +34,20 @@ async function getCachedCategories(pool: ReturnType<typeof getSourcingPool>): Pr
   if (categoriesCache && categoriesCache.expiresAt > now) return categoriesCache.value;
   if (categoriesPending) return categoriesPending;
   categoriesPending = (async () => {
-    const result = await pool.query<{ category_name: string }>(
-      `SELECT DISTINCT category_name FROM sourcing_items
-       WHERE category_name IS NOT NULL
-       ORDER BY category_name`,
-    );
-    const categories = [...new Set(
-      result.rows.map((r) => toParentCategory(r.category_name)),
-    )].sort();
-    categoriesCache = { value: categories, expiresAt: Date.now() + 5 * 60 * 1000 };
-    categoriesPending = null;
-    return categories;
+    try {
+      const result = await pool.query<{ category_name: string }>(
+        `SELECT DISTINCT category_name FROM sourcing_items
+         WHERE category_name IS NOT NULL
+         ORDER BY category_name`,
+      );
+      const categories = [...new Set(
+        result.rows.map((r) => toParentCategory(r.category_name)),
+      )].sort();
+      categoriesCache = { value: categories, expiresAt: Date.now() + 5 * 60 * 1000 };
+      return categories;
+    } finally {
+      categoriesPending = null;
+    }
   })();
   return categoriesPending;
 }
