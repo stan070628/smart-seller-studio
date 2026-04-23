@@ -38,6 +38,14 @@ interface SuggestedKeyword {
   reasoning: string | null;
 }
 
+interface DiscoveredKeyword {
+  keyword: string;
+  searchVolume: number;
+  competitorCount: number;
+  pass: boolean | null;
+  reasoning: string | null;
+}
+
 const STORAGE_KEY = 'plan_keywords';
 
 function loadKeywords(): KeywordEntry[] {
@@ -91,6 +99,9 @@ export default function KeywordTrackerTab() {
   const [suggestResults, setSuggestResults] = useState<SuggestedKeyword[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [suggestError, setSuggestError] = useState<string | null>(null);
+  const [isDiscovering, setIsDiscovering] = useState(false);
+  const [discoverResults, setDiscoverResults] = useState<DiscoveredKeyword[]>([]);
+  const [showDiscoverModal, setShowDiscoverModal] = useState(false);
 
   useEffect(() => {
     setEntries(loadKeywords());
@@ -180,6 +191,23 @@ export default function KeywordTrackerTab() {
     }
   }
 
+  const handleDiscover = async () => {
+    setIsDiscovering(true);
+    setDiscoverResults([]);
+    try {
+      const res = await fetch('/api/ai/keyword-discover', { method: 'POST' });
+      const json = await res.json();
+      if (json.success) {
+        setDiscoverResults(json.data.keywords);
+        setShowDiscoverModal(true);
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setIsDiscovering(false);
+    }
+  };
+
   function handleAddSuggested() {
     const toAdd = suggestResults
       .filter((_, i) => selectedIds.has(i))
@@ -254,6 +282,13 @@ export default function KeywordTrackerTab() {
             }}
           >
             ✨ AI 추천
+          </button>
+          <button
+            onClick={handleDiscover}
+            disabled={isDiscovering}
+            className="px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+          >
+            {isDiscovering ? '발굴 중...' : '키워드 발굴'}
           </button>
           <button
             onClick={() => setShowForm((v) => !v)}
@@ -423,6 +458,54 @@ export default function KeywordTrackerTab() {
             {!suggestLoading && suggestResults.length === 0 && (
               <div style={{ textAlign: 'center', padding: '24px 0', color: C.textSub, fontSize: 13 }}>
                 힌트를 입력하거나 그냥 &ldquo;추천 받기&rdquo;를 눌러보세요
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 키워드 발굴 모달 */}
+      {showDiscoverModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">키워드 발굴 결과</h3>
+              <button onClick={() => setShowDiscoverModal(false)} className="text-gray-500 hover:text-gray-700">✕</button>
+            </div>
+            {discoverResults.length === 0 ? (
+              <p className="text-gray-500 text-center py-8">발굴된 키워드가 없습니다.</p>
+            ) : (
+              <div className="space-y-2">
+                {discoverResults.map((kw) => (
+                  <div key={kw.keyword} className="flex items-center justify-between p-3 border rounded hover:bg-gray-50">
+                    <div className="flex items-center gap-3">
+                      <span className="font-medium">{kw.keyword}</span>
+                      <span className="text-xs text-gray-500">검색량 {kw.searchVolume.toLocaleString()}</span>
+                      <span className="text-xs text-gray-500">경쟁 {kw.competitorCount.toLocaleString()}</span>
+                      {kw.pass === true && (
+                        <span title={kw.reasoning ?? undefined} className="text-green-600 cursor-help">✅</span>
+                      )}
+                      {kw.pass === false && (
+                        <span title={kw.reasoning ?? undefined} className="text-red-500 cursor-help">❌</span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => {
+                        setShowDiscoverModal(false);
+                        setForm((f) => ({
+                          ...f,
+                          keyword: kw.keyword,
+                          searchVolume: String(kw.searchVolume),
+                          competitorCount: String(kw.competitorCount),
+                        }));
+                        setShowForm(true);
+                      }}
+                      className="text-sm text-blue-600 hover:underline"
+                    >
+                      사용
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
           </div>
