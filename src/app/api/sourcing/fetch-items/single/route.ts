@@ -132,6 +132,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // MATERIALIZED VIEW 비동기 갱신 (CONCURRENTLY — 읽기 차단 없음, await 하지 않음)
+    void pool.query('REFRESH MATERIALIZED VIEW CONCURRENTLY public.sales_analysis_view')
+      .catch((e) => console.error('[fetch-items/single] matview refresh 실패:', e));
+
     console.info(
       `[fetch-items/single] ${isNew ? '신규' : '업데이트'}: ${itemNo} "${title}"`,
     );
