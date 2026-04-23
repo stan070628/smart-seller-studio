@@ -264,6 +264,10 @@ export async function POST(request: NextRequest) {
         `실패 ${batchResult.failed.length}건 (날짜: ${snapshotDate})`,
     );
 
+    // MATERIALIZED VIEW 비동기 갱신 (CONCURRENTLY — 읽기 차단 없음, await 하지 않음)
+    pool.query('REFRESH MATERIALIZED VIEW CONCURRENTLY public.sales_analysis_view')
+      .catch((e) => console.error('[snapshot] matview refresh 실패:', e));
+
     return Response.json({
       success: true,
       data: {
