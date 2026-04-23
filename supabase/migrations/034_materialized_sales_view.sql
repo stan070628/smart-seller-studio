@@ -1,5 +1,5 @@
 -- ─────────────────────────────────────────────────────────────────────────
--- 035: sales_analysis_view → MATERIALIZED VIEW 전환
+-- 034: sales_analysis_view → MATERIALIZED VIEW 전환
 --
 -- 이유: 매 요청마다 inventory_snapshots CTE 풀스캔 3회 → 결과 캐시로 교체
 -- refresh: POST /api/sourcing/snapshot 완료 시점에 CONCURRENTLY 갱신
