@@ -33,6 +33,15 @@ function parseItemNo(input: string): number | null {
   return null;
 }
 
+// API 배송비 부담 한국어 → 단일문자 코드 변환
+// deli.pay: '무료*' → 'P' (판매자 부담, 리스트 API 관례)
+//           '선결제'|'착불' → 'B' (구매자 부담)
+// 'P' = 판매자 부담(무료), 'B' = 구매자 부담
+function parseDeliPay(pay: string): string {
+  if (pay.includes('무료')) return 'P';
+  return 'B';
+}
+
 const requestSchema = z.union([
   z.object({ url: z.string().min(1) }),
   z.object({ itemId: z.number().int().positive() }),
@@ -83,8 +92,9 @@ export async function POST(request: NextRequest) {
     const priceDome  = detail.price?.dome ?? null;
     const moq        = detail.qty?.domeMoq ?? null;
     const inventory  = detail.qty?.inventory ?? null;
-    const deliWho    = detail.deli?.who ?? null;
-    const deliFee    = detail.deli?.fee ?? null;
+    const deliWho    = detail.deli?.who ?? (detail.deli?.pay ? parseDeliPay(detail.deli.pay) : null);
+    const rawDeliFee = detail.deli?.fee ?? (detail.deli?.dome?.fee != null ? Number(detail.deli.dome.fee) : null);
+    const deliFee    = rawDeliFee != null && Number.isFinite(rawDeliFee) ? rawDeliFee : null;
 
     const pool = getSourcingPool();
     const now = new Date();

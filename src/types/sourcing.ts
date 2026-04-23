@@ -66,8 +66,12 @@ export interface DomeggookItemDetail {
     domeMoq?: number;      // 최소주문수량
   };
   deli?: {
-    who?: string;          // 'S'=무료, 'P'=선결제, 'B'=착불, 'C'=구매자선택
-    fee?: number;          // 배송비 (원)
+    who?: string;          // 단일문자 코드 (구형 API 호환)
+    pay?: string;          // '선결제'|'착불'|'무료' (실제 API 응답 필드)
+    fee?: number;          // 배송비 (단일값, 구형 API 호환)
+    dome?: {
+      fee?: string | number; // 도매 배송비 (실제 API: deli.dome.fee)
+    };
   };
   image?: {
     url?: string;
