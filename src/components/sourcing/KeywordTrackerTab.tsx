@@ -491,10 +491,15 @@ export default function KeywordTrackerTab() {
 
       {/* 키워드 발굴 모달 */}
       {showDiscoverModal && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50,
-        }}>
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50,
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowDiscoverModal(false); }}
+          onKeyDown={(e) => { if (e.key === 'Escape') setShowDiscoverModal(false); }}
+          tabIndex={-1}
+        >
           <div style={{
             background: C.card, borderRadius: 12, padding: 24,
             maxWidth: 672, width: '100%', maxHeight: '80vh', overflowY: 'auto',
