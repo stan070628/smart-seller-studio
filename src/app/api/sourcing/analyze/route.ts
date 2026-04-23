@@ -21,27 +21,32 @@ import { logDiscoveryBatch, type DiscoveryLogEntry } from '@/lib/sourcing/analyt
 import { getActiveSeasonKeywords } from '@/lib/sourcing/shared/season-bonus';
 
 // categories 결과 5분 메모리 캐시 — 거의 변하지 않는 데이터
+// pending 프로미스 공유로 동시 만료 시 DB 중복 조회(stampede) 방지
 interface CategoriesCache {
   value: string[];
   expiresAt: number;
 }
 let categoriesCache: CategoriesCache | null = null;
+let categoriesPending: Promise<string[]> | null = null;
 
 async function getCachedCategories(pool: ReturnType<typeof getSourcingPool>): Promise<string[]> {
   const now = Date.now();
-  if (categoriesCache && categoriesCache.expiresAt > now) {
-    return categoriesCache.value;
-  }
-  const result = await pool.query<{ category_name: string }>(
-    `SELECT DISTINCT category_name FROM sourcing_items
-     WHERE category_name IS NOT NULL
-     ORDER BY category_name`,
-  );
-  const categories = [...new Set(
-    result.rows.map((r) => toParentCategory(r.category_name)),
-  )].sort();
-  categoriesCache = { value: categories, expiresAt: now + 5 * 60 * 1000 };
-  return categories;
+  if (categoriesCache && categoriesCache.expiresAt > now) return categoriesCache.value;
+  if (categoriesPending) return categoriesPending;
+  categoriesPending = (async () => {
+    const result = await pool.query<{ category_name: string }>(
+      `SELECT DISTINCT category_name FROM sourcing_items
+       WHERE category_name IS NOT NULL
+       ORDER BY category_name`,
+    );
+    const categories = [...new Set(
+      result.rows.map((r) => toParentCategory(r.category_name)),
+    )].sort();
+    categoriesCache = { value: categories, expiresAt: Date.now() + 5 * 60 * 1000 };
+    categoriesPending = null;
+    return categories;
+  })();
+  return categoriesPending;
 }
 
 // ─────────────────────────────────────────
