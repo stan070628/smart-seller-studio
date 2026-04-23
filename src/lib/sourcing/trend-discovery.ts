@@ -39,10 +39,7 @@ export async function discoverTrendSeeds(): Promise<TrendSeed[]> {
       contents: [{ role: 'user', parts: [{ text: DISCOVER_PROMPT }] }],
     });
 
-    const candidates = response.candidates;
-    if (!candidates?.length) return [];
-    const parts = candidates[0]?.content?.parts;
-    const text = parts?.find((p: { text?: string }) => typeof p.text === 'string')?.text ?? '';
+    const text = response.text ?? '';
     return parseSeedResponse(text);
   } catch {
     return [];

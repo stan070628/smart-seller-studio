@@ -41,11 +41,7 @@ describe('discoverTrendSeeds', () => {
   it('Gemini 응답에서 씨드를 파싱해 반환한다', async () => {
     const mockAI = getGeminiGenAI();
     (mockAI.models.generateContent as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-      candidates: [{
-        content: {
-          parts: [{ text: '{"seeds":[{"keyword":"텀블러","source":"threads","reason":"환경"}]}' }],
-        },
-      }],
+      text: '{"seeds":[{"keyword":"텀블러","source":"threads","reason":"환경"}]}',
     });
 
     const result = await discoverTrendSeeds();
