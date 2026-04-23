@@ -162,6 +162,7 @@ export async function getKeywordStats(keywords: string[]): Promise<KeywordStat[]
 
 // ─── 씨드 기반 키워드 확장 ──────────────────────────────────────────────────
 
+// Naver 검색광고 API /keywordstool의 hintKeywords 최대 허용 개수
 const AD_BATCH_SIZE = 5;
 
 /**
@@ -175,22 +176,19 @@ export async function expandKeywords(seeds: string[]): Promise<KeywordStat[]> {
 
   if (!apiKey || !secretKey || !customerId) return [];
 
-  // 5개씩 배치로 나눠 검색광고 API 호출 → 모든 관련 키워드 수집
   const batches: string[][] = [];
   for (let i = 0; i < seeds.length; i += AD_BATCH_SIZE) {
     batches.push(seeds.slice(i, i + AD_BATCH_SIZE));
   }
 
-  const volumeMap = new Map<string, number>();
-  for (const batch of batches) {
-    const timestamp = Date.now().toString();
-    const path = '/keywordstool';
-    const signature = buildSignature(timestamp, 'GET', path, secretKey);
-    const query = batch.map(encodeURIComponent).join(',');
-
-    try {
+  const adPath = '/keywordstool';
+  const batchResults = await Promise.allSettled(
+    batches.map(async (batch) => {
+      const timestamp = Date.now().toString();
+      const signature = buildSignature(timestamp, 'GET', adPath, secretKey);
+      const query = batch.map(encodeURIComponent).join(',');
       const res = await fetch(
-        `https://api.searchad.naver.com${path}?hintKeywords=${query}&showDetail=1`,
+        `https://api.searchad.naver.com${adPath}?hintKeywords=${query}&showDetail=1`,
         {
           headers: {
             'X-Timestamp': timestamp,
@@ -200,23 +198,28 @@ export async function expandKeywords(seeds: string[]): Promise<KeywordStat[]> {
           },
         },
       );
-      if (!res.ok) continue;
-      const json = await res.json();
-      const stats = parseKeywordStats(json);
-      for (const s of stats) {
+      if (!res.ok) return [];
+      return parseKeywordStats(await res.json());
+    }),
+  );
+
+  const volumeMap = new Map<string, number>();
+  for (const r of batchResults) {
+    if (r.status === 'fulfilled') {
+      for (const s of r.value) {
         if (!volumeMap.has(s.keyword)) {
           volumeMap.set(s.keyword, s.searchVolume);
         }
       }
-    } catch {
-      // 배치 실패는 건너뜀
     }
   }
 
   if (volumeMap.size === 0) return [];
 
   const relatedKeywords = Array.from(volumeMap.keys());
-  const competitorMap = await fetchCompetitorCounts(relatedKeywords);
+  const competitorMap = await fetchCompetitorCounts(relatedKeywords).catch(
+    () => new Map<string, number>(),
+  );
 
   return relatedKeywords.map((kw) => ({
     keyword: kw,
