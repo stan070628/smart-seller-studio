@@ -5,6 +5,12 @@ vi.mock('@/lib/supabase/auth', () => ({
   requireAuth: vi.fn().mockResolvedValue({ userId: 'user-1' }),
 }));
 
+vi.mock('@/lib/rate-limit', () => ({
+  checkRateLimit: vi.fn().mockReturnValue({ allowed: true, remaining: 9, resetAt: 0 }),
+  getRateLimitKey: vi.fn().mockReturnValue('key'),
+  RATE_LIMITS: { AI_API: {} },
+}));
+
 vi.mock('@/lib/ai/claude', () => ({
   getAnthropicClient: vi.fn().mockReturnValue({
     messages: {
