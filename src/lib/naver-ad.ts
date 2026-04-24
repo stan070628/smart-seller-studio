@@ -176,9 +176,12 @@ export async function expandKeywords(seeds: string[]): Promise<KeywordStat[]> {
 
   if (!apiKey || !secretKey || !customerId) return [];
 
+  // Naver AD API는 공백 포함 키워드를 거부(400)하므로 공백을 제거한다.
+  const normalizedSeeds = seeds.map((s) => s.replace(/\s+/g, ''));
+
   const batches: string[][] = [];
-  for (let i = 0; i < seeds.length; i += AD_BATCH_SIZE) {
-    batches.push(seeds.slice(i, i + AD_BATCH_SIZE));
+  for (let i = 0; i < normalizedSeeds.length; i += AD_BATCH_SIZE) {
+    batches.push(normalizedSeeds.slice(i, i + AD_BATCH_SIZE));
   }
 
   const adPath = '/keywordstool';
