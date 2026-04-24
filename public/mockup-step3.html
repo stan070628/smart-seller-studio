@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Step 3 UX 목업 — 등록 정보 입력</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      background: #f0f2f5;
+      color: #1a1a1a;
+      font-size: 14px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── 레이아웃 ── */
+    .shell { display: flex; height: 100vh; overflow: hidden; }
+    .sidebar {
+      width: 220px; background: #fff;
+      border-right: 1px solid #e5e7eb;
+      flex-shrink: 0; display: flex; flex-direction: column; padding: 20px 0;
+    }
+    .sidebar-logo { padding: 0 20px 20px; font-size: 15px; font-weight: 800; color: #BE0014; border-bottom: 1px solid #f0f0f0; margin-bottom: 12px; }
+    .sidebar-item { padding: 9px 20px; font-size: 13px; color: #888; cursor: pointer; }
+    .sidebar-item.active { color: #BE0014; background: rgba(190,0,20,0.05); font-weight: 600; border-right: 2px solid #BE0014; }
+    .main { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+
+    /* ── 스텝 바 ── */
+    .step-bar {
+      background: #fff; border-bottom: 1px solid #e5e7eb;
+      padding: 14px 32px; display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .step-bar-left { display: flex; align-items: center; gap: 0; }
+    .step-item { display: flex; align-items: center; gap: 8px; color: #bbb; font-size: 13px; font-weight: 500; }
+    .step-item.active { color: #BE0014; font-weight: 700; }
+    .step-item.done { color: #16a34a; }
+    .step-circle {
+      width: 26px; height: 26px; border-radius: 50%;
+      background: #e5e7eb; color: #aaa;
+      font-size: 12px; font-weight: 800;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .step-item.active .step-circle { background: #BE0014; color: #fff; }
+    .step-item.done .step-circle { background: #16a34a; color: #fff; }
+    .step-arrow { width: 36px; height: 1px; background: #e5e7eb; margin: 0 6px; }
+    /* 이전 버튼을 스텝바 우측으로 */
+    .step-back-btn {
+      display: flex; align-items: center; gap: 6px;
+      padding: 7px 16px; font-size: 12px; font-weight: 600;
+      background: #fff; color: #555;
+      border: 1px solid #e5e7eb; border-radius: 8px; cursor: pointer;
+    }
+    .step-back-btn:hover { background: #f9f9f9; }
+
+    /* ── 콘텐츠 2컬럼 ── */
+    .content-area {
+      flex: 1; overflow: hidden;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+    }
+
+    /* ── 좌측: sticky 미리보기 ── */
+    .preview-col {
+      overflow-y: auto;
+      padding: 24px 16px 24px 32px;
+      border-right: 1px solid #e5e7eb;
+    }
+    .preview-card {
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+      overflow: hidden;
+      position: sticky; top: 0;
+    }
+    .preview-card-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px; border-bottom: 1px solid #e5e7eb;
+      background: #f8f8f8;
+    }
+    .preview-card-title { font-size: 13px; font-weight: 700; color: #1a1a1a; }
+    .preview-actions { display: flex; gap: 6px; }
+    .btn-ghost {
+      display: flex; align-items: center; gap: 4px;
+      padding: 5px 10px; font-size: 11px; font-weight: 600;
+      background: #fff; color: #444;
+      border: 1px solid #e5e7eb; border-radius: 6px; cursor: pointer;
+    }
+    .btn-ghost:hover { background: #f3f3f3; }
+    .btn-dark {
+      display: flex; align-items: center; gap: 4px;
+      padding: 5px 10px; font-size: 11px; font-weight: 600;
+      background: #1a1a1a; color: #fff;
+      border: none; border-radius: 6px; cursor: pointer;
+    }
+    /* 미리보기 영역 */
+    .preview-iframe-mock {
+      width: 100%; height: 440px;
+      background: linear-gradient(160deg, #fafafa 0%, #f0f0f0 100%);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    .mock-detail-hero {
+      background: #e8e8e8; height: 180px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; color: #999;
+      position: relative; overflow: hidden;
+    }
+    .mock-detail-hero img { width: 100%; height: 100%; object-fit: cover; opacity: 0.5; }
+    .mock-detail-hero-label {
+      position: absolute; font-size: 11px; color: #999;
+    }
+    .mock-detail-body { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .mock-tag { display: inline-block; font-size: 10px; font-weight: 700; color: #BE0014; background: rgba(190,0,20,0.07); padding: 2px 8px; border-radius: 4px; margin-bottom: 4px; }
+    .mock-product-name { font-size: 14px; font-weight: 800; color: #1a1a1a; line-height: 1.4; }
+    .mock-price { font-size: 20px; font-weight: 900; color: #BE0014; }
+    .mock-price-sub { font-size: 11px; color: #aaa; text-decoration: line-through; }
+    .mock-section-title { font-size: 11px; font-weight: 700; color: #888; border-top: 1px solid #eee; padding-top: 10px; }
+    .mock-spec-row { display: flex; gap: 8px; font-size: 11px; }
+    .mock-spec-key { color: #aaa; width: 60px; flex-shrink: 0; }
+    .mock-spec-val { color: #444; }
+
+    /* 스니펫 코드 패널 */
+    .snippet-panel {
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+      overflow: hidden; margin-top: 12px;
+    }
+    .snippet-panel-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 14px; border-bottom: 1px solid #e5e7eb; background: #f8f8f8;
+    }
+    .snippet-panel-title { font-size: 12px; font-weight: 700; color: #1a1a1a; }
+    .snippet-panel-sub { font-size: 10px; color: #aaa; margin-top: 1px; }
+    .code-block {
+      font-family: 'Courier New', monospace; font-size: 10px; line-height: 1.6;
+      color: #4ade80; background: #030712;
+      padding: 12px 14px; height: 100px; overflow: hidden;
+      position: relative;
+    }
+    .code-fade {
+      position: absolute; bottom: 0; left: 0; right: 0; height: 40px;
+      background: linear-gradient(to bottom, transparent, #030712);
+    }
+
+    /* ── 우측: 등록 폼 (스크롤) ── */
+    .form-col {
+      overflow-y: auto;
+      padding: 24px 32px 24px 16px;
+    }
+    .form-card {
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+      overflow: hidden; margin-bottom: 12px;
+    }
+    .form-card-header {
+      padding: 12px 20px; border-bottom: 1px solid #f0f0f0;
+      background: #f8f8f8; font-size: 13px; font-weight: 700; color: #1a1a1a;
+    }
+    .form-card-body { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+
+    /* 필드 */
+    .field-label { display: block; font-size: 11px; font-weight: 700; color: #666; margin-bottom: 5px; }
+    .required { color: #BE0014; }
+    .input {
+      width: 100%; padding: 9px 12px; font-size: 13px;
+      border: 1px solid #e5e7eb; border-radius: 8px; outline: none;
+      color: #1a1a1a; background: #fff;
+    }
+    .input:focus { border-color: #BE0014; }
+    .input-row { display: grid; gap: 10px; }
+    .input-row.col2 { grid-template-columns: 1fr 1fr; }
+    .input-row.col3 { grid-template-columns: 1fr 1fr 1fr; }
+    select.input { appearance: auto; }
+    textarea.input { resize: vertical; min-height: 80px; font-family: inherit; }
+
+    /* AI 최적화 버튼 */
+    .btn-ai {
+      display: flex; align-items: center; gap: 4px;
+      padding: 0 12px; font-size: 12px; font-weight: 600;
+      border: 1px solid #8b5cf6; border-radius: 8px;
+      background: #f5f3ff; color: #7c3aed; cursor: pointer; white-space: nowrap;
+    }
+    .input-with-btn { display: flex; gap: 6px; }
+    .input-with-btn .input { flex: 1; }
+
+    /* 플랫폼 배지 */
+    .badge-coupang { font-size: 10px; font-weight: 700; color: #fff; background: #be0014; padding: 1px 6px; border-radius: 4px; }
+    .badge-naver { font-size: 10px; font-weight: 700; color: #fff; background: #03c75a; padding: 1px 6px; border-radius: 4px; }
+    .badge-label { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: #666; margin-bottom: 5px; }
+
+    /* 채널별 가격 */
+    .channel-price-hint { font-size: 10px; color: #aaa; margin-bottom: 6px; display: flex; align-items: center; gap: 4px; }
+    .hint-badge { font-size: 9px; background: #f3f3f3; color: #888; padding: 1px 5px; border-radius: 3px; }
+
+    /* 이미지 섹션 */
+    .img-grid { display: flex; gap: 6px; flex-wrap: wrap; }
+    .img-thumb {
+      width: 56px; height: 56px; border-radius: 8px;
+      background: #f0f0f0; border: 1px solid #e5e7eb;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; color: #bbb; overflow: hidden; position: relative;
+    }
+    .img-thumb.filled { background: linear-gradient(135deg, #dde8ff, #e8f5e9); }
+    .img-thumb.add-btn { background: #fff; border: 1.5px dashed #d0d0d0; cursor: pointer; color: #aaa; font-size: 18px; }
+    .img-count { font-size: 10px; color: #888; margin-top: 4px; }
+
+    /* 카테고리 — "확인 모드" ★ 핵심 개선 */
+    .cat-confirm-box {
+      border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden;
+    }
+    .cat-confirm-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 14px; border-bottom: 1px solid #f0f0f0;
+    }
+    .cat-confirm-row:last-child { border-bottom: none; }
+    .cat-confirm-left { display: flex; align-items: flex-start; gap: 8px; }
+    .cat-confirm-path { font-size: 12px; color: #444; line-height: 1.4; }
+    .cat-confirm-path strong { color: #1a1a1a; font-weight: 600; }
+    .cat-confirm-sub { font-size: 10px; color: #aaa; margin-top: 1px; }
+    .cat-confirmed-icon { font-size: 14px; }
+    .btn-change {
+      font-size: 11px; font-weight: 600; color: #555;
+      background: #f3f3f3; border: 1px solid #e5e7eb;
+      border-radius: 6px; padding: 4px 10px; cursor: pointer; flex-shrink: 0;
+    }
+    .btn-change:hover { background: #ebebeb; }
+    .cat-search-panel {
+      border-top: 1px solid #e5e7eb; background: #fafafa; padding: 12px;
+      display: none;
+    }
+    .cat-search-panel.open { display: block; }
+    .cat-search-input-wrap { position: relative; margin-bottom: 8px; }
+    .cat-search-input { width: 100%; padding: 8px 12px; font-size: 12px; border: 1px solid #e5e7eb; border-radius: 7px; outline: none; }
+    .cat-search-input:focus { border-color: #BE0014; }
+    .cat-results { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .cat-result-col-label { font-size: 10px; font-weight: 700; color: #aaa; margin-bottom: 4px; }
+    .cat-result-item { padding: 6px 10px; border-radius: 6px; font-size: 11px; cursor: pointer; border: 1px solid #e5e7eb; background: #fff; }
+    .cat-result-item:hover { background: rgba(190,0,20,0.04); }
+    .cat-result-name { font-weight: 600; color: #1a1a1a; }
+    .cat-result-path { font-size: 10px; color: #aaa; }
+
+    /* 태그 */
+    .tag-list { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+    .tag-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 10px; font-size: 11px; font-weight: 500;
+      background: rgba(190,0,20,0.06); color: #BE0014;
+      border: 1px solid rgba(190,0,20,0.15); border-radius: 100px;
+      cursor: pointer;
+    }
+
+    /* 하단 고정 액션바 */
+    .action-bar {
+      background: #fff; border-top: 1px solid #e5e7eb;
+      padding: 14px 32px;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .action-bar-right { display: flex; align-items: center; gap: 8px; }
+    .btn-preview {
+      display: flex; align-items: center; gap: 6px;
+      padding: 10px 20px; font-size: 13px; font-weight: 600;
+      background: #f3f3f3; color: #333;
+      border: 1px solid #e5e7eb; border-radius: 8px; cursor: pointer;
+    }
+    .btn-preview:hover { background: #ebebeb; }
+    .btn-register {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 28px; font-size: 13px; font-weight: 700;
+      background: #BE0014; color: #fff;
+      border: none; border-radius: 8px; cursor: pointer;
+    }
+    .btn-register:hover { background: #a50012; }
+    .btn-register.loading { background: #ccc; cursor: not-allowed; }
+    .action-hint { font-size: 11px; color: #aaa; }
+
+    /* 미리보기 모달 (등록 정보 요약) */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.4);
+      display: none; align-items: center; justify-content: center;
+      z-index: 100;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: #fff; border-radius: 16px;
+      width: 560px; max-height: 80vh; overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    }
+    .modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 18px 24px; border-bottom: 1px solid #e5e7eb; position: sticky; top: 0; background: #fff;
+    }
+    .modal-title { font-size: 15px; font-weight: 800; color: #1a1a1a; }
+    .modal-close {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: #f3f3f3; border: none; cursor: pointer;
+      font-size: 14px; display: flex; align-items: center; justify-content: center; color: #555;
+    }
+    .modal-body { padding: 20px 24px; display: flex; flex-direction: column; gap: 16px; }
+    .summary-row { display: flex; gap: 12px; align-items: flex-start; }
+    .summary-key { font-size: 12px; color: #aaa; width: 80px; flex-shrink: 0; padding-top: 1px; }
+    .summary-val { font-size: 13px; color: #1a1a1a; line-height: 1.5; }
+    .summary-divider { height: 1px; background: #f0f0f0; }
+    .platform-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; background: #fafafa; border: 1px solid #f0f0f0; }
+    .price-big { font-size: 16px; font-weight: 800; }
+    .price-big.coupang { color: #be0014; }
+    .price-big.naver { color: #03c75a; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 16px 24px; border-top: 1px solid #e5e7eb; position: sticky; bottom: 0; background: #fff; }
+    .btn-modal-cancel { padding: 9px 20px; font-size: 13px; font-weight: 600; background: #f3f3f3; color: #555; border: 1px solid #e5e7eb; border-radius: 8px; cursor: pointer; }
+    .btn-modal-confirm { padding: 9px 24px; font-size: 13px; font-weight: 700; background: #BE0014; color: #fff; border: none; border-radius: 8px; cursor: pointer; }
+
+    /* 등록 완료 배너 */
+    .success-banner {
+      display: none;
+      margin: 16px 32px 0;
+      padding: 16px 20px;
+      background: #dcfce7; border: 1px solid #86efac; border-radius: 12px;
+      align-items: center; justify-content: space-between;
+    }
+    .success-banner.show { display: flex; }
+    .success-banner-left { display: flex; align-items: center; gap: 12px; }
+    .success-icon {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: #16a34a; color: #fff; font-size: 16px;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .success-title { font-size: 14px; font-weight: 700; color: #14532d; }
+    .success-sub { font-size: 12px; color: #16a34a; margin-top: 1px; }
+    .result-pills { display: flex; gap: 6px; margin-top: 6px; }
+    .result-pill {
+      font-size: 11px; font-weight: 600; padding: 3px 10px;
+      border-radius: 6px; border: 1px solid;
+    }
+    .result-pill.ok { color: #15803d; background: rgba(22,163,74,0.08); border-color: rgba(22,163,74,0.2); }
+    .result-pill.warn { color: #92400e; background: rgba(234,179,8,0.08); border-color: rgba(234,179,8,0.2); }
+    .btn-new-product {
+      display: flex; align-items: center; gap: 6px;
+      padding: 8px 16px; font-size: 12px; font-weight: 700;
+      background: #16a34a; color: #fff; border: none; border-radius: 8px; cursor: pointer;
+    }
+
+    /* 로딩 스피너 */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff; border-radius: 50%;
+      animation: spin 0.8s linear infinite; display: inline-block;
+    }
+
+    /* 섹션 구분선 */
+    .section-divider {
+      display: flex; align-items: center; gap: 10px; margin: 4px 0;
+    }
+    .section-divider-line { flex: 1; height: 1px; background: #e5e7eb; }
+    .section-divider-label { font-size: 11px; font-weight: 700; color: #aaa; white-space: nowrap; }
+
+    /* 상태 애니메이션 */
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+    .anim { animation: fadeIn 0.2s ease; }
+
+    /* AI 수정 패널 */
+    .ai-edit-panel {
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+      overflow: hidden; margin-top: 12px;
+    }
+    .ai-edit-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 11px 16px; border-bottom: 1px solid #e5e7eb; background: #f8f8f8;
+    }
+    .ai-edit-header-icon {
+      width: 22px; height: 22px; border-radius: 6px;
+      background: linear-gradient(135deg, #8b5cf6, #BE0014);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; flex-shrink: 0;
+    }
+    .ai-edit-header-title { font-size: 13px; font-weight: 700; color: #1a1a1a; }
+    .ai-edit-header-sub { font-size: 11px; color: #aaa; margin-left: auto; }
+
+    .ai-edit-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+
+    /* 예시 프롬프트 칩 */
+    .ai-prompt-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+    .ai-prompt-chip {
+      font-size: 11px; color: #6d28d9; background: #f5f3ff;
+      border: 1px solid #ddd6fe; border-radius: 100px;
+      padding: 4px 10px; cursor: pointer; transition: background .12s;
+    }
+    .ai-prompt-chip:hover { background: #ede9fe; }
+
+    /* 입력창 + 버튼 행 */
+    .ai-edit-input-row { display: flex; gap: 8px; align-items: flex-end; }
+    .ai-edit-textarea {
+      flex: 1; padding: 10px 12px; font-size: 12px; line-height: 1.5;
+      border: 1.5px solid #ddd6fe; border-radius: 10px;
+      outline: none; resize: none; height: 68px; font-family: inherit;
+      color: #1a1a1a; transition: border-color .15s;
+    }
+    .ai-edit-textarea:focus { border-color: #8b5cf6; }
+    .ai-edit-textarea::placeholder { color: #bbb; }
+    .btn-ai-edit {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 4px; padding: 0 16px; height: 68px;
+      font-size: 12px; font-weight: 700;
+      background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+      color: #fff; border: none; border-radius: 10px; cursor: pointer;
+      flex-shrink: 0; transition: opacity .15s; white-space: nowrap;
+    }
+    .btn-ai-edit:hover { opacity: 0.88; }
+    .btn-ai-edit:disabled { background: #d4d4d8; cursor: not-allowed; }
+    .btn-ai-edit .btn-ai-icon { font-size: 16px; }
+
+    /* AI 수정 중 오버레이 */
+    .ai-generating-overlay {
+      display: none; padding: 16px;
+      background: linear-gradient(135deg, #faf5ff, #f5f3ff);
+      border-top: 1px solid #e9d5ff;
+      align-items: center; gap: 12px;
+    }
+    .ai-generating-overlay.show { display: flex; }
+    .ai-gen-spinner {
+      width: 28px; height: 28px; border-radius: 50%;
+      border: 2.5px solid #ddd6fe; border-top-color: #8b5cf6;
+      animation: spin 0.7s linear infinite; flex-shrink: 0;
+    }
+    .ai-gen-text { font-size: 12px; color: #6d28d9; font-weight: 600; }
+    .ai-gen-sub { font-size: 11px; color: #a78bfa; margin-top: 1px; }
+
+    /* AI 수정 완료 토스트 */
+    .ai-done-toast {
+      display: none; padding: 10px 16px;
+      background: #f0fdf4; border-top: 1px solid #bbf7d0;
+      align-items: center; gap: 8px;
+    }
+    .ai-done-toast.show { display: flex; }
+    .ai-done-icon { font-size: 16px; }
+    .ai-done-text { font-size: 12px; color: #15803d; font-weight: 600; flex: 1; }
+    .btn-ai-revert {
+      font-size: 11px; color: #aaa; background: none; border: none; cursor: pointer; text-decoration: underline;
+    }
+
+    /* 스크롤바 */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-thumb { background: #d0d0d0; border-radius: 10px; }
+  </style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- 사이드바 -->
+  <div class="sidebar">
+    <div class="sidebar-logo">SmartSeller</div>
+    <div class="sidebar-item">대시보드</div>
+    <div class="sidebar-item active">상품 등록</div>
+    <div class="sidebar-item">상품 관리</div>
+    <div class="sidebar-item">주문 관리</div>
+    <div class="sidebar-item">정산</div>
+    <div class="sidebar-item">설정</div>
+  </div>
+
+  <!-- 메인 -->
+  <div class="main">
+
+    <!-- 스텝 바 (이전 버튼을 여기로 이동) -->
+    <div class="step-bar">
+      <div class="step-bar-left">
+        <div class="step-item done">
+          <div class="step-circle">✓</div>
+          <span>소스 선택</span>
+        </div>
+        <div class="step-arrow"></div>
+        <div class="step-item done">
+          <div class="step-circle">✓</div>
+          <span>AI 처리</span>
+        </div>
+        <div class="step-arrow"></div>
+        <div class="step-item active">
+          <div class="step-circle">3</div>
+          <span>등록 정보 입력</span>
+          <!-- ★ "확인 등록" → "등록 정보 입력"으로 변경 -->
+        </div>
+      </div>
+      <!-- ★ 이전 버튼을 스텝바 우측으로 이동 → 버튼 계층 분리 -->
+      <button class="step-back-btn" onclick="alert('Step 2로 이동')">
+        ← 이전 단계로
+      </button>
+    </div>
+
+    <!-- 등록 성공 배너 (숨김 → 등록 완료 후 표시) -->
+    <div class="success-banner" id="successBanner">
+      <div class="success-banner-left">
+        <div class="success-icon">✓</div>
+        <div>
+          <div class="success-title">상품 등록 완료!</div>
+          <div class="success-sub">마켓에 성공적으로 등록되었습니다.</div>
+          <div class="result-pills">
+            <span class="result-pill ok">쿠팡 ✓ 상품번호 28374651</span>
+            <span class="result-pill warn">네이버 ⚠ 임시저장 — 권한 신청 필요</span>
+          </div>
+        </div>
+      </div>
+      <button class="btn-new-product" onclick="location.reload()">
+        + 새 상품 등록
+      </button>
+    </div>
+
+    <!-- 2컬럼 콘텐츠 -->
+    <div class="content-area">
+
+      <!-- ── 좌측: sticky 미리보기 ── -->
+      <div class="preview-col">
+
+        <div class="preview-card">
+          <div class="preview-card-header">
+            <span class="preview-card-title">AI 생성 상세페이지</span>
+            <div class="preview-actions">
+              <button class="btn-ghost" onclick="copyCode()">
+                <span id="copyIcon">📋</span>
+                <span id="copyLabel">코드 복사</span>
+              </button>
+              <button class="btn-dark" onclick="alert('HTML 파일 다운로드')">
+                ↓ 다운로드
+              </button>
+            </div>
+          </div>
+
+          <!-- 상세페이지 목업 미리보기 -->
+          <div class="preview-iframe-mock">
+            <div class="mock-detail-hero">
+              <div class="mock-detail-hero-label">상품 이미지</div>
+            </div>
+            <div class="mock-detail-body">
+              <span class="mock-tag">NEW</span>
+              <div class="mock-product-name">프리미엄 무선 블루투스 이어폰<br>노이즈캔슬링 / 30시간 재생</div>
+              <div style="display:flex; align-items:baseline; gap:8px;">
+                <div class="mock-price">29,900원</div>
+                <div class="mock-price-sub">49,000원</div>
+              </div>
+              <div class="mock-section-title">상품 특징</div>
+              <div class="mock-spec-row"><span class="mock-spec-key">소재</span><span class="mock-spec-val">ABS 플라스틱, 실리콘 이어팁</span></div>
+              <div class="mock-spec-row"><span class="mock-spec-key">색상</span><span class="mock-spec-val">매트 블랙, 펄 화이트</span></div>
+              <div class="mock-spec-row"><span class="mock-spec-key">배터리</span><span class="mock-spec-val">이어버드 8시간 + 케이스 22시간</span></div>
+              <div class="mock-spec-row"><span class="mock-spec-key">방수등급</span><span class="mock-spec-val">IPX5</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI 수정 패널 -->
+        <div class="ai-edit-panel">
+          <div class="ai-edit-header">
+            <div class="ai-edit-header-icon">✦</div>
+            <span class="ai-edit-header-title">AI로 상세페이지 수정</span>
+            <span class="ai-edit-header-sub">요청 사항을 입력하면 AI가 반영합니다</span>
+          </div>
+
+          <div class="ai-edit-body">
+            <!-- 예시 프롬프트 칩 -->
+            <div class="ai-prompt-chips" id="promptChips">
+              <span class="ai-prompt-chip" onclick="fillPrompt('톤을 더 감성적으로 바꿔줘')">감성적인 톤으로</span>
+              <span class="ai-prompt-chip" onclick="fillPrompt('특징을 더 간결하게 정리해줘')">특징 간결하게</span>
+              <span class="ai-prompt-chip" onclick="fillPrompt('가격 대비 가성비를 강조해줘')">가성비 강조</span>
+              <span class="ai-prompt-chip" onclick="fillPrompt('20대 여성 타겟으로 수정해줘')">20대 여성 타겟</span>
+              <span class="ai-prompt-chip" onclick="fillPrompt('선물용 문구를 추가해줘')">선물용 문구 추가</span>
+            </div>
+
+            <!-- 텍스트 입력 + 수정 버튼 -->
+            <div class="ai-edit-input-row">
+              <textarea
+                class="ai-edit-textarea"
+                id="aiEditInput"
+                placeholder="수정 요청을 자유롭게 입력하세요&#10;예) 혜택을 bullet point로 정리해줘, 더 전문적인 느낌으로 바꿔줘"
+              ></textarea>
+              <button class="btn-ai-edit" id="aiEditBtn" onclick="startAiEdit()">
+                <span class="btn-ai-icon">✦</span>
+                AI 수정
+              </button>
+            </div>
+          </div>
+
+          <!-- AI 생성 중 -->
+          <div class="ai-generating-overlay" id="aiGenerating">
+            <div class="ai-gen-spinner"></div>
+            <div>
+              <div class="ai-gen-text">AI가 상세페이지를 수정하고 있습니다...</div>
+              <div class="ai-gen-sub" id="aiGenStep">이미지 컨텍스트 분석 중</div>
+            </div>
+          </div>
+
+          <!-- 수정 완료 -->
+          <div class="ai-done-toast" id="aiDoneToast">
+            <span class="ai-done-icon">✅</span>
+            <span class="ai-done-text">상세페이지가 수정되었습니다</span>
+            <button class="btn-ai-revert" onclick="revertAiEdit()">되돌리기</button>
+          </div>
+        </div>
+
+        <!-- 쿠팡용 HTML 스니펫 -->
+        <div class="snippet-panel">
+          <div class="snippet-panel-header">
+            <div>
+              <div class="snippet-panel-title">쿠팡 상세페이지 HTML 코드</div>
+              <div class="snippet-panel-sub">쿠팡 상품 등록 › 상세설명 HTML 에디터에 붙여넣기</div>
+            </div>
+            <button class="btn-ghost" onclick="copySnippet()">
+              <span id="snippetIcon">📋</span>
+              <span id="snippetLabel">코드 복사</span>
+            </button>
+          </div>
+          <div class="code-block">
+&lt;div class="product-detail"&gt;<br>
+&nbsp;&nbsp;&lt;h2&gt;프리미엄 무선 블루투스 이어폰&lt;/h2&gt;<br>
+&nbsp;&nbsp;&lt;img src="https://cdn.example.com/img/product-01.jpg" /&gt;<br>
+&nbsp;&nbsp;&lt;ul&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&lt;li&gt;노이즈캔슬링&lt;/li&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&lt;li&gt;30시간 재생&lt;/li&gt;<br>
+&nbsp;&nbsp;&lt;/ul&gt;<br>
+&lt;/div&gt;
+            <div class="code-fade"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ── 우측: 등록 폼 (스크롤) ── -->
+      <div class="form-col" id="formCol">
+
+        <!-- ① 기본 정보 -->
+        <div class="form-card">
+          <div class="form-card-header">공통 정보</div>
+          <div class="form-card-body">
+
+            <!-- 상품명 -->
+            <div>
+              <label class="field-label">상품명 <span class="required">*</span></label>
+              <div class="input-with-btn">
+                <input class="input" type="text" value="프리미엄 무선 블루투스 이어폰 노이즈캔슬링 30시간 재생" />
+                <button class="btn-ai">✦ AI 최적화</button>
+              </div>
+            </div>
+
+            <!-- 판매가 -->
+            <div>
+              <label class="field-label">판매가 <span class="required">*</span></label>
+              <div class="input-row col3">
+                <div>
+                  <div class="field-label" style="color:#aaa">공통</div>
+                  <input class="input" type="number" value="29900" />
+                </div>
+                <div>
+                  <div class="field-label" style="color:#aaa">정상가</div>
+                  <input class="input" type="number" value="49000" />
+                </div>
+                <div>
+                  <div class="field-label" style="color:#aaa">재고</div>
+                  <input class="input" type="number" value="99" />
+                </div>
+              </div>
+            </div>
+
+            <!-- 채널별 판매가 -->
+            <div>
+              <div class="channel-price-hint">
+                채널별 판매가 설정 <span class="hint-badge">선택</span>
+                <span>— 입력 시 공통 판매가보다 우선 적용</span>
+              </div>
+              <div class="input-row col2">
+                <div>
+                  <div class="badge-label"><span class="badge-coupang">쿠팡</span> 판매가</div>
+                  <input class="input" type="number" value="32900" />
+                </div>
+                <div>
+                  <div class="badge-label"><span class="badge-naver">네이버</span> 판매가</div>
+                  <input class="input" type="number" value="28900" />
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ② 이미지 -->
+        <div class="form-card">
+          <div class="form-card-header">이미지</div>
+          <div class="form-card-body">
+            <div>
+              <label class="field-label">상품 이미지 (썸네일) <span class="required">*</span></label>
+              <div class="img-grid">
+                <div class="img-thumb filled" style="background:linear-gradient(135deg,#c8d8ff,#d0f0d0)"></div>
+                <div class="img-thumb filled" style="background:linear-gradient(135deg,#ffe0c8,#ffd0e8)"></div>
+                <div class="img-thumb filled" style="background:linear-gradient(135deg,#d8ffe0,#e8d0ff)"></div>
+                <div class="img-thumb add-btn">+</div>
+              </div>
+              <div class="img-count">3장 / 최대 10장</div>
+            </div>
+            <div>
+              <label class="field-label">상세페이지 이미지</label>
+              <div style="font-size:10px;color:#aaa;margin-bottom:6px;">상세설명 하단에 자동 삽입됩니다.</div>
+              <div class="img-grid">
+                <div class="img-thumb add-btn">+</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ④ 배송 -->
+        <div class="form-card">
+          <div class="form-card-header">배송 정보</div>
+          <div class="form-card-body">
+            <div class="input-row col3">
+              <div>
+                <label class="field-label">배송비 유형</label>
+                <select class="input">
+                  <option>무료배송</option>
+                  <option>유료배송</option>
+                  <option>착불</option>
+                </select>
+              </div>
+              <div>
+                <label class="field-label">배송비 (원)</label>
+                <input class="input" type="number" value="0" />
+              </div>
+              <div>
+                <label class="field-label">반품배송비 (원)</label>
+                <input class="input" type="number" value="5000" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ⑤ 태그 -->
+        <div class="form-card">
+          <div class="form-card-header">태그</div>
+          <div class="form-card-body">
+            <div>
+              <div class="input-with-btn">
+                <input class="input" type="text" placeholder="예: 블루투스이어폰, 무선이어폰 (Enter 추가)" />
+                <button class="btn-ghost">추가</button>
+              </div>
+              <div class="tag-list">
+                <span class="tag-chip">블루투스이어폰 ×</span>
+                <span class="tag-chip">무선이어폰 ×</span>
+                <span class="tag-chip">노이즈캔슬링 ×</span>
+                <span class="tag-chip">TWS ×</span>
+                <span class="tag-chip">방수이어폰 ×</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ⑥ 플랫폼별 설정 -->
+        <div class="section-divider">
+          <div class="section-divider-line"></div>
+          <div class="section-divider-label">플랫폼별 설정</div>
+          <div class="section-divider-line"></div>
+        </div>
+
+        <!-- 카테고리 — ★ 핵심 개선: 확인 모드 -->
+        <div class="form-card">
+          <div class="form-card-header">카테고리</div>
+          <div class="form-card-body" style="padding:0;">
+
+            <div class="cat-confirm-box">
+              <!-- 쿠팡 확인 행 -->
+              <div class="cat-confirm-row">
+                <div class="cat-confirm-left">
+                  <div>
+                    <div class="badge-label" style="margin-bottom:3px;">
+                      <span class="badge-coupang">쿠팡</span>
+                      <span class="cat-confirmed-icon">✓</span>
+                    </div>
+                    <div class="cat-confirm-path">
+                      가전디지털 &gt; 음향기기 &gt; <strong>블루투스 이어폰</strong>
+                    </div>
+                    <div class="cat-confirm-sub">Step 2에서 선택됨 · 코드 #87291</div>
+                  </div>
+                </div>
+                <!-- ★ 취소가 아닌 "변경" 토글 -->
+                <button class="btn-change" onclick="toggleCatSearch('coupang')">변경</button>
+              </div>
+
+              <!-- 쿠팡 검색 패널 (토글) -->
+              <div class="cat-search-panel" id="catSearch-coupang">
+                <div class="cat-search-input-wrap">
+                  <input class="cat-search-input" type="text" placeholder="카테고리 재검색..." />
+                </div>
+                <div class="cat-results">
+                  <div>
+                    <div class="cat-result-col-label">쿠팡</div>
+                    <div class="cat-result-item">
+                      <div class="cat-result-name">블루투스 이어폰</div>
+                      <div class="cat-result-path">가전 › 음향기기 › 블루투스 이어폰</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 네이버 확인 행 -->
+              <div class="cat-confirm-row">
+                <div class="cat-confirm-left">
+                  <div>
+                    <div class="badge-label" style="margin-bottom:3px;">
+                      <span class="badge-naver">네이버</span>
+                      <span class="cat-confirmed-icon">✓</span>
+                    </div>
+                    <div class="cat-confirm-path">
+                      디지털/가전 &gt; 음향기기 &gt; <strong>블루투스 이어폰</strong>
+                    </div>
+                    <div class="cat-confirm-sub">Step 2에서 선택됨 · ID: 50003371</div>
+                  </div>
+                </div>
+                <button class="btn-change" onclick="toggleCatSearch('naver')">변경</button>
+              </div>
+
+              <!-- 네이버 검색 패널 (토글) -->
+              <div class="cat-search-panel" id="catSearch-naver">
+                <div class="cat-search-input-wrap">
+                  <input class="cat-search-input" type="text" placeholder="카테고리 재검색..." />
+                </div>
+                <div class="cat-results">
+                  <div>
+                    <div class="cat-result-col-label">네이버</div>
+                    <div class="cat-result-item">
+                      <div class="cat-result-name">블루투스 이어폰</div>
+                      <div class="cat-result-path">디지털/가전 › 음향기기</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- 플랫폼 전용 필드 -->
+        <div class="form-card">
+          <div class="form-card-header">플랫폼 전용 설정</div>
+          <div class="form-card-body">
+            <div class="input-row col2">
+              <div>
+                <div class="badge-label"><span class="badge-coupang">쿠팡</span> 브랜드명</div>
+                <input class="input" type="text" placeholder="없으면 비워두세요" />
+              </div>
+              <div>
+                <div class="badge-label"><span class="badge-naver">네이버</span> 교환배송비 (원)</div>
+                <input class="input" type="number" value="5000" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 여백 -->
+        <div style="height: 8px;"></div>
+
+      </div>
+    </div>
+
+    <!-- ── 하단 고정 액션바 ── -->
+    <div class="action-bar">
+      <div class="action-hint" id="actionHint">모든 필수 항목을 입력하면 등록할 수 있습니다.</div>
+      <div class="action-bar-right">
+        <!-- ★ "미리보기"를 인간이 읽을 수 있는 요약으로 개선 -->
+        <button class="btn-preview" onclick="openPreviewModal()">
+          🔍 등록 정보 확인
+        </button>
+        <button class="btn-register" id="registerBtn" onclick="startRegister()">
+          쿠팡 + 네이버 동시 등록
+        </button>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /shell -->
+
+<!-- ── 미리보기 모달 (★ JSON payload → 사람이 읽는 요약) ── -->
+<div class="modal-overlay" id="previewModal">
+  <div class="modal anim">
+    <div class="modal-header">
+      <span class="modal-title">등록 정보 확인</span>
+      <button class="modal-close" onclick="closePreviewModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="summary-row">
+        <span class="summary-key">상품명</span>
+        <span class="summary-val">프리미엄 무선 블루투스 이어폰 노이즈캔슬링 30시간 재생</span>
+      </div>
+      <div class="summary-divider"></div>
+      <div class="summary-row">
+        <span class="summary-key">이미지</span>
+        <span class="summary-val">썸네일 3장</span>
+      </div>
+      <div class="summary-divider"></div>
+      <div class="summary-row">
+        <span class="summary-key">태그</span>
+        <span class="summary-val">블루투스이어폰, 무선이어폰, 노이즈캔슬링, TWS, 방수이어폰</span>
+      </div>
+      <div class="summary-divider"></div>
+      <div class="summary-row">
+        <span class="summary-key">배송</span>
+        <span class="summary-val">무료배송 · 반품 5,000원</span>
+      </div>
+      <div class="summary-divider"></div>
+      <!-- 플랫폼별 요약 카드 -->
+      <div class="platform-row">
+        <span class="badge-coupang" style="font-size:11px;padding:3px 8px;">쿠팡</span>
+        <div style="flex:1;">
+          <div style="font-size:11px;color:#aaa;">가전디지털 › 블루투스 이어폰</div>
+          <div style="display:flex;align-items:baseline;gap:6px;margin-top:2px;">
+            <span class="price-big coupang">32,900원</span>
+            <span style="font-size:11px;color:#aaa;text-decoration:line-through;">49,000원</span>
+          </div>
+        </div>
+      </div>
+      <div class="platform-row">
+        <span class="badge-naver" style="font-size:11px;padding:3px 8px;">네이버</span>
+        <div style="flex:1;">
+          <div style="font-size:11px;color:#aaa;">디지털/가전 › 블루투스 이어폰</div>
+          <div style="display:flex;align-items:baseline;gap:6px;margin-top:2px;">
+            <span class="price-big naver">28,900원</span>
+            <span style="font-size:11px;color:#aaa;text-decoration:line-through;">49,000원</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" onclick="closePreviewModal()">돌아가기</button>
+      <!-- ★ 모달에서 바로 등록 진행 가능 -->
+      <button class="btn-modal-confirm" onclick="closePreviewModal(); startRegister()">
+        이대로 등록하기
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  /* 카테고리 변경 토글 */
+  function toggleCatSearch(platform) {
+    const panel = document.getElementById('catSearch-' + platform);
+    panel.classList.toggle('open');
+  }
+
+  /* 미리보기 모달 */
+  function openPreviewModal() {
+    document.getElementById('previewModal').classList.add('open');
+  }
+  function closePreviewModal() {
+    document.getElementById('previewModal').classList.remove('open');
+  }
+  // 모달 외부 클릭 시 닫기
+  document.getElementById('previewModal').addEventListener('click', function(e) {
+    if (e.target === this) closePreviewModal();
+  });
+
+  /* 등록 흐름 */
+  function startRegister() {
+    const btn = document.getElementById('registerBtn');
+    const hint = document.getElementById('actionHint');
+
+    btn.innerHTML = '<div class="spinner"></div> 등록 중...';
+    btn.classList.add('loading');
+    btn.disabled = true;
+    hint.textContent = '쿠팡과 네이버에 동시 등록하고 있습니다...';
+
+    setTimeout(() => {
+      btn.innerHTML = '쿠팡 + 네이버 동시 등록';
+      btn.classList.remove('loading');
+      btn.disabled = false;
+      hint.textContent = '';
+
+      // ★ 성공 배너 표시 (취소 버튼과 완전히 분리된 흐름)
+      const banner = document.getElementById('successBanner');
+      banner.classList.add('show');
+      banner.classList.add('anim');
+
+      // 폼 영역 스크롤을 맨 위로
+      document.getElementById('formCol').scrollTop = 0;
+    }, 2200);
+  }
+
+  /* 예시 프롬프트 칩 클릭 시 입력칸에 채우기 */
+  function fillPrompt(text) {
+    const ta = document.getElementById('aiEditInput');
+    ta.value = text;
+    ta.focus();
+  }
+
+  /* AI 수정 흐름 */
+  const genSteps = [
+    '이미지 컨텍스트 분석 중',
+    '요청 사항 해석 중',
+    '카피 재작성 중',
+    'HTML 조립 중',
+  ];
+
+  function startAiEdit() {
+    const input = document.getElementById('aiEditInput');
+    if (!input.value.trim()) {
+      input.focus();
+      input.style.borderColor = '#f87171';
+      setTimeout(() => input.style.borderColor = '#ddd6fe', 1000);
+      return;
+    }
+
+    const btn = document.getElementById('aiEditBtn');
+    btn.disabled = true;
+
+    // 생성 중 UI 표시
+    document.getElementById('aiDoneToast').classList.remove('show');
+    const overlay = document.getElementById('aiGenerating');
+    overlay.classList.add('show');
+
+    // 단계 텍스트 순환
+    let stepIdx = 0;
+    const stepEl = document.getElementById('aiGenStep');
+    const stepTimer = setInterval(() => {
+      stepIdx = (stepIdx + 1) % genSteps.length;
+      stepEl.textContent = genSteps[stepIdx];
+    }, 700);
+
+    setTimeout(() => {
+      clearInterval(stepTimer);
+      overlay.classList.remove('show');
+      btn.disabled = false;
+      input.value = '';
+
+      // 미리보기 내용 교체 (수정된 것처럼)
+      document.querySelector('.mock-product-name').innerHTML =
+        '프리미엄 무선 블루투스 이어폰<br><span style="font-size:12px;color:#888;font-weight:500;">✦ AI 감성 카피 반영됨</span>';
+      document.querySelector('.mock-tag').textContent = '✦ AI 수정';
+
+      // 완료 토스트
+      document.getElementById('aiDoneToast').classList.add('show');
+    }, 2800);
+  }
+
+  function revertAiEdit() {
+    document.getElementById('aiDoneToast').classList.remove('show');
+    document.querySelector('.mock-product-name').innerHTML =
+      '프리미엄 무선 블루투스 이어폰<br>노이즈캔슬링 / 30시간 재생';
+    document.querySelector('.mock-tag').textContent = 'NEW';
+  }
+
+  /* HTML 코드 복사 */
+  function copyCode() {
+    document.getElementById('copyIcon').textContent = '✓';
+    document.getElementById('copyLabel').textContent = '복사됨';
+    setTimeout(() => {
+      document.getElementById('copyIcon').textContent = '📋';
+      document.getElementById('copyLabel').textContent = '코드 복사';
+    }, 2000);
+  }
+  function copySnippet() {
+    document.getElementById('snippetIcon').textContent = '✓';
+    document.getElementById('snippetLabel').textContent = '복사됨';
+    setTimeout(() => {
+      document.getElementById('snippetIcon').textContent = '📋';
+      document.getElementById('snippetLabel').textContent = '코드 복사';
+    }, 2000);
+  }
+</script>
+</body>
+</html>

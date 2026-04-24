@@ -44,6 +44,7 @@ const NAV_ITEMS = [
   { href: '/editor', label: '에디터' },
   { href: '/listing', label: '상품등록' },
   { href: '/orders', label: '주문/매출' },
+  { href: '/plan', label: '플랜' },
 ];
 
 // ─── 타입 ─────────────────────────────────────────────────────

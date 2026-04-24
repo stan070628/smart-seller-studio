@@ -55,6 +55,11 @@ export interface CommonProductInput {
 // 쿠팡 전용 입력 타입
 // ─────────────────────────────────────────────────────────────
 
+export interface NoticeItem {
+  noticeCategoryName: string;
+  content: string;
+}
+
 export interface CoupangSpecificInput {
   displayCategoryCode: number;
   brand: string;
@@ -62,6 +67,13 @@ export interface CoupangSpecificInput {
   maximumBuyForPerson?: number;
   outboundShippingPlaceCode: string;
   returnCenterCode: string;
+  deliveryCompanyCode?: string;
+  outboundShippingTimeDay?: number;
+  adultOnly?: 'EVERYONE' | 'ADULTS_ONLY';
+  taxType?: 'TAX' | 'TAX_FREE' | 'ZERO_TAX';
+  overseasPurchased?: 'NOT_OVERSEAS_PURCHASED' | 'OVERSEAS_PURCHASED';
+  parallelImported?: 'NOT_PARALLEL_IMPORTED' | 'PARALLEL_IMPORTED' | 'CONFIRMED_CARRIED_OUT';
+  notices?: NoticeItem[];
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -107,8 +119,15 @@ export function buildCoupangPayload(
     })),
   ];
 
-  // 고시정보 — overrideNotices가 전달되면 사용, 없으면 빈 배열
-  const notices = overrideNotices ?? [];
+  // overrideNotices: getCategoryMeta()가 자동 생성한 카테고리별 필수 고시정보. 있으면 우선 사용.
+  // specific.notices: 사용자가 폼에서 직접 입력한 고시정보. overrideNotices 없을 때만 사용.
+  const notices =
+    overrideNotices ??
+    (specific.notices?.map((n) => ({
+      noticeCategoryName: n.noticeCategoryName,
+      noticeCategoryDetailName: n.noticeCategoryName,
+      content: n.content,
+    })) ?? []);
 
   // 이미지 배열 — 썸네일 + 상세 이미지를 함께 포함
   // (쿠팡은 vendorPath에 외부 URL 허용, contents IMAGE는 거부함)
@@ -146,12 +165,12 @@ export function buildCoupangPayload(
             maximumBuyCount,
             maximumBuyForPerson,
             maximumBuyForPersonPeriod: 1,
-            outboundShippingTimeDay: 3,
+            outboundShippingTimeDay: specific.outboundShippingTimeDay ?? 3,
             unitCount: 1,
-            adultOnly: 'EVERYONE' as const,
-            taxType: 'TAX' as const,
-            overseasPurchased: 'NOT_OVERSEAS_PURCHASED' as const,
-            parallelImported: 'NOT_PARALLEL_IMPORTED' as const,
+            adultOnly: specific.adultOnly ?? 'EVERYONE',
+            taxType: specific.taxType ?? 'TAX',
+            overseasPurchased: specific.overseasPurchased ?? 'NOT_OVERSEAS_PURCHASED',
+            parallelImported: specific.parallelImported ?? 'NOT_PARALLEL_IMPORTED',
             images,
             attributes,
             contents,
@@ -167,12 +186,12 @@ export function buildCoupangPayload(
             maximumBuyCount,
             maximumBuyForPerson,
             maximumBuyForPersonPeriod: 1,
-            outboundShippingTimeDay: 3,
+            outboundShippingTimeDay: specific.outboundShippingTimeDay ?? 3,
             unitCount: 1,
-            adultOnly: 'EVERYONE' as const,
-            taxType: 'TAX' as const,
-            overseasPurchased: 'NOT_OVERSEAS_PURCHASED' as const,
-            parallelImported: 'NOT_PARALLEL_IMPORTED' as const,
+            adultOnly: specific.adultOnly ?? 'EVERYONE',
+            taxType: specific.taxType ?? 'TAX',
+            overseasPurchased: specific.overseasPurchased ?? 'NOT_OVERSEAS_PURCHASED',
+            parallelImported: specific.parallelImported ?? 'NOT_PARALLEL_IMPORTED',
             images,
             attributes: [],
             contents,
@@ -189,7 +208,7 @@ export function buildCoupangPayload(
     brand: specific.brand,
     generalProductName: common.name,
     deliveryMethod: 'SEQUENCIAL',
-    deliveryCompanyCode: 'LOTTE',
+    deliveryCompanyCode: specific.deliveryCompanyCode ?? 'LOTTE',
     deliveryChargeType: common.deliveryCharge === 0 ? 'FREE' : 'NOT_FREE',
     deliveryCharge: common.deliveryCharge,
     freeShipOverAmount: 0,

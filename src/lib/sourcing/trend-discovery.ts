@@ -42,7 +42,7 @@ export async function discoverTrendSeeds(): Promise<TrendSeed[]> {
   try {
     const ai = getGeminiGenAI();
     const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.5-flash',
       tools: [{ googleSearch: {} }],
       contents: [{ role: 'user', parts: [{ text: DISCOVER_PROMPT }] }],
     });

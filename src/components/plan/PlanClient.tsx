@@ -15,6 +15,8 @@ import {
   BarChart2,
   Zap,
   Trash2,
+  Search,
+  Plus,
 } from 'lucide-react';
 import { C as BASE_C } from '@/lib/design-tokens';
 
@@ -34,6 +36,9 @@ const C = {
   yellow: '#d97706',
   yellowBg: 'rgba(217,119,6,0.08)',
   yellowBorder: 'rgba(217,119,6,0.20)',
+  blue: '#2563eb',
+  blueBg: 'rgba(37,99,235,0.07)',
+  blueBorder: 'rgba(37,99,235,0.20)',
 } as const;
 
 // ─── 네비게이션 ─────────────────────────────────────────────────
@@ -107,7 +112,7 @@ const WBS_DATA: Record<number, WeekData> = {
     revenueTarget: '50만원',
     tasks: [
       { id: 'w1-1', text: '아이템스카우트(itemscout.io) 가입 및 사용법 숙지' },
-      { id: 'w1-2', text: '틈새 키워드 발굴 — 월 검색량 3,000~30,000 / 경쟁상품 500개 미만 / 리뷰 50개 미만' },
+      { id: 'w1-2', text: '틈새 키워드 발굴 — 월 검색량 1,000 이상 / 경쟁상품수 검색량의 5배 미만 / 상위 리뷰 100개 미만' },
       { id: 'w1-3', text: '발굴 키워드 30개 목록 작성' },
       { id: 'w1-4', text: '도매꾹 위 키워드 매칭 상품 100개 선별 (마진 30% 이상 / 위탁 가능 / 배송 3일 이내)' },
       { id: 'w1-5', text: '코스트코 주말 방문: 온라인 미출시 상품 10개 스캔 (경쟁 셀러 3개 미만)' },
@@ -1096,6 +1101,349 @@ function WinnerTab() {
   );
 }
 
+// ─── 틈새 키워드 발굴 탭 ─────────────────────────────────────────
+
+interface KeywordEntry {
+  id: string;
+  keyword: string;
+  searchVolume: number | null;   // 월 검색량
+  competition: number | null;    // 경쟁 상품 수
+  maxReviews: number | null;     // 상위 경쟁상품 최대 리뷰 수
+  platform: 'naver' | 'coupang' | 'both';
+  status: 'candidate' | 'registered' | 'archived';
+  memo: string;
+  createdAt: string;
+}
+
+function judgeKeyword(k: KeywordEntry): 'pass' | 'partial' | 'fail' {
+  const sv = k.searchVolume;
+  const comp = k.competition;
+  const rev = k.maxReviews;
+  // 수요(검색량) 최소 1,000 이상
+  const svOk = sv !== null && sv >= 1000;
+  // 경쟁상품수가 검색량의 5배 미만 (수요 대비 공급 비율)
+  const ratioOk = sv !== null && comp !== null && comp < sv * 5;
+  // 상위 경쟁상품 리뷰 100개 미만
+  const revOk = rev !== null && rev < 100;
+  const passCount = [svOk, ratioOk, revOk].filter(Boolean).length;
+  if (passCount === 3) return 'pass';
+  if (passCount >= 1) return 'partial';
+  return 'fail';
+}
+
+const KEYWORD_STORAGE_KEY = 'plan_keywords';
+
+function loadKeywords(): KeywordEntry[] {
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(KEYWORD_STORAGE_KEY) : null;
+    return raw ? (JSON.parse(raw) as KeywordEntry[]) : [];
+  } catch { return []; }
+}
+
+function saveKeywords(entries: KeywordEntry[]): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(KEYWORD_STORAGE_KEY, JSON.stringify(entries));
+}
+
+const EMPTY_FORM = {
+  keyword: '',
+  searchVolume: '',
+  competition: '',
+  maxReviews: '',
+  platform: 'naver' as 'naver' | 'coupang' | 'both',
+  memo: '',
+};
+
+function KeywordTab() {
+  const [entries, setEntries] = useState<KeywordEntry[]>([]);
+  const [mounted, setMounted] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'candidate' | 'registered' | 'archived'>('all');
+  const [form, setForm] = useState(EMPTY_FORM);
+
+  useEffect(() => {
+    setEntries(loadKeywords());
+    setMounted(true);
+  }, []);
+
+  function handleAdd() {
+    if (!form.keyword.trim()) return;
+    const entry: KeywordEntry = {
+      id: crypto.randomUUID(),
+      keyword: form.keyword.trim(),
+      searchVolume: form.searchVolume !== '' ? Number(form.searchVolume) : null,
+      competition: form.competition !== '' ? Number(form.competition) : null,
+      maxReviews: form.maxReviews !== '' ? Number(form.maxReviews) : null,
+      platform: form.platform,
+      status: 'candidate',
+      memo: form.memo.trim(),
+      createdAt: new Date().toISOString(),
+    };
+    const updated = [entry, ...entries];
+    setEntries(updated);
+    saveKeywords(updated);
+    setForm(EMPTY_FORM);
+    setShowForm(false);
+  }
+
+  function handleStatusChange(id: string, status: KeywordEntry['status']) {
+    const updated = entries.map((e) => e.id === id ? { ...e, status } : e);
+    setEntries(updated);
+    saveKeywords(updated);
+  }
+
+  function handleDelete(id: string) {
+    const updated = entries.filter((e) => e.id !== id);
+    setEntries(updated);
+    saveKeywords(updated);
+  }
+
+  const filtered = useMemo(
+    () => filter === 'all' ? entries : entries.filter((e) => e.status === filter),
+    [entries, filter]
+  );
+
+  const passCount = useMemo(() => entries.filter((e) => judgeKeyword(e) === 'pass').length, [entries]);
+  const candidateCount = entries.filter((e) => e.status === 'candidate').length;
+  const registeredCount = entries.filter((e) => e.status === 'registered').length;
+
+  const inputSt: React.CSSProperties = {
+    padding: '7px 10px', fontSize: 13,
+    border: `1px solid ${C.border}`, borderRadius: 7,
+    outline: 'none', color: C.text, background: '#fff',
+    width: '100%', boxSizing: 'border-box',
+  };
+
+  if (!mounted) return null;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* 기준 안내 배너 */}
+      <div style={{
+        background: C.blueBg, border: `1px solid ${C.blueBorder}`,
+        borderRadius: 10, padding: '12px 18px',
+        display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center',
+      }}>
+        <Search size={15} color={C.blue} style={{ flexShrink: 0 }} />
+        <span style={{ fontSize: 12, color: C.blue, fontWeight: 600 }}>틈새 키워드 선별 기준 (AI 평가 동일 기준)</span>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 12, color: C.textSub }}>
+          <span style={{ background: '#fff', border: `1px solid ${C.blueBorder}`, borderRadius: 6, padding: '2px 10px' }}>
+            월 검색량 <strong style={{ color: C.text }}>1,000 이상</strong>
+          </span>
+          <span style={{ background: '#fff', border: `1px solid ${C.blueBorder}`, borderRadius: 6, padding: '2px 10px' }}>
+            경쟁상품수 <strong style={{ color: C.text }}>검색량 × 5배 미만</strong>
+          </span>
+          <span style={{ background: '#fff', border: `1px solid ${C.blueBorder}`, borderRadius: 6, padding: '2px 10px' }}>
+            상위 리뷰 <strong style={{ color: C.text }}>100개 미만</strong>
+          </span>
+        </div>
+      </div>
+
+      {/* 상태 요약 + 추가 버튼 */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 12, fontSize: 13, color: C.textSub }}>
+          <span>전체 <strong style={{ color: C.text }}>{entries.length}</strong>개</span>
+          <span style={{ color: C.green }}>기준 충족 <strong>{passCount}</strong>개</span>
+          <span>후보 <strong style={{ color: C.text }}>{candidateCount}</strong> · 등록 <strong style={{ color: C.text }}>{registeredCount}</strong></span>
+        </div>
+        <button
+          onClick={() => setShowForm((v) => !v)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '7px 16px', fontSize: 13, fontWeight: 700,
+            background: C.accent, color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer',
+          }}
+        >
+          <Plus size={14} /> 키워드 추가
+        </button>
+      </div>
+
+      {/* 추가 폼 */}
+      {showForm && (
+        <div style={{
+          background: '#fff', border: `1px solid ${C.border}`,
+          borderRadius: 12, padding: 20,
+        }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12, marginBottom: 12 }}>
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 600, color: C.textSub, display: 'block', marginBottom: 4 }}>키워드 *</label>
+              <input style={inputSt} placeholder="예: 미니 가습기 usb" value={form.keyword}
+                onChange={(e) => setForm((f) => ({ ...f, keyword: e.target.value }))}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 600, color: C.textSub, display: 'block', marginBottom: 4 }}>플랫폼</label>
+              <select style={{ ...inputSt, cursor: 'pointer' }} value={form.platform}
+                onChange={(e) => setForm((f) => ({ ...f, platform: e.target.value as 'naver' | 'coupang' | 'both' }))}>
+                <option value="naver">스마트스토어</option>
+                <option value="coupang">쿠팡</option>
+                <option value="both">둘 다</option>
+              </select>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 600, color: C.textSub, display: 'block', marginBottom: 4 }}>
+                월 검색량 <span style={{ color: C.textMuted, fontWeight: 400 }}>(1,000 이상)</span>
+              </label>
+              <input style={inputSt} type="number" placeholder="예: 8500" value={form.searchVolume}
+                onChange={(e) => setForm((f) => ({ ...f, searchVolume: e.target.value }))} />
+            </div>
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 600, color: C.textSub, display: 'block', marginBottom: 4 }}>
+                경쟁 상품 수 <span style={{ color: C.textMuted, fontWeight: 400 }}>(검색량 5배 미만)</span>
+              </label>
+              <input style={inputSt} type="number" placeholder="예: 3000" value={form.competition}
+                onChange={(e) => setForm((f) => ({ ...f, competition: e.target.value }))} />
+            </div>
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 600, color: C.textSub, display: 'block', marginBottom: 4 }}>
+                상위 리뷰 수 <span style={{ color: C.textMuted, fontWeight: 400 }}>(&lt;100)</span>
+              </label>
+              <input style={inputSt} type="number" placeholder="예: 12" value={form.maxReviews}
+                onChange={(e) => setForm((f) => ({ ...f, maxReviews: e.target.value }))} />
+            </div>
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ fontSize: 11, fontWeight: 600, color: C.textSub, display: 'block', marginBottom: 4 }}>메모</label>
+            <input style={inputSt} placeholder="소싱 출처, 발굴 경로 등" value={form.memo}
+              onChange={(e) => setForm((f) => ({ ...f, memo: e.target.value }))} />
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={handleAdd}
+              disabled={!form.keyword.trim()}
+              style={{
+                padding: '7px 18px', fontSize: 13, fontWeight: 700,
+                background: form.keyword.trim() ? C.accent : '#ccc',
+                color: '#fff', border: 'none', borderRadius: 8,
+                cursor: form.keyword.trim() ? 'pointer' : 'not-allowed',
+              }}
+            >저장</button>
+            <button
+              onClick={() => setShowForm(false)}
+              style={{
+                padding: '7px 14px', fontSize: 13,
+                background: C.bg, color: C.textSub,
+                border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer',
+              }}
+            >취소</button>
+          </div>
+        </div>
+      )}
+
+      {/* 필터 탭 */}
+      <div style={{ display: 'flex', gap: 4, borderBottom: `1px solid ${C.border}` }}>
+        {([['all', '전체'], ['candidate', '후보'], ['registered', '등록완료'], ['archived', '보류']] as const).map(([val, label]) => (
+          <button
+            key={val}
+            onClick={() => setFilter(val)}
+            style={{
+              padding: '7px 14px', fontSize: 12, fontWeight: filter === val ? 700 : 400,
+              color: filter === val ? C.accent : C.textSub,
+              background: 'transparent', border: 'none',
+              borderBottom: filter === val ? `2px solid ${C.accent}` : '2px solid transparent',
+              marginBottom: -1, cursor: 'pointer',
+            }}
+          >{label}</button>
+        ))}
+      </div>
+
+      {/* 키워드 목록 */}
+      {filtered.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '48px 0', color: C.textMuted, fontSize: 14 }}>
+          {entries.length === 0
+            ? '아이템스카우트에서 발굴한 키워드를 여기에 기록하세요.'
+            : '해당 상태의 키워드가 없습니다.'}
+        </div>
+      ) : (
+        <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: '#f3f3f3', borderBottom: `1px solid ${C.border}` }}>
+                <th style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 600, color: C.textSub, width: 40 }}>적합</th>
+                <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: C.textSub }}>키워드</th>
+                <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 600, color: C.textSub, width: 90 }}>월 검색량</th>
+                <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 600, color: C.textSub, width: 90 }}>경쟁 상품</th>
+                <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 600, color: C.textSub, width: 80 }}>상위 리뷰</th>
+                <th style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 600, color: C.textSub, width: 70 }}>플랫폼</th>
+                <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: C.textSub }}>메모</th>
+                <th style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 600, color: C.textSub, width: 80 }}>상태</th>
+                <th style={{ padding: '10px 14px', width: 36 }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((entry, idx) => {
+                const grade = judgeKeyword(entry);
+                const sv = entry.searchVolume;
+                const comp = entry.competition;
+                const rev = entry.maxReviews;
+                const svOk = sv !== null && sv >= 1000;
+                const ratioOk = sv !== null && comp !== null && comp < sv * 5;
+                const revOk = rev !== null && rev < 100;
+                const dotColor = grade === 'pass' ? C.green : grade === 'partial' ? C.yellow : C.textMuted;
+                return (
+                  <tr key={entry.id} style={{
+                    borderTop: idx > 0 ? `1px solid ${C.border}` : 'none',
+                    background: grade === 'pass' ? 'rgba(22,163,74,0.04)' : idx % 2 === 0 ? '#fff' : C.bg,
+                    opacity: entry.status === 'archived' ? 0.55 : 1,
+                  }}>
+                    <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                      <span style={{
+                        display: 'inline-block', width: 10, height: 10,
+                        borderRadius: '50%', background: dotColor,
+                      }} title={grade === 'pass' ? '기준 충족' : grade === 'partial' ? '일부 충족' : '미충족'} />
+                    </td>
+                    <td style={{ padding: '10px 14px', fontWeight: grade === 'pass' ? 700 : 400, color: C.text }}>
+                      {entry.keyword}
+                    </td>
+                    <td style={{ padding: '10px 14px', textAlign: 'right', color: svOk ? C.green : sv !== null ? C.accent : C.textMuted, fontWeight: svOk ? 700 : 400 }}>
+                      {sv !== null ? sv.toLocaleString() : '—'}
+                    </td>
+                    <td style={{ padding: '10px 14px', textAlign: 'right', color: ratioOk ? C.green : comp !== null ? C.accent : C.textMuted, fontWeight: ratioOk ? 700 : 400 }}>
+                      {comp !== null ? comp.toLocaleString() : '—'}
+                    </td>
+                    <td style={{ padding: '10px 14px', textAlign: 'right', color: revOk ? C.green : rev !== null ? C.accent : C.textMuted, fontWeight: revOk ? 700 : 400 }}>
+                      {rev !== null ? rev : '—'}
+                    </td>
+                    <td style={{ padding: '10px 14px', textAlign: 'center', fontSize: 11, color: C.textSub }}>
+                      {entry.platform === 'both' ? '둘 다' : entry.platform === 'naver' ? '스토어' : '쿠팡'}
+                    </td>
+                    <td style={{ padding: '10px 14px', color: C.textSub, fontSize: 12, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {entry.memo || '—'}
+                    </td>
+                    <td style={{ padding: '10px 8px', textAlign: 'center' }}>
+                      <select
+                        value={entry.status}
+                        onChange={(e) => handleStatusChange(entry.id, e.target.value as KeywordEntry['status'])}
+                        style={{
+                          fontSize: 11, padding: '3px 6px',
+                          border: `1px solid ${C.border}`, borderRadius: 5,
+                          background: '#fff', color: C.textSub, cursor: 'pointer', outline: 'none',
+                        }}
+                      >
+                        <option value="candidate">후보</option>
+                        <option value="registered">등록완료</option>
+                        <option value="archived">보류</option>
+                      </select>
+                    </td>
+                    <td style={{ padding: '10px 8px' }}>
+                      <button onClick={() => handleDelete(entry.id)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: C.textMuted }}>
+                        <Trash2 size={13} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── 탭 C: 목표 진행도 ──────────────────────────────────────────
 function ProgressTab() {
   const [records, setRecords] = useState<DailyRecord[]>([]);
@@ -1425,7 +1773,7 @@ function ProgressTab() {
 }
 
 // ─── 메인 PlanClient 컴포넌트 ────────────────────────────────────
-type TabId = 'today' | 'daily' | 'progress' | 'winner';
+type TabId = 'today' | 'daily' | 'progress' | 'winner' | 'keyword';
 
 interface Tab {
   id: TabId;
@@ -1442,6 +1790,7 @@ export default function PlanClient() {
     { id: 'daily', label: '일일 실적 기록', icon: <Calendar size={15} /> },
     { id: 'progress', label: '목표 진행도', icon: <TrendingUp size={15} /> },
     { id: 'winner' as const, label: '위너 선별', icon: <Target size={15} /> },
+    { id: 'keyword' as const, label: '틈새 키워드 발굴', icon: <Search size={15} /> },
   ];
 
   return (
@@ -1565,6 +1914,7 @@ export default function PlanClient() {
         {activeTab === 'daily' && <DailyTab />}
         {activeTab === 'progress' && <ProgressTab />}
         {activeTab === 'winner' && <WinnerTab />}
+        {activeTab === 'keyword' && <KeywordTab />}
       </div>
     </div>
   );

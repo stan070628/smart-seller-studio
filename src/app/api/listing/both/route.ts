@@ -64,6 +64,13 @@ const BothRegisterSchema = z.object({
     maximumBuyForPerson: z.number().int().min(0).default(0),
     outboundShippingPlaceCode: z.string().optional(),
     returnCenterCode: z.string().optional(),
+    deliveryCompanyCode: z.string().optional(),
+    outboundShippingTimeDay: z.number().int().min(1).max(30).optional(),
+    adultOnly: z.enum(['EVERYONE', 'ADULTS_ONLY']).optional(),
+    taxType: z.enum(['TAX', 'TAX_FREE', 'ZERO_TAX']).optional(),
+    overseasPurchased: z.enum(['NOT_OVERSEAS_PURCHASED', 'OVERSEAS_PURCHASED']).optional(),
+    parallelImported: z.enum(['NOT_PARALLEL_IMPORTED', 'PARALLEL_IMPORTED', 'CONFIRMED_CARRIED_OUT']).optional(),
+    notices: z.array(z.object({ noticeCategoryName: z.string(), content: z.string() })).optional(),
   }).optional(),
   // 네이버 전용 필드 (platform이 'coupang'이면 생략 가능)
   naver: z.object({
@@ -160,6 +167,13 @@ async function registerCoupang(
     maximumBuyForPerson: d.coupang.maximumBuyForPerson,
     outboundShippingPlaceCode: outboundCode,
     returnCenterCode: returnCode,
+    deliveryCompanyCode: d.coupang.deliveryCompanyCode,
+    outboundShippingTimeDay: d.coupang.outboundShippingTimeDay,
+    adultOnly: d.coupang.adultOnly,
+    taxType: d.coupang.taxType,
+    overseasPurchased: d.coupang.overseasPurchased,
+    parallelImported: d.coupang.parallelImported,
+    notices: d.coupang.notices,
   };
 
   // 카테고리 메타에서 고시정보 자동 생성 (첫 번째 noticeCategory의 "기타 재화" 우선, 없으면 첫 항목)
@@ -319,6 +333,13 @@ export async function POST(request: NextRequest) {
         displayCategoryCode: d.coupang.displayCategoryCode, brand: d.coupang.brand,
         maximumBuyCount: d.coupang.maximumBuyCount, maximumBuyForPerson: d.coupang.maximumBuyForPerson,
         outboundShippingPlaceCode: outboundCode, returnCenterCode: returnCode,
+        deliveryCompanyCode: d.coupang.deliveryCompanyCode,
+        outboundShippingTimeDay: d.coupang.outboundShippingTimeDay,
+        adultOnly: d.coupang.adultOnly,
+        taxType: d.coupang.taxType,
+        overseasPurchased: d.coupang.overseasPurchased,
+        parallelImported: d.coupang.parallelImported,
+        notices: d.coupang.notices,
       };
       coupangPayload = buildCoupangPayload({ ...commonBase, salePrice: d.coupangPrice ?? d.salePrice }, coupangSpecific, client.vendor, optionsInput, autoNotices);
     }

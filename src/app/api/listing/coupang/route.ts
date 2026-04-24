@@ -69,6 +69,16 @@ const RegisterSchema = z.object({
   maximumBuyForPerson: z.number().int().min(0).default(0),
   outboundShippingPlaceCode: z.string().optional(),
   returnCenterCode: z.string().optional(),
+  deliveryCompanyCode: z.string().optional(),
+  outboundShippingTimeDay: z.number().int().min(1).max(30).optional(),
+  adultOnly: z.enum(['EVERYONE', 'ADULTS_ONLY']).optional(),
+  taxType: z.enum(['TAX', 'TAX_FREE', 'ZERO_TAX']).optional(),
+  overseasPurchased: z.enum(['NOT_OVERSEAS_PURCHASED', 'OVERSEAS_PURCHASED']).optional(),
+  parallelImported: z.enum(['NOT_PARALLEL_IMPORTED', 'PARALLEL_IMPORTED', 'CONFIRMED_CARRIED_OUT']).optional(),
+  notices: z.array(z.object({
+    noticeCategoryName: z.string(),
+    content: z.string(),
+  })).optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -119,7 +129,7 @@ export async function POST(request: NextRequest) {
       brand: d.brand,
       generalProductName: d.sellerProductName,
       deliveryMethod: 'SEQUENCIAL',
-      deliveryCompanyCode: 'LOTTE',
+      deliveryCompanyCode: d.deliveryCompanyCode ?? 'LOTTE',
       deliveryChargeType: d.deliveryCharge === 0 ? 'FREE' : 'NOT_FREE',
       deliveryCharge: d.deliveryCharge,
       freeShipOverAmount: 0,
@@ -145,11 +155,12 @@ export async function POST(request: NextRequest) {
           maximumBuyCount: d.maximumBuyCount,
           maximumBuyForPerson: d.maximumBuyForPerson,
           maximumBuyForPersonPeriod: 1,
-          outboundShippingTimeDay: 3,
+          outboundShippingTimeDay: d.outboundShippingTimeDay ?? 3,
           unitCount: 1,
-          adultOnly: 'EVERYONE',
-          taxType: 'TAX',
-          overseasPurchased: 'NOT_OVERSEAS_PURCHASED',
+          adultOnly: d.adultOnly ?? 'EVERYONE',
+          taxType: d.taxType ?? 'TAX',
+          overseasPurchased: d.overseasPurchased ?? 'NOT_OVERSEAS_PURCHASED',
+          parallelImported: d.parallelImported ?? 'NOT_PARALLEL_IMPORTED',
           images: [
             ...d.thumbnailImages.map((url, i) => ({
               imageOrder: i,
@@ -164,7 +175,11 @@ export async function POST(request: NextRequest) {
           ],
           attributes: [],
           contents,
-          notices: [],
+          notices: d.notices?.map((n) => ({
+            noticeCategoryName: n.noticeCategoryName,
+            noticeCategoryDetailName: n.noticeCategoryName,
+            content: n.content,
+          })) ?? [],
         },
       ],
     };

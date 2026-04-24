@@ -5,6 +5,7 @@ import { Play, Square, Trash2 } from 'lucide-react';
 import { useImportQueue } from '@/hooks/useImportQueue';
 import { useListingStore } from '@/store/useListingStore';
 import DomeggookPreparePanel from '@/components/listing/DomeggookPreparePanel';
+import BothRegisterForm, { type DomeggookPrepareData } from '@/components/listing/BothRegisterForm';
 import type { BulkImportItem, ImportItemStatus } from '@/types/bulkImport';
 
 const C = {
@@ -37,6 +38,7 @@ export default function BulkImportPanel() {
   const [rawInput, setRawInput] = useState('');
   const [initialized, setInitialized] = useState(false);
   const [registerItemNo, setRegisterItemNo] = useState<number | null>(null);
+  const [registerPrefill, setRegisterPrefill] = useState<{ data: DomeggookPrepareData; mode: 'both' | 'coupang' | 'naver' } | null>(null);
   const {
     items,
     isRunning,
@@ -66,6 +68,25 @@ export default function BulkImportPanel() {
 
   return (
     <div style={{ padding: '24px 0' }}>
+      {/* BothRegisterForm 모달 (DomeggookPreparePanel 완료 후) */}
+      {registerPrefill !== null && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1001,
+          background: 'rgba(0,0,0,0.55)',
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+          overflowY: 'auto',
+          padding: '40px 16px',
+        }}>
+          <div style={{ width: '100%', maxWidth: 900 }}>
+            <BothRegisterForm
+              prefill={registerPrefill.data}
+              onSuccess={() => setRegisterPrefill(null)}
+              onCancel={() => setRegisterPrefill(null)}
+            />
+          </div>
+        </div>
+      )}
+
       {/* DomeggookPreparePanel 모달 */}
       {registerItemNo !== null && (
         <div style={{
@@ -76,7 +97,11 @@ export default function BulkImportPanel() {
           <div style={{ width: '100%', maxWidth: 720, maxHeight: '90vh', overflowY: 'auto', borderRadius: 12 }}>
             <DomeggookPreparePanel
               onClose={() => setRegisterItemNo(null)}
-              onContinueToRegister={() => setRegisterItemNo(null)}
+              onContinueToRegister={(data, mode) => {
+                setRegisterItemNo(null);
+                useListingStore.getState().updateSharedDraft({ selectedPlatform: mode });
+                setRegisterPrefill({ data, mode });
+              }}
               initialItemNo={String(registerItemNo)}
             />
           </div>

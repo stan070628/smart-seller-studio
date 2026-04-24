@@ -2431,6 +2431,7 @@ export default function ListingDashboard() {
               { href: '/editor', label: '에디터' },
               { href: '/listing', label: '상품등록', active: true },
               { href: '/orders', label: '주문/매출' },
+              { href: '/plan', label: '플랜' },
             ].map((item) => (
               <Link
                 key={item.href}
