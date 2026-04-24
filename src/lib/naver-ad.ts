@@ -219,12 +219,18 @@ export async function expandKeywords(seeds: string[]): Promise<KeywordStat[]> {
 
   if (volumeMap.size === 0) return [];
 
-  const relatedKeywords = Array.from(volumeMap.keys());
-  const competitorMap = await fetchCompetitorCounts(relatedKeywords).catch(
+  // Shopping API는 키워드당 1건 요청이므로 검색량 기준으로 상위 50개만 선별 후 호출한다.
+  // 전체(최대 1200개) 병렬 요청은 Naver API rate limit으로 대부분 실패한다.
+  const candidateKeywords = Array.from(volumeMap.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 50)
+    .map(([kw]) => kw);
+
+  const competitorMap = await fetchCompetitorCounts(candidateKeywords).catch(
     () => new Map<string, number>(),
   );
 
-  return relatedKeywords.map((kw) => ({
+  return candidateKeywords.map((kw) => ({
     keyword: kw,
     searchVolume: volumeMap.get(kw) ?? null,
     competitorCount: competitorMap.get(kw) ?? null,
