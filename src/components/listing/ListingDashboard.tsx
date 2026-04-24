@@ -422,6 +422,27 @@ function PlatformTabs({
 
       {/* 우측 버튼 그룹 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {/* 자동등록 버튼 */}
+        <Link
+          href="/listing/auto-register"
+          style={{
+            padding: '6px 14px',
+            borderRadius: '8px',
+            border: '1px solid rgba(37,99,235,0.3)',
+            backgroundColor: 'rgba(37,99,235,0.07)',
+            color: '#1d4ed8',
+            fontSize: '13px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            textDecoration: 'none',
+          }}
+        >
+          🤖 URL 자동등록
+        </Link>
+
         {/* 도매꾹 불러오기 버튼 */}
         <button
           onClick={onToggleDomeggookPanel}
