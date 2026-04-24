@@ -219,9 +219,10 @@ export async function expandKeywords(seeds: string[]): Promise<KeywordStat[]> {
 
   if (volumeMap.size === 0) return [];
 
-  // Shopping API는 키워드당 1건 요청이므로 검색량 기준으로 상위 50개만 선별 후 호출한다.
-  // 전체(최대 1200개) 병렬 요청은 Naver API rate limit으로 대부분 실패한다.
+  // Shopping API는 키워드당 1건 요청이므로 발굴 범위(2k~50k) 내 상위 50개만 선별 후 호출한다.
+  // 범위 밖 키워드에 API 호출을 낭비하지 않고, 전부 필터를 통과할 수 있도록 사전 필터링한다.
   const candidateKeywords = Array.from(volumeMap.entries())
+    .filter(([, sv]) => sv >= 2_000 && sv <= 50_000)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 50)
     .map(([kw]) => kw);
