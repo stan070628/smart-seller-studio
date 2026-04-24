@@ -89,14 +89,14 @@ export async function POST(
   }
 
   // 5. 검색량·경쟁상품수 필터 + 검색량 내림차순 정렬 + 상위 30개 추출
+  // competitorCount가 null이면 Shopping API 미응답 — 필터 통과시켜 AI가 판단하도록 위임
   const filtered = expanded
     .filter(
       (k) =>
         k.searchVolume !== null &&
-        k.competitorCount !== null &&
         k.searchVolume >= MIN_SEARCH_VOLUME &&
         k.searchVolume <= MAX_SEARCH_VOLUME &&
-        k.competitorCount < MAX_COMPETITOR_COUNT,
+        (k.competitorCount === null || k.competitorCount < MAX_COMPETITOR_COUNT),
     )
     .sort((a, b) => (b.searchVolume ?? 0) - (a.searchVolume ?? 0))
     .slice(0, MAX_EVALUATE);

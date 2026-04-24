@@ -525,7 +525,7 @@ export default function KeywordTrackerTab() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{kw.keyword}</span>
                       <span style={{ fontSize: 11, color: C.textSub }}>검색량 {kw.searchVolume.toLocaleString()}</span>
-                      <span style={{ fontSize: 11, color: C.textSub }}>경쟁 {kw.competitorCount.toLocaleString()}</span>
+                      <span style={{ fontSize: 11, color: C.textSub }}>경쟁 {kw.competitorCount !== null ? kw.competitorCount.toLocaleString() : '—'}</span>
                       {kw.pass === true && (
                         <span title={kw.reasoning ?? undefined} style={{ cursor: 'help' }}>✅</span>
                       )}
@@ -543,7 +543,7 @@ export default function KeywordTrackerTab() {
                           ...f,
                           keyword: kw.keyword,
                           searchVolume: String(kw.searchVolume),
-                          competitorCount: String(kw.competitorCount),
+                          competitorCount: kw.competitorCount !== null ? String(kw.competitorCount) : '',
                         }));
                         setShowForm(true);
                       }}
