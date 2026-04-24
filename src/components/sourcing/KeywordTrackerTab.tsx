@@ -280,25 +280,27 @@ export default function KeywordTrackerTab() {
           <button
             onClick={() => setShowSuggestModal(true)}
             style={{
-              display: 'flex', alignItems: 'center', gap: 6,
+              display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2,
               padding: '8px 16px', fontSize: 13, fontWeight: 700,
               background: C.purple, color: '#fff',
               border: 'none', borderRadius: 8, cursor: 'pointer',
             }}
           >
-            ✨ AI 추천
+            <span>✨ AI 추천</span>
+            <span style={{ fontSize: 10, fontWeight: 400, opacity: 0.85 }}>힌트 입력 → Claude 키워드 제안</span>
           </button>
           <button
             onClick={handleDiscover}
             disabled={isDiscovering}
             style={{
-              display: 'flex', alignItems: 'center', gap: 6,
+              display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2,
               padding: '8px 16px', fontSize: 13, fontWeight: 700,
               background: isDiscovering ? '#86efac' : C.green, color: '#fff',
               border: 'none', borderRadius: 8, cursor: isDiscovering ? 'not-allowed' : 'pointer',
             }}
           >
-            {isDiscovering ? '발굴 중...' : '🔍 키워드 발굴'}
+            <span>{isDiscovering ? '발굴 중...' : '🔍 키워드 발굴'}</span>
+            <span style={{ fontSize: 10, fontWeight: 400, opacity: 0.85 }}>오늘 SNS 트렌드 자동 발굴</span>
           </button>
           <button
             onClick={() => setShowForm((v) => !v)}
