@@ -33,6 +33,10 @@ export interface CoupangFeeMatch {
   matchedPrefix: string | null;
 }
 
+function matchesPrefix(fullPath: string, prefix: string): boolean {
+  return fullPath === prefix || fullPath.startsWith(prefix + '/');
+}
+
 export function resolveCoupangFee(fullPath: string | null | undefined): CoupangFeeMatch {
   if (!fullPath) {
     return {
@@ -42,10 +46,20 @@ export function resolveCoupangFee(fullPath: string | null | undefined): CoupangF
       matchedPrefix: null,
     };
   }
+  // 정렬 규칙(긴 prefix 우선) 덕에 첫 매치가 가장 긴 매치
+  const hit = COUPANG_FEE_MAP.find((e) => matchesPrefix(fullPath, e.prefix));
+  if (!hit) {
+    return {
+      rate: COUPANG_DEFAULT_FEE.rate,
+      categoryName: COUPANG_DEFAULT_FEE.categoryName,
+      matched: false,
+      matchedPrefix: null,
+    };
+  }
   return {
-    rate: COUPANG_DEFAULT_FEE.rate,
-    categoryName: COUPANG_DEFAULT_FEE.categoryName,
-    matched: false,
-    matchedPrefix: null,
+    rate: hit.rate,
+    categoryName: hit.categoryName,
+    matched: true,
+    matchedPrefix: hit.prefix,
   };
 }
