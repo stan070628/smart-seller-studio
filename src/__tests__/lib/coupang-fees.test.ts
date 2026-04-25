@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveCoupangFee, COUPANG_DEFAULT_FEE, COUPANG_FEE_MAP } from '@/lib/calculator/coupang-fees';
+import { resolveCoupangFee, COUPANG_DEFAULT_FEE, COUPANG_FEE_MAP, matchesPrefix } from '@/lib/calculator/coupang-fees';
 
 describe('resolveCoupangFee — empty path 처리', () => {
   it('빈 문자열은 matched=false + 기본값 10.8%', () => {
@@ -42,5 +42,21 @@ describe('resolveCoupangFee — prefix 매칭', () => {
     const r = resolveCoupangFee('새로운미지카테고리/하위');
     expect(r.matched).toBe(false);
     expect(r.rate).toBe(0.108);
+  });
+});
+
+describe('matchesPrefix — segment 경계 단위 테스트', () => {
+  it('prefix와 정확히 일치하는 fullPath는 매칭된다', () => {
+    expect(matchesPrefix('식품', '식품')).toBe(true);
+  });
+  it('segment 경계 안에서 매칭된다', () => {
+    expect(matchesPrefix('식품/과일', '식품')).toBe(true);
+  });
+  it('prefix 다음 글자가 / 가 아니면 매칭되지 않는다', () => {
+    // "식품관" 같은 가상의 1차 카테고리가 prefix "식품"과 잘못 매칭되지 않음
+    expect(matchesPrefix('식품관/하위', '식품')).toBe(false);
+  });
+  it('역방향 prefix(prefix가 더 김)는 매칭되지 않는다', () => {
+    expect(matchesPrefix('식품', '식품/과일')).toBe(false);
   });
 });

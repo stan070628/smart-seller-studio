@@ -33,7 +33,7 @@ export interface CoupangFeeMatch {
   matchedPrefix: string | null;
 }
 
-function matchesPrefix(fullPath: string, prefix: string): boolean {
+export function matchesPrefix(fullPath: string, prefix: string): boolean {
   return fullPath === prefix || fullPath.startsWith(prefix + '/');
 }
 
