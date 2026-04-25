@@ -616,8 +616,7 @@ export default function AutoRegisterPage() {
   }, [categoryCode]);
 
   // 카테고리 키워드 검색
-  async function handleCategorySearch() {
-    const kw = categorySearch.trim() || name;
+  async function doCategorySearch(kw: string) {
     if (!kw) return;
     setIsCategorySearching(true);
     try {
@@ -629,6 +628,10 @@ export default function AutoRegisterPage() {
     } finally {
       setIsCategorySearching(false);
     }
+  }
+
+  function handleCategorySearch() {
+    doCategorySearch(categorySearch.trim() || name);
   }
 
   // AI 썸네일 편집 — mode: 'edit'(슬롯1만), 'combine'(두 이미지 합치기)
@@ -1222,21 +1225,36 @@ export default function AutoRegisterPage() {
                     AI 추천 참고값: {mappedFields.displayCategoryCode.value} (실제 유효 여부 불확실 — Wings 기존 상품에서 코드를 확인하세요)
                   </p>
                 )}
-                {/* 직접 입력 */}
+                {/* 직접 입력 — 숫자 외 텍스트 입력 시 자동으로 검색 필드로 전환 */}
                 <input
                   value={categoryCode}
-                  onChange={(e) => { setCategoryCode(e.target.value); setCategoryResults([]); setCategoryFullPath(''); }}
-                  placeholder="Wings 상품관리에서 확인한 코드 입력"
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v && /\D/.test(v)) {
+                      // 숫자가 아닌 문자가 포함되면 검색 필드로 이동 후 자동 검색
+                      setCategoryCode('');
+                      setCategorySearch(v);
+                      setCategoryResults([]);
+                      setCategoryFullPath('');
+                      doCategorySearch(v);
+                    } else {
+                      setCategoryCode(v);
+                      setCategoryResults([]);
+                      setCategoryFullPath('');
+                    }
+                  }}
+                  placeholder="카테고리 코드 숫자 입력 (예: 78780)"
                   className={`${INPUT} ${categoryCodeValid === false ? 'border-red-400 focus:ring-red-400' : categoryCodeValid === true ? 'border-green-400' : ''}`}
                 />
-                {/* 기존 판매 상품 기반 검색 */}
+                {/* 카테고리 이름 검색 */}
                 <div className="flex gap-2">
                   <input
                     value={categorySearch}
                     onChange={(e) => setCategorySearch(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleCategorySearch()}
-                    placeholder="내 기존 상품에서 검색 (예: 선풍기)"
+                    placeholder="카테고리 이름으로 검색 (예: 유리발수코팅제)"
                     className={INPUT}
+                    autoFocus={categorySearch.length > 0}
                   />
                   <button
                     onClick={handleCategorySearch}
