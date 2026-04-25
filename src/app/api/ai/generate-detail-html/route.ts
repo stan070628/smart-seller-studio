@@ -63,11 +63,19 @@ const ImageItemSchema = z.object({
 const RequestSchema = z.object({
   images: z
     .array(ImageItemSchema)
-    .min(1, "이미지는 최소 1장 이상이어야 합니다.")
-    .max(5, "이미지는 최대 5장까지 허용됩니다."),
+    .min(1, '이미지는 최소 1장 이상이어야 합니다.')
+    .max(5, '이미지는 최대 5장까지 허용됩니다.')
+    .optional(),
+  imageUrls: z
+    .array(z.string().url('유효한 이미지 URL이 아닙니다.'))
+    .max(5, '이미지 URL은 최대 5개까지 허용됩니다.')
+    .optional(),
   productName: z.string().max(100).optional(),
   price: z.number().int().positive().optional(),
-});
+}).refine(
+  (d) => (d.images && d.images.length > 0) || (d.imageUrls && d.imageUrls.length > 0),
+  { message: 'images 또는 imageUrls 중 하나는 필수입니다.' },
+);
 
 type ValidatedRequest = z.infer<typeof RequestSchema>;
 
@@ -75,9 +83,26 @@ type ValidatedRequest = z.infer<typeof RequestSchema>;
 // 이미지 분석 로직 (Claude Vision 직접 호출)
 // ─────────────────────────────────────────
 
+// URL 배열을 fetch하여 base64 배열로 변환
+async function fetchImagesFromUrls(
+  urls: string[],
+): Promise<Array<{ imageBase64: string; mimeType: AllowedMimeType }>> {
+  return Promise.all(
+    urls.map(async (url) => {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`이미지 다운로드 실패: ${url} (${res.status})`);
+      const contentType = res.headers.get('content-type') ?? 'image/jpeg';
+      const mimeType: AllowedMimeType =
+        (ALLOWED_MIME_TYPES.find((m) => contentType.includes(m)) as AllowedMimeType | undefined) ??
+        'image/jpeg';
+      const buffer = Buffer.from(await res.arrayBuffer());
+      return { imageBase64: buffer.toString('base64'), mimeType };
+    }),
+  );
+}
 
 async function analyzeImages(
-  images: ValidatedRequest["images"]
+  images: Array<{ imageBase64: string; mimeType: AllowedMimeType }>
 ): Promise<ProductImageAnalysis> {
   const client = getAnthropicClient();
 
@@ -216,7 +241,30 @@ export async function POST(
     );
   }
 
-  const { images, productName } = parseResult.data;
+  const { images: rawImages, imageUrls, productName } = parseResult.data;
+
+  // imageUrls가 있으면 서버에서 fetch → base64 변환 후 rawImages와 합산
+  let images: Array<{ imageBase64: string; mimeType: AllowedMimeType }>;
+  if (imageUrls && imageUrls.length > 0) {
+    try {
+      const fetched = await fetchImagesFromUrls(imageUrls);
+      images = [...(rawImages ?? []), ...fetched].slice(0, 5) as Array<{ imageBase64: string; mimeType: AllowedMimeType }>;
+    } catch (error) {
+      console.error('[/api/ai/generate-detail-html] URL 이미지 다운로드 실패:', error);
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            error instanceof Error
+              ? `이미지 다운로드 실패: ${error.message}`
+              : '이미지 URL에서 이미지를 가져오는 중 오류가 발생했습니다.',
+        },
+        { status: 502 },
+      );
+    }
+  } else {
+    images = rawImages!;
+  }
 
   // 이미지 분석
   let imageAnalysis: ProductImageAnalysis;
