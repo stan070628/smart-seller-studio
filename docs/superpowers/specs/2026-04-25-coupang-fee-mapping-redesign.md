@@ -5,7 +5,7 @@
 
 ## 배경
 
-쿠팡 자동등록 페이지(`src/app/listing/auto-register/page.tsx`)에서 카테고리 코드를 입력하면 마진 계산용 쿠팡 수수료가 자동 추정된다. 그런데 실제 사용 중 카테고리 코드 `78780`(주방용품류)을 입력했을 때 수수료가 잘못된 값(6.5%, 식품)으로 세팅되는 사례가 발견되었다.
+쿠팡 자동등록 페이지(`src/app/listing/auto-register/page.tsx`)에서 카테고리 코드를 입력하면 마진 계산용 쿠팡 수수료가 자동 추정된다. 그런데 실제 사용 중 카테고리 코드 `78780`(자동차용품/세차/관리용품 — fullPath의 leaf는 "유리발수코팅제")을 입력했을 때 수수료가 잘못된 값(6.5%, 식품)으로 세팅되는 사례가 발견되었다. 원인은 fullPath `자동차용품/...` 안의 단일 한 글자 "차"(자동**차**)를 정규식이 substring 매칭한 것.
 
 원인은 `src/lib/calculator/fees.ts:38-70`의 `getCoupangFeeFromPath()` 함수가 카테고리 fullPath 문자열을 정규식 substring 매칭으로 분류하기 때문이다. 식품 정규식 `/식품|먹|건강기능식품|농산|수산|축산|간식|음료|커피|차|과자|쌀|잡곡/`에 단일 한 글자 키워드(`먹`, `차`)가 포함되어 있어, 자동차용품·반려동물용품·차량용품 같은 무관한 카테고리가 식품으로 오분류된다.
 
@@ -85,15 +85,15 @@ export function resolveCoupangFee(fullPath: string | null | undefined): CoupangF
    ↓
 [GET /api/auto-register/validate-category?categoryCode=78780]
    → coupang-client.findCategoryFullPath(78780)
-   → fullPath: "주방용품/조리도구/주방잡화"
+   → fullPath: "자동차용품/세차/관리용품/관리용품/광택/케미컬/유리발수코팅제"
    ↓
-[resolveCoupangFee("주방용품/조리도구/주방잡화")]
-   → COUPANG_FEE_MAP에서 startsWith로 매칭 (긴 prefix 우선)
-   → { rate: 0.108, categoryName: '주방용품', matched: true, matchedPrefix: '주방용품' }
+[resolveCoupangFee("자동차용품/세차/관리용품/관리용품/광택/케미컬/유리발수코팅제")]
+   → COUPANG_FEE_MAP에서 segment 경계 prefix 매칭 (긴 prefix 우선)
+   → { rate: 0.108, categoryName: '자동차용품', matched: true, matchedPrefix: '자동차용품' }
    ↓
 [페이지 상태]
    estimatedRate = 0.108
-   matched = true → UI 경고 없음, "✓ 주방용품" 표시
+   matched = true → UI 경고 없음, "✓ 자동차용품" 표시
    effectiveFeeRate = customRate ?? estimatedRate
    ↓
 [calcCoupangWing({ ..., feeRate: effectiveFeeRate })]
@@ -353,4 +353,4 @@ describe('COUPANG_FEE_MAP invariant', () => {
 6. `src/app/listing/auto-register/page.tsx` 호출부 + UI 경고 배지 업데이트
 7. `src/components/calculator/` 호출부 업데이트
 8. 기존 테스트 마이그레이션
-9. 수동 검증: 카테고리 78780으로 자동등록 페이지 진입 → 6.5%가 아닌 10.8%(주방용품)로 표시되는지 확인
+9. 수동 검증: 카테고리 78780으로 자동등록 페이지 진입 → 6.5%가 아닌 10.8%(자동차용품)로 표시되는지 확인

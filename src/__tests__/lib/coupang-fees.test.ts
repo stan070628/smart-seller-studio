@@ -169,13 +169,15 @@ describe('getCoupangCategoryNames — dedupe/order 강화', () => {
 });
 
 describe('회귀 — 원본 버그 (카테고리 78780)', () => {
-  it('주방용품 fullPath는 6.5%(식품)로 잘못 분류되지 않는다', () => {
-    // 카테고리 코드 78780이 매핑되는 fullPath 예시 ("주방용품/조리도구/주방잡화" 등)
-    const r = resolveCoupangFee('주방용품/조리도구/주방잡화');
+  it('카테고리 78780 (자동차용품/세차/.../유리발수코팅제) 실제 fullPath 회귀 가드', () => {
+    // 쿠팡 API에서 직접 확인한 78780의 실제 fullPath.
+    // 이전 정규식이 "차"(자동차) 한 글자를 substring 매칭해 6.5% 식품으로 오분류했던 원본 버그.
+    const r = resolveCoupangFee('자동차용품/세차/관리용품/관리용품/광택/케미컬/유리발수코팅제');
     expect(r.rate).toBe(0.108);
     expect(r.rate).not.toBe(0.065);
-    expect(r.categoryName).toBe('주방용품');
+    expect(r.categoryName).toBe('자동차용품');
     expect(r.matched).toBe(true);
+    expect(r.matchedPrefix).toBe('자동차용품');
   });
 
   it('"차"가 path에 있어도 식품으로 매칭되지 않는다 (이전 정규식 버그)', () => {
