@@ -77,3 +77,80 @@ describe('getCoupangCategoryNames', () => {
     expect(new Set(names).size).toBe(names.length);
   });
 });
+
+describe('resolveCoupangFee — 정상 매칭 (잠정 매핑)', () => {
+  it('식품 카테고리는 6.5%', () => {
+    expect(resolveCoupangFee('식품/가공식품/통조림').rate).toBe(0.065);
+    expect(resolveCoupangFee('식품/가공식품/통조림').matched).toBe(true);
+  });
+  it('가전디지털/스마트폰은 4%', () => {
+    expect(resolveCoupangFee('가전디지털/스마트폰/갤럭시').rate).toBe(0.04);
+  });
+  it('가전디지털/생활가전은 7.8%', () => {
+    expect(resolveCoupangFee('가전디지털/생활가전/공기청정기').rate).toBe(0.078);
+  });
+  it('가전디지털만 있을 때 1차 fallback (생활가전 7.8%)', () => {
+    expect(resolveCoupangFee('가전디지털').rate).toBe(0.078);
+  });
+  it('주방용품은 10.8%', () => {
+    expect(resolveCoupangFee('주방용품/조리도구/주방잡화').rate).toBe(0.108);
+  });
+  // 회귀 방지 (이전 정규식 오분류 케이스)
+  it('자동차용품 경로에 "차"가 있어도 식품으로 분류되지 않는다', () => {
+    const r = resolveCoupangFee('자동차용품/차량용품/방향제');
+    expect(r.categoryName).not.toBe('식품');
+    expect(r.rate).not.toBe(0.065);
+  });
+  it('반려동물 사료 경로에 "먹"이 있어도 식품으로 분류되지 않는다', () => {
+    const r = resolveCoupangFee('반려동물용품/강아지/먹이');
+    expect(r.categoryName).not.toBe('식품');
+  });
+});
+
+import { assertCoupangFeeMapInvariants, type CoupangFeeEntry } from '@/lib/calculator/coupang-fees';
+
+describe('assertCoupangFeeMapInvariants — 위반 fixture', () => {
+  it('정렬 위반 (짧은 prefix가 긴 prefix 위) → throw', () => {
+    const bad: CoupangFeeEntry[] = [
+      { prefix: '식품', rate: 0.065, categoryName: '식품' },
+      { prefix: '식품/가공식품', rate: 0.065, categoryName: '식품' },
+    ];
+    expect(() => assertCoupangFeeMapInvariants(bad)).toThrow(/정렬 위반/);
+  });
+  it('중복 prefix → throw', () => {
+    const bad: CoupangFeeEntry[] = [
+      { prefix: '식품', rate: 0.065, categoryName: '식품' },
+      { prefix: '식품', rate: 0.065, categoryName: '식품' },
+    ];
+    // 정렬 위반이 먼저 잡히지만, 동일 메시지 패턴은 둘 다 정렬/중복 메시지 중 하나
+    expect(() => assertCoupangFeeMapInvariants(bad)).toThrow();
+  });
+  it('rate가 0이면 throw', () => {
+    const bad: CoupangFeeEntry[] = [{ prefix: '식품', rate: 0, categoryName: '식품' }];
+    expect(() => assertCoupangFeeMapInvariants(bad)).toThrow(/rate 범위 위반/);
+  });
+  it('rate가 1 이상이면 throw', () => {
+    const bad: CoupangFeeEntry[] = [{ prefix: '식품', rate: 1.5, categoryName: '식품' }];
+    expect(() => assertCoupangFeeMapInvariants(bad)).toThrow(/rate 범위 위반/);
+  });
+});
+
+describe('getCoupangCategoryNames — dedupe/order 강화', () => {
+  it('동일 categoryName이 여러 prefix에 등장해도 1회만 포함', () => {
+    const names = getCoupangCategoryNames();
+    const uniqueByName = new Set(COUPANG_FEE_MAP.map((e) => e.categoryName));
+    expect(names.length).toBe(uniqueByName.size);
+  });
+  it('등록 순서를 보존한다 (첫 등장 기준)', () => {
+    const names = getCoupangCategoryNames();
+    const firstSeenOrder: string[] = [];
+    const seen = new Set<string>();
+    for (const e of COUPANG_FEE_MAP) {
+      if (!seen.has(e.categoryName)) {
+        seen.add(e.categoryName);
+        firstSeenOrder.push(e.categoryName);
+      }
+    }
+    expect(names).toEqual(firstSeenOrder);
+  });
+});
