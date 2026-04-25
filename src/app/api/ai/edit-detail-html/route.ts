@@ -33,7 +33,7 @@ const EDIT_SYSTEM_PROMPT =
   "수정된 HTML 전체만 출력하세요. 코드 블록, 마크다운, 설명 텍스트 금지.";
 
 /** Claude에 전달할 HTML의 최대 글자 수 (초과 시 앞부분만 사용) */
-const HTML_CHAR_LIMIT = 3_000;
+const HTML_CHAR_LIMIT = 30_000;
 
 // ─────────────────────────────────────────
 // 요청 검증 스키마 (Zod)
