@@ -175,6 +175,8 @@ export default function AutoRegisterPage() {
     updatedAt: string;
   }[]>([]);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [draftSaveFeedback, setDraftSaveFeedback] = useState<'saved' | 'error' | null>(null);
+  const [draftSaveError, setDraftSaveError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [submitResult, setSubmitResult] = useState<{ sellerProductId: number; wingsUrl: string } | null>(null);
@@ -283,7 +285,15 @@ export default function AutoRegisterPage() {
       taxType,
       parallelImported,
       usedProduct,
-      // 옵션이 있으면 저장
+      // 옵션이 있으면 저장 (optionTypes + variants 모두 저장해야 불러오기 시 완전 복원 가능)
+      ...(optionTypes.length > 0
+        ? {
+            optionTypes: optionTypes.map((t) => ({
+              name: t.name,
+              values: t.values.map((v) => v.value),
+            })),
+          }
+        : {}),
       ...(variants.length > 0
         ? {
             variants: variants.map((v) => ({
@@ -298,11 +308,12 @@ export default function AutoRegisterPage() {
     };
     try {
       if (draftId) {
-        await fetch(`/api/listing/coupang/drafts/${draftId}`, {
+        const res = await fetch(`/api/listing/coupang/drafts/${draftId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ productName: name, draftData }),
         });
+        if (!res.ok) throw new Error(await res.text());
       } else {
         const res = await fetch('/api/listing/coupang/drafts', {
           method: 'POST',
@@ -314,6 +325,7 @@ export default function AutoRegisterPage() {
             draftData,
           }),
         });
+        if (!res.ok) throw new Error(await res.text());
         const data = (await res.json()) as { id: string };
         setDraftId(data.id);
       }
@@ -321,8 +333,12 @@ export default function AutoRegisterPage() {
       const listRes = await fetch('/api/listing/coupang/drafts');
       const listData = (await listRes.json()) as { drafts: typeof drafts };
       setDrafts(listData.drafts ?? []);
-    } catch {
-      // 네트워크 오류 무시
+      setDraftSaveFeedback('saved');
+      setTimeout(() => setDraftSaveFeedback(null), 2000);
+    } catch (err) {
+      setDraftSaveError(err instanceof Error ? err.message : '저장 실패');
+      setDraftSaveFeedback('error');
+      setTimeout(() => setDraftSaveFeedback(null), 3000);
     } finally {
       setIsSavingDraft(false);
     }
@@ -352,6 +368,8 @@ export default function AutoRegisterPage() {
       taxType?: 'TAX' | 'TAX_FREE';
       parallelImported?: 'NOT_PARALLEL_IMPORTED' | 'PARALLEL_IMPORTED';
       usedProduct?: 'NEW' | 'USED';
+      optionTypes?: { name: string; values: string[] }[];
+      variants?: { itemName: string; attributes: { attributeTypeName: string; attributeValueName: string }[]; salePrice: number; originalPrice: number; stock: number }[];
     };
     setDraftId(draft.id);
     setName(d.name ?? '');
@@ -374,6 +392,28 @@ export default function AutoRegisterPage() {
     if (d.taxType) setTaxType(d.taxType);
     if (d.parallelImported) setParallelImported(d.parallelImported);
     if (d.usedProduct) setUsedProduct(d.usedProduct);
+    // 옵션 복원
+    if (d.optionTypes && d.optionTypes.length > 0) {
+      setOptionTypes(d.optionTypes.map((t) => ({
+        id: crypto.randomUUID(),
+        name: t.name,
+        values: t.values.map((v) => ({ id: crypto.randomUUID(), value: v })),
+      })));
+    } else {
+      setOptionTypes([]);
+    }
+    if (d.variants && d.variants.length > 0) {
+      setVariants(d.variants.map((v) => ({
+        key: v.itemName,
+        combination: v.itemName,
+        attributes: v.attributes,
+        salePrice: Number(v.salePrice) || 0,
+        originalPrice: Number(v.originalPrice) || 0,
+        stock: Number(v.stock) || 100,
+      })));
+    } else {
+      setVariants([]);
+    }
     setUrlDone(true);
   }
 
@@ -2216,7 +2256,13 @@ export default function AutoRegisterPage() {
                     {isSubmitting ? '제출 중...' : '쿠팡에 제출'}
                   </button>
                 </div>
-                {!draftId && (
+                {draftSaveFeedback === 'saved' && (
+                  <p className="text-xs text-center text-green-600 font-medium">저장됐습니다</p>
+                )}
+                {draftSaveFeedback === 'error' && (
+                  <p className="text-xs text-center text-red-600">{draftSaveError || '저장에 실패했습니다'}</p>
+                )}
+                {!draftSaveFeedback && !draftId && (
                   <p className="text-xs text-center text-gray-400">임시저장 후 쿠팡에 제출할 수 있습니다</p>
                 )}
               </div>
