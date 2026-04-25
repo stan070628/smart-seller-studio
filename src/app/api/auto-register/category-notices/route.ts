@@ -15,7 +15,7 @@
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
-import Anthropic from '@anthropic-ai/sdk';
+import { callClaude } from '@/lib/ai/claude-cli';
 import { requireAuth } from '@/lib/supabase/auth';
 import { getCoupangClient } from '@/lib/listing/coupang-client';
 
@@ -169,20 +169,11 @@ ${certification
 - 전화번호: "1:1문의 참조"
 - 품명: 상품명 그대로 사용`;
 
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-  const response = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 1024,
-    system: '당신은 쿠팡 판매자를 위해 상품 고시정보(법정 표기사항)를 작성하는 전문가입니다. JSON 형식으로만 응답합니다.',
-    messages: [{ role: 'user', content: userPrompt }],
-  });
-
-  // 응답 텍스트 추출
-  const text = response.content
-    .filter((block) => block.type === 'text')
-    .map((block) => (block as { type: 'text'; text: string }).text)
-    .join('');
+  const text = await callClaude(
+    '당신은 쿠팡 판매자를 위해 상품 고시정보(법정 표기사항)를 작성하는 전문가입니다. JSON 형식으로만 응답합니다.',
+    userPrompt,
+    'haiku',
+  );
 
   // JSON 파싱 (마크다운 코드블록 제거 후 시도)
   const cleaned = text.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();

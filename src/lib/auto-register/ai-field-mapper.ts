@@ -3,7 +3,7 @@
  * Claude API를 사용하여 한국 이커머스 도메인 지식을 활용한 필드 추론 및 신뢰도 산정
  */
 
-import { getAnthropicClient } from '@/lib/ai/claude';
+import { callClaude } from '@/lib/ai/claude-cli';
 import type { NormalizedProduct, MappedCoupangFields } from './types';
 
 const SYSTEM_PROMPT = `당신은 한국 이커머스 상품을 쿠팡 오픈마켓에 등록하기 위해 필드를 분석하는 전문가입니다.
@@ -45,20 +45,7 @@ function buildPrompt(product: NormalizedProduct): string {
 export async function mapProductToCoupangFields(
   product: NormalizedProduct,
 ): Promise<MappedCoupangFields> {
-  const client = getAnthropicClient();
-
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 1024,
-    system: SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: buildPrompt(product) }],
-  });
-
-  // 응답 텍스트 추출
-  const raw = response.content
-    .filter((b) => b.type === 'text')
-    .map((b) => (b as { type: 'text'; text: string }).text)
-    .join('');
+  const raw = await callClaude(SYSTEM_PROMPT, buildPrompt(product), 'sonnet');
 
   // 마크다운 코드 블록 제거
   const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();

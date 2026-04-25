@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAnthropicClient } from '@/lib/ai/claude';
+import { callClaude } from '@/lib/ai/claude-cli';
 import { checkRateLimit, getRateLimitKey, RATE_LIMITS } from '@/lib/rate-limit';
 import { requireAuth } from '@/lib/supabase/auth';
 import { getKeywordStats } from '@/lib/naver-ad';
 import { evaluateKeyword } from '@/app/api/ai/keyword-evaluate/route';
-import type { TextBlock } from '@anthropic-ai/sdk/resources/messages';
 
 // ─── 타입 ────────────────────────────────────────────────────────────────────
 
@@ -100,19 +99,9 @@ export async function POST(
       : undefined;
 
   // 1단계: Claude 키워드 생성
-  const client = getAnthropicClient();
   let rawText: string;
   try {
-    const response = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 2048,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: buildUserPrompt(hint) }],
-    });
-    rawText = response.content
-      .filter((b): b is TextBlock => b.type === 'text')
-      .map((b) => b.text)
-      .join('');
+    rawText = await callClaude(SYSTEM_PROMPT, buildUserPrompt(hint), 'haiku', 2048);
   } catch (error) {
     console.error('[keyword-suggest] Claude API error', error);
     return NextResponse.json(

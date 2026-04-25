@@ -11,7 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { getAnthropicClient } from '@/lib/ai/claude';
+import { callClaude } from '@/lib/ai/claude-cli';
 import { withRetry } from '@/lib/ai/resilience';
 
 // ─────────────────────────────────────────
@@ -199,26 +199,11 @@ export async function POST(request: NextRequest) {
 
     const detailText = detailHtml ? extractTextFromHtml(detailHtml) : undefined;
 
-    const client = getAnthropicClient();
-
-    const response = await withRetry(
-      () =>
-        client.messages.create({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 1024,
-          system: SYSTEM_PROMPT,
-          messages: [{
-            role: 'user',
-            content: buildUserPrompt(originalTitle, autoComplete, marketTitles, categoryName, detailText),
-          }],
-        }),
-      { label: 'Claude optimizeListing' },
+    const rawText = await callClaude(
+      SYSTEM_PROMPT,
+      buildUserPrompt(originalTitle, autoComplete, marketTitles, categoryName, detailText),
+      'sonnet',
     );
-
-    const rawText = response.content
-      .filter((block) => block.type === 'text')
-      .map((block) => (block as { type: 'text'; text: string }).text)
-      .join('');
 
     const result = parseResponse(rawText);
 

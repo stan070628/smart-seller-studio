@@ -6,7 +6,7 @@
  */
 
 import { z } from 'zod';
-import { getAnthropicClient } from './claude';
+import { callClaude } from './claude-cli';
 import { withRetry } from './resilience';
 import {
   CHINESE_QUERY_SYSTEM_PROMPT,
@@ -53,7 +53,7 @@ function parseChineseQueries(rawText: string): string[] {
 // 메인 함수
 // ─────────────────────────────────────────────────────────────────────────────
 
-const MODEL = 'claude-sonnet-4-6';
+const MODEL = 'sonnet'; // claude-cli alias
 
 /**
  * 한국어 키워드를 Claude API에 보내 중국어 검색어 변형을 생성한다.
@@ -62,24 +62,10 @@ const MODEL = 'claude-sonnet-4-6';
  * @returns 중국어 검색어 배열 (3~5개). 생성 실패 시 빈 배열.
  */
 export async function generateChineseQueries(keyword: string): Promise<string[]> {
-  const client = getAnthropicClient();
-
-  const response = await withRetry(
-    () =>
-      client.messages.create({
-        model: MODEL,
-        max_tokens: 256,
-        system: CHINESE_QUERY_SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: buildChineseQueryUserPrompt(keyword) }],
-      }),
+  const rawText = await withRetry(
+    () => callClaude(CHINESE_QUERY_SYSTEM_PROMPT, buildChineseQueryUserPrompt(keyword), 'sonnet', 256),
     { label: 'Claude chineseQuery' },
   );
-
-  const rawText = response.content
-    .filter((block) => block.type === 'text')
-    .map((block) => (block as { type: 'text'; text: string }).text)
-    .join('');
-
   return parseChineseQueries(rawText);
 }
 

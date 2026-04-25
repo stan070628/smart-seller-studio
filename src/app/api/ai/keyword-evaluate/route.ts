@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/supabase/auth';
-import { getAnthropicClient } from '@/lib/ai/claude';
+import { callClaude } from '@/lib/ai/claude-cli';
 import { checkRateLimit, getRateLimitKey, RATE_LIMITS } from '@/lib/rate-limit';
-import type { TextBlock } from '@anthropic-ai/sdk/resources/messages';
 
 export interface EvaluateParams {
   keyword: string;
@@ -51,17 +50,7 @@ ${ccLine}${reviewLine ? `\n${reviewLine}` : ''}
 이 키워드가 신규 셀러 진입에 적합한지 판단해주세요.`;
 
   try {
-    const client = getAnthropicClient();
-    const response = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 256,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: userPrompt }],
-    });
-    const raw = response.content
-      .filter((b): b is TextBlock => b.type === 'text')
-      .map((b) => b.text)
-      .join('');
+    const raw = await callClaude(SYSTEM_PROMPT, userPrompt, 'haiku', 256);
     const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const parsed = JSON.parse(cleaned);
     if (typeof parsed.pass !== 'boolean' || typeof parsed.reasoning !== 'string') {

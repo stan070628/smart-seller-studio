@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { getAnthropicClient } from '@/lib/ai/claude';
+import { callClaude } from '@/lib/ai/claude-cli';
 import { withRetry } from '@/lib/ai/resilience';
 import { requireAuth } from '@/lib/supabase/auth';
 import { checkRateLimit, getRateLimitKey } from '@/lib/rate-limit';
@@ -156,7 +156,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const { title, categoryHint, description, options, context } = parsed.data;
 
-  const anthropic = getAnthropicClient();
   let systemPrompt: string;
   if (context === 'detail-html') {
     systemPrompt = buildDetailHtmlSystemPrompt();
@@ -168,16 +167,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const userPrompt = buildUserPrompt(title, categoryHint, description, options, context);
 
   try {
-    const response = await withRetry(() =>
-      anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 600,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }],
-      }),
-    );
-
-    const raw = response.content[0]?.type === 'text' ? response.content[0].text.trim() : '';
+    const raw = await withRetry(() => callClaude(systemPrompt, userPrompt, 'haiku', 600));
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('JSON 파싱 실패');
 

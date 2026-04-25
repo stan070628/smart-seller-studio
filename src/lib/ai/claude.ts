@@ -13,6 +13,7 @@ import {
   type CopyGenerationSchemaType,
 } from "./schemas";
 import { withRetry } from "./resilience";
+import { callClaude } from "./claude-cli";
 
 // ─────────────────────────────────────────
 // 타입 정의
@@ -80,27 +81,12 @@ export function getAnthropicClient(): Anthropic {
 export async function generateCopyFromReviews(
   input: GenerateCopyInput
 ): Promise<GenerateCopyOutput> {
-  const client = getAnthropicClient();
-
-  // 고도화된 유저 프롬프트 생성
   const userMessage = buildCopyUserPrompt(input.reviews, input.productName);
 
-  const response = await withRetry(
-    () =>
-      client.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 1024,
-        system: COPY_SYSTEM_PROMPT,
-        messages: [{ role: "user", content: userMessage }],
-      }),
+  const rawText = await withRetry(
+    () => callClaude(COPY_SYSTEM_PROMPT, userMessage, "sonnet"),
     { label: "Claude generateCopy" }
   );
-
-  // 응답 텍스트 추출
-  const rawText = response.content
-    .filter((block) => block.type === "text")
-    .map((block) => (block as { type: "text"; text: string }).text)
-    .join("");
 
   // Zod 스키마로 JSON 파싱 및 구조 검증
   // 실패 시 AiResponseParseError가 throw됩니다.
