@@ -190,12 +190,26 @@ function buildCtaSection(content: DetailPageContent): string {
 const RETURN_NOTICE_URL =
   'https://mvergrjqfjuwndveztts.supabase.co/storage/v1/object/public/smart-seller-studio/static/return-notice.jpg';
 
+const PRIVACY_NOTICE_URL =
+  'https://mvergrjqfjuwndveztts.supabase.co/storage/v1/object/public/smart-seller-studio/static/privacy-notice.jpg';
+
 function buildReturnNoticeSection(): string {
   return `
     <section style="width:100%;padding:0;">
       <img
         src="${RETURN_NOTICE_URL}"
         alt="교환/반품 안내"
+        style="width:100%;display:block;"
+      />
+    </section>`;
+}
+
+function buildPrivacyNoticeSection(): string {
+  return `
+    <section style="width:100%;padding:0;">
+      <img
+        src="${PRIVACY_NOTICE_URL}"
+        alt="개인정보 제공 안내"
         style="width:100%;display:block;"
       />
     </section>`;
@@ -227,6 +241,7 @@ function buildSections(
     buildWarningsSection(content),
     buildCtaSection(content),
     buildReturnNoticeSection(),
+    buildPrivacyNoticeSection(),
   ]
     .filter(Boolean)
     .join("\n");
