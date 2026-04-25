@@ -66,6 +66,13 @@ export default function AutoRegisterPage() {
   const [categoryCode, setCategoryCode] = useState('');
   const [brand, setBrand] = useState('');
 
+  // 상품 주요 정보
+  const [manufacturer, setManufacturer] = useState('');
+  const [adultOnly, setAdultOnly] = useState<'EVERYONE' | 'ADULTS_ONLY'>('EVERYONE');
+  const [taxType, setTaxType] = useState<'TAX' | 'TAX_FREE'>('TAX');
+  const [parallelImported, setParallelImported] = useState<'NOT_PARALLEL_IMPORTED' | 'PARALLEL_IMPORTED'>('NOT_PARALLEL_IMPORTED');
+  const [usedProduct, setUsedProduct] = useState<'NEW' | 'USED'>('NEW');
+
   // 카테고리 검색 + 유효성
   const [categorySearch, setCategorySearch] = useState('');
   const [categoryResults, setCategoryResults] = useState<{ displayCategoryCode: number; displayCategoryName: string; fullPath: string }[]>([]);
@@ -265,6 +272,11 @@ export default function AutoRegisterPage() {
       notices,
       tags,
       detailImages,
+      manufacturer,
+      adultOnly,
+      taxType,
+      parallelImported,
+      usedProduct,
       // 옵션이 있으면 저장
       ...(variants.length > 0
         ? {
@@ -329,6 +341,11 @@ export default function AutoRegisterPage() {
       returnCode?: string;
       notices?: { categoryName: string; detailName: string; content: string }[];
       tags?: string[];
+      manufacturer?: string;
+      adultOnly?: 'EVERYONE' | 'ADULTS_ONLY';
+      taxType?: 'TAX' | 'TAX_FREE';
+      parallelImported?: 'NOT_PARALLEL_IMPORTED' | 'PARALLEL_IMPORTED';
+      usedProduct?: 'NEW' | 'USED';
     };
     setDraftId(draft.id);
     setName(d.name ?? '');
@@ -346,6 +363,11 @@ export default function AutoRegisterPage() {
     setReturnCode(d.returnCode ?? '');
     setNotices(d.notices ?? []);
     setTags(d.tags ?? []);
+    if (d.manufacturer !== undefined) setManufacturer(d.manufacturer);
+    if (d.adultOnly) setAdultOnly(d.adultOnly);
+    if (d.taxType) setTaxType(d.taxType);
+    if (d.parallelImported) setParallelImported(d.parallelImported);
+    if (d.usedProduct) setUsedProduct(d.usedProduct);
     setUrlDone(true);
   }
 
@@ -952,6 +974,9 @@ export default function AutoRegisterPage() {
         outboundShippingPlaceCode: outboundCode,
         returnCenterCode: returnCode,
         searchTags: tags,
+        adultOnly,
+        taxType,
+        parallelImported,
         notices: notices.map((n) => ({
           noticeCategoryName: n.categoryName,
           noticeCategoryDetailName: n.detailName,
@@ -1187,6 +1212,77 @@ export default function AutoRegisterPage() {
               <div className="flex flex-col gap-1">
                 <label className="text-sm font-medium text-gray-700">브랜드</label>
                 <input value={brand} onChange={(e) => setBrand(e.target.value)} className={INPUT} />
+              </div>
+            </div>
+
+            {/* 섹션 1.5: 상품 주요 정보 */}
+            <div className={SECTION}>
+              <h3 className="font-semibold text-gray-900">상품 주요 정보</h3>
+
+              {/* 제조사 */}
+              <div className="flex flex-col gap-1">
+                <label className="text-sm font-medium text-gray-700">제조사</label>
+                <input
+                  value={manufacturer}
+                  onChange={(e) => setManufacturer(e.target.value)}
+                  placeholder="제조사를 알 수 없는 경우 브랜드명을 입력해주세요."
+                  className={INPUT}
+                />
+              </div>
+
+              {/* 미성년자 구매 */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-gray-700">미성년자 구매 <span className="text-red-500">*</span></label>
+                <div className="flex gap-4">
+                  {([['EVERYONE', '가능'], ['ADULTS_ONLY', '불가능']] as const).map(([val, label]) => (
+                    <label key={val} className="flex items-center gap-1.5 cursor-pointer">
+                      <input type="radio" name="adultOnly" value={val} checked={adultOnly === val} onChange={() => setAdultOnly(val)} className="accent-blue-600" />
+                      <span className="text-sm text-gray-700">{label}</span>
+                    </label>
+                  ))}
+                </div>
+                {adultOnly === 'ADULTS_ONLY' && (
+                  <p className="text-xs text-orange-600">⚠ 상품 등록 후에는 미성년자 구매 &apos;가능&apos;으로 변경할 수 없습니다.</p>
+                )}
+              </div>
+
+              {/* 병행수입 */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-gray-700">병행수입</label>
+                <div className="flex gap-4">
+                  {([['NOT_PARALLEL_IMPORTED', '병행수입 아님'], ['PARALLEL_IMPORTED', '병행수입']] as const).map(([val, label]) => (
+                    <label key={val} className="flex items-center gap-1.5 cursor-pointer">
+                      <input type="radio" name="parallelImported" value={val} checked={parallelImported === val} onChange={() => setParallelImported(val)} className="accent-blue-600" />
+                      <span className="text-sm text-gray-700">{label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* 중고상품 여부 */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-gray-700">중고상품 여부 <span className="text-red-500">*</span></label>
+                <div className="flex gap-4">
+                  {([['NEW', '새상품'], ['USED', '중고상품']] as const).map(([val, label]) => (
+                    <label key={val} className="flex items-center gap-1.5 cursor-pointer">
+                      <input type="radio" name="usedProduct" value={val} checked={usedProduct === val} onChange={() => setUsedProduct(val)} className="accent-blue-600" />
+                      <span className="text-sm text-gray-700">{label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* 부가세 */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-gray-700">부가세 <span className="text-red-500">*</span></label>
+                <div className="flex gap-4">
+                  {([['TAX', '과세'], ['TAX_FREE', '면세']] as const).map(([val, label]) => (
+                    <label key={val} className="flex items-center gap-1.5 cursor-pointer">
+                      <input type="radio" name="taxType" value={val} checked={taxType === val} onChange={() => setTaxType(val)} className="accent-blue-600" />
+                      <span className="text-sm text-gray-700">{label}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
             </div>
 

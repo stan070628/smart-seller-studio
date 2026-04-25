@@ -1,15 +1,27 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const nextConfig: NextConfig = {
   /**
    * Turbopack resolve alias 설정
-   * Fabric.js 의 선택적 node-canvas 의존성이 서버에서 오류를 일으키지 않도록
-   * 빈 모듈로 대체한다.
+   * - canvas: Fabric.js 선택적 서버 의존성 무력화
+   * - dompurify: browser-only 패키지를 SSR 빌드에서 identity stub으로 대체
    */
   turbopack: {
     resolveAlias: {
       canvas: "./src/lib/empty-module.ts",
+      dompurify: "./src/lib/dompurify-ssr.ts",
     },
+  },
+  webpack(config, { isServer }) {
+    if (isServer) {
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        canvas: path.resolve("./src/lib/empty-module.ts"),
+        dompurify: path.resolve("./src/lib/dompurify-ssr.ts"),
+      };
+    }
+    return config;
   },
 };
 
