@@ -29,4 +29,14 @@ describe('parseSourceUrl', () => {
   it('빈 문자열은 null을 반환한다', () => {
     expect(parseSourceUrl('')).toBeNull();
   });
+
+  it('도매꾹 단축 URL(숫자만) 형식에서 itemId를 추출한다', () => {
+    const result = parseSourceUrl('https://domeggook.com/58847698');
+    expect(result).toEqual({ source: 'domeggook', itemId: '58847698' });
+  });
+
+  it('www 포함 도매꾹 단축 URL도 처리한다', () => {
+    const result = parseSourceUrl('https://www.domeggook.com/58847698');
+    expect(result).toEqual({ source: 'domeggook', itemId: '58847698' });
+  });
 });
