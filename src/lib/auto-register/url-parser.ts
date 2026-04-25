@@ -12,8 +12,9 @@ const PATTERNS: { source: ParsedUrl['source']; regex: RegExp }[] = [
     regex: /domeggook\.com\/(\d{6,})\b/,
   },
   {
+    // /p/12345 앞에 카테고리 경로가 있는 형식도 지원
     source: 'costco',
-    regex: /costco\.co\.kr\/p\/([A-Za-z0-9-]+)/,
+    regex: /costco\.co\.kr\/(?:.*\/)?p\/([A-Za-z0-9]+)/,
   },
 ];
 
