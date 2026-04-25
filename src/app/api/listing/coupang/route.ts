@@ -7,6 +7,8 @@
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { getCoupangClient } from '@/lib/listing/coupang-client';
+import { getSupabaseServerClient } from '@/lib/supabase/server';
+import { requireAuth } from '@/lib/supabase/auth';
 
 // ─────────────────────────────────────────────────────────────
 // GET — 판매자 상품 목록
@@ -16,6 +18,9 @@ import { getCoupangClient } from '@/lib/listing/coupang-client';
 const ALL_PRODUCT_STATUSES = ['APPROVED', 'SUSPENSION', 'UNDER_REVIEW', 'REJECTED'];
 
 export async function GET(request: NextRequest) {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof Response) return authResult;
+
   const sp = request.nextUrl.searchParams;
   const status = sp.get('status') ?? '';          // 빈 문자열 = 전체
   const maxPerPage = parseInt(sp.get('maxPerPage') ?? '50', 10);
@@ -51,6 +56,18 @@ export async function GET(request: NextRequest) {
 // POST — 상품 등록
 // ─────────────────────────────────────────────────────────────
 
+// 옵션(variant) 단일 항목 스키마
+const VariantSchema = z.object({
+  itemName: z.string().min(1),
+  attributes: z.array(z.object({
+    attributeTypeName: z.string(),
+    attributeValueName: z.string(),
+  })),
+  salePrice: z.number().int().min(100),
+  originalPrice: z.number().int().min(100).optional(),
+  stock: z.number().int().min(0).default(100),
+});
+
 const RegisterSchema = z.object({
   displayCategoryCode: z.number().int(),
   sellerProductName: z.string().min(1).max(200),
@@ -60,10 +77,12 @@ const RegisterSchema = z.object({
   stock: z.number().int().min(1).default(999),
   thumbnailImages: z.array(z.string().url()).min(1).max(10),
   detailImages: z.array(z.string().url()).max(20).default([]),
-  description: z.string().min(1),
+  description: z.string().default(''),
   deliveryCharge: z.number().int().min(0).default(0),
   deliveryChargeType: z.enum(['FREE', 'NOT_FREE', 'CHARGE_RECEIVED']).default('FREE'),
   returnCharge: z.number().int().min(0).default(5000),
+  // dry-run: 실제 쿠팡 API 호출 없이 성공 응답만 반환
+  dryRun: z.boolean().optional(),
   // 선택 필드
   maximumBuyCount: z.number().int().min(1).default(999),
   maximumBuyForPerson: z.number().int().min(0).default(0),
@@ -77,11 +96,19 @@ const RegisterSchema = z.object({
   parallelImported: z.enum(['NOT_PARALLEL_IMPORTED', 'PARALLEL_IMPORTED', 'CONFIRMED_CARRIED_OUT']).optional(),
   notices: z.array(z.object({
     noticeCategoryName: z.string(),
+    noticeCategoryDetailName: z.string(),
     content: z.string(),
   })).optional(),
+  // 상품 옵션(variant) — 있으면 각 조합마다 별도 item 생성
+  variants: z.array(VariantSchema).optional(),
 });
 
 export async function POST(request: NextRequest) {
+  // 인증 확인
+  const authResult = await requireAuth(request);
+  if (authResult instanceof Response) return authResult;
+  const { userId } = authResult;
+
   let rawBody: unknown;
   try {
     rawBody = await request.json();
@@ -120,6 +147,69 @@ export async function POST(request: NextRequest) {
         }))
       : [{ contentsType: 'TEXT' as const, contentDetails: [{ content: d.description || d.sellerProductName, detailType: 'TEXT' as const }] }];
 
+    // 이미지 목록 (썸네일 + 상세) — 모든 item이 공유
+    const itemImages = [
+      ...d.thumbnailImages.map((url, i) => ({
+        imageOrder: i,
+        imageType: i === 0 ? 'REPRESENTATION' as const : 'DETAIL' as const,
+        vendorPath: url,
+      })),
+      ...d.detailImages.map((url: string, i: number) => ({
+        imageOrder: d.thumbnailImages.length + i,
+        imageType: 'DETAIL' as const,
+        vendorPath: url,
+      })),
+    ];
+
+    // 공통 notice 목록
+    const itemNotices = d.notices?.map((n) => ({
+      noticeCategoryName: n.noticeCategoryName,
+      noticeCategoryDetailName: n.noticeCategoryDetailName,
+      content: n.content,
+    })) ?? [];
+
+    // variants가 있으면 각 조합을 별도 item으로, 없으면 단일 item(기존 동작)
+    const items: import('@/lib/listing/coupang-client').CoupangProductItem[] =
+      d.variants && d.variants.length > 0
+        ? d.variants.map((v) => ({
+            itemName: v.itemName,
+            originalPrice: v.originalPrice ?? d.originalPrice ?? d.salePrice,
+            salePrice: v.salePrice,
+            maximumBuyCount: d.maximumBuyCount,
+            maximumBuyForPerson: d.maximumBuyForPerson,
+            maximumBuyForPersonPeriod: 1,
+            outboundShippingTimeDay: d.outboundShippingTimeDay ?? 3,
+            unitCount: 1,
+            adultOnly: d.adultOnly ?? 'EVERYONE',
+            taxType: d.taxType ?? 'TAX',
+            overseasPurchased: d.overseasPurchased ?? 'NOT_OVERSEAS_PURCHASED',
+            parallelImported: d.parallelImported ?? 'NOT_PARALLEL_IMPORTED',
+            images: itemImages,
+            attributes: v.attributes,
+            contents,
+            notices: itemNotices,
+          }))
+        : [
+            {
+              itemName: d.sellerProductName,
+              originalPrice: d.originalPrice ?? d.salePrice,
+              salePrice: d.salePrice,
+              maximumBuyCount: d.maximumBuyCount,
+              maximumBuyForPerson: d.maximumBuyForPerson,
+              maximumBuyForPersonPeriod: 1,
+              outboundShippingTimeDay: d.outboundShippingTimeDay ?? 3,
+              unitCount: 1,
+              adultOnly: d.adultOnly ?? 'EVERYONE',
+              taxType: d.taxType ?? 'TAX',
+              overseasPurchased: d.overseasPurchased ?? 'NOT_OVERSEAS_PURCHASED',
+              parallelImported: d.parallelImported ?? 'NOT_PARALLEL_IMPORTED',
+              images: itemImages,
+              attributes: [],
+              contents,
+              notices: itemNotices,
+            },
+          ];
+
     const payload: import('@/lib/listing/coupang-client').CoupangProductPayload = {
       displayCategoryCode: d.displayCategoryCode,
       sellerProductName: d.sellerProductName,
@@ -129,7 +219,7 @@ export async function POST(request: NextRequest) {
       brand: d.brand,
       generalProductName: d.sellerProductName,
       deliveryMethod: 'SEQUENCIAL',
-      deliveryCompanyCode: d.deliveryCompanyCode ?? 'LOTTE',
+      deliveryCompanyCode: d.deliveryCompanyCode ?? 'CJGLS',
       deliveryChargeType: d.deliveryCharge === 0 ? 'FREE' : 'NOT_FREE',
       deliveryCharge: d.deliveryCharge,
       freeShipOverAmount: 0,
@@ -147,50 +237,43 @@ export async function POST(request: NextRequest) {
       returnAddressDetail: process.env.COUPANG_RETURN_ADDRESS_DETAIL ?? '',
       returnCharge: d.returnCharge,
       vendorUserId: process.env.COUPANG_VENDOR_USER_ID ?? '',
-      items: [
-        {
-          itemName: d.sellerProductName,
-          originalPrice: d.originalPrice ?? d.salePrice,
-          salePrice: d.salePrice,
-          maximumBuyCount: d.maximumBuyCount,
-          maximumBuyForPerson: d.maximumBuyForPerson,
-          maximumBuyForPersonPeriod: 1,
-          outboundShippingTimeDay: d.outboundShippingTimeDay ?? 3,
-          unitCount: 1,
-          adultOnly: d.adultOnly ?? 'EVERYONE',
-          taxType: d.taxType ?? 'TAX',
-          overseasPurchased: d.overseasPurchased ?? 'NOT_OVERSEAS_PURCHASED',
-          parallelImported: d.parallelImported ?? 'NOT_PARALLEL_IMPORTED',
-          images: [
-            ...d.thumbnailImages.map((url, i) => ({
-              imageOrder: i,
-              imageType: i === 0 ? 'REPRESENTATION' as const : 'DETAIL' as const,
-              vendorPath: url,
-            })),
-            ...d.detailImages.map((url: string, i: number) => ({
-              imageOrder: d.thumbnailImages.length + i,
-              imageType: 'DETAIL' as const,
-              vendorPath: url,
-            })),
-          ],
-          attributes: [],
-          contents,
-          notices: d.notices?.map((n) => ({
-            noticeCategoryName: n.noticeCategoryName,
-            noticeCategoryDetailName: n.noticeCategoryName,
-            content: n.content,
-          })) ?? [],
-        },
-      ],
+      items,
     };
 
+    if (d.dryRun) {
+      return Response.json({
+        success: true,
+        dryRun: true,
+        data: {
+          sellerProductId: 99999999,
+          productUrl: 'https://www.coupang.com/vp/products/99999999',
+          wingsUrl: 'https://wing.coupang.com',
+        },
+      });
+    }
+
     const result = await client.registerProduct(payload);
+
+    // 등록 이력 Supabase에 저장 (실패해도 등록 성공에 영향 없음)
+    try {
+      const supabase = getSupabaseServerClient();
+      await supabase.from('coupang_registered_products').insert({
+        user_id: userId,
+        seller_product_id: result.sellerProductId,
+        seller_product_name: d.sellerProductName,
+        source_type: 'manual',
+        wings_status: 'UNDER_REVIEW',
+      });
+    } catch (saveErr) {
+      console.warn('[POST /api/listing/coupang] Supabase 저장 실패 (무시됨):', saveErr);
+    }
 
     return Response.json({
       success: true,
       data: {
         sellerProductId: result.sellerProductId,
-        productUrl: `https://www.coupang.com/vp/products/${result.sellerProductId}`, // productId는 등록 후 별도 조회 필요
+        productUrl: `https://www.coupang.com/vp/products/${result.sellerProductId}`,
+        wingsUrl: 'https://wing.coupang.com',
       },
     });
   } catch (err) {

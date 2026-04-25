@@ -17,6 +17,7 @@ function buildPrompt(product: NormalizedProduct): string {
 - 가격(원가): ${product.price}원
 - 원래가격: ${product.originalPrice ?? '없음'}원
 - 브랜드: ${product.brand ?? '없음'}
+- 제조사: ${product.manufacturer ?? '없음'}
 - 소스 카테고리: ${product.categoryHint ?? '없음'}
 - 설명: ${product.description.slice(0, 500)}
 

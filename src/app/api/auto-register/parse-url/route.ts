@@ -111,14 +111,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           .trim();
       }
 
-      // KC 인증번호 추출 (상세 HTML 텍스트에서 KC 뒤 영숫자 패턴)
+      // KC 인증번호 + 제조사 추출 (상세 HTML 텍스트 파싱)
       let certification: string | undefined;
+      let manufacturerFromHtml: string | undefined;
       if (rawDetailHtml) {
         const plainText = rawDetailHtml.replace(/<[^>]*>/g, ' ');
         // KC 인증번호 패턴: "KC" 뒤 하이픈/공백 포함 영숫자 (최소 5자)
         const kcMatch = /KC[\s\-]?([A-Z0-9][\w\-]{4,30})/i.exec(plainText);
         if (kcMatch) {
           certification = `KC인증 ${kcMatch[0].replace(/\s+/g, ' ').trim()}`;
+        }
+        // 제조사 패턴: "제조사" 뒤 콜론/공백 + 회사명 (2~40자)
+        const makerMatch = /제조사\s*[:：]?\s*([^\n\r\t<]{2,40})/i.exec(plainText);
+        if (makerMatch) {
+          manufacturerFromHtml = makerMatch[1].trim();
         }
       }
 
@@ -144,6 +150,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         }
       }
 
+      // 제조사: API basis.maker 우선, 없으면 상세 HTML에서 추출한 값 사용
+      const manufacturer = (itemDetail.basis?.maker?.trim()) || manufacturerFromHtml || undefined;
+
       product = {
         source: 'domeggook',
         itemId: parsedUrl.itemId,
@@ -154,7 +163,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         description,
         detailHtml: rawDetailHtml || undefined,
         brand: itemDetail.seller?.nick,
-        manufacturer: itemDetail.basis?.maker || undefined,
+        manufacturer,
         categoryHint: itemDetail.category?.current?.name,
         deliFee,
         moq: parseInt(String(itemDetail.qty?.domeMoq ?? 1), 10) || 1,
