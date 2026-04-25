@@ -118,6 +118,7 @@ export default function AutoRegisterPage() {
   const [detailHtmlEditError, setDetailHtmlEditError] = useState('');
   const [isGeneratingHtmlFromImages, setIsGeneratingHtmlFromImages] = useState(false);
   const [isSupplementingWithPhotos, setIsSupplementingWithPhotos] = useState(false);
+  const [isReformingFromUrl, setIsReformingFromUrl] = useState(false);
   const detailFileInputRef = useRef<HTMLInputElement>(null);
   const detailUploadSlotRef = useRef<number>(0);
 
@@ -746,11 +747,13 @@ export default function AutoRegisterPage() {
   }
 
   // Case 2-2: 사진만으로AI편집 (스튜디오 컨셉 새 HTML 생성)
+  // detailImages가 없으면 AI 편집된 editImages를 fallback으로 사용
   async function handleGenerateFromPhotos() {
-    if (detailImages.length === 0) return;
+    const sourceImages = detailImages.length > 0 ? detailImages : editImages;
+    if (sourceImages.length === 0) return;
     setIsGeneratingHtmlFromImages(true);
     setDetailHtmlEditError('');
-    const { images, imageUrls } = buildImagePayload(detailImages);
+    const { images, imageUrls } = buildImagePayload(sourceImages);
     try {
       const res = await fetch('/api/ai/generate-detail-html', {
         method: 'POST',
@@ -759,6 +762,7 @@ export default function AutoRegisterPage() {
           ...(images.length > 0 ? { images } : {}),
           ...(imageUrls.length > 0 ? { imageUrls } : {}),
           productName: name,
+          ...(detailHtml ? { existingHtml: detailHtml } : {}),
           studioMode: true,
         }),
       });
@@ -772,6 +776,33 @@ export default function AutoRegisterPage() {
       setDetailHtmlEditError('HTML 생성 중 오류가 발생했습니다.');
     } finally {
       setIsGeneratingHtmlFromImages(false);
+    }
+  }
+
+  // Case A: URL 상세페이지만으로 AI 재편집 (사진 없음)
+  async function handleAiReformFromUrl() {
+    if (!detailHtml) return;
+    setIsReformingFromUrl(true);
+    setDetailHtmlEditError('');
+    try {
+      const res = await fetch('/api/ai/generate-detail-html', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productName: name,
+          existingHtml: detailHtml,
+        }),
+      });
+      const data = (await res.json()) as { success: boolean; html?: string; error?: string };
+      if (res.ok && data.success && data.html) {
+        setDetailHtml(data.html);
+      } else {
+        setDetailHtmlEditError(data.error ?? `서버 오류 (HTTP ${res.status})`);
+      }
+    } catch {
+      setDetailHtmlEditError('AI 재편집 중 오류가 발생했습니다.');
+    } finally {
+      setIsReformingFromUrl(false);
     }
   }
 
@@ -1845,25 +1876,52 @@ export default function AutoRegisterPage() {
                   </div>
                 </div>
               ) : (
-                <div
-                  onClick={() => triggerDetailFileUpload(0)}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDragEnter={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
-                    files.forEach(file => {
-                      const reader = new FileReader();
-                      reader.onload = () => {
-                        setDetailImages(prev => prev.length < 5 ? [...prev, reader.result as string] : prev);
-                      };
-                      reader.readAsDataURL(file);
-                    });
-                  }}
-                  className="border-2 border-dashed border-gray-200 rounded-lg p-4 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-colors"
-                >
-                  <p className="text-sm text-gray-400">클릭하거나 드래그해서 상세 이미지 추가</p>
-                  <p className="text-xs text-gray-300 mt-1">최대 5장 · 사진추가AI편집 또는 사진만으로AI편집 가능</p>
+                <div className="flex flex-col gap-2">
+                  <div
+                    onClick={() => triggerDetailFileUpload(0)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDragEnter={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+                      files.forEach(file => {
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          setDetailImages(prev => prev.length < 5 ? [...prev, reader.result as string] : prev);
+                        };
+                        reader.readAsDataURL(file);
+                      });
+                    }}
+                    className="border-2 border-dashed border-gray-200 rounded-lg p-4 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-colors"
+                  >
+                    <p className="text-sm text-gray-400">클릭하거나 드래그해서 상세 이미지 추가</p>
+                    <p className="text-xs text-gray-300 mt-1">최대 5장 · 사진추가AI편집 또는 사진만으로AI편집 가능</p>
+                  </div>
+                  {/* Case A: detailHtml 있고 editImages 없을 때 */}
+                  {detailHtml && editImages.length === 0 && (
+                    <button
+                      onClick={handleAiReformFromUrl}
+                      disabled={isReformingFromUrl || isGeneratingHtmlFromImages}
+                      className="w-full py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {isReformingFromUrl ? 'AI 재편집 중... (30초~1분 소요)' : 'URL 상세페이지 AI 재편집'}
+                    </button>
+                  )}
+
+                  {/* Case B: editImages 있을 때 */}
+                  {editImages.length > 0 && (
+                    <button
+                      onClick={handleGenerateFromPhotos}
+                      disabled={isGeneratingHtmlFromImages || isReformingFromUrl}
+                      className="w-full py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {isGeneratingHtmlFromImages
+                        ? 'AI 편집 중... (30초~1분 소요)'
+                        : detailHtml
+                          ? 'URL+사진으로 AI 상세페이지 생성'
+                          : 'AI 편집 사진으로 상세페이지 생성'}
+                    </button>
+                  )}
                 </div>
               )}
 
