@@ -10,6 +10,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getAnthropicClient } from '@/lib/ai/claude';
 import { withRetry } from '@/lib/ai/resilience';
+import { requireAuth } from '@/lib/supabase/auth';
+import { checkRateLimit, getRateLimitKey } from '@/lib/rate-limit';
+
+const SUGGEST_PROMPTS_RATE_LIMIT = { windowMs: 60_000, maxRequests: 20 };
 
 const OptionValueSchema = z.object({ label: z.string() });
 const OptionSchema = z.object({
@@ -113,6 +117,28 @@ ${optionSummary}${thumbnailNote}`;
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  // 인증 검사
+  const auth = await requireAuth(req);
+  if (auth instanceof Response) {
+    return NextResponse.json({ success: false, error: '인증이 필요합니다.' }, { status: 401 });
+  }
+
+  // Rate Limit 검사
+  const ip =
+    req.headers.get('x-forwarded-for') ??
+    req.headers.get('x-real-ip') ??
+    'unknown';
+  const rateLimitResult = checkRateLimit(
+    getRateLimitKey(ip, 'suggest-thumbnail-prompts'),
+    SUGGEST_PROMPTS_RATE_LIMIT,
+  );
+  if (!rateLimitResult.allowed) {
+    return NextResponse.json(
+      { success: false, error: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' },
+      { status: 429, headers: { 'X-RateLimit-Reset': rateLimitResult.resetAt.toString() } },
+    );
+  }
+
   let body: unknown;
   try {
     body = await req.json();
