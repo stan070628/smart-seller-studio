@@ -39,7 +39,7 @@ interface SharedDraft {
   detailPageFullHtml: string | null;
   detailPageSnippet: string | null;
   detailPageSnippetNaver: string | null;
-  detailPageStatus: 'idle' | 'analyzing' | 'generating' | 'done' | 'error';
+  detailPageStatus: 'idle' | 'studio_editing' | 'analyzing' | 'generating' | 'done' | 'error';
   detailPageError: string | null;
   detailPageSkipped: boolean;
 
@@ -177,8 +177,8 @@ interface ListingStore {
   error: string | null;
 
   // ─── Browse 모드 ─────────────────────────────────────────────────────────
-  listingMode: 'register' | 'browse' | 'bulk';
-  setListingMode: (mode: 'register' | 'browse' | 'bulk') => void;
+  listingMode: 'register' | 'browse' | 'assets';
+  setListingMode: (mode: 'register' | 'browse' | 'assets') => void;
   browsePlatform: 'coupang' | 'naver';
   setBrowsePlatform: (p: 'coupang' | 'naver') => void;
   browseFilters: {
@@ -823,18 +823,23 @@ export const useListingStore = create<ListingStore>()(
             img.src = dataUrl;
           });
 
-        // analyzing 단계 시작
+        // ─── Phase 1: 스튜디오 AI 편집 ────────────────────────────────────────
         set(
           (s) => ({
             sharedDraft: {
               ...s.sharedDraft,
-              detailPageStatus: 'analyzing',
+              detailPageStatus: 'studio_editing',
               detailPageError: null,
             },
           }),
           false,
-          'listing/generateDetailPage/analyzing',
+          'listing/generateDetailPage/studio_editing',
         );
+
+        const STUDIO_EDIT_PROMPT =
+          'Remove the background and replace with pure white (#FFFFFF). ' +
+          'Apply bright, uniform studio lighting. ' +
+          'Create a professional e-commerce product photo.';
 
         try {
           // rawImageFiles 우선, 남은 자리에 detailImageFiles 추가 (총 5장 상한)
@@ -843,19 +848,61 @@ export const useListingStore = create<ListingStore>()(
             ...sharedDraft.detailImageFiles,
           ].slice(0, 5);
 
-          // 이미지 base64 변환 + 압축
-          const imagePayloads = await Promise.all(
+          // 각 이미지 data URL 변환 → 압축 → edit-thumbnail 병렬 호출 (25초 타임아웃)
+          const studioResults = await Promise.allSettled(
             allFiles.map(async (file) => {
-              const dataUrl = await readFileAsDataURL(file);
-              const compressed = await compressImage(dataUrl);
-              return {
-                imageBase64: compressed,
-                mimeType: 'image/jpeg' as const,
-              };
+              const rawDataUrl = await readFileAsDataURL(file);
+              // 원본이 고해상도 사진이면 10MB+가 될 수 있어 API가 실패함.
+              // edit-thumbnail에 보내기 전에 반드시 압축한다.
+              const compressedDataUrl = await compressImage(rawDataUrl);
+              const controller = new AbortController();
+              const timer = setTimeout(() => controller.abort(), 25_000);
+              try {
+                const editRes = await fetch('/api/ai/edit-thumbnail', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ imageUrl: compressedDataUrl, prompt: STUDIO_EDIT_PROMPT }),
+                  signal: controller.signal,
+                });
+                clearTimeout(timer);
+                const editJson = await editRes.json();
+                if (editRes.ok && editJson.success && editJson.data?.editedUrl) {
+                  return { type: 'url' as const, value: editJson.data.editedUrl as string };
+                }
+              } catch {
+                clearTimeout(timer);
+              }
+              // 편집 실패 시 이미 압축된 base64 폴백 (재압축 불필요)
+              return { type: 'base64' as const, value: compressedDataUrl };
             }),
           );
 
-          // generating 단계
+          // ─── Phase 2: 이미지 분석 ──────────────────────────────────────────
+          set(
+            (s) => ({
+              sharedDraft: {
+                ...s.sharedDraft,
+                detailPageStatus: 'analyzing',
+              },
+            }),
+            false,
+            'listing/generateDetailPage/analyzing',
+          );
+
+          // 편집 성공 → Supabase URL / 실패 → base64 분리
+          const imageUrls: string[] = [];
+          const fallbackImages: Array<{ imageBase64: string; mimeType: 'image/jpeg' }> = [];
+          for (const result of studioResults) {
+            if (result.status === 'fulfilled') {
+              if (result.value.type === 'url') {
+                imageUrls.push(result.value.value);
+              } else {
+                fallbackImages.push({ imageBase64: result.value.value, mimeType: 'image/jpeg' });
+              }
+            }
+          }
+
+          // ─── Phase 3: HTML 생성 ─────────────────────────────────────────────
           set(
             (s) => ({
               sharedDraft: {
@@ -868,13 +915,17 @@ export const useListingStore = create<ListingStore>()(
           );
 
           const currentDraft = get().sharedDraft;
+          const requestBody: Record<string, unknown> = {
+            productName: currentDraft.name || undefined,
+            studioMode: true,
+          };
+          if (imageUrls.length > 0) requestBody.imageUrls = imageUrls;
+          if (fallbackImages.length > 0) requestBody.images = fallbackImages;
+
           const res = await fetch('/api/ai/generate-detail-html', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              images: imagePayloads,
-              productName: currentDraft.name || undefined,
-            }),
+            body: JSON.stringify(requestBody),
           });
 
           const data = await res.json();
