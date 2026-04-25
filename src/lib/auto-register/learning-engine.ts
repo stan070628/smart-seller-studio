@@ -34,20 +34,32 @@ export function computeAutoModeStatus(statuses: FieldTrustStatus[]): AutoModeSta
   };
 }
 
-/** DB에서 source_type 기준 각 필드 최근 5행 조회 후 신뢰도 계산 */
+/** DB에서 source_type 기준 모든 필드 최근 행을 단일 쿼리로 조회 후 신뢰도 계산 */
 export async function getAutoModeStatus(sourceType: SourceType): Promise<AutoModeStatus> {
   const supabase = await getSupabaseServerClient();
-  const statuses: FieldTrustStatus[] = await Promise.all(
-    ALL_FIELDS.map(async (fieldName) => {
-      const { data } = await supabase
-        .from('auto_register_corrections')
-        .select('was_corrected')
-        .eq('source_type', sourceType)
-        .eq('field_name', fieldName)
-        .order('created_at', { ascending: false })
-        .limit(MIN_SAMPLES);
-      return computeFieldTrust(fieldName, data ?? []);
-    }),
+
+  // 9번 개별 쿼리 대신 단일 쿼리 — created_at DESC 순이므로 필드별 최신 행부터 누적
+  const { data } = await supabase
+    .from('auto_register_corrections')
+    .select('field_name, was_corrected')
+    .eq('source_type', sourceType)
+    .in('field_name', ALL_FIELDS)
+    .order('created_at', { ascending: false })
+    .limit(MIN_SAMPLES * ALL_FIELDS.length); // 최대 45행
+
+  // 필드별로 최근 MIN_SAMPLES행 그룹핑 (이미 DESC 정렬이므로 앞에서 자르면 됨)
+  const grouped = new Map<string, { was_corrected: boolean }[]>();
+  for (const row of data ?? []) {
+    const key = row.field_name as string;
+    const arr = grouped.get(key) ?? [];
+    if (arr.length < MIN_SAMPLES) {
+      arr.push({ was_corrected: row.was_corrected as boolean });
+      grouped.set(key, arr);
+    }
+  }
+
+  const statuses = ALL_FIELDS.map((fieldName) =>
+    computeFieldTrust(fieldName, grouped.get(fieldName) ?? []),
   );
   return computeAutoModeStatus(statuses);
 }

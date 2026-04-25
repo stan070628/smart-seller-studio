@@ -2,8 +2,14 @@ import type { ParsedUrl } from './types';
 
 const PATTERNS: { source: ParsedUrl['source']; regex: RegExp }[] = [
   {
+    // /product/detail/XXXXX 형식
     source: 'domeggook',
     regex: /domeggook\.com\/product\/detail\/(\d+)/,
+  },
+  {
+    // 단축 URL: domeggook.com/XXXXX 형식 (숫자 8자리 이상)
+    source: 'domeggook',
+    regex: /domeggook\.com\/(\d{6,})\b/,
   },
   {
     source: 'costco',

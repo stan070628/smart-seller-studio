@@ -24,6 +24,11 @@ const MODEL = "gemini-2.5-flash-image"
 /** AI 호출 타임아웃: 30초 */
 const AI_TIMEOUT_MS = 30_000
 
+/** 503 과부하 시 최대 재시도 횟수 */
+const MAX_RETRIES = 3
+/** 재시도 기본 지연 (ms, attempt 수를 곱함) */
+const RETRY_BASE_DELAY_MS = 3_000
+
 /** 이미지 다운로드 타임아웃: 8초 */
 const DOWNLOAD_TIMEOUT_MS = 8_000
 
@@ -42,7 +47,10 @@ const SYSTEM_PROMPT =
 // ─────────────────────────────────────────
 
 const requestSchema = z.object({
-  imageUrl: z.string().url("imageUrl은 유효한 URL이어야 합니다."),
+  // URL 또는 data:image/... (파일 업로드) 모두 허용
+  imageUrl: z.string().min(1, "imageUrl은 비어 있을 수 없습니다."),
+  // 두 번째 이미지 (선택 — 2장 합치기 모드에서 사용)
+  imageUrl2: z.string().min(1).optional(),
   prompt: z.string().min(1, "prompt는 비어 있을 수 없습니다."),
 })
 
@@ -93,6 +101,36 @@ function createSupabaseServiceClient() {
       autoRefreshToken: false,
     },
   })
+}
+
+// ─────────────────────────────────────────
+// 헬퍼: imageUrl 파싱 (URL 또는 data:// 통합 처리)
+// ─────────────────────────────────────────
+
+/**
+ * imageUrl이 data:// 형식이면 직접 base64 파싱,
+ * 일반 URL이면 downloadImage()로 다운로드 후 base64 변환합니다.
+ */
+async function resolveImageInput(
+  imageUrl: string
+): Promise<{ data: string; mimeType: string }> {
+  if (imageUrl.startsWith("data:")) {
+    // "data:image/jpeg;base64,XXXX..." 형식 파싱
+    const commaIdx = imageUrl.indexOf(",")
+    if (commaIdx === -1) {
+      throw new Error("data URL 형식이 올바르지 않습니다.")
+    }
+    const header = imageUrl.slice(0, commaIdx) // "data:image/jpeg;base64"
+    const data = imageUrl.slice(commaIdx + 1)   // base64 payload
+    const mimeType = header.split(":")[1]?.split(";")[0] ?? "image/jpeg"
+    return { data, mimeType }
+  }
+
+  // 일반 URL → 다운로드 후 변환
+  const buffer = await downloadImage(imageUrl)
+  const mimeType = detectMimeType(buffer)
+  const data = buffer.toString("base64")
+  return { data, mimeType }
 }
 
 // ─────────────────────────────────────────
@@ -234,111 +272,151 @@ export async function POST(request: NextRequest): Promise<Response> {
     )
   }
 
-  const { imageUrl, prompt } = parsed.data
+  const { imageUrl, imageUrl2, prompt } = parsed.data
 
-  // 3. 원본 이미지 다운로드
-  let imageBuffer: Buffer
+  // 3. 원본 이미지(1장, 필수) 해석 — URL 또는 data://
+  let img1Base64: string
+  let img1MimeType: string
   try {
-    imageBuffer = await downloadImage(imageUrl)
+    const resolved = await resolveImageInput(imageUrl)
+    img1Base64 = resolved.data
+    img1MimeType = resolved.mimeType
   } catch (err) {
-    console.error("[POST /api/ai/edit-thumbnail] 이미지 다운로드 오류:", err)
+    console.error("[POST /api/ai/edit-thumbnail] 이미지1 처리 오류:", err)
     return Response.json(
       {
         success: false,
         error:
           err instanceof Error
             ? err.message
-            : "원본 이미지를 다운로드하는 데 실패했습니다.",
+            : "원본 이미지를 처리하는 데 실패했습니다.",
       } satisfies ApiErrorResponse,
       { status: 400 }
     )
   }
 
-  // 4. 이미지 MIME 타입 감지 및 base64 변환
-  const mimeType = detectMimeType(imageBuffer)
-  const imageBase64 = imageBuffer.toString("base64")
-
-  // 5. Gemini Imagen AI 편집 호출 (30초 타임아웃)
-  let editedImageBase64: string
-  let editedMimeType: string
-  try {
-    const ai = getGeminiGenAI()
-
-    // 프롬프트를 영어 편집 지시로 래핑하여 이미지 출력을 유도
-    const editInstruction =
-      `Edit this product photo according to the following instruction. ` +
-      `You MUST output the edited image. Instruction: ${prompt}`
-
-    const aiCallPromise = ai.models.generateContent({
-      model: MODEL,
-      config: {
-        responseModalities: ["IMAGE", "TEXT"],
-        systemInstruction: SYSTEM_PROMPT,
-      },
-      contents: [
+  // 4. 두 번째 이미지(선택) 해석
+  let img2Base64: string | null = null
+  let img2MimeType: string | null = null
+  if (imageUrl2) {
+    try {
+      const resolved2 = await resolveImageInput(imageUrl2)
+      img2Base64 = resolved2.data
+      img2MimeType = resolved2.mimeType
+    } catch (err) {
+      console.error("[POST /api/ai/edit-thumbnail] 이미지2 처리 오류:", err)
+      return Response.json(
         {
-          role: "user",
-          parts: [
-            {
-              inlineData: {
-                data: imageBase64,
-                mimeType,
-              },
-            },
-            {
-              text: editInstruction,
-            },
-          ],
-        },
-      ],
-    })
-
-    // 30초 타임아웃 레이스
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(
-        () => reject(new Error("AI 처리 시간이 초과되었습니다. (30초)")),
-        AI_TIMEOUT_MS
+          success: false,
+          error:
+            err instanceof Error
+              ? err.message
+              : "두 번째 이미지를 처리하는 데 실패했습니다.",
+        } satisfies ApiErrorResponse,
+        { status: 400 }
       )
+    }
+  }
+
+  // 5. Gemini Imagen AI 편집 호출 (30초 타임아웃, 503 시 최대 3회 재시도)
+  let editedImageBase64 = ''
+  let editedMimeType = ''
+
+  const isOverloadedError = (err: unknown): boolean => {
+    const msg = err instanceof Error ? err.message : ""
+    return (
+      msg.includes("503") ||
+      msg.toLowerCase().includes("unavailable") ||
+      msg.toLowerCase().includes("high demand")
     )
+  }
 
-    const response = await Promise.race([aiCallPromise, timeoutPromise])
+  const ai = getGeminiGenAI()
+  const editInstruction =
+    `Edit this product photo according to the following instruction. ` +
+    `You MUST output the edited image. Instruction: ${prompt}`
 
-    // 응답에서 이미지 part 추출
-    const candidates = response.candidates
-    if (!candidates || candidates.length === 0) {
-      throw new Error("AI가 이미지를 생성하지 못했습니다.")
+  let lastErr: unknown
+  let succeeded = false
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const aiCallPromise = ai.models.generateContent({
+        model: MODEL,
+        config: {
+          responseModalities: ["IMAGE", "TEXT"],
+          systemInstruction: SYSTEM_PROMPT,
+        },
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { inlineData: { data: img1Base64, mimeType: img1MimeType } },
+              // 두 번째 이미지가 있을 때만 추가 (2장 합치기 모드)
+              ...(img2Base64 && img2MimeType
+                ? [{ inlineData: { data: img2Base64, mimeType: img2MimeType } }]
+                : []),
+              { text: editInstruction },
+            ],
+          },
+        ],
+      })
+
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error("AI 처리 시간이 초과되었습니다. (30초)")),
+          AI_TIMEOUT_MS
+        )
+      )
+
+      const response = await Promise.race([aiCallPromise, timeoutPromise])
+
+      const candidates = response.candidates
+      if (!candidates || candidates.length === 0) {
+        throw new Error("AI가 이미지를 생성하지 못했습니다.")
+      }
+
+      const contentParts = candidates[0]?.content?.parts
+      if (!contentParts || contentParts.length === 0) {
+        throw new Error("AI 응답에서 이미지 데이터를 찾을 수 없습니다.")
+      }
+
+      const imagePart = contentParts.find(
+        (part) => part.inlineData && part.inlineData.data
+      )
+
+      if (!imagePart || !imagePart.inlineData) {
+        throw new Error("AI 응답에 이미지 데이터가 포함되어 있지 않습니다.")
+      }
+
+      editedImageBase64 = imagePart.inlineData.data as string
+      editedMimeType = (imagePart.inlineData.mimeType as string) || "image/jpeg"
+      succeeded = true
+      break
+    } catch (err) {
+      lastErr = err
+      if (isOverloadedError(err) && attempt < MAX_RETRIES) {
+        const delay = attempt * RETRY_BASE_DELAY_MS
+        console.warn(
+          `[POST /api/ai/edit-thumbnail] 503 과부하, ${delay / 1000}초 후 재시도 (${attempt}/${MAX_RETRIES})`
+        )
+        await new Promise((r) => setTimeout(r, delay))
+        continue
+      }
+      break
     }
+  }
 
-    const contentParts = candidates[0]?.content?.parts
-    if (!contentParts || contentParts.length === 0) {
-      throw new Error("AI 응답에서 이미지 데이터를 찾을 수 없습니다.")
-    }
-
-    const imagePart = contentParts.find(
-      (part) => part.inlineData && part.inlineData.data
-    )
-
-    if (!imagePart || !imagePart.inlineData) {
-      throw new Error("AI 응답에 이미지 데이터가 포함되어 있지 않습니다.")
-    }
-
-    editedImageBase64 = imagePart.inlineData.data as string
-    editedMimeType = (imagePart.inlineData.mimeType as string) || "image/jpeg"
-  } catch (err) {
-    console.error("[POST /api/ai/edit-thumbnail] Gemini AI 오류:", err)
-    const errMsg = err instanceof Error ? err.message : ""
-    const isOverloaded =
-      errMsg.includes("503") ||
-      errMsg.toLowerCase().includes("unavailable") ||
-      errMsg.toLowerCase().includes("high demand")
+  if (!succeeded) {
+    console.error("[POST /api/ai/edit-thumbnail] Gemini AI 오류:", lastErr)
     return Response.json(
       {
         success: false,
-        error: isOverloaded
+        error: isOverloadedError(lastErr)
           ? "AI 서버가 일시적으로 혼잡합니다. 잠시 후 다시 시도해주세요."
-          : errMsg || "AI 이미지 편집 처리 중 오류가 발생했습니다.",
+          : (lastErr instanceof Error ? lastErr.message : "") ||
+            "AI 이미지 편집 처리 중 오류가 발생했습니다.",
       } satisfies ApiErrorResponse,
-      { status: isOverloaded ? 503 : 500 }
+      { status: isOverloadedError(lastErr) ? 503 : 500 }
     )
   }
 
