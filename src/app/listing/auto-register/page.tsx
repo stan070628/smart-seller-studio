@@ -471,7 +471,8 @@ export default function AutoRegisterPage() {
     setDetailHtml(p.detailHtml ?? p.description ?? '');
     setDeliveryChargeType((f?.deliveryChargeType.value ?? 'FREE') as 'FREE' | 'NOT_FREE');
     setDeliveryCharge(f?.deliveryCharge.value ?? 0);
-    setTags(f?.searchTags.value ?? []);
+    // 네이버 연관검색어 태그 우선, 없으면 AI 제안
+    setTags(p.suggestedTags?.length ? p.suggestedTags : (f?.searchTags.value ?? []));
 
     // 도매꾹 selectOpt 기반 옵션 자동 생성
     if (p.options && p.options.length > 0) {

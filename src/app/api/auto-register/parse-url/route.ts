@@ -4,6 +4,8 @@ import { requireAuth } from '@/lib/supabase/auth';
 import { parseSourceUrl } from '@/lib/auto-register/url-parser';
 import { getDomeggookClient } from '@/lib/sourcing/domeggook-client';
 import { fetchCostcoProduct } from '@/lib/sourcing/costco-client';
+import { expandKeywords } from '@/lib/naver-ad';
+import type { KeywordStat } from '@/lib/naver-ad';
 import type { NormalizedProduct, NormalizedProductOption, NormalizedProductOptionValue } from '@/lib/auto-register/types';
 
 // 요청 바디 검증
@@ -12,6 +14,103 @@ const RequestSchema = z.object({
 });
 
 type RequestBody = z.infer<typeof RequestSchema>;
+
+// ─────────────────────────────────────────────────────────────
+// 도매꾹 상품 페이지 스크래핑 헬퍼
+// ─────────────────────────────────────────────────────────────
+
+interface DomeggookPageInfo {
+  manufacturer?: string;
+  certification?: string;
+}
+
+/**
+ * 라벨(예: "제조사") 뒤에 오는 첫 번째 유의미한 텍스트를 HTML에서 추출.
+ * 라벨 이후 300자를 태그 제거 후 첫 번째 비공백 값을 반환.
+ */
+function extractLabelValue(html: string, label: string): string | undefined {
+  const idx = html.indexOf(label);
+  if (idx === -1) return undefined;
+  const snippet = html.slice(idx + label.length, idx + label.length + 300);
+  // 태그 제거 + HTML 엔티티 단순화
+  const text = snippet.replace(/<[^>]*>/g, ' ').replace(/&[a-z]+;/gi, ' ').trim();
+  // 콜론/공백 건너뛰고 첫 번째 값 추출
+  const m = /^[\s:：\-]*(\S[^\n\r\t]{0,39})/.exec(text);
+  if (!m) return undefined;
+  const value = m[1].trim().split(/\s{2,}/)[0].trim();
+  return value.length >= 2 && value.length <= 40 ? value : undefined;
+}
+
+/**
+ * 도매꾹 상품 URL을 직접 fetch하여 제조사 · KC 인증번호를 추출.
+ * 실패 시 빈 객체 반환 (API 값으로 폴백).
+ */
+async function scrapeDomeggookPage(url: string): Promise<DomeggookPageInfo> {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.5',
+      },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!res.ok) return {};
+    const html = await res.text();
+
+    const manufacturer = extractLabelValue(html, '제조사');
+
+    let certification: string | undefined;
+    const kcMatch = /KC[\s\-]?([A-Z0-9][\w\-]{4,30})/i.exec(html);
+    if (kcMatch) {
+      certification = `KC인증 ${kcMatch[0].replace(/\s+/g, ' ').trim()}`;
+    }
+
+    return { manufacturer, certification };
+  } catch {
+    return {};
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// 네이버 연관검색어로 검색태그 제안
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * 상품 제목의 주요 단어를 씨드로 네이버 검색광고 API expandKeywords를 호출하여
+ * 연관 검색어를 검색량 기준으로 정렬 후 상위 10개를 반환.
+ * 환경변수 미설정 또는 API 실패 시 빈 배열.
+ */
+async function suggestTagsFromNaver(title: string): Promise<string[]> {
+  try {
+    const seeds = title
+      .replace(/[\[\]()（）【】《》\/\\,·]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length >= 2 && !/^\d+$/.test(w))
+      .slice(0, 5);
+
+    if (seeds.length === 0) return [];
+
+    const stats = await Promise.race<KeywordStat[]>([
+      expandKeywords(seeds),
+      new Promise<KeywordStat[]>((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), 5000),
+      ),
+    ]);
+
+    return stats
+      .filter((k) => (k.searchVolume ?? 0) >= 100)
+      .sort((a, b) => (b.searchVolume ?? 0) - (a.searchVolume ?? 0))
+      .slice(0, 10)
+      .map((k) => k.keyword);
+  } catch {
+    return [];
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Route Handler
+// ─────────────────────────────────────────────────────────────
 
 /**
  * POST /api/auto-register/parse-url
@@ -32,36 +131,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
   }
 
-  // JSON 파싱
   let body: unknown;
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json(
-      { error: '유효한 JSON 형식이 아닙니다.' },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: '유효한 JSON 형식이 아닙니다.' }, { status: 400 });
   }
 
-  // Zod 검증
   const parsed = RequestSchema.safeParse(body);
   if (!parsed.success) {
     const errorMessage = parsed.error.issues[0]?.message || '유효하지 않은 입력입니다.';
-    return NextResponse.json(
-      { error: errorMessage },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: errorMessage }, { status: 400 });
   }
 
   const { url } = parsed.data as RequestBody;
 
-  // URL 파싱
   const parsedUrl = parseSourceUrl(url);
   if (!parsedUrl) {
     return NextResponse.json(
-      {
-        error: '지원하지 않는 URL 형식입니다. 도매꾹 또는 코스트코 코리아 상품 URL을 입력해주세요.',
-      },
+      { error: '지원하지 않는 URL 형식입니다. 도매꾹 또는 코스트코 코리아 상품 URL을 입력해주세요.' },
       { status: 422 },
     );
   }
@@ -70,25 +158,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     let product: NormalizedProduct;
 
     if (parsedUrl.source === 'domeggook') {
-      // 도매꾹 API 호출
       const client = getDomeggookClient();
       const itemNo = parseInt(parsedUrl.itemId, 10);
 
       if (Number.isNaN(itemNo)) {
-        return NextResponse.json(
-          { error: '유효하지 않은 도매꾹 상품 번호입니다.' },
-          { status: 422 },
-        );
+        return NextResponse.json({ error: '유효하지 않은 도매꾹 상품 번호입니다.' }, { status: 422 });
       }
 
-      const itemDetail = await client.getItemView(itemNo);
+      // API 호출 + 실제 상품 페이지 스크래핑 병렬 실행
+      const [apiRes, pageRes] = await Promise.allSettled([
+        client.getItemView(itemNo),
+        scrapeDomeggookPage(url),
+      ]);
 
-      if (!itemDetail || !itemDetail.basis) {
-        return NextResponse.json(
-          { error: '도매꾹 상품을 찾을 수 없습니다.' },
-          { status: 404 },
-        );
+      if (apiRes.status !== 'fulfilled' || !apiRes.value?.basis) {
+        return NextResponse.json({ error: '도매꾹 상품을 찾을 수 없습니다.' }, { status: 404 });
       }
+
+      const itemDetail = apiRes.value;
+      const pageInfo = pageRes.status === 'fulfilled' ? pageRes.value : {};
 
       // 이미지 URL 추출
       const imageUrls: string[] = [];
@@ -111,22 +199,23 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           .trim();
       }
 
-      // KC 인증번호 + 제조사 추출 (상세 HTML 텍스트 파싱)
-      let certification: string | undefined;
-      let manufacturerFromHtml: string | undefined;
-      if (rawDetailHtml) {
+      // KC 인증번호: 페이지 스크래핑 우선, API desc HTML 폴백
+      let certification: string | undefined = pageInfo.certification;
+      if (!certification && rawDetailHtml) {
         const plainText = rawDetailHtml.replace(/<[^>]*>/g, ' ');
-        // KC 인증번호 패턴: "KC" 뒤 하이픈/공백 포함 영숫자 (최소 5자)
         const kcMatch = /KC[\s\-]?([A-Z0-9][\w\-]{4,30})/i.exec(plainText);
-        if (kcMatch) {
-          certification = `KC인증 ${kcMatch[0].replace(/\s+/g, ' ').trim()}`;
-        }
-        // 제조사 패턴: "제조사" 뒤 콜론/공백 + 회사명 (2~40자)
+        if (kcMatch) certification = `KC인증 ${kcMatch[0].replace(/\s+/g, ' ').trim()}`;
+      }
+
+      // 제조사: 페이지 스크래핑 > API(basis.maker) > desc HTML regex
+      let manufacturer: string | undefined =
+        pageInfo.manufacturer || itemDetail.basis?.maker?.trim() || undefined;
+      if (!manufacturer && rawDetailHtml) {
+        const plainText = rawDetailHtml.replace(/<[^>]*>/g, ' ');
         const makerMatch = /제조사\s*[:：]?\s*([^\n\r\t<]{2,40})/i.exec(plainText);
         if (makerMatch) {
-          // 같은 행 다음 셀이 연속 공백으로 이어질 수 있으므로 첫 번째 덩어리만 취함
           const raw = makerMatch[1].trim().split(/\s{2,}/)[0].trim();
-          if (raw.length >= 2) manufacturerFromHtml = raw;
+          if (raw.length >= 2) manufacturer = raw;
         }
       }
 
@@ -141,19 +230,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       } else if (typeof rawDeliFee === 'string' && rawDeliFee) {
         deliFee = parseFloat(rawDeliFee) || 0;
       } else {
-        // tbl 형식: "50+3000|50+3000" → 첫 번째 tier의 fee 추출
         const tbl = itemDetail.deli?.dome?.tbl as string | undefined;
         if (tbl) {
-          const firstTier = tbl.split('|')[0];   // "50+3000"
-          const feePart = firstTier?.split('+')?.[1]; // "3000"
+          const firstTier = tbl.split('|')[0];
+          const feePart = firstTier?.split('+')?.[1];
           deliFee = parseInt(feePart ?? '0', 10) || 0;
         } else {
           deliFee = 0;
         }
       }
-
-      // 제조사: API basis.maker 우선, 없으면 상세 HTML에서 추출한 값 사용
-      const manufacturer = (itemDetail.basis?.maker?.trim()) || manufacturerFromHtml || undefined;
 
       product = {
         source: 'domeggook',
@@ -217,15 +302,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           // selectOpt JSON 파싱 실패 → 옵션 없음
         }
       }
+
+      // 네이버 연관검색어로 검색태그 자동 제안
+      const suggestedTags = await suggestTagsFromNaver(product.title);
+      if (suggestedTags.length > 0) product.suggestedTags = suggestedTags;
+
     } else {
       // 코스트코 API 호출
       const item = await fetchCostcoProduct(parsedUrl.itemId);
 
       if (!item) {
-        return NextResponse.json(
-          { error: '코스트코 상품을 찾을 수 없습니다.' },
-          { status: 404 },
-        );
+        return NextResponse.json({ error: '코스트코 상품을 찾을 수 없습니다.' }, { status: 404 });
       }
 
       product = {
@@ -239,6 +326,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         brand: item.brand,
         categoryHint: item.categoryName,
       };
+
+      // 코스트코도 네이버 연관검색어 태그 제안
+      const suggestedTags = await suggestTagsFromNaver(product.title);
+      if (suggestedTags.length > 0) product.suggestedTags = suggestedTags;
     }
 
     return NextResponse.json({ product }, { status: 200 });

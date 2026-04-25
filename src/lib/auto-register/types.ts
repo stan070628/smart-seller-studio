@@ -81,4 +81,5 @@ export interface NormalizedProduct {
   moq?: number;          // 최소주문수량
   options?: NormalizedProductOption[]; // 상품 옵션 (도매꾹 selectOpt 파싱)
   certification?: string; // KC 인증번호 (도매꾹 상세 HTML에서 추출)
+  suggestedTags?: string[]; // 네이버 연관검색어 기반 추천 검색태그
 }
