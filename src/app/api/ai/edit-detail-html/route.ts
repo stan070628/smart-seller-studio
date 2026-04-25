@@ -235,12 +235,19 @@ export async function POST(
       () =>
         client.messages.create({
           model: "claude-sonnet-4-6",
-          max_tokens: 4096,
+          max_tokens: 16384,
           system: EDIT_SYSTEM_PROMPT,
           messages: [{ role: "user", content: userPrompt }],
         }),
       { label: "Claude editDetailHtml" }
     );
+
+    if (response.stop_reason === "max_tokens") {
+      return NextResponse.json(
+        { success: false, error: "HTML이 너무 길어 편집할 수 없습니다. '처음부터 재생성'을 사용해 주세요." },
+        { status: 422 }
+      );
+    }
 
     rawResponseText = response.content
       .filter((block) => block.type === "text")
