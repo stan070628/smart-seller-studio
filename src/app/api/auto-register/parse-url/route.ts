@@ -111,6 +111,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           .trim();
       }
 
+      // KC 인증번호 추출 (상세 HTML 텍스트에서 KC 뒤 영숫자 패턴)
+      let certification: string | undefined;
+      if (rawDetailHtml) {
+        const plainText = rawDetailHtml.replace(/<[^>]*>/g, ' ');
+        // KC 인증번호 패턴: "KC" 뒤 하이픈/공백 포함 영숫자 (최소 5자)
+        const kcMatch = /KC[\s\-]?([A-Z0-9][\w\-]{4,30})/i.exec(plainText);
+        if (kcMatch) {
+          certification = `KC인증 ${kcMatch[0].replace(/\s+/g, ' ').trim()}`;
+        }
+      }
+
       // 도매가: API가 string으로 반환하는 경우도 있어 명시적 Number() 변환
       const domePrice = Number(itemDetail.price?.dome) || Number(itemDetail.price?.supply) || 0;
 
@@ -147,6 +158,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         categoryHint: itemDetail.category?.current?.name,
         deliFee,
         moq: parseInt(String(itemDetail.qty?.domeMoq ?? 1), 10) || 1,
+        certification,
       };
 
       // selectOpt 옵션 파싱 (단일/복합 옵션 모두 지원)

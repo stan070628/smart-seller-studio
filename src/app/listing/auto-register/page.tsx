@@ -1,6 +1,5 @@
 'use client';
 import { useState, useEffect, useMemo, useRef } from 'react';
-import DOMPurify from 'dompurify';
 import { UrlInputStep } from '@/components/listing/auto-register/UrlInputStep';
 import { calcCoupangWing } from '@/lib/calculator/calculate';
 import { getCoupangFeeFromPath } from '@/lib/calculator/fees';
@@ -72,6 +71,7 @@ export default function AutoRegisterPage() {
   const [taxType, setTaxType] = useState<'TAX' | 'TAX_FREE'>('TAX');
   const [parallelImported, setParallelImported] = useState<'NOT_PARALLEL_IMPORTED' | 'PARALLEL_IMPORTED'>('NOT_PARALLEL_IMPORTED');
   const [usedProduct, setUsedProduct] = useState<'NEW' | 'USED'>('NEW');
+  const [certification, setCertification] = useState<string | undefined>(undefined);
 
   // 카테고리 검색 + 유효성
   const [categorySearch, setCategorySearch] = useState('');
@@ -133,7 +133,13 @@ export default function AutoRegisterPage() {
   // 상세페이지
   const [detailHtml, setDetailHtml] = useState('');
   const [isPreview, setIsPreview] = useState(true);
-  const safeHtml = useMemo(() => (typeof window !== 'undefined' ? DOMPurify.sanitize(detailHtml) : detailHtml), [detailHtml]);
+  const safeHtml = useMemo(() => {
+    if (typeof window === 'undefined') return detailHtml;
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const purify = require('dompurify') as { sanitize?: (html: string) => string; default?: { sanitize: (html: string) => string } };
+    const sanitize = purify.sanitize ?? purify.default?.sanitize;
+    return sanitize ? sanitize(detailHtml) : detailHtml;
+  }, [detailHtml]);
 
   // 배송
   const [deliveryMethod, setDeliveryMethod] = useState<'SEQUENCIAL' | 'VENDOR_DIRECT'>('SEQUENCIAL');
@@ -408,6 +414,7 @@ export default function AutoRegisterPage() {
     setCategoryCode(f?.displayCategoryCode.value ? String(f.displayCategoryCode.value) : '');
     setBrand(f?.brand.value ?? p.brand ?? '기타');
     if (p.manufacturer) setManufacturer(p.manufacturer);
+    setCertification(p.certification);
 
     // 추천 판매가 계산 — AI 가격은 사용하지 않고 소싱 마진 로직으로만 산출
     const sourcePrice = Number(p.price) || 0; // 명시적 숫자 변환 (NaN/string 방어)
@@ -536,13 +543,19 @@ export default function AutoRegisterPage() {
   }, [categoryCode]);
 
   // 카테고리 코드 변경 시 고시정보 자동 생성
+  const certificationRef = useRef<string | undefined>(undefined);
+  useEffect(() => { certificationRef.current = certification; }, [certification]);
+
   useEffect(() => {
     const code = categoryCode.trim();
     if (!code || !name) return;
     const timer = setTimeout(async () => {
       setIsNoticeFetching(true);
       try {
-        const url = `/api/auto-register/category-notices?categoryCode=${encodeURIComponent(code)}&productName=${encodeURIComponent(name)}`;
+        const certParam = certificationRef.current
+          ? `&certification=${encodeURIComponent(certificationRef.current)}`
+          : '';
+        const url = `/api/auto-register/category-notices?categoryCode=${encodeURIComponent(code)}&productName=${encodeURIComponent(name)}${certParam}`;
         const res = await fetch(url);
         if (res.ok) {
           const data = (await res.json()) as { notices: { categoryName: string; detailName: string; content: string }[] };

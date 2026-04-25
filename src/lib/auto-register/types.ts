@@ -80,4 +80,5 @@ export interface NormalizedProduct {
   deliFee?: number;      // 실제 배송비 (도매꾹: deli.dome.fee 또는 deli.fee)
   moq?: number;          // 최소주문수량
   options?: NormalizedProductOption[]; // 상품 옵션 (도매꾹 selectOpt 파싱)
+  certification?: string; // KC 인증번호 (도매꾹 상세 HTML에서 추출)
 }
