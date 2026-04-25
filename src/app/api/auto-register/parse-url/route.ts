@@ -124,7 +124,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         // 제조사 패턴: "제조사" 뒤 콜론/공백 + 회사명 (2~40자)
         const makerMatch = /제조사\s*[:：]?\s*([^\n\r\t<]{2,40})/i.exec(plainText);
         if (makerMatch) {
-          manufacturerFromHtml = makerMatch[1].trim();
+          // 같은 행 다음 셀이 연속 공백으로 이어질 수 있으므로 첫 번째 덩어리만 취함
+          const raw = makerMatch[1].trim().split(/\s{2,}/)[0].trim();
+          if (raw.length >= 2) manufacturerFromHtml = raw;
         }
       }
 

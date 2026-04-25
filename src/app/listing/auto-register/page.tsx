@@ -412,7 +412,10 @@ export default function AutoRegisterPage() {
     setMappedFields(f);
     setName(f?.sellerProductName.value ?? p.title ?? '');
     setCategoryCode(f?.displayCategoryCode.value ? String(f.displayCategoryCode.value) : '');
-    setBrand(f?.brand.value ?? p.brand ?? '기타');
+    // AI가 '' 또는 '기타'를 반환하면 NormalizedProduct의 brand(판매자명)로 폴백
+    const aiBrand = f?.brand.value;
+    setBrand((aiBrand && aiBrand !== '기타') ? aiBrand : (p.brand || '기타'));
+    // 제조사: NormalizedProduct에서 추출된 값 우선
     if (p.manufacturer) setManufacturer(p.manufacturer);
     setCertification(p.certification);
 
