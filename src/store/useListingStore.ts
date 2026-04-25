@@ -161,6 +161,28 @@ interface NaverProduct {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type NaverProductDetail = Record<string, any>;
 
+// ─── AssetsDraft 타입 ─────────────────────────────────────────────────────────
+// 썸네일·상세만 만들기 탭의 임시 작업 상태
+interface AssetsDraft {
+  mode: 'url' | 'upload';
+  url: string;
+  uploadedFiles: string[];
+  generatedThumbnails: string[];
+  generatedDetailHtml: string;
+  isGenerating: boolean;
+  lastError: string | null;
+}
+
+const ASSETS_DRAFT_INITIAL: AssetsDraft = {
+  mode: 'url',
+  url: '',
+  uploadedFiles: [],
+  generatedThumbnails: [],
+  generatedDetailHtml: '',
+  isGenerating: false,
+  lastError: null,
+};
+
 interface ListingStore {
   // ─── 상태 ─────────────────────────────────────────────────────────────────
   activePlatform: PlatformId;
@@ -187,6 +209,11 @@ interface ListingStore {
     keyword: string;
   };
   updateBrowseFilters: (patch: Partial<{ coupangStatus: string; naverStatus: string; keyword: string }>) => void;
+
+  // ─── AssetsDraft 슬라이스 ─────────────────────────────────────────────────
+  assetsDraft: AssetsDraft;
+  updateAssetsDraft: (patch: Partial<AssetsDraft>) => void;
+  resetAssetsDraft: () => void;
 
   // ─── 소싱탭 → 대량등록 연결 ─────────────────────────────────────────────
   pendingBulkItems: string[];
@@ -295,6 +322,17 @@ export const useListingStore = create<ListingStore>()(
       browsePlatform: 'coupang',
       browseFilters: { coupangStatus: '', naverStatus: '', keyword: '' },
       pendingBulkItems: [],
+
+      // ─── AssetsDraft 초기값 및 액션 ────────────────────────────────────────
+      assetsDraft: ASSETS_DRAFT_INITIAL,
+      updateAssetsDraft: (patch) =>
+        set(
+          (s) => ({ assetsDraft: { ...s.assetsDraft, ...patch } }),
+          false,
+          'listing/updateAssetsDraft',
+        ),
+      resetAssetsDraft: () =>
+        set({ assetsDraft: ASSETS_DRAFT_INITIAL }, false, 'listing/resetAssetsDraft'),
 
       // ─── Browse 모드 액션 ─────────────────────────────────────────────────
       setListingMode: (mode) => set({ listingMode: mode }, false, 'listing/setListingMode'),
