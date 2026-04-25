@@ -167,3 +167,49 @@ describe('getCoupangCategoryNames — dedupe/order 강화', () => {
     expect(names).toEqual(firstSeenOrder);
   });
 });
+
+describe('회귀 — 원본 버그 (카테고리 78780)', () => {
+  it('주방용품 fullPath는 6.5%(식품)로 잘못 분류되지 않는다', () => {
+    // 카테고리 코드 78780이 매핑되는 fullPath 예시 ("주방용품/조리도구/주방잡화" 등)
+    const r = resolveCoupangFee('주방용품/조리도구/주방잡화');
+    expect(r.rate).toBe(0.108);
+    expect(r.rate).not.toBe(0.065);
+    expect(r.categoryName).toBe('주방용품');
+    expect(r.matched).toBe(true);
+  });
+
+  it('"차"가 path에 있어도 식품으로 매칭되지 않는다 (이전 정규식 버그)', () => {
+    const cases = [
+      '자동차용품/차량용품/방향제',
+      '자동차용품/주차용품',
+      '스포츠/레저/자전거',
+    ];
+    for (const path of cases) {
+      const r = resolveCoupangFee(path);
+      expect(r.categoryName).not.toBe('식품');
+      expect(r.rate).not.toBe(0.065);
+    }
+  });
+
+  it('"먹"이 path에 있어도 식품으로 매칭되지 않는다 (이전 정규식 버그)', () => {
+    const r = resolveCoupangFee('반려동물용품/강아지/먹이');
+    expect(r.categoryName).not.toBe('식품');
+  });
+});
+
+describe('helper contract — name 전용 vs fullPath 전용 분리', () => {
+  it('getCoupangFeeRateByCategoryName은 dropdown name 전용 (fullPath를 주면 기본값 반환)', () => {
+    // helper는 strict equality로 categoryName을 매칭하므로 fullPath를 받으면 무매치 → 기본값
+    expect(getCoupangFeeRateByCategoryName('식품/가공식품/통조림')).toBe(COUPANG_DEFAULT_FEE.rate);
+  });
+  it('getCoupangFeeRateByCategoryName은 빈 문자열/공백을 안전하게 기본값 처리', () => {
+    expect(getCoupangFeeRateByCategoryName('')).toBe(COUPANG_DEFAULT_FEE.rate);
+    expect(getCoupangFeeRateByCategoryName('  ')).toBe(COUPANG_DEFAULT_FEE.rate);
+  });
+  it('resolveCoupangFee는 fullPath 전용 (dropdown name 만 주면 정확 매칭으로만 통과)', () => {
+    // "식품" 자체는 매핑된 prefix와 정확히 일치하므로 매칭됨 (좋은 동작)
+    expect(resolveCoupangFee('식품').matched).toBe(true);
+    // "디지털기기"는 categoryName이지만 prefix가 아니므로 미매칭
+    expect(resolveCoupangFee('디지털기기').matched).toBe(false);
+  });
+});
