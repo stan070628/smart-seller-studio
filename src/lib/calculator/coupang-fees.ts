@@ -64,6 +64,19 @@ export function resolveCoupangFee(fullPath: string | null | undefined): CoupangF
   };
 }
 
+/** 드롭다운/필터용: 중복 제거된 카테고리명 목록을 prefix 등록 순서대로 반환 */
+export function getCoupangCategoryNames(): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const entry of COUPANG_FEE_MAP) {
+    if (!seen.has(entry.categoryName)) {
+      seen.add(entry.categoryName);
+      result.push(entry.categoryName);
+    }
+  }
+  return result;
+}
+
 // ─── 빌드 타임/모듈 로드 타임 안전장치 ─────────────────────────
 (function assertCoupangFeeMapInvariants() {
   // 1. 정렬: 더 구체적인(긴) prefix가 위에 위치

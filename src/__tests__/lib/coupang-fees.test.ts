@@ -67,3 +67,13 @@ describe('COUPANG_FEE_MAP invariants', () => {
     expect(COUPANG_FEE_MAP).toBeDefined();
   });
 });
+
+import { getCoupangCategoryNames } from '@/lib/calculator/coupang-fees';
+
+describe('getCoupangCategoryNames', () => {
+  it('중복 제거된 카테고리명 배열을 반환한다', () => {
+    const names = getCoupangCategoryNames();
+    expect(Array.isArray(names)).toBe(true);
+    expect(new Set(names).size).toBe(names.length);
+  });
+});
