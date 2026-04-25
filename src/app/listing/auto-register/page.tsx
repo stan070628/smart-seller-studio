@@ -965,7 +965,10 @@ export default function AutoRegisterPage() {
   // 가격 계산 (costPrice: NaN 방어 + product 없을 때 0 처리)
   const safeDomePrice = Number.isFinite(product?.price) ? (product!.price as number) : 0;
   const safeDeliveryFee = product?.deliFee ?? 0;
-  const safeCostPrice = safeDomePrice + safeDeliveryFee; // 도매가 + 도매 배송비
+  // 코스트코: deliFee가 없으므로 calcCostcoPrice의 totalCost(매입가+배송비+포장비) 사용
+  const safeCostPrice = product?.source === 'costco'
+    ? calcCostcoPrice({ buyPrice: safeDomePrice, packQty: 1, categoryName: product.categoryHint ?? null, channel: 'coupang', weightKg: null }).totalCost
+    : safeDomePrice + safeDeliveryFee; // 도매가 + 도매 배송비
   // 수수료율 우선순위: 사용자 직접 입력 → 쿠팡 카테고리 fullPath → 소싱 카테고리 hint
   const { categoryName: coupangCategory, rate: estimatedRate } = getCoupangFeeFromPath(
     categoryFullPath || product?.categoryHint || ''
