@@ -60,3 +60,10 @@ describe('matchesPrefix — segment 경계 단위 테스트', () => {
     expect(matchesPrefix('식품', '식품/과일')).toBe(false);
   });
 });
+
+describe('COUPANG_FEE_MAP invariants', () => {
+  it('모듈 로드 시 정렬/중복/rate 검증을 통과한다', () => {
+    // import 자체가 IIFE assertion을 실행하므로 import가 던지지 않으면 OK
+    expect(COUPANG_FEE_MAP).toBeDefined();
+  });
+});

@@ -63,3 +63,33 @@ export function resolveCoupangFee(fullPath: string | null | undefined): CoupangF
     matchedPrefix: hit.prefix,
   };
 }
+
+// ─── 빌드 타임/모듈 로드 타임 안전장치 ─────────────────────────
+(function assertCoupangFeeMapInvariants() {
+  // 1. 정렬: 더 구체적인(긴) prefix가 위에 위치
+  for (let i = 0; i < COUPANG_FEE_MAP.length; i++) {
+    for (let j = 0; j < i; j++) {
+      const subj = COUPANG_FEE_MAP[i].prefix;
+      const upper = COUPANG_FEE_MAP[j].prefix;
+      if (subj === upper || subj.startsWith(upper + '/')) {
+        throw new Error(
+          `COUPANG_FEE_MAP 정렬 위반: "${subj}"는 "${upper}" 보다 위에 있어야 함`,
+        );
+      }
+    }
+  }
+  // 2. 중복 prefix 금지
+  const seen = new Set<string>();
+  for (const entry of COUPANG_FEE_MAP) {
+    if (seen.has(entry.prefix)) {
+      throw new Error(`COUPANG_FEE_MAP 중복 prefix: "${entry.prefix}"`);
+    }
+    seen.add(entry.prefix);
+  }
+  // 3. rate 범위
+  for (const entry of COUPANG_FEE_MAP) {
+    if (!(entry.rate > 0 && entry.rate < 1)) {
+      throw new Error(`COUPANG_FEE_MAP rate 범위 위반: "${entry.prefix}" rate=${entry.rate}`);
+    }
+  }
+})();
