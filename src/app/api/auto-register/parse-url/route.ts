@@ -308,11 +308,36 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       if (suggestedTags.length > 0) product.suggestedTags = suggestedTags;
 
     } else {
-      // 코스트코 API 호출
-      const item = await fetchCostcoProduct(parsedUrl.itemId);
+      // 코스트코 API + 상품 페이지 병렬 호출
+      const [item, cosPageHtml] = await Promise.all([
+        fetchCostcoProduct(parsedUrl.itemId),
+        fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept-Language': 'ko-KR,ko;q=0.9',
+          },
+          signal: AbortSignal.timeout(6000),
+        }).then((r) => r.ok ? r.text() : '').catch(() => ''),
+      ]);
 
       if (!item) {
         return NextResponse.json({ error: '코스트코 상품을 찾을 수 없습니다.' }, { status: 404 });
+      }
+
+      // 페이지 HTML에서 제조사/브랜드 추출 (API가 비어있을 때 보완)
+      let costooBrand = item.brand || undefined;
+      if (!costooBrand && cosPageHtml) {
+        const mfMatch = /제조사[:\s：]*([^\s/\n<][^/\n<]{0,20})/.exec(cosPageHtml);
+        if (mfMatch) {
+          costooBrand = mfMatch[1].replace(/<[^>]*>/g, '').trim();
+        }
+      }
+
+      // KC 인증번호 추출
+      let cosCertification: string | undefined;
+      if (cosPageHtml) {
+        const kcMatch = /KC[\s\-]?([A-Z0-9][\w\-]{4,30})/i.exec(cosPageHtml);
+        if (kcMatch) cosCertification = `KC인증 ${kcMatch[0].replace(/\s+/g, ' ').trim()}`;
       }
 
       product = {
@@ -323,8 +348,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         originalPrice: item.originalPrice,
         imageUrls: item.imageUrl ? [item.imageUrl] : [],
         description: item.title,
-        brand: item.brand,
+        brand: costooBrand,
+        manufacturer: costooBrand,
         categoryHint: item.categoryName,
+        certification: cosCertification,
       };
 
       // 코스트코도 네이버 연관검색어 태그 제안
