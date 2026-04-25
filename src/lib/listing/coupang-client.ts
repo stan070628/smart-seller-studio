@@ -268,6 +268,7 @@ export class CoupangClient {
       const obj = rawData as Record<string, unknown>;
       if (Array.isArray(obj['data'])) roots = normalizeCategoryNodes(obj['data'] as unknown[]);
       else if (Array.isArray(obj['children'])) roots = normalizeCategoryNodes(obj['children'] as unknown[]);
+      else if (Array.isArray(obj['child'])) roots = normalizeCategoryNodes(obj['child'] as unknown[]);
       else roots = normalizeCategoryNodes([rawData]);
     } else {
       roots = [];
@@ -494,16 +495,17 @@ function normalizeCategoryNodes(nodes: unknown[]): CoupangCategory[] {
   for (const node of nodes) {
     if (!node || typeof node !== 'object') continue;
     const obj = node as Record<string, unknown>;
-    const code = typeof obj['displayCategoryCode'] === 'number'
-      ? obj['displayCategoryCode']
-      : Number(obj['displayCategoryCode']);
-    const name = typeof obj['displayCategoryName'] === 'string'
-      ? obj['displayCategoryName']
-      : String(obj['displayCategoryName'] ?? '');
-    if (!isFinite(code) || !name) continue;
-    const children = Array.isArray(obj['children'])
-      ? normalizeCategoryNodes(obj['children'] as unknown[])
+    // API는 displayItemCategoryCode/name/child, 내부 표현은 displayCategoryCode/displayCategoryName/children
+    const rawCode = obj['displayCategoryCode'] ?? obj['displayItemCategoryCode'];
+    const code = typeof rawCode === 'number' ? rawCode : Number(rawCode);
+    const name = (typeof obj['displayCategoryName'] === 'string' ? obj['displayCategoryName']
+      : typeof obj['name'] === 'string' ? obj['name']
+      : String(obj['displayCategoryName'] ?? obj['name'] ?? ''));
+    if (!isFinite(code) || !name || name === 'ROOT') continue;
+    const rawChildren = Array.isArray(obj['children']) ? obj['children']
+      : Array.isArray(obj['child']) ? obj['child']
       : undefined;
+    const children = rawChildren ? normalizeCategoryNodes(rawChildren as unknown[]) : undefined;
     result.push({ displayCategoryCode: code, displayCategoryName: name, children });
   }
   return result;
