@@ -695,6 +695,7 @@ export default function AutoRegisterPage() {
           productName: name,
         }),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = (await res.json()) as { success: boolean; html?: string; error?: string };
       if (data.success && data.html) {
         setDetailHtml(data.html);
@@ -745,6 +746,7 @@ export default function AutoRegisterPage() {
           productName: name,
         }),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = (await res.json()) as { success: boolean; html?: string; error?: string };
       if (data.success && data.html) {
         setDetailHtml(data.html);
