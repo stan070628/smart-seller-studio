@@ -1,14 +1,20 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { COUPANG_WING_CATEGORIES, COUPANG_ROCKET_LOGISTICS, type RocketSize } from '@/lib/calculator/fees';
+import { COUPANG_ROCKET_LOGISTICS, type RocketSize } from '@/lib/calculator/fees';
+import { COUPANG_FEE_MAP, getCoupangCategoryNames } from '@/lib/calculator/coupang-fees';
 import { calcCoupangWing, calcCoupangRocket } from '@/lib/calculator/calculate';
 import { NumberInput, SelectInput, RadioGroup, ResultPanel, Card } from '../shared';
 
 type Mode = 'wing' | 'rocket';
 
-const categories = Object.keys(COUPANG_WING_CATEGORIES) as string[];
+const categories = getCoupangCategoryNames();
 const sizes = Object.keys(COUPANG_ROCKET_LOGISTICS) as RocketSize[];
+
+function feeRateForCategoryName(name: string): number {
+  const hit = COUPANG_FEE_MAP.find((e) => e.categoryName === name);
+  return hit?.rate ?? 0.108;
+}
 
 interface CoupangTabProps {
   initialCostPrice?: number;
@@ -27,10 +33,11 @@ export default function CoupangTab({ initialCostPrice = 0, initialShippingFee }:
 
   const result = useMemo(() => {
     if (!sellingPrice) return null;
+    const feeRate = feeRateForCategoryName(category);
     if (mode === 'wing') {
-      return calcCoupangWing({ costPrice, sellingPrice, category, shippingFee, adCost });
+      return calcCoupangWing({ costPrice, sellingPrice, feeRate, shippingFee, adCost });
     }
-    return calcCoupangRocket({ costPrice, sellingPrice, category, size, monthlyQty, adCost });
+    return calcCoupangRocket({ costPrice, sellingPrice, feeRate, size, monthlyQty, adCost });
   }, [mode, costPrice, sellingPrice, category, shippingFee, adCost, size, monthlyQty]);
 
   return (

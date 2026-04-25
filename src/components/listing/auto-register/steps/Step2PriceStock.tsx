@@ -24,7 +24,7 @@ export function Step2PriceStock({ initialValue, costPrice, onNext, onBack }: Pro
   const calc = calcCoupangWing({
     costPrice,
     sellingPrice: salePrice,
-    category: '기타',
+    feeRate: 0.108,
     shippingFee: 0,
     adCost: 0,
   });

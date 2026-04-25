@@ -18,7 +18,7 @@ import {
 import { useListingStore } from '@/store/useListingStore';
 import { C } from '@/lib/design-tokens';
 import { calcCoupangWing, calcNaver } from '@/lib/calculator/calculate';
-import { getCoupangFeeFromPath } from '@/lib/calculator/fees';
+import { resolveCoupangFee } from '@/lib/calculator/coupang-fees';
 import AiEditModal from '@/components/listing/AiEditModal';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -899,7 +899,7 @@ function PriceWithMarginCalc({ urlSuccess, urlExtractedPrice }: PriceWithMarginC
   const targetMargin = sharedDraft.targetMarginRate;
 
   const coupangFee = useMemo(
-    () => getCoupangFeeFromPath(sharedDraft.coupangCategoryPath || ''),
+    () => resolveCoupangFee(sharedDraft.coupangCategoryPath || ''),
     [sharedDraft.coupangCategoryPath],
   );
 
@@ -907,7 +907,7 @@ function PriceWithMarginCalc({ urlSuccess, urlExtractedPrice }: PriceWithMarginC
     if (!costPrice) return null;
     const coupangPrice = calcRecommendedPrice(costPrice, shippingFee, coupangFee.rate, targetMargin);
     const naverPrice   = calcRecommendedPrice(costPrice, shippingFee, 0.036, targetMargin);
-    const cr = calcCoupangWing({ costPrice, sellingPrice: coupangPrice, category: coupangFee.categoryName, shippingFee, adCost: 0 });
+    const cr = calcCoupangWing({ costPrice, sellingPrice: coupangPrice, feeRate: coupangFee.rate, shippingFee, adCost: 0 });
     const nr = calcNaver({ costPrice, sellingPrice: naverPrice, shippingFee, grade: '일반', inflow: '네이버쇼핑', adCost: 0 });
     return {
       coupang: { price: coupangPrice, margin: cr.marginRate, profit: cr.netProfit },
