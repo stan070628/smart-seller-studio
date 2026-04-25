@@ -407,6 +407,7 @@ export default function AutoRegisterPage() {
     setName(f?.sellerProductName.value ?? p.title ?? '');
     setCategoryCode(f?.displayCategoryCode.value ? String(f.displayCategoryCode.value) : '');
     setBrand(f?.brand.value ?? p.brand ?? '기타');
+    if (p.manufacturer) setManufacturer(p.manufacturer);
 
     // 추천 판매가 계산 — AI 가격은 사용하지 않고 소싱 마진 로직으로만 산출
     const sourcePrice = Number(p.price) || 0; // 명시적 숫자 변환 (NaN/string 방어)

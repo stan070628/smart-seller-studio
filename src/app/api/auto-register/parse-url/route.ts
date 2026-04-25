@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { requireAuth } from '@/lib/supabase/auth';
 import { parseSourceUrl } from '@/lib/auto-register/url-parser';
 import { getDomeggookClient } from '@/lib/sourcing/domeggook-client';
 import { fetchCostcoProduct } from '@/lib/sourcing/costco-client';
-import type { NormalizedProduct } from '@/lib/auto-register/types';
+import type { NormalizedProduct, NormalizedProductOption, NormalizedProductOptionValue } from '@/lib/auto-register/types';
 
 // 요청 바디 검증
 const RequestSchema = z.object({
@@ -26,6 +27,11 @@ type RequestBody = z.infer<typeof RequestSchema>;
  *   { "error": "메시지" }
  */
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  const auth = await requireAuth(req);
+  if (auth instanceof Response) {
+    return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
+  }
+
   // JSON 파싱
   let body: unknown;
   try {
@@ -94,27 +100,100 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         imageUrls.push(itemDetail.image.url);
       }
 
-      // 설명 추출 (HTML에서 텍스트만 추출)
+      // 상세 HTML (원본) + 텍스트 설명 (AI 프롬프트용)
+      const rawDetailHtml = itemDetail.desc?.contents?.item ?? '';
       let description = itemDetail.basis.title || '';
-      if (itemDetail.desc?.contents?.item) {
-        // 간단히 HTML 태그 제거 (실제 환경에서는 cheerio 등 사용 권장)
-        description = itemDetail.desc.contents.item
+      if (rawDetailHtml) {
+        description = rawDetailHtml
           .replace(/<[^>]*>/g, '')
+          .replace(/\s{2,}/g, ' ')
           .slice(0, 500)
           .trim();
+      }
+
+      // 도매가: API가 string으로 반환하는 경우도 있어 명시적 Number() 변환
+      const domePrice = Number(itemDetail.price?.dome) || Number(itemDetail.price?.supply) || 0;
+
+      // 배송비: deli.dome.tbl 형식 "수량+fee|수량+fee" 파싱 (1개 주문 기준 첫 번째 tier)
+      const rawDeliFee = itemDetail.deli?.dome?.fee ?? itemDetail.deli?.fee;
+      let deliFee: number;
+      if (typeof rawDeliFee === 'number') {
+        deliFee = rawDeliFee;
+      } else if (typeof rawDeliFee === 'string' && rawDeliFee) {
+        deliFee = parseFloat(rawDeliFee) || 0;
+      } else {
+        // tbl 형식: "50+3000|50+3000" → 첫 번째 tier의 fee 추출
+        const tbl = itemDetail.deli?.dome?.tbl as string | undefined;
+        if (tbl) {
+          const firstTier = tbl.split('|')[0];   // "50+3000"
+          const feePart = firstTier?.split('+')?.[1]; // "3000"
+          deliFee = parseInt(feePart ?? '0', 10) || 0;
+        } else {
+          deliFee = 0;
+        }
       }
 
       product = {
         source: 'domeggook',
         itemId: parsedUrl.itemId,
         title: itemDetail.basis.title || '',
-        price: itemDetail.price?.dome ?? 0,
+        price: domePrice,
         originalPrice: itemDetail.price?.resale?.Recommand,
         imageUrls,
         description,
+        detailHtml: rawDetailHtml || undefined,
         brand: itemDetail.seller?.nick,
+        manufacturer: itemDetail.basis?.maker || undefined,
         categoryHint: itemDetail.category?.current?.name,
+        deliFee,
+        moq: parseInt(String(itemDetail.qty?.domeMoq ?? 1), 10) || 1,
       };
+
+      // selectOpt 옵션 파싱 (단일/복합 옵션 모두 지원)
+      if (itemDetail.selectOpt) {
+        try {
+          const rawOpt = JSON.parse(itemDetail.selectOpt) as {
+            type?: string;
+            set?: Array<{ name: string; opts: string[]; changeKey: string[] }>;
+            data?: Record<string, { domPrice?: string; qty?: string; hid?: string }>;
+          };
+          if (rawOpt.set && Array.isArray(rawOpt.set) && rawOpt.set.length > 0) {
+            const sets = rawOpt.set;
+            const data = rawOpt.data ?? {};
+            const isSingleDim = sets.length === 1;
+
+            const parsedOptions: NormalizedProductOption[] = sets
+              .map((setItem) => {
+                const values: NormalizedProductOptionValue[] = [];
+                for (let i = 0; i < setItem.opts.length; i++) {
+                  const changeKey = setItem.changeKey?.[i] ?? String(i);
+                  const dataKey = changeKey.padStart(2, '0');
+                  const entry = data[dataKey];
+                  if (entry?.hid === '1') continue;
+
+                  const fullName = setItem.opts[i];
+                  const bracketMatch = /\[([^\]]+)\]$/.exec(fullName);
+                  const label = bracketMatch ? bracketMatch[1].trim() : fullName.trim();
+
+                  values.push({
+                    label,
+                    fullName,
+                    priceAdjustment: isSingleDim ? (parseInt(entry?.domPrice ?? '0', 10) || 0) : 0,
+                    stock: parseInt(entry?.qty ?? '99999', 10) || 0,
+                  });
+                }
+                return { typeName: setItem.name, values };
+              })
+              .filter((o) => o.values.length > 0);
+
+            if (parsedOptions.length > 0) {
+              product.options = parsedOptions;
+            }
+          }
+        } catch {
+          // selectOpt JSON 파싱 실패 → 옵션 없음
+        }
+      }
     } else {
       // 코스트코 API 호출
       const item = await fetchCostcoProduct(parsedUrl.itemId);

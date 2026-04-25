@@ -46,6 +46,7 @@ export interface DomeggookItemDetail {
     no: number;
     title: string;
     status: string;
+    maker?: string;   // 제조사 (도매꾹 API ver=4.5)
   };
   category?: {
     current?: { name?: string };
@@ -55,22 +56,24 @@ export interface DomeggookItemDetail {
     nick?: string;
   };
   price?: {
-    dome?: number;
-    supply?: number;
+    dome?: number | string;   // API가 string으로 반환하는 경우 있음
+    supply?: number | string;
     resale?: {
       Recommand?: number;  // 도매꾹 API 오타 그대로 사용
     };
   };
   qty?: {
     inventory: number;
-    domeMoq?: number;      // 최소주문수량
+    domeMoq?: number | string; // 최소주문수량
   };
   deli?: {
     who?: string;          // 단일문자 코드 (구형 API 호환)
     pay?: string;          // '선결제'|'착불'|'무료' (실제 API 응답 필드)
-    fee?: number;          // 배송비 (단일값, 구형 API 호환)
+    fee?: number | string; // 배송비 (단일값, 구형 API 호환)
     dome?: {
-      fee?: string | number; // 도매 배송비 (실제 API: deli.dome.fee)
+      fee?: string | number;
+      type?: string;         // '수량별비례' 등
+      tbl?: string;          // "50+3000|50+3000" 형식 (수량별 배송비 테이블)
     };
   };
   image?: {
