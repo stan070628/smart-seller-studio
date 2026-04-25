@@ -1953,6 +1953,99 @@ export default function AutoRegisterPage() {
                       사진으로 다시 시작 →
                     </button>
                   </div>
+
+                  {/* ── 상세 이미지 첨부 + AI 편집 (HTML 모드에서도 사용 가능) ── */}
+                  <div className="border-t border-gray-100 pt-4 flex flex-col gap-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-700">상세 이미지</span>
+                      <button
+                        onClick={() => triggerDetailFileUpload(detailImages.length)}
+                        className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs hover:bg-gray-200"
+                      >
+                        + 이미지 추가
+                      </button>
+                    </div>
+
+                    {detailImages.length > 0 ? (
+                      <div className="flex flex-col gap-2">
+                        {detailImages.map((url, idx) => (
+                          <div key={idx} className="flex items-center gap-2 p-2 border border-gray-200 rounded-lg bg-gray-50">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={url}
+                              alt={`상세 이미지 ${idx + 1}`}
+                              className="w-16 h-16 object-cover rounded border border-gray-200 flex-shrink-0 cursor-pointer"
+                              onClick={() => triggerDetailFileUpload(idx)}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <span className="text-xs text-gray-500">이미지 {idx + 1}</span>
+                            </div>
+                            <button
+                              onClick={() => handleDetailImgAiEdit(idx)}
+                              disabled={isEditingDetailImg || !detailEditInstruction.trim()}
+                              className="px-2.5 py-1.5 bg-purple-600 text-white rounded text-xs whitespace-nowrap hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                              title={!detailEditInstruction.trim() ? 'AI 편집 지시문을 먼저 입력하세요' : ''}
+                            >
+                              {isEditingDetailImg && detailEditingSlot === idx ? '편집 중...' : 'AI 편집'}
+                            </button>
+                            <button
+                              onClick={() => removeDetailImage(idx)}
+                              className="px-2 py-1.5 text-gray-400 hover:text-red-500 text-xs"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={handleDetailImgAiEditAll}
+                            disabled={isEditingDetailImg || !detailEditInstruction.trim()}
+                            className="px-3 py-2 bg-purple-600 text-white rounded-lg text-xs whitespace-nowrap hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                          >
+                            {isEditingDetailImg
+                              ? `편집 중 (${(detailEditingSlot ?? 0) + 1}/${detailImages.length})...`
+                              : '전체 AI 편집'}
+                          </button>
+                          <button
+                            onClick={handleGenerateHtmlFromImages}
+                            disabled={isGeneratingHtmlFromImages}
+                            className="px-3 py-2 border border-blue-300 text-blue-700 rounded-lg text-xs whitespace-nowrap hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isGeneratingHtmlFromImages ? 'HTML 재생성 중...' : '이미지로 HTML 재생성'}
+                          </button>
+                        </div>
+                        {detailImgEditError && <p className="text-xs text-red-500">{detailImgEditError}</p>}
+                      </div>
+                    ) : (
+                      <div
+                        onClick={() => triggerDetailFileUpload(0)}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDragEnter={(e) => e.preventDefault()}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+                          files.forEach(file => {
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                              setDetailImages(prev => prev.length < 5 ? [...prev, reader.result as string] : prev);
+                            };
+                            reader.readAsDataURL(file);
+                          });
+                        }}
+                        className="border-2 border-dashed border-gray-200 rounded-lg p-4 text-center cursor-pointer hover:border-purple-300 hover:bg-purple-50/30 transition-colors"
+                      >
+                        <p className="text-sm text-gray-400">클릭하거나 드래그해서 상세 이미지 추가</p>
+                        <p className="text-xs text-gray-300 mt-1">등록 시 쿠팡 상세페이지에 함께 전송됩니다</p>
+                      </div>
+                    )}
+                    <input
+                      ref={detailFileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleDetailFileChange}
+                    />
+                  </div>
                 </>
               ) : (
                 /* ── 케이스 2: HTML 없음 → 사진 첨부 & HTML 생성 모드 ── */
