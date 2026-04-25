@@ -1889,6 +1889,9 @@ export default function AutoRegisterPage() {
                   ) : (
                     <div
                       onClick={() => triggerDetailFileUpload(0)}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDragEnter={(e) => e.preventDefault()}
+                      onDrop={(e) => { e.preventDefault(); const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/')); if (files.length > 0) handleDetailFileChange({ target: { files } } as unknown as React.ChangeEvent<HTMLInputElement>); }}
                       className="border-2 border-dashed border-gray-200 rounded-lg p-6 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-colors"
                     >
                       <p className="text-sm text-gray-400">클릭해서 상세 이미지를 추가하세요</p>
