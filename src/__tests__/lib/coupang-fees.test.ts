@@ -180,9 +180,9 @@ describe('회귀 — 원본 버그 (카테고리 78780)', () => {
 
   it('"차"가 path에 있어도 식품으로 매칭되지 않는다 (이전 정규식 버그)', () => {
     const cases = [
-      '자동차용품/차량용품/방향제',
-      '자동차용품/주차용품',
-      '스포츠/레저/자전거',
+      '자동차용품/차량용품/방향제',  // '자동차용품' prefix 매칭으로 식품 회피
+      '자동차용품/주차용품',          // 동일
+      '스포츠/레저/자전거',           // '스포츠/레저' prefix 매칭이 우선 — '차' substring 차단의 보조 증거
     ];
     for (const path of cases) {
       const r = resolveCoupangFee(path);
@@ -192,8 +192,24 @@ describe('회귀 — 원본 버그 (카테고리 78780)', () => {
   });
 
   it('"먹"이 path에 있어도 식품으로 매칭되지 않는다 (이전 정규식 버그)', () => {
+    // '반려동물용품' prefix 매칭이 우선 — '먹' substring 차단의 보조 증거
     const r = resolveCoupangFee('반려동물용품/강아지/먹이');
     expect(r.categoryName).not.toBe('식품');
+  });
+
+  it('매핑되지 않은 path에 "차"가 있어도 식품 default로 떨어진다 (순수 회귀 케이스)', () => {
+    // 어떤 prefix에도 매칭되지 않는 path. 정규식이었다면 6.5% 식품으로 오분류됐을 것.
+    const r = resolveCoupangFee('미지카테고리/차량부품/엔진');
+    expect(r.matched).toBe(false);
+    expect(r.rate).toBe(0.108);  // default 10.8% (식품 6.5% 아님)
+    expect(r.categoryName).toBe('기타');
+  });
+
+  it('매핑되지 않은 path에 "먹"이 있어도 식품 default로 떨어진다 (순수 회귀 케이스)', () => {
+    const r = resolveCoupangFee('미지카테고리/먹거리포장재');
+    expect(r.matched).toBe(false);
+    expect(r.rate).toBe(0.108);
+    expect(r.categoryName).toBe('기타');
   });
 });
 
