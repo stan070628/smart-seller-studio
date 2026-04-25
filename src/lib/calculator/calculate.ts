@@ -3,7 +3,6 @@
  */
 
 import {
-  COUPANG_WING_CATEGORIES,
   COUPANG_WING,
   COUPANG_ROCKET_LOGISTICS,
   COUPANG_ROCKET,
@@ -50,11 +49,12 @@ function calcAdMetrics(sellingPrice: number, totalFeesExcludingAd: number, costP
 export function calcCoupangWing(p: {
   costPrice: number;
   sellingPrice: number;
-  category: string;
+  /** 0 < feeRate < 1. resolveCoupangFee()의 rate 또는 사용자 입력값 */
+  feeRate: number;
   shippingFee: number;
   adCost: number;
 }): CalcResult {
-  const rate = COUPANG_WING_CATEGORIES[p.category] ?? 0.108;
+  const rate = p.feeRate;
   const commission = Math.round(p.sellingPrice * rate);
   const shippingCommission = Math.round(p.shippingFee * COUPANG_WING.shippingFeeRate);
 
@@ -77,12 +77,12 @@ export function calcCoupangWing(p: {
 export function calcCoupangRocket(p: {
   costPrice: number;
   sellingPrice: number;
-  category: string;
+  feeRate: number;
   size: RocketSize;
   monthlyQty: number;
   adCost: number;
 }): CalcResult {
-  const rate = COUPANG_WING_CATEGORIES[p.category] ?? 0.108;
+  const rate = p.feeRate;
   const commission = Math.round(p.sellingPrice * rate);
   const logistics = COUPANG_ROCKET_LOGISTICS[p.size] ?? 0;
   const storageFee = Math.round(
@@ -265,28 +265,41 @@ export function calcCompareAll(p: {
   costPrice: number;
   sellingPrice: number;
   shippingFee: number;
+  /** 쿠팡 윙/로켓용 수수료율 (0~1) */
+  feeRate: number;
+  /** G마켓/11번가 카테고리 수수료 룩업용 */
   category: string;
 }): CompareResult[] {
-  const wing = calcCoupangWing({ ...p, adCost: 0 });
+  const wing = calcCoupangWing({ costPrice: p.costPrice, sellingPrice: p.sellingPrice, feeRate: p.feeRate, shippingFee: p.shippingFee, adCost: 0 });
   const rocket = calcCoupangRocket({
-    ...p,
+    costPrice: p.costPrice,
+    sellingPrice: p.sellingPrice,
+    feeRate: p.feeRate,
     size: '소형',
     monthlyQty: 0,
     adCost: 0,
   });
   const naver = calcNaver({
-    ...p,
+    costPrice: p.costPrice,
+    sellingPrice: p.sellingPrice,
+    shippingFee: p.shippingFee,
     grade: '일반',
     inflow: '네이버쇼핑',
     adCost: 0,
   });
   const gmarket = calcGmarket({
-    ...p,
+    costPrice: p.costPrice,
+    sellingPrice: p.sellingPrice,
+    shippingFee: p.shippingFee,
+    category: p.category,
     couponDiscount: 0,
     adCost: 0,
   });
   const elevenst = calcElevenst({
-    ...p,
+    costPrice: p.costPrice,
+    sellingPrice: p.sellingPrice,
+    shippingFee: p.shippingFee,
+    category: p.category,
     couponDiscount: 0,
     isNewSeller: false,
     adCost: 0,
