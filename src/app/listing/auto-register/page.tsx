@@ -2106,7 +2106,10 @@ export default function AutoRegisterPage() {
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold text-gray-900">고시정보 (법정 표기사항)</h3>
                 {isNoticeFetching && (
-                  <span className="text-xs text-blue-500 animate-pulse">AI 생성 중...</span>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3.5 h-3.5 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
+                    <span className="text-xs text-blue-500">AI 고시정보 생성 중...</span>
+                  </div>
                 )}
               </div>
               {notices.length === 0 && !isNoticeFetching && (
