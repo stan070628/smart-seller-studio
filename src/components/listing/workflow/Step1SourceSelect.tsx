@@ -50,7 +50,7 @@ const labelStyle: React.CSSProperties = {
 interface DetailImage {
   id: string;
   url: string;
-  file: File;
+  file?: File;
   name: string;
 }
 
@@ -105,7 +105,9 @@ export default function Step1SourceSelect() {
 
   // ─── ① 썸네일 ──────────────────────────────────────────────────────────────
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
-  const [thumbnailPreviewUrl, setThumbnailPreviewUrl] = useState<string | null>(null);
+  const [thumbnailPreviewUrl, setThumbnailPreviewUrl] = useState<string | null>(
+    () => sharedDraft.thumbnailImages[0] ?? null
+  );
   const thumbInputRef = useRef<HTMLInputElement>(null);
   const [showAiEdit, setShowAiEdit] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
@@ -114,7 +116,13 @@ export default function Step1SourceSelect() {
   const [detailTab, setDetailTab] = useState<'image' | 'url'>('image');
 
   // ─── ② 이미지 탭 ───────────────────────────────────────────────────────────
-  const [detailImages, setDetailImages] = useState<DetailImage[]>([]);
+  const [detailImages, setDetailImages] = useState<DetailImage[]>(() =>
+    sharedDraft.detailImages.map((url) => ({
+      id: url,
+      url,
+      name: url.split('/').pop() ?? 'image',
+    }))
+  );
   const [detailDragOver, setDetailDragOver] = useState(false);
   const detailFileInputRef = useRef<HTMLInputElement>(null);
   const MAX_DETAIL = 10;
@@ -141,6 +149,8 @@ export default function Step1SourceSelect() {
     imageUrl: string;
     imageFile: File | null;
     initialPrompt?: string;
+    /** 편집 대상: 썸네일이면 undefined, 상세이미지면 해당 id */
+    detailImageId?: string;
   } | null>(null);
 
   // ─── 통합 URL 가져오기 핸들러 ───────────────────────────────────────────────
@@ -494,7 +504,7 @@ export default function Step1SourceSelect() {
                 const toAdd: DetailImage[] = files.slice(0, remaining).map(file => ({ id: generateId(), url: URL.createObjectURL(file), file, name: file.name }));
                 setDetailImages(prev => {
                   const updated = [...prev, ...toAdd];
-                  updateSharedDraft({ detailImageFiles: updated.map(d => d.file), detailPageSkipped: false });
+                  updateSharedDraft({ detailImageFiles: updated.map(d => d.file).filter((f): f is File => f !== undefined), detailImages: updated.map(d => d.url), detailPageSkipped: false });
                   return updated;
                 });
               }}
@@ -525,7 +535,7 @@ export default function Step1SourceSelect() {
                 const toAdd: DetailImage[] = files.slice(0, remaining).map(file => ({ id: generateId(), url: URL.createObjectURL(file), file, name: file.name }));
                 setDetailImages(prev => {
                   const updated = [...prev, ...toAdd];
-                  updateSharedDraft({ detailImageFiles: updated.map(d => d.file), detailPageSkipped: false });
+                  updateSharedDraft({ detailImageFiles: updated.map(d => d.file).filter((f): f is File => f !== undefined), detailImages: updated.map(d => d.url), detailPageSkipped: false });
                   return updated;
                 });
                 e.target.value = '';
@@ -552,7 +562,7 @@ export default function Step1SourceSelect() {
                         URL.revokeObjectURL(img.url);
                         setDetailImages(prev => {
                           const updated = prev.filter(d => d.id !== img.id);
-                          updateSharedDraft({ detailImageFiles: updated.map(d => d.file), detailPageSkipped: false });
+                          updateSharedDraft({ detailImageFiles: updated.map(d => d.file).filter((f): f is File => f !== undefined), detailImages: updated.map(d => d.url), detailPageSkipped: false });
                           return updated;
                         });
                       }}
@@ -562,7 +572,7 @@ export default function Step1SourceSelect() {
                     </button>
                     {/* AI 편집 버튼 */}
                     <button
-                      onClick={() => setAiEditModal({ open: true, imageUrl: img.url, imageFile: img.file })}
+                      onClick={() => setAiEditModal({ open: true, imageUrl: img.url, imageFile: img.file ?? null, detailImageId: img.id })}
                       style={{ width: '100%', padding: '4px', fontSize: '10px', fontWeight: 600, backgroundColor: 'rgba(190,0,20,0.07)', color: C.accent, border: 'none', cursor: 'pointer', borderTop: `1px solid ${C.border}` }}
                     >
                       AI 편집
@@ -812,10 +822,52 @@ export default function Step1SourceSelect() {
           imageFile={aiEditModal.imageFile}
           initialPrompt={aiEditModal.initialPrompt}
           onClose={() => setAiEditModal(null)}
-          onSave={(resultUrl) => {
-            // 썸네일 AI 편집 결과 업데이트
-            setThumbnailPreviewUrl(resultUrl);
-            updateSharedDraft({ thumbnailImages: [resultUrl] });
+          onSave={async (resultUrl) => {
+            if (aiEditModal?.detailImageId) {
+              const targetId = aiEditModal.detailImageId;
+              // 편집된 URL → File 변환 (Step2에서 File 배열을 사용하므로)
+              let editedFile: File | undefined;
+              try {
+                const res = await fetch(resultUrl);
+                const blob = await res.blob();
+                editedFile = new File([blob], `ai-edited-${Date.now()}.jpg`, {
+                  type: blob.type || 'image/jpeg',
+                });
+              } catch {
+                // fetch 실패 시 File 없이 URL만 업데이트
+              }
+              setDetailImages((prev) => {
+                const updated = prev.map((d) =>
+                  d.id === targetId
+                    ? { ...d, url: resultUrl, ...(editedFile ? { file: editedFile } : {}) }
+                    : d
+                );
+                updateSharedDraft({
+                  detailImageFiles: updated.map((d) => d.file).filter(Boolean) as File[],
+                  detailImages: updated.map((d) => d.url),
+                });
+                return updated;
+              });
+            } else {
+              // 썸네일 AI 편집 결과: URL 업데이트 + rawImageFiles도 교체 (Step2 AI 분석에 편집본 사용)
+              setThumbnailPreviewUrl(resultUrl);
+              let editedThumbnailFile: File | undefined;
+              try {
+                const res = await fetch(resultUrl);
+                const blob = await res.blob();
+                editedThumbnailFile = new File(
+                  [blob],
+                  `ai-thumbnail-${Date.now()}.jpg`,
+                  { type: blob.type || 'image/jpeg' }
+                );
+              } catch {
+                // fetch 실패 시 rawImageFiles 기존 값 유지
+              }
+              updateSharedDraft({
+                thumbnailImages: [resultUrl],
+                ...(editedThumbnailFile ? { rawImageFiles: [editedThumbnailFile] } : {}),
+              });
+            }
             setAiEditModal(null);
           }}
         />

@@ -2377,7 +2377,7 @@ function NaverTabContent() {
 const CONNECTED_PLATFORMS = new Set<PlatformId>(['coupang', 'naver']);
 
 export default function ListingDashboard() {
-  const { sharedDraft, setCurrentStep, goPrevStep, listingMode, setListingMode } = useListingStore();
+  const { sharedDraft, setCurrentStep, goPrevStep, listingMode, setListingMode, resetSharedDraft } = useListingStore();
   const { currentStep } = sharedDraft;
 
   // URL ?step= 파라미터로 특정 step 진입 지원 (예: /listing?step=2)
@@ -2473,6 +2473,27 @@ export default function ListingDashboard() {
             ))}
           </nav>
         </div>
+
+        {/* 우측: URL 자동등록 버튼 */}
+        <Link
+          href="/listing/auto-register"
+          style={{
+            padding: '6px 14px',
+            borderRadius: '8px',
+            border: '1px solid rgba(37,99,235,0.3)',
+            backgroundColor: 'rgba(37,99,235,0.07)',
+            color: '#1d4ed8',
+            fontSize: '13px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            textDecoration: 'none',
+          }}
+        >
+          🤖 URL 자동등록
+        </Link>
       </header>
 
       {/* -------------------------------------------------------------------- */}
@@ -2566,6 +2587,34 @@ export default function ListingDashboard() {
                   }}
                 />
               </div>
+              {currentStep === 1 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm('현재 작업 중인 내용이 모두 초기화됩니다. 계속하시겠습니까?')) {
+                      resetSharedDraft();
+                    }
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '8px 16px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    backgroundColor: '#fff',
+                    color: '#71717a',
+                    border: '1px solid #e5e5e5',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    marginLeft: '12px',
+                    flexShrink: 0,
+                    alignSelf: 'flex-start',
+                  }}
+                >
+                  ↺ 새로 시작
+                </button>
+              )}
               {currentStep > 1 && (
                 <button
                   type="button"

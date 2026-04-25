@@ -1,5 +1,6 @@
 'use client';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import DOMPurify from 'dompurify';
 
 export interface DetailPageValue {
   detailHtml: string;
@@ -17,6 +18,7 @@ interface Props {
 export function Step4DetailPage({ initialValue, onNext, onBack }: Props) {
   const [html, setHtml] = useState(initialValue.detailHtml);
   const [isPreview, setIsPreview] = useState(true);
+  const safeHtml = useMemo(() => DOMPurify.sanitize(html), [html]);
 
   return (
     <div className="flex flex-col gap-5">
@@ -42,7 +44,7 @@ export function Step4DetailPage({ initialValue, onNext, onBack }: Props) {
         // HTML 미리보기
         <div
           className="border border-gray-200 rounded-lg p-4 max-h-72 overflow-y-auto text-sm"
-          dangerouslySetInnerHTML={{ __html: html }}
+          dangerouslySetInnerHTML={{ __html: safeHtml }}
         />
       ) : (
         // 원시 HTML 직접 편집

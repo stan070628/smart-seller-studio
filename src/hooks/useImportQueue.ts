@@ -23,12 +23,24 @@ export function useImportQueue() {
   }, []);
 
   // 도매꾹 URL 또는 숫자에서 상품번호 추출
+  // 예: "https://domeggook.com/60015467" → 60015467
+  //     "https://domeggook.com/60015467?from=lstGen" → 60015467
+  //     "https://www.domeggook.com/...goods_no=99999999" → 99999999
   const parseItemNo = useCallback((raw: string): number | null => {
     const trimmed = raw.trim();
-    const urlMatch = trimmed.match(/[?&]goods_no=(\d+)/);
-    if (urlMatch) return parseInt(urlMatch[1], 10);
-    const numMatch = trimmed.match(/^\d+$/);
-    if (numMatch) return parseInt(trimmed, 10);
+    if (/^\d+$/.test(trimmed)) return parseInt(trimmed, 10);
+    // goods_no 쿼리파라미터 형식
+    const qsMatch = trimmed.match(/[?&]goods_no=(\d+)/);
+    if (qsMatch) return parseInt(qsMatch[1], 10);
+    // URL 경로의 마지막 숫자 세그먼트
+    try {
+      const pathname = new URL(trimmed).pathname;
+      const pathMatch = pathname.match(/\/(\d+)\/?$/);
+      if (pathMatch) return parseInt(pathMatch[1], 10);
+    } catch {
+      const fallback = trimmed.match(/\/(\d+)(?:[/?#]|$)/);
+      if (fallback) return parseInt(fallback[1], 10);
+    }
     return null;
   }, []);
 

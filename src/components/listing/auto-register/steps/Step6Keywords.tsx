@@ -11,7 +11,6 @@ interface RegisterSummary {
   brand: string;
   salePrice: number;
   stockQuantity: number;
-  thumbnailUrl: string;
   deliveryChargeType: string;
 }
 

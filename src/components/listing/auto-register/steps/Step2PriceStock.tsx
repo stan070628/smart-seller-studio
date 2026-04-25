@@ -11,7 +11,6 @@ export interface PriceStockValue {
 interface Props {
   initialValue: Partial<PriceStockValue>;
   costPrice: number;
-  confidences?: Partial<Record<keyof PriceStockValue, number>>;
   onNext: (value: PriceStockValue) => void;
   onBack: () => void;
 }

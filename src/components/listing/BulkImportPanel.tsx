@@ -123,6 +123,8 @@ export default function BulkImportPanel() {
               width: '100%',
               padding: '10px 12px',
               fontSize: 13,
+              color: C.text,
+              background: C.card,
               border: `1px solid ${C.border}`,
               borderRadius: 8,
               resize: 'vertical',

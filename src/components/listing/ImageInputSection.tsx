@@ -110,14 +110,18 @@ export default function ImageInputSection({
   const [uploadErrors, setUploadErrors] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
 
-  // URL 탭에서 textarea 값
-  const urlTextValue = urls.join('\n');
+  // URL 탭 textarea의 원본 텍스트 (urls 배열과 분리해 관리)
+  const [rawUrlText, setRawUrlText] = useState(() => urls.join('\n'));
 
   // ─── URL 탭 입력 처리 ───────────────────────────────────────────────────
   const handleUrlTextChange = (raw: string) => {
-    const parsed = raw.split('\n').map((s) => s.trim()).filter(Boolean);
+    setRawUrlText(raw);
+    // http(s)://로 시작하는 줄만 유효 URL로 파싱
+    const parsed = raw
+      .split('\n')
+      .map((s) => s.trim())
+      .filter((s) => /^https?:\/\//i.test(s));
     onUrlsChange(parsed);
-    // URL 탭에서 직접 편집하면 로컬 항목도 동기화 (업로드 탭으로 전환 시 표시용)
     setLocalItems(
       parsed.map((url) => ({
         localId: url,
@@ -340,7 +344,7 @@ export default function ImageInputSection({
               resize: 'vertical',
               borderColor: error ? '#b91c1c' : C.border,
             }}
-            value={urlTextValue}
+            value={rawUrlText}
             onChange={(e) => handleUrlTextChange(e.target.value)}
             placeholder={`https://example.com/image1.jpg\nhttps://example.com/image2.jpg`}
           />
