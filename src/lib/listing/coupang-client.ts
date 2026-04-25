@@ -317,8 +317,9 @@ export class CoupangClient {
         roots = normalizeCategoryNodes(obj['data'] as unknown[]);
       } else if (Array.isArray(obj['children'])) {
         roots = normalizeCategoryNodes(obj['children'] as unknown[]);
+      } else if (Array.isArray(obj['child'])) {
+        roots = normalizeCategoryNodes(obj['child'] as unknown[]);
       } else {
-        // 단일 루트 노드인 경우
         roots = normalizeCategoryNodes([rawData]);
       }
     } else {
