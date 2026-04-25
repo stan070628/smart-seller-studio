@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { calcCoupangWing } from '@/lib/calculator/calculate';
+import { COUPANG_DEFAULT_FEE } from '@/lib/calculator/coupang-fees';
 
 export interface PriceStockValue {
   salePrice: number;
@@ -24,7 +25,7 @@ export function Step2PriceStock({ initialValue, costPrice, onNext, onBack }: Pro
   const calc = calcCoupangWing({
     costPrice,
     sellingPrice: salePrice,
-    feeRate: 0.108,
+    feeRate: COUPANG_DEFAULT_FEE.rate,
     shippingFee: 0,
     adCost: 0,
   });

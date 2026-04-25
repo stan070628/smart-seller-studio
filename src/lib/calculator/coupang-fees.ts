@@ -2,10 +2,6 @@
  * 쿠팡 카테고리 fullPath → 판매 수수료율 매핑
  * - segment 경계(`/`)를 존중하는 prefix 매칭
  * - 매핑 없으면 기본값(10.8%) + matched=false
- *
- * Task 9에서 `src/lib/calculator/fees.ts`의 `getCoupangFeeFromPath` 와
- * `COUPANG_WING_CATEGORIES`(기본값 0.108)를 완전히 대체한다. 이전 기간 동안
- * 두 모듈의 기본값을 함께 변경할 것 — silent skew 위험.
  */
 
 export interface CoupangFeeEntry {
@@ -100,6 +96,12 @@ export function getCoupangCategoryNames(): string[] {
     }
   }
   return result;
+}
+
+/** categoryName(드롭다운 값) → 수수료율. 알 수 없으면 기본값. */
+export function getCoupangFeeRateByCategoryName(name: string): number {
+  return COUPANG_FEE_MAP.find((e) => e.categoryName === name)?.rate
+    ?? COUPANG_DEFAULT_FEE.rate;
 }
 
 // ─── 빌드 타임/모듈 로드 타임 안전장치 ─────────────────────────

@@ -107,6 +107,19 @@ describe('resolveCoupangFee — 정상 매칭 (잠정 매핑)', () => {
   });
 });
 
+import { getCoupangFeeRateByCategoryName } from '@/lib/calculator/coupang-fees';
+
+describe('getCoupangFeeRateByCategoryName', () => {
+  it('등록된 카테고리명은 해당 rate 반환', () => {
+    expect(getCoupangFeeRateByCategoryName('식품')).toBe(0.065);
+    expect(getCoupangFeeRateByCategoryName('주방용품')).toBe(0.108);
+    expect(getCoupangFeeRateByCategoryName('디지털기기')).toBe(0.04);
+  });
+  it('알 수 없는 카테고리명은 COUPANG_DEFAULT_FEE.rate 반환', () => {
+    expect(getCoupangFeeRateByCategoryName('존재하지않음')).toBe(COUPANG_DEFAULT_FEE.rate);
+  });
+});
+
 import { assertCoupangFeeMapInvariants, type CoupangFeeEntry } from '@/lib/calculator/coupang-fees';
 
 describe('assertCoupangFeeMapInvariants — 위반 fixture', () => {

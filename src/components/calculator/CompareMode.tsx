@@ -1,17 +1,13 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { getCoupangCategoryNames, COUPANG_FEE_MAP } from '@/lib/calculator/coupang-fees';
+import { getCoupangCategoryNames, getCoupangFeeRateByCategoryName } from '@/lib/calculator/coupang-fees';
 import { calcCompareAll, type CompareResult } from '@/lib/calculator/calculate';
 import { NumberInput, SelectInput, Card } from './shared';
 import { Trophy } from 'lucide-react';
 
 const categories = getCoupangCategoryNames();
 
-function feeRateForCategoryName(name: string): number {
-  const hit = COUPANG_FEE_MAP.find((e) => e.categoryName === name);
-  return hit?.rate ?? 0.108;
-}
 
 interface CompareModeProps {
   initialCostPrice?: number;
@@ -25,7 +21,7 @@ export default function CompareMode({ initialCostPrice = 0 }: CompareModeProps) 
 
   const results: CompareResult[] = useMemo(() => {
     if (!sellingPrice) return [];
-    return calcCompareAll({ costPrice, sellingPrice, shippingFee, feeRate: feeRateForCategoryName(category), category });
+    return calcCompareAll({ costPrice, sellingPrice, shippingFee, feeRate: getCoupangFeeRateByCategoryName(category), category });
   }, [costPrice, sellingPrice, shippingFee, category]);
 
   const bestIdx = results.length
