@@ -1664,172 +1664,263 @@ export default function AutoRegisterPage() {
 
             {/* 섹션 4: 상세페이지 */}
             <div className={SECTION}>
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-gray-900">상세페이지</h3>
-                <div className="flex rounded-lg overflow-hidden border border-gray-200 text-xs">
-                  <button
-                    onClick={() => setIsPreview(true)}
-                    className={`px-3 py-1.5 ${isPreview ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
-                  >
-                    미리보기
-                  </button>
-                  <button
-                    onClick={() => setIsPreview(false)}
-                    className={`px-3 py-1.5 ${!isPreview ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
-                  >
-                    HTML 편집
-                  </button>
-                </div>
-              </div>
               {detailHtml ? (
-                isPreview ? (
-                  <div
-                    className="border border-gray-200 rounded-lg p-4 max-h-72 overflow-y-auto text-sm"
-                    dangerouslySetInnerHTML={{ __html: safeHtml }}
-                  />
-                ) : (
-                  <textarea
-                    value={detailHtml}
-                    onChange={(e) => setDetailHtml(e.target.value)}
-                    rows={12}
-                    className="px-3 py-2 border border-gray-300 rounded-lg text-xs font-mono text-gray-900 bg-white resize-y focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    spellCheck={false}
-                  />
-                )
-              ) : (
-                <p className="text-sm text-gray-400">상세페이지 HTML이 없습니다.</p>
-              )}
-
-              {/* 상세 이미지 편집 */}
-              <div className="border-t border-gray-100 pt-4 flex flex-col gap-3">
-                {/* ── AI 프롬프트 제안 (항상 표시) ── */}
-                <div className="flex flex-col gap-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-500 font-medium">AI 편집 프롬프트</span>
-                    {product && (
+                /* ── 케이스 1: HTML 있음 → HTML 편집 모드 ── */
+                <>
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-gray-900">상세페이지</h3>
+                    <div className="flex rounded-lg overflow-hidden border border-gray-200 text-xs">
                       <button
-                        onClick={handleGenerateDetailPrompts}
-                        disabled={isGeneratingDetailPrompts}
-                        className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs hover:bg-purple-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={() => setIsPreview(true)}
+                        className={`px-3 py-1.5 ${isPreview ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
                       >
-                        {isGeneratingDetailPrompts ? '분석 중...' : 'AI 제안 3개'}
+                        미리보기
                       </button>
-                    )}
-                    {isGeneratingDetailPrompts && (
-                      <span className="text-xs text-purple-500 animate-pulse">분석 중...</span>
-                    )}
+                      <button
+                        onClick={() => setIsPreview(false)}
+                        className={`px-3 py-1.5 ${!isPreview ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                      >
+                        HTML 편집
+                      </button>
+                    </div>
                   </div>
 
-                  {/* 프롬프트 제안 카드 */}
-                  {(isGeneratingDetailPrompts || detailSuggestedPrompts.length > 0) && (
-                    <div className="flex flex-col gap-1.5">
-                      {isGeneratingDetailPrompts && detailSuggestedPrompts.length === 0
-                        ? [1, 2, 3].map((n) => (
-                            <div key={n} className="h-9 rounded-lg bg-gray-100 animate-pulse" />
-                          ))
-                        : detailSuggestedPrompts.map((prompt, idx) => (
-                            <button
-                              key={idx}
-                              onClick={() => setDetailEditInstruction(prompt)}
-                              className={`text-left px-3 py-2 rounded-lg text-xs border transition-all ${
-                                detailEditInstruction === prompt
-                                  ? 'border-purple-500 bg-purple-50 text-purple-800'
-                                  : 'border-gray-200 bg-gray-50 text-gray-700 hover:border-purple-300 hover:bg-purple-50/50'
-                              }`}
-                            >
-                              <span className="font-semibold text-purple-600 mr-1.5">
-                                {['배경정리형', '특징강조형', '라이프스타일형'][idx] ?? `옵션 ${idx + 1}`}
-                              </span>
-                              {prompt}
-                            </button>
-                          ))}
+                  {isPreview ? (
+                    <div
+                      className="border border-gray-200 rounded-lg p-4 max-h-72 overflow-y-auto text-sm"
+                      dangerouslySetInnerHTML={{ __html: safeHtml }}
+                    />
+                  ) : (
+                    <textarea
+                      value={detailHtml}
+                      onChange={(e) => setDetailHtml(e.target.value)}
+                      rows={12}
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-xs font-mono text-gray-900 bg-white resize-y focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      spellCheck={false}
+                    />
+                  )}
+
+                  {/* AI 지시문 편집 영역 */}
+                  <div className="border-t border-gray-100 pt-4 flex flex-col gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-500 font-medium">AI 편집 지시문</span>
+                      {product && (
+                        <button
+                          onClick={handleGenerateDetailPrompts}
+                          disabled={isGeneratingDetailPrompts}
+                          className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs hover:bg-purple-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isGeneratingDetailPrompts ? '분석 중...' : 'AI 제안 3개'}
+                        </button>
+                      )}
+                    </div>
+
+                    {(isGeneratingDetailPrompts || detailSuggestedPrompts.length > 0) && (
+                      <div className="flex flex-col gap-1.5">
+                        {isGeneratingDetailPrompts && detailSuggestedPrompts.length === 0
+                          ? [1, 2, 3].map((n) => (
+                              <div key={n} className="h-9 rounded-lg bg-gray-100 animate-pulse" />
+                            ))
+                          : detailSuggestedPrompts.map((prompt, idx) => (
+                              <button
+                                key={idx}
+                                onClick={() => setDetailEditInstruction(prompt)}
+                                className={`text-left px-3 py-2 rounded-lg text-xs border transition-all ${
+                                  detailEditInstruction === prompt
+                                    ? 'border-purple-500 bg-purple-50 text-purple-800'
+                                    : 'border-gray-200 bg-gray-50 text-gray-700 hover:border-purple-300 hover:bg-purple-50/50'
+                                }`}
+                              >
+                                <span className="font-semibold text-purple-600 mr-1.5">
+                                  {['설명강화형', '레이아웃정리형', '특징부각형'][idx] ?? `옵션 ${idx + 1}`}
+                                </span>
+                                {prompt}
+                              </button>
+                            ))}
+                      </div>
+                    )}
+
+                    <input
+                      value={detailEditInstruction}
+                      onChange={(e) => setDetailEditInstruction(e.target.value)}
+                      placeholder="상품 설명을 더 설득력 있게 작성해줘, 모바일 레이아웃으로 재구성해줘..."
+                      disabled={isEditingDetailHtml}
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-50 w-full"
+                    />
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleDetailHtmlEdit(detailEditInstruction)}
+                        disabled={isEditingDetailHtml || !detailEditInstruction.trim()}
+                        className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm whitespace-nowrap hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                      >
+                        {isEditingDetailHtml ? 'AI 편집 중...' : 'AI 편집'}
+                      </button>
+                      <button
+                        onClick={handleDetailHtmlRegenerate}
+                        disabled={isEditingDetailHtml}
+                        className="px-4 py-2 border border-purple-300 text-purple-700 rounded-lg text-sm whitespace-nowrap hover:bg-purple-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        처음부터 재생성
+                      </button>
+                    </div>
+
+                    {detailHtmlEditError && (
+                      <p className="text-xs text-red-500">{detailHtmlEditError}</p>
+                    )}
+
+                    <button
+                      onClick={() => { setDetailHtml(''); setDetailImages([]); setDetailSuggestedPrompts([]); setDetailEditInstruction(''); }}
+                      className="text-xs text-gray-400 hover:text-gray-600 self-start"
+                    >
+                      사진으로 다시 시작 →
+                    </button>
+                  </div>
+                </>
+              ) : (
+                /* ── 케이스 2: HTML 없음 → 사진 첨부 & HTML 생성 모드 ── */
+                <>
+                  <h3 className="font-semibold text-gray-900">상세페이지 이미지로 생성</h3>
+
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-500 font-medium">AI 편집 프롬프트</span>
+                      {product && (
+                        <button
+                          onClick={handleGenerateDetailPrompts}
+                          disabled={isGeneratingDetailPrompts}
+                          className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs hover:bg-purple-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isGeneratingDetailPrompts ? '분석 중...' : 'AI 제안 3개'}
+                        </button>
+                      )}
+                    </div>
+
+                    {(isGeneratingDetailPrompts || detailSuggestedPrompts.length > 0) && (
+                      <div className="flex flex-col gap-1.5">
+                        {isGeneratingDetailPrompts && detailSuggestedPrompts.length === 0
+                          ? [1, 2, 3].map((n) => (
+                              <div key={n} className="h-9 rounded-lg bg-gray-100 animate-pulse" />
+                            ))
+                          : detailSuggestedPrompts.map((prompt, idx) => (
+                              <button
+                                key={idx}
+                                onClick={() => setDetailEditInstruction(prompt)}
+                                className={`text-left px-3 py-2 rounded-lg text-xs border transition-all ${
+                                  detailEditInstruction === prompt
+                                    ? 'border-purple-500 bg-purple-50 text-purple-800'
+                                    : 'border-gray-200 bg-gray-50 text-gray-700 hover:border-purple-300 hover:bg-purple-50/50'
+                                }`}
+                              >
+                                <span className="font-semibold text-purple-600 mr-1.5">
+                                  {['배경정리형', '특징강조형', '라이프스타일형'][idx] ?? `옵션 ${idx + 1}`}
+                                </span>
+                                {prompt}
+                              </button>
+                            ))}
+                      </div>
+                    )}
+
+                    <input
+                      value={detailEditInstruction}
+                      onChange={(e) => setDetailEditInstruction(e.target.value)}
+                      placeholder="배경 제거, 밝기 조정, 라이프스타일 배경 추가..."
+                      disabled={isEditingDetailImg}
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-50 w-full"
+                    />
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleDetailImgAiEditAll}
+                        disabled={isEditingDetailImg || !detailEditInstruction.trim() || detailImages.length === 0}
+                        className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm whitespace-nowrap hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                      >
+                        {isEditingDetailImg
+                          ? `편집 중 (${(detailEditingSlot ?? 0) + 1}/${detailImages.length})...`
+                          : '사진 AI 편집'}
+                      </button>
+                      {detailImages.length === 0 && (
+                        <span className="text-xs text-gray-400 self-center">이미지를 먼저 추가하세요</span>
+                      )}
+                    </div>
+                    {detailImgEditError && <p className="text-xs text-red-500">{detailImgEditError}</p>}
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-700">상세 이미지</span>
+                    <button
+                      onClick={() => triggerDetailFileUpload(detailImages.length)}
+                      className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs hover:bg-gray-200"
+                    >
+                      + 이미지 추가
+                    </button>
+                  </div>
+
+                  {detailImages.length > 0 ? (
+                    <div className="flex flex-col gap-2">
+                      {detailImages.map((url, idx) => (
+                        <div key={idx} className="flex items-center gap-2 p-2 border border-gray-200 rounded-lg bg-gray-50">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={url}
+                            alt={`상세 이미지 ${idx + 1}`}
+                            className="w-16 h-16 object-cover rounded border border-gray-200 flex-shrink-0 cursor-pointer"
+                            onClick={() => triggerDetailFileUpload(idx)}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <span className="text-xs text-gray-500">이미지 {idx + 1}</span>
+                          </div>
+                          <button
+                            onClick={() => handleDetailImgAiEdit(idx)}
+                            disabled={isEditingDetailImg || !detailEditInstruction.trim()}
+                            className="px-2.5 py-1.5 bg-purple-600 text-white rounded text-xs whitespace-nowrap hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                          >
+                            {isEditingDetailImg && detailEditingSlot === idx ? '편집 중...' : 'AI 편집'}
+                          </button>
+                          <button
+                            onClick={() => removeDetailImage(idx)}
+                            className="px-2 py-1.5 text-gray-400 hover:text-red-500 text-xs"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => triggerDetailFileUpload(0)}
+                      className="border-2 border-dashed border-gray-200 rounded-lg p-6 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-colors"
+                    >
+                      <p className="text-sm text-gray-400">클릭해서 상세 이미지를 추가하세요</p>
                     </div>
                   )}
 
-                  {/* 프롬프트 입력 + AI 편집 버튼 */}
-                  <input
-                    value={detailEditInstruction}
-                    onChange={(e) => setDetailEditInstruction(e.target.value)}
-                    placeholder="배경 제거, 밝기 조정, 라이프스타일 배경 추가..."
-                    disabled={isEditingDetailImg}
-                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-50 w-full"
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleDetailImgAiEditAll}
-                      disabled={isEditingDetailImg || !detailEditInstruction.trim() || detailImages.length === 0}
-                      className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm whitespace-nowrap hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
-                    >
-                      {isEditingDetailImg
-                        ? `편집 중 (${(detailEditingSlot ?? 0) + 1}/${detailImages.length})...`
-                        : 'AI 편집'}
-                    </button>
-                    {detailImages.length === 0 && (
-                      <span className="text-xs text-gray-400 self-center">이미지를 먼저 추가하세요</span>
+                  <div className="border-t border-gray-100 pt-3">
+                    {detailHtmlEditError && (
+                      <p className="text-xs text-red-500 mb-2">{detailHtmlEditError}</p>
                     )}
+                    <button
+                      onClick={handleGenerateHtmlFromImages}
+                      disabled={detailImages.length === 0 || isGeneratingHtmlFromImages}
+                      className="w-full py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                    >
+                      {isGeneratingHtmlFromImages
+                        ? 'HTML 생성 중... (30초~1분 소요)'
+                        : detailImages.length === 0
+                        ? '이미지를 추가하면 HTML 생성 가능'
+                        : `HTML 생성 (이미지 ${detailImages.length}장)`}
+                    </button>
                   </div>
-                  {detailImgEditError && <p className="text-xs text-red-500">{detailImgEditError}</p>}
-                </div>
 
-                {/* ── 이미지 목록 + 추가 ── */}
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-700">상세 이미지</span>
-                  <button
-                    onClick={() => triggerDetailFileUpload(detailImages.length)}
-                    className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs hover:bg-gray-200"
-                  >
-                    + 이미지 추가
-                  </button>
-                </div>
-
-                {detailImages.length > 0 ? (
-                  <div className="flex flex-col gap-2">
-                    {detailImages.map((url, idx) => (
-                      <div key={idx} className="flex items-center gap-2 p-2 border border-gray-200 rounded-lg bg-gray-50">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={url}
-                          alt={`상세 이미지 ${idx + 1}`}
-                          className="w-16 h-16 object-cover rounded border border-gray-200 flex-shrink-0 cursor-pointer"
-                          onClick={() => triggerDetailFileUpload(idx)}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <span className="text-xs text-gray-500">이미지 {idx + 1}</span>
-                        </div>
-                        <button
-                          onClick={() => handleDetailImgAiEdit(idx)}
-                          disabled={isEditingDetailImg || !detailEditInstruction.trim()}
-                          className="px-2.5 py-1.5 bg-purple-600 text-white rounded text-xs whitespace-nowrap hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
-                        >
-                          {isEditingDetailImg && detailEditingSlot === idx ? '편집 중...' : 'AI 편집'}
-                        </button>
-                        <button
-                          onClick={() => removeDetailImage(idx)}
-                          className="px-2 py-1.5 text-gray-400 hover:text-red-500 text-xs"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div
-                    onClick={() => triggerDetailFileUpload(0)}
-                    className="border-2 border-dashed border-gray-200 rounded-lg p-6 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-colors"
-                  >
-                    <p className="text-sm text-gray-400">클릭해서 상세 이미지를 추가하세요</p>
-                  </div>
-                )}
-
-                {/* hidden file input — 상세 이미지용 */}
-                <input
-                  ref={detailFileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleDetailFileChange}
-                />
-              </div>
+                  <input
+                    ref={detailFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleDetailFileChange}
+                  />
+                </>
+              )}
             </div>
 
             {/* 섹션 5: 배송 · 반품 */}
