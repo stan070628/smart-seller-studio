@@ -695,15 +695,15 @@ export default function AutoRegisterPage() {
           productName: name,
         }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = (await res.json()) as { success: boolean; html?: string; error?: string };
-      if (data.success && data.html) {
-        setDetailHtml(data.html);
-      } else {
-        setDetailHtmlEditError(data.error ?? 'HTML 편집 중 오류가 발생했습니다.');
+      if (!res.ok || !data.success) {
+        setDetailHtmlEditError(data.error ?? `HTML 편집 중 오류가 발생했습니다. (${res.status})`);
+        return;
       }
-    } catch {
-      setDetailHtmlEditError('HTML 편집 중 오류가 발생했습니다.');
+      if (data.html) setDetailHtml(data.html);
+    } catch (err) {
+      console.error('[handleDetailHtmlEdit]', err);
+      setDetailHtmlEditError('네트워크 오류 또는 서버 응답을 처리할 수 없습니다.');
     } finally {
       setIsEditingDetailHtml(false);
     }
