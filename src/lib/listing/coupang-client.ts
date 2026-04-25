@@ -253,12 +253,94 @@ export class CoupangClient {
     return (res.data ?? {}) as Record<string, unknown>;
   }
 
+  // 카테고리 코드로 fullPath 조회 (트리 캐시 활용)
+  async findCategoryFullPath(code: number): Promise<string | null> {
+    const now = Date.now();
+    if (!categoryTreeCache || now - categoryTreeCache.ts > 5 * 60 * 1000) {
+      const raw = await this.getCategoryTree();
+      categoryTreeCache = { data: raw, ts: now };
+    }
+    const rawData = categoryTreeCache.data;
+    let roots: CoupangCategory[];
+    if (Array.isArray(rawData)) {
+      roots = normalizeCategoryNodes(rawData);
+    } else if (rawData && typeof rawData === 'object') {
+      const obj = rawData as Record<string, unknown>;
+      if (Array.isArray(obj['data'])) roots = normalizeCategoryNodes(obj['data'] as unknown[]);
+      else if (Array.isArray(obj['children'])) roots = normalizeCategoryNodes(obj['children'] as unknown[]);
+      else roots = normalizeCategoryNodes([rawData]);
+    } else {
+      roots = [];
+    }
+    const all = flattenCategories(roots, '');
+    return all.find((c) => c.displayCategoryCode === code)?.fullPath ?? null;
+  }
+
   // ─── 카테고리 조회 ─────────────────────────────────────────
 
   async getCategoryTree(): Promise<unknown> {
     const path = `/v2/providers/seller_api/apis/api/v1/marketplace/meta/display-categories`;
     const res = await this.request<unknown>('GET', path);
     return res.data ?? {};
+  }
+
+  /**
+   * 카테고리 트리를 flatten하여 keyword로 필터링한 결과를 반환합니다.
+   *
+   * - getCategoryTree()로 전체 트리를 fetch하고 모듈 스코프에 5분간 캐시
+   * - 각 노드에 조상 이름을 "/" 로 이어붙인 fullPath 생성
+   * - fullPath에 keyword가 포함된 항목을 필터링 (대소문자 무시)
+   * - 리프 노드(children 없는 것)를 우선하여 최대 8개 반환
+   */
+  async searchCategories(keyword: string): Promise<{
+    displayCategoryCode: number;
+    displayCategoryName: string;
+    fullPath: string;
+  }[]> {
+    // 캐시 히트 확인 (5분 = 300,000ms)
+    const now = Date.now();
+    if (!categoryTreeCache || now - categoryTreeCache.ts > 5 * 60 * 1000) {
+      const raw = await this.getCategoryTree();
+      categoryTreeCache = { data: raw, ts: now };
+    }
+
+    // 트리를 배열로 정규화 (방어적 파싱)
+    const rawData = categoryTreeCache.data;
+    let roots: CoupangCategory[];
+    if (Array.isArray(rawData)) {
+      roots = normalizeCategoryNodes(rawData);
+    } else if (rawData && typeof rawData === 'object') {
+      // { data: [...] } 혹은 { displayCategoryCode: ..., children: [...] } 형태 대응
+      const obj = rawData as Record<string, unknown>;
+      if (Array.isArray(obj['data'])) {
+        roots = normalizeCategoryNodes(obj['data'] as unknown[]);
+      } else if (Array.isArray(obj['children'])) {
+        roots = normalizeCategoryNodes(obj['children'] as unknown[]);
+      } else {
+        // 단일 루트 노드인 경우
+        roots = normalizeCategoryNodes([rawData]);
+      }
+    } else {
+      roots = [];
+    }
+
+    // 전체 flatten (fullPath 포함)
+    const all = flattenCategories(roots, '');
+
+    // keyword 필터링 (대소문자 무시)
+    const lower = keyword.toLowerCase();
+    const matched = all.filter((c) => c.fullPath.toLowerCase().includes(lower));
+
+    // 리프 노드 우선 정렬 후 최대 8개
+    const leaves = matched.filter((c) => c.isLeaf);
+    const nonLeaves = matched.filter((c) => !c.isLeaf);
+    const sorted = [...leaves, ...nonLeaves];
+
+    return sorted.slice(0, 8).map(({ displayCategoryCode, displayCategoryName, fullPath }) => ({
+      displayCategoryCode,
+      displayCategoryName,
+      fullPath,
+    }));
   }
 
   // ─── 상품 등록 ─────────────────────────────────────────────
@@ -286,6 +368,12 @@ export class CoupangClient {
       throw new Error(`[쿠팡] 상품 조회 실패: ${res.message}`);
     }
     return res.data;
+  }
+
+  // ─── 상품 삭제 ────────────────────────────────────────────
+
+  async deleteProduct(sellerProductId: number): Promise<void> {
+    await this.request('DELETE', `/v2/providers/seller_api/apis/api/v4/products/${sellerProductId}`);
   }
 
   // ─── 상품 수정 ────────────────────────────────────────────
@@ -380,6 +468,70 @@ export class CoupangClient {
     if (!res.data) throw new Error(`[쿠팡] 주문 조회 실패: ${res.message}`);
     return res.data;
   }
+}
+
+// ─────────────────────────────────────────────────────────────
+// 카테고리 트리 캐시 & 헬퍼
+// ─────────────────────────────────────────────────────────────
+
+/** 모듈 스코프 캐시 (5분 TTL) */
+let categoryTreeCache: { data: unknown; ts: number } | null = null;
+
+/** flatten 결과 내부 타입 */
+interface FlatCategory {
+  displayCategoryCode: number;
+  displayCategoryName: string;
+  fullPath: string;
+  isLeaf: boolean;
+}
+
+/**
+ * unknown[] 배열을 CoupangCategory[]로 방어적 변환합니다.
+ * 필드가 없거나 타입이 맞지 않으면 해당 노드는 건너뜁니다.
+ */
+function normalizeCategoryNodes(nodes: unknown[]): CoupangCategory[] {
+  const result: CoupangCategory[] = [];
+  for (const node of nodes) {
+    if (!node || typeof node !== 'object') continue;
+    const obj = node as Record<string, unknown>;
+    const code = typeof obj['displayCategoryCode'] === 'number'
+      ? obj['displayCategoryCode']
+      : Number(obj['displayCategoryCode']);
+    const name = typeof obj['displayCategoryName'] === 'string'
+      ? obj['displayCategoryName']
+      : String(obj['displayCategoryName'] ?? '');
+    if (!isFinite(code) || !name) continue;
+    const children = Array.isArray(obj['children'])
+      ? normalizeCategoryNodes(obj['children'] as unknown[])
+      : undefined;
+    result.push({ displayCategoryCode: code, displayCategoryName: name, children });
+  }
+  return result;
+}
+
+/**
+ * 카테고리 트리를 재귀적으로 순회하여 모든 노드를 flat 배열로 반환합니다.
+ * @param nodes - 현재 레벨의 카테고리 배열
+ * @param parentPath - 상위 노드들의 이름을 "/" 로 이어붙인 경로
+ */
+function flattenCategories(nodes: CoupangCategory[], parentPath: string): FlatCategory[] {
+  const result: FlatCategory[] = [];
+  for (const node of nodes) {
+    const currentPath = parentPath
+      ? `${parentPath}/${node.displayCategoryName}`
+      : node.displayCategoryName;
+    const isLeaf = !node.children || node.children.length === 0;
+    result.push({
+      displayCategoryCode: node.displayCategoryCode,
+      displayCategoryName: node.displayCategoryName,
+      fullPath: currentPath,
+      isLeaf,
+    });
+    if (!isLeaf) {
+      result.push(...flattenCategories(node.children!, currentPath));
+    }
+  }
+  return result;
 }
 
 // ─────────────────────────────────────────────────────────────

@@ -18,7 +18,9 @@ export const COUPANG_WING_CATEGORIES: Record<string, number> = {
   '욕실용품': 0.108,
   '가구/인테리어': 0.108,
   '식품': 0.065,
-  '디지털/가전': 0.04,
+  '디지털기기': 0.04,       // 스마트폰/컴퓨터/태블릿
+  '생활가전': 0.078,        // 선풍기/에어컨/냉장고 등 가전
+  'TV/음향가전': 0.078,
   '패션의류': 0.108,
   '뷰티/화장품': 0.108,
 };
@@ -36,10 +38,23 @@ export const COUPANG_WING = {
 export function getCoupangFeeFromPath(categoryPath: string): { rate: number; categoryName: string } {
   const p = categoryPath.toLowerCase();
 
-  if (/디지털|가전|컴퓨터|노트북|스마트폰|태블릿|tv|모니터|음향|카메라|캠코더/.test(p))
-    return { rate: 0.04, categoryName: '디지털/가전' };
-  if (/식품|먹|건강기능식품|농산|수산|축산|간식|음료|커피|차|과자/.test(p))
+  // 4% — 순수 디지털 기기 (스마트폰/컴퓨터/태블릿 등)
+  if (/스마트폰|태블릿|컴퓨터|노트북|모니터|카메라|캠코더|mp3|게임기/.test(p))
+    return { rate: 0.04, categoryName: '디지털기기' };
+
+  // 7.8% — 생활가전 (선풍기/에어컨/냉장고/세탁기/청소기 등 가전제품)
+  if (/가전|선풍기|에어컨|냉장고|세탁기|건조기|청소기|공기청정기|제습기|가습기|전기밥솥|전자레인지|오븐|식기세척기|서큘레이터|히터|온풍기|전기장판/.test(p))
+    return { rate: 0.078, categoryName: '생활가전' };
+
+  // 7.8% — TV/음향 가전
+  if (/tv|모니터|음향|스피커|이어폰|헤드폰/.test(p))
+    return { rate: 0.078, categoryName: 'TV/음향가전' };
+
+  // 6.5% — 식품
+  if (/식품|먹|건강기능식품|농산|수산|축산|간식|음료|커피|차|과자|쌀|잡곡/.test(p))
     return { rate: 0.065, categoryName: '식품' };
+
+  // 10.8% — 이하 동일
   if (/패션|의류|잡화|가방|지갑|신발|모자|벨트|패딩|코트|청바지/.test(p))
     return { rate: 0.108, categoryName: '패션의류' };
   if (/뷰티|화장품|스킨케어|헤어|네일|향수|미용/.test(p))
@@ -50,8 +65,6 @@ export function getCoupangFeeFromPath(categoryPath: string): { rate: number; cat
     return { rate: 0.108, categoryName: '가구/인테리어' };
   if (/욕실|샤워|비누|치약|칫솔|면도/.test(p))
     return { rate: 0.108, categoryName: '욕실용품' };
-  if (/청소|세탁|세제|빨래|진공청소/.test(p))
-    return { rate: 0.108, categoryName: '청소/세탁용품' };
 
   return { rate: 0.108, categoryName: '생활용품' }; // 기본값
 }
