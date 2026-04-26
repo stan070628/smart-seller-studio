@@ -370,14 +370,435 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
     }
   }
 
-  // ── JSX (Task 3에서 완전한 폼으로 교체) ──────────────────────────────────
+  // ── JSX ─────────────────────────────────────────────────────────────────
+  const C = {
+    border: '#e5e5e5',
+    text: '#18181b',
+    textSub: '#71717a',
+    accent: '#be0014',
+    card: '#ffffff',
+    header: '#f3f3f3',
+  } as const;
+
+  const section: React.CSSProperties = {
+    backgroundColor: C.card,
+    border: `1px solid ${C.border}`,
+    borderRadius: '12px',
+    padding: '18px 20px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '14px',
+  };
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '9px 12px',
+    fontSize: '13px',
+    border: `1px solid ${C.border}`,
+    borderRadius: '8px',
+    outline: 'none',
+    color: C.text,
+    backgroundColor: '#fff',
+    boxSizing: 'border-box',
+  };
+
+  const label: React.CSSProperties = {
+    display: 'block',
+    fontSize: '12px',
+    fontWeight: 600,
+    color: C.textSub,
+    marginBottom: '5px',
+  };
+
+  const sectionTitle: React.CSSProperties = {
+    fontSize: '13px',
+    fontWeight: 700,
+    color: C.text,
+    margin: 0,
+  };
+
+  if (submitSuccess && submitResult) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', padding: '40px 20px', backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: '12px', textAlign: 'center' }}>
+        <div style={{ fontSize: '40px', color: '#15803d' }}>✓</div>
+        <div>
+          <p style={{ fontWeight: 700, color: C.text, margin: '0 0 6px' }}>쿠팡 제출 완료 (검수 대기)</p>
+          <p style={{ fontSize: '13px', color: C.textSub, margin: '0 0 4px' }}>상품 ID: {submitResult.sellerProductId}</p>
+          <p style={{ fontSize: '12px', color: C.textSub, margin: 0 }}>고객 노출 전 Wings에서 내용을 확인하세요</p>
+        </div>
+        <a
+          href={submitResult.wingsUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ padding: '10px 20px', backgroundColor: '#1d4ed8', color: '#fff', borderRadius: '8px', fontSize: '13px', fontWeight: 600, textDecoration: 'none' }}
+        >
+          Wings에서 확인하기 →
+        </a>
+      </div>
+    );
+  }
+
   return (
-    <div data-testid="coupang-auto-register-panel">
-      {isAiMapping && <div>AI 필드 매핑 중...</div>}
-      <input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-      />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+
+      {/* AI 매핑 배너 */}
+      {isAiMapping && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', fontSize: '12px', color: '#1d4ed8' }}>
+          <div style={{ width: '14px', height: '14px', border: '2px solid #93c5fd', borderTopColor: '#1d4ed8', borderRadius: '50%', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
+          AI 필드 매핑 중... 상품 정보를 분석하고 있습니다
+        </div>
+      )}
+      {!isAiMapping && mappedFields && (
+        <div style={{ padding: '8px 14px', backgroundColor: '#f0fdf4', border: '1px solid #86efac', borderRadius: '8px', fontSize: '12px', color: '#15803d' }}>
+          ✓ AI 자동완성 완료 — 값을 검토하고 필요시 수정하세요
+        </div>
+      )}
+
+      {/* ── 섹션 1: 기본 정보 ──────────────────────────────────────────────── */}
+      <div style={section}>
+        <p style={sectionTitle}>기본 정보</p>
+
+        {/* 상품명 */}
+        <div>
+          <label style={label}>
+            상품명
+            {mappedFields?.sellerProductName.confidence !== undefined && (
+              <span style={{ marginLeft: '6px', fontSize: '11px', color: C.textSub }}>
+                AI {Math.round((mappedFields.sellerProductName.confidence) * 100)}%
+              </span>
+            )}
+          </label>
+          <input
+            style={inputStyle}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={100}
+            placeholder="상품명"
+          />
+        </div>
+
+        {/* 카테고리 */}
+        <div>
+          <label style={label}>
+            카테고리 코드
+            {isValidating && <span style={{ marginLeft: '6px', fontSize: '11px', color: C.textSub }}>확인 중...</span>}
+            {!isValidating && categoryValid === true && <span style={{ marginLeft: '6px', fontSize: '11px', color: '#15803d' }}>✓ 유효</span>}
+            {!isValidating && categoryValid === false && <span style={{ marginLeft: '6px', fontSize: '11px', color: '#b91c1c' }}>✗ 없는 코드</span>}
+          </label>
+          {mappedFields?.displayCategoryCode.value ? (
+            <p style={{ fontSize: '11px', color: C.textSub, margin: '0 0 5px' }}>
+              AI 추천 참고: {mappedFields.displayCategoryCode.value} (유효 여부 불확실)
+            </p>
+          ) : null}
+          <input
+            style={{
+              ...inputStyle,
+              borderColor: categoryValid === false ? '#f87171' : categoryValid === true ? '#86efac' : C.border,
+            }}
+            value={categoryCode}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v && /\D/.test(v)) {
+                setCategoryCode('');
+                setCategorySearch(v);
+                setCategoryResults([]);
+                doCategorySearch(v);
+              } else {
+                setCategoryCode(v);
+                setCategoryResults([]);
+                setCategoryFullPath('');
+              }
+            }}
+            placeholder="숫자 코드 입력 (예: 78780)"
+          />
+          {categoryFullPath && (
+            <p style={{ fontSize: '11px', color: C.textSub, margin: '4px 0 0' }}>{categoryFullPath}</p>
+          )}
+          {/* 이름 검색 */}
+          <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+            <input
+              style={{ ...inputStyle, flex: 1 }}
+              value={categorySearch}
+              onChange={(e) => setCategorySearch(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && doCategorySearch(categorySearch)}
+              placeholder="이름으로 검색 (예: 유리발수코팅제)"
+            />
+            <button
+              type="button"
+              onClick={() => doCategorySearch(categorySearch.trim() || name)}
+              disabled={isCategorySearching}
+              style={{ padding: '9px 14px', fontSize: '12px', fontWeight: 600, backgroundColor: isCategorySearching ? '#e5e7eb' : '#1d4ed8', color: isCategorySearching ? C.textSub : '#fff', border: 'none', borderRadius: '8px', cursor: isCategorySearching ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}
+            >
+              {isCategorySearching ? '검색 중...' : '검색'}
+            </button>
+          </div>
+          {categoryResults.length > 0 && (
+            <div style={{ border: `1px solid ${C.border}`, borderRadius: '8px', overflow: 'hidden', marginTop: '4px' }}>
+              {categoryResults.map((c) => (
+                <button
+                  key={c.displayCategoryCode}
+                  type="button"
+                  onClick={() => {
+                    setCategoryCode(String(c.displayCategoryCode));
+                    setCategoryFullPath(c.fullPath);
+                    setCategoryResults([]);
+                    setCategorySearch('');
+                  }}
+                  style={{ width: '100%', textAlign: 'left', padding: '8px 12px', fontSize: '12px', backgroundColor: '#fff', border: 'none', borderBottom: `1px solid ${C.border}`, cursor: 'pointer', color: C.text }}
+                >
+                  <strong>{c.displayCategoryCode}</strong>
+                  <span style={{ marginLeft: '8px', color: C.textSub }}>{c.fullPath}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── 섹션 2: 상품 주요 정보 ──────────────────────────────────────────── */}
+      <div style={section}>
+        <p style={sectionTitle}>상품 주요 정보</p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div>
+            <label style={label}>브랜드</label>
+            <input style={inputStyle} value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="기타" />
+          </div>
+          <div>
+            <label style={label}>제조사</label>
+            <input style={inputStyle} value={manufacturer} onChange={(e) => setManufacturer(e.target.value)} placeholder="직접 입력" />
+          </div>
+          <div>
+            <label style={label}>성인 여부</label>
+            <select style={inputStyle} value={adultOnly} onChange={(e) => setAdultOnly(e.target.value as 'EVERYONE' | 'ADULTS_ONLY')}>
+              <option value="EVERYONE">전체 이용가</option>
+              <option value="ADULTS_ONLY">성인 전용</option>
+            </select>
+          </div>
+          <div>
+            <label style={label}>부가세</label>
+            <select style={inputStyle} value={taxType} onChange={(e) => setTaxType(e.target.value as 'TAX' | 'TAX_FREE')}>
+              <option value="TAX">과세</option>
+              <option value="TAX_FREE">면세</option>
+            </select>
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={label}>병행수입</label>
+            <select style={inputStyle} value={parallelImported} onChange={(e) => setParallelImported(e.target.value as 'NOT_PARALLEL_IMPORTED' | 'PARALLEL_IMPORTED')}>
+              <option value="NOT_PARALLEL_IMPORTED">비병행수입</option>
+              <option value="PARALLEL_IMPORTED">병행수입</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* ── 섹션 3: 가격·재고 ────────────────────────────────────────────────── */}
+      <div style={section}>
+        <p style={sectionTitle}>가격 · 재고</p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+          <div>
+            <label style={label}>판매가 (원)</label>
+            <input style={inputStyle} type="number" value={salePrice} onChange={(e) => setSalePrice(Number(e.target.value))} min={0} />
+          </div>
+          <div>
+            <label style={label}>정가 (원)</label>
+            <input style={inputStyle} type="number" value={originalPrice} onChange={(e) => setOriginalPrice(Number(e.target.value))} min={0} />
+          </div>
+          <div>
+            <label style={label}>재고 수량</label>
+            <input style={inputStyle} type="number" value={stock} onChange={(e) => setStock(Number(e.target.value))} min={0} />
+          </div>
+        </div>
+        {/* 수수료 계산 */}
+        {salePrice > 0 && (
+          <div style={{ padding: '10px 12px', backgroundColor: '#f8f9fa', border: `1px solid ${C.border}`, borderRadius: '8px', fontSize: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+              <span style={{ color: C.textSub }}>
+                수수료 ({feeMatch.matched ? feeMatch.categoryName : '기본'}, {(effectiveFeeRate * 100).toFixed(1)}%)
+              </span>
+              <span style={{ color: '#b91c1c' }}>-{commission.toLocaleString()}원</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: `1px solid ${C.border}`, paddingTop: '4px' }}>
+              <span style={{ fontWeight: 700, color: C.text }}>예상 수익</span>
+              <span style={{ fontWeight: 700, color: calc.netProfit >= 0 ? '#15803d' : '#b91c1c' }}>
+                {(salePrice - commission).toLocaleString()}원
+              </span>
+            </div>
+            <div style={{ marginTop: '6px' }}>
+              <label style={{ ...label, marginBottom: '3px' }}>수수료율 직접 입력 (%)</label>
+              <input
+                style={{ ...inputStyle, width: '100px' }}
+                type="number"
+                step="0.1"
+                value={customFeeRate}
+                onChange={(e) => setCustomFeeRate(e.target.value)}
+                placeholder="예: 10.8"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── 섹션 4: 배송·반품 ───────────────────────────────────────────────── */}
+      <div style={section}>
+        <p style={sectionTitle}>배송 · 반품</p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div>
+            <label style={label}>배송비 유형</label>
+            <select style={inputStyle} value={deliveryChargeType} onChange={(e) => setDeliveryChargeType(e.target.value as 'FREE' | 'NOT_FREE')}>
+              <option value="FREE">무료</option>
+              <option value="NOT_FREE">유료</option>
+            </select>
+          </div>
+          {deliveryChargeType === 'NOT_FREE' && (
+            <div>
+              <label style={label}>배송비 (원)</label>
+              <input style={inputStyle} type="number" value={deliveryCharge} onChange={(e) => setDeliveryCharge(Number(e.target.value))} min={0} />
+            </div>
+          )}
+          <div>
+            <label style={label}>출하지 코드</label>
+            <input style={inputStyle} value={outboundCode} onChange={(e) => setOutboundCode(e.target.value)} placeholder="자동 로드" />
+          </div>
+          <div>
+            <label style={label}>반품센터 코드</label>
+            <input style={inputStyle} value={returnCode} onChange={(e) => setReturnCode(e.target.value)} placeholder="자동 로드" />
+          </div>
+        </div>
+      </div>
+
+      {/* ── 섹션 5: 고시정보 ─────────────────────────────────────────────────── */}
+      <div style={section}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <p style={sectionTitle}>고시정보 (법정 표기사항)</p>
+          {isNoticeFetching && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#1d4ed8' }}>
+              <div style={{ width: '12px', height: '12px', border: '2px solid #93c5fd', borderTopColor: '#1d4ed8', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+              AI 생성 중...
+            </div>
+          )}
+        </div>
+        {notices.length === 0 && !isNoticeFetching && (
+          <p style={{ fontSize: '12px', color: C.textSub }}>카테고리 코드를 입력하면 AI가 자동으로 작성합니다.</p>
+        )}
+        {notices.map((n, i) => (
+          <div key={i}>
+            <label style={{ ...label, fontSize: '11px' }}>{n.categoryName} › {n.detailName}</label>
+            <input
+              style={inputStyle}
+              value={n.content}
+              onChange={(e) => {
+                const updated = [...notices];
+                updated[i] = { ...updated[i], content: e.target.value };
+                setNotices(updated);
+              }}
+              placeholder="직접 입력하거나 AI 생성 값을 수정하세요"
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* ── 섹션 6: 검색 태그 ───────────────────────────────────────────────── */}
+      <div style={section}>
+        <p style={sectionTitle}>검색 태그 (최대 10개)</p>
+        <div style={{ display: 'flex', gap: '6px' }}>
+          <input
+            style={{ ...inputStyle, flex: 1 }}
+            value={tagInput}
+            onChange={(e) => setTagInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                const t = tagInput.trim();
+                if (t && !tags.includes(t) && tags.length < 10) {
+                  setTags([...tags, t]);
+                  setTagInput('');
+                }
+              }
+            }}
+            placeholder="태그 입력 후 Enter"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              const t = tagInput.trim();
+              if (t && !tags.includes(t) && tags.length < 10) {
+                setTags([...tags, t]);
+                setTagInput('');
+              }
+            }}
+            style={{ padding: '9px 14px', fontSize: '12px', fontWeight: 600, backgroundColor: C.header, color: C.text, border: `1px solid ${C.border}`, borderRadius: '8px', cursor: 'pointer' }}
+          >
+            추가
+          </button>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+          {tags.map((tag) => (
+            <span
+              key={tag}
+              style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '3px 10px', backgroundColor: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: '100px', fontSize: '12px' }}
+            >
+              {tag}
+              <button
+                type="button"
+                onClick={() => setTags(tags.filter((t) => t !== tag))}
+                style={{ background: 'none', border: 'none', color: '#60a5fa', cursor: 'pointer', padding: 0, fontSize: '14px', lineHeight: 1 }}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* ── 액션 바 ─────────────────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingTop: '4px' }}>
+        {submitError && (
+          <div style={{ padding: '10px 14px', backgroundColor: '#fee2e2', border: '1px solid #fca5a5', borderRadius: '8px', fontSize: '12px', color: '#b91c1c' }}>
+            {submitError}
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={handleSaveDraft}
+            disabled={isSavingDraft || !name}
+            style={{
+              flex: 1, padding: '12px', fontSize: '13px', fontWeight: 600,
+              backgroundColor: '#fff', color: C.text,
+              border: `2px solid ${C.border}`, borderRadius: '10px',
+              cursor: isSavingDraft || !name ? 'not-allowed' : 'pointer',
+              opacity: !name ? 0.5 : 1,
+            }}
+          >
+            {isSavingDraft ? '저장 중...' : draftId ? '임시저장 업데이트' : '임시저장'}
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={isSubmitting || !name || !draftId || categoryValid !== true}
+            title={!draftId ? '먼저 임시저장하세요' : categoryValid !== true ? '유효한 카테고리 코드를 입력하세요' : ''}
+            style={{
+              flex: 1, padding: '12px', fontSize: '13px', fontWeight: 700,
+              backgroundColor: isSubmitting || !draftId || categoryValid !== true ? '#e5e7eb' : '#15803d',
+              color: isSubmitting || !draftId || categoryValid !== true ? C.textSub : '#fff',
+              border: 'none', borderRadius: '10px',
+              cursor: isSubmitting || !draftId || categoryValid !== true ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {isSubmitting ? '제출 중...' : '쿠팡에 제출'}
+          </button>
+        </div>
+        {draftFeedback === 'saved' && (
+          <p style={{ fontSize: '11px', textAlign: 'center', color: '#15803d', fontWeight: 600 }}>저장됐습니다</p>
+        )}
+        {draftFeedback === 'error' && (
+          <p style={{ fontSize: '11px', textAlign: 'center', color: '#b91c1c' }}>{draftSaveError || '저장에 실패했습니다'}</p>
+        )}
+        {!draftFeedback && !draftId && (
+          <p style={{ fontSize: '11px', textAlign: 'center', color: C.textSub }}>임시저장 후 쿠팡에 제출할 수 있습니다</p>
+        )}
+      </div>
     </div>
   );
 }
