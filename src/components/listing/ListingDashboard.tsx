@@ -10,20 +10,18 @@
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { Layers, Sparkles, Loader2, ChevronLeft } from 'lucide-react';
 import { useListingStore } from '@/store/useListingStore';
 import { PLATFORMS } from '@/types/listing';
 import type { PlatformId, ListingStatus, ProductListing } from '@/types/listing';
-import BothRegisterForm from '@/components/listing/BothRegisterForm';
-import DomeggookPreparePanel from '@/components/listing/DomeggookPreparePanel';
 import ImageInputSection from '@/components/listing/ImageInputSection';
 import StepIndicator from '@/components/listing/workflow/StepIndicator';
 import Step1SourceSelect from '@/components/listing/workflow/Step1SourceSelect';
 import Step2Processing from '@/components/listing/workflow/Step2Processing';
 import Step3ReviewRegister from '@/components/listing/workflow/Step3ReviewRegister';
 import BrowseMode from '@/components/listing/browse/BrowseMode';
-import BulkImportPanel from '@/components/listing/BulkImportPanel';
+import AssetsTab from '@/components/listing/assets/AssetsTab';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 색상 상수
@@ -2380,6 +2378,9 @@ export default function ListingDashboard() {
   const { sharedDraft, setCurrentStep, goPrevStep, listingMode, setListingMode, resetSharedDraft } = useListingStore();
   const { currentStep } = sharedDraft;
 
+  const router = useRouter();
+  const pathname = usePathname();
+
   // URL ?step= 파라미터로 특정 step 진입 지원 (예: /listing?step=2)
   const searchParams = useSearchParams();
   useEffect(() => {
@@ -2388,6 +2389,24 @@ export default function ListingDashboard() {
     else if (stepParam === '3') setCurrentStep(3);
     // step=1은 기본값이므로 별도 처리 불필요
   }, [searchParams, setCurrentStep]);
+
+  // URL tab= 파라미터에서 초기 탭 동기화
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab === 'browse' || tab === 'assets' || tab === 'register') {
+      setListingMode(tab);
+    }
+  }, [searchParams, setListingMode]);
+
+  // 탭 전환 + URL 동기화 헬퍼
+  const goTab = (mode: 'register' | 'browse' | 'assets') => {
+    setListingMode(mode);
+    const params = new URLSearchParams(Array.from(searchParams.entries()));
+    if (mode === 'register') params.delete('tab');
+    else params.set('tab', mode);
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
 
   return (
     <div
@@ -2474,26 +2493,6 @@ export default function ListingDashboard() {
           </nav>
         </div>
 
-        {/* 우측: URL 자동등록 버튼 */}
-        <Link
-          href="/listing/auto-register"
-          style={{
-            padding: '6px 14px',
-            borderRadius: '8px',
-            border: '1px solid rgba(37,99,235,0.3)',
-            backgroundColor: 'rgba(37,99,235,0.07)',
-            color: '#1d4ed8',
-            fontSize: '13px',
-            fontWeight: 600,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            textDecoration: 'none',
-          }}
-        >
-          🤖 URL 자동등록
-        </Link>
       </header>
 
       {/* -------------------------------------------------------------------- */}
@@ -2508,7 +2507,7 @@ export default function ListingDashboard() {
           margin: '0 auto',
         }}
       >
-        {/* 모드 토글: 새 상품 등록 / 내 상품 조회 */}
+        {/* 모드 토글: AI 상품 등록 / 내 상품 조회 / 썸네일·상세만 만들기 */}
         <div
           style={{
             display: 'flex',
@@ -2520,58 +2519,32 @@ export default function ListingDashboard() {
             width: 'fit-content',
           }}
         >
-          <button
-            onClick={() => setListingMode('register')}
-            style={{
-              padding: '7px 18px',
-              fontSize: '13px',
-              fontWeight: listingMode === 'register' ? 700 : 500,
-              borderRadius: '7px',
-              border: 'none',
-              cursor: 'pointer',
-              backgroundColor: listingMode === 'register' ? '#fff' : 'transparent',
-              color: listingMode === 'register' ? C.text : C.textSub,
-              boxShadow: listingMode === 'register' ? '0 1px 4px rgba(0,0,0,0.1)' : 'none',
-            }}
-          >
-            + 새 상품 등록
-          </button>
-          <button
-            onClick={() => setListingMode('browse')}
-            style={{
-              padding: '7px 18px',
-              fontSize: '13px',
-              fontWeight: listingMode === 'browse' ? 700 : 500,
-              borderRadius: '7px',
-              border: 'none',
-              cursor: 'pointer',
-              backgroundColor: listingMode === 'browse' ? '#fff' : 'transparent',
-              color: listingMode === 'browse' ? C.text : C.textSub,
-              boxShadow: listingMode === 'browse' ? '0 1px 4px rgba(0,0,0,0.1)' : 'none',
-            }}
-          >
-            📋 내 상품 조회
-          </button>
-          {/* 대량 등록 탭 */}
-          <button
-            onClick={() => setListingMode('bulk')}
-            style={{
-              padding: '6px 14px',
-              borderRadius: '8px',
-              border: '1px solid rgba(190,0,20,0.3)',
-              backgroundColor: listingMode === 'bulk' ? '#be0014' : 'rgba(190,0,20,0.07)',
-              color: listingMode === 'bulk' ? '#ffffff' : '#be0014',
-              fontSize: '13px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-          >
-            <Layers size={14} />
-            대량 등록
-          </button>
+          {([
+            { id: 'register', label: 'AI 상품 등록' },
+            { id: 'browse', label: '내 상품 조회' },
+            { id: 'assets', label: '썸네일·상세만 만들기' },
+          ] as const).map((tab) => {
+            const isActive = listingMode === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => goTab(tab.id)}
+                style={{
+                  padding: '7px 18px',
+                  fontSize: '13px',
+                  fontWeight: isActive ? 700 : 500,
+                  borderRadius: '7px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  backgroundColor: isActive ? '#fff' : 'transparent',
+                  color: isActive ? C.text : C.textSub,
+                  boxShadow: isActive ? '0 1px 4px rgba(0,0,0,0.1)' : 'none',
+                }}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
 
         {/* 모드 분기 */}
@@ -2645,8 +2618,8 @@ export default function ListingDashboard() {
             {currentStep === 2 && <Step2Processing />}
             {currentStep === 3 && <Step3ReviewRegister />}
           </>
-        ) : listingMode === 'bulk' ? (
-          <BulkImportPanel />
+        ) : listingMode === 'assets' ? (
+          <AssetsTab />
         ) : (
           <BrowseMode />
         )}

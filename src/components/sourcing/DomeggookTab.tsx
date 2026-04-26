@@ -1006,7 +1006,7 @@ export default function DomeggookTab() {
   }, [sortedItems, selectedIds, addPendingBulkItems]);
 
   const handleBulkToastNavigate = useCallback(() => {
-    setListingMode('bulk');
+    setListingMode('register');
     router.push('/listing');
   }, [setListingMode, router]);
 
