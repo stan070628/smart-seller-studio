@@ -24,7 +24,7 @@ import { fetchCoupangSettlement, fetchNaverSettlement } from '@/lib/dashboard/se
 export const dynamic = 'force-dynamic';
 
 const CACHE_TTL_MS = 30_000;
-const cache = new Map<Period, { data: DashboardSummaryData; expiresAt: number }>();
+const cache = new Map<string, { data: DashboardSummaryData; expiresAt: number }>();
 
 // Export only for tests — used by integration tests to reset cache between cases
 export function _resetDashboardCacheForTests(): void {
@@ -77,7 +77,12 @@ async function fetchCoupangOrders(from: string, to: string): Promise<CoupangOrde
         items.push({
           orderId: Number(o.orderId ?? 0),
           status: String(o.status ?? ''),
-          totalAmount: Number(o.totalPrice ?? 0),
+          totalAmount: Array.isArray(o.orderItems)
+            ? (o.orderItems as Array<{ orderPrice?: number }>).reduce(
+                (sum: number, it) => sum + (Number(it.orderPrice) || 0),
+                0,
+              )
+            : 0,
         });
       }
     }
@@ -153,14 +158,15 @@ export async function GET(request: NextRequest) {
   }
   const period: Period = periodParam;
 
-  const cached = cache.get(period);
+  const cacheKey = `${userId}:${period}`;
+  const cached = cache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
     return Response.json({ success: true, data: cached.data });
   }
 
   try {
     const data = await buildSummary(period, userId);
-    cache.set(period, { data, expiresAt: Date.now() + CACHE_TTL_MS });
+    cache.set(cacheKey, { data, expiresAt: Date.now() + CACHE_TTL_MS });
     return Response.json({ success: true, data });
   } catch (err) {
     const message = err instanceof Error ? err.message : '알 수 없는 오류';

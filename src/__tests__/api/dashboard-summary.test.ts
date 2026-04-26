@@ -56,10 +56,14 @@ describe('GET /api/dashboard/summary', () => {
     mockSettleCoupang.mockResolvedValue({ count: 0, amount: 0, available: false });
     mockSettleNaver.mockResolvedValue({ count: 0, amount: 0, available: false });
     mockCoupangClient.mockReturnValue({
-      getOrders: vi.fn().mockResolvedValue({
-        items: [{ orderId: 1, status: 'ACCEPT', totalPrice: 10000 }],
-        nextToken: null,
-      }),
+      getOrders: vi.fn().mockImplementation(({ status }: { status: string }) =>
+        Promise.resolve({
+          items: status === 'ACCEPT'
+            ? [{ orderId: 1, status: 'ACCEPT', orderItems: [{ orderPrice: 10000 }] }]
+            : [],
+          nextToken: null,
+        }),
+      ),
     });
     mockNaverClient.mockReturnValue({
       getOrders: vi.fn().mockResolvedValue({
@@ -92,6 +96,7 @@ describe('GET /api/dashboard/summary', () => {
     expect(body.data.revenue12w.weeks).toEqual([1,2,3,4,5,6,7,8,9,10,11,12]);
     expect(body.data.revenue12w.target).toEqual([50,100,200,300,400,500,600,700,800,900,950,1000]);
     expect(body.data.revenue12w.actual).toEqual(new Array(12).fill(null));
+    expect(body.data.pipeline.coupang.주문.amount).toBe(10000); // C2 regression guard
   });
 
   it('정산 실패 시 정산완료만 available:false로 떨어지고 다른 stage는 정상', async () => {
