@@ -104,7 +104,7 @@ export default function DashboardClient() {
   }, [planData]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: '#f5f5f7' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflowY: 'auto', backgroundColor: '#f5f5f7' }}>
       {/* ── 헤더 (기존 유지) ─────────────────── */}
       <header
         style={{
