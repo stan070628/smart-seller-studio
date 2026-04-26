@@ -115,7 +115,15 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
 
   // ── 가격·재고 ─────────────────────────────────────────────────────────────
   const [salePrice, setSalePrice] = useState(Number(sharedDraft.salePrice) || 0);
-  const [originalPrice, setOriginalPrice] = useState(Number(sharedDraft.originalPrice) || 0);
+  const initSale = Number(sharedDraft.salePrice) || 0;
+  const initOrig = Number(sharedDraft.originalPrice) || 0;
+  const [originalPrice, setOriginalPrice] = useState(
+    initOrig > initSale && initOrig > 0
+      ? initOrig
+      : initSale > 0
+        ? Math.ceil((initSale * 1.25) / 1000) * 1000
+        : 0,
+  );
   const [stock, setStock] = useState(Number(sharedDraft.stock) || 100);
   const [customFeeRate, setCustomFeeRate] = useState('');
 
