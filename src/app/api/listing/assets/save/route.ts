@@ -10,7 +10,7 @@ import { getSupabaseServerClient } from '@/lib/supabase/server';
 const RequestSchema = z.object({
   sourceType: z.enum(['url', 'upload']),
   sourceUrl: z.string().url().optional(),
-  thumbnails: z.array(z.string()).default([]),
+  thumbnails: z.array(z.string()).min(1),
   detailHtml: z.string().optional(),
   detailImage: z.string().optional(),
 });

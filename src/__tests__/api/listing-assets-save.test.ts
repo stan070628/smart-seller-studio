@@ -39,6 +39,16 @@ describe('POST /api/listing/assets/save', () => {
     expect(res.status).toBe(400);
   });
 
+  it('thumbnails가 없으면 400을 반환한다', async () => {
+    const res = await POST(makeReq({
+      sourceType: 'url',
+      sourceUrl: 'https://x.com',
+      // thumbnails 없음
+      detailHtml: '<div></div>',
+    }) as never);
+    expect(res.status).toBe(400);
+  });
+
   it('성공 시 generated_assets에 insert하고 id를 반환한다', async () => {
     const res = await POST(makeReq({
       sourceType: 'url',
