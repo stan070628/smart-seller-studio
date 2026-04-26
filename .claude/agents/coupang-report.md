@@ -109,3 +109,58 @@ $B snapshot -i
 단위가 "원"이면 그대로, "%"면 소수점 포함 float으로 저장.
 
 데이터가 보이지 않거나 불완전하면 `$B screenshot`으로 화면 캡처해 시각적으로 확인.
+
+## STEP 5: 쿠팡 Wing 접속
+
+```bash
+$B goto "https://wing.coupang.com/vendor-inventory/list?page=1&countPerPage=50&productStatus=ON_SALE"
+$B snapshot -i
+```
+
+로그인 감지 패턴을 실행한다 (위의 "로그인 감지 함수" 참고).
+사이트명은 "쿠팡 Wing(wing.coupang.com)"으로 안내한다.
+
+로그인 성공 확인 후 → STEP 6 진행.
+
+## STEP 6: Wing 데이터 수집
+
+### 6-1. 상품 목록
+
+현재 페이지 스냅샷에서 각 상품 행 파싱:
+
+```bash
+$B snapshot -i
+```
+
+각 상품에서 수집:
+- `PRODUCT_NAME`: 상품명
+- `PRODUCT_PRICE`: 판매가 (원)
+- `PRODUCT_STOCK`: 재고수량
+- `PRODUCT_STATUS`: 노출 상태 (판매중/품절/판매중지)
+- `ITEM_WINNER`: 아이템위너 여부 (배지 존재 여부로 판단)
+
+상품이 10개 초과면 다음 페이지도 확인:
+```bash
+$B click @<다음페이지_버튼_ref>
+$B snapshot -i
+```
+
+### 6-2. 리뷰 현황
+
+```bash
+$B goto "https://wing.coupang.com/reviews/list"
+$B snapshot -i
+```
+
+수집:
+- `REVIEW_TOTAL_30D`: 최근 30일 리뷰 총 수
+- `REVIEW_AVG_RATING`: 평균 평점
+- 상품별 리뷰 수 (상위 5개 상품)
+
+리뷰 페이지 경로가 다를 경우 Wing 좌측 메뉴에서 "리뷰" 링크를 찾아 클릭:
+```bash
+$B links
+# "리뷰" 포함 링크 찾기
+$B goto <리뷰관리_URL>
+$B snapshot -i
+```
