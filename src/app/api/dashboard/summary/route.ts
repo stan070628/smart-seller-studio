@@ -1,181 +1,176 @@
 /**
- * GET /api/dashboard/summary
- * 3채널(도매꾹·코스트코·니치) 통합 대시보드 요약 데이터
+ * GET /api/dashboard/summary?period=today|7d|30d|month
  *
- * 응답: {
- *   success: true,
- *   data: {
- *     overview: { totalProducts, totalRevenue7d, totalOrders7d, avgMargin, legalIssues },
- *     channels: {
- *       domeggook: { products, avgMargin, topSellers[], legalBlocked, legalWarning, lastCollected },
- *       costco:    { products, avgMargin, avgScore, gradeDistribution, lastCollected },
- *       niche:     { trackedKeywords, avgScore, topKeywords[] },
- *     },
- *     orders: { totalOrders, totalRevenue, newOrders, recentOrders[] },
- *   }
- * }
+ * 운영 대시보드용 요약 — 채널별 주문 파이프라인 + 등록 상품 수 + 12주 매출 추세 (target만).
+ * 12주 actual은 클라이언트에서 plan localStorage 기반으로 채움.
+ *
+ * 스펙: docs/superpowers/specs/2026-04-26-dashboard-redesign-design.md
  */
-
-import { NextResponse } from 'next/server';
-import { getSourcingPool } from '@/lib/sourcing/db';
-import { CHANNEL_FEE, VAT_RATE } from '@/lib/sourcing/shared/channel-policy';
+import { NextRequest } from 'next/server';
+import { requireAuth } from '@/lib/supabase/auth';
+import { isPeriod, type Period, type DashboardSummaryData, type ChannelPipeline } from '@/lib/dashboard/types';
+import { WEEKLY_TARGETS } from '@/lib/plan/constants';
+import { countCoupangProducts, countNaverProducts } from '@/lib/dashboard/product-count';
+import { getCoupangClient } from '@/lib/listing/coupang-client';
+import { getNaverCommerceClient } from '@/lib/listing/naver-commerce-client';
+import {
+  aggregateCoupangPipeline,
+  aggregateNaverPipeline,
+  type CoupangOrderRow,
+  type NaverOrderRow,
+} from '@/lib/dashboard/pipeline-aggregator';
+import { fetchCoupangSettlement, fetchNaverSettlement } from '@/lib/dashboard/settlement-clients';
 
 export const dynamic = 'force-dynamic';
 
-// 코스트코 마진 역산 상수 (channel-policy 기반)
-// 순이익 = 시장가 × (1 - 네이버수수료 - VAT) - 매입가 - 배송비
-const NAVER_NET_RATE = 1 - CHANNEL_FEE.naver - VAT_RATE; // ≈ 0.849
-const COSTCO_SHIPPING = 3500; // 기본 배송비 (getShippingCost 기준 최소값)
-// 이상치 클램프: 0% ~ 80% 범위 밖은 NULL 처리
-const MARGIN_MIN = 0;
-const MARGIN_MAX = 80;
+const CACHE_TTL_MS = 30_000;
+const cache = new Map<string, { data: DashboardSummaryData; expiresAt: number }>();
 
-export async function GET() {
-  const pool = getSourcingPool();
+// Export only for tests — used by integration tests to reset cache between cases
+export function _resetDashboardCacheForTests(): void {
+  cache.clear();
+}
 
-  // ── 채널별 독립 병렬 실행 (하나 실패해도 나머지 정상 반환) ─────────────
+function toDateStr(d: Date): string {
+  // KST = UTC+9. 한국 시간대 기준 YYYY-MM-DD 반환 (서버 TZ 무관).
+  const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+  return kst.toISOString().slice(0, 10);
+}
+
+function periodRange(period: Period): { from: string; to: string } {
+  const today = new Date();
+  const to = toDateStr(today);
+  let from = to;
+
+  if (period === 'today') {
+    from = to;
+  } else if (period === '7d') {
+    const d = new Date(today);
+    d.setDate(d.getDate() - 6);
+    from = toDateStr(d);
+  } else if (period === '30d') {
+    const d = new Date(today);
+    d.setDate(d.getDate() - 29);
+    from = toDateStr(d);
+  } else if (period === 'month') {
+    const d = new Date(today.getFullYear(), today.getMonth(), 1);
+    from = toDateStr(d);
+  }
+
+  return { from, to };
+}
+
+const COUPANG_PIPELINE_STATUSES = ['ACCEPT', 'INSTRUCT', 'DEPARTURE', 'DELIVERING', 'FINAL_DELIVERY'];
+
+async function fetchCoupangOrders(from: string, to: string): Promise<CoupangOrderRow[]> {
+  try {
+    const client = getCoupangClient();
+    const results = await Promise.allSettled(
+      COUPANG_PIPELINE_STATUSES.map((s) =>
+        client.getOrders({ createdAtFrom: from, createdAtTo: to, status: s, maxPerPage: 50 })
+      )
+    );
+    const items: CoupangOrderRow[] = [];
+    for (const r of results) {
+      if (r.status !== 'fulfilled') continue;
+      for (const o of r.value.items as unknown as Array<Record<string, unknown>>) {
+        items.push({
+          orderId: Number(o.orderId ?? 0),
+          status: String(o.status ?? ''),
+          totalAmount: Array.isArray(o.orderItems)
+            ? (o.orderItems as Array<{ orderPrice?: number }>).reduce(
+                (sum: number, it) => sum + (Number(it.orderPrice) || 0),
+                0,
+              )
+            : 0,
+        });
+      }
+    }
+    return items;
+  } catch (err) {
+    console.warn('[dashboard] 쿠팡 주문 조회 실패:', err instanceof Error ? err.message : err);
+    return [];
+  }
+}
+
+async function fetchNaverOrders(from: string, to: string): Promise<NaverOrderRow[]> {
+  try {
+    const client = getNaverCommerceClient();
+    const result = await client.getOrders({ fromDate: from, toDate: to });
+    return (result.contents ?? []).map((o) => ({
+      productOrderId: o.productOrderId,
+      productOrderStatus: o.productOrderStatus,
+      totalPaymentAmount: o.totalPaymentAmount,
+    }));
+  } catch (err) {
+    console.warn('[dashboard] 네이버 주문 조회 실패:', err instanceof Error ? err.message : err);
+    return [];
+  }
+}
+
+async function buildSummary(period: Period, userId: string): Promise<DashboardSummaryData> {
+  const { from, to } = periodRange(period);
+
   const [
-    domeggookRes,
-    domeggookTopRes,
-    domeggookMarginRes,
-    costcoRes,
-    costcoGradeRes,
-    costcoMarginRes,
-    nicheRes,
-    nicheTopRes,
-  ] = await Promise.allSettled([
-    // 도매꾹: 총 상품수 + 법적이슈
-    pool.query(`
-      SELECT
-        COUNT(*)::int AS total,
-        COUNT(*) FILTER (WHERE legal_status = 'blocked')::int AS legal_blocked,
-        COUNT(*) FILTER (WHERE legal_status = 'warning')::int AS legal_warning,
-        MAX(latest_date) AS last_collected
-      FROM public.sales_analysis_view
-    `),
-    // 도매꾹: Top 5 판매
-    pool.query(`
-      SELECT title, sales_7d, margin_rate,
-             score_total, latest_price_dome
-      FROM public.sales_analysis_view
-      ORDER BY sales_7d DESC NULLS LAST
-      LIMIT 5
-    `),
-    // 도매꾹: 평균 마진율
-    pool.query(`
-      SELECT ROUND(AVG(margin_rate)::numeric, 1) AS avg_margin
-      FROM public.sales_analysis_view
-      WHERE margin_rate IS NOT NULL AND margin_rate > 0
-    `),
-    // 코스트코: 총 상품수 + 평균 스코어
-    pool.query(`
-      SELECT
-        COUNT(*)::int AS total,
-        ROUND(AVG(COALESCE(costco_score_total, sourcing_score))::numeric, 1) AS avg_score,
-        MAX(collected_at) AS last_collected
-      FROM public.costco_products
-      WHERE is_active = true
-    `),
-    // 코스트코: 등급 분포
-    pool.query(`
-      SELECT
-        COUNT(*) FILTER (WHERE COALESCE(costco_score_total, sourcing_score) >= 80)::int AS grade_s,
-        COUNT(*) FILTER (WHERE COALESCE(costco_score_total, sourcing_score) >= 65
-                          AND COALESCE(costco_score_total, sourcing_score) < 80)::int AS grade_a,
-        COUNT(*) FILTER (WHERE COALESCE(costco_score_total, sourcing_score) >= 50
-                          AND COALESCE(costco_score_total, sourcing_score) < 65)::int AS grade_b,
-        COUNT(*) FILTER (WHERE COALESCE(costco_score_total, sourcing_score) < 50)::int AS grade_cd
-      FROM public.costco_products
-      WHERE is_active = true
-    `),
-    // 코스트코: 평균 마진율 (시장가 대비, channel-policy 상수 사용 + 이상치 클램프)
-    pool.query(
-      `SELECT ROUND(AVG(margin_pct)::numeric, 1) AS avg_margin
-       FROM (
-         SELECT GREATEST($1, LEAST($2,
-           ((market_lowest_price * $3 - price - $4) / market_lowest_price * 100)
-         )) AS margin_pct
-         FROM public.costco_products
-         WHERE is_active = true
-           AND market_lowest_price IS NOT NULL
-           AND market_lowest_price > price  -- 시장가가 매입가보다 낮은 이상치 제거
-       ) sub`,
-      [MARGIN_MIN, MARGIN_MAX, NAVER_NET_RATE, COSTCO_SHIPPING],
-    ),
-    // 니치: 추적 키워드 수 + 평균 스코어
-    pool.query(`
-      SELECT
-        COUNT(*)::int AS total,
-        ROUND(AVG(total_score)::numeric, 1) AS avg_score
-      FROM public.niche_keywords
-    `),
-    // 니치: Top 5 키워드
-    pool.query(`
-      SELECT keyword, total_score, grade, analyzed_at
-      FROM public.niche_keywords
-      ORDER BY total_score DESC NULLS LAST
-      LIMIT 5
-    `),
+    coupangCount,
+    naverCount,
+    coupangOrders,
+    naverOrders,
+    coupangSettle,
+    naverSettle,
+  ] = await Promise.all([
+    countCoupangProducts(userId).catch(() => 0),
+    countNaverProducts().catch(() => 0),
+    fetchCoupangOrders(from, to),
+    fetchNaverOrders(from, to),
+    fetchCoupangSettlement({ period }).catch(() => ({ count: 0, amount: 0, available: false })),
+    fetchNaverSettlement({ period }).catch(() => ({ count: 0, amount: 0, available: false })),
   ]);
 
-  // ── 결과 안전하게 추출 (실패한 쿼리는 기본값으로 대체) ────────────────
-  const dome      = domeggookRes.status === 'fulfilled'     ? domeggookRes.value.rows[0]     : null;
-  const domeTop   = domeggookTopRes.status === 'fulfilled'  ? domeggookTopRes.value.rows      : [];
-  const domeMargin= domeggookMarginRes.status === 'fulfilled' ? domeggookMarginRes.value.rows[0] : null;
-  const costco    = costcoRes.status === 'fulfilled'        ? costcoRes.value.rows[0]         : null;
-  const costcoGrade = costcoGradeRes.status === 'fulfilled' ? costcoGradeRes.value.rows[0]   : null;
-  const costcoMargin= costcoMarginRes.status === 'fulfilled' ? costcoMarginRes.value.rows[0] : null;
-  const niche     = nicheRes.status === 'fulfilled'         ? nicheRes.value.rows[0]          : null;
-  const nicheTop  = nicheTopRes.status === 'fulfilled'      ? nicheTopRes.value.rows          : [];
+  const coupangPipeline: ChannelPipeline = aggregateCoupangPipeline(coupangOrders);
+  coupangPipeline.정산완료 = coupangSettle;
 
-  return NextResponse.json({
-    success: true,
-    data: {
-      overview: {
-        totalProducts: (dome?.total ?? 0) + (costco?.total ?? 0),
-        avgMarginDomeggook: parseFloat(domeMargin?.avg_margin) || null,
-        avgMarginCostco: parseFloat(costcoMargin?.avg_margin) || null,
-        legalBlocked: dome?.legal_blocked ?? 0,
-        legalWarning: dome?.legal_warning ?? 0,
-      },
-      channels: {
-        domeggook: {
-          products: dome?.total ?? 0,
-          avgMargin: parseFloat(domeMargin?.avg_margin) || null,
-          topSellers: (domeTop as Record<string, unknown>[]).map((r) => ({
-            title: r.title,
-            sales7d: r.sales_7d,
-            marginRate: r.margin_rate != null ? parseFloat(r.margin_rate as string) : null,
-            scoreTotal: r.score_total != null ? parseFloat(r.score_total as string) : null,
-            priceDome: r.latest_price_dome,
-          })),
-          legalBlocked: dome?.legal_blocked ?? 0,
-          legalWarning: dome?.legal_warning ?? 0,
-          lastCollected: dome?.last_collected ?? null,
-        },
-        costco: {
-          products: costco?.total ?? 0,
-          avgScore: parseFloat(costco?.avg_score) || null,
-          avgMargin: parseFloat(costcoMargin?.avg_margin) || null,
-          gradeDistribution: {
-            S: costcoGrade?.grade_s ?? 0,
-            A: costcoGrade?.grade_a ?? 0,
-            B: costcoGrade?.grade_b ?? 0,
-            CD: costcoGrade?.grade_cd ?? 0,
-          },
-          lastCollected: costco?.last_collected ?? null,
-        },
-        niche: {
-          trackedKeywords: niche?.total ?? 0,
-          avgScore: parseFloat(niche?.avg_score) || null,
-          topKeywords: (nicheTop as Record<string, unknown>[]).map((r) => ({
-            keyword: r.keyword,
-            totalScore: r.total_score != null ? parseFloat(r.total_score as string) : null,
-            grade: r.grade,
-            analyzedAt: r.analyzed_at,
-          })),
-        },
-      },
+  const naverPipeline: ChannelPipeline = aggregateNaverPipeline(naverOrders);
+  naverPipeline.정산완료 = naverSettle;
+
+  return {
+    products: { coupang: coupangCount, naver: naverCount },
+    pipeline: { coupang: coupangPipeline, naver: naverPipeline },
+    revenue12w: {
+      weeks: Array.from({ length: 12 }, (_, i) => i + 1),
+      target: [...WEEKLY_TARGETS],
+      actual: new Array(12).fill(null),
     },
-  });
+  };
+}
+
+export async function GET(request: NextRequest) {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof Response) return authResult;
+  const { userId } = authResult;
+
+  const periodParam = request.nextUrl.searchParams.get('period') ?? 'today';
+  if (!isPeriod(periodParam)) {
+    return Response.json(
+      { success: false, error: `유효하지 않은 period: ${periodParam}` },
+      { status: 400 },
+    );
+  }
+  const period: Period = periodParam;
+
+  const cacheKey = `${userId}:${period}`;
+  const cached = cache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return Response.json({ success: true, data: cached.data });
+  }
+
+  try {
+    const data = await buildSummary(period, userId);
+    cache.set(cacheKey, { data, expiresAt: Date.now() + CACHE_TTL_MS });
+    return Response.json({ success: true, data });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : '알 수 없는 오류';
+    console.error('[GET /api/dashboard/summary]', err);
+    return Response.json({ success: false, error: message }, { status: 500 });
+  }
 }
