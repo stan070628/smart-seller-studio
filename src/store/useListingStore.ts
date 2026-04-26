@@ -60,6 +60,10 @@ interface SharedDraft {
   detailPageEditStatus: 'idle' | 'editing' | 'done' | 'error';
   detailPageEditError: string | null;
 
+  // ─── 제조사 / 원산지 ─────────────────────────────────────────────────────────
+  manufacturer?: string;   // 제조사/브랜드 (parse-url에서 추출, 네이버 등록에 사용)
+  countryOfOrigin?: string; // 원산지 (예: 국산, 미국산, 중국산)
+
   // ─── KC 인증 ────────────────────────────────────────────────────────────────
   certification?: string; // KC 인증번호 (parse-url에서 추출)
 
@@ -111,6 +115,9 @@ const SHARED_DRAFT_INITIAL: SharedDraft = {
   // AI 상세페이지 수정
   detailPageEditStatus: 'idle',
   detailPageEditError: null,
+  // 제조사 / 원산지
+  manufacturer: undefined,
+  countryOfOrigin: undefined,
   // 네이버 임시저장 ID
   naverDraftId: undefined,
 };

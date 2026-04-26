@@ -85,6 +85,8 @@ export interface NaverSpecificInput {
   tags?: string[];
   exchangeFee?: number;
   returnFee?: number;
+  manufacturerName?: string;  // 제조사/브랜드
+  countryOfOrigin?: string;   // 원산지 (예: 국산, 미국산)
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -303,7 +305,7 @@ export function buildNaverPayload(
       },
       detailAttribute: {
         naverShoppingSearchInfo: {
-          manufacturerName: '상세페이지 참조',
+          manufacturerName: specific.manufacturerName || '상세페이지 참조',
         },
         afterServiceInfo: {
           afterServiceTelephoneNumber: process.env.NAVER_AS_PHONE ?? '010-0000-0000',
@@ -314,7 +316,7 @@ export function buildNaverPayload(
           etc: {
             itemName: common.name,
             modelName: '상세페이지 참조',
-            manufacturer: '상세페이지 참조',
+            manufacturer: specific.manufacturerName || '상세페이지 참조',
             afterServiceDirector: process.env.NAVER_AS_PHONE ?? '010-0000-0000',
             returnCostReason: '전자상거래법에 의한 반품 시 반품배송비 부담',
             noRefundReason: '상세페이지 참조',
@@ -326,7 +328,7 @@ export function buildNaverPayload(
         productCertificationInfos: [],
         originAreaInfo: {
           originAreaCode: '00',
-          content: '상세페이지 참조',
+          content: specific.countryOfOrigin || '상세페이지 참조',
         },
         sellerCodeInfo: {},
         optionInfo,
@@ -365,12 +367,10 @@ export function buildNaverPayload(
     },
   };
 
-  // 태그 추가
+  // sellerTags는 originProduct 직접 하위 (detailAttribute 안이 아님)
   if (specific.tags && specific.tags.length > 0) {
-    (
-      (payload.originProduct as Record<string, unknown>)
-        .detailAttribute as Record<string, unknown>
-    ).sellerTags = specific.tags.map((text) => ({ text }));
+    (payload.originProduct as Record<string, unknown>).sellerTags =
+      specific.tags.map((text) => ({ text }));
   }
 
   return payload;

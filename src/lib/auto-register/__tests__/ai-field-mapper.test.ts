@@ -2,20 +2,21 @@
  * ai-field-mapper.test.ts
  * mapProductToCoupangFields — AI 응답 파싱·displayCategoryCode 보정·오류 처리 검증
  *
- * Anthropic Claude API를 mock해서 외부 호출 없이 파싱 로직을 검증한다.
+ * 실제 구현이 @/lib/ai/claude-cli의 callClaude를 사용하므로 해당 모듈을 mock한다.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ── 의존성 mock ────────────────────────────────────────────────────────────
-vi.mock('@/lib/ai/claude', () => ({
-  getAnthropicClient: vi.fn(),
+// 실제 구현(ai-field-mapper.ts)은 @/lib/ai/claude-cli의 callClaude를 사용
+vi.mock('@/lib/ai/claude-cli', () => ({
+  callClaude: vi.fn(),
 }));
 
-import { getAnthropicClient } from '@/lib/ai/claude';
+import { callClaude } from '@/lib/ai/claude-cli';
 import type { NormalizedProduct, MappedCoupangFields } from '../types';
 
-const mockGetAnthropicClient = getAnthropicClient as ReturnType<typeof vi.fn>;
+const mockCallClaude = callClaude as ReturnType<typeof vi.fn>;
 
 const { mapProductToCoupangFields } = await import('../ai-field-mapper');
 
@@ -44,18 +45,6 @@ const wellFormedFields: MappedCoupangFields = {
   searchTags: { value: ['테스트', '생활용품'], confidence: 0.8 },
 };
 
-function mockClientWith(responseText: string) {
-  const mockClient = {
-    messages: {
-      create: vi.fn().mockResolvedValue({
-        content: [{ type: 'text', text: responseText }],
-      }),
-    },
-  };
-  mockGetAnthropicClient.mockReturnValue(mockClient);
-  return mockClient;
-}
-
 // ── 테스트 ────────────────────────────────────────────────────────────────
 
 describe('mapProductToCoupangFields', () => {
@@ -66,7 +55,7 @@ describe('mapProductToCoupangFields', () => {
   // ── 정상 JSON 파싱 ────────────────────────────────────────────────────────
 
   it('올바른 JSON 응답을 파싱해서 MappedCoupangFields를 반환한다', async () => {
-    mockClientWith(JSON.stringify(wellFormedFields));
+    mockCallClaude.mockResolvedValue(JSON.stringify(wellFormedFields));
 
     const result = await mapProductToCoupangFields(sampleProduct);
 
@@ -79,7 +68,7 @@ describe('mapProductToCoupangFields', () => {
 
   it('마크다운 코드 블록(```json ... ```)으로 감싼 응답을 파싱한다', async () => {
     const markdown = '```json\n' + JSON.stringify(wellFormedFields) + '\n```';
-    mockClientWith(markdown);
+    mockCallClaude.mockResolvedValue(markdown);
 
     const result = await mapProductToCoupangFields(sampleProduct);
 
@@ -88,7 +77,7 @@ describe('mapProductToCoupangFields', () => {
 
   it('백틱 없는 마크다운(``` ... ```)으로 감싼 응답을 파싱한다', async () => {
     const markdown = '```\n' + JSON.stringify(wellFormedFields) + '\n```';
-    mockClientWith(markdown);
+    mockCallClaude.mockResolvedValue(markdown);
 
     const result = await mapProductToCoupangFields(sampleProduct);
 
@@ -102,7 +91,7 @@ describe('mapProductToCoupangFields', () => {
       ...wellFormedFields,
       displayCategoryCode: { value: 0, confidence: 0.6 },
     };
-    mockClientWith(JSON.stringify(fieldsWithZeroCategory));
+    mockCallClaude.mockResolvedValue(JSON.stringify(fieldsWithZeroCategory));
 
     const result = await mapProductToCoupangFields(sampleProduct);
 
@@ -111,7 +100,7 @@ describe('mapProductToCoupangFields', () => {
   });
 
   it('displayCategoryCode.value가 0이 아니면 confidence를 그대로 유지한다', async () => {
-    mockClientWith(JSON.stringify(wellFormedFields));
+    mockCallClaude.mockResolvedValue(JSON.stringify(wellFormedFields));
 
     const result = await mapProductToCoupangFields(sampleProduct);
 
@@ -122,18 +111,13 @@ describe('mapProductToCoupangFields', () => {
   // ── 오류 처리 ─────────────────────────────────────────────────────────────
 
   it('AI 응답이 유효하지 않은 JSON이면 에러를 throw한다', async () => {
-    mockClientWith('이것은 JSON이 아닙니다');
+    mockCallClaude.mockResolvedValue('이것은 JSON이 아닙니다');
 
     await expect(mapProductToCoupangFields(sampleProduct)).rejects.toThrow();
   });
 
-  it('Claude API 호출 자체가 실패하면 에러를 throw한다', async () => {
-    const mockClient = {
-      messages: {
-        create: vi.fn().mockRejectedValue(new Error('API rate limit exceeded')),
-      },
-    };
-    mockGetAnthropicClient.mockReturnValue(mockClient);
+  it('callClaude 자체가 실패하면 에러를 throw한다', async () => {
+    mockCallClaude.mockRejectedValue(new Error('API rate limit exceeded'));
 
     await expect(mapProductToCoupangFields(sampleProduct)).rejects.toThrow('API rate limit exceeded');
   });

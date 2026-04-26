@@ -187,31 +187,157 @@ function buildCtaSection(content: DetailPageContent): string {
     </section>`;
 }
 
-const RETURN_NOTICE_URL =
-  'https://mvergrjqfjuwndveztts.supabase.co/storage/v1/object/public/smart-seller-studio/static/return-notice.jpg';
+// ─────────────────────────────────────────
+// 스튜디오 전용 섹션 빌더 (프리미엄·미니멀 비주얼)
+// ─────────────────────────────────────────
 
-const PRIVACY_NOTICE_URL =
-  'https://mvergrjqfjuwndveztts.supabase.co/storage/v1/object/public/smart-seller-studio/static/privacy-notice.jpg';
-
-function buildReturnNoticeSection(): string {
+function buildStudioHeroSection(content: DetailPageContent, heroImage: ImageInput): string {
   return `
-    <section style="width:100%;padding:0;">
+    <section style="width:100%;background:#fff;">
       <img
-        src="${RETURN_NOTICE_URL}"
-        alt="교환/반품 안내"
-        style="width:100%;display:block;"
+        src="${toDataUrl(heroImage)}"
+        alt="${escapeHtml(content.headline)}"
+        style="width:100%;height:auto;display:block;"
       />
+      <div style="padding:40px 28px 32px;text-align:center;">
+        <h1 style="margin:0 0 14px;font-size:28px;font-weight:300;color:#111;line-height:1.3;letter-spacing:-0.5px;">${escapeHtml(content.headline)}</h1>
+        <p style="margin:0;font-size:15px;font-weight:400;color:#777;line-height:1.8;letter-spacing:0.2px;">${escapeHtml(content.subheadline)}</p>
+      </div>
     </section>`;
 }
 
-function buildPrivacyNoticeSection(): string {
+function buildStudioSellingPointsSection(content: DetailPageContent): string {
+  const cards = content.sellingPoints
+    .map(
+      (sp, idx) => `
+        <div style="flex:1;min-width:0;padding:28px 16px;text-align:center;${idx < content.sellingPoints.length - 1 ? 'border-right:1px solid #e8e8e8;' : ''}">
+          <div style="font-size:28px;margin-bottom:10px;">${escapeHtml(sp.icon)}</div>
+          <div style="font-size:13px;font-weight:600;color:#111;margin-bottom:6px;line-height:1.4;letter-spacing:0.5px;text-transform:uppercase;">${escapeHtml(sp.title)}</div>
+          <div style="font-size:12px;color:#888;line-height:1.7;">${escapeHtml(sp.description)}</div>
+        </div>`
+    )
+    .join("");
+
   return `
-    <section style="width:100%;padding:0;">
-      <img
-        src="${PRIVACY_NOTICE_URL}"
-        alt="개인정보 제공 안내"
-        style="width:100%;display:block;"
-      />
+    <section style="border-top:1px solid #e8e8e8;border-bottom:1px solid #e8e8e8;background:#fff;">
+      <div style="display:flex;">
+        ${cards}
+      </div>
+    </section>`;
+}
+
+function buildStudioGallerySection(images: ImageInput[]): string {
+  if (images.length === 0) return "";
+  const items = images
+    .map(
+      (img, idx) => `
+        <div style="width:100%;">
+          <img
+            src="${toDataUrl(img)}"
+            alt="상품 이미지 ${idx + 2}"
+            style="width:100%;display:block;"
+          />
+        </div>`
+    )
+    .join("");
+  return `
+    <section style="background:#fff;display:flex;flex-direction:column;gap:2px;">
+      ${items}
+    </section>`;
+}
+
+function buildStudioFeaturesSection(content: DetailPageContent): string {
+  const items = content.features
+    .map(
+      (f) => `
+        <li style="padding:24px 0;border-bottom:1px solid #ebebeb;">
+          <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:6px;letter-spacing:0.3px;">${escapeHtml(f.title)}</div>
+          <div style="font-size:13px;color:#888;line-height:1.8;">${escapeHtml(f.description)}</div>
+        </li>`
+    )
+    .join("");
+
+  return `
+    <section style="padding:48px 28px;background:#fff;">
+      <h2 style="margin:0 0 4px;font-size:11px;font-weight:600;color:#aaa;letter-spacing:2px;text-transform:uppercase;">Features</h2>
+      <h3 style="margin:0 0 28px;font-size:22px;font-weight:300;color:#111;letter-spacing:-0.3px;">상품 특징</h3>
+      <ul style="list-style:none;margin:0;padding:0;border-top:1px solid #ebebeb;">
+        ${items}
+      </ul>
+    </section>`;
+}
+
+function buildStudioSpecsSection(specs: Array<{ label: string; value: string }>): string {
+  if (specs.length === 0) return '';
+  const rows = specs
+    .map(
+      (s) => `
+        <tr>
+          <td style="padding:14px 0;font-size:13px;font-weight:500;color:#888;width:40%;border-bottom:1px solid #ebebeb;">${escapeHtml(s.label)}</td>
+          <td style="padding:14px 0;font-size:13px;color:#111;border-bottom:1px solid #ebebeb;">${escapeHtml(s.value)}</td>
+        </tr>`
+    )
+    .join("");
+  return `
+    <section style="padding:0 28px 48px;background:#fff;">
+      <h2 style="margin:0 0 4px;font-size:11px;font-weight:600;color:#aaa;letter-spacing:2px;text-transform:uppercase;">Specs</h2>
+      <h3 style="margin:0 0 20px;font-size:22px;font-weight:300;color:#111;letter-spacing:-0.3px;">스펙</h3>
+      <table style="width:100%;border-collapse:collapse;border-top:1px solid #ebebeb;">
+        <tbody>${rows}</tbody>
+      </table>
+    </section>`;
+}
+
+function buildStudioUsageSection(content: DetailPageContent): string {
+  const steps = content.usageSteps
+    .map(
+      (step, idx) => `
+        <li style="display:flex;align-items:flex-start;gap:20px;padding:20px 0;border-bottom:1px solid #ebebeb;">
+          <div style="flex-shrink:0;width:28px;height:28px;border:1px solid #ddd;border-radius:50%;font-size:12px;font-weight:500;color:#888;display:flex;align-items:center;justify-content:center;">${idx + 1}</div>
+          <div style="font-size:14px;color:#444;line-height:1.7;padding-top:5px;">${escapeHtml(step)}</div>
+        </li>`
+    )
+    .join("");
+  return `
+    <section style="padding:0 28px 48px;background:#fafafa;">
+      <div style="padding-top:48px;">
+        <h2 style="margin:0 0 4px;font-size:11px;font-weight:600;color:#aaa;letter-spacing:2px;text-transform:uppercase;">How to use</h2>
+        <h3 style="margin:0 0 20px;font-size:22px;font-weight:300;color:#111;letter-spacing:-0.3px;">사용법</h3>
+        <ul style="list-style:none;margin:0;padding:0;border-top:1px solid #ebebeb;">
+          ${steps}
+        </ul>
+      </div>
+    </section>`;
+}
+
+function buildStudioWarningsSection(content: DetailPageContent): string {
+  const items = content.warnings
+    .map(
+      (w) => `
+        <li style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;">
+          <span style="flex-shrink:0;font-size:14px;color:#bbb;">—</span>
+          <span style="font-size:13px;color:#888;line-height:1.7;">${escapeHtml(w)}</span>
+        </li>`
+    )
+    .join("");
+  return `
+    <section style="padding:0 28px 48px;background:#fafafa;">
+      <div style="border:1px solid #e8e8e8;border-radius:4px;padding:24px 20px;">
+        <h3 style="margin:0 0 14px;font-size:12px;font-weight:600;color:#bbb;letter-spacing:1.5px;text-transform:uppercase;">주의사항</h3>
+        <ul style="list-style:none;margin:0;padding:0;">
+          ${items}
+        </ul>
+      </div>
+    </section>`;
+}
+
+function buildStudioCtaSection(content: DetailPageContent): string {
+  return `
+    <section style="padding:0 28px 64px;background:#fafafa;">
+      <div style="border:1px solid #111;padding:40px 24px;text-align:center;">
+        <p style="margin:0 0 20px;font-size:16px;font-weight:300;color:#111;line-height:1.6;letter-spacing:0.2px;">${escapeHtml(content.headline)}</p>
+        <span style="display:inline-block;background:#111;color:#fff;font-size:14px;font-weight:500;padding:14px 44px;letter-spacing:1.5px;text-transform:uppercase;">${escapeHtml(content.ctaText)}</span>
+      </div>
     </section>`;
 }
 
@@ -222,14 +348,29 @@ function buildPrivacyNoticeSection(): string {
 function buildSections(
   content: DetailPageContent,
   images: ImageInput[],
-  specOverride?: Array<{ label: string; value: string }>
+  specOverride?: Array<{ label: string; value: string }>,
+  studioMode = false
 ): string {
   const heroImage = images[0];
   const galleryImages = images.slice(1);
 
-  // 외부에서 추출한 스펙이 있으면 우선 사용, 없으면 AI 생성 스펙 사용
   const finalSpecs =
     specOverride && specOverride.length > 0 ? specOverride : content.specs;
+
+  if (studioMode) {
+    return [
+      buildStudioHeroSection(content, heroImage),
+      buildStudioSellingPointsSection(content),
+      galleryImages.length > 0 ? buildStudioGallerySection(galleryImages) : "",
+      buildStudioFeaturesSection(content),
+      buildStudioSpecsSection(finalSpecs),
+      buildStudioUsageSection(content),
+      buildStudioWarningsSection(content),
+      buildStudioCtaSection(content),
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
 
   return [
     buildHeroSection(content, heroImage),
@@ -240,34 +381,36 @@ function buildSections(
     buildUsageSection(content),
     buildWarningsSection(content),
     buildCtaSection(content),
-    buildReturnNoticeSection(),
-    buildPrivacyNoticeSection(),
   ]
     .filter(Boolean)
     .join("\n");
 }
 
 /** 상세 페이지 에디터에 붙여넣을 HTML snippet (body 내용만)
- *  @param maxWidth 최대 너비(px) — 쿠팡: 780, 네이버: 860 (기본값 780) */
+ *  @param maxWidth 최대 너비(px) — 쿠팡: 780, 네이버: 860 (기본값 780)
+ *  @param studioMode 스튜디오 전용 미니멀 템플릿 사용 여부 */
 export function buildDetailPageSnippet(
   content: DetailPageContent,
   images: ImageInput[],
   specOverride?: Array<{ label: string; value: string }>,
-  maxWidth = 780
+  maxWidth = 780,
+  studioMode = false
 ): string {
-  const sections = buildSections(content, images, specOverride);
+  const sections = buildSections(content, images, specOverride, studioMode);
   return `<div style="max-width:${maxWidth}px;margin:0 auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden;">\n${sections}\n</div>`;
 }
 
 /** 미리보기용 전체 HTML 문서
- *  @param maxWidth 최대 너비(px) — 쿠팡: 780, 네이버: 860 (기본값 780) */
+ *  @param maxWidth 최대 너비(px) — 쿠팡: 780, 네이버: 860 (기본값 780)
+ *  @param studioMode 스튜디오 전용 미니멀 템플릿 사용 여부 */
 export function buildDetailPageHtml(
   content: DetailPageContent,
   images: ImageInput[],
   specOverride?: Array<{ label: string; value: string }>,
-  maxWidth = 780
+  maxWidth = 780,
+  studioMode = false
 ): string {
-  const sections = buildSections(content, images, specOverride);
+  const sections = buildSections(content, images, specOverride, studioMode);
 
   return `<!DOCTYPE html>
 <html lang="ko">

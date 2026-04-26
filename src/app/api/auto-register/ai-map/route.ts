@@ -3,7 +3,7 @@ import { requireAuth } from '@/lib/supabase/auth';
 import { mapProductToCoupangFields } from '@/lib/auto-register/ai-field-mapper';
 import type { NormalizedProduct } from '@/lib/auto-register/types';
 
-const AI_MAP_TIMEOUT_MS = 10_000;
+const AI_MAP_TIMEOUT_MS = 25_000;
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuth(req);

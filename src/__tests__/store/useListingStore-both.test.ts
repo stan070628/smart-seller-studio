@@ -70,6 +70,9 @@ function resetStore() {
       naverCategoryPath: '',
       detailPageEditStatus: 'idle',
       detailPageEditError: null,
+      pickedDetailImages: [],
+      detailPageSnippetNaver: null,
+      categoryHint: '',
     },
     bothRegistration: {
       coupang: { status: 'idle' },

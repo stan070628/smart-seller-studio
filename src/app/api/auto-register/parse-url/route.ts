@@ -5,6 +5,7 @@ import { parseSourceUrl } from '@/lib/auto-register/url-parser';
 import { getDomeggookClient } from '@/lib/sourcing/domeggook-client';
 import { fetchCostcoProduct } from '@/lib/sourcing/costco-client';
 import { expandKeywords } from '@/lib/naver-ad';
+import { appendPrivacyFooter } from '@/lib/detail-page-privacy';
 import type { KeywordStat } from '@/lib/naver-ad';
 import type { NormalizedProduct, NormalizedProductOption, NormalizedProductOptionValue } from '@/lib/auto-register/types';
 
@@ -16,12 +17,39 @@ const RequestSchema = z.object({
 type RequestBody = z.infer<typeof RequestSchema>;
 
 // ─────────────────────────────────────────────────────────────
+// KC 인증번호 추출 헬퍼 (도매꾹·코스트코 공통)
+// ─────────────────────────────────────────────────────────────
+
+function extractKcCert(plainText: string): string | undefined {
+  // 패턴별로 모든 매치를 수집하여 중복 없이 합친다 (쉼표 구분)
+  const patterns: RegExp[] = [
+    /인증번호[\s:：]+([A-Z0-9][A-Z0-9\-]{4,40})/gi,
+    /\b(R-R-[A-Za-z0-9가-힣\-]{3,40})/g,
+    /\b(MSIP-REI-[A-Za-z0-9가-힣\-]{3,40})/g,
+    /\b(SU\d{5}-\d{4,6}[A-Z]?)/gi,
+    /KC[\s\-]?인증[\s\-]?번호[\s:：]*([A-Z0-9][A-Z0-9\-]{4,30})/gi,
+    /전기용품안전인증번호[\s:：]*([A-Z0-9][A-Z0-9\-]{4,40})/gi,
+    /\b(XU\d{6}-\d{5})/gi, // 전기용품안전인증 형식 (XU100557-25047)
+  ];
+  const found = new Set<string>();
+  for (const pat of patterns) {
+    let m: RegExpExecArray | null;
+    while ((m = pat.exec(plainText)) !== null) {
+      const val = (m[1] ?? m[0]).trim();
+      if (val) found.add(val);
+    }
+  }
+  return found.size > 0 ? [...found].join(', ') : undefined;
+}
+
+// ─────────────────────────────────────────────────────────────
 // 도매꾹 상품 페이지 스크래핑 헬퍼
 // ─────────────────────────────────────────────────────────────
 
 interface DomeggookPageInfo {
   manufacturer?: string;
   certification?: string;
+  countryOfOrigin?: string;
 }
 
 /**
@@ -59,17 +87,51 @@ async function scrapeDomeggookPage(url: string): Promise<DomeggookPageInfo> {
     const html = await res.text();
 
     const manufacturer = extractLabelValue(html, '제조사');
+    const countryOfOrigin = extractLabelValue(html, '원산지') || extractLabelValue(html, '제조국');
+    const plain = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+    const certification = extractKcCert(plain);
 
-    let certification: string | undefined;
-    const kcMatch = /KC[\s\-]?([A-Z0-9][\w\-]{4,30})/i.exec(html);
-    if (kcMatch) {
-      certification = `KC인증 ${kcMatch[0].replace(/\s+/g, ' ').trim()}`;
-    }
-
-    return { manufacturer, certification };
+    return { manufacturer, countryOfOrigin, certification };
   } catch {
     return {};
   }
+}
+
+// ─────────────────────────────────────────────────────────────
+// 코스트코 상품 페이지 스크래핑 헬퍼
+// ─────────────────────────────────────────────────────────────
+
+interface CostcoPageDetail {
+  description?: string;
+}
+
+/**
+ * 코스트코 온라인 상품 페이지 HTML에서 상품 설명을 추출합니다.
+ * 우선순위: JSON-LD structured data → og:description → meta description
+ * jsdom 없이 정규식만 사용합니다.
+ */
+function scrapeCostcoPageDetail(html: string): CostcoPageDetail {
+  if (!html) return {};
+
+  // 1. JSON-LD structured data (가장 신뢰도 높음)
+  const jsonLdRegex = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = jsonLdRegex.exec(html)) !== null) {
+    try {
+      const data = JSON.parse(m[1].trim()) as Record<string, unknown>;
+      if (data['@type'] === 'Product' && typeof data.description === 'string' && data.description.length > 20) {
+        return { description: data.description.slice(0, 1000).trim() };
+      }
+    } catch { /* ignore */ }
+  }
+
+  // 2. og:description 또는 meta description
+  const contentFirst = /<meta[^>]+(?:property=["']og:description["']|name=["']description["'])[^>]+content=["']([^"']{20,500})["'][^>]*>/i.exec(html);
+  const contentSecond = /<meta[^>]+content=["']([^"']{20,500})["'][^>]+(?:property=["']og:description["']|name=["']description["'])[^>]*>/i.exec(html);
+  const metaDesc = (contentFirst ?? contentSecond)?.[1]?.trim();
+  if (metaDesc) return { description: metaDesc };
+
+  return {};
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -81,12 +143,23 @@ async function scrapeDomeggookPage(url: string): Promise<DomeggookPageInfo> {
  * 연관 검색어를 검색량 기준으로 정렬 후 상위 10개를 반환.
  * 환경변수 미설정 또는 API 실패 시 빈 배열.
  */
+
+// 쇼핑몰·유통사명은 씨드로 사용 시 해당 몰의 인기상품 전체를 연관어로 반환하므로 제외
+const GENERIC_SEED_STOPWORDS = new Set([
+  '코스트코', '이마트', '홈플러스', '쿠팡', '롯데마트', '마켓컬리', '지마켓', '옥션',
+  '11번가', '네이버', '카카오', '위메프', '티몬', '쓱', 'ssg', 'kirkland', '커클랜드',
+  '정품', '공식', '무료배송', '당일배송', '특가', '할인', '세일', '신상',
+]);
+
 async function suggestTagsFromNaver(title: string): Promise<string[]> {
   try {
-    const seeds = title
+    const allWords = title
       .replace(/[\[\]()（）【】《》\/\\,·]/g, ' ')
       .split(/\s+/)
-      .filter((w) => w.length >= 2 && !/^\d+$/.test(w))
+      .filter((w) => w.length >= 2 && !/^\d+$/.test(w));
+
+    const seeds = allWords
+      .filter((w) => !GENERIC_SEED_STOPWORDS.has(w.toLowerCase()))
       .slice(0, 5);
 
     if (seeds.length === 0) return [];
@@ -98,8 +171,14 @@ async function suggestTagsFromNaver(title: string): Promise<string[]> {
       ),
     ]);
 
+    // 씨드 단어 중 하나라도 포함하는 태그만 남겨 상품과 무관한 연관어를 걸러냄
+    const seedSet = seeds.map((s) => s.toLowerCase());
     return stats
-      .filter((k) => (k.searchVolume ?? 0) >= 100)
+      .filter((k) => {
+        if ((k.searchVolume ?? 0) < 100) return false;
+        const kw = k.keyword.toLowerCase();
+        return seedSet.some((s) => kw.includes(s) || s.includes(kw));
+      })
       .sort((a, b) => (b.searchVolume ?? 0) - (a.searchVolume ?? 0))
       .slice(0, 10)
       .map((k) => k.keyword);
@@ -199,12 +278,34 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           .trim();
       }
 
+      // 상세 HTML에서 이미지 URL 추출 (도매꾹 상세페이지 이미지)
+      // src, data-src, data-original, data-lazy 등 lazy-load 속성도 모두 추출
+      const detailImageUrls: string[] = [];
+      if (rawDetailHtml) {
+        const imgTagRegex = /<img[^>]*>/gi;
+        const urlAttrRegex = /(?:src|data-src|data-original|data-lazy(?:-src)?|data-url)=["']([^"']+)["']/gi;
+        let tagMatch: RegExpExecArray | null;
+        while ((tagMatch = imgTagRegex.exec(rawDetailHtml)) !== null) {
+          const tag = tagMatch[0];
+          urlAttrRegex.lastIndex = 0;
+          let attrMatch: RegExpExecArray | null;
+          while ((attrMatch = urlAttrRegex.exec(tag)) !== null) {
+            const src = attrMatch[1];
+            if (src && src.startsWith('http') && !detailImageUrls.includes(src)) {
+              detailImageUrls.push(src);
+            }
+          }
+        }
+        console.log(`[parse-url/domeggook] rawDetailHtml length=${rawDetailHtml.length}, detailImageUrls=${detailImageUrls.length}`);
+      } else {
+        console.log(`[parse-url/domeggook] rawDetailHtml empty — itemId=${parsedUrl.itemId}`);
+      }
+
       // KC 인증번호: 페이지 스크래핑 우선, API desc HTML 폴백
       let certification: string | undefined = pageInfo.certification;
       if (!certification && rawDetailHtml) {
-        const plainText = rawDetailHtml.replace(/<[^>]*>/g, ' ');
-        const kcMatch = /KC[\s\-]?([A-Z0-9][\w\-]{4,30})/i.exec(plainText);
-        if (kcMatch) certification = `KC인증 ${kcMatch[0].replace(/\s+/g, ' ').trim()}`;
+        const plainText = rawDetailHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+        certification = extractKcCert(plainText);
       }
 
       // 제조사: 페이지 스크래핑 > API(basis.maker) > desc HTML regex
@@ -240,17 +341,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         }
       }
 
+      // 상세 HTML 이미지를 imageUrls에도 추가 (API는 썸네일 1장뿐이므로)
+      // 중복 제거하여 순서대로: 메인 썸네일 → 상세 HTML 이미지
+      const mergedImageUrls = [...imageUrls];
+      for (const u of detailImageUrls) {
+        if (!mergedImageUrls.includes(u)) mergedImageUrls.push(u);
+      }
+
       product = {
         source: 'domeggook',
         itemId: parsedUrl.itemId,
         title: itemDetail.basis.title || '',
         price: domePrice,
         originalPrice: itemDetail.price?.resale?.Recommand,
-        imageUrls,
+        imageUrls: mergedImageUrls,
+        detailImageUrls: detailImageUrls.length > 0 ? detailImageUrls : undefined,
         description,
-        detailHtml: rawDetailHtml || undefined,
+        detailHtml: appendPrivacyFooter(rawDetailHtml) || undefined,
         brand: itemDetail.seller?.nick,
         manufacturer,
+        countryOfOrigin: pageInfo.countryOfOrigin,
         categoryHint: itemDetail.category?.current?.name,
         deliFee,
         moq: parseInt(String(itemDetail.qty?.domeMoq ?? 1), 10) || 1,
@@ -324,7 +434,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         return NextResponse.json({ error: '코스트코 상품을 찾을 수 없습니다.' }, { status: 404 });
       }
 
-      // 페이지 HTML에서 제조사/브랜드 추출 (API가 비어있을 때 보완)
+      // 페이지 HTML에서 제조사/브랜드 + 상세 설명 추출
       let costooBrand = item.brand || undefined;
       if (!costooBrand && cosPageHtml) {
         const mfMatch = /제조사[:\s：]*([^\s/\n<][^/\n<]{0,20})/.exec(cosPageHtml);
@@ -333,12 +443,132 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         }
       }
 
-      // KC 인증번호 추출
+      const pageDetail = scrapeCostcoPageDetail(cosPageHtml);
+
+      // KC 인증번호 + 원산지 추출
+      // 1순위: 구조화된 features에서 직접 추출
       let cosCertification: string | undefined;
-      if (cosPageHtml) {
-        const kcMatch = /KC[\s\-]?([A-Z0-9][\w\-]{4,30})/i.exec(cosPageHtml);
-        if (kcMatch) cosCertification = `KC인증 ${kcMatch[0].replace(/\s+/g, ' ').trim()}`;
+      let cosCountryOfOrigin: string | undefined;
+      const allFeatures = (item.classifications ?? []).flatMap((c: { features?: { name?: string; featureValues?: { value?: string }[] }[] }) => c.features ?? []);
+      for (const f of allFeatures) {
+        const fname = f.name ?? '';
+        const fval = (f.featureValues ?? [])[0]?.value ?? '';
+        if (/인증/i.test(fname) && fval) {
+          const certMatch = extractKcCert(fval);
+          if (certMatch) { cosCertification = certMatch; }
+          else if (/^[A-Z0-9][A-Z0-9\-]{4,40}$/.test(fval.trim())) { cosCertification = fval.trim(); }
+        }
+        if (!cosCountryOfOrigin && /원산지|country.of.origin|제조국|made.in/i.test(fname) && fval) {
+          cosCountryOfOrigin = fval.trim();
+        }
       }
+      // 2순위: 페이지 HTML 텍스트에서 추출
+      const cosPlainText = cosPageHtml ? cosPageHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ') : '';
+      if (!cosCertification && cosPlainText) {
+        cosCertification = extractKcCert(cosPlainText);
+      }
+      if (!cosCountryOfOrigin && cosPlainText) {
+        const originMatch = /원산지\s*[:：]?\s*([^\s,<]{2,20})/.exec(cosPlainText)
+          || /country\s+of\s+origin\s*[:：]?\s*([^\s,<]{2,20})/i.exec(cosPlainText)
+          || /Made\s+in\s+([A-Za-z가-힣]{2,20})/i.exec(cosPlainText);
+        if (originMatch) cosCountryOfOrigin = originMatch[1].trim();
+      }
+
+      // 모든 이미지 수집: primary + gallery (중복 제거)
+      const allImageUrls: string[] = [];
+      if (item.imageUrl) allImageUrls.push(item.imageUrl);
+      if (item.galleryImages) {
+        for (const u of item.galleryImages) {
+          if (u !== item.imageUrl) allImageUrls.push(u);
+        }
+      }
+
+      // 상세 HTML 생성 (제목 + 전체 이미지 + 스펙 테이블 + 설명)
+      const safeTitle = item.title
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+      const imagesHtml = allImageUrls
+        .map(u => `<div style="width:100%;margin-bottom:8px;"><img src="${u}" alt="${safeTitle}" style="width:100%;max-width:780px;display:block;margin:0 auto;" /></div>`)
+        .join('\n');
+
+      // description HTML 내 상대경로 이미지 → 절대 URL 변환 후 추가 수집
+      const cosDetailImageUrls: string[] = [...allImageUrls];
+      const rawDescHtml = item.description || '';
+      const fixedDescHtml = rawDescHtml
+        ? rawDescHtml.replace(/src=["'](\/mediapermalink\/[^"']+)["']/gi,
+            (_m, p1: string) => `src="https://www.costco.co.kr${p1}"`)
+        : '';
+
+      // description HTML의 절대 URL 이미지 수집
+      if (fixedDescHtml && /<img/i.test(fixedDescHtml)) {
+        const imgTagRegex2 = /<img[^>]*>/gi;
+        const urlAttrRegex2 = /(?:src|data-src|data-original|data-lazy(?:-src)?|data-url)=["']([^"']+)["']/gi;
+        let tagMatch2: RegExpExecArray | null;
+        while ((tagMatch2 = imgTagRegex2.exec(fixedDescHtml)) !== null) {
+          const tag2 = tagMatch2[0];
+          urlAttrRegex2.lastIndex = 0;
+          let attrMatch2: RegExpExecArray | null;
+          while ((attrMatch2 = urlAttrRegex2.exec(tag2)) !== null) {
+            const src = attrMatch2[1];
+            if (src && src.startsWith('http') && !cosDetailImageUrls.includes(src)) {
+              cosDetailImageUrls.push(src);
+            }
+          }
+        }
+      }
+
+      // classifications.features → 스펙 테이블 HTML
+      let specsHtml = '';
+      const features = (item.classifications ?? []).flatMap(c => c.features ?? []);
+      if (features.length > 0) {
+        const rows = features
+          .filter(f => f.name && f.featureValues?.length > 0)
+          .map(f => {
+            const valStr = f.featureValues
+              .map(v => (v.value ?? '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]*>/g, ''))
+              .join(', ')
+              .replace(/\n/g, '<br/>');
+            const safeName = f.name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return `<tr style="border-bottom:1px solid #f0f0f0;">` +
+              `<td style="padding:10px 12px;font-weight:600;color:#555;word-break:keep-all;width:160px;min-width:120px;max-width:180px;vertical-align:top;background:#fafafa;">${safeName}</td>` +
+              `<td style="padding:10px 12px;color:#333;line-height:1.6;word-break:break-word;">${valStr}</td>` +
+              `</tr>`;
+          })
+          .join('\n');
+
+        if (rows) {
+          specsHtml = `\n<div style="padding:16px;">\n` +
+            `<h2 style="font-size:16px;font-weight:700;margin:0 0 12px;color:#222;">상품 정보</h2>\n` +
+            `<table style="width:100%;border-collapse:collapse;border:1px solid #e8e8e8;font-size:14px;">\n` +
+            rows + `\n</table>\n</div>`;
+        }
+      }
+
+      // description 텍스트(og:description 등) 폴백
+      const descFallback = pageDetail.description;
+      let descHtml = '';
+      if (descFallback && features.length === 0) {
+        descHtml = `\n<div style="padding:16px;line-height:1.7;color:#333;font-size:15px;">${
+          descFallback.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br/>')
+        }</div>`;
+      }
+
+      // description HTML 이미지 블록 (내용이 실질적인 경우에만)
+      const descImgHtml = fixedDescHtml && /<img/i.test(fixedDescHtml)
+        ? `\n<div style="padding:8px 0;">${fixedDescHtml}</div>`
+        : '';
+
+      const cosDetailHtml =
+        `<div style="max-width:780px;margin:0 auto;font-family:sans-serif;background:#fff;padding:20px 16px;">\n` +
+        `<h1 style="font-size:22px;font-weight:700;text-align:center;margin:0 0 16px;line-height:1.4;">${safeTitle}</h1>\n` +
+        imagesHtml +
+        descImgHtml +
+        specsHtml +
+        descHtml +
+        `\n</div>` +
+        appendPrivacyFooter('');
+
+      console.log(`[parse-url/costco] imageUrls=${allImageUrls.length}, detailImageUrls=${cosDetailImageUrls.length}, galleryImages=${item.galleryImages?.length ?? 0}, specFeatures=${features.length}`);
 
       product = {
         source: 'costco',
@@ -346,10 +576,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         title: item.title,
         price: item.price,
         originalPrice: item.originalPrice,
-        imageUrls: item.imageUrl ? [item.imageUrl] : [],
-        description: item.title,
+        imageUrls: allImageUrls,
+        detailImageUrls: cosDetailImageUrls.length > 0 ? cosDetailImageUrls : undefined,
+        description: features.length > 0
+          ? features.filter(f => f.featureValues?.length > 0)
+              .map(f => `${f.name}: ${f.featureValues.map(v => v.value).join(', ')}`)
+              .join('\n')
+          : (item.description?.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim() || pageDetail.description || item.title),
+        detailHtml: cosDetailHtml,
         brand: costooBrand,
         manufacturer: costooBrand,
+        countryOfOrigin: cosCountryOfOrigin,
         categoryHint: item.categoryName,
         certification: cosCertification,
       };

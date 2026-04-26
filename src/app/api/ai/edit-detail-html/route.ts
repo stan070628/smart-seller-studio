@@ -15,6 +15,7 @@ import { getAnthropicClient } from "@/lib/ai/claude";
 import { withRetry } from "@/lib/ai/resilience";
 import { checkRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { requireAuth } from "@/lib/supabase/auth";
+import { appendPrivacyFooter } from "@/lib/detail-page-privacy";
 
 // ─────────────────────────────────────────
 // 상수
@@ -24,12 +25,14 @@ import { requireAuth } from "@/lib/supabase/auth";
 const EDIT_HTML_RATE_LIMIT = { windowMs: 60_000, maxRequests: 10 };
 
 /**
- * HTML 구조와 이미지 태그를 유지하면서 텍스트/스타일만 수정하도록 지시.
- * 출력은 수정된 HTML 전체만 허용하며 마크다운·설명·코드블록 금지.
+ * 기존 HTML을 보충·추가하도록 지시. 기존 내용 삭제/교체 금지.
+ * 출력은 보충된 HTML 전체만 허용하며 마크다운·설명·코드블록 금지.
  */
 const EDIT_SYSTEM_PROMPT =
   "당신은 한국 이커머스 상세페이지 HTML 편집 전문가입니다. " +
-  "제공된 HTML을 사용자 지시에 따라 수정하되, HTML 구조와 이미지 태그는 그대로 유지하세요. " +
+  "제공된 기존 HTML을 기반으로, 사용자 지시에 따라 내용을 보충하거나 추가하세요. " +
+  "기존 텍스트·이미지·구조는 절대 삭제하거나 교체하지 마세요. " +
+  "지시문이 다루지 않는 섹션은 그대로 유지합니다. " +
   "수정된 HTML 전체만 출력하세요. 코드 블록, 마크다운, 설명 텍스트 금지.";
 
 /** Claude에 전달할 HTML의 최대 글자 수 (초과 시 앞부분만 사용) */
@@ -118,31 +121,6 @@ function toNaverSnippet(snippet: string): string {
   return snippet.replace(/max-width\s*:\s*780px/g, "max-width:860px");
 }
 
-const PRIVACY_NOTICE_URL =
-  'https://mvergrjqfjuwndveztts.supabase.co/storage/v1/object/public/smart-seller-studio/static/privacy-notice.jpg';
-
-const PRIVACY_NOTICE_IMG = `\n<div style="width:100%;padding:0;"><img src="${PRIVACY_NOTICE_URL}" alt="개인정보 제공 안내" style="width:100%;display:block;" /></div>`;
-
-/**
- * HTML에서 개인정보 관련 텍스트 블록을 제거하고 끝에 개인정보 이미지를 추가합니다.
- * 이미 privacy-notice.jpg 이미지가 포함된 경우 중복 추가하지 않습니다.
- */
-function injectPrivacyNotice(html: string): string {
-  if (html.includes('privacy-notice.jpg')) return html;
-
-  // 개인정보 관련 텍스트 섹션 제거 패턴 (도매꾹/일반 HTML에서 자주 나타나는 형태)
-  const cleaned = html
-    .replace(/<[^>]+>[^<]*개인정보[^<]*제공[^<]*받는\s*자[^<]*<\/[^>]+>/gi, '')
-    .replace(/<[^>]+>[^<]*개인정보\s*처리방침[^<]*<\/[^>]+>/gi, '')
-    .replace(/<[^>]+>[^<]*Privacy[^<]*<\/[^>]+>/gi, '');
-
-  // </body> 앞 또는 HTML 끝에 삽입
-  const bodyCloseIdx = cleaned.toLowerCase().lastIndexOf('</body>');
-  if (bodyCloseIdx !== -1) {
-    return cleaned.slice(0, bodyCloseIdx) + PRIVACY_NOTICE_IMG + cleaned.slice(bodyCloseIdx);
-  }
-  return cleaned + PRIVACY_NOTICE_IMG;
-}
 
 /**
  * Claude에 전달할 user 프롬프트를 구성합니다.
@@ -300,7 +278,7 @@ export async function POST(
   }
 
   // 개인정보 이미지 주입 (기존 개인정보 텍스트 블록 제거 후 이미지로 교체)
-  const editedHtml = injectPrivacyNotice(rawHtml);
+  const editedHtml = appendPrivacyFooter(rawHtml);
 
   // snippet 결정: 편집된 HTML 전체에서 body 내용을 추출하여 쿠팡 스니펫으로 사용
   // naverSnippet은 쿠팡 스니펫의 max-width를 860px로 교체하여 생성

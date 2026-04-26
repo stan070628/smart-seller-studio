@@ -2207,13 +2207,13 @@ export default function ListingDashboard() {
   // URL tab= 파라미터에서 초기 탭 동기화
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab === 'browse' || tab === 'assets' || tab === 'register') {
+    if (tab === 'browse' || tab === 'assets' || tab === 'register' || tab === 'drafts') {
       setListingMode(tab);
     }
   }, [searchParams, setListingMode]);
 
   // 탭 전환 + URL 동기화 헬퍼
-  const goTab = (mode: 'register' | 'browse' | 'assets') => {
+  const goTab = (mode: 'register' | 'browse' | 'assets' | 'drafts') => {
     setListingMode(mode);
     const params = new URLSearchParams(Array.from(searchParams.entries()));
     if (mode === 'register') params.delete('tab');
@@ -2335,6 +2335,7 @@ export default function ListingDashboard() {
         >
           {([
             { id: 'register', label: 'AI 상품 등록' },
+            { id: 'drafts', label: '임시저장' },
             { id: 'browse', label: '내 상품 조회' },
             { id: 'assets', label: '썸네일·상세만 만들기' },
           ] as const).map((tab) => {
@@ -2432,12 +2433,198 @@ export default function ListingDashboard() {
             {currentStep === 2 && <Step2Processing />}
             {currentStep === 3 && <Step3ReviewRegister />}
           </>
+        ) : listingMode === 'drafts' ? (
+          <DraftListTab onLoad={() => goTab('register')} />
         ) : listingMode === 'assets' ? (
           <AssetsTab />
         ) : (
           <BrowseMode />
         )}
       </main>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 임시저장 목록 탭
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface CoupangDraft {
+  id: string;
+  productName: string;
+  sourceUrl: string | null;
+  sourceType: string;
+  status: string;
+  draftData: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+function DraftListTab({ onLoad }: { onLoad: () => void }) {
+  const { updateSharedDraft, setCurrentStep } = useListingStore();
+  const [drafts, setDrafts] = useState<CoupangDraft[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const fetchDrafts = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/listing/coupang/drafts');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? '목록 조회 실패');
+      setDrafts(json.drafts ?? []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchDrafts(); }, []);
+
+  const handleLoad = (draft: CoupangDraft) => {
+    // sharedDraft 전체를 복원하고 Step3으로 이동
+    // coupangDraftId를 함께 저장해 제출 버튼을 즉시 활성화
+    updateSharedDraft({
+      ...(draft.draftData as Parameters<typeof updateSharedDraft>[0]),
+      coupangDraftId: draft.id,
+    });
+    setCurrentStep(3);
+    onLoad();
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('이 임시저장을 삭제하시겠습니까?')) return;
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/listing/coupang/drafts/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const json = await res.json();
+        throw new Error(json.error ?? '삭제 실패');
+      }
+      setDrafts((prev) => prev.filter((d) => d.id !== id));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '삭제 중 오류가 발생했습니다.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const formatDate = (iso: string) => {
+    const d = new Date(iso);
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffMin = Math.floor(diffMs / 60000);
+    const diffHour = Math.floor(diffMin / 60);
+    const diffDay = Math.floor(diffHour / 24);
+    if (diffMin < 1) return '방금 전';
+    if (diffMin < 60) return `${diffMin}분 전`;
+    if (diffHour < 24) return `${diffHour}시간 전`;
+    if (diffDay < 7) return `${diffDay}일 전`;
+    return d.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '60px', gap: '10px', color: C.textSub }}>
+        <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} />
+        <span style={{ fontSize: '14px' }}>임시저장 목록 불러오는 중...</span>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ padding: '32px', textAlign: 'center' }}>
+        <p style={{ fontSize: '14px', color: '#b91c1c', marginBottom: '12px' }}>{error}</p>
+        <button onClick={fetchDrafts} style={{ padding: '8px 18px', fontSize: '13px', fontWeight: 600, backgroundColor: C.accent, color: '#fff', border: 'none', borderRadius: '7px', cursor: 'pointer' }}>
+          다시 시도
+        </button>
+      </div>
+    );
+  }
+
+  if (drafts.length === 0) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 24px', gap: '12px', color: C.textSub }}>
+        <span style={{ fontSize: '32px' }}>📋</span>
+        <p style={{ fontSize: '15px', fontWeight: 600, color: C.text, margin: 0 }}>임시저장된 상품이 없습니다</p>
+        <p style={{ fontSize: '13px', margin: 0 }}>Step 3에서 임시저장 버튼을 누르면 여기에 저장됩니다.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0 14px' }}>
+        <span style={{ fontSize: '14px', color: C.textSub }}>{drafts.length}개 임시저장됨</span>
+        <button onClick={fetchDrafts} style={{ fontSize: '12px', color: C.textSub, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>새로고침</button>
+      </div>
+      <div style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: '12px', overflow: 'hidden' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ backgroundColor: C.tableHeader }}>
+              {['상품명', '저장일시', '출처', ''].map((h) => (
+                <th key={h} style={{ padding: '10px 14px', fontSize: '11px', fontWeight: 600, color: C.textSub, textAlign: 'left', borderBottom: `1px solid ${C.border}` }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {drafts.map((draft, idx) => (
+              <tr
+                key={draft.id}
+                style={{ borderBottom: idx < drafts.length - 1 ? `1px solid ${C.border}` : 'none' }}
+              >
+                <td style={{ padding: '12px 14px', fontSize: '13px', fontWeight: 600, color: C.text, maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {draft.productName || '(이름 없음)'}
+                </td>
+                <td style={{ padding: '12px 14px', fontSize: '12px', color: C.textSub, whiteSpace: 'nowrap' }}>
+                  {formatDate(draft.updatedAt)}
+                </td>
+                <td style={{ padding: '12px 14px', fontSize: '11px', color: C.textSub }}>
+                  {draft.sourceUrl ? (
+                    <a href={draft.sourceUrl} target="_blank" rel="noopener noreferrer" style={{ color: C.accent, textDecoration: 'none' }} title={draft.sourceUrl}>
+                      URL ↗
+                    </a>
+                  ) : (
+                    <span>직접 입력</span>
+                  )}
+                </td>
+                <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
+                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                    <button
+                      onClick={() => handleLoad(draft)}
+                      style={{
+                        padding: '6px 14px', fontSize: '12px', fontWeight: 700,
+                        backgroundColor: C.accent, color: '#fff',
+                        border: 'none', borderRadius: '6px', cursor: 'pointer',
+                      }}
+                    >
+                      불러오기
+                    </button>
+                    <button
+                      onClick={() => handleDelete(draft.id)}
+                      disabled={deletingId === draft.id}
+                      style={{
+                        padding: '6px 10px', fontSize: '12px',
+                        backgroundColor: '#fff', color: '#b91c1c',
+                        border: '1px solid #fca5a5', borderRadius: '6px',
+                        cursor: deletingId === draft.id ? 'not-allowed' : 'pointer',
+                        opacity: deletingId === draft.id ? 0.5 : 1,
+                      }}
+                    >
+                      {deletingId === draft.id ? '삭제 중...' : '삭제'}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

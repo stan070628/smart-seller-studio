@@ -19,6 +19,9 @@ vi.mock('@/lib/listing/coupang-client', () => {
   const mockRegisterProduct = vi.fn();
   const mockGetOutboundShippingPlaces = vi.fn();
   const mockGetReturnShippingCenters = vi.fn();
+  const mockGetOutboundShippingPlaceCode = vi.fn().mockReturnValue('DEFAULT-OUT');
+  const mockGetReturnCenterCode = vi.fn().mockReturnValue('DEFAULT-RET');
+  const mockGetCategoryMeta = vi.fn().mockResolvedValue({ noticeCategories: [] });
 
   return {
     getCoupangClient: vi.fn(() => ({
@@ -26,6 +29,9 @@ vi.mock('@/lib/listing/coupang-client', () => {
       registerProduct: mockRegisterProduct,
       getOutboundShippingPlaces: mockGetOutboundShippingPlaces,
       getReturnShippingCenters: mockGetReturnShippingCenters,
+      getOutboundShippingPlaceCode: mockGetOutboundShippingPlaceCode,
+      getReturnCenterCode: mockGetReturnCenterCode,
+      getCategoryMeta: mockGetCategoryMeta,
     })),
     // 클래스 자체도 export 되어 있으므로 빈 클래스로 대체
     CoupangClient: vi.fn(),
@@ -38,10 +44,12 @@ vi.mock('@/lib/listing/coupang-client', () => {
 
 vi.mock('@/lib/listing/naver-commerce-client', () => {
   const mockRegisterProduct = vi.fn();
+  const mockUploadImagesFromUrls = vi.fn().mockResolvedValue(['https://img.naver.com/uploaded.jpg']);
 
   return {
     getNaverCommerceClient: vi.fn(() => ({
       registerProduct: mockRegisterProduct,
+      uploadImagesFromUrls: mockUploadImagesFromUrls,
     })),
     NaverCommerceClient: vi.fn(),
   };
@@ -59,7 +67,7 @@ import { POST } from '@/app/api/listing/both/route';
 const VALID_PAYLOAD = {
   name: '자동 등록 테스트 상품',
   salePrice: 19900,
-  images: ['https://example.com/img1.jpg'],
+  thumbnailImages: ['https://example.com/img1.jpg'],
   description: '<p>상세 설명입니다.</p>',
   coupang: {
     displayCategoryCode: 56137,
@@ -89,6 +97,9 @@ function getCoupangMocks() {
     registerProduct: client.registerProduct as ReturnType<typeof vi.fn>,
     getOutboundShippingPlaces: client.getOutboundShippingPlaces as ReturnType<typeof vi.fn>,
     getReturnShippingCenters: client.getReturnShippingCenters as ReturnType<typeof vi.fn>,
+    getOutboundShippingPlaceCode: client.getOutboundShippingPlaceCode as ReturnType<typeof vi.fn>,
+    getReturnCenterCode: client.getReturnCenterCode as ReturnType<typeof vi.fn>,
+    getCategoryMeta: client.getCategoryMeta as ReturnType<typeof vi.fn>,
   };
 }
 
@@ -96,6 +107,7 @@ function getNaverMocks() {
   const client = (getNaverCommerceClient as ReturnType<typeof vi.fn>)();
   return {
     registerProduct: client.registerProduct as ReturnType<typeof vi.fn>,
+    uploadImagesFromUrls: client.uploadImagesFromUrls as ReturnType<typeof vi.fn>,
   };
 }
 
@@ -232,8 +244,8 @@ describe('POST /api/listing/both', () => {
     expect(json.success).toBe(false);
   });
 
-  it('images 필드 누락 → HTTP 400', async () => {
-    const { images: _img, ...withoutImages } = VALID_PAYLOAD;
+  it('thumbnailImages 필드 누락 → HTTP 400', async () => {
+    const { thumbnailImages: _img, ...withoutImages } = VALID_PAYLOAD;
     const res = await POST(makeRequest(withoutImages));
     const json = await res.json();
 
@@ -252,12 +264,18 @@ describe('POST /api/listing/both', () => {
     expect(json.details?.naver).toBeDefined();
   });
 
-  it('coupang 객체 누락 → HTTP 400', async () => {
+  it('coupang 객체 누락 → 네이버만 등록, 쿠팡 skipped (HTTP 200)', async () => {
+    const { registerProduct: naverRegister } = getNaverMocks();
+    naverRegister.mockResolvedValueOnce({ originProductNo: 222, smartstoreChannelProductNo: 333 });
+
     const { coupang: _c, ...withoutCoupang } = VALID_PAYLOAD;
     const res = await POST(makeRequest(withoutCoupang));
     const json = await res.json();
 
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(200);
+    expect(json.data.naver.success).toBe(true);
+    expect(json.data.coupang.success).toBe(false);
+    expect(json.data.coupang.skipped).toBe(true);
   });
 
   // ─── 경계값: 이미지 URL 개수 ─────────────────────────────────────────────
@@ -270,7 +288,7 @@ describe('POST /api/listing/both', () => {
 
     const body = {
       ...VALID_PAYLOAD,
-      images: Array.from({ length: 10 }, (_, i) => `https://example.com/img${i + 1}.jpg`),
+      thumbnailImages: Array.from({ length: 10 }, (_, i) => `https://example.com/img${i + 1}.jpg`),
     };
     const res = await POST(makeRequest(body));
     const json = await res.json();
@@ -282,7 +300,7 @@ describe('POST /api/listing/both', () => {
   it('이미지 URL 11개 초과 → HTTP 400', async () => {
     const body = {
       ...VALID_PAYLOAD,
-      images: Array.from({ length: 11 }, (_, i) => `https://example.com/img${i + 1}.jpg`),
+      thumbnailImages: Array.from({ length: 11 }, (_, i) => `https://example.com/img${i + 1}.jpg`),
     };
     const res = await POST(makeRequest(body));
     const json = await res.json();
@@ -292,7 +310,7 @@ describe('POST /api/listing/both', () => {
   });
 
   it('이미지 URL 0개 (빈 배열) → HTTP 400 (min 1)', async () => {
-    const body = { ...VALID_PAYLOAD, images: [] };
+    const body = { ...VALID_PAYLOAD, thumbnailImages: [] };
     const res = await POST(makeRequest(body));
     const json = await res.json();
 
@@ -358,12 +376,10 @@ describe('POST /api/listing/both', () => {
 
   // ─── 출고지/반품지 자동 조회 ─────────────────────────────────────────────
 
-  it('outboundShippingPlaceCode 미지정 시 자동 조회 결과가 사용된다', async () => {
-    const { registerProduct: coupangRegister, getOutboundShippingPlaces, getReturnShippingCenters } = getCoupangMocks();
+  it('outboundShippingPlaceCode 미지정 시 getOutboundShippingPlaceCode 가 사용된다', async () => {
+    const { registerProduct: coupangRegister, getOutboundShippingPlaceCode, getReturnCenterCode } = getCoupangMocks();
     const { registerProduct: naverRegister } = getNaverMocks();
 
-    getOutboundShippingPlaces.mockResolvedValueOnce([{ outboundShippingPlaceCode: 'AUTO-OUT-001' }]);
-    getReturnShippingCenters.mockResolvedValueOnce([{ returnCenterCode: 'AUTO-RET-001' }]);
     coupangRegister.mockResolvedValueOnce({ sellerProductId: 777 });
     naverRegister.mockResolvedValueOnce({ originProductNo: 888, smartstoreChannelProductNo: 999 });
 
@@ -372,7 +388,7 @@ describe('POST /api/listing/both', () => {
       ...VALID_PAYLOAD,
       coupang: {
         displayCategoryCode: 56137,
-        // outboundShippingPlaceCode, returnCenterCode 없음 → 자동 조회
+        // outboundShippingPlaceCode, returnCenterCode 없음 → 클라이언트 메서드로 조회
       },
     };
 
@@ -381,8 +397,8 @@ describe('POST /api/listing/both', () => {
 
     expect(res.status).toBe(200);
     expect(json.data.summary.totalSucceeded).toBe(2);
-    expect(getOutboundShippingPlaces).toHaveBeenCalledTimes(1);
-    expect(getReturnShippingCenters).toHaveBeenCalledTimes(1);
+    expect(getOutboundShippingPlaceCode).toHaveBeenCalledTimes(1);
+    expect(getReturnCenterCode).toHaveBeenCalledTimes(1);
   });
 
   // ─── 선택 필드 기본값 ────────────────────────────────────────────────────

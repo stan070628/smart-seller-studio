@@ -11,24 +11,16 @@ vi.mock('@/lib/rate-limit', () => ({
   RATE_LIMITS: { AI_API: {} },
 }));
 
-vi.mock('@/lib/ai/claude', () => ({
-  getAnthropicClient: vi.fn().mockReturnValue({
-    messages: {
-      create: vi.fn().mockResolvedValue({
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              keywords: [
-                { keyword: '방수 백팩', reason: '수요 안정적' },
-                { keyword: '미니 선풍기', reason: '여름 수요' },
-              ],
-            }),
-          },
-        ],
-      }),
-    },
-  }),
+// 실제 구현은 @/lib/ai/claude-cli의 callClaude를 사용
+vi.mock('@/lib/ai/claude-cli', () => ({
+  callClaude: vi.fn().mockResolvedValue(
+    JSON.stringify({
+      keywords: [
+        { keyword: '방수 백팩', reason: '수요 안정적' },
+        { keyword: '미니 선풍기', reason: '여름 수요' },
+      ],
+    }),
+  ),
 }));
 
 vi.mock('@/lib/naver-ad', () => ({

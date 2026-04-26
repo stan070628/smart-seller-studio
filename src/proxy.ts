@@ -74,11 +74,12 @@ export const config = {
   matcher: [
     /*
      * 다음 경로를 제외한 모든 요청에 Proxy 적용:
+     * - api/ (API 라우트 — body cloning 방지, 인증은 각 핸들러에서 처리)
      * - _next/static (정적 파일)
      * - _next/image (이미지 최적화)
      * - favicon.ico
      * - 이미지/폰트 파일 확장자
      */
-    '/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|woff2?)$).*)',
+    '/((?!api/|_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|woff2?)$).*)',
   ],
 };

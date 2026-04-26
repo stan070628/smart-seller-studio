@@ -7,6 +7,24 @@
 // OCC API 응답 타입
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** OCC classifications 스펙 피처 */
+export interface OccFeatureValue {
+  value: string;
+  unit?: { name?: string; symbol?: string };
+}
+export interface OccFeature {
+  code?: string;
+  name: string;
+  featureValues: OccFeatureValue[];
+  comparable?: boolean;
+  range?: boolean;
+}
+export interface OccClassification {
+  code?: string;
+  name?: string;
+  features: OccFeature[];
+}
+
 /** OCC products/search API의 단일 상품 항목 */
 export interface OccProduct {
   code: string;
@@ -35,6 +53,12 @@ export interface OccProduct {
   manufacturer?: string;
   categories?: Array<{ code: string; name: string }>;
   url?: string;
+  /** 상품 상세 설명 (OCC fields=FULL에서 반환) */
+  description?: string;
+  /** 짧은 요약 */
+  summary?: string;
+  /** 상품 스펙/분류 (OCC fields=FULL에서 반환) */
+  classifications?: OccClassification[];
 }
 
 /** OCC products/search API 페이지 응답 */
@@ -61,12 +85,16 @@ export interface CostcoApiProduct {
   price: number;
   originalPrice?: number;
   imageUrl?: string;
+  galleryImages?: string[];
+  description?: string;
   productUrl: string;
   brand?: string;
   averageRating?: number;
   reviewCount: number;
   stockStatus: 'inStock' | 'outOfStock' | 'lowStock';
   shippingIncluded: boolean;
+  /** OCC classifications 스펙 데이터 */
+  classifications?: OccClassification[];
 }
 
 /** 카테고리별 수집 결과 */

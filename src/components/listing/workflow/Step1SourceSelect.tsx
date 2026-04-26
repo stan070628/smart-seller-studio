@@ -79,6 +79,7 @@ export default function Step1SourceSelect() {
 
       updateSharedDraft({
         name: p.title,
+        costPrice: costPrice > 0 ? String(costPrice) : '',
         salePrice: recommendedSalePrice > 0 ? String(recommendedSalePrice) : '',
         originalPrice: computedOriginal > 0 ? String(computedOriginal) : '',
         thumbnailImages: p.imageUrls ?? [],
@@ -86,6 +87,9 @@ export default function Step1SourceSelect() {
         description: p.detailHtml ?? '',
         tags: p.suggestedTags ?? [],
         categoryHint: p.categoryHint ?? '',
+        certification: p.certification,
+        manufacturer: p.manufacturer ?? p.brand,
+        countryOfOrigin: p.countryOfOrigin,
         detailPageStatus: 'idle',
         detailPageSkipped: !p.detailHtml,
       });

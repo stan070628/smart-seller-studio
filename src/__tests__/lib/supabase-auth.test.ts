@@ -2,27 +2,22 @@
  * supabase-auth.test.ts
  * src/lib/supabase/auth.ts 의 verifyAuth, requireAuth 단위 테스트
  *
- * 실제 Supabase 호출 없이 getSupabaseServerClient 를 vi.mock 으로 대체합니다.
+ * 실제 getCurrentUser 호출 없이 @/lib/auth 를 vi.mock 으로 대체합니다.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { NextRequest } from 'next/server';
 
 // ---------------------------------------------------------------------------
-// Supabase 서버 클라이언트 Mock
+// @/lib/auth Mock — getCurrentUser 반환값을 테스트마다 제어합니다.
+// vi.mock 은 파일 최상단으로 호이스팅되므로, mock 함수는 vi.hoisted 로 먼저 선언합니다.
 // ---------------------------------------------------------------------------
 
-// getUser mock 함수를 모듈 레벨에서 선언하되,
-// getSupabaseServerClient 는 매 호출마다 이 함수를 참조하는 새 객체를 반환합니다.
-const mockGetUser = vi.fn();
+const { mockGetCurrentUser } = vi.hoisted(() => ({
+  mockGetCurrentUser: vi.fn(),
+}));
 
-vi.mock('@/lib/supabase/server', () => ({
-  // factory 함수로 감싸지 않고, 항상 동일한 mockGetUser 를 참조하도록 구성
-  getSupabaseServerClient: () => ({
-    auth: {
-      getUser: mockGetUser,
-    },
-  }),
+vi.mock('@/lib/auth', () => ({
+  getCurrentUser: mockGetCurrentUser,
 }));
 
 // ---------------------------------------------------------------------------
@@ -32,111 +27,67 @@ vi.mock('@/lib/supabase/server', () => ({
 import { verifyAuth, requireAuth } from '@/lib/supabase/auth';
 
 // ---------------------------------------------------------------------------
-// 헬퍼: NextRequest 생성
-// ---------------------------------------------------------------------------
-
-function makeRequest(authHeader?: string): NextRequest {
-  const headers: Record<string, string> = {};
-  if (authHeader !== undefined) {
-    headers['Authorization'] = authHeader;
-  }
-  return new NextRequest('http://localhost:3000/api/test', {
-    method: 'GET',
-    headers,
-  });
-}
-
-// ---------------------------------------------------------------------------
-// verifyAuth 테스트 (6개)
+// verifyAuth 테스트 (4개)
 // ---------------------------------------------------------------------------
 
 describe('verifyAuth', () => {
   beforeEach(() => {
-    // vi.clearAllMocks() 는 mockOnce 큐를 비우지 않으므로
-    // mockReset() 으로 구현체(큐 포함) 까지 완전히 초기화합니다.
-    mockGetUser.mockReset();
+    // mockOnce 큐까지 포함해 완전히 초기화합니다.
+    mockGetCurrentUser.mockReset();
   });
 
   // ── 테스트 1 ──────────────────────────────────────────────────────────────
-  it('유효한 Bearer 토큰 → { userId, email } 반환', async () => {
-    mockGetUser.mockResolvedValueOnce({
-      data: { user: { id: 'user-abc', email: 'test@example.com' } },
-      error: null,
-    });
+  it('getCurrentUser가 null을 반환하면 verifyAuth도 null을 반환한다', async () => {
+    mockGetCurrentUser.mockResolvedValueOnce(null);
 
-    const request = makeRequest('Bearer valid-token-123');
-    const result = await verifyAuth(request);
+    const result = await verifyAuth();
 
-    expect(result).not.toBeNull();
-    expect(result!.userId).toBe('user-abc');
-    expect(result!.email).toBe('test@example.com');
-    expect(mockGetUser).toHaveBeenCalledOnce();
-    expect(mockGetUser).toHaveBeenCalledWith('valid-token-123');
+    expect(result).toBeNull();
+    expect(mockGetCurrentUser).toHaveBeenCalledOnce();
   });
 
   // ── 테스트 2 ──────────────────────────────────────────────────────────────
-  it('Authorization 헤더 없음 → null 반환', async () => {
-    const request = makeRequest(); // Authorization 헤더 미포함
-    const result = await verifyAuth(request);
+  it('getCurrentUser가 userId와 email을 반환하면 동일한 AuthResult를 반환한다', async () => {
+    mockGetCurrentUser.mockResolvedValueOnce({
+      userId: 'u1',
+      email: 'a@a.com',
+    });
 
-    expect(result).toBeNull();
-    // getUser 는 호출되지 않아야 함
-    expect(mockGetUser).not.toHaveBeenCalled();
+    const result = await verifyAuth();
+
+    expect(result).not.toBeNull();
+    expect(result!.userId).toBe('u1');
+    expect(result!.email).toBe('a@a.com');
   });
 
   // ── 테스트 3 ──────────────────────────────────────────────────────────────
-  it('Bearer 형식이 아닌 헤더 → null 반환', async () => {
-    // "Basic ..." 또는 "Token ..." 등 Bearer 로 시작하지 않는 경우
-    const request = makeRequest('Basic dXNlcjpwYXNz');
-    const result = await verifyAuth(request);
+  it('getCurrentUser가 email 없이 userId만 반환하면 email은 undefined이다', async () => {
+    // getCurrentUser 반환 타입은 { userId: string; email: string } | null 이지만,
+    // AuthResult의 email은 optional이므로 email 필드가 없는 경우도 방어적으로 검증합니다.
+    mockGetCurrentUser.mockResolvedValueOnce({
+      userId: 'u1',
+    });
 
-    expect(result).toBeNull();
-    expect(mockGetUser).not.toHaveBeenCalled();
+    const result = await verifyAuth();
+
+    expect(result).not.toBeNull();
+    expect(result!.userId).toBe('u1');
+    expect(result!.email).toBeUndefined();
   });
 
   // ── 테스트 4 ──────────────────────────────────────────────────────────────
-  it('빈 토큰 (Bearer 뒤에 공백만) → null 반환', async () => {
-    // "Bearer " 이후 실제 토큰이 없거나 공백만 있는 경우
-    // auth.ts 의 구현: authHeader.slice(7) → 빈 문자열 또는 공백
-    // getUser('') 는 Supabase 에러를 반환할 것이므로 → null
-    mockGetUser.mockResolvedValueOnce({
-      data: { user: null },
-      error: { message: 'Invalid JWT' },
+  it('request 인자 없이 호출해도 동작한다 (인자는 무시됨)', async () => {
+    mockGetCurrentUser.mockResolvedValueOnce({
+      userId: 'u2',
+      email: 'b@b.com',
     });
 
-    const request = makeRequest('Bearer ');
-    const result = await verifyAuth(request);
+    // _request 파라미터는 현재 구현에서 무시되므로 인자 없이 호출
+    const result = await verifyAuth();
 
-    // token 이 빈 문자열이므로 getUser 를 호출해도 에러/null user → null 반환
-    expect(result).toBeNull();
-  });
-
-  // ── 테스트 5 ──────────────────────────────────────────────────────────────
-  it('Supabase getUser 가 error 반환 시 → null 반환', async () => {
-    mockGetUser.mockResolvedValueOnce({
-      data: { user: null },
-      error: { message: 'JWT expired', status: 401 },
-    });
-
-    const request = makeRequest('Bearer expired-token');
-    const result = await verifyAuth(request);
-
-    expect(result).toBeNull();
-    expect(mockGetUser).toHaveBeenCalledOnce();
-  });
-
-  // ── 테스트 6 ──────────────────────────────────────────────────────────────
-  it('Supabase getUser user 가 null 일 때 → null 반환', async () => {
-    mockGetUser.mockResolvedValueOnce({
-      data: { user: null },
-      error: null,
-    });
-
-    const request = makeRequest('Bearer valid-but-revoked-token');
-    const result = await verifyAuth(request);
-
-    expect(result).toBeNull();
-    expect(mockGetUser).toHaveBeenCalledOnce();
+    expect(result).not.toBeNull();
+    expect(result!.userId).toBe('u2');
+    expect(result!.email).toBe('b@b.com');
   });
 });
 
@@ -146,69 +97,62 @@ describe('verifyAuth', () => {
 
 describe('requireAuth', () => {
   beforeEach(() => {
-    // mockOnce 큐까지 포함해 완전히 초기화
-    mockGetUser.mockReset();
+    // mockOnce 큐까지 포함해 완전히 초기화합니다.
+    mockGetCurrentUser.mockReset();
   });
 
   // ── 테스트 1 ──────────────────────────────────────────────────────────────
-  it('유효한 토큰 → AuthResult 반환 (Response 아님)', async () => {
-    mockGetUser.mockResolvedValueOnce({
-      data: { user: { id: 'user-xyz', email: 'user@example.com' } },
-      error: null,
-    });
+  it('getCurrentUser가 null이면 status 401 Response를 반환한다', async () => {
+    mockGetCurrentUser.mockResolvedValueOnce(null);
 
-    const request = makeRequest('Bearer good-token');
-    const result = await requireAuth(request);
-
-    // Response 인스턴스가 아니어야 함
-    expect(result).not.toBeInstanceOf(Response);
-    // AuthResult 구조 확인
-    const auth = result as { userId: string; email?: string };
-    expect(auth.userId).toBe('user-xyz');
-    expect(auth.email).toBe('user@example.com');
-  });
-
-  // ── 테스트 2 ──────────────────────────────────────────────────────────────
-  it('인증 실패 → Response 인스턴스 반환, status 401', async () => {
-    // Authorization 헤더 없음 → verifyAuth 가 null 반환 → requireAuth 가 401 Response 반환
-    const request = makeRequest();
-    const result = await requireAuth(request);
+    const result = await requireAuth();
 
     expect(result).toBeInstanceOf(Response);
     const response = result as Response;
     expect(response.status).toBe(401);
 
-    // 응답 본문에 에러 정보가 포함되어야 함
+    // 응답 본문에 에러 정보가 포함되어야 합니다.
     const body = await response.json();
-    expect(body.success).toBe(false);
     expect(body.error).toBeTruthy();
-    expect(body.code).toBe('UNAUTHORIZED');
+  });
+
+  // ── 테스트 2 ──────────────────────────────────────────────────────────────
+  it('getCurrentUser가 유저를 반환하면 Response가 아닌 AuthResult를 반환한다', async () => {
+    mockGetCurrentUser.mockResolvedValueOnce({
+      userId: 'user-xyz',
+      email: 'user@example.com',
+    });
+
+    const result = await requireAuth();
+
+    // Response 인스턴스가 아니어야 합니다.
+    expect(result).not.toBeInstanceOf(Response);
+    const auth = result as { userId: string; email?: string };
+    expect(auth.userId).toBe('user-xyz');
+    expect(auth.email).toBe('user@example.com');
   });
 
   // ── 테스트 3 ──────────────────────────────────────────────────────────────
-  it('반환값이 instanceof Response 로 타입 분기 가능한지 확인', async () => {
+  it('반환값이 instanceof Response로 타입 분기 가능한지 확인한다', async () => {
     // 인증 성공 케이스
-    mockGetUser.mockResolvedValueOnce({
-      data: { user: { id: 'user-ok', email: 'ok@example.com' } },
-      error: null,
+    mockGetCurrentUser.mockResolvedValueOnce({
+      userId: 'user-ok',
+      email: 'ok@example.com',
     });
-    const successRequest = makeRequest('Bearer success-token');
-    const successResult = await requireAuth(successRequest);
+
+    const successResult = await requireAuth();
 
     // instanceof Response → false (AuthResult)
     expect(successResult instanceof Response).toBe(false);
     if (!(successResult instanceof Response)) {
-      // 타입 가드 이후 AuthResult 로 사용 가능
+      // 타입 가드 이후 AuthResult 로 사용 가능합니다.
       expect(successResult.userId).toBe('user-ok');
     }
 
     // 인증 실패 케이스
-    mockGetUser.mockResolvedValueOnce({
-      data: { user: null },
-      error: { message: 'invalid token' },
-    });
-    const failRequest = makeRequest('Bearer bad-token');
-    const failResult = await requireAuth(failRequest);
+    mockGetCurrentUser.mockResolvedValueOnce(null);
+
+    const failResult = await requireAuth();
 
     // instanceof Response → true (401 Response)
     expect(failResult instanceof Response).toBe(true);

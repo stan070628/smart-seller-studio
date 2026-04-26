@@ -71,12 +71,14 @@ export interface NormalizedProduct {
   title: string;
   price: number;
   originalPrice?: number;
-  imageUrls: string[];   // 첫 번째가 대표 이미지
-  description: string;   // 텍스트 설명 (HTML 제거)
+  imageUrls: string[];           // 첫 번째가 대표 이미지 (썸네일용)
+  detailImageUrls?: string[];    // 상세페이지 전용 이미지 (상세 HTML에서 추출)
+  description: string;           // 텍스트 설명 (HTML 제거)
   brand?: string;
   manufacturer?: string; // 제조사
+  countryOfOrigin?: string; // 원산지 (예: 미국산, 국산)
   categoryHint?: string; // 소스 카테고리명 (AI 매핑 힌트용)
-  detailHtml?: string;   // 도매꾹 prepare API 결과 HTML (있으면)
+  detailHtml?: string;   // 상세페이지 HTML (있으면)
   deliFee?: number;      // 실제 배송비 (도매꾹: deli.dome.fee 또는 deli.fee)
   moq?: number;          // 최소주문수량
   options?: NormalizedProductOption[]; // 상품 옵션 (도매꾹 selectOpt 파싱)

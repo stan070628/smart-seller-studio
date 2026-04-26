@@ -127,11 +127,7 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
   const [stock, setStock] = useState(Number(sharedDraft.stock) || 100);
   const [customFeeRate, setCustomFeeRate] = useState('');
 
-  // ── 배송·반품 ─────────────────────────────────────────────────────────────
-  const [deliveryChargeType, setDeliveryChargeType] = useState<'FREE' | 'NOT_FREE'>(
-    sharedDraft.deliveryChargeType === 'NOT_FREE' ? 'NOT_FREE' : 'FREE',
-  );
-  const [deliveryCharge, setDeliveryCharge] = useState(Number(sharedDraft.deliveryCharge) || 0);
+  // ── 배송·반품: 계정 고정값(무료배송) — UI 없음, outbound/return은 API에서 자동 로드 ──
   const [outboundCode, setOutboundCode] = useState('');
   const [returnCode, setReturnCode] = useState('');
 
@@ -146,7 +142,8 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
   const [tagInput, setTagInput] = useState('');
 
   // ── 임시저장 / 제출 ───────────────────────────────────────────────────────
-  const [draftId, setDraftId] = useState<string | null>(null);
+  // draft 목록에서 불러온 경우 sharedDraft.coupangDraftId가 세팅되어 있음
+  const [draftId, setDraftId] = useState<string | null>(sharedDraft.coupangDraftId ?? null);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
@@ -204,9 +201,8 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
 
         const aiBrand = f.brand.value;
         setBrand((prev) => (!prev && aiBrand && aiBrand !== '기타') ? aiBrand : (prev || '기타'));
-        if (f.deliveryChargeType.confidence >= 0.7)
-          setDeliveryChargeType(f.deliveryChargeType.value as 'FREE' | 'NOT_FREE');
-        if (f.deliveryCharge.confidence >= 0.7) setDeliveryCharge(f.deliveryCharge.value);
+        if (f.displayCategoryCode.value)
+          setCategoryCode((prev) => prev || String(f.displayCategoryCode.value));
         setTags((prev) => (f.searchTags.value.length > 0 && prev.length === 0)
           ? f.searchTags.value.slice(0, 10)
           : prev);
@@ -246,13 +242,28 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
     const timer = setTimeout(async () => {
       setIsNoticeFetching(true);
       try {
-        const url = `/api/auto-register/category-notices?categoryCode=${encodeURIComponent(code)}&productName=${encodeURIComponent(name)}`;
+        const cert = sharedDraft.certification ?? '';
+        // description: 코스트코 features 텍스트(정격전압·크기·출시년월 등)가 담겨 있어 고시정보 AI 품질 향상
+        const desc = sharedDraft.description ?? '';
+        const params = new URLSearchParams({ categoryCode: code, productName: name });
+        if (cert) params.set('certification', cert);
+        if (desc) params.set('productDesc', desc.slice(0, 800)); // 너무 길면 잘라서 전달
+        const url = `/api/auto-register/category-notices?${params.toString()}`;
         const res = await fetch(url);
         if (res.ok) {
           const data = (await res.json()) as {
             notices?: { categoryName: string; detailName: string; content: string }[];
           };
-          if (data.notices && data.notices.length > 0) setNotices(data.notices);
+          if (data.notices && data.notices.length > 0) {
+            const AS_MANAGER_RE = /A\/S|애프터서비스|서비스\s*책임자/i;
+            const AS_PHONE_RE = /A\/S\s*전화|전화\s*번호|연락처/i;
+            const fixed = data.notices.map((n) => {
+              if (AS_MANAGER_RE.test(n.detailName)) return { ...n, content: '청연코퍼레이션' };
+              if (AS_PHONE_RE.test(n.detailName)) return { ...n, content: '010-5169-2357' };
+              return n;
+            });
+            setNotices(fixed);
+          }
         }
       } catch { /* 실패 시 기존 notices 유지 */ } finally {
         setIsNoticeFetching(false);
@@ -262,21 +273,29 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categoryCode]);
 
+  // ── 개선 2: 고시정보 품질 경고 카운트 ────────────────────────────────────
+  const vagueNoticeCount = notices.filter((n) => n.content.includes('상품 상세 참조')).length;
+
+  // ── 개선 3: 상세설명 유무 ─────────────────────────────────────────────────
+  const hasDetailHtml = !!sharedDraft.detailPageSnippet;
+
   // ── 가격 계산 ─────────────────────────────────────────────────────────────
   const feeMatch = resolveCoupangFee(categoryFullPath || sharedDraft.categoryHint || '');
   const customRate = customFeeRate ? parseFloat(customFeeRate) / 100 : null;
   const effectiveFeeRate =
     customRate && customRate > 0 && customRate < 1 ? customRate : feeMatch.rate;
+  const sourcingCost = Number(sharedDraft.costPrice) || 0;   // 소싱 원가 (Step1에서 저장)
+  const ACTUAL_SHIPPING_COST = 3000;                          // 무료배송 시 판매자 부담 택배비
   const calc = calcCoupangWing({
-    costPrice: 0,
+    costPrice: sourcingCost + ACTUAL_SHIPPING_COST,
     sellingPrice: salePrice,
     feeRate: effectiveFeeRate,
-    shippingFee: deliveryChargeType === 'NOT_FREE' ? deliveryCharge : 0,
+    shippingFee: 0,
     adCost: 0,
   });
-  const commission = customRate && salePrice > 0
-    ? Math.round(salePrice * effectiveFeeRate)
-    : (calc.items[0]?.amount ?? 0);
+  const commission = calc.items[0]?.amount ?? 0;
+  const netProfit = calc.netProfit;
+  const marginRate = calc.marginRate;
 
   // ── 카테고리 검색 ─────────────────────────────────────────────────────────
   async function doCategorySearch(kw: string) {
@@ -302,27 +321,48 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
       ? sharedDraft.pickedDetailImages
       : sharedDraft.detailImages;
 
-    const draftData = buildDraftData({
-      name,
-      categoryCode,
-      brand,
-      manufacturer,
-      salePrice,
-      originalPrice,
-      stock,
-      thumbnail: sharedDraft.thumbnailImages[0] || '',
-      detailHtml: sharedDraft.detailPageSnippet || sharedDraft.description || '',
-      deliveryChargeType,
-      deliveryCharge,
-      outboundCode,
-      returnCode,
-      notices,
-      tags,
-      detailImages,
-      adultOnly,
-      taxType,
-      parallelImported,
-    });
+    const draftData = {
+      // 쿠팡 등록 폼 필드
+      ...buildDraftData({
+        name,
+        categoryCode,
+        brand,
+        manufacturer,
+        salePrice,
+        originalPrice,
+        stock,
+        thumbnail: sharedDraft.thumbnailImages[0] || '',
+        detailHtml: sharedDraft.detailPageSnippet || sharedDraft.description || '',
+        deliveryChargeType: 'FREE',
+        deliveryCharge: 0,
+        outboundCode,
+        returnCode,
+        notices,
+        tags,
+        detailImages,
+        adultOnly,
+        taxType,
+        parallelImported,
+      }),
+      // sharedDraft 복원용 미디어·AI 필드 (불러오기 시 초기화 방지)
+      thumbnailImages: sharedDraft.thumbnailImages,
+      detailImages: sharedDraft.detailImages,
+      pickedDetailImages: sharedDraft.pickedDetailImages,
+      description: sharedDraft.description,
+      detailPageFullHtml: sharedDraft.detailPageFullHtml,
+      detailPageSnippet: sharedDraft.detailPageSnippet,
+      detailPageSnippetNaver: sharedDraft.detailPageSnippetNaver,
+      detailPageStatus: sharedDraft.detailPageStatus,
+      detailPageSkipped: sharedDraft.detailPageSkipped,
+      categoryHint: sharedDraft.categoryHint,
+      coupangCategoryCode: categoryCode,
+      coupangCategoryPath: categoryFullPath,
+      costPrice: sharedDraft.costPrice,
+      certification: sharedDraft.certification,
+      salePrice: String(salePrice),
+      originalPrice: String(originalPrice),
+      sourceUrl: sharedDraft.sourceUrl,
+    };
 
     try {
       if (draftId) {
@@ -346,6 +386,8 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
         const data = (await res.json()) as { id?: string; error?: string };
         if (!res.ok || !data.id) throw new Error(data.error ?? '임시저장 실패');
         setDraftId(data.id);
+        // sharedDraft에도 저장 — 이후 draft 불러오기 시 제출 즉시 활성화
+        useListingStore.getState().updateSharedDraft({ coupangDraftId: data.id });
       }
       setDraftFeedback('saved');
       setTimeout(() => setDraftFeedback(null), 2000);
@@ -361,6 +403,10 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
   // ── 쿠팡 제출 ────────────────────────────────────────────────────────────
   async function handleSubmit() {
     if (!draftId) return;
+    const confirmed = window.confirm(
+      '쿠팡에 상품을 등록하시겠습니까?\n\n등록 후에는 Wing에서 직접 수정해야 합니다.'
+    );
+    if (!confirmed) return;
     setIsSubmitting(true);
     setSubmitError(null);
     try {
@@ -610,6 +656,13 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
             </select>
           </div>
         </div>
+        {/* 개선 1: KC 인증번호 표시 */}
+        {sharedDraft.certification && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 10px', backgroundColor: '#f0fdf4', border: '1px solid #86efac', borderRadius: '6px', fontSize: '11px', color: '#166534' }}>
+            <span style={{ fontWeight: 700 }}>KC 인증</span>
+            <span>{sharedDraft.certification}</span>
+          </div>
+        )}
       </div>
 
       {/* ── 섹션 3: 가격·재고 ────────────────────────────────────────────────── */}
@@ -629,22 +682,35 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
             <input style={inputStyle} type="number" value={stock} onChange={(e) => setStock(Number(e.target.value))} min={0} />
           </div>
         </div>
-        {/* 수수료 계산 */}
+        {/* 수수료 · 수익 계산 */}
         {salePrice > 0 && (
-          <div style={{ padding: '10px 12px', backgroundColor: '#f8f9fa', border: `1px solid ${C.border}`, borderRadius: '8px', fontSize: '12px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+          <div style={{ padding: '10px 12px', backgroundColor: '#f8f9fa', border: `1px solid ${C.border}`, borderRadius: '8px', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            {sourcingCost > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: C.textSub }}>소싱 원가</span>
+                <span style={{ color: '#b91c1c' }}>-{sourcingCost.toLocaleString()}원</span>
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ color: C.textSub }}>
-                수수료 ({feeMatch.matched ? feeMatch.categoryName : '기본'}, {(effectiveFeeRate * 100).toFixed(1)}%)
+                판매 수수료 ({feeMatch.matched ? feeMatch.categoryName : '기본'} {(effectiveFeeRate * 100).toFixed(1)}%)
               </span>
               <span style={{ color: '#b91c1c' }}>-{commission.toLocaleString()}원</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: `1px solid ${C.border}`, paddingTop: '4px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: C.textSub }}>실 배송비 (추정)</span>
+              <span style={{ color: '#b91c1c' }}>-{ACTUAL_SHIPPING_COST.toLocaleString()}원</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: `1px solid ${C.border}`, paddingTop: '5px', marginTop: '2px' }}>
               <span style={{ fontWeight: 700, color: C.text }}>예상 수익</span>
-              <span style={{ fontWeight: 700, color: (salePrice - commission) >= 0 ? '#15803d' : '#b91c1c' }}>
-                {(salePrice - commission).toLocaleString()}원
+              <span style={{ fontWeight: 700, color: netProfit >= 0 ? '#15803d' : '#b91c1c' }}>
+                {netProfit.toLocaleString()}원
+                <span style={{ marginLeft: '6px', fontSize: '11px', fontWeight: 400, color: netProfit >= 0 ? '#15803d' : '#b91c1c' }}>
+                  ({marginRate.toFixed(1)}%)
+                </span>
               </span>
             </div>
-            <div style={{ marginTop: '6px' }}>
+            <div style={{ marginTop: '4px' }}>
               <label style={{ ...label, marginBottom: '3px' }}>수수료율 직접 입력 (%)</label>
               <input
                 style={{ ...inputStyle, width: '100px' }}
@@ -659,33 +725,7 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
         )}
       </div>
 
-      {/* ── 섹션 4: 배송·반품 ───────────────────────────────────────────────── */}
-      <div style={section}>
-        <p style={sectionTitle}>배송 · 반품</p>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-          <div>
-            <label style={label}>배송비 유형</label>
-            <select style={inputStyle} value={deliveryChargeType} onChange={(e) => setDeliveryChargeType(e.target.value as 'FREE' | 'NOT_FREE')}>
-              <option value="FREE">무료</option>
-              <option value="NOT_FREE">유료</option>
-            </select>
-          </div>
-          {deliveryChargeType === 'NOT_FREE' && (
-            <div>
-              <label style={label}>배송비 (원)</label>
-              <input style={inputStyle} type="number" value={deliveryCharge} onChange={(e) => setDeliveryCharge(Number(e.target.value))} min={0} />
-            </div>
-          )}
-          <div>
-            <label style={label}>출하지 코드</label>
-            <input style={inputStyle} value={outboundCode} onChange={(e) => setOutboundCode(e.target.value)} placeholder="자동 로드" />
-          </div>
-          <div>
-            <label style={label}>반품센터 코드</label>
-            <input style={inputStyle} value={returnCode} onChange={(e) => setReturnCode(e.target.value)} placeholder="자동 로드" />
-          </div>
-        </div>
-      </div>
+      {/* 배송·반품: 모두 계정 고정값(무료배송/출하지/반품센터) → UI 불필요 */}
 
       {/* ── 섹션 5: 고시정보 ─────────────────────────────────────────────────── */}
       <div style={section}>
@@ -698,24 +738,37 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
             </div>
           )}
         </div>
+        {/* 개선 2: 고시정보 품질 경고 */}
+        {vagueNoticeCount >= 3 && (
+          <div style={{ padding: '8px 12px', backgroundColor: '#fffbeb', border: '1px solid #fbbf24', borderRadius: '6px', fontSize: '11px', color: '#92400e', marginBottom: '8px' }}>
+            ⚠ {vagueNoticeCount}개 항목이 &quot;상품 상세 참조&quot;입니다. 실제 값으로 수정하면 승인률이 높아집니다.
+          </div>
+        )}
         {notices.length === 0 && !isNoticeFetching && (
           <p style={{ fontSize: '12px', color: C.textSub }}>카테고리 코드를 입력하면 AI가 자동으로 작성합니다.</p>
         )}
-        {notices.map((n, i) => (
-          <div key={`${n.categoryName}-${n.detailName}`}>
-            <label style={{ ...label, fontSize: '11px' }}>{n.categoryName} › {n.detailName}</label>
-            <input
-              style={inputStyle}
-              value={n.content}
-              onChange={(e) => {
-                const updated = [...notices];
-                updated[i] = { ...updated[i], content: e.target.value };
-                setNotices(updated);
-              }}
-              placeholder="직접 입력하거나 AI 생성 값을 수정하세요"
-            />
-          </div>
-        ))}
+        {notices.map((n, i) => {
+          const isFixed = /A\/S|애프터서비스|서비스\s*책임자|전화\s*번호|연락처/i.test(n.detailName);
+          return (
+            <div key={`${n.categoryName}-${n.detailName}`}>
+              <label style={{ ...label, fontSize: '11px' }}>
+                {n.categoryName} › {n.detailName}
+                {isFixed && <span style={{ marginLeft: '5px', color: '#6b7280', fontSize: '10px', fontWeight: 400 }}>고정값</span>}
+              </label>
+              <input
+                style={{ ...inputStyle, backgroundColor: isFixed ? '#f3f4f6' : '#fff', color: isFixed ? '#6b7280' : C.text }}
+                value={n.content}
+                readOnly={isFixed}
+                onChange={isFixed ? undefined : (e) => {
+                  const updated = [...notices];
+                  updated[i] = { ...updated[i], content: e.target.value };
+                  setNotices(updated);
+                }}
+                placeholder="직접 입력하거나 AI 생성 값을 수정하세요"
+              />
+            </div>
+          );
+        })}
       </div>
 
       {/* ── 섹션 6: 검색 태그 ───────────────────────────────────────────────── */}
@@ -778,13 +831,14 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
             {submitError}
           </div>
         )}
-        <div style={{ display: 'flex', gap: '8px' }}>
+        {/* 개선 4: 임시저장 / 제출 버튼 분리 — 실수 클릭 방지 */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
           <button
             type="button"
             onClick={handleSaveDraft}
             disabled={isSavingDraft || !name}
             style={{
-              flex: 1, padding: '12px', fontSize: '13px', fontWeight: 600,
+              width: '100%', padding: '12px', fontSize: '13px', fontWeight: 600,
               backgroundColor: '#fff', color: C.text,
               border: `2px solid ${C.border}`, borderRadius: '10px',
               cursor: isSavingDraft || !name ? 'not-allowed' : 'pointer',
@@ -793,20 +847,34 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
           >
             {isSavingDraft ? '저장 중...' : draftId ? '임시저장 업데이트' : '임시저장'}
           </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '2px 0' }}>
+            <div style={{ flex: 1, height: '1px', backgroundColor: '#e5e7eb' }} />
+            <span style={{ fontSize: '10px', color: '#9ca3af', whiteSpace: 'nowrap' }}>저장 후 제출</span>
+            <div style={{ flex: 1, height: '1px', backgroundColor: '#e5e7eb' }} />
+          </div>
+          {/* 개선 3: 상세설명 없으면 제출 비활성화 */}
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={isSubmitting || !name || !draftId || categoryValid !== true}
-            title={!draftId ? '먼저 임시저장하세요' : categoryValid !== true ? '유효한 카테고리 코드를 입력하세요' : ''}
+            disabled={isSubmitting || !name || !draftId || !hasDetailHtml}
+            title={!draftId ? '먼저 임시저장하세요' : !hasDetailHtml ? '상세설명을 먼저 생성하세요' : ''}
             style={{
-              flex: 1, padding: '12px', fontSize: '13px', fontWeight: 700,
-              backgroundColor: isSubmitting || !draftId || categoryValid !== true ? '#e5e7eb' : '#15803d',
-              color: isSubmitting || !draftId || categoryValid !== true ? C.textSub : '#fff',
+              width: '100%', padding: '12px', fontSize: '13px', fontWeight: 700,
+              backgroundColor: isSubmitting || !draftId || !hasDetailHtml
+                ? '#e5e7eb'
+                : categoryValid === false
+                  ? '#b45309'
+                  : '#15803d',
+              color: isSubmitting || !draftId || !hasDetailHtml ? C.textSub : '#fff',
               border: 'none', borderRadius: '10px',
-              cursor: isSubmitting || !draftId || categoryValid !== true ? 'not-allowed' : 'pointer',
+              cursor: isSubmitting || !draftId || !hasDetailHtml ? 'not-allowed' : 'pointer',
             }}
           >
-            {isSubmitting ? '제출 중...' : '쿠팡에 제출'}
+            {isSubmitting
+              ? '제출 중...'
+              : categoryValid === false
+                ? '⚠ 카테고리 확인 후 제출'
+                : '쿠팡에 제출'}
           </button>
         </div>
         {draftFeedback === 'saved' && (

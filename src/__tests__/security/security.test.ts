@@ -3,7 +3,7 @@
  * 보안 취약점 시나리오 테스트
  *
  * 테스트 범주:
- *   1. 경로 인젝션 (Storage Upload)
+ *   1. Content-Type 조작 및 MIME 타입 우회 (Storage Upload)
  *   2. 인증 우회 (Projects API)
  *   3. Rate Limit 우회
  *   4. XSS 방어 (Generate Copy API)
@@ -13,7 +13,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
 // ---------------------------------------------------------------------------
-// Mock: @/lib/supabase/server
+// Mock: @/lib/supabase/server (Projects API 테스트용 — Upload에서는 불필요)
 // ---------------------------------------------------------------------------
 
 vi.mock('@/lib/supabase/server', () => {
@@ -29,8 +29,7 @@ vi.mock('@/lib/supabase/server', () => {
   })
 
   return {
-    uploadToStorage: vi.fn(),
-    STORAGE_BUCKET: 'smart-seller-studio',
+    // Upload route는 supabase/server를 사용하지 않으므로 빈 mock만 제공
     getSupabaseServerClient: vi.fn(() => ({
       from: vi.fn(() => ({
         select: vi.fn((_fields?: string, opts?: { count?: string; head?: boolean }) => {
@@ -73,11 +72,10 @@ import { POST as uploadPost } from '@/app/api/storage/upload/route'
 import { GET as listProjects } from '@/app/api/projects/route'
 import { POST as generateCopy } from '@/app/api/ai/generate-copy/route'
 import { requireAuth } from '@/lib/supabase/auth'
-import { uploadToStorage, getSupabaseServerClient } from '@/lib/supabase/server'
+import { getSupabaseServerClient } from '@/lib/supabase/server'
 import { generateCopyFromReviews } from '@/lib/ai/claude'
 
 const mockRequireAuth = requireAuth as ReturnType<typeof vi.fn>
-const mockUploadToStorage = uploadToStorage as ReturnType<typeof vi.fn>
 const mockGetSupabaseServerClient = getSupabaseServerClient as ReturnType<typeof vi.fn>
 const mockGenerateCopyFromReviews = generateCopyFromReviews as ReturnType<typeof vi.fn>
 
@@ -86,40 +84,34 @@ const mockGenerateCopyFromReviews = generateCopyFromReviews as ReturnType<typeof
 // ---------------------------------------------------------------------------
 
 interface MockUploadOptions {
-  userId?: string | null
-  projectId?: string | null
   setMultipartHeader?: boolean
   fileType?: string
   fileSize?: number
-  ip?: string
+  /** true면 FormData에 file을 추가하지 않음 */
+  omitFile?: boolean
 }
 
 function makeUploadRequest(opts: MockUploadOptions = {}): NextRequest {
   const {
-    userId = 'user-123',
-    projectId = 'project-456',
     setMultipartHeader = true,
     fileType = 'image/jpeg',
     fileSize = 1024,
-    ip,
+    omitFile = false,
   } = opts
 
   const formData = new FormData()
-  if (fileSize > 0) {
+  if (!omitFile && fileSize > 0) {
     const content = new Uint8Array(Math.min(fileSize, 100)).fill(0xff)
     const file = new File([content], 'test.jpg', { type: fileType })
     Object.defineProperty(file, 'size', { value: fileSize, writable: false })
     formData.append('file', file)
   }
-  if (userId !== null) formData.append('userId', userId)
-  if (projectId !== null) formData.append('projectId', projectId)
 
   const headers: Record<string, string> = {}
   if (setMultipartHeader) {
     headers['content-type'] = 'multipart/form-data; boundary=----TestBoundary'
-  }
-  if (ip) {
-    headers['x-forwarded-for'] = ip
+  } else {
+    headers['content-type'] = 'application/json'
   }
 
   const request = new NextRequest('http://localhost:3000/api/storage/upload', {
@@ -132,70 +124,64 @@ function makeUploadRequest(opts: MockUploadOptions = {}): NextRequest {
 }
 
 // ===========================================================================
-// 1. 경로 인젝션 테스트 (Storage Upload)
+// 1. Content-Type 조작 및 MIME 타입 우회 시도 (Storage Upload)
+//
+// 현재 라우트는 userId/projectId를 사용하지 않습니다.
+// 검증 대상: Content-Type 헤더, MIME 타입
 // ===========================================================================
 
-describe('[보안] 경로 인젝션 - Storage Upload', () => {
+describe('[보안] Content-Type 조작 및 MIME 타입 우회 - Storage Upload', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockUploadToStorage.mockResolvedValue({
-      url: 'https://example.com/path',
-      path: 'users/user/project/raw_images/file.jpg',
-      size: 1024,
-    })
   })
 
-  it('userId에 ../ 포함 시 400을 반환한다 (path traversal 차단)', async () => {
-    const request = makeUploadRequest({ userId: '../admin/secret' })
+  it(
+    'Content-Type에 multipart/form-data 문자열이 포함되어 있으면 통과한다 ' +
+    '(예: "text/html; multipart/form-data"처럼 조작된 값도 includes 검사로 허용됨 — 보안 확인)',
+    async () => {
+      /**
+       * 현재 구현은 contentType.includes("multipart/form-data") 방식으로 검사합니다.
+       * 공격자가 Content-Type 헤더를 "text/html; multipart/form-data"처럼 조작하면
+       * 검사를 통과합니다. 이 테스트는 해당 동작을 문서화합니다.
+       * 보안 강화 시 정확한 prefix 검사(startsWith 또는 정규식)로 전환을 권장합니다.
+       */
+      const formData = new FormData()
+      const content = new Uint8Array(10).fill(0xff)
+      const file = new File([content], 'test.jpg', { type: 'image/jpeg' })
+      formData.append('file', file)
+
+      const request = new NextRequest('http://localhost:3000/api/storage/upload', {
+        method: 'POST',
+        headers: {
+          // includes() 검사를 우회하는 조작된 Content-Type
+          'content-type': 'text/html; multipart/form-data; boundary=----Test',
+        },
+        body: 'stub',
+      })
+      vi.spyOn(request, 'formData').mockResolvedValue(formData)
+
+      const response = await uploadPost(request)
+      const json = await response.json()
+
+      // 현재 구현: includes() 로 검사하므로 통과 (201)
+      // 이 동작을 인지하고 있음을 문서화
+      expect(response.status).toBe(201)
+      expect(json.success).toBe(true)
+    }
+  )
+
+  it('허용되지 않는 MIME 타입(image/gif)으로 우회 시도 → 415 반환', async () => {
+    /**
+     * MIME 타입 검증은 file.type 필드를 기반으로 합니다.
+     * 공격자가 file.type을 허용되지 않는 값으로 설정해도 415로 차단됩니다.
+     */
+    const request = makeUploadRequest({ fileType: 'image/gif' })
     const response = await uploadPost(request)
     const json = await response.json()
 
-    expect(response.status).toBe(400)
+    expect(response.status).toBe(415)
     expect(json.success).toBe(false)
-    expect(mockUploadToStorage).not.toHaveBeenCalled()
-  })
-
-  it('userId에 URL 인코딩된 ..%2F 포함 시 400을 반환한다', async () => {
-    // URL 디코딩 없이 그대로 검증되므로 %2F 자체가 허용 문자(영문/숫자/-/_)가 아님 → 400
-    const request = makeUploadRequest({ userId: '..%2Fadmin' })
-    const response = await uploadPost(request)
-    const json = await response.json()
-
-    expect(response.status).toBe(400)
-    expect(json.success).toBe(false)
-    expect(mockUploadToStorage).not.toHaveBeenCalled()
-  })
-
-  it('projectId에 / 슬래시 포함 시 400을 반환한다', async () => {
-    const request = makeUploadRequest({ projectId: 'proj/hack' })
-    const response = await uploadPost(request)
-    const json = await response.json()
-
-    expect(response.status).toBe(400)
-    expect(json.success).toBe(false)
-    expect(mockUploadToStorage).not.toHaveBeenCalled()
-  })
-
-  it('userId에 null 바이트(\\0) 포함 시 400을 반환한다', async () => {
-    // null 바이트는 허용 문자 정규식 ^[a-zA-Z0-9_-]+$ 에서 불일치
-    const request = makeUploadRequest({ userId: 'user\0evil' })
-    const response = await uploadPost(request)
-    const json = await response.json()
-
-    expect(response.status).toBe(400)
-    expect(json.success).toBe(false)
-    expect(mockUploadToStorage).not.toHaveBeenCalled()
-  })
-
-  it('정상적인 userId/projectId(영문자+숫자+-+_)는 통과한다', async () => {
-    const request = makeUploadRequest({
-      userId: 'user-abc_123',
-      projectId: 'proj-ABC-001',
-    })
-    const response = await uploadPost(request)
-
-    expect(response.status).toBe(201)
-    expect(mockUploadToStorage).toHaveBeenCalledTimes(1)
+    expect(json.error).toContain('image/gif')
   })
 })
 

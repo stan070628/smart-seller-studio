@@ -9,7 +9,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import useEditorStore from '@/store/useEditorStore';
-import type { UploadedImage, GeneratedCopy, CanvasTextObject, CanvasImageObject, ImageAnalysisResult } from '@/types/editor';
+import type { UploadedImage, ImageAnalysisResult } from '@/types/editor';
 
 // ---------------------------------------------------------------------------
 // 테스트 헬퍼: 스토어 초기화
@@ -17,13 +17,14 @@ import type { UploadedImage, GeneratedCopy, CanvasTextObject, CanvasImageObject,
 
 // 각 테스트 전 스토어를 완전히 초기화합니다
 beforeEach(() => {
-  // Zustand 스토어 상태 직접 리셋
   useEditorStore.setState({
     uploadedImages: [],
     reviewText: '',
-    generatedCopies: [],
-    canvasObjects: [],
     isGenerating: false,
+    imageAnalysis: null,
+    isAnalyzing: false,
+    productExtract: null,
+    isExtracting: false,
   });
 });
 
@@ -54,50 +55,6 @@ function makeImageAnalysis(overrides?: Partial<ImageAnalysisResult>): ImageAnaly
   };
 }
 
-function makeCopy(overrides?: Partial<GeneratedCopy>): GeneratedCopy {
-  return {
-    id: 'copy-1',
-    title: '테스트 카피 제목',
-    subtitle: '테스트 서브 카피',
-    ...overrides,
-  };
-}
-
-function makeTextObject(overrides?: Partial<CanvasTextObject>): CanvasTextObject {
-  return {
-    id: 'obj-text-1',
-    type: 'text',
-    content: '테스트 텍스트',
-    left: 100,
-    top: 100,
-    width: 200,
-    height: 50,
-    angle: 0,
-    zIndex: 1,
-    fontSize: 16,
-    fontFamily: 'Arial',
-    fontWeight: 'normal',
-    fill: '#000000',
-    textAlign: 'left',
-    ...overrides,
-  };
-}
-
-function makeImageObject(overrides?: Partial<CanvasImageObject>): CanvasImageObject {
-  return {
-    id: 'obj-img-1',
-    type: 'image',
-    imageId: 'img-1',
-    src: 'blob:http://localhost/test-image-1',
-    left: 0,
-    top: 0,
-    width: 400,
-    height: 300,
-    angle: 0,
-    zIndex: 0,
-    ...overrides,
-  };
-}
 
 // ---------------------------------------------------------------------------
 // 1. 이미지 관리
@@ -221,201 +178,10 @@ describe('리뷰 텍스트 관리', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3. 캔버스 객체 관리
+// 3. isGenerating 토글
 // ---------------------------------------------------------------------------
 
-describe('캔버스 객체 관리', () => {
-  it('addCanvasObject: 텍스트 객체를 캔버스에 추가할 수 있다', () => {
-    const { result } = renderHook(() => useEditorStore());
-    const textObj = makeTextObject();
-
-    act(() => {
-      result.current.addCanvasObject(textObj);
-    });
-
-    expect(result.current.canvasObjects).toHaveLength(1);
-    expect(result.current.canvasObjects[0].type).toBe('text');
-    expect((result.current.canvasObjects[0] as CanvasTextObject).content).toBe('테스트 텍스트');
-  });
-
-  it('addCanvasObject: 이미지 객체를 캔버스에 추가할 수 있다', () => {
-    const { result } = renderHook(() => useEditorStore());
-    const imgObj = makeImageObject();
-
-    act(() => {
-      result.current.addCanvasObject(imgObj);
-    });
-
-    expect(result.current.canvasObjects).toHaveLength(1);
-    expect(result.current.canvasObjects[0].type).toBe('image');
-    expect((result.current.canvasObjects[0] as CanvasImageObject).imageId).toBe('img-1');
-  });
-
-  it('addCanvasObject: 텍스트와 이미지 객체를 함께 추가할 수 있다', () => {
-    const { result } = renderHook(() => useEditorStore());
-
-    act(() => {
-      result.current.addCanvasObject(makeTextObject({ id: 'text-1' }));
-      result.current.addCanvasObject(makeImageObject({ id: 'image-1' }));
-    });
-
-    expect(result.current.canvasObjects).toHaveLength(2);
-  });
-
-  it('updateCanvasObject: 특정 id 객체의 속성을 부분 업데이트한다', () => {
-    const { result } = renderHook(() => useEditorStore());
-    const textObj = makeTextObject({ id: 'update-target', left: 100, top: 100 });
-
-    act(() => {
-      result.current.addCanvasObject(textObj);
-    });
-
-    // 위치와 콘텐츠만 부분 업데이트
-    act(() => {
-      result.current.updateCanvasObject('update-target', {
-        left: 250,
-        top: 300,
-      });
-    });
-
-    const updated = result.current.canvasObjects.find((o) => o.id === 'update-target');
-    expect(updated).toBeDefined();
-    expect(updated!.left).toBe(250);
-    expect(updated!.top).toBe(300);
-    // 변경하지 않은 속성은 유지
-    expect(updated!.angle).toBe(0);
-  });
-
-  it('updateCanvasObject: 존재하지 않는 id 업데이트 시 다른 객체에 영향 없다', () => {
-    const { result } = renderHook(() => useEditorStore());
-
-    act(() => {
-      result.current.addCanvasObject(makeTextObject({ id: 'obj-1', left: 10 }));
-    });
-
-    act(() => {
-      result.current.updateCanvasObject('non-existent', { left: 999 });
-    });
-
-    expect(result.current.canvasObjects[0].left).toBe(10);
-  });
-
-  it('removeCanvasObject: 특정 id 객체를 삭제한다', () => {
-    const { result } = renderHook(() => useEditorStore());
-
-    act(() => {
-      result.current.addCanvasObject(makeTextObject({ id: 'keep-obj' }));
-      result.current.addCanvasObject(makeTextObject({ id: 'del-obj' }));
-    });
-    expect(result.current.canvasObjects).toHaveLength(2);
-
-    act(() => {
-      result.current.removeCanvasObject('del-obj');
-    });
-
-    expect(result.current.canvasObjects).toHaveLength(1);
-    expect(result.current.canvasObjects[0].id).toBe('keep-obj');
-  });
-
-  it('removeCanvasObject: 존재하지 않는 id 삭제 시 에러 없이 동작한다', () => {
-    const { result } = renderHook(() => useEditorStore());
-
-    act(() => {
-      result.current.addCanvasObject(makeTextObject({ id: 'obj-1' }));
-    });
-
-    expect(() => {
-      act(() => {
-        result.current.removeCanvasObject('ghost-id');
-      });
-    }).not.toThrow();
-
-    expect(result.current.canvasObjects).toHaveLength(1);
-  });
-
-  it('clearCanvasObjects: 모든 캔버스 객체를 초기화한다', () => {
-    const { result } = renderHook(() => useEditorStore());
-
-    act(() => {
-      result.current.addCanvasObject(makeTextObject({ id: 'obj-1' }));
-      result.current.addCanvasObject(makeTextObject({ id: 'obj-2' }));
-      result.current.addCanvasObject(makeImageObject({ id: 'obj-3' }));
-    });
-    expect(result.current.canvasObjects).toHaveLength(3);
-
-    act(() => {
-      result.current.clearCanvasObjects();
-    });
-
-    expect(result.current.canvasObjects).toHaveLength(0);
-  });
-
-  it('clearCanvasObjects: 빈 배열에서 호출해도 에러가 발생하지 않는다', () => {
-    const { result } = renderHook(() => useEditorStore());
-
-    expect(() => {
-      act(() => {
-        result.current.clearCanvasObjects();
-      });
-    }).not.toThrow();
-
-    expect(result.current.canvasObjects).toHaveLength(0);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 4. AI 카피 관리
-// ---------------------------------------------------------------------------
-
-describe('AI 카피 관리', () => {
-  it('setGeneratedCopies: Mock 카피 3개 주입 후 상태에 반영된다', () => {
-    const { result } = renderHook(() => useEditorStore());
-    const mockCopies: GeneratedCopy[] = [
-      makeCopy({ id: 'copy-1', title: '카피 제목 1', subtitle: '카피 서브 1' }),
-      makeCopy({ id: 'copy-2', title: '카피 제목 2', subtitle: '카피 서브 2' }),
-      makeCopy({ id: 'copy-3', title: '카피 제목 3', subtitle: '카피 서브 3' }),
-    ];
-
-    act(() => {
-      result.current.setGeneratedCopies(mockCopies);
-    });
-
-    expect(result.current.generatedCopies).toHaveLength(3);
-    expect(result.current.generatedCopies[0].id).toBe('copy-1');
-    expect(result.current.generatedCopies[0].title).toBe('카피 제목 1');
-    expect(result.current.generatedCopies[1].id).toBe('copy-2');
-    expect(result.current.generatedCopies[2].id).toBe('copy-3');
-  });
-
-  it('setGeneratedCopies: 빈 배열로 초기화할 수 있다', () => {
-    const { result } = renderHook(() => useEditorStore());
-
-    act(() => {
-      result.current.setGeneratedCopies([makeCopy()]);
-    });
-    expect(result.current.generatedCopies).toHaveLength(1);
-
-    act(() => {
-      result.current.setGeneratedCopies([]);
-    });
-    expect(result.current.generatedCopies).toHaveLength(0);
-  });
-
-  it('setGeneratedCopies: 기존 카피를 새 카피로 덮어쓴다', () => {
-    const { result } = renderHook(() => useEditorStore());
-
-    act(() => {
-      result.current.setGeneratedCopies([makeCopy({ id: 'old-copy', title: '이전 카피' })]);
-    });
-
-    act(() => {
-      result.current.setGeneratedCopies([makeCopy({ id: 'new-copy', title: '새 카피' })]);
-    });
-
-    expect(result.current.generatedCopies).toHaveLength(1);
-    expect(result.current.generatedCopies[0].id).toBe('new-copy');
-  });
-
+describe('isGenerating 토글', () => {
   it('setIsGenerating: 로딩 상태를 토글할 수 있다', () => {
     const { result } = renderHook(() => useEditorStore());
     expect(result.current.isGenerating).toBe(false);
@@ -433,7 +199,7 @@ describe('AI 카피 관리', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 5. 이미지 상태 업데이트 (Wave 2A: updateImageStatus)
+// 4. 이미지 상태 업데이트 (Wave 2A: updateImageStatus)
 // ---------------------------------------------------------------------------
 
 describe('이미지 상태 업데이트', () => {

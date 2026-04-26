@@ -35,7 +35,7 @@ const ReturnNoticeTemplate: React.FC<TemplateProps> = ({
   const closed = (frame.metadata?.closed as string) ?? '주말, 공휴일 휴무';
   const description = (frame.metadata?.description as string) ??
     '유선상담이 원활하지 않을 수 있습니다.\n문의사항을 사이트 내 문의기능 또는 문자를 이용하여\n남겨주시면 빠르게 확인 후 처리 도와드리겠습니다.';
-  const email = (frame.metadata?.email as string) ?? 'example@gmail.com';
+  const email = (frame.metadata?.email as string) ?? 'cheongyeon.corp@gmail.com';
 
   return (
     <div style={{

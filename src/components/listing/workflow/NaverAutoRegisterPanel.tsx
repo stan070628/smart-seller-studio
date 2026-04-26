@@ -63,6 +63,8 @@ export default function NaverAutoRegisterPanel({ onSuccess }: NaverAutoRegisterP
   const [stock, setStock] = useState(Number(sharedDraft.stock) || 999);
   const [deliveryCharge, setDeliveryCharge] = useState(Number(sharedDraft.deliveryCharge) || 0);
   const [returnCharge, setReturnCharge] = useState(Number(sharedDraft.returnCharge) || 4000);
+  const [manufacturerName, setManufacturerName] = useState(sharedDraft.manufacturer ?? '');
+  const [countryOfOrigin, setCountryOfOrigin] = useState(sharedDraft.countryOfOrigin ?? '');
   const [tags, setTags] = useState<string[]>(sharedDraft.tags ?? []);
   const [tagInput, setTagInput] = useState('');
 
@@ -122,6 +124,8 @@ export default function NaverAutoRegisterPanel({ onSuccess }: NaverAutoRegisterP
       deliveryCharge,
       returnCharge,
       exchangeFee: returnCharge * 2,
+      manufacturerName: manufacturerName.trim() || undefined,
+      countryOfOrigin: countryOfOrigin.trim() || undefined,
     };
   }
 
@@ -264,7 +268,42 @@ export default function NaverAutoRegisterPanel({ onSuccess }: NaverAutoRegisterP
         </div>
       </div>
 
-      {/* ── 섹션 2: 가격·재고 ────────────────────────────────── */}
+      {/* ── 섹션 2: 제조사 · 원산지 ─────────────────────────── */}
+      <div style={section}>
+        <p style={sectionTitle}>제조사 · 원산지</p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div>
+            <label style={label}>제조사 / 브랜드</label>
+            <input
+              style={inputStyle}
+              value={manufacturerName}
+              onChange={(e) => setManufacturerName(e.target.value)}
+              placeholder="예: 커클랜드, 오리온, CJ"
+            />
+          </div>
+          <div>
+            <label style={label}>원산지</label>
+            <input
+              style={inputStyle}
+              value={countryOfOrigin}
+              onChange={(e) => setCountryOfOrigin(e.target.value)}
+              placeholder="예: 국산, 미국산, 중국산"
+              list="origin-options"
+            />
+            <datalist id="origin-options">
+              <option value="국산" />
+              <option value="미국산" />
+              <option value="중국산" />
+              <option value="일본산" />
+              <option value="캐나다산" />
+              <option value="유럽산" />
+              <option value="상세페이지 참조" />
+            </datalist>
+          </div>
+        </div>
+      </div>
+
+      {/* ── 섹션 4: 가격·재고 ────────────────────────────────── */}
       <div style={section}>
         <p style={sectionTitle}>가격 · 재고</p>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>

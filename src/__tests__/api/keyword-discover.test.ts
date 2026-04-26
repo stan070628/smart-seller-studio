@@ -45,8 +45,10 @@ describe('POST /api/ai/keyword-discover', () => {
 
     (expandKeywords as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
       { keyword: '캠핑의자', searchVolume: 5000, competitorCount: 200 },
+      // 검색량 2000 미만 → 필터 제외
       { keyword: '초저인기', searchVolume: 500, competitorCount: 100 },
-      { keyword: '포화시장', searchVolume: 10000, competitorCount: 9000 },
+      // competitorCount가 MAX_COMPETITOR_COUNT(5,000,000) 이상 → 필터 제외
+      { keyword: '포화시장', searchVolume: 10000, competitorCount: 5_000_000 },
     ]);
 
     (evaluateKeyword as ReturnType<typeof vi.fn>).mockResolvedValueOnce({

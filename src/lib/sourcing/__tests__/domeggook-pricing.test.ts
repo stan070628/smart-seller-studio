@@ -14,7 +14,7 @@ import {
   calcAllScenarios,
 } from '../domeggook-pricing';
 
-// DEDUCTION_RATE = 1 - 0.10 - 0.10 = 0.80
+// DEDUCTION_RATE = 1 - 0.06 - 0.10 = 0.84 (네이버 수수료 6% + VAT 10%)
 
 describe('getMoqStrategy', () => {
   it('MOQ 1 → single', () => {
@@ -43,24 +43,24 @@ describe('getMoqStrategy', () => {
 });
 
 describe('calcBundleMinPrice', () => {
-  it('MOQ 1, 무료배송: ceil(10000 / 0.8) = 12500', () => {
-    expect(calcBundleMinPrice({ priceDome: 10000, deliWho: 'S', deliFee: 3000, moq: 1 })).toBe(12500);
+  it('MOQ 1, 무료배송: ceil(10000 / 0.84) = 11905', () => {
+    expect(calcBundleMinPrice({ priceDome: 10000, deliWho: 'S', deliFee: 3000, moq: 1 })).toBe(11905);
   });
 
-  it('MOQ 1, 구매자 배송비 3000원: ceil((10000 + 3000) / 0.8) = 16250', () => {
-    expect(calcBundleMinPrice({ priceDome: 10000, deliWho: 'B', deliFee: 3000, moq: 1 })).toBe(16250);
+  it('MOQ 1, 구매자 배송비 3000원: ceil((10000 + 3000) / 0.84) = 15477', () => {
+    expect(calcBundleMinPrice({ priceDome: 10000, deliWho: 'B', deliFee: 3000, moq: 1 })).toBe(15477);
   });
 
-  it('MOQ 2, 무료배송: ceil(10000 * 2 / 0.8) = 25000', () => {
-    expect(calcBundleMinPrice({ priceDome: 10000, deliWho: 'S', deliFee: null, moq: 2 })).toBe(25000);
+  it('MOQ 2, 무료배송: ceil(10000 * 2 / 0.84) = 23810', () => {
+    expect(calcBundleMinPrice({ priceDome: 10000, deliWho: 'S', deliFee: null, moq: 2 })).toBe(23810);
   });
 
-  it('MOQ 3, 배송비 3000원: ceil((8000 * 3 + 3000) / 0.8) = 33750', () => {
-    expect(calcBundleMinPrice({ priceDome: 8000, deliWho: 'P', deliFee: 3000, moq: 3 })).toBe(33750);
+  it('MOQ 3, 배송비 3000원: ceil((8000 * 3 + 3000) / 0.84) = 32143', () => {
+    expect(calcBundleMinPrice({ priceDome: 8000, deliWho: 'P', deliFee: 3000, moq: 3 })).toBe(32143);
   });
 
-  it('deliFee null 처리: ceil((10000 + 0) / 0.8)', () => {
-    expect(calcBundleMinPrice({ priceDome: 10000, deliWho: null, deliFee: null, moq: 1 })).toBe(12500);
+  it('deliFee null 처리: ceil((10000 + 0) / 0.84) = 11905', () => {
+    expect(calcBundleMinPrice({ priceDome: 10000, deliWho: null, deliFee: null, moq: 1 })).toBe(11905);
   });
 });
 
@@ -130,35 +130,35 @@ describe('getPriceCompStatus', () => {
 describe('compareWithMarket', () => {
   it('TC-01: MOQ 1, 단품, 강력한 경쟁력', () => {
     // priceDome: 10000, MOQ: 1, 무료배송, 시장가 25000
-    // bundleMinPrice = ceil(10000 / 0.8) = 12500
-    // perUnitPrice = 12500
-    // priceGapRate = (25000 - 12500) / 25000 * 100 = 50%
+    // bundleMinPrice = ceil(10000 / 0.84) = 11905
+    // perUnitPrice = 11905
+    // priceGapRate = (25000 - 11905) / 25000 * 100 = 52.38%
     const result = compareWithMarket(10000, 1, 'S', null, 25000);
-    expect(result.bundleMinPrice).toBe(12500);
-    expect(result.perUnitPrice).toBe(12500);
-    expect(result.priceGapRate).toBe(50);
+    expect(result.bundleMinPrice).toBe(11905);
+    expect(result.perUnitPrice).toBe(11905);
+    expect(result.priceGapRate).toBe(52.38);
     expect(result.status).toBe('강력한 경쟁력');
   });
 
   it('TC-02: MOQ 3, 2+1 묶음 perUnitPrice 기준 비교', () => {
     // priceDome: 8000, MOQ: 3, 배송비 3000, 시장가 15000
-    // bundleMinPrice = ceil((8000*3 + 3000) / 0.8) = ceil(27000/0.8) = ceil(33750) = 33750
-    // perUnitPrice = ceil(33750 / 3) = 11250
-    // priceGapRate = (15000 - 11250) / 15000 * 100 = 25%
+    // bundleMinPrice = ceil((8000*3 + 3000) / 0.84) = ceil(27000/0.84) = 32143
+    // perUnitPrice = ceil(32143 / 3) = 10715
+    // priceGapRate = (15000 - 10715) / 15000 * 100 = 28.57%
     const result = compareWithMarket(8000, 3, 'P', 3000, 15000);
-    expect(result.bundleMinPrice).toBe(33750);
-    expect(result.perUnitPrice).toBe(11250);
-    expect(result.priceGapRate).toBe(25);
+    expect(result.bundleMinPrice).toBe(32143);
+    expect(result.perUnitPrice).toBe(10715);
+    expect(result.priceGapRate).toBe(28.57);
     expect(result.status).toBe('경쟁력 보통');
   });
 
   it('TC-04: 시장가 초과 (드롭쉬핑 단가 > 시장가)', () => {
     // priceDome: 20000, MOQ: 1, 무료배송, 시장가 22000
-    // bundleMinPrice = ceil(20000 / 0.8) = 25000
-    // perUnitPrice = 25000
-    // priceGapRate = (22000 - 25000) / 22000 * 100 ≈ -13.6%
+    // bundleMinPrice = ceil(20000 / 0.84) = 23810
+    // perUnitPrice = 23810
+    // priceGapRate = (22000 - 23810) / 22000 * 100 ≈ -8.23%
     const result = compareWithMarket(20000, 1, 'S', null, 22000);
-    expect(result.perUnitPrice).toBe(25000);
+    expect(result.perUnitPrice).toBe(23810);
     expect(result.priceGapRate).toBeLessThan(0);
     expect(result.status).toBe('시장가 초과');
   });

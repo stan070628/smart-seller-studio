@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
 
 const CreateDraftSchema = z.object({
   productName: z.string().default(''),
-  sourceUrl: z.string().optional(),
+  sourceUrl: z.string().nullish(),
   sourceType: z.string().default('manual'),
   draftData: z.record(z.string(), z.unknown()),
 });
@@ -114,7 +114,12 @@ export async function POST(request: NextRequest) {
     return Response.json({ id: (data as { id: string }).id }, { status: 201 });
   } catch (err) {
     console.error('[POST /api/listing/coupang/drafts]', err);
-    const message = err instanceof Error ? err.message : '알 수 없는 오류';
+    const message =
+      err instanceof Error
+        ? err.message
+        : typeof err === 'object' && err !== null && 'message' in err
+          ? String((err as { message: unknown }).message)
+          : JSON.stringify(err);
     return Response.json({ success: false, error: message }, { status: 500 });
   }
 }

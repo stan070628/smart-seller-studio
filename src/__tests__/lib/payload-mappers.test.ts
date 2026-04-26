@@ -74,32 +74,32 @@ describe('buildCoupangPayload', () => {
     expect(payload.items[0].images).toHaveLength(3);
   });
 
-  it('deliveryChargeType: "FREE" 입력 → deliveryInfo.deliveryChargeType 이 "FREE"로 매핑된다', () => {
+  it('deliveryCharge=0 → deliveryChargeType 이 "FREE"로 매핑된다', () => {
     const payload = buildCoupangPayload(
-      makeCommon({ deliveryChargeType: 'FREE' }),
+      makeCommon({ deliveryCharge: 0 }),
       makeCoupangSpecific(),
       'A0000012345',
     );
 
-    expect(payload.deliveryInfo.deliveryChargeType).toBe('FREE');
+    expect(payload.deliveryChargeType).toBe('FREE');
   });
 
-  it('deliveryChargeType: "NOT_FREE" 입력 → deliveryInfo.deliveryChargeType 이 "NOT_FREE"로 매핑된다', () => {
+  it('deliveryCharge>0 → deliveryChargeType 이 "NOT_FREE"로 매핑된다', () => {
     const payload = buildCoupangPayload(
-      makeCommon({ deliveryChargeType: 'NOT_FREE', deliveryCharge: 3000 }),
+      makeCommon({ deliveryCharge: 3000 }),
       makeCoupangSpecific(),
       'A0000012345',
     );
 
-    expect(payload.deliveryInfo.deliveryChargeType).toBe('NOT_FREE');
-    expect(payload.deliveryInfo.deliveryCharge).toBe(3000);
+    expect(payload.deliveryChargeType).toBe('NOT_FREE');
+    expect(payload.deliveryCharge).toBe(3000);
   });
 
-  it('이미지 첫 번째 → imageType "REPRESENTATIVE", 나머지 → "DETAIL"로 설정된다', () => {
+  it('이미지 첫 번째 → imageType "REPRESENTATION", 나머지 → "DETAIL"로 설정된다', () => {
     const payload = buildCoupangPayload(makeCommon(), makeCoupangSpecific(), 'vendor');
     const images = payload.items[0].images;
 
-    expect(images[0].imageType).toBe('REPRESENTATIVE');
+    expect(images[0].imageType).toBe('REPRESENTATION');
     expect(images[0].imageOrder).toBe(0);
     expect(images[1].imageType).toBe('DETAIL');
     expect(images[2].imageType).toBe('DETAIL');
@@ -133,7 +133,7 @@ describe('buildCoupangPayload', () => {
     expect(payload.items[0].originalPrice).toBe(29900);
   });
 
-  it('이미지 1개만 있을 때 → REPRESENTATIVE 1개만 존재하고 오류 없이 처리된다', () => {
+  it('이미지 1개만 있을 때 → REPRESENTATION 1개만 존재하고 오류 없이 처리된다', () => {
     const payload = buildCoupangPayload(
       makeCommon({ thumbnailImages: ['https://example.com/single.jpg'] }),
       makeCoupangSpecific(),
@@ -142,7 +142,7 @@ describe('buildCoupangPayload', () => {
     const images = payload.items[0].images;
 
     expect(images).toHaveLength(1);
-    expect(images[0].imageType).toBe('REPRESENTATIVE');
+    expect(images[0].imageType).toBe('REPRESENTATION');
   });
 
   it('maximumBuyCount / maximumBuyForPerson 미지정 시 기본값 999 / 0 이 적용된다', () => {
@@ -156,7 +156,7 @@ describe('buildCoupangPayload', () => {
     expect(payload.items[0].maximumBuyForPerson).toBe(0);
   });
 
-  it('outboundShippingPlaceCode / returnCenterCode 가 deliveryInfo에 반영된다', () => {
+  it('outboundShippingPlaceCode / returnCenterCode 가 최상위 필드에 반영된다', () => {
     const payload = buildCoupangPayload(
       makeCommon(),
       makeCoupangSpecific({
@@ -166,34 +166,34 @@ describe('buildCoupangPayload', () => {
       'vendor',
     );
 
-    expect(payload.deliveryInfo.outboundShippingPlaceCode).toBe('OUT-XYZ');
-    expect(payload.deliveryInfo.returnCenterCode).toBe('RET-ABC');
+    expect(payload.outboundShippingPlaceCode).toBe('OUT-XYZ');
+    expect(payload.returnCenterCode).toBe('RET-ABC');
   });
 
-  it('returnCharge 가 deliveryInfo.deliveryChargeOnReturn 과 최상위 returnCharge 양쪽에 반영된다', () => {
+  it('returnCharge 가 최상위 returnCharge 및 deliveryChargeOnReturn 양쪽에 반영된다', () => {
     const payload = buildCoupangPayload(
       makeCommon({ returnCharge: 7000 }),
       makeCoupangSpecific(),
       'vendor',
     );
 
-    expect(payload.deliveryInfo.deliveryChargeOnReturn).toBe(7000);
+    expect(payload.deliveryChargeOnReturn).toBe(7000);
     expect(payload.returnCharge).toBe(7000);
   });
 
-  it('saleEndedAt 은 항상 "2099-12-31T23:59:59" 이다', () => {
+  it('saleEndedAt 은 항상 "2999-01-01T00:00:00" 이다', () => {
     const payload = buildCoupangPayload(makeCommon(), makeCoupangSpecific(), 'vendor');
 
-    expect(payload.saleEndedAt).toBe('2099-12-31T23:59:59');
+    expect(payload.saleEndedAt).toBe('2999-01-01T00:00:00');
   });
 
-  it('notices 배열에 4개의 필수 고지 항목이 포함된다', () => {
+  it('notices 미지정 시 빈 배열이다', () => {
     const payload = buildCoupangPayload(makeCommon(), makeCoupangSpecific(), 'vendor');
 
-    expect(payload.items[0].notices).toHaveLength(4);
+    expect(payload.items[0].notices).toHaveLength(0);
   });
 
-  it('description 이 HTML contentDetails에 그대로 삽입된다', () => {
+  it('description 이 TEXT contentDetails에 그대로 삽입된다', () => {
     const payload = buildCoupangPayload(
       makeCommon({ description: '<p>핵심 설명</p>' }),
       makeCoupangSpecific(),
@@ -202,7 +202,7 @@ describe('buildCoupangPayload', () => {
 
     const detail = payload.items[0].contents[0].contentDetails[0];
     expect(detail.content).toBe('<p>핵심 설명</p>');
-    expect(detail.detailType).toBe('HTML');
+    expect(detail.detailType).toBe('TEXT');
   });
 });
 

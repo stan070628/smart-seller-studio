@@ -109,18 +109,21 @@ export function useRegisterForm(opts: UseRegisterFormOptions = {}) {
     saveCoupangDefaults(coupangDefaults);
   }, [coupangDefaults, coupangMounted]);
 
-  // ─── useEffect: Step 2 카테고리 동기화 ──────────────────────────────────
+  // ─── useEffect: Step 2 카테고리 → Step 3 폼 동기화 ─────────────────────
+  // store 값이 바뀔 때마다 로컬 state를 덮어씀 (Step 2 선택 → Step 3 반영)
   useEffect(() => {
-    if (sharedDraft.coupangCategoryCode && !coupangCategoryCode) {
+    if (sharedDraft.coupangCategoryCode) {
       setCoupangCategoryCode(sharedDraft.coupangCategoryCode);
       setCoupangCategoryPath(sharedDraft.coupangCategoryPath);
     }
-    if (sharedDraft.naverCategoryId && !naverCategoryId) {
+  }, [sharedDraft.coupangCategoryCode, sharedDraft.coupangCategoryPath]);
+
+  useEffect(() => {
+    if (sharedDraft.naverCategoryId) {
       setNaverCategoryId(sharedDraft.naverCategoryId);
       setNaverCategoryPath(sharedDraft.naverCategoryPath);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [sharedDraft.naverCategoryId, sharedDraft.naverCategoryPath]);
 
   // ─── useEffect: 등록 성공 시 onSuccess 호출 ─────────────────────────────
   useEffect(() => {

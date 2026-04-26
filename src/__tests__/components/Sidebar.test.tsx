@@ -3,16 +3,19 @@
  * src/components/editor/Sidebar.tsx 컴포넌트 RTL 단위 테스트
  *
  * 실제 Sidebar.tsx DOM 구조 기반:
+ *   - 섹션 0: 템플릿 스타일 테마 선택 (뷰티제품 / 기능 강조 / 정품 강조)
  *   - 섹션 1: 상품 이미지 업로드 (드롭 영역, 숨겨진 file input)
- *   - 섹션 2: 쿠팡 리뷰 붙여넣기 (textarea)
+ *   - 섹션 1.5: 상품 정보 자동 추출 (URL 입력, 스크린샷)
+ *   - 섹션 2: 제품 특징 입력 (textarea)
+ *   - 섹션 3: 쿠팡 리뷰 붙여넣기 (textarea)
  *   - AI 카피 생성 버튼 (disabled: reviewText.trim() === 0 || isGenerating)
- *   - 생성된 카피 목록 (generatedCopies > 0 시 표시)
- *   - "캔버스에 추가" 버튼 → addCanvasObject 호출
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { THEMES } from '@/lib/themes';
+import type { Theme } from '@/lib/themes';
 
 // ---------------------------------------------------------------------------
 // 전역 Mock 설정
@@ -29,27 +32,41 @@ global.alert = vi.fn();
 // Zustand 스토어 Mock
 // ---------------------------------------------------------------------------
 
-// addCanvasObject spy를 모듈 레벨에서 선언
-const mockAddCanvasObject = vi.fn();
 const mockSetReviewText = vi.fn();
 const mockAddImage = vi.fn();
 const mockRemoveImage = vi.fn();
 const mockUpdateImageStatus = vi.fn();
-const mockSetGeneratedCopies = vi.fn();
 const mockSetIsGenerating = vi.fn();
 const mockSetImageAnalysis = vi.fn();
 const mockSetIsAnalyzing = vi.fn();
+const mockSetProductDescription = vi.fn();
+const mockSetFrames = vi.fn();
+const mockSetTheme = vi.fn();
+const mockAddCustomFrame = vi.fn();
+const mockSetProductExtract = vi.fn();
+const mockSetIsExtracting = vi.fn();
 
 // Zustand 스토어를 직접 모킹 — 실제 상태를 외부에서 제어하기 위해
-let storeState = {
-  uploadedImages: [] as Array<{ id: string; url: string; name: string; size: number; uploadedAt: string; uploadStatus?: string }>,
+let storeState: {
+  uploadedImages: Array<{ id: string; url: string; name: string; size: number; uploadedAt: string; uploadStatus?: string }>;
+  reviewText: string;
+  isGenerating: boolean;
+  imageAnalysis: null | object;
+  isAnalyzing: boolean;
+  productDescription: string;
+  productExtract: null | object;
+  isExtracting: boolean;
+  theme: Theme;
+} = {
+  uploadedImages: [],
   reviewText: '',
-  generatedCopies: [] as Array<{ id: string; title: string; subtitle?: string }>,
   isGenerating: false,
-  canvasObjects: [],
-  exportTrigger: 0,
-  imageAnalysis: null as null | object,
+  imageAnalysis: null,
   isAnalyzing: false,
+  productDescription: '',
+  productExtract: null,
+  isExtracting: false,
+  theme: THEMES.functional,
 };
 
 vi.mock('@/store/useEditorStore', () => {
@@ -58,11 +75,15 @@ vi.mock('@/store/useEditorStore', () => {
     removeImage: typeof mockRemoveImage;
     updateImageStatus: typeof mockUpdateImageStatus;
     setReviewText: typeof mockSetReviewText;
-    setGeneratedCopies: typeof mockSetGeneratedCopies;
     setIsGenerating: typeof mockSetIsGenerating;
-    addCanvasObject: typeof mockAddCanvasObject;
     setImageAnalysis: typeof mockSetImageAnalysis;
     setIsAnalyzing: typeof mockSetIsAnalyzing;
+    setProductDescription: typeof mockSetProductDescription;
+    setFrames: typeof mockSetFrames;
+    setTheme: typeof mockSetTheme;
+    addCustomFrame: typeof mockAddCustomFrame;
+    setProductExtract: typeof mockSetProductExtract;
+    setIsExtracting: typeof mockSetIsExtracting;
   }) => unknown) => {
     return selector({
       ...storeState,
@@ -70,11 +91,15 @@ vi.mock('@/store/useEditorStore', () => {
       removeImage: mockRemoveImage,
       updateImageStatus: mockUpdateImageStatus,
       setReviewText: mockSetReviewText,
-      setGeneratedCopies: mockSetGeneratedCopies,
       setIsGenerating: mockSetIsGenerating,
-      addCanvasObject: mockAddCanvasObject,
       setImageAnalysis: mockSetImageAnalysis,
       setIsAnalyzing: mockSetIsAnalyzing,
+      setProductDescription: mockSetProductDescription,
+      setFrames: mockSetFrames,
+      setTheme: mockSetTheme,
+      addCustomFrame: mockAddCustomFrame,
+      setProductExtract: mockSetProductExtract,
+      setIsExtracting: mockSetIsExtracting,
     });
   };
   return { default: useEditorStore };
@@ -101,12 +126,13 @@ function resetStore() {
   storeState = {
     uploadedImages: [],
     reviewText: '',
-    generatedCopies: [],
     isGenerating: false,
-    canvasObjects: [],
-    exportTrigger: 0,
     imageAnalysis: null,
     isAnalyzing: false,
+    productDescription: '',
+    productExtract: null,
+    isExtracting: false,
+    theme: THEMES.functional,
   };
 }
 
@@ -146,12 +172,13 @@ describe('Sidebar 컴포넌트', () => {
   it('AI 카피 생성 버튼이 초기에 disabled 상태 (reviewText 비어있음)', () => {
     render(<Sidebar />);
 
+    // 실제 버튼 텍스트: "AI 카피 생성 (13 프레임)"
     const generateButton = screen.getByRole('button', { name: /AI 카피 생성/ });
     expect(generateButton).toBeDisabled();
   });
 
   // ── 테스트 3 ──────────────────────────────────────────────────────────────
-  it('리뷰 Textarea에 텍스트 입력 시 setReviewText 호출 후 버튼 활성화됨 (상태 반영)', async () => {
+  it('리뷰 Textarea에 텍스트 입력 시 setReviewText 호출됨', async () => {
     const user = userEvent.setup();
     render(<Sidebar />);
 
@@ -178,8 +205,11 @@ describe('Sidebar 컴포넌트', () => {
     render(<Sidebar />);
 
     // 숨겨진 file input 찾기 (accept="image/*")
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-    expect(fileInput).toBeTruthy();
+    // Sidebar에 두 개의 file input이 있음 (이미지 업로드용, 스크린샷 추출용)
+    // 첫 번째가 이미지 업로드용
+    const fileInputs = document.querySelectorAll('input[type="file"]');
+    expect(fileInputs.length).toBeGreaterThanOrEqual(1);
+    const fileInput = fileInputs[0] as HTMLInputElement;
 
     const mockFile = new File(['fake image content'], 'test-image.jpg', {
       type: 'image/jpeg',
@@ -251,79 +281,50 @@ describe('Sidebar 컴포넌트', () => {
   });
 
   // ── 테스트 8 ──────────────────────────────────────────────────────────────
-  it('Zustand store에 generatedCopies가 있으면 카피 목록 렌더링', () => {
-    storeState.generatedCopies = [
-      {
-        id: 'copy-1',
-        title: '고객이 직접 인정한 품질! 리뷰로 증명하다',
-        subtitle: '실제 구매자 만족도 98% — 지금 바로 경험하세요',
-      },
-      {
-        id: 'copy-2',
-        title: '한 번 써보면 다시는 못 놓는 이유',
-        subtitle: '수백 개의 리얼 후기가 말해주는 압도적 성능',
-      },
-    ];
-
-    render(<Sidebar />);
-
-    // 생성된 카피 섹션 헤딩
-    expect(screen.getByText(/생성된 카피/)).toBeInTheDocument();
-    expect(screen.getByText(/2개/)).toBeInTheDocument();
-
-    // 카피 제목들
-    expect(screen.getByText('고객이 직접 인정한 품질! 리뷰로 증명하다')).toBeInTheDocument();
-    expect(screen.getByText('한 번 써보면 다시는 못 놓는 이유')).toBeInTheDocument();
-
-    // 서브타이틀
-    expect(screen.getByText(/실제 구매자 만족도 98%/)).toBeInTheDocument();
-
-    // 카피 번호 뱃지 (안 1, 안 2)
-    expect(screen.getByText('안 1')).toBeInTheDocument();
-    expect(screen.getByText('안 2')).toBeInTheDocument();
-
-    // "캔버스에 추가" 버튼이 각 카피마다 존재
-    const addButtons = screen.getAllByRole('button', { name: /캔버스에 추가/ });
-    expect(addButtons).toHaveLength(2);
-  });
-
-  // ── 테스트 9 ──────────────────────────────────────────────────────────────
-  it('"캔버스에 추가" 버튼 클릭 시 addCanvasObject 호출됨', async () => {
-    storeState.generatedCopies = [
-      {
-        id: 'copy-1',
-        title: '믿고 사는 브랜드, 리뷰가 증거입니다',
-        subtitle: '별점 4.9 / 5.0 — 후회 없는 선택',
-      },
-    ];
-
+  it('테마 선택 버튼 클릭 시 setTheme 호출됨', async () => {
     const user = userEvent.setup();
     render(<Sidebar />);
 
-    const addButton = screen.getByRole('button', { name: /캔버스에 추가/ });
-    await user.click(addButton);
+    // 뷰티제품 테마 버튼 클릭
+    const beautyButton = screen.getByRole('button', { name: /뷰티제품/ });
+    await user.click(beautyButton);
 
-    // 제목 + 서브타이틀 = addCanvasObject 2번 호출
-    expect(mockAddCanvasObject).toHaveBeenCalledTimes(2);
+    expect(mockSetTheme).toHaveBeenCalledWith('beauty');
+  });
 
-    // 첫 번째 호출: 제목 텍스트 객체 (type: 'textbox')
-    expect(mockAddCanvasObject).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({
-        type: 'textbox',
-        content: '믿고 사는 브랜드, 리뷰가 증거입니다',
-        fontWeight: 'bold',
-      }),
-    );
+  // ── 테스트 9 ──────────────────────────────────────────────────────────────
+  it('현재 테마(functional)가 선택된 상태로 표시됨 ("선택됨" 텍스트)', () => {
+    // storeState.theme = THEMES.functional (기본값)
+    render(<Sidebar />);
 
-    // 두 번째 호출: 서브타이틀 텍스트 객체
-    expect(mockAddCanvasObject).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        type: 'textbox',
-        content: '별점 4.9 / 5.0 — 후회 없는 선택',
-        fontWeight: 'normal',
-      }),
-    );
+    // "선택됨" 뱃지가 1개여야 함
+    const selectedBadges = screen.getAllByText('선택됨');
+    expect(selectedBadges).toHaveLength(1);
+
+    // functional 테마 버튼에 선택됨 표시
+    const functionalButton = screen.getByRole('button', { name: /기능 강조/ });
+    expect(functionalButton).toHaveTextContent('선택됨');
+  });
+
+  // ── 테스트 10 ──────────────────────────────────────────────────────────────
+  it('커스텀 템플릿 - 3컬럼 제품 비교 버튼 클릭 시 addCustomFrame 호출됨', async () => {
+    const user = userEvent.setup();
+    render(<Sidebar />);
+
+    const customFrameButton = screen.getByRole('button', { name: /3컬럼 제품 비교/ });
+    await user.click(customFrameButton);
+
+    expect(mockAddCustomFrame).toHaveBeenCalledWith('custom_3col');
+  });
+
+  // ── 테스트 11 ──────────────────────────────────────────────────────────────
+  it('isGenerating이 true일 때 AI 카피 생성 버튼이 disabled 상태', () => {
+    storeState.reviewText = '리뷰 내용';
+    storeState.isGenerating = true;
+    render(<Sidebar />);
+
+    // isGenerating이 true이면 버튼이 disabled
+    const button = screen.getByRole('button', { name: /AI 카피 생성|이미지 분석 중|카피 생성 중/ });
+    expect(button).toBeDisabled();
   });
 });

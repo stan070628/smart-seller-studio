@@ -174,12 +174,16 @@ describe('POST /api/auto-register/parse-url', () => {
       expect(data.error).toContain('도매꾹 상품을 찾을 수 없습니다');
     });
 
-    it('도매꾹 API 오류 시 500을 반환한다', async () => {
+    it('도매꾹 API 오류 시 404를 반환한다', async () => {
+      // 구현이 Promise.allSettled를 사용하므로 getItemView reject → apiRes.status === 'rejected'
+      // → "도매꾹 상품을 찾을 수 없습니다." 404 반환 (500이 아님)
       const mockClient = { getItemView: vi.fn().mockRejectedValue(new Error('API Error')) };
       mockGetDomeggookClient.mockReturnValue(mockClient);
 
       const res = await POST(makeRequest({ url: VALID_DOMEGGOOK_URL }) as never);
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(404);
+      const data = await res.json() as { error: string };
+      expect(data.error).toContain('도매꾹 상품을 찾을 수 없습니다');
     });
   });
 
@@ -214,6 +218,76 @@ describe('POST /api/auto-register/parse-url', () => {
 
       const res = await POST(makeRequest({ url: VALID_COSTCO_URL }) as never);
       expect(res.status).toBe(500);
+    });
+
+    it('코스트코 상품 응답에 detailHtml 필드가 포함된다', async () => {
+      mockFetchCostcoProduct.mockResolvedValue(costcoItem);
+
+      const res = await POST(makeRequest({ url: VALID_COSTCO_URL }) as never);
+      const data = await res.json() as { product: { detailHtml?: string } };
+
+      expect(data.product.detailHtml).toBeDefined();
+      expect(typeof data.product.detailHtml).toBe('string');
+      expect((data.product.detailHtml ?? '').length).toBeGreaterThan(10);
+    });
+
+    it('코스트코 상품 detailHtml은 제품명을 HTML 요소로 포함한다', async () => {
+      mockFetchCostcoProduct.mockResolvedValue(costcoItem);
+
+      const res = await POST(makeRequest({ url: VALID_COSTCO_URL }) as never);
+      const data = await res.json() as { product: { detailHtml?: string } };
+
+      expect(data.product.detailHtml).toContain('코스트코 테스트 상품');
+    });
+
+    it('코스트코 상품 detailHtml은 이미지 URL을 포함한다', async () => {
+      mockFetchCostcoProduct.mockResolvedValue(costcoItem);
+
+      const res = await POST(makeRequest({ url: VALID_COSTCO_URL }) as never);
+      const data = await res.json() as { product: { detailHtml?: string } };
+
+      expect(data.product.detailHtml).toContain('img.costco.co.kr/test.jpg');
+    });
+
+    it('galleryImages가 있으면 imageUrls에 포함된다', async () => {
+      mockFetchCostcoProduct.mockResolvedValue({
+        ...costcoItem,
+        galleryImages: [
+          'https://img.costco.co.kr/gallery1.jpg',
+          'https://img.costco.co.kr/gallery2.jpg',
+        ],
+      });
+
+      const res = await POST(makeRequest({ url: VALID_COSTCO_URL }) as never);
+      const data = await res.json() as { product: { imageUrls?: string[] } };
+
+      expect(data.product.imageUrls).toContain('https://img.costco.co.kr/gallery1.jpg');
+      expect(data.product.imageUrls).toContain('https://img.costco.co.kr/gallery2.jpg');
+    });
+
+    it('galleryImages가 있으면 detailHtml에 갤러리 이미지가 포함된다', async () => {
+      mockFetchCostcoProduct.mockResolvedValue({
+        ...costcoItem,
+        galleryImages: ['https://img.costco.co.kr/gallery1.jpg'],
+      });
+
+      const res = await POST(makeRequest({ url: VALID_COSTCO_URL }) as never);
+      const data = await res.json() as { product: { detailHtml?: string } };
+
+      expect(data.product.detailHtml).toContain('img.costco.co.kr/gallery1.jpg');
+    });
+
+    it('OCC description이 있으면 detailHtml에 포함된다', async () => {
+      mockFetchCostcoProduct.mockResolvedValue({
+        ...costcoItem,
+        description: '고품질 코스트코 제품입니다. 신선하게 배송됩니다.',
+      });
+
+      const res = await POST(makeRequest({ url: VALID_COSTCO_URL }) as never);
+      const data = await res.json() as { product: { detailHtml?: string; description?: string } };
+
+      expect(data.product.detailHtml).toContain('고품질 코스트코 제품입니다');
+      expect(data.product.description).toContain('고품질 코스트코 제품입니다');
     });
   });
 });

@@ -11,19 +11,11 @@ vi.mock('@/lib/rate-limit', () => ({
   RATE_LIMITS: { AI_API: {} },
 }));
 
-vi.mock('@/lib/ai/claude', () => ({
-  getAnthropicClient: vi.fn().mockReturnValue({
-    messages: {
-      create: vi.fn().mockResolvedValue({
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({ pass: true, reasoning: '검색량 대비 경쟁이 낮아 신규 진입에 적합합니다.' }),
-          },
-        ],
-      }),
-    },
-  }),
+// 실제 구현은 @/lib/ai/claude가 아닌 @/lib/ai/claude-cli의 callClaude를 사용
+vi.mock('@/lib/ai/claude-cli', () => ({
+  callClaude: vi.fn().mockResolvedValue(
+    JSON.stringify({ pass: true, reasoning: '검색량 대비 경쟁이 낮아 신규 진입에 적합합니다.' }),
+  ),
 }));
 
 async function getPost() {
@@ -79,12 +71,9 @@ describe('POST /api/ai/keyword-evaluate', () => {
   });
 
   it('Claude API 오류 시 pass: null, reasoning: null을 200으로 반환한다', async () => {
-    const { getAnthropicClient } = await import('@/lib/ai/claude');
-    vi.mocked(getAnthropicClient).mockReturnValueOnce({
-      messages: {
-        create: vi.fn().mockRejectedValueOnce(new Error('API down')),
-      },
-    } as unknown as ReturnType<typeof getAnthropicClient>);
+    // callClaude가 예외를 throw하면 evaluateKeyword가 { pass: null, reasoning: null }을 반환
+    const { callClaude } = await import('@/lib/ai/claude-cli');
+    vi.mocked(callClaude).mockRejectedValueOnce(new Error('API down'));
 
     const POST = await getPost();
     const res = await POST(makeRequest({ keyword: '방수 백팩', searchVolume: 11700, competitorCount: 312 }));

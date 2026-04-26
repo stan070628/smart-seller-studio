@@ -34,6 +34,8 @@ interface NaverDraftData {
   deliveryCharge?: number;
   returnCharge?: number;
   exchangeFee?: number;
+  manufacturerName?: string;
+  countryOfOrigin?: string;
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
@@ -78,6 +80,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const deliveryCharge = Number(d.deliveryCharge) || 0;
   const returnCharge = Number(d.returnCharge) || 4000;
   const exchangeFee = Number(d.exchangeFee) || returnCharge * 2;
+  const manufacturerName = d.manufacturerName?.trim() || undefined;
+  const countryOfOrigin = d.countryOfOrigin?.trim() || undefined;
 
   if (!name || !leafCategoryId || !salePrice) {
     return Response.json(
@@ -124,6 +128,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
       tags,
       exchangeFee,
       returnFee: returnCharge,
+      manufacturerName,
+      countryOfOrigin,
     };
 
     const payload = buildNaverPayload(common, specific);

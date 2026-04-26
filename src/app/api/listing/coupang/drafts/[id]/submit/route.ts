@@ -15,6 +15,7 @@ import { getCoupangClient } from '@/lib/listing/coupang-client';
 import type { CoupangProductPayload } from '@/lib/listing/coupang-client';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 import { requireAuth } from '@/lib/supabase/auth';
+import { ensureCoupangImages } from '@/lib/image/coupang-constraints';
 
 // 라우트 파라미터 타입
 interface RouteContext {
@@ -90,6 +91,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
   // draft_data에서 Coupang payload 구성
   const d = (draft.draft_data ?? {}) as DraftData;
+  // extra 필드 접근 (DraftData 인터페이스에 없는 필드)
+  const raw = (draft.draft_data ?? {}) as Record<string, unknown>;
 
   const sellerProductName = d.name ?? (draft.product_name as string) ?? '';
   const displayCategoryCode = Number(d.categoryCode) || 0;
@@ -98,8 +101,25 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const originalPrice = Number(d.originalPrice) || salePrice;
   const deliveryCharge = Number(d.deliveryCharge) || 0;
   const returnCharge = Number(d.returnCharge) || 0;
-  const detailImages = Array.isArray(d.detailImages) ? d.detailImages as string[] : [];
-  const thumbnailImages = d.thumbnail ? [d.thumbnail] : [];
+
+  // 대표이미지·추가이미지용: thumbnailImages 배열 (최대 10장)
+  // draft 저장 시 thumbnailImages 배열 전체가 raw 필드에 저장됨
+  const thumbnailImages: string[] = Array.isArray(raw['thumbnailImages'])
+    ? (raw['thumbnailImages'] as string[]).filter(Boolean).slice(0, 10)
+    : d.thumbnail ? [d.thumbnail] : [];
+
+  // 상세설명(HTML) 우선: detailPageSnippet → detailHtml
+  // 쿠팡 상세설명은 반드시 HTML(TEXT)로 등록
+  const detailHtmlContent: string =
+    typeof raw['detailPageSnippet'] === 'string' && raw['detailPageSnippet']
+      ? raw['detailPageSnippet']
+      : d.detailHtml ?? sellerProductName;
+
+  // pickedDetailImages: 사용자가 직접 선택한 이미지 — 상세설명 contents 이미지 폴백용
+  // itemImages(추가이미지)에는 넣지 않음
+  const pickedDetailImages: string[] = Array.isArray(raw['pickedDetailImages'])
+    ? (raw['pickedDetailImages'] as string[]).filter(Boolean)
+    : Array.isArray(d.detailImages) ? (d.detailImages as string[]) : [];
 
   if (!sellerProductName || !displayCategoryCode || !salePrice) {
     return Response.json(
@@ -115,30 +135,36 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const outboundCode = d.outboundCode || client.getOutboundShippingPlaceCode();
     const returnCenterCode = d.returnCode || client.getReturnCenterCode();
 
-    // 상세페이지 콘텐츠 구성 (기존 route.ts와 동일 로직)
-    const contents = detailImages.length > 0
-      ? detailImages.map((url: string) => ({
-          contentsType: 'IMAGE' as const,
-          contentDetails: [{ content: url, detailType: 'IMAGE' as const }],
-        }))
-      : [{
-          contentsType: 'TEXT' as const,
-          contentDetails: [{ content: d.detailHtml ?? sellerProductName, detailType: 'TEXT' as const }],
-        }];
+    // ── 쿠팡 이미지 규격 적용 (min 500×500, max 5000×5000, max 10MB) ──────────
+    // thumbnailImages만 규격 검사 — detailImages는 itemImages에 넣지 않음
+    console.log('[submit] 이미지 규격 검사 시작...');
+    const safeThumbUrls = await ensureCoupangImages(thumbnailImages);
 
-    // 이미지 목록 (썸네일 + 상세) — 모든 item이 공유
-    const itemImages = [
-      ...thumbnailImages.map((url: string, i: number) => ({
-        imageOrder: i,
-        imageType: i === 0 ? 'REPRESENTATION' as const : 'DETAIL' as const,
-        vendorPath: url,
-      })),
-      ...detailImages.map((url: string, i: number) => ({
-        imageOrder: thumbnailImages.length + i,
-        imageType: 'DETAIL' as const,
-        vendorPath: url,
-      })),
-    ];
+    // ── 대표이미지 + 추가이미지 (itemImages) ─────────────────────────────────
+    // thumbnailImages만 사용: [0] = REPRESENTATION, [1..9] = DETAIL (추가이미지)
+    // detailImages는 상세설명(contents)에만 사용 — 추가이미지 슬롯에 넣지 않음
+    const itemImages = safeThumbUrls.map((url: string, i: number) => ({
+      imageOrder: i,
+      imageType: i === 0 ? 'REPRESENTATION' as const : 'DETAIL' as const,
+      vendorPath: url,
+    }));
+
+    // ── 상세설명 contents: HTML 우선, 없으면 pickedDetailImages 이미지 배열 ─────
+    // 쿠팡 상세설명은 HTML(TEXT)로 등록하는 것이 정식 방법
+    const contents = detailHtmlContent
+      ? [{
+          contentsType: 'TEXT' as const,
+          contentDetails: [{ content: detailHtmlContent, detailType: 'TEXT' as const }],
+        }]
+      : pickedDetailImages.length > 0
+        ? pickedDetailImages.map((url: string) => ({
+            contentsType: 'IMAGE' as const,
+            contentDetails: [{ content: url, detailType: 'IMAGE' as const }],
+          }))
+        : [{
+            contentsType: 'TEXT' as const,
+            contentDetails: [{ content: sellerProductName, detailType: 'TEXT' as const }],
+          }];
 
     // 공통 notice 목록
     const itemNotices = (d.notices ?? []).map((n) => ({
@@ -151,6 +177,23 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const adultOnly = d.adultOnly || 'EVERYONE';
     const taxType = d.taxType || 'TAX';
     const parallelImported = d.parallelImported || 'NOT_PARALLEL_IMPORTED';
+
+    // KC 인증정보 — certification은 쉼표 구분 여러 번호일 수 있음 (예: "XU100557-25047, R-R-ONH-FANSTAND4C")
+    // 인증번호 패턴으로 Coupang certificationType 자동 매핑
+    const certRaw = typeof raw['certification'] === 'string' ? raw['certification'].trim() : '';
+    const certifications = certRaw
+      ? certRaw.split(',').map(s => s.trim()).filter(Boolean).map(code => {
+          let certificationType = 'KC_ELECTRONICS_CONFIRM'; // 기본값 (XU... 안전확인)
+          if (/^R-R-/i.test(code) || /^MSIP-REI-/i.test(code)) {
+            certificationType = 'COMMUNICATION_EQUIPMENT'; // 방송통신기자재 적합성
+          } else if (/^SU\d{5}/i.test(code)) {
+            certificationType = 'KC_ELECTRONICS_CERTIFICATION'; // 안전인증
+          } else if (/^KB/i.test(code)) {
+            certificationType = 'KC_ELECTRONICS_CERTIFICATION'; // 안전인증
+          }
+          return { certificationCode: code, certificationType };
+        })
+      : [];
 
     // variants가 있으면 각 조합을 별도 item으로, 없으면 단일 item(기존 동작)
     const variants = Array.isArray(d.variants) && d.variants.length > 0 ? d.variants : null;
@@ -172,6 +215,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           attributes: v.attributes,
           contents,
           notices: itemNotices,
+          ...(certifications.length > 0 && { certifications }),
         }))
       : [
           {
@@ -191,6 +235,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
             attributes: [],
             contents,
             notices: itemNotices,
+            ...(certifications.length > 0 && { certifications }),
           },
         ];
 

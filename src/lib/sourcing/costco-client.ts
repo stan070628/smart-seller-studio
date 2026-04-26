@@ -7,7 +7,7 @@
  *   올바른 방식: query=:relevance:category:OCC_CODE
  */
 
-import type { OccSearchResponse, CostcoApiProduct, CostcoFetchResult } from '@/types/costco';
+import type { OccSearchResponse, CostcoApiProduct, CostcoFetchResult, OccClassification } from '@/types/costco';
 import {
   COSTCO_API_BASE,
   COSTCO_API_DEFAULTS,
@@ -43,6 +43,15 @@ function extractImageUrl(
   return url.startsWith('http') ? url : `https://www.costco.co.kr${url}`;
 }
 
+function extractGalleryUrls(
+  images?: OccSearchResponse['products'][number]['images'],
+): string[] {
+  if (!images || images.length === 0) return [];
+  return images
+    .filter((img) => img.imageType === 'GALLERY' && img.format === 'product')
+    .map((img) => (img.url.startsWith('http') ? img.url : `https://www.costco.co.kr${img.url}`));
+}
+
 function occProductToApi(
   raw: OccSearchResponse['products'][number],
   categoryName: string,
@@ -69,12 +78,15 @@ function occProductToApi(
         ? raw.listPrice.value
         : undefined,
     imageUrl: extractImageUrl(raw.images),
+    galleryImages: extractGalleryUrls(raw.images),
+    description: raw.description || raw.summary || undefined,
     productUrl,
     brand: raw.manufacturer || undefined,
     averageRating: raw.averageRating || undefined,
     reviewCount: raw.numberOfReviews ?? 0,
     stockStatus: normalizeStockStatus(raw.stock?.stockLevelStatus),
     shippingIncluded: false,
+    classifications: (raw as unknown as { classifications?: OccClassification[] }).classifications,
   };
 }
 
