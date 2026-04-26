@@ -69,7 +69,7 @@ function readPlanLocalData(): PlanLocalData | null {
 }
 
 export default function DashboardClient() {
-  const [period, setPeriod] = useState<Period>('today');
+  const [period, setPeriod] = useState<Period>('30d');
   const [data, setData] = useState<DashboardSummaryData | null>(null);
   const [planData, setPlanData] = useState<PlanLocalData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
