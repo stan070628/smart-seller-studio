@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 
 // 디자인 토큰 (BothRegisterForm 기준)
@@ -68,6 +68,13 @@ export default function CategoryPicker({
   const [isSearching, setIsSearching] = useState(false);
   const [showSearch, setShowSearch] = useState(!selectedCode);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // unmount 시 타이머 정리 — 메모리 누수 방지
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
 
   const ps = PLATFORM_STYLE[platform];
   const apiPath =

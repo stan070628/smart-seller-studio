@@ -9,7 +9,7 @@
  * - handleCancel은 컨테이너 컴포넌트에서 처리 (훅에 미포함)
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useListingStore } from '@/store/useListingStore';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -52,21 +52,6 @@ function saveCoupangDefaults(vals: CoupangItemDefaults) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 카테고리 검색 결과 타입
-// ─────────────────────────────────────────────────────────────────────────────
-export interface CoupangCategoryResult {
-  code: number;
-  name: string;
-  path: string;
-}
-
-export interface NaverCategoryResult {
-  id: string;
-  name: string;
-  path: string;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // 훅 옵션
 // ─────────────────────────────────────────────────────────────────────────────
 export interface UseRegisterFormOptions {
@@ -94,22 +79,11 @@ export function useRegisterForm(opts: UseRegisterFormOptions = {}) {
   const [naverCategoryId, setNaverCategoryId] = useState(sharedDraft.naverCategoryId);
   const [naverCategoryPath, setNaverCategoryPath] = useState(sharedDraft.naverCategoryPath);
 
-  // 카테고리 검색창 토글 상태 (Step 2에서 선택됐으면 기본 확인 모드)
-  const [showCoupangCatSearch, setShowCoupangCatSearch] = useState(!sharedDraft.coupangCategoryCode);
-  const [showNaverCatSearch, setShowNaverCatSearch] = useState(!sharedDraft.naverCategoryId);
-
   const [brand, setBrand] = useState('');
   const [naverExchangeFee, setNaverExchangeFee] = useState('5000');
 
   const [coupangDefaults, setCoupangDefaults] = useState<CoupangItemDefaults>(DEFAULT_COUPANG_ITEM);
   const [coupangMounted, setCoupangMounted] = useState(false);
-
-  // ─── 카테고리 검색 상태 ──────────────────────────────────────────────────
-  const [categoryKeyword, setCategoryKeyword] = useState('');
-  const [coupangResults, setCoupangResults] = useState<CoupangCategoryResult[]>([]);
-  const [naverResults, setNaverResults] = useState<NaverCategoryResult[]>([]);
-  const [isCategorySearching, setIsCategorySearching] = useState(false);
-  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ─── 태그 입력 상태 ──────────────────────────────────────────────────────
   const [tagInput, setTagInput] = useState('');
@@ -189,42 +163,6 @@ export function useRegisterForm(opts: UseRegisterFormOptions = {}) {
   const isRegistering =
     bothRegistration.coupang.status === 'loading' ||
     bothRegistration.naver.status === 'loading';
-
-  // ─── 카테고리 병렬 검색 (debounce 300ms) ────────────────────────────────
-  const searchCategories = useCallback((keyword: string) => {
-    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-
-    if (!keyword.trim()) {
-      setCoupangResults([]);
-      setNaverResults([]);
-      return;
-    }
-
-    searchTimerRef.current = setTimeout(async () => {
-      setIsCategorySearching(true);
-      try {
-        const encoded = encodeURIComponent(keyword.trim());
-        const [coupangRes, naverRes] = await Promise.all([
-          fetch(`/api/listing/coupang/categories?keyword=${encoded}`),
-          fetch(`/api/listing/naver/categories?keyword=${encoded}`),
-        ]);
-
-        const [coupangJson, naverJson] = await Promise.all([
-          coupangRes.json() as Promise<{ success: boolean; data: CoupangCategoryResult[] }>,
-          naverRes.json() as Promise<{ success: boolean; data: NaverCategoryResult[] }>,
-        ]);
-
-        // 최대 8개만 표시
-        setCoupangResults(coupangJson.success ? (coupangJson.data ?? []).slice(0, 8) : []);
-        setNaverResults(naverJson.success ? (naverJson.data ?? []).slice(0, 8) : []);
-      } catch {
-        setCoupangResults([]);
-        setNaverResults([]);
-      } finally {
-        setIsCategorySearching(false);
-      }
-    }, 300);
-  }, []);
 
   // ─── 태그 추가/제거 ──────────────────────────────────────────────────────
   const addTag = useCallback((input: string) => {
@@ -407,15 +345,6 @@ export function useRegisterForm(opts: UseRegisterFormOptions = {}) {
     coupangCategoryPath, setCoupangCategoryPath,
     naverCategoryId, setNaverCategoryId,
     naverCategoryPath, setNaverCategoryPath,
-    showCoupangCatSearch, setShowCoupangCatSearch,
-    showNaverCatSearch, setShowNaverCatSearch,
-
-    // 카테고리 검색
-    categoryKeyword, setCategoryKeyword,
-    coupangResults, setCoupangResults,
-    naverResults, setNaverResults,
-    isCategorySearching,
-    searchCategories,
 
     // 플랫폼별 추가
     brand, setBrand,
