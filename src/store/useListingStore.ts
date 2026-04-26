@@ -19,6 +19,8 @@ interface SharedDraft {
   stock: string;
   thumbnailImages: string[]; // 상품 목록/상단 이미지 (최소 1개 필요)
   detailImages: string[];    // 상세페이지 이미지 (선택사항)
+  pickedDetailImages: string[]; // 사용자가 선택/정렬한 최종 이미지 URL 목록 (비어있으면 전체 사용)
+  sourceUrl?: string | null;   // parse-url에서 추출한 원본 상품 URL
   description: string;
   deliveryCharge: string;
   deliveryChargeType: 'FREE' | 'NOT_FREE' | 'CHARGE_RECEIVED';
@@ -48,6 +50,7 @@ interface SharedDraft {
   targetMarginRate: number;
 
   // ─── 카테고리 ───────────────────────────────────────────────────────────────
+  categoryHint: string;        // parse-url에서 추출한 소스 카테고리 힌트 (자동 검색용)
   coupangCategoryCode: string;
   coupangCategoryPath: string;
   naverCategoryId: string;
@@ -56,6 +59,13 @@ interface SharedDraft {
   // ─── AI 상세페이지 수정 ─────────────────────────────────────────────────────
   detailPageEditStatus: 'idle' | 'editing' | 'done' | 'error';
   detailPageEditError: string | null;
+
+  // ─── KC 인증 ────────────────────────────────────────────────────────────────
+  certification?: string; // KC 인증번호 (parse-url에서 추출)
+
+  // ─── 쿠팡 임시저장 ID ────────────────────────────────────────────────────────
+  coupangDraftId?: string; // 임시저장 후 또는 draft 불러오기 시 세팅 → 제출 활성화에 사용
+  naverDraftId?: string; // 네이버 임시저장 ID
 }
 
 const SHARED_DRAFT_INITIAL: SharedDraft = {
@@ -67,6 +77,8 @@ const SHARED_DRAFT_INITIAL: SharedDraft = {
   stock: '999',
   thumbnailImages: [],
   detailImages: [],
+  pickedDetailImages: [],
+  sourceUrl: null,
   description: '',
   deliveryCharge: '0',
   deliveryChargeType: 'FREE',
@@ -91,6 +103,7 @@ const SHARED_DRAFT_INITIAL: SharedDraft = {
   costPrice: '',
   targetMarginRate: 20,
   // 카테고리
+  categoryHint: '',
   coupangCategoryCode: '',
   coupangCategoryPath: '',
   naverCategoryId: '',
@@ -98,6 +111,8 @@ const SHARED_DRAFT_INITIAL: SharedDraft = {
   // AI 상세페이지 수정
   detailPageEditStatus: 'idle',
   detailPageEditError: null,
+  // 네이버 임시저장 ID
+  naverDraftId: undefined,
 };
 
 // ─── BothRegistration 타입 ───────────────────────────────────────────────────
@@ -199,8 +214,8 @@ interface ListingStore {
   error: string | null;
 
   // ─── Browse 모드 ─────────────────────────────────────────────────────────
-  listingMode: 'register' | 'browse' | 'assets';
-  setListingMode: (mode: 'register' | 'browse' | 'assets') => void;
+  listingMode: 'register' | 'browse' | 'assets' | 'drafts';
+  setListingMode: (mode: 'register' | 'browse' | 'assets' | 'drafts') => void;
   browsePlatform: 'coupang' | 'naver';
   setBrowsePlatform: (p: 'coupang' | 'naver') => void;
   browseFilters: {
@@ -265,7 +280,9 @@ interface ListingStore {
   setCurrentStep: (step: 1 | 2 | 3) => void;
   skipDetailPage: () => void;
   generateDetailPage: () => Promise<void>;
+  generateDetailPageFromPicked: () => Promise<void>;
   editDetailPage: (instruction: string) => Promise<void>;
+  saveImagesToStorage: () => Promise<Array<{ url: string; error: string }>>;
   resetWorkflow: () => void;
 
   // ─── BothRegistration 액션 ──────────────────────────────────────────────────
@@ -1002,6 +1019,101 @@ export const useListingStore = create<ListingStore>()(
         }
       },
 
+      generateDetailPageFromPicked: async () => {
+        const { sharedDraft } = get();
+        const { pickedDetailImages, detailImages, name } = sharedDraft;
+
+        // pickedDetailImages가 있으면 사용자 선택 순서 우선.
+        // 없으면 detailImages만 사용 (thumbnailImages는 제외 — 썸네일은 상세페이지용이 아님)
+        const allImageUrls = pickedDetailImages.length > 0
+          ? pickedDetailImages
+          : detailImages;
+
+        if (allImageUrls.length === 0) return;
+
+        // analyzing 상태 (스튜디오 편집 단계 없이 바로 시작)
+        set(
+          (s) => ({
+            sharedDraft: {
+              ...s.sharedDraft,
+              detailPageStatus: 'analyzing',
+              detailPageError: null,
+            },
+          }),
+          false,
+          'listing/generateDetailPageFromPicked/analyzing',
+        );
+
+        try {
+          // 외부 URL vs base64 data URL 분리 (선택 순서 유지)
+          const externalUrls: string[] = [];
+          const base64Images: Array<{ imageBase64: string; mimeType: 'image/jpeg' }> = [];
+
+          for (const url of allImageUrls.slice(0, 5)) {
+            if (url.startsWith('data:')) {
+              base64Images.push({ imageBase64: url, mimeType: 'image/jpeg' });
+            } else {
+              externalUrls.push(url);
+            }
+          }
+
+          // existingHtml은 전달하지 않음 — 항상 신규 생성 모드로 실행.
+          // scraped description을 supplement로 넘기면 인코딩 깨짐 + 이미지 중복 발생.
+          const requestBody: Record<string, unknown> = {
+            productName: name || undefined,
+            studioMode: true,
+          };
+
+          if (externalUrls.length > 0) requestBody.imageUrls = externalUrls;
+          if (base64Images.length > 0) requestBody.images = base64Images;
+
+          // generating 상태
+          set(
+            (s) => ({ sharedDraft: { ...s.sharedDraft, detailPageStatus: 'generating' } }),
+            false,
+            'listing/generateDetailPageFromPicked/generating',
+          );
+
+          const res = await fetch('/api/ai/generate-detail-html', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody),
+          });
+
+          const data = await res.json();
+          if (!res.ok || !data.html) {
+            throw new Error(data.error ?? '생성에 실패했습니다.');
+          }
+
+          set(
+            (s) => ({
+              sharedDraft: {
+                ...s.sharedDraft,
+                detailPageFullHtml: data.html,
+                detailPageSnippet: data.snippet ?? null,
+                detailPageSnippetNaver: data.naverSnippet ?? null,
+                detailPageStatus: 'done',
+                description: data.snippet ?? s.sharedDraft.description,
+              },
+            }),
+            false,
+            'listing/generateDetailPageFromPicked/done',
+          );
+        } catch (err) {
+          set(
+            (s) => ({
+              sharedDraft: {
+                ...s.sharedDraft,
+                detailPageStatus: 'error',
+                detailPageError: err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.',
+              },
+            }),
+            false,
+            'listing/generateDetailPageFromPicked/error',
+          );
+        }
+      },
+
       editDetailPage: async (instruction: string) => {
         const { sharedDraft } = get();
         // editing 상태로 전환
@@ -1060,6 +1172,57 @@ export const useListingStore = create<ListingStore>()(
             'listing/editDetailPage/error',
           );
         }
+      },
+
+      saveImagesToStorage: async () => {
+        const { sharedDraft } = get();
+        const { thumbnailImages, detailImages, pickedDetailImages } = sharedDraft;
+
+        // 저장이 필요한 URL = Supabase 영구 URL이 아닌 것
+        const isSaved = (url: string) =>
+          url.includes('supabase.co/storage') || url.includes('supabase.in/storage');
+
+        const allUrls = [...new Set([
+          ...thumbnailImages,
+          ...detailImages,
+          ...pickedDetailImages,
+        ])].filter((url) => !isSaved(url));
+
+        if (allUrls.length === 0) return [];
+
+        const res = await fetch('/api/storage/save-images', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageUrls: allUrls, folder: 'listing-images' }),
+        });
+        const data = await res.json() as {
+          success: boolean;
+          results: Array<{ originalUrl: string; savedUrl: string }>;
+          errors: Array<{ url: string; error: string }>;
+        };
+        if (!res.ok) throw new Error((data as { error?: string }).error ?? '이미지 저장에 실패했습니다.');
+
+        // 원본 → 영구 URL 매핑
+        const urlMap = new Map<string, string>(
+          data.results.map((r) => [r.originalUrl, r.savedUrl]),
+        );
+
+        const remap = (urls: string[]) => urls.map((u) => urlMap.get(u) ?? u);
+
+        set(
+          (s) => ({
+            sharedDraft: {
+              ...s.sharedDraft,
+              thumbnailImages: remap(s.sharedDraft.thumbnailImages),
+              detailImages: remap(s.sharedDraft.detailImages),
+              pickedDetailImages: remap(s.sharedDraft.pickedDetailImages),
+            },
+          }),
+          false,
+          'listing/saveImagesToStorage/done',
+        );
+
+        return data.errors;
       },
 
       resetWorkflow: () =>
