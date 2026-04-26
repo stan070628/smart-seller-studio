@@ -112,7 +112,7 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
 
   // ── 배송·반품 ─────────────────────────────────────────────────────────────
   const [deliveryChargeType, setDeliveryChargeType] = useState<'FREE' | 'NOT_FREE'>(
-    (sharedDraft.deliveryChargeType as 'FREE' | 'NOT_FREE') || 'FREE',
+    sharedDraft.deliveryChargeType === 'NOT_FREE' ? 'NOT_FREE' : 'FREE',
   );
   const [deliveryCharge, setDeliveryCharge] = useState(Number(sharedDraft.deliveryCharge) || 0);
   const [outboundCode, setOutboundCode] = useState('');
@@ -186,12 +186,13 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
         setMappedFields(f);
 
         const aiBrand = f.brand.value;
-        if (!brand) setBrand((aiBrand && aiBrand !== '기타') ? aiBrand : '기타');
+        setBrand((prev) => (!prev && aiBrand && aiBrand !== '기타') ? aiBrand : (prev || '기타'));
         if (f.deliveryChargeType.confidence >= 0.7)
           setDeliveryChargeType(f.deliveryChargeType.value as 'FREE' | 'NOT_FREE');
         if (f.deliveryCharge.confidence >= 0.7) setDeliveryCharge(f.deliveryCharge.value);
-        if (f.searchTags.value.length > 0 && tags.length === 0)
-          setTags(f.searchTags.value.slice(0, 10));
+        setTags((prev) => (f.searchTags.value.length > 0 && prev.length === 0)
+          ? f.searchTags.value.slice(0, 10)
+          : prev);
       })
       .catch(() => {})
       .finally(() => setIsAiMapping(false));
