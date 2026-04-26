@@ -13,6 +13,7 @@ import {
 import { useListingStore } from '@/store/useListingStore';
 import { C } from '@/lib/design-tokens';
 import CoupangAutoRegisterPanel from '@/components/listing/workflow/CoupangAutoRegisterPanel';
+import NaverAutoRegisterPanel from '@/components/listing/workflow/NaverAutoRegisterPanel';
 
 const AI_STEPS = [
   { label: '이미지 분석', activeOn: 'analyzing' as const },
@@ -49,11 +50,15 @@ export default function Step3ReviewRegister() {
     pickedDetailImages,
     thumbnailImages,
     detailImages,
+    sourceUrl,
+    selectedPlatform,
   } = sharedDraft;
 
   const [copied, setCopied] = useState(false);
   const [snippetCopied, setSnippetCopied] = useState(false);
   const [snippetNaverCopied, setSnippetNaverCopied] = useState(false);
+  const [copiedImageIndex, setCopiedImageIndex] = useState<number | null>(null);
+  const [copiedSourceUrl, setCopiedSourceUrl] = useState(false);
   const [registered, setRegistered] = useState(false);
   const [showRegisterForm, setShowRegisterForm] = useState(true);
 
@@ -83,6 +88,20 @@ export default function Step3ReviewRegister() {
     if (detailPageStatus === 'analyzing') return index === 0 ? 'active' : 'idle';
     if (detailPageStatus === 'generating') return index === 0 ? 'done' : 'active';
     return 'idle';
+  };
+
+  // 썸네일 URL 복사
+  const handleCopyImageUrl = async (url: string, index: number) => {
+    await navigator.clipboard.writeText(url).catch(() => {});
+    setCopiedImageIndex(index);
+    setTimeout(() => setCopiedImageIndex(null), 2000);
+  };
+
+  const handleCopySourceUrl = async () => {
+    if (!sourceUrl) return;
+    await navigator.clipboard.writeText(sourceUrl).catch(() => {});
+    setCopiedSourceUrl(true);
+    setTimeout(() => setCopiedSourceUrl(false), 2000);
   };
 
   // 복사 / 다운로드
@@ -176,10 +195,13 @@ export default function Step3ReviewRegister() {
     }
   };
 
-  const handleRegistered = () => {
+  function handleCoupangRegistered() {
     setRegistered(true);
-    setShowRegisterForm(false);
-  };
+  }
+
+  function handleNaverRegistered(_originProductNo: number) {
+    setRegistered(true);
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -211,6 +233,62 @@ export default function Step3ReviewRegister() {
 
         {/* ══ 좌측: 상세페이지 미리보기 + AI 생성/수정 ══════════════════════ */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', position: 'sticky', top: '16px', alignSelf: 'start' }}>
+
+          {/* 썸네일 이미지 + 소스 URL */}
+          {(thumbnailImages.length > 0 || sourceUrl) && (
+            <div style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: '12px', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 14px', borderBottom: `1px solid ${C.border}`, backgroundColor: C.tableHeader }}>
+                <div>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: C.text }}>썸네일 이미지</span>
+                  {thumbnailImages.length > 0 && (
+                    <span style={{ marginLeft: '6px', fontSize: '11px', color: C.textSub }}>{thumbnailImages.length}장</span>
+                  )}
+                </div>
+                {sourceUrl && (
+                  <button
+                    onClick={handleCopySourceUrl}
+                    style={{ display: 'flex', alignItems: 'center', gap: '3px', padding: '4px 9px', fontSize: '11px', fontWeight: 600, backgroundColor: copiedSourceUrl ? '#15803d' : '#fff', color: copiedSourceUrl ? '#fff' : C.text, border: `1px solid ${copiedSourceUrl ? '#15803d' : C.border}`, borderRadius: '5px', cursor: 'pointer', transition: 'all 0.15s' }}
+                  >
+                    {copiedSourceUrl ? <><CheckCheck size={10} />소스 URL 복사됨</> : <><Copy size={10} />소스 URL 복사</>}
+                  </button>
+                )}
+              </div>
+              {thumbnailImages.length > 0 ? (
+                <div style={{ padding: '10px 12px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                  {thumbnailImages.map((url, i) => (
+                    <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <div style={{ position: 'relative', aspectRatio: '1', overflow: 'hidden', borderRadius: '6px', border: `1px solid ${C.border}`, backgroundColor: '#f8f9fa' }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={url}
+                          alt={`썸네일 ${i + 1}`}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        />
+                      </div>
+                      <button
+                        onClick={() => handleCopyImageUrl(url, i)}
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px',
+                          padding: '3px 6px', fontSize: '10px', fontWeight: 600,
+                          backgroundColor: copiedImageIndex === i ? '#15803d' : '#fff',
+                          color: copiedImageIndex === i ? '#fff' : C.textSub,
+                          border: `1px solid ${copiedImageIndex === i ? '#15803d' : C.border}`,
+                          borderRadius: '4px', cursor: 'pointer', transition: 'all 0.15s',
+                        }}
+                      >
+                        {copiedImageIndex === i ? <><CheckCheck size={9} />복사됨</> : <><Copy size={9} />URL 복사</>}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ padding: '10px 14px', fontSize: '12px', color: C.textSub }}>
+                  썸네일 이미지가 없습니다.
+                </div>
+              )}
+            </div>
+          )}
 
           {/* AI 상세페이지 생성 카드 */}
           <div style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: '12px', overflow: 'hidden' }}>
@@ -506,7 +584,16 @@ export default function Step3ReviewRegister() {
         {/* ══ 우측: 등록 폼 (AI 자동완성) ════════════════════════════════════ */}
         <div>
           {showRegisterForm && !registered && (
-            <CoupangAutoRegisterPanel onSuccess={handleRegistered} />
+            <>
+              {(selectedPlatform === 'coupang' || selectedPlatform === 'both' || !selectedPlatform) && (
+                <CoupangAutoRegisterPanel onSuccess={handleCoupangRegistered} />
+              )}
+              {(selectedPlatform === 'naver' || selectedPlatform === 'both') && (
+                <div style={{ marginTop: selectedPlatform === 'both' ? '16px' : '0' }}>
+                  <NaverAutoRegisterPanel onSuccess={handleNaverRegistered} />
+                </div>
+              )}
+            </>
           )}
           {registered && (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px', padding: '48px 24px', backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: '12px', textAlign: 'center' }}>
