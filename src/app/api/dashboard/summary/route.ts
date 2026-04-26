@@ -32,7 +32,9 @@ export function _resetDashboardCacheForTests(): void {
 }
 
 function toDateStr(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  // KST = UTC+9. 한국 시간대 기준 YYYY-MM-DD 반환 (서버 TZ 무관).
+  const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+  return kst.toISOString().slice(0, 10);
 }
 
 function periodRange(period: Period): { from: string; to: string } {
@@ -71,11 +73,11 @@ async function fetchCoupangOrders(from: string, to: string): Promise<CoupangOrde
     const items: CoupangOrderRow[] = [];
     for (const r of results) {
       if (r.status !== 'fulfilled') continue;
-      for (const o of r.value.items as Array<Record<string, unknown>>) {
+      for (const o of r.value.items as unknown as Array<Record<string, unknown>>) {
         items.push({
           orderId: Number(o.orderId ?? 0),
           status: String(o.status ?? ''),
-          totalAmount: Number((o as { totalPrice?: number }).totalPrice ?? 0),
+          totalAmount: Number(o.totalPrice ?? 0),
         });
       }
     }
