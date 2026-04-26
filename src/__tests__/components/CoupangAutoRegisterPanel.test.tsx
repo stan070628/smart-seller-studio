@@ -1,4 +1,88 @@
+import { render, screen, waitFor } from '@testing-library/react';
 import { buildDraftData } from '@/components/listing/workflow/CoupangAutoRegisterPanel';
+import CoupangAutoRegisterPanel from '@/components/listing/workflow/CoupangAutoRegisterPanel';
+
+// useListingStore mock
+vi.mock('@/store/useListingStore', () => ({
+  useListingStore: () => ({
+    sharedDraft: {
+      name: '도매꾹 상품',
+      salePrice: '12000',
+      originalPrice: '15000',
+      thumbnailImages: ['https://img.domeggook.com/thumb.jpg'],
+      detailImages: ['https://img.domeggook.com/detail.jpg'],
+      pickedDetailImages: [],
+      description: '<p>상세설명</p>',
+      tags: ['가전', 'USB'],
+      coupangCategoryCode: '',
+      coupangCategoryPath: '',
+      categoryHint: '생활가전',
+      deliveryChargeType: 'FREE',
+      deliveryCharge: '0',
+      stock: '100',
+    },
+  }),
+}));
+
+describe('CoupangAutoRegisterPanel 컴포넌트', () => {
+  beforeEach(() => {
+    global.fetch = vi.fn();
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation((url: string) => {
+      if (url.includes('ai-map')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              fields: {
+                sellerProductName: { value: '도매꾹 상품 AI', confidence: 0.9 },
+                displayCategoryCode: { value: 78780, confidence: 0.7 },
+                brand: { value: '기타', confidence: 0.5 },
+                salePrice: { value: 12000, confidence: 0.9 },
+                originalPrice: { value: 15000, confidence: 0.9 },
+                stockQuantity: { value: 100, confidence: 0.9 },
+                deliveryChargeType: { value: 'FREE', confidence: 0.9 },
+                deliveryCharge: { value: 0, confidence: 0.9 },
+                searchTags: { value: ['가전', 'USB'], confidence: 0.8 },
+              },
+            }),
+        });
+      }
+      if (url.includes('delivery-defaults')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({ outboundShippingPlaceCode: 'OUT001', returnCenterCode: 'RET001' }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('마운트 시 AI 매핑과 배송 기본값을 로드한다', async () => {
+    render(<CoupangAutoRegisterPanel onSuccess={() => {}} />);
+
+    // AI 매핑 로딩 배너 표시
+    expect(screen.getByText(/AI 필드 매핑/)).toBeInTheDocument();
+
+    // 매핑 완료 후 fetch가 호출됨
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('ai-map'),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it('sharedDraft.name으로 상품명 input이 초기화된다', async () => {
+    render(<CoupangAutoRegisterPanel onSuccess={() => {}} />);
+    // sharedDraft.name 값으로 초기화됨
+    expect(screen.getByDisplayValue('도매꾹 상품')).toBeInTheDocument();
+  });
+});
 
 describe('buildDraftData', () => {
   it('필수 필드를 올바르게 매핑한다', () => {
