@@ -104,6 +104,9 @@ describe('buildDraftData', () => {
       notices: [{ categoryName: '의류', detailName: '제조국', content: '대한민국' }],
       tags: ['태그1', '태그2'],
       detailImages: [],
+      adultOnly: 'EVERYONE',
+      taxType: 'TAX',
+      parallelImported: 'NOT_PARALLEL_IMPORTED',
     });
 
     expect(result.name).toBe('테스트 상품');
@@ -116,6 +119,9 @@ describe('buildDraftData', () => {
     expect(result.deliveryChargeType).toBe('FREE');
     expect(result.notices).toHaveLength(1);
     expect(result.tags).toEqual(['태그1', '태그2']);
+    expect(result.adultOnly).toBe('EVERYONE');
+    expect(result.taxType).toBe('TAX');
+    expect(result.parallelImported).toBe('NOT_PARALLEL_IMPORTED');
   });
 
   it('originalPrice가 salePrice보다 작으면 salePrice × 1.25로 보정한다', () => {
@@ -136,6 +142,9 @@ describe('buildDraftData', () => {
       notices: [],
       tags: [],
       detailImages: [],
+      adultOnly: 'EVERYONE',
+      taxType: 'TAX',
+      parallelImported: 'NOT_PARALLEL_IMPORTED',
     });
 
     expect(result.originalPrice).toBe(13000); // ceil(10000 * 1.25 / 1000) * 1000
@@ -159,6 +168,9 @@ describe('buildDraftData', () => {
       notices: [],
       tags: [],
       detailImages: ['https://example.com/detail.jpg'],
+      adultOnly: 'EVERYONE',
+      taxType: 'TAX',
+      parallelImported: 'NOT_PARALLEL_IMPORTED',
     });
 
     expect(result.thumbnail).toBe('https://example.com/detail.jpg');

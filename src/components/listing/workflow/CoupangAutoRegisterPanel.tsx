@@ -25,6 +25,9 @@ export interface DraftFormState {
   notices: { categoryName: string; detailName: string; content: string }[];
   tags: string[];
   detailImages: string[];
+  adultOnly: 'EVERYONE' | 'ADULTS_ONLY';
+  taxType: 'TAX' | 'TAX_FREE';
+  parallelImported: 'NOT_PARALLEL_IMPORTED' | 'PARALLEL_IMPORTED';
 }
 
 export interface DraftData {
@@ -44,6 +47,9 @@ export interface DraftData {
   notices: { categoryName: string; detailName: string; content: string }[];
   tags: string[];
   detailImages: string[];
+  adultOnly: 'EVERYONE' | 'ADULTS_ONLY';
+  taxType: 'TAX' | 'TAX_FREE';
+  parallelImported: 'NOT_PARALLEL_IMPORTED' | 'PARALLEL_IMPORTED';
 }
 
 export function buildDraftData(s: DraftFormState): DraftData {
@@ -73,6 +79,9 @@ export function buildDraftData(s: DraftFormState): DraftData {
     notices: s.notices,
     tags: s.tags,
     detailImages: s.detailImages,
+    adultOnly: s.adultOnly,
+    taxType: s.taxType,
+    parallelImported: s.parallelImported,
   };
 }
 
@@ -302,6 +311,9 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
       notices,
       tags,
       detailImages,
+      adultOnly,
+      taxType,
+      parallelImported,
     });
 
     try {
@@ -620,7 +632,7 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: `1px solid ${C.border}`, paddingTop: '4px' }}>
               <span style={{ fontWeight: 700, color: C.text }}>예상 수익</span>
-              <span style={{ fontWeight: 700, color: calc.netProfit >= 0 ? '#15803d' : '#b91c1c' }}>
+              <span style={{ fontWeight: 700, color: (salePrice - commission) >= 0 ? '#15803d' : '#b91c1c' }}>
                 {(salePrice - commission).toLocaleString()}원
               </span>
             </div>
@@ -682,7 +694,7 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
           <p style={{ fontSize: '12px', color: C.textSub }}>카테고리 코드를 입력하면 AI가 자동으로 작성합니다.</p>
         )}
         {notices.map((n, i) => (
-          <div key={i}>
+          <div key={`${n.categoryName}-${n.detailName}`}>
             <label style={{ ...label, fontSize: '11px' }}>{n.categoryName} › {n.detailName}</label>
             <input
               style={inputStyle}
