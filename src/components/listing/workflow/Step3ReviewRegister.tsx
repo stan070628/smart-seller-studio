@@ -585,11 +585,9 @@ export default function Step3ReviewRegister() {
         <div>
           {showRegisterForm && !registered && (
             <>
-              {(selectedPlatform === 'coupang' || selectedPlatform === 'both' || !selectedPlatform) && (
-                <CoupangAutoRegisterPanel onSuccess={handleCoupangRegistered} />
-              )}
+              <CoupangAutoRegisterPanel onSuccess={handleCoupangRegistered} />
               {(selectedPlatform === 'naver' || selectedPlatform === 'both') && (
-                <div style={{ marginTop: selectedPlatform === 'both' ? '16px' : '0' }}>
+                <div style={{ marginTop: '16px' }}>
                   <NaverAutoRegisterPanel onSuccess={handleNaverRegistered} />
                 </div>
               )}
