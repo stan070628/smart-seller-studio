@@ -58,9 +58,8 @@ export default function RevenueChart({ weeks, target, actual, currentWeek }: Rev
         role="img"
         aria-label="매출 추세 차트"
         viewBox={`0 0 ${W} ${H}`}
-        width="100%"
-        height={H}
-        style={{ display: 'block' }}
+        preserveAspectRatio="xMidYMid meet"
+        style={{ display: 'block', width: '100%', height: 'auto', maxHeight: H * 1.5 }}
       >
         {/* Y축 grid + 라벨 */}
         {[0, 250, 500, 750, 1000].map((v) => (
