@@ -468,6 +468,36 @@ export class NaverCommerceClient {
     return { contents: rawItems.map(normalizeNaverOrder) };
   }
 
+  // ─── 정산 조회 ────────────────────────────────────────────
+
+  /**
+   * 네이버 커머스 settlements API — 지급 완료된 정산 내역.
+   *
+   * 주의: 정확한 엔드포인트 경로/파라미터/응답 필드는 네이버 커머스 API 문서 재확인 필요.
+   * 현재 가정: GET /external/v1/settlements with paymentDateFrom/paymentDateTo.
+   */
+  async getSettlements(params: {
+    fromDate: string;  // YYYY-MM-DD
+    toDate: string;
+  }): Promise<{ items: Array<{ productOrderId: string; settlementAmount: number; paymentDate: string }> }> {
+    const query = new URLSearchParams({
+      paymentDateFrom: `${params.fromDate}T00:00:00.000+09:00`,
+      paymentDateTo:   `${params.toDate}T23:59:59.000+09:00`,
+    });
+    const res = await this.request<{ data?: Array<Record<string, unknown>> }>(
+      'GET',
+      `/external/v1/settlements?${query.toString()}`,
+    );
+    const rawItems = res.data ?? [];
+    return {
+      items: rawItems.map((r) => ({
+        productOrderId: String(r.productOrderId ?? r.productOrderNo ?? ''),
+        settlementAmount: Number(r.settlementAmount ?? r.amount ?? 0),
+        paymentDate: String(r.paymentDate ?? r.payoutDate ?? ''),
+      })),
+    };
+  }
+
   // ─── 카테고리 조회 ────────────────────────────────────────
 
   async getCategories(): Promise<NaverCategory[]> {

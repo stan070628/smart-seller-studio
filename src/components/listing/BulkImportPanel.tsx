@@ -4,8 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { Play, Square, Trash2 } from 'lucide-react';
 import { useImportQueue } from '@/hooks/useImportQueue';
 import { useListingStore } from '@/store/useListingStore';
-import DomeggookPreparePanel from '@/components/listing/DomeggookPreparePanel';
-import BothRegisterForm, { type DomeggookPrepareData } from '@/components/listing/BothRegisterForm';
+import DomeggookPreparePanel, { type DomeggookPrefillData } from '@/components/listing/DomeggookPreparePanel';
+import RegisterFormSections from '@/components/listing/register-form';
 import type { BulkImportItem, ImportItemStatus } from '@/types/bulkImport';
 
 const C = {
@@ -38,7 +38,7 @@ export default function BulkImportPanel() {
   const [rawInput, setRawInput] = useState('');
   const [initialized, setInitialized] = useState(false);
   const [registerItemNo, setRegisterItemNo] = useState<number | null>(null);
-  const [registerPrefill, setRegisterPrefill] = useState<{ data: DomeggookPrepareData; mode: 'both' | 'coupang' | 'naver' } | null>(null);
+  const [registerPrefill, setRegisterPrefill] = useState<{ data: DomeggookPrefillData; mode: 'both' | 'coupang' | 'naver' } | null>(null);
   const {
     items,
     isRunning,
@@ -68,7 +68,7 @@ export default function BulkImportPanel() {
 
   return (
     <div style={{ padding: '24px 0' }}>
-      {/* BothRegisterForm 모달 (DomeggookPreparePanel 완료 후) */}
+      {/* RegisterFormSections 모달 (DomeggookPreparePanel 완료 후) */}
       {registerPrefill !== null && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 1001,
@@ -78,8 +78,7 @@ export default function BulkImportPanel() {
           padding: '40px 16px',
         }}>
           <div style={{ width: '100%', maxWidth: 900 }}>
-            <BothRegisterForm
-              prefill={registerPrefill.data}
+            <RegisterFormSections
               onSuccess={() => setRegisterPrefill(null)}
               onCancel={() => setRegisterPrefill(null)}
             />
@@ -99,7 +98,19 @@ export default function BulkImportPanel() {
               onClose={() => setRegisterItemNo(null)}
               onContinueToRegister={(data, mode) => {
                 setRegisterItemNo(null);
-                useListingStore.getState().updateSharedDraft({ selectedPlatform: mode });
+                // prefill 데이터를 전역 스토어에 직접 주입 (RegisterFormSections는 prefill prop 없음)
+                const store = useListingStore.getState();
+                store.updateSharedDraft({
+                  selectedPlatform: mode,
+                  name: data.title,
+                  thumbnailImages: [data.thumbnailUrl],
+                  description: data.detailHtml,
+                  naverPrice: String(data.naverPrice),
+                  coupangPrice: String(data.coupangPrice),
+                });
+                if (data.itemNo) {
+                  store.fetchOptions(data.itemNo);
+                }
                 setRegisterPrefill({ data, mode });
               }}
               initialItemNo={String(registerItemNo)}

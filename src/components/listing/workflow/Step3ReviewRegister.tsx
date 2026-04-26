@@ -9,7 +9,7 @@ import React, { useState, useRef } from 'react';
 import { Copy, CheckCheck, Download, AlertCircle, Plus, Loader2 } from 'lucide-react';
 import { useListingStore } from '@/store/useListingStore';
 import { C } from '@/lib/design-tokens';
-import BothRegisterForm from '@/components/listing/BothRegisterForm';
+import RegisterFormSections from '@/components/listing/register-form';
 
 // AI 수정 예시 칩 목록
 const AI_EDIT_CHIPS = [
@@ -602,7 +602,7 @@ export default function Step3ReviewRegister() {
         {/* ── 우측: 등록 폼 ─────────────────────────────────────────────── */}
         <div>
           {showRegisterForm && !registered && (
-            <BothRegisterForm
+            <RegisterFormSections
               onSuccess={handleRegistered}
               onCancel={() => {}}
             />

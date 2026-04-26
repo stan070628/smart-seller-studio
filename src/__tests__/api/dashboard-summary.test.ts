@@ -118,4 +118,15 @@ describe('GET /api/dashboard/summary', () => {
     expect(body.data.pipeline.coupang.주문.count).toBe(0);
     expect(body.data.pipeline.naver.주문.count).toBe(1);
   });
+
+  it('쿠팡 정산이 성공하면 available:true + 금액 반환', async () => {
+    mockSettleCoupang.mockResolvedValue({ count: 5, amount: 500_000, available: true });
+    const res = await GET(makeRequest('30d'));
+    const body = await res.json();
+    expect(body.data.pipeline.coupang.정산완료).toEqual({
+      count: 5,
+      amount: 500_000,
+      available: true,
+    });
+  });
 });

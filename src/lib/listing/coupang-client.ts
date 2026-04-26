@@ -470,6 +470,42 @@ export class CoupangClient {
     if (!res.data) throw new Error(`[쿠팡] 주문 조회 실패: ${res.message}`);
     return res.data;
   }
+
+  // ─── 매출 내역 (정산) 조회 ─────────────────────────────────
+
+  /**
+   * Wing revenue-history API — 입금 완료된 매출 내역.
+   * https://developers.coupangcorp.com (revenue-history endpoint)
+   *
+   * 주의: 응답 필드명은 실제 API 호출로 검증 필요. orderId/saleAmount/recognitionDate는
+   * 일반적인 명명 가정이며, 실제 필드명이 다르면 호출부에서 매핑 조정 필요.
+   */
+  async getRevenueHistory(params: {
+    recognitionDateFrom: string;  // YYYY-MM-DD
+    recognitionDateTo: string;    // YYYY-MM-DD
+    maxPerPage?: number;
+    token?: string;
+  }): Promise<{ items: Array<{ orderId: string; saleAmount: number; recognitionDate: string }>; nextToken: string | null }> {
+    const parts: string[] = [
+      `recognitionDateFrom=${params.recognitionDateFrom}`,
+      `recognitionDateTo=${params.recognitionDateTo}`,
+    ];
+    if (params.maxPerPage) parts.push(`maxPerPage=${params.maxPerPage}`);
+    if (params.token) parts.push(`token=${params.token}`);
+
+    const url = `/v2/providers/openapi/apis/api/v1/revenue-history?${parts.join('&')}`;
+    await sleep(API_DELAY);
+    const res = await this.request<Array<Record<string, unknown>>>('GET', url);
+    const rawItems = res.data ?? [];
+    return {
+      items: rawItems.map((r) => ({
+        orderId: String(r.orderId ?? r.orderID ?? ''),
+        saleAmount: Number(r.saleAmount ?? r.amount ?? r.totalAmount ?? 0),
+        recognitionDate: String(r.recognitionDate ?? r.salesDate ?? ''),
+      })),
+      nextToken: res.nextToken ?? null,
+    };
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
