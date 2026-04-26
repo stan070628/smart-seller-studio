@@ -38,3 +38,36 @@ B=~/.claude/skills/gstack/browse/dist/browse
      ```
      스냅샷 재확인 후 데이터 수집 진행.
    - **로그인 성공**: 위 조건에 해당하지 않으면 → 데이터 수집 진행
+
+## STEP 1: 기간 파싱
+
+요청 텍스트에서 분석 기간(일수)을 추출한다:
+
+| 요청 패턴 | 추출값 |
+|---|---|
+| "7일", "일주일", "지난주" | 7 |
+| "14일", "2주" | 14 |
+| "이번달", "30일", "한달", "월간" | 30 |
+| 기간 언급 없음 | 30 (기본값) |
+
+추출한 값을 `PERIOD` 변수로 기억한다.
+
+오늘 날짜도 기억한다:
+```bash
+DATE=$(date +%Y%m%d)
+REPORT_TITLE="쿠팡 광고 성과 분석 보고서"
+PERIOD_LABEL="${PERIOD}일"
+```
+
+## STEP 2: 쿠팡 광고(Ads) 접속
+
+```bash
+$B connect
+$B goto "https://advertising.coupang.com/marketing/dashboard/sales"
+$B snapshot -i
+```
+
+로그인 감지 패턴을 실행한다 (위의 "로그인 감지 함수" 참고).
+사이트명은 "쿠팡 광고 관리자(advertising.coupang.com)"로 안내한다.
+
+로그인 성공 확인 후 → STEP 3 진행.
