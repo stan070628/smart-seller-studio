@@ -49,6 +49,9 @@ interface DraftData {
   notices?: { categoryName: string; detailName: string; content: string }[];
   tags?: string[];
   detailImages?: string[];
+  adultOnly?: 'EVERYONE' | 'ADULTS_ONLY';
+  taxType?: 'TAX' | 'TAX_FREE';
+  parallelImported?: 'NOT_PARALLEL_IMPORTED' | 'PARALLEL_IMPORTED';
   // 상품 옵션(variant) — 있으면 각 조합마다 별도 item 생성
   variants?: DraftVariant[];
 }
@@ -144,6 +147,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
       content: n.content,
     }));
 
+    // draft_data에서 읽은 상품 속성 값 (없으면 기본값)
+    const adultOnly = d.adultOnly || 'EVERYONE';
+    const taxType = d.taxType || 'TAX';
+    const parallelImported = d.parallelImported || 'NOT_PARALLEL_IMPORTED';
+
     // variants가 있으면 각 조합을 별도 item으로, 없으면 단일 item(기존 동작)
     const variants = Array.isArray(d.variants) && d.variants.length > 0 ? d.variants : null;
     const items: import('@/lib/listing/coupang-client').CoupangProductItem[] = variants
@@ -156,10 +164,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
           maximumBuyForPersonPeriod: 1,
           outboundShippingTimeDay: 3,
           unitCount: 1,
-          adultOnly: 'EVERYONE',
-          taxType: 'TAX',
+          adultOnly,
+          taxType,
           overseasPurchased: 'NOT_OVERSEAS_PURCHASED',
-          parallelImported: 'NOT_PARALLEL_IMPORTED',
+          parallelImported,
           images: itemImages,
           attributes: v.attributes,
           contents,
@@ -175,10 +183,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
             maximumBuyForPersonPeriod: 1,
             outboundShippingTimeDay: 3,
             unitCount: 1,
-            adultOnly: 'EVERYONE',
-            taxType: 'TAX',
+            adultOnly,
+            taxType,
             overseasPurchased: 'NOT_OVERSEAS_PURCHASED',
-            parallelImported: 'NOT_PARALLEL_IMPORTED',
+            parallelImported,
             images: itemImages,
             attributes: [],
             contents,
@@ -214,6 +222,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       returnCharge,
       vendorUserId: process.env.COUPANG_VENDOR_USER_ID ?? '',
       items,
+      searchTags: d.tags || [],
     };
 
     // Coupang API 실제 호출

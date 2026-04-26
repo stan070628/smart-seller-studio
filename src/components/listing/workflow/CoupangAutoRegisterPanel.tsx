@@ -303,7 +303,7 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
       originalPrice,
       stock,
       thumbnail: sharedDraft.thumbnailImages[0] || '',
-      detailHtml: sharedDraft.description || '',
+      detailHtml: sharedDraft.detailPageSnippet || sharedDraft.description || '',
       deliveryChargeType,
       deliveryCharge,
       outboundCode,
