@@ -84,10 +84,13 @@ export default function NaverAutoRegisterPanel({ onSuccess }: NaverAutoRegisterP
   // 상세설명: 네이버 전용 → 공통 순서로 폴백
   const hasDetailHtml = !!(sharedDraft.detailPageSnippetNaver || sharedDraft.detailPageSnippet);
 
-  // sharedDraft 변경 시 동기화
+  const initialSyncDone = React.useRef(false);
   useEffect(() => {
-    if (sharedDraft.name && !name) setName(sharedDraft.name);
-  }, [sharedDraft.name]);
+    if (!initialSyncDone.current && sharedDraft.name && !name) {
+      setName(sharedDraft.name);
+      initialSyncDone.current = true;
+    }
+  }, [sharedDraft.name, name]);
 
   // ── 카테고리 검색 ─────────────────────────────────────────
   async function handleCategorySearch() {
@@ -146,7 +149,7 @@ export default function NaverAutoRegisterPanel({ onSuccess }: NaverAutoRegisterP
           body: JSON.stringify({
             productName: name,
             sourceUrl: sharedDraft.sourceUrl ?? null,
-            sourceType: 'costco',
+            sourceType: sharedDraft.sourceUrl ? 'url' : 'manual',
             draftData,
           }),
         });

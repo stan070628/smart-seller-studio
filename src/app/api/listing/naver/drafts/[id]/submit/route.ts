@@ -75,7 +75,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const thumbnailImages = Array.isArray(d.thumbnailImages) ? d.thumbnailImages.filter(Boolean) : [];
   const detailHtml = d.detailHtml ?? name;
   const tags = Array.isArray(d.tags) ? d.tags : [];
-  const deliveryCharge = Number(d.deliveryCharge) ?? 0;
+  const deliveryCharge = Number(d.deliveryCharge) || 0;
   const returnCharge = Number(d.returnCharge) || 4000;
   const exchangeFee = Number(d.exchangeFee) || returnCharge * 2;
 
