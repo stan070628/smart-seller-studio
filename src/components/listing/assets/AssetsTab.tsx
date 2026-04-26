@@ -1,6 +1,88 @@
 'use client';
 
-// 썸네일·상세 에셋 생성 탭 — placeholder
+import React from 'react';
+import AssetsInputPanel from './AssetsInputPanel';
+import AssetsResultPanel from './AssetsResultPanel';
+import { useListingStore } from '@/store/useListingStore';
+
 export default function AssetsTab() {
-  return <div>썸네일·상세만 만들기 — 곧 구현됩니다</div>;
+  const { assetsDraft, updateAssetsDraft } = useListingStore();
+
+  const handleGenerate = async () => {
+    updateAssetsDraft({ isGenerating: true, lastError: null });
+    const body =
+      assetsDraft.mode === 'url'
+        ? { mode: 'url', url: assetsDraft.url.trim() }
+        : { mode: 'upload', images: assetsDraft.uploadedFiles };
+    try {
+      const res = await fetch('/api/listing/assets/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const json = (await res.json()) as {
+        success: boolean;
+        data?: { thumbnails: string[]; detailHtml: string; detailImage: string | null };
+        error?: string;
+      };
+      if (!json.success || !json.data) {
+        updateAssetsDraft({ isGenerating: false, lastError: json.error ?? '생성 실패' });
+        return;
+      }
+      updateAssetsDraft({
+        isGenerating: false,
+        generatedThumbnails: json.data.thumbnails ?? [],
+        generatedDetailHtml: json.data.detailHtml ?? '',
+      });
+    } catch (e) {
+      updateAssetsDraft({
+        isGenerating: false,
+        lastError: e instanceof Error ? e.message : '알 수 없는 오류',
+      });
+    }
+  };
+
+  const handleSave = async () => {
+    const body = {
+      sourceType: assetsDraft.mode,
+      sourceUrl: assetsDraft.mode === 'url' ? assetsDraft.url : undefined,
+      thumbnails: assetsDraft.generatedThumbnails,
+      detailHtml: assetsDraft.generatedDetailHtml,
+    };
+    try {
+      const res = await fetch('/api/listing/assets/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const json = (await res.json()) as { success: boolean; error?: string };
+      if (json.success) {
+        alert('자산이 저장되었습니다.');
+      } else {
+        alert('저장 실패: ' + (json.error ?? 'unknown'));
+      }
+    } catch {
+      alert('저장 중 오류가 발생했습니다.');
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: '20px', alignItems: 'start' }}>
+        <AssetsInputPanel onGenerate={handleGenerate} />
+        <AssetsResultPanel onSave={handleSave} />
+      </div>
+      {assetsDraft.lastError && (
+        <div style={{
+          padding: '10px 14px',
+          backgroundColor: '#fee2e2',
+          color: '#b91c1c',
+          fontSize: '13px',
+          borderRadius: '8px',
+        }}>
+          {assetsDraft.lastError}
+        </div>
+      )}
+    </div>
+  );
 }
