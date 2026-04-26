@@ -22,6 +22,7 @@ import Step2Processing from '@/components/listing/workflow/Step2Processing';
 import Step3ReviewRegister from '@/components/listing/workflow/Step3ReviewRegister';
 import BrowseMode from '@/components/listing/browse/BrowseMode';
 import AssetsTab from '@/components/listing/assets/AssetsTab';
+import Section from '@/components/listing/register-form/Section';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 색상 상수
@@ -545,48 +546,6 @@ function CategoryPicker({
       {query && !isLoading && results.length === 0 && (
         <div style={{ marginTop: '4px', fontSize: '12px', color: C.textSub, padding: '8px' }}>
           검색 결과가 없습니다.
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── 아코디언 섹션 ──────────────────────────────────────────────────────────
-
-function Section({
-  title,
-  required,
-  defaultOpen = true,
-  children,
-}: {
-  title: string;
-  required?: boolean;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div style={{
-      backgroundColor: C.card, border: `1px solid ${C.border}`,
-      borderRadius: '10px', overflow: 'hidden',
-    }}>
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        style={{
-          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '14px 20px', background: 'none', border: 'none', cursor: 'pointer',
-        }}
-      >
-        <span style={{ fontSize: '14px', fontWeight: 700, color: C.text }}>
-          {title}
-          {required && <span style={{ color: C.accent, marginLeft: '4px' }}>*</span>}
-        </span>
-        <span style={{ color: C.textSub, fontSize: '12px' }}>{open ? '접기' : '펼치기'}</span>
-      </button>
-      {open && (
-        <div style={{ padding: '0 20px 20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          {children}
         </div>
       )}
     </div>
