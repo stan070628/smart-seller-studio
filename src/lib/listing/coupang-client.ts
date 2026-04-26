@@ -487,6 +487,7 @@ export class CoupangClient {
     token?: string;
   }): Promise<{ items: Array<{ orderId: string; saleAmount: number; recognitionDate: string }>; nextToken: string | null }> {
     const parts: string[] = [
+      `vendorId=${this.vendorId}`,
       `recognitionDateFrom=${params.recognitionDateFrom}`,
       `recognitionDateTo=${params.recognitionDateTo}`,
     ];
