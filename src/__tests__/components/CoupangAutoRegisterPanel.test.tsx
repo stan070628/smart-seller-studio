@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { buildDraftData } from '@/components/listing/workflow/CoupangAutoRegisterPanel';
 import CoupangAutoRegisterPanel from '@/components/listing/workflow/CoupangAutoRegisterPanel';
 
@@ -174,5 +175,103 @@ describe('buildDraftData', () => {
     });
 
     expect(result.thumbnail).toBe('https://example.com/detail.jpg');
+  });
+});
+
+describe('임시저장 → 제출 플로우', () => {
+  beforeEach(() => {
+    global.fetch = vi.fn();
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation((url: string, options?: RequestInit) => {
+      if (url.includes('ai-map')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ fields: null }),
+        });
+      }
+      if (url.includes('delivery-defaults')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ outboundShippingPlaceCode: '', returnCenterCode: '' }),
+        });
+      }
+      if (url === '/api/listing/coupang/drafts' && options?.method === 'POST') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ id: 'draft-abc-123' }),
+        });
+      }
+      if (url.includes('drafts/draft-abc-123/submit') && options?.method === 'POST') {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              success: true,
+              sellerProductId: 99887766,
+              wingsUrl: 'https://wing.coupang.com',
+            }),
+        });
+      }
+      if (url.includes('validate-category')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ valid: true, fullPath: '테스트>카테고리' }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+  });
+
+  it('임시저장 버튼 클릭 시 POST /api/listing/coupang/drafts가 호출된다', async () => {
+    const user = userEvent.setup();
+    render(<CoupangAutoRegisterPanel onSuccess={() => {}} />);
+
+    // 카테고리 코드 입력 (유효성 검증 트리거)
+    const catInput = screen.getByPlaceholderText('숫자 코드 입력 (예: 78780)');
+    await user.type(catInput, '78780');
+
+    // 임시저장 버튼 클릭
+    const saveBtn = screen.getByText('임시저장');
+    await user.click(saveBtn);
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/listing/coupang/drafts',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+  });
+
+  it('임시저장 후 제출 버튼이 활성화되고, 클릭 시 submit API가 호출된다', async () => {
+    const user = userEvent.setup();
+    const onSuccess = vi.fn();
+    render(<CoupangAutoRegisterPanel onSuccess={onSuccess} />);
+
+    const catInput = screen.getByPlaceholderText('숫자 코드 입력 (예: 78780)');
+    await user.type(catInput, '78780');
+
+    // 임시저장
+    await user.click(screen.getByText('임시저장'));
+    await waitFor(() => screen.getByText('임시저장 업데이트'));
+
+    // 제출 버튼 활성화 확인 (카테고리 유효 + draftId 있음)
+    await waitFor(() => {
+      const submitBtn = screen.getByText('쿠팡에 제출');
+      expect(submitBtn).not.toBeDisabled();
+    }, { timeout: 5000 });
+
+    await user.click(screen.getByText('쿠팡에 제출'));
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('drafts/draft-abc-123/submit'),
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+
+    // 성공 화면
+    await waitFor(() => {
+      expect(screen.getByText(/쿠팡 제출 완료/)).toBeInTheDocument();
+      expect(screen.getByText(/99887766/)).toBeInTheDocument();
+    });
   });
 });
