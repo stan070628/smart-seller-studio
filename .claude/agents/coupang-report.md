@@ -71,3 +71,41 @@ $B snapshot -i
 사이트명은 "쿠팡 광고 관리자(advertising.coupang.com)"로 안내한다.
 
 로그인 성공 확인 후 → STEP 3 진행.
+
+## STEP 3: Ads 기간 필터 설정
+
+대시보드 상단의 날짜 범위 선택기를 찾아 PERIOD일로 설정한다.
+
+```bash
+$B snapshot -i
+# 날짜 선택기 ref 확인 후:
+$B click @<날짜선택기_ref>
+$B snapshot -i
+```
+
+"최근 7일", "최근 30일" 같은 프리셋 버튼이 있으면 PERIOD에 맞는 버튼 클릭.
+프리셋이 없으면 커스텀 날짜 입력 필드에 시작일/종료일 입력.
+
+필터 적용 후 `$B snapshot -i`로 데이터 갱신 확인.
+
+## STEP 4: Ads 데이터 수집
+
+스냅샷에서 다음 데이터를 파싱해 변수로 저장한다:
+
+**전체 KPI (대시보드 상단 요약 카드)**:
+- `ADS_IMPRESSIONS`: 노출수
+- `ADS_CLICKS`: 클릭수
+- `ADS_CTR`: CTR (%)
+- `ADS_ORDERS`: 주문수
+- `ADS_CVR`: CVR (%)
+- `ADS_SPEND`: 집행 광고비 (원)
+- `ADS_REVENUE`: 광고 전환 매출 (원)
+- `ADS_ROAS`: ROAS (%)
+
+**캠페인 목록 테이블** (각 행에서 파싱):
+- 캠페인명, 상태(ON/OFF), 노출수, 클릭수, CTR, 주문수, 광고비
+
+숫자가 "183,969" 형태면 쉼표 제거하여 정수로 저장.
+단위가 "원"이면 그대로, "%"면 소수점 포함 float으로 저장.
+
+데이터가 보이지 않거나 불완전하면 `$B screenshot`으로 화면 캡처해 시각적으로 확인.
