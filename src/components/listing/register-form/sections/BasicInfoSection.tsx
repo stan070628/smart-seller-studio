@@ -4,6 +4,7 @@ import React from 'react';
 import { Sparkles, Loader2 } from 'lucide-react';
 import { useRegisterForm } from '@/hooks/useRegisterForm';
 import CategoryPicker from '../parts/CategoryPicker';
+import PlatformExtraOptions from '../parts/PlatformExtraOptions';
 
 // 디자인 토큰 (BothRegisterForm 기준)
 const C = {
@@ -156,6 +157,9 @@ export default function BasicInfoSection() {
           error={errors.naverCategory}
         />
       </div>
+
+      {/* 쿠팡 전용 추가 옵션 (접힘 영역) */}
+      <PlatformExtraOptions />
     </div>
   );
 }

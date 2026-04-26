@@ -350,6 +350,7 @@ export function useRegisterForm(opts: UseRegisterFormOptions = {}) {
     brand, setBrand,
     naverExchangeFee, setNaverExchangeFee,
     coupangDefaults, setCoupangDefaults,
+    coupangMounted,
 
     // 태그
     tagInput, setTagInput,
