@@ -2,7 +2,7 @@
  * Legal 체크 공통 타입
  */
 
-export type LegalLayer = 'kc' | 'banned' | 'trademark';
+export type LegalLayer = 'kc' | 'banned' | 'trademark' | 'season' | 'oversize' | 'category';
 export type LegalSeverity = 'RED' | 'YELLOW' | 'GREEN';
 export type LegalStatus = 'blocked' | 'warning' | 'safe' | 'unchecked';
 
