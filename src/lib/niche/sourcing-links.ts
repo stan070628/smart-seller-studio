@@ -108,3 +108,15 @@ export function generateSourcingLinks(
     };
   });
 }
+
+/**
+ * 단일 플랫폼의 검색 URL을 생성한다.
+ *
+ * 상표 사전체크 결과 카드처럼 특정 플랫폼만 필요할 때 사용.
+ */
+export function buildSourcingUrl(
+  platform: SourcingPlatform,
+  query: string,
+): string {
+  return PLATFORM_CONFIG[platform].buildUrl(query);
+}
