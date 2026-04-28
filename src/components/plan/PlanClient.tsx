@@ -10,6 +10,7 @@ import {
   ClipboardList,
   AlertTriangle,
   ChevronRight,
+  ChevronDown,
   Save,
   Calendar,
   BarChart2,
@@ -117,12 +118,33 @@ function saveTaskChecks(data: Record<string, boolean>): void {
   localStorage.setItem('plan_wbs_tasks', JSON.stringify(data));
 }
 
+// ─── 난이도 헬퍼 ────────────────────────────────────────────────
+const DIFFICULTY_COLORS = ['#16A34A', '#65A30D', '#CA8A04', '#EA580C', '#DC2626'];
+
+function difficultyColor(d: 1 | 2 | 3 | 4 | 5): string {
+  return DIFFICULTY_COLORS[d - 1];
+}
+
+function renderStars(d: 1 | 2 | 3 | 4 | 5): string {
+  return '⭐'.repeat(d);
+}
+
 // ─── 탭 A: 오늘 할 일 ───────────────────────────────────────────
 function TodayTab() {
   const currentWeek = useMemo(() => getCurrentWeek(), []);
   const weekData = WBS_DATA[currentWeek];
   const [checks, setChecks] = useState<Record<string, boolean>>({});
   const [mounted, setMounted] = useState(false);
+  const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
+
+  function toggleExpanded(id: string) {
+    setExpandedTasks((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   useEffect(() => {
     setChecks(loadTaskChecks());
@@ -296,47 +318,145 @@ function TodayTab() {
         <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
           {weekData.tasks.map((task, idx) => {
             const done = !!checks[task.id];
+            const isExpanded = expandedTasks.has(task.id);
+            const hasDetails = !!(task.steps?.length || task.tip || task.videoRef);
+            const isLast = idx === weekData.tasks.length - 1;
             return (
-              <li
-                key={task.id}
-                onClick={() => toggleTask(task.id)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 12,
-                  padding: '14px 24px',
-                  borderBottom: idx < weekData.tasks.length - 1 ? `1px solid ${C.border}` : 'none',
-                  cursor: 'pointer',
-                  background: done ? 'rgba(22,163,74,0.04)' : 'transparent',
-                  transition: 'background 0.15s',
-                }}
-                onMouseEnter={(e) => {
-                  if (!done) (e.currentTarget as HTMLLIElement).style.background = C.rowHover;
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLLIElement).style.background = done
-                    ? 'rgba(22,163,74,0.04)'
-                    : 'transparent';
-                }}
-              >
-                <div style={{ marginTop: 2, flexShrink: 0 }}>
-                  {done ? (
-                    <CheckSquare size={18} color={C.green} />
-                  ) : (
-                    <Square size={18} color={C.textMuted} />
-                  )}
-                </div>
-                <span
+              <React.Fragment key={task.id}>
+                <li
+                  onClick={() => toggleTask(task.id)}
                   style={{
-                    fontSize: 14,
-                    color: done ? C.textMuted : C.text,
-                    textDecoration: done ? 'line-through' : 'none',
-                    lineHeight: 1.6,
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 12,
+                    padding: '14px 24px',
+                    borderBottom: !isExpanded && !isLast ? `1px solid ${C.border}` : 'none',
+                    cursor: 'pointer',
+                    background: done ? 'rgba(22,163,74,0.04)' : 'transparent',
+                    transition: 'background 0.15s',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!done) (e.currentTarget as HTMLLIElement).style.background = C.rowHover;
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLLIElement).style.background = done
+                      ? 'rgba(22,163,74,0.04)'
+                      : 'transparent';
                   }}
                 >
-                  {task.text}
-                </span>
-              </li>
+                  <div style={{ marginTop: 2, flexShrink: 0 }}>
+                    {done ? (
+                      <CheckSquare size={18} color={C.green} />
+                    ) : (
+                      <Square size={18} color={C.textMuted} />
+                    )}
+                  </div>
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <span
+                      style={{
+                        fontSize: 14,
+                        color: done ? C.textMuted : C.text,
+                        textDecoration: done ? 'line-through' : 'none',
+                        lineHeight: 1.6,
+                        flex: 1,
+                      }}
+                    >
+                      {task.text}
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          color: difficultyColor(task.difficulty),
+                          fontWeight: 600,
+                          letterSpacing: -1,
+                        }}
+                        title={`난이도 ${task.difficulty}/5`}
+                      >
+                        {renderStars(task.difficulty)}
+                      </span>
+                      {hasDetails && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleExpanded(task.id);
+                          }}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            padding: 4,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                          }}
+                          aria-label={isExpanded ? '접기' : '펼치기'}
+                        >
+                          {isExpanded ? (
+                            <ChevronDown size={16} color={C.textMuted} />
+                          ) : (
+                            <ChevronRight size={16} color={C.textMuted} />
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </li>
+                {isExpanded && (
+                  <li
+                    style={{
+                      padding: '12px 24px 16px 54px',
+                      borderBottom: !isLast ? `1px solid ${C.border}` : 'none',
+                      background: '#FAFAFA',
+                      listStyle: 'none',
+                    }}
+                  >
+                    {task.steps && task.steps.length > 0 && (
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: C.textMuted, marginBottom: 6 }}>
+                          📋 단계별 가이드
+                        </div>
+                        <ol style={{ margin: 0, paddingLeft: 20, fontSize: 13, lineHeight: 1.7, color: C.text }}>
+                          {task.steps.map((s, i) => (
+                            <li key={i} style={{ marginBottom: 4 }}>{s}</li>
+                          ))}
+                        </ol>
+                      </div>
+                    )}
+                    {task.tip && (
+                      <div
+                        style={{
+                          background: '#FEF3C7',
+                          border: '1px solid #FCD34D',
+                          borderRadius: 4,
+                          padding: '8px 12px',
+                          fontSize: 12,
+                          color: '#78350F',
+                          marginBottom: 8,
+                        }}
+                      >
+                        💡 {task.tip}
+                      </div>
+                    )}
+                    {(task.videoRef || task.estimatedHours !== undefined) && (
+                      <div
+                        style={{
+                          display: 'flex',
+                          gap: 16,
+                          fontSize: 11,
+                          color: C.textMuted,
+                          marginTop: 8,
+                        }}
+                      >
+                        {task.videoRef && <span>📺 {task.videoRef}</span>}
+                        {task.estimatedHours !== undefined && (
+                          <span>⏱️ 약 {task.estimatedHours}시간</span>
+                        )}
+                      </div>
+                    )}
+                  </li>
+                )}
+              </React.Fragment>
             );
           })}
         </ul>
