@@ -9,6 +9,10 @@
       "schedule": "0 15 * * *"
     },
     {
+      "path": "/api/sourcing/cron/refresh-matview",
+      "schedule": "30 15 * * *"
+    },
+    {
       "path": "/api/sourcing/costco/cron",
       "schedule": "0 21 * * *"
     },
