@@ -20,10 +20,10 @@ export async function POST(request: NextRequest) {
     let params: unknown[];
 
     if (ids && ids.length > 0) {
-      query = 'SELECT id, title FROM costco_products WHERE id = ANY($1)';
+      query = 'SELECT id, title, category_name FROM costco_products WHERE id = ANY($1)';
       params = [ids];
     } else {
-      query = 'SELECT id, title FROM costco_products WHERE is_active = true';
+      query = 'SELECT id, title, category_name FROM costco_products WHERE is_active = true';
       params = [];
     }
 
@@ -34,7 +34,10 @@ export async function POST(request: NextRequest) {
     let warningCount = 0;
 
     for (const row of rows) {
-      const { status, issues } = runSyncLegalCheck(row.title);
+      const { status, issues } = runSyncLegalCheck({
+        title: row.title ?? '',
+        categoryName: row.category_name ?? null,
+      });
 
       const blockedReason =
         status === 'blocked'

@@ -24,14 +24,14 @@ export async function POST(request: NextRequest) {
 
     if (ids && ids.length > 0) {
       query = `
-        SELECT id, title, safety_cert
+        SELECT id, title, safety_cert, category_name
         FROM sourcing_items
         WHERE id = ANY($1)
       `;
       params = [ids];
     } else {
       query = `
-        SELECT id, title, safety_cert
+        SELECT id, title, safety_cert, category_name
         FROM sourcing_items
         WHERE is_active = true
       `;
@@ -46,10 +46,11 @@ export async function POST(request: NextRequest) {
     let safeCount = 0;
 
     for (const row of rows) {
-      const { status, issues } = runSyncLegalCheck(
-        row.title ?? '',
-        row.safety_cert ?? null,
-      );
+      const { status, issues } = runSyncLegalCheck({
+        title: row.title ?? '',
+        safetyCert: row.safety_cert ?? null,
+        categoryName: row.category_name ?? null,
+      });
 
       const blockedReason =
         status === 'blocked' ? (issues[0]?.message ?? '법적 판매 금지') : null;

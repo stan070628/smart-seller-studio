@@ -21,10 +21,10 @@ export async function POST(request: NextRequest) {
     let params: unknown[];
 
     if (itemNos && itemNos.length > 0) {
-      query = 'SELECT id, item_no, title FROM sourcing_items WHERE item_no = ANY($1)';
+      query = 'SELECT id, item_no, title, safety_cert, category_name FROM sourcing_items WHERE item_no = ANY($1)';
       params = [itemNos];
     } else {
-      query = 'SELECT id, item_no, title FROM sourcing_items WHERE is_tracking = true';
+      query = 'SELECT id, item_no, title, safety_cert, category_name FROM sourcing_items WHERE is_tracking = true';
       params = [];
     }
 
@@ -35,7 +35,11 @@ export async function POST(request: NextRequest) {
     let warningCount = 0;
 
     for (const row of rows) {
-      const { status, issues } = runSyncLegalCheck(row.title);
+      const { status, issues } = runSyncLegalCheck({
+        title: row.title ?? '',
+        safetyCert: row.safety_cert ?? null,
+        categoryName: row.category_name ?? null,
+      });
 
       await pool.query(
         `UPDATE sourcing_items

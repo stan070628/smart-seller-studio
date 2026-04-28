@@ -139,8 +139,13 @@ async function runFetchAndSnapshot(): Promise<FetchAndSnapshotResult> {
         updatedItems++;
       }
 
-      // Layer 1+2 법적 검토 (동기 — 수집 흐름에서 즉시 실행)
-      const { status: legalStatus, issues: legalIssues } = runSyncLegalCheck(item.title);
+      // Layer 1+2+season+oversize+category 법적 검토 (동기 — 수집 흐름에서 즉시 실행)
+      // 도매꾹 list 응답(getItemList v4.1)에는 카테고리명이 없으므로 categoryName=null 전달
+      // 카테고리 기반 차단은 별도 legal-check 배치(getItemView 결과 사용)에서 적용
+      const { status: legalStatus, issues: legalIssues } = runSyncLegalCheck({
+        title: item.title,
+        categoryName: null,
+      });
       await pool.query(
         `UPDATE sourcing_items
          SET legal_status = $1, legal_issues = $2, legal_checked_at = now()
