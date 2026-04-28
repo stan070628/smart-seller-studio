@@ -65,15 +65,9 @@ export async function fetchCoupangSettlement(params: SettlementParams): Promise<
   }
 }
 
-export async function fetchNaverSettlement(params: SettlementParams): Promise<SettlementStageMetric> {
-  try {
-    const client = getNaverCommerceClient();
-    const { from, to } = periodToRange(params.period);
-    const result = await client.getSettlements({ fromDate: from, toDate: to });
-    const totalAmount = result.items.reduce((sum, r) => sum + (r.settlementAmount || 0), 0);
-    return { count: result.items.length, amount: totalAmount, available: true };
-  } catch (err) {
-    console.warn('[dashboard] 네이버 정산 조회 실패:', err instanceof Error ? err.message : err);
-    return { count: 0, amount: 0, available: false };
-  }
+export async function fetchNaverSettlement(_params: SettlementParams): Promise<SettlementStageMetric> {
+  // 네이버 커머스 정산 endpoint(`/external/v1/settlements`)가 404 반환 — 정확한 경로 미확인.
+  // 정확한 spec 확인 후 활성화 예정. 그 전까지 호출 자체 skip하여 미연동 상태 명시.
+  // (이전 구현은 매 요청마다 1초+ 무의미한 호출이 발생했음.)
+  return { count: 0, amount: 0, available: false };
 }
