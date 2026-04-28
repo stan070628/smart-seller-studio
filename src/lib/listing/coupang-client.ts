@@ -474,36 +474,52 @@ export class CoupangClient {
   // ─── 매출 내역 (정산) 조회 ─────────────────────────────────
 
   /**
-   * Wing revenue-history API — 입금 완료된 매출 내역.
-   * https://developers.coupangcorp.com (revenue-history endpoint)
+   * Wing revenue-history API — 인식일 기준 매출 내역.
    *
-   * 주의: 응답 필드명은 실제 API 호출로 검증 필요. orderId/saleAmount/recognitionDate는
-   * 일반적인 명명 가정이며, 실제 필드명이 다르면 호출부에서 매핑 조정 필요.
+   * 실제 응답 구조 (검증 완료):
+   *   { orderId, saleType, saleDate, recognitionDate, settlementDate, finalSettlementDate,
+   *     deliveryFee, items: [{ saleAmount, settlementAmount, salePrice, quantity, ... }] }
+   *
+   * API 제약:
+   *   - token 파라미터 필수 (첫 페이지는 빈 문자열로 명시 전송. 누락 시 400)
+   *   - recognitionDateTo 는 어제까지만 허용 (호출부에서 clamp 필요)
    */
   async getRevenueHistory(params: {
     recognitionDateFrom: string;  // YYYY-MM-DD
-    recognitionDateTo: string;    // YYYY-MM-DD
+    recognitionDateTo: string;    // YYYY-MM-DD (어제 또는 그 이전이어야 함)
     maxPerPage?: number;
     token?: string;
-  }): Promise<{ items: Array<{ orderId: string; saleAmount: number; recognitionDate: string }>; nextToken: string | null }> {
+  }): Promise<{
+    items: Array<{ orderId: string; saleAmount: number; settlementAmount: number; recognitionDate: string }>;
+    nextToken: string | null;
+  }> {
     const parts: string[] = [
       `vendorId=${this.vendorId}`,
       `recognitionDateFrom=${params.recognitionDateFrom}`,
       `recognitionDateTo=${params.recognitionDateTo}`,
+      `token=${params.token ?? ''}`,  // 빈 문자열이라도 명시 필수
     ];
     if (params.maxPerPage) parts.push(`maxPerPage=${params.maxPerPage}`);
-    if (params.token) parts.push(`token=${params.token}`);
 
     const url = `/v2/providers/openapi/apis/api/v1/revenue-history?${parts.join('&')}`;
     await sleep(API_DELAY);
     const res = await this.request<Array<Record<string, unknown>>>('GET', url);
     const rawItems = res.data ?? [];
     return {
-      items: rawItems.map((r) => ({
-        orderId: String(r.orderId ?? r.orderID ?? ''),
-        saleAmount: Number(r.saleAmount ?? r.amount ?? r.totalAmount ?? 0),
-        recognitionDate: String(r.recognitionDate ?? r.salesDate ?? ''),
-      })),
+      items: rawItems.map((r) => {
+        const innerItems = Array.isArray(r.items) ? (r.items as Array<Record<string, unknown>>) : [];
+        const saleAmount = innerItems.reduce((sum, it) => sum + (Number(it.saleAmount) || 0), 0);
+        const settlementAmount = innerItems.reduce(
+          (sum, it) => sum + (Number(it.settlementAmount) || 0),
+          0,
+        );
+        return {
+          orderId: String(r.orderId ?? ''),
+          saleAmount,
+          settlementAmount,
+          recognitionDate: String(r.recognitionDate ?? ''),
+        };
+      }),
       nextToken: res.nextToken ?? null,
     };
   }

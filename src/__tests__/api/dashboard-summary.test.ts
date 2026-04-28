@@ -94,7 +94,7 @@ describe('GET /api/dashboard/summary', () => {
     expect(body.data.pipeline.coupang.주문.count).toBeGreaterThanOrEqual(0);
     expect(body.data.pipeline.naver.주문.count).toBeGreaterThanOrEqual(0);
     expect(body.data.revenue12w.weeks).toEqual([1,2,3,4,5,6,7,8,9,10,11,12]);
-    expect(body.data.revenue12w.target).toEqual([50,100,200,300,400,500,600,700,800,900,950,1000]);
+    expect(body.data.revenue12w.target).toEqual([0,50,150,300,400,550,700,800,870,920,970,1000]);
     expect(body.data.revenue12w.actual).toEqual(new Array(12).fill(null));
     expect(body.data.pipeline.coupang.주문.amount).toBe(10000); // C2 regression guard
   });

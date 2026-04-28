@@ -1,16 +1,12 @@
 /**
- * GET /api/dashboard/summary?period=today|7d|30d|month
+ * GET /api/dashboard/orders-summary?period=today|7d|30d|month
  *
- * 운영 대시보드용 요약 — 채널별 주문 파이프라인 + 등록 상품 수 + 12주 매출 추세 (target만).
- * 12주 actual은 클라이언트에서 plan localStorage 기반으로 채움.
- *
- * 스펙: docs/superpowers/specs/2026-04-26-dashboard-redesign-design.md
+ * Phase 1: 빠른 path — 주문 파이프라인 + 정산. 쿠팡 상품 수 조회는 분리됨 (느림).
  */
 import { NextRequest } from 'next/server';
 import { requireAuth } from '@/lib/supabase/auth';
-import { isPeriod, type Period, type DashboardSummaryData, type ChannelPipeline } from '@/lib/dashboard/types';
+import { isPeriod, type Period, type OrdersSummaryData, type ChannelPipeline } from '@/lib/dashboard/types';
 import { WEEKLY_TARGETS } from '@/lib/plan/constants';
-import { countCoupangProducts, countNaverProducts } from '@/lib/dashboard/product-count';
 import { getCoupangClient } from '@/lib/listing/coupang-client';
 import { getNaverCommerceClient } from '@/lib/listing/naver-commerce-client';
 import {
@@ -24,15 +20,13 @@ import { fetchCoupangSettlement, fetchNaverSettlement } from '@/lib/dashboard/se
 export const dynamic = 'force-dynamic';
 
 const CACHE_TTL_MS = 30_000;
-const cache = new Map<string, { data: DashboardSummaryData; expiresAt: number }>();
+const cache = new Map<string, { data: OrdersSummaryData; expiresAt: number }>();
 
-// Export only for tests — used by integration tests to reset cache between cases
-export function _resetDashboardCacheForTests(): void {
+export function _resetOrdersSummaryCacheForTests(): void {
   cache.clear();
 }
 
 function toDateStr(d: Date): string {
-  // KST = UTC+9. 한국 시간대 기준 YYYY-MM-DD 반환 (서버 TZ 무관).
   const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
   return kst.toISOString().slice(0, 10);
 }
@@ -41,22 +35,13 @@ function periodRange(period: Period): { from: string; to: string } {
   const today = new Date();
   const to = toDateStr(today);
   let from = to;
-
-  if (period === 'today') {
-    from = to;
-  } else if (period === '7d') {
-    const d = new Date(today);
-    d.setDate(d.getDate() - 6);
-    from = toDateStr(d);
+  if (period === '7d') {
+    const d = new Date(today); d.setDate(d.getDate() - 6); from = toDateStr(d);
   } else if (period === '30d') {
-    const d = new Date(today);
-    d.setDate(d.getDate() - 29);
-    from = toDateStr(d);
+    const d = new Date(today); d.setDate(d.getDate() - 29); from = toDateStr(d);
   } else if (period === 'month') {
-    const d = new Date(today.getFullYear(), today.getMonth(), 1);
-    from = toDateStr(d);
+    const d = new Date(today.getFullYear(), today.getMonth(), 1); from = toDateStr(d);
   }
-
   return { from, to };
 }
 
@@ -68,7 +53,6 @@ async function fetchCoupangOrdersForStatus(
   to: string,
   status: string,
 ): Promise<CoupangOrderRow[]> {
-  // ordersheets API는 maxPerPage 최대 50. 30일 기간이면 nextToken으로 이어 받아야 누락 없음.
   const MAX_PAGES = 20;
   const items: CoupangOrderRow[] = [];
   let nextToken: string | undefined = undefined;
@@ -131,19 +115,10 @@ async function fetchNaverOrders(from: string, to: string): Promise<NaverOrderRow
   }
 }
 
-async function buildSummary(period: Period, userId: string): Promise<DashboardSummaryData> {
+async function buildOrdersSummary(period: Period): Promise<OrdersSummaryData> {
   const { from, to } = periodRange(period);
 
-  const [
-    coupangCount,
-    naverCount,
-    coupangOrders,
-    naverOrders,
-    coupangSettle,
-    naverSettle,
-  ] = await Promise.all([
-    countCoupangProducts(userId).catch(() => 0),
-    countNaverProducts().catch(() => 0),
+  const [coupangOrders, naverOrders, coupangSettle, naverSettle] = await Promise.all([
     fetchCoupangOrders(from, to),
     fetchNaverOrders(from, to),
     fetchCoupangSettlement({ period }).catch(() => ({ count: 0, amount: 0, available: false })),
@@ -157,7 +132,6 @@ async function buildSummary(period: Period, userId: string): Promise<DashboardSu
   naverPipeline.정산완료 = naverSettle;
 
   return {
-    products: { coupang: coupangCount, naver: naverCount },
     pipeline: { coupang: coupangPipeline, naver: naverPipeline },
     revenue12w: {
       weeks: Array.from({ length: 12 }, (_, i) => i + 1),
@@ -174,10 +148,7 @@ export async function GET(request: NextRequest) {
 
   const periodParam = request.nextUrl.searchParams.get('period') ?? 'today';
   if (!isPeriod(periodParam)) {
-    return Response.json(
-      { success: false, error: `유효하지 않은 period: ${periodParam}` },
-      { status: 400 },
-    );
+    return Response.json({ success: false, error: `유효하지 않은 period: ${periodParam}` }, { status: 400 });
   }
   const period: Period = periodParam;
 
@@ -188,12 +159,12 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const data = await buildSummary(period, userId);
+    const data = await buildOrdersSummary(period);
     cache.set(cacheKey, { data, expiresAt: Date.now() + CACHE_TTL_MS });
     return Response.json({ success: true, data });
   } catch (err) {
     const message = err instanceof Error ? err.message : '알 수 없는 오류';
-    console.error('[GET /api/dashboard/summary]', err);
+    console.error('[GET /api/dashboard/orders-summary]', err);
     return Response.json({ success: false, error: message }, { status: 500 });
   }
 }

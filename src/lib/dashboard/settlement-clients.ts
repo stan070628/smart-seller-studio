@@ -20,12 +20,16 @@ function periodToRange(period: Period): { from: string; to: string } {
     const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
     return kst.toISOString().slice(0, 10);
   };
-  const to = toKstDate(today);
+  // 쿠팡 revenue-history 는 dateTo가 어제 이전이어야 함 → 어제로 clamp.
+  // 정산은 본질적으로 D+N 데이터라 today 노출은 의미 없음 — 네이버 settlements도 동일하게 처리.
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const to = toKstDate(yesterday);
   let from = to;
   if (period === '7d') {
-    const d = new Date(today); d.setDate(d.getDate() - 6); from = toKstDate(d);
+    const d = new Date(yesterday); d.setDate(d.getDate() - 6); from = toKstDate(d);
   } else if (period === '30d') {
-    const d = new Date(today); d.setDate(d.getDate() - 29); from = toKstDate(d);
+    const d = new Date(yesterday); d.setDate(d.getDate() - 29); from = toKstDate(d);
   } else if (period === 'month') {
     const d = new Date(today.getFullYear(), today.getMonth(), 1); from = toKstDate(d);
   }
@@ -36,13 +40,25 @@ export async function fetchCoupangSettlement(params: SettlementParams): Promise<
   try {
     const client = getCoupangClient();
     const { from, to } = periodToRange(params.period);
-    const result = await client.getRevenueHistory({
-      recognitionDateFrom: from,
-      recognitionDateTo: to,
-      maxPerPage: 100,
-    });
-    const totalAmount = result.items.reduce((sum, r) => sum + (r.saleAmount || 0), 0);
-    return { count: result.items.length, amount: totalAmount, available: true };
+
+    // revenue-history는 ordersheet 단위 페이징. 누락 방지를 위해 nextToken 끝까지 따라감.
+    const MAX_PAGES = 30;
+    let token = '';
+    let totalCount = 0;
+    let totalAmount = 0;
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const result = await client.getRevenueHistory({
+        recognitionDateFrom: from,
+        recognitionDateTo: to,
+        maxPerPage: 50,  // 쿠팡 API 상한
+        token,
+      });
+      totalCount += result.items.length;
+      totalAmount += result.items.reduce((sum, r) => sum + (r.saleAmount || 0), 0);
+      if (!result.nextToken) break;
+      token = result.nextToken;
+    }
+    return { count: totalCount, amount: totalAmount, available: true };
   } catch (err) {
     console.warn('[dashboard] 쿠팡 정산 조회 실패:', err instanceof Error ? err.message : err);
     return { count: 0, amount: 0, available: false };

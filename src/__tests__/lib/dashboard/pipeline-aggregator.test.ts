@@ -19,7 +19,7 @@ const np = (status: string, amount: number): NaverOrderRow => ({
 });
 
 describe('aggregateCoupangPipeline', () => {
-  it('각 status를 5단계 파이프라인에 매핑한다', () => {
+  it('각 status를 5단계 파이프라인에 매핑한다 — 주문 = ACCEPT + INSTRUCT (쿠팡 미출고 신규 주문)', () => {
     const result = aggregateCoupangPipeline([
       cp('ACCEPT',         10000),
       cp('INSTRUCT',       20000),
@@ -27,8 +27,8 @@ describe('aggregateCoupangPipeline', () => {
       cp('DELIVERING',     40000),
       cp('FINAL_DELIVERY', 50000),
     ]);
-    expect(result.주문).toEqual({ count: 1, amount: 10000 });
-    expect(result.배송중).toEqual({ count: 3, amount: 90000 });
+    expect(result.주문).toEqual({ count: 2, amount: 30000 });
+    expect(result.배송중).toEqual({ count: 2, amount: 70000 });
     expect(result.배송완료).toEqual({ count: 1, amount: 50000 });
     expect(result.구매확정).toEqual({ count: 0, amount: 0 });
   });

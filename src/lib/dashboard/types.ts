@@ -51,6 +51,27 @@ export interface DashboardErrorResponse {
   error: string;
 }
 
+// Phase 1: 카드별 점진 로딩용 분리 타입.
+export interface OrdersSummaryData {
+  pipeline: {
+    coupang: ChannelPipeline;
+    naver: ChannelPipeline;
+  };
+  revenue12w: {
+    weeks: number[];
+    target: number[];
+    actual: (number | null)[];
+  };
+}
+
+export interface ProductCountData {
+  coupang: number;
+  naver: number;
+  /** Phase 2 DB 캐시에서 채워짐. 직접 API 조회면 'live'. */
+  source: 'live' | 'cache';
+  refreshedAt: string;
+}
+
 export const PERIOD_LABELS: Record<Period, string> = {
   today: '오늘',
   '7d': '7일',

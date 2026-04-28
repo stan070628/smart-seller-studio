@@ -10,7 +10,8 @@ import OrderPipeline from './OrderPipeline';
 import RevenueChart from './RevenueChart';
 import {
   type Period,
-  type DashboardSummaryData,
+  type OrdersSummaryData,
+  type ProductCountData,
 } from '@/lib/dashboard/types';
 import { WBS_DATA, WEEKLY_TARGETS } from '@/lib/plan/constants';
 import { getCurrentWeek, getDaysIntoWeek } from '@/lib/plan/week';
@@ -70,34 +71,59 @@ function readPlanLocalData(): PlanLocalData | null {
 
 export default function DashboardClient() {
   const [period, setPeriod] = useState<Period>('30d');
-  const [data, setData] = useState<DashboardSummaryData | null>(null);
+  const [orders, setOrders] = useState<OrdersSummaryData | null>(null);
+  const [productCount, setProductCount] = useState<ProductCountData | null>(null);
   const [planData, setPlanData] = useState<PlanLocalData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [isOrdersLoading, setIsOrdersLoading] = useState(true);
+  const [isProductCountLoading, setIsProductCountLoading] = useState(true);
+  const [ordersError, setOrdersError] = useState<string | null>(null);
 
   // 플랜 데이터는 client side localStorage에서만
   useEffect(() => {
     setPlanData(readPlanLocalData());
   }, []);
 
-  const fetchSummary = async (p: Period) => {
-    setIsLoading(true);
-    setError(null);
+  const fetchOrders = async (p: Period) => {
+    setIsOrdersLoading(true);
+    setOrdersError(null);
     try {
-      const res = await fetch(`/api/dashboard/summary?period=${p}`);
+      const res = await fetch(`/api/dashboard/orders-summary?period=${p}`);
       const json = await res.json();
       if (!json.success) throw new Error(json.error ?? '요청 실패');
-      setData(json.data);
+      setOrders(json.data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '알 수 없는 오류');
+      setOrdersError(err instanceof Error ? err.message : '알 수 없는 오류');
     } finally {
-      setIsLoading(false);
+      setIsOrdersLoading(false);
+    }
+  };
+
+  const fetchProductCount = async () => {
+    setIsProductCountLoading(true);
+    try {
+      const res = await fetch('/api/dashboard/product-count');
+      const json = await res.json();
+      if (json.success) setProductCount(json.data);
+    } catch {
+      // 상품 수 조회 실패는 위젯 자체를 dim 처리. 큰 흐름은 차단하지 않음.
+    } finally {
+      setIsProductCountLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchSummary(period);
+    fetchOrders(period);
   }, [period]);
+
+  // product-count는 period와 무관하므로 마운트 시 1회만.
+  useEffect(() => {
+    fetchProductCount();
+  }, []);
+
+  const refreshAll = () => {
+    fetchOrders(period);
+    fetchProductCount();
+  };
 
   const chartActual = useMemo(() => {
     return planData?.cumulativeActual ?? new Array(12).fill(null);
@@ -162,7 +188,7 @@ export default function DashboardClient() {
           </nav>
         </div>
         <button
-          onClick={() => fetchSummary(period)}
+          onClick={refreshAll}
           aria-label="새로고침"
           style={{
             display: 'flex',
@@ -221,29 +247,31 @@ export default function DashboardClient() {
             <PlanEmptyCard />
           )}
 
-          {/* 등록 상품 위젯 */}
-          {data && (
-            <ProductCountWidget coupang={data.products.coupang} naver={data.products.naver} />
-          )}
+          {/* 등록 상품 위젯 — 자체 로딩/소스 표기 */}
+          {productCount ? (
+            <ProductCountWidget coupang={productCount.coupang} naver={productCount.naver} />
+          ) : isProductCountLoading ? (
+            <ProductCountSkeleton />
+          ) : null}
 
-          {/* 로딩 / 에러 / 정상 분기 */}
-          {isLoading && !data ? (
+          {/* 주문 파이프라인 — 자체 로딩/에러 분기 */}
+          {isOrdersLoading && !orders ? (
             <LoadingCard />
-          ) : error && !data ? (
-            <ErrorCard error={error} onRetry={() => fetchSummary(period)} />
-          ) : data ? (
+          ) : ordersError && !orders ? (
+            <ErrorCard error={ordersError} onRetry={() => fetchOrders(period)} />
+          ) : orders ? (
             <>
               <OrderPipeline
-                coupang={data.pipeline.coupang}
-                naver={data.pipeline.naver}
+                coupang={orders.pipeline.coupang}
+                naver={orders.pipeline.naver}
                 period={period}
                 onPeriodChange={setPeriod}
-                coupangDimmed={data.products.coupang === 0}
-                naverDimmed={data.products.naver === 0}
+                coupangDimmed={(productCount?.coupang ?? 0) === 0}
+                naverDimmed={(productCount?.naver ?? 0) === 0}
               />
               <RevenueChart
-                weeks={data.revenue12w.weeks}
-                target={data.revenue12w.target}
+                weeks={orders.revenue12w.weeks}
+                target={orders.revenue12w.target}
                 actual={chartActual}
                 currentWeek={planData?.weekNumber ?? 1}
               />
@@ -251,6 +279,25 @@ export default function DashboardClient() {
           ) : null}
         </div>
       </main>
+    </div>
+  );
+}
+
+function ProductCountSkeleton() {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: 16,
+        backgroundColor: C.card,
+        borderRadius: 14,
+        border: `1px solid ${C.border}`,
+      }}
+    >
+      <Loader2 size={14} style={{ animation: 'spin 1s linear infinite', color: '#a1a1aa' }} />
+      <span style={{ fontSize: 12, color: '#71717a' }}>등록 상품 수 집계 중…</span>
     </div>
   );
 }
