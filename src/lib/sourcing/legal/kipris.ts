@@ -8,7 +8,12 @@
 
 import type { LegalIssue } from './types';
 
-const KIPRIS_API_KEY = process.env.KIPRIS_API_KEY || '';
+// 운영: KIPRIS_TRADEMARK_API_KEY 우선 (kipris-client.ts 컨벤션과 일치)
+// 로컬: KIPRIS_API_KEY fallback (기존 .env.local 호환)
+const KIPRIS_API_KEY =
+  process.env.KIPRIS_TRADEMARK_API_KEY ||
+  process.env.KIPRIS_API_KEY ||
+  '';
 const KIPRIS_BASE_URL = 'http://plus.kipris.or.kr/kipo-api/kipi/trademarkInfoSearchService/getAdvancedSearch';
 
 // 상표 조회 제외 단어 (일반 명사, 조사 등)
