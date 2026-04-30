@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import AssetsResultPanel from '@/components/listing/assets/AssetsResultPanel';
 import { useListingStore } from '@/store/useListingStore';
@@ -6,7 +6,7 @@ import { useListingStore } from '@/store/useListingStore';
 describe('AssetsResultPanel', () => {
   it('생성 결과가 없으면 안내문을 표시한다', () => {
     useListingStore.getState().resetAssetsDraft();
-    render(<AssetsResultPanel onSave={() => {}} />);
+    render(<AssetsResultPanel />);
     expect(screen.getByText(/자산을 먼저 생성/)).toBeInTheDocument();
   });
 
@@ -15,8 +15,7 @@ describe('AssetsResultPanel', () => {
       generatedThumbnails: ['data:image/png;base64,xxx'],
       generatedDetailHtml: '<div>x</div>',
     });
-    render(<AssetsResultPanel onSave={() => {}} />);
+    render(<AssetsResultPanel />);
     expect(screen.getByRole('button', { name: /ZIP 다운로드/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Supabase에 저장/ })).toBeInTheDocument();
   });
 });

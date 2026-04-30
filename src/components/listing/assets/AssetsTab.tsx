@@ -147,41 +147,11 @@ export default function AssetsTab() {
     }
   };
 
-  const handleSave = async () => {
-    const body = {
-      sourceType: assetsDraft.mode,
-      sourceUrl: assetsDraft.mode === 'url' ? assetsDraft.url : undefined,
-      thumbnails: assetsDraft.generatedThumbnails,
-      detailHtml: assetsDraft.generatedDetailHtml,
-    };
-    try {
-      const res = await fetch('/api/listing/assets/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const ct = res.headers.get('content-type') ?? '';
-      if (!ct.includes('application/json')) {
-        const text = await res.text();
-        alert(`저장 실패 (HTTP ${res.status}): ${text.slice(0, 160)}`);
-        return;
-      }
-      const json = (await res.json()) as { success: boolean; error?: string };
-      if (res.ok && json.success) {
-        alert('자산이 저장되었습니다.');
-      } else {
-        alert('저장 실패: ' + (json.error ?? 'unknown'));
-      }
-    } catch {
-      alert('저장 중 오류가 발생했습니다.');
-    }
-  };
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: '20px', alignItems: 'start' }}>
         <AssetsInputPanel onGenerate={handleGenerate} />
-        <AssetsResultPanel onSave={handleSave} />
+        <AssetsResultPanel />
       </div>
       {assetsDraft.generatingMessage && (
         <div

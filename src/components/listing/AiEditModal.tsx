@@ -13,7 +13,7 @@ import { C } from '@/lib/design-tokens';
 import { X, Wand2, Loader2, AlertTriangle } from 'lucide-react';
 import { detectCoupangPolicyViolations } from '@/lib/ai/prompts/coupang-image-guide';
 
-// 빠른 프롬프트 선택지 — 모두 쿠팡 가이드라인(흰배경/85%/중앙/텍스트 금지) 강제
+// 단일 이미지 편집 — 빠른 프롬프트 (쿠팡 가이드라인 강제)
 const QUICK_PROMPTS = [
   {
     label: '흰 배경',
@@ -37,15 +37,42 @@ const QUICK_PROMPTS = [
   },
 ];
 
+// 두 이미지 합치기 — 빠른 프롬프트 (쿠팡 가이드라인 강제)
+const MERGE_QUICK_PROMPTS = [
+  {
+    label: '나란히 배치',
+    prompt:
+      'Place both products side by side on a pure white (#FFFFFF) background, centered as a single composition that fills at least 85% of the frame, square 1:1 framing. Keep both products unchanged. Soft shadow under each product. No text, no logo, no badge, no people.',
+  },
+  {
+    label: '메인 + 부속',
+    prompt:
+      'Compose a single product photo: place the first image as the main product in the center and the second image as a smaller accessory/companion next to it, both on a pure white (#FFFFFF) background, square 1:1, filling at least 85% of the frame. Keep both products unchanged. No text, no logo, no badge, no people.',
+  },
+  {
+    label: '겹쳐 배치',
+    prompt:
+      'Combine the two products into one natural-looking composition with subtle overlap, on a pure white (#FFFFFF) background, centered, square 1:1, filling at least 85% of the frame. Keep both products unchanged. Small soft shadow. No text, no logo, no badge, no people.',
+  },
+  {
+    label: '자연스럽게 한 컷',
+    prompt:
+      'Merge both products into a single, cohesive product photo as if they were photographed together. Pure white (#FFFFFF) background, centered, square 1:1, filling at least 85% of the frame. Keep both products unchanged. No text, no logo, no badge, no people.',
+  },
+];
+
 interface AiEditModalProps {
-  imageUrl: string;           // blob URL 또는 공개 URL
+  imageUrl: string;           // blob URL 또는 공개 URL (필수, 첫 번째 이미지)
   imageFile: File | null;     // 업로드할 File (blob URL인 경우)
+  imageUrl2?: string;         // 합치기 모드일 때 두 번째 이미지 (공개 URL이라 가정)
   onClose: () => void;
   onSave: (resultUrl: string) => void;
   initialPrompt?: string;     // 인라인 입력창에서 미리 입력된 프롬프트
 }
 
-export default function AiEditModal({ imageUrl, imageFile, onClose, onSave, initialPrompt }: AiEditModalProps) {
+export default function AiEditModal({ imageUrl, imageFile, imageUrl2, onClose, onSave, initialPrompt }: AiEditModalProps) {
+  const isMergeMode = Boolean(imageUrl2);
+  const quickPrompts = isMergeMode ? MERGE_QUICK_PROMPTS : QUICK_PROMPTS;
   const [prompt, setPrompt] = useState(initialPrompt ?? '');
   const [uploading, setUploading] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -91,7 +118,11 @@ export default function AiEditModal({ imageUrl, imageFile, onClose, onSave, init
       const res = await fetch('/api/ai/edit-thumbnail', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageUrl: publicUrl, prompt }),
+        body: JSON.stringify({
+          imageUrl: publicUrl,
+          ...(imageUrl2 ? { imageUrl2 } : {}),
+          prompt,
+        }),
       });
       const json = await res.json();
       if (!res.ok || !json.data?.editedUrl) throw new Error(json.error ?? 'AI 편집 실패');
@@ -131,7 +162,9 @@ export default function AiEditModal({ imageUrl, imageFile, onClose, onSave, init
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px 0' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Wand2 size={18} color={C.accent} />
-            <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: C.text }}>AI 이미지 편집</h2>
+            <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: C.text }}>
+              {isMergeMode ? 'AI로 두 이미지 합치기' : 'AI 이미지 편집'}
+            </h2>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textSub }}>
             <X size={20} />
@@ -142,25 +175,50 @@ export default function AiEditModal({ imageUrl, imageFile, onClose, onSave, init
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', padding: '20px 24px' }}>
           {/* 왼쪽: 원본 + 편집 설정 */}
           <div>
-            <p style={{ margin: '0 0 8px', fontSize: '12px', fontWeight: 600, color: C.textSub }}>원본 이미지</p>
+            <p style={{ margin: '0 0 8px', fontSize: '12px', fontWeight: 600, color: C.textSub }}>
+              {isMergeMode ? '원본 이미지 (왼쪽 → 오른쪽)' : '원본 이미지'}
+            </p>
             <div
               style={{
-                borderRadius: '10px',
-                overflow: 'hidden',
-                border: `1px solid ${C.border}`,
+                display: isMergeMode ? 'grid' : 'block',
+                gridTemplateColumns: isMergeMode ? '1fr 1fr' : undefined,
+                gap: isMergeMode ? '8px' : undefined,
                 marginBottom: '16px',
-                position: 'relative',
-                height: '180px',
-                backgroundColor: C.tableHeader,
               }}
             >
-              {uploading ? (
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Loader2 size={24} color={C.textSub} style={{ animation: 'spin 1s linear infinite' }} />
+              <div
+                style={{
+                  borderRadius: '10px',
+                  overflow: 'hidden',
+                  border: `1px solid ${C.border}`,
+                  position: 'relative',
+                  height: '180px',
+                  backgroundColor: C.tableHeader,
+                }}
+              >
+                {uploading ? (
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Loader2 size={24} color={C.textSub} style={{ animation: 'spin 1s linear infinite' }} />
+                  </div>
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                )}
+              </div>
+              {isMergeMode && imageUrl2 && (
+                <div
+                  style={{
+                    borderRadius: '10px',
+                    overflow: 'hidden',
+                    border: `1px solid ${C.border}`,
+                    position: 'relative',
+                    height: '180px',
+                    backgroundColor: C.tableHeader,
+                  }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={imageUrl2} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                 </div>
-              ) : (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
               )}
             </div>
 
@@ -214,7 +272,7 @@ export default function AiEditModal({ imageUrl, imageFile, onClose, onSave, init
 
             <p style={{ margin: '10px 0 6px', fontSize: '12px', fontWeight: 600, color: C.textSub }}>빠른 선택</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-              {QUICK_PROMPTS.map(q => (
+              {quickPrompts.map(q => (
                 <button
                   key={q.label}
                   onClick={() => setPrompt(q.prompt)}
@@ -315,7 +373,7 @@ export default function AiEditModal({ imageUrl, imageFile, onClose, onSave, init
             }}
           >
             <Wand2 size={14} />
-            AI 편집 실행
+            {isMergeMode ? 'AI 합치기 실행' : 'AI 편집 실행'}
           </button>
           {resultUrl && (
             <button
