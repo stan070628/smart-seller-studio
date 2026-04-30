@@ -30,7 +30,8 @@ describe('useListingStore — assetsDraft', () => {
     const d = useListingStore.getState().assetsDraft;
     expect(d.mode).toBe('url');
     expect(d.url).toBe('');
-    expect(d.uploadedFiles).toEqual([]);
+    expect(d.thumbnailFiles).toEqual([]);
+    expect(d.detailFiles).toEqual([]);
     expect(d.generatedThumbnails).toEqual([]);
     expect(d.generatedDetailHtml).toBe('');
     expect(d.isGenerating).toBe(false);

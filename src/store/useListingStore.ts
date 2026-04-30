@@ -188,10 +188,15 @@ type NaverProductDetail = Record<string, any>;
 interface AssetsDraft {
   mode: 'url' | 'upload';
   url: string;
-  uploadedFiles: string[];
+  // 업로드 모드: 썸네일용 / 상세페이지용 이미지를 분리해서 보관
+  // 상세용 이미지는 자산 생성 시 AI 편집을 거쳐 상세페이지에 사용된다.
+  thumbnailFiles: string[];
+  detailFiles: string[];
   generatedThumbnails: string[];
   generatedDetailHtml: string;
   isGenerating: boolean;
+  /** 사람이 읽는 진행 메시지 ("상세 이미지 AI 편집 중 (2/5)..." 등) */
+  generatingMessage: string | null;
   lastError: string | null;
   // 상세 HTML AI 수정 상태
   detailEditStatus: 'idle' | 'editing' | 'done' | 'error';
@@ -201,10 +206,12 @@ interface AssetsDraft {
 const ASSETS_DRAFT_INITIAL: AssetsDraft = {
   mode: 'url',
   url: '',
-  uploadedFiles: [],
+  thumbnailFiles: [],
+  detailFiles: [],
   generatedThumbnails: [],
   generatedDetailHtml: '',
   isGenerating: false,
+  generatingMessage: null,
   lastError: null,
   detailEditStatus: 'idle',
   detailEditError: null,
