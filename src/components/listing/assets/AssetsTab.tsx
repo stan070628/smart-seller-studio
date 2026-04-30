@@ -15,6 +15,7 @@ export default function AssetsTab() {
         ? { mode: 'url', url: assetsDraft.url.trim() }
         : { mode: 'upload', images: assetsDraft.uploadedFiles };
     try {
+      // 1) 썸네일 + (URL 모드의 경우) 외부 사이트에서 추출한 detailHtml 받기
       const res = await fetch('/api/listing/assets/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -38,10 +39,52 @@ export default function AssetsTab() {
         updateAssetsDraft({ isGenerating: false, lastError: json.error ?? '생성 실패' });
         return;
       }
+
+      const thumbnails = json.data.thumbnails ?? [];
+      let detailHtml = json.data.detailHtml ?? '';
+
+      // 2) 업로드 모드이거나 detailHtml이 비어있으면 AI로 상세페이지 HTML 생성
+      const needsAiDetail = thumbnails.length > 0 && (assetsDraft.mode === 'upload' || !detailHtml);
+      if (needsAiDetail) {
+        const aiRes = await fetch('/api/ai/generate-detail-html', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageUrls: thumbnails.slice(0, 5),
+            studioMode: true,
+          }),
+        });
+        const aiCt = aiRes.headers.get('content-type') ?? '';
+        if (aiCt.includes('application/json')) {
+          const aiData = (await aiRes.json()) as { html?: string; error?: string };
+          if (aiRes.ok && aiData.html) {
+            detailHtml = aiData.html;
+          } else if (aiData.error) {
+            // AI 단계 실패해도 썸네일은 살리고 에러만 표시
+            updateAssetsDraft({
+              isGenerating: false,
+              generatedThumbnails: thumbnails,
+              generatedDetailHtml: detailHtml,
+              lastError: `상세페이지 생성 실패: ${aiData.error}`,
+            });
+            return;
+          }
+        } else {
+          const aiText = await aiRes.text();
+          updateAssetsDraft({
+            isGenerating: false,
+            generatedThumbnails: thumbnails,
+            generatedDetailHtml: detailHtml,
+            lastError: `상세페이지 생성 실패 (HTTP ${aiRes.status}): ${aiText.slice(0, 160)}`,
+          });
+          return;
+        }
+      }
+
       updateAssetsDraft({
         isGenerating: false,
-        generatedThumbnails: json.data.thumbnails ?? [],
-        generatedDetailHtml: json.data.detailHtml ?? '',
+        generatedThumbnails: thumbnails,
+        generatedDetailHtml: detailHtml,
       });
     } catch (e) {
       updateAssetsDraft({

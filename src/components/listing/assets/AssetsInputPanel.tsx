@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useRef } from 'react';
 import { useListingStore } from '@/store/useListingStore';
 import { C } from '@/lib/design-tokens';
 import { prepareUpload } from '@/lib/image/prepare-upload';
@@ -12,6 +12,7 @@ interface Props {
 export default function AssetsInputPanel({ onGenerate }: Props) {
   const { assetsDraft, updateAssetsDraft } = useListingStore();
   const { mode, url, uploadedFiles, isGenerating } = assetsDraft;
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // 생성 버튼 활성화 조건: 로딩 중이 아니고, URL 모드면 URL이 있거나, 업로드 모드면 파일이 있어야 함
   const canGenerate = !isGenerating && (
@@ -121,7 +122,9 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
         />
       ) : (
         <div>
+          {/* OS 기본 파일 input은 텍스트 색이 옅어 흰 카드에서 가독성이 떨어지므로 숨기고 커스텀 컨트롤 사용 */}
           <input
+            ref={fileInputRef}
             type="file"
             accept="image/*"
             multiple
@@ -131,8 +134,32 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
               // 동일 파일 재선택을 허용하기 위해 input value 초기화.
               e.target.value = '';
             }}
-            style={{ fontSize: '12px' }}
+            style={{ display: 'none' }}
           />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isGenerating}
+              style={{
+                padding: '8px 16px',
+                fontSize: '13px',
+                fontWeight: 600,
+                color: C.text,
+                backgroundColor: '#fff',
+                border: `1px solid ${C.text}`,
+                borderRadius: '7px',
+                cursor: isGenerating ? 'not-allowed' : 'pointer',
+              }}
+            >
+              파일 선택
+            </button>
+            <span style={{ fontSize: '12px', color: C.text }}>
+              {uploadedFiles.length === 0
+                ? '선택된 파일 없음'
+                : `${uploadedFiles.length}개 선택됨`}
+            </span>
+          </div>
           {uploadedFiles.length > 0 && (
             <>
               <div
