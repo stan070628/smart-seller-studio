@@ -338,13 +338,24 @@ export async function POST(request: NextRequest): Promise<Response> {
   }
 
   const ai = getGeminiGenAI()
+  const REQUIRED_OUTPUT_TRAITS = [
+    "REQUIRED OUTPUT (always enforced, do not skip):",
+    "- Square 1:1 framing.",
+    "- Reframe and zoom so the product is CENTERED and fills at least 85% of either the image width or height (or both). If the input shows the product surrounded by large empty space, you MUST crop in tighter.",
+    "- Background must be pure white (#FFFFFF) or near-white (#F2F2F2 to #FFFFFF) unless the product category clearly permits a lifestyle background.",
+    "- Do NOT add any text, price tag, logo, watermark, badge, sticker, frame, arrow, callout, or speech bubble.",
+    "- Do NOT add a person, hand, or body part unless the product is fashion apparel / fashion accessory / sportswear.",
+    "- Keep the original product identity intact: same colors, same shape, same printed labels.",
+    "- Output one single unified image (no collage, no split, no side-by-side panels).",
+  ].join("\n")
+
   const editInstruction = imageUrl2
     ? `Merge the two product photos into a SINGLE unified product image that complies with the Coupang image policy in the system instruction. ` +
       `If the user's instruction below would violate the policy (e.g. add text, add a price tag, build a collage, add a person in a non-fashion category, use a colored background where it is forbidden), silently produce a policy-compliant image instead. ` +
-      `You MUST output the edited image. User instruction: ${prompt}`
+      `You MUST output the edited image. User instruction: ${prompt}\n\n${REQUIRED_OUTPUT_TRAITS}`
     : `Edit this product photo according to the user's instruction while complying with the Coupang image policy in the system instruction. ` +
       `If the user's instruction would violate the policy, silently produce a policy-compliant image instead of refusing. ` +
-      `You MUST output the edited image. User instruction: ${prompt}`
+      `You MUST output the edited image. User instruction: ${prompt}\n\n${REQUIRED_OUTPUT_TRAITS}`
 
   let lastErr: unknown
   let succeeded = false

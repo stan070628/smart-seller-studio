@@ -12,12 +12,28 @@ import { useState, useEffect } from 'react';
 import { C } from '@/lib/design-tokens';
 import { X, Wand2, Loader2 } from 'lucide-react';
 
-// 빠른 프롬프트 선택지
+// 빠른 프롬프트 선택지 — 모두 쿠팡 가이드라인(흰배경/85%/중앙/텍스트 금지) 강제
 const QUICK_PROMPTS = [
-  { label: '흰 배경', prompt: 'Pure white clean background, professional product photo' },
-  { label: '자연광', prompt: 'Natural daylight outdoor setting, soft shadows' },
-  { label: '그라데이션', prompt: 'Subtle gradient background, studio lighting' },
-  { label: '클로즈업', prompt: 'Close-up detail shot emphasizing product texture and quality' },
+  {
+    label: '흰 배경',
+    prompt:
+      'Replace the background with pure white (#FFFFFF). Reframe and zoom so the product is centered and fills at least 85% of the image width or height (whichever is larger). Square 1:1 framing. Keep the product unchanged. Add only a small soft shadow under the product. No text, no logo, no badge, no people.',
+  },
+  {
+    label: '자연광',
+    prompt:
+      'Soft natural daylight on a clean light background. Center the product so it fills at least 85% of the frame, square 1:1. Small natural shadow under the product. No text, no logo, no badge, no people.',
+  },
+  {
+    label: '옅은 그라데이션',
+    prompt:
+      'Subtle very-light-gray gradient background (#F2F2F2 to #FFFFFF). Product centered and filling at least 85% of the frame, square 1:1. Soft studio lighting with a small shadow. No text, no logo, no badge, no people.',
+  },
+  {
+    label: '디테일 강조',
+    prompt:
+      'Same product on a pure white (#FFFFFF) background, centered, filling at least 85% of the frame in square 1:1 framing. Sharpen product details and texture but do not crop the product itself. No text, no logo, no badge, no people.',
+  },
 ];
 
 interface AiEditModalProps {
