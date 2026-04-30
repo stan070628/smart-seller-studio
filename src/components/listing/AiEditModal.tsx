@@ -8,9 +8,10 @@
  * - 결과 미리보기 후 "이 이미지로 저장" 클릭 시 onSave(resultUrl) 호출
  */
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { C } from '@/lib/design-tokens';
-import { X, Wand2, Loader2 } from 'lucide-react';
+import { X, Wand2, Loader2, AlertTriangle } from 'lucide-react';
+import { detectCoupangPolicyViolations } from '@/lib/ai/prompts/coupang-image-guide';
 
 // 빠른 프롬프트 선택지 — 모두 쿠팡 가이드라인(흰배경/85%/중앙/텍스트 금지) 강제
 const QUICK_PROMPTS = [
@@ -51,6 +52,9 @@ export default function AiEditModal({ imageUrl, imageFile, onClose, onSave, init
   const [publicUrl, setPublicUrl] = useState<string | null>(null);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // 사용자 프롬프트가 쿠팡 가이드라인 위반 의도를 포함하는지 실시간 감지
+  const violations = useMemo(() => detectCoupangPolicyViolations(prompt), [prompt]);
 
   // 모달 열릴 때 File이면 먼저 업로드해서 공개 URL 확보
   useEffect(() => {
@@ -178,6 +182,35 @@ export default function AiEditModal({ imageUrl, imageFile, onClose, onSave, init
                 color: C.text,
               }}
             />
+
+            {violations.length > 0 && (
+              <div
+                style={{
+                  marginTop: '10px',
+                  padding: '10px 12px',
+                  border: '1px solid #fbbf24',
+                  backgroundColor: '#fffbeb',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  color: '#92400e',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}>
+                  <AlertTriangle size={13} /> 쿠팡 가이드라인 위반 가능 항목
+                </div>
+                <ul style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  {violations.map((v) => (
+                    <li key={v.category}>{v.hint}</li>
+                  ))}
+                </ul>
+                <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#b45309' }}>
+                  AI가 이 지시를 무시하고 정책 준수 결과를 만들 수 있습니다. 결과를 확인 후 저장해 주세요.
+                </p>
+              </div>
+            )}
 
             <p style={{ margin: '10px 0 6px', fontSize: '12px', fontWeight: 600, color: C.textSub }}>빠른 선택</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>

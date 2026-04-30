@@ -113,3 +113,78 @@ export const COUPANG_IMAGE_GUIDE_EN = `
 
 You MUST follow these rules even if the user instruction conflicts. When the user asks for something forbidden (price tag, "Sale" text, model when not allowed, collage, colored background outside permitted categories, etc.), silently obey the policy and produce a compliant image instead.
 `.trim();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 위반 감지기 — 사용자 프롬프트가 가이드라인 위반 지시를 포함하는지 판정
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type PolicyViolationCategory =
+  | 'text'
+  | 'price'
+  | 'logo'
+  | 'collage'
+  | 'model'
+  | 'background';
+
+export interface PolicyViolation {
+  category: PolicyViolationCategory;
+  hint: string;
+}
+
+// 한국어 + 영어 키워드 매칭. 거짓 양성을 줄이기 위해 단어 경계와
+// "추가/넣기/삽입" 같은 의도 동사를 함께 매칭한다.
+const VIOLATION_PATTERNS: Array<{
+  pattern: RegExp;
+  category: PolicyViolationCategory;
+  hint: string;
+}> = [
+  {
+    pattern: /(텍스트|글자|문구|타이포|문자|카피|copy)\s*(박스|넣|추가|삽입|강조|적|입력|표시)/i,
+    category: 'text',
+    hint: '이미지 위 텍스트·문구 추가는 쿠팡 가이드라인 위반입니다.',
+  },
+  {
+    pattern: /(가격|할인율?|세일|특가|sale|\d+\s*%\s*(off|할인|다운|down))/i,
+    category: 'price',
+    hint: '가격·할인·세일 문구 표시는 위반입니다.',
+  },
+  {
+    pattern: /(로고|워터마크|watermark|브랜드.*마크|뱃지|배지|badge)\s*(넣|추가|삽입|박)/i,
+    category: 'logo',
+    hint: '브랜드 로고·워터마크·뱃지 추가는 위반입니다 (수량 표시 1개·2개·1set·x3 제외).',
+  },
+  {
+    pattern: /(콜라주|분할|나란히\s*비교|split|collage|n등분|쪼개|좌우.*비교)/i,
+    category: 'collage',
+    hint: '콜라주·분할·비교 이미지는 위반입니다 — 결과는 단일 통합 컷이어야 합니다.',
+  },
+  {
+    pattern: /(1\s*위|최고|단\s*하루|추천\s*뱃지|인기\s*뱃지|hot\s*event|신상\s*마크|new\s*뱃지)/i,
+    category: 'text',
+    hint: '"1위", "추천", "단 하루" 같은 홍보 문구·뱃지 추가는 위반입니다.',
+  },
+  {
+    pattern: /(모델|사람|인물|손|얼굴|여자|남자|키즈)\s*(넣|추가|합성|배치|들|착용)/i,
+    category: 'model',
+    hint: '인물 모델 추가는 패션의류·잡화·스포츠의류 카테고리 외에는 위반입니다.',
+  },
+  {
+    pattern: /(파란|빨간|초록|핑크|노란|컬러|color)\s*(색)?\s*배경/i,
+    category: 'background',
+    hint: '컬러 배경은 신선식품·패션 등 일부 카테고리에서만 허용됩니다. 그 외에는 흰색(#FFFFFF) 배경을 권장합니다.',
+  },
+];
+
+/** 사용자 프롬프트에서 가이드라인 위반 의도를 감지해 리스트로 반환 */
+export function detectCoupangPolicyViolations(prompt: string): PolicyViolation[] {
+  if (!prompt || prompt.trim().length === 0) return [];
+  const violations: PolicyViolation[] = [];
+  const seen = new Set<PolicyViolationCategory>();
+  for (const { pattern, category, hint } of VIOLATION_PATTERNS) {
+    if (pattern.test(prompt) && !seen.has(category)) {
+      violations.push({ category, hint });
+      seen.add(category);
+    }
+  }
+  return violations;
+}

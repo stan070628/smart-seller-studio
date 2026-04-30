@@ -10,6 +10,7 @@
 
 import { NextRequest } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import sharp from "sharp"
 import { z } from "zod"
 import { getGeminiGenAI } from "@/lib/ai/gemini"
 import { requireAuth } from "@/lib/supabase/auth"
@@ -38,6 +39,75 @@ const LISTING_IMAGES_BUCKET = "smart-seller-studio"
 
 /** 결과 이미지 저장 경로 prefix */
 const STORAGE_PATH_PREFIX = "ai-edited"
+
+// ─────────────────────────────────────────
+// 결정적 후처리 (쿠팡 가이드라인 강제)
+// ─────────────────────────────────────────
+
+/** 후처리 결과 캔버스 한 변 (정사각형) */
+const POSTPROCESS_CANVAS_SIZE = 1200
+/** 상품이 캔버스에서 차지할 비율. 가이드라인은 85%, 안전 마진 두고 92% 적용 */
+const POSTPROCESS_FILL_RATIO = 0.92
+/** trim 임계값: 흰 배경 판단 시 채널당 허용 차이 */
+const POSTPROCESS_TRIM_THRESHOLD = 12
+
+/**
+ * Gemini가 어떤 구도로 그리든 항상 쿠팡 정책을 만족하도록 강제하는 결정적 후처리:
+ * 1) 흰 배경을 자동 trim 하여 상품 윤곽만 추출
+ * 2) 1200×1200 흰 캔버스 중앙에 92% 크기로 재배치 (긴 변 기준)
+ * 3) JPEG q92로 인코딩
+ *
+ * trim에 실패하면(예: 배경이 흰색이 아닌 경우) 원본 그대로 반환한다.
+ */
+async function enforceCoupangPolicy(
+  inputBuffer: Buffer,
+): Promise<{ buffer: Buffer; mimeType: string }> {
+  try {
+    const trimmed = await sharp(inputBuffer)
+      .trim({
+        background: { r: 255, g: 255, b: 255 },
+        threshold: POSTPROCESS_TRIM_THRESHOLD,
+      })
+      .toBuffer()
+
+    const meta = await sharp(trimmed).metadata()
+    const w = meta.width ?? 0
+    const h = meta.height ?? 0
+    if (!w || !h) {
+      return { buffer: inputBuffer, mimeType: "image/jpeg" }
+    }
+
+    const longEdge = Math.max(w, h)
+    const targetLongEdge = Math.round(POSTPROCESS_CANVAS_SIZE * POSTPROCESS_FILL_RATIO)
+    const scale = targetLongEdge / longEdge
+    const newW = Math.max(1, Math.round(w * scale))
+    const newH = Math.max(1, Math.round(h * scale))
+
+    const resized = await sharp(trimmed)
+      .resize(newW, newH, { fit: "fill" })
+      .toBuffer()
+
+    const result = await sharp({
+      create: {
+        width: POSTPROCESS_CANVAS_SIZE,
+        height: POSTPROCESS_CANVAS_SIZE,
+        channels: 3,
+        background: { r: 255, g: 255, b: 255 },
+      },
+    })
+      .composite([{ input: resized, gravity: "center" }])
+      .jpeg({ quality: 92, progressive: true })
+      .toBuffer()
+
+    return { buffer: result, mimeType: "image/jpeg" }
+  } catch (err) {
+    console.warn(
+      "[edit-thumbnail] enforceCoupangPolicy 실패, 원본 유지:",
+      err instanceof Error ? err.message : err,
+    )
+    return { buffer: inputBuffer, mimeType: "image/jpeg" }
+  }
+}
 
 /** Gemini 시스템 프롬프트 — Coupang Ads 가이드라인을 항상 강제 */
 const SYSTEM_PROMPT = [
@@ -441,26 +511,22 @@ export async function POST(request: NextRequest): Promise<Response> {
     )
   }
 
-  // 6. 편집된 이미지를 Supabase Storage에 업로드
-  //    경로: ai-edited/{uuid}.jpg
+  // 6. 편집된 이미지를 후처리(흰배경+85% 강제) 후 Supabase Storage에 업로드
+  //    경로: ai-edited/{uuid}.jpg (후처리 결과는 항상 JPEG)
   const uuid = generateUuid()
-  // AI 응답 MIME 타입에 따라 확장자 결정 (기본 jpg)
-  const ext = editedMimeType.includes("png")
-    ? "png"
-    : editedMimeType.includes("webp")
-      ? "webp"
-      : "jpg"
-  const storagePath = `${STORAGE_PATH_PREFIX}/${uuid}.${ext}`
+  const storagePath = `${STORAGE_PATH_PREFIX}/${uuid}.jpg`
 
   let editedUrl: string
   try {
     const supabase = createSupabaseServiceClient()
-    const editedBuffer = Buffer.from(editedImageBase64, "base64")
+    const rawBuffer = Buffer.from(editedImageBase64, "base64")
+    const { buffer: editedBuffer, mimeType: finalMimeType } =
+      await enforceCoupangPolicy(rawBuffer)
 
     const { error: uploadError } = await supabase.storage
       .from(LISTING_IMAGES_BUCKET)
       .upload(storagePath, editedBuffer, {
-        contentType: editedMimeType,
+        contentType: finalMimeType,
         upsert: false,
       })
 
