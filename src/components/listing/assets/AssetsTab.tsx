@@ -20,12 +20,21 @@ export default function AssetsTab() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
+      const ct = res.headers.get('content-type') ?? '';
+      if (!ct.includes('application/json')) {
+        const text = await res.text();
+        updateAssetsDraft({
+          isGenerating: false,
+          lastError: `생성 실패 (HTTP ${res.status}): ${text.slice(0, 160)}`,
+        });
+        return;
+      }
       const json = (await res.json()) as {
         success: boolean;
         data?: { thumbnails: string[]; detailHtml: string; detailImage: string | null };
         error?: string;
       };
-      if (!json.success || !json.data) {
+      if (!res.ok || !json.success || !json.data) {
         updateAssetsDraft({ isGenerating: false, lastError: json.error ?? '생성 실패' });
         return;
       }
@@ -55,8 +64,14 @@ export default function AssetsTab() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
+      const ct = res.headers.get('content-type') ?? '';
+      if (!ct.includes('application/json')) {
+        const text = await res.text();
+        alert(`저장 실패 (HTTP ${res.status}): ${text.slice(0, 160)}`);
+        return;
+      }
       const json = (await res.json()) as { success: boolean; error?: string };
-      if (json.success) {
+      if (res.ok && json.success) {
         alert('자산이 저장되었습니다.');
       } else {
         alert('저장 실패: ' + (json.error ?? 'unknown'));
