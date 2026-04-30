@@ -3,6 +3,7 @@
 import React from 'react';
 import { useListingStore } from '@/store/useListingStore';
 import { C } from '@/lib/design-tokens';
+import { prepareUpload } from '@/lib/image/prepare-upload';
 
 interface Props {
   onGenerate: () => void;
@@ -27,8 +28,9 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
     try {
       const newUrls: string[] = [];
       for (const file of Array.from(files)) {
+        const { blob, filename } = await prepareUpload(file);
         const fd = new FormData();
-        fd.append('file', file);
+        fd.append('file', blob, filename);
         fd.append('usageContext', 'listing_thumbnail');
         const res = await fetch('/api/listing/upload-image', { method: 'POST', body: fd });
         const ct = res.headers.get('content-type') ?? '';
