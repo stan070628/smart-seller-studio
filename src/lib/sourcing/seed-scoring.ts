@@ -48,12 +48,13 @@ function calcCompetitorScore(
 
 /**
  * 검색량 점수 (25점)
- *  - 베이스: 역U형 (3k 12점 - 15k 25점 - 30k 12점)
+ *  - 베이스: 역U형 (3k 12점 - 7.5k 25점 - 15k 12점)
+ *    채널 [로켓그로스 소싱 100만원으로 시작 (2025-11-04)] 위너 키워드 분포가 4k~12k 집중 → 7.5k 피크
  *  - 보정: 평균 CTR 1% 미만은 정보검색성 키워드 (구매 의도 약함) → 50% 감점
  *  - CTR 데이터 없으면 (null) 보정 없음
  */
 function calcSearchVolumeScore(volume: number, avgCtr: number | null): number {
-  const PEAK = 15_000, MIN = 3_000, MAX = 30_000, BASE = 12, PEAK_SCORE = 25;
+  const PEAK = 7_500, MIN = 3_000, MAX = 15_000, BASE = 12, PEAK_SCORE = 25;
   let base: number;
   if (volume <= MIN || volume >= MAX) base = BASE;
   else if (volume <= PEAK) base = Math.round(BASE + (PEAK_SCORE - BASE) * (volume - MIN) / (PEAK - MIN));

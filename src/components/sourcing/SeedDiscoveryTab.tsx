@@ -239,14 +239,17 @@ function StepCategorySelect({ categories, setCategories, customSeeds, setCustomS
 
       {/* 직접 입력 시드 */}
       <div style={{ marginBottom: 14, padding: '10px 12px', background: '#fefce8', border: '1px solid #fde68a', borderRadius: 6 }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: '#92400e', marginBottom: 6 }}>
-          ✏️ 시드 직접 입력 — 자기 niche topic 기반 long-tail 발굴 (최대 20개, 콤마/공백/줄바꿈으로 구분)
+        <div style={{ fontSize: 10, fontWeight: 700, color: '#92400e', marginBottom: 4 }}>
+          ✏️ 시드 직접 입력 — <strong>2단어 이상 조합 권장</strong> (단일 카테고리명은 경쟁자 너무 많음)
+        </div>
+        <div style={{ fontSize: 9, color: '#92400e', marginBottom: 6, opacity: 0.8 }}>
+          ❌ '수납함', '방향제' (모키워드) → ✅ '캠핑수납함 폴딩', '석고방향제 자동차' (2단어 시드)
         </div>
         <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
           <input
             type="text"
             value={draft}
-            placeholder="예: 캠핑 펜트리, 베이비 모니터 거치대, 미니 디퓨저"
+            placeholder="예: 캠핑수납함 폴딩, 디퓨저 자동차, 약정리함 일주일"
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSeeds(); } }}
             style={{
@@ -557,8 +560,8 @@ function CriteriaPanel() {
           </tr>
           <tr>
             <td style={cell}><strong>검색량 필터</strong></td>
-            <td style={cell}>월 검색량 <strong style={{ color: '#1d4ed8' }}>3,000 ~ 30,000</strong> 사이만 통과 (네이버 검색광고 API)</td>
-            <td style={cell}>채널 — 검색량 가이드</td>
+            <td style={cell}>월 검색량 <strong style={{ color: '#1d4ed8' }}>3,000 ~ 15,000</strong> 사이만 통과 (네이버 검색광고 API)</td>
+            <td style={cell}>채널 — [로켓그로스 100만원 (2025-11-04)] 위너 키워드 분포 4k~12k 집중</td>
           </tr>
           <tr>
             <td style={cell}><strong>경쟁수 측정</strong></td>
@@ -598,8 +601,8 @@ function CriteriaPanel() {
           <div style={{ padding: '8px', background: '#eff6ff', borderRadius: 5, border: '1px solid #bfdbfe' }}>
             <div style={{ fontWeight: 700, color: '#1d4ed8', marginBottom: 3 }}>검색량 (25점)</div>
             <div style={{ color: '#475569', lineHeight: 1.5 }}>
-              역U형 — 15,000 피크 25점<br />
-              3,000 / 30,000 양 끝 12점<br />
+              역U형 — 7,500 피크 25점<br />
+              3,000 / 15,000 양 끝 12점<br />
               <strong>+ 보정:</strong> CTR &lt;1%면 50% 감점 (정보검색성)
             </div>
           </div>
