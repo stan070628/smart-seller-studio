@@ -416,7 +416,8 @@ export class NaverCommerceClient {
     toDate: string;    // "2024-01-07"
   }): Promise<{ contents: NaverOrder[] }> {
     // 실제 유효한 lastChangedType (EXCHANGED/CANCELED/RETURNED 는 400 반환으로 제외)
-    const VALID_STATUSES = ['PAYED', 'DISPATCHED', 'PURCHASE_DECIDED'];
+    // DELIVERING/DELIVERED 추가 — 배송중·배송완료 주문이 누락되던 버그 수정
+    const VALID_STATUSES = ['PAYED', 'DISPATCHED', 'DELIVERING', 'DELIVERED', 'PURCHASE_DECIDED'];
 
     const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 

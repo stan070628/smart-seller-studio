@@ -100,8 +100,8 @@ async function fetchCoupangOrders(from: string, to: string): Promise<CoupangOrde
   }
 }
 
-// 네이버 주문 API는 24h 단위 fan-out × 3 status. 30일이면 90회 + rate limit 가능성.
-// dashboard 용으로는 최근 7일로 clamp하여 호출량을 ~21회로 제한 (약 10초 이내).
+// 네이버 주문 API는 24h 단위 fan-out × 5 status. 30일이면 150회 + rate limit 가능성.
+// dashboard 용으로는 최근 7일로 clamp하여 호출량을 ~35회로 제한 (약 18초 이내).
 // 정확한 30d/month 데이터는 추후 cron 사전 집계로 대체 예정.
 const NAVER_DASHBOARD_MAX_DAYS = 7;
 
