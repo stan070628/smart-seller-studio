@@ -45,3 +45,15 @@ next-env.d.ts
 src/components/templates/.backups/
 .gstack/
 .worktrees/
+
+# Claude Code / superpowers / 로컬 작업 자료
+.claude/
+.superpowers/
+screenshots/
+test-results/
+supabase/.temp/
+scripts/debug-*.mjs
+scripts/regen-*.mjs
+
+# docs/superpowers/specs와 plans는 영구 문서로 git 관리
+# (이전에 통째로 무시했지만, spec/plan 문서는 추적 필요)
