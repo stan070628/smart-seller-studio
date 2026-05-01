@@ -45,6 +45,8 @@ export default function SeedDiscoveryTab() {
     setSelectedCategories, startAnalysis, loadSessions, reset,
   } = useSeedDiscoveryStore();
 
+  const [showCriteria, setShowCriteria] = React.useState(false);
+
   useEffect(() => { loadSessions(); }, [loadSessions]);
 
   const pendingReview = keywords.filter((k) => !k.isBlocked && k.topReviewCount === null).length;
@@ -60,10 +62,24 @@ export default function SeedDiscoveryTab() {
           <div style={{ fontSize: 11, color: C.textSub }}>카테고리 선택 → 키워드 자동 분석 → 검증 → 30개 확정 → 도매꾹 탭으로 이동</div>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+          <button
+            onClick={() => setShowCriteria((v) => !v)}
+            style={{
+              padding: '5px 10px', borderRadius: 6,
+              border: `1px solid ${showCriteria ? C.seedBorder : C.border}`,
+              background: showCriteria ? C.seedLight : C.card,
+              color: showCriteria ? C.seedAccent : C.text,
+              fontSize: 11, fontWeight: showCriteria ? 700 : 500, cursor: 'pointer',
+            }}
+          >
+            {showCriteria ? '▴ 기준 닫기' : 'ℹ️ 발굴 기준'}
+          </button>
           <button onClick={reset} style={{ padding: '5px 10px', borderRadius: 6, border: `1px solid ${C.border}`, background: C.card, fontSize: 11, cursor: 'pointer', color: C.text }}>초기화</button>
           <button onClick={() => reset()} style={{ padding: '5px 12px', borderRadius: 6, border: 'none', background: C.seedAccent, color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>+ 새 발굴 세션</button>
         </div>
       </div>
+
+      {showCriteria && <CriteriaPanel />}
 
       {/* 세션 이력 */}
       {sessions.length > 0 && (
@@ -422,6 +438,108 @@ function StepConfirm({ keywords, selectedCount, isConfirming }: {
       </div>
       <div style={{ marginTop: 14, fontSize: 11, color: '#374151' }}>
         도매꾹 탭에서 <strong style={{ color: '#7c3aed' }}>🌱 시드만 보기</strong> 필터로 확인하세요.
+      </div>
+    </div>
+  );
+}
+
+// ── 발굴 기준 패널 ────────────────────────────────────────────────────────
+function CriteriaPanel() {
+  const cell: React.CSSProperties = { padding: '6px 10px', borderBottom: `1px solid ${C.border}`, fontSize: 11, color: C.text };
+  const head: React.CSSProperties = { ...cell, background: '#f8fafc', fontWeight: 700, color: '#475569', fontSize: 10 };
+  return (
+    <div style={{ padding: '14px 20px', background: '#fdfcff', borderBottom: `1px solid ${C.seedBorder}`, fontSize: 11, color: C.text }}>
+      <div style={{ fontWeight: 700, marginBottom: 8, color: C.seedAccent, fontSize: 12 }}>📐 시드 발굴 기준 — 돈버는하마 채널 + 내부 보정</div>
+
+      {/* 4단계 파이프라인 */}
+      <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff', borderRadius: 6, overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', marginBottom: 12 }}>
+        <thead>
+          <tr>
+            <th style={{ ...head, width: 70, textAlign: 'left' }}>단계</th>
+            <th style={{ ...head, textAlign: 'left' }}>기준</th>
+            <th style={{ ...head, width: 220, textAlign: 'left' }}>출처/근거</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style={cell}><strong>Gate 0</strong></td>
+            <td style={cell}>시즌 키워드(크리스마스·설날·할로윈 등) 자동 차단</td>
+            <td style={cell}>채널 — 회피 리스트</td>
+          </tr>
+          <tr>
+            <td style={cell}><strong>자동완성</strong></td>
+            <td style={cell}>시드별 네이버 자동완성 상위 5개 + 시드 자체 = 후보 풀</td>
+            <td style={cell}>채널 — 롱테일 키워드 발굴</td>
+          </tr>
+          <tr>
+            <td style={cell}><strong>검색량 필터</strong></td>
+            <td style={cell}>월 검색량 <strong style={{ color: '#1d4ed8' }}>3,000 ~ 30,000</strong> 사이만 통과 (네이버 검색광고 API)</td>
+            <td style={cell}>채널 — 검색량 가이드</td>
+          </tr>
+          <tr>
+            <td style={cell}><strong>경쟁수 측정</strong></td>
+            <td style={cell}>네이버 쇼핑 통합 카탈로그 검색 — 경쟁수 표시(필터링 X)</td>
+            <td style={cell}>내부 — 채널의 &lt;500 기준이 쿠팡 단일 카탈로그 기준이라 통합 카탈로그 측정값엔 부적합 → hard 필터 제거</td>
+          </tr>
+          <tr>
+            <td style={cell}><strong>리뷰 입력</strong></td>
+            <td style={cell}>쿠팡 검색 시 상위 3개 상품 중 <strong>최대</strong> 리뷰수 입력. <strong style={{ color: '#dc2626' }}>50개 이상 자동 탈락</strong></td>
+            <td style={cell}>채널 — &quot;초보가 소싱이 어려운 이유&quot;</td>
+          </tr>
+          <tr>
+            <td style={cell}><strong>마진 게이트</strong></td>
+            <td style={cell}>위탁 마진 <strong>30% 미만</strong> 자동 탈락. 1688 마진 40% 미만은 ⚠️ 경고만</td>
+            <td style={cell}>채널 — 위탁 마진 가이드</td>
+          </tr>
+          <tr>
+            <td style={cell}><strong>KIPRIS</strong></td>
+            <td style={cell}>상표권 충돌 자동 검사 (선등록 상표 발견 시 경고)</td>
+            <td style={{ ...cell, borderBottom: 'none' }}>내부 — 등록 차단 예방</td>
+          </tr>
+        </tbody>
+      </table>
+
+      {/* 점수 산식 */}
+      <div style={{ background: '#fff', borderRadius: 6, padding: '10px 12px', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+        <div style={{ fontWeight: 700, fontSize: 11, color: '#475569', marginBottom: 6 }}>🎯 시드 점수 산출 (총 100점)</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, fontSize: 10 }}>
+          <div style={{ padding: '8px', background: '#ecfeff', borderRadius: 5, border: '1px solid #a5f3fc' }}>
+            <div style={{ fontWeight: 700, color: '#0891b2', marginBottom: 3 }}>경쟁 (30점)</div>
+            <div style={{ color: '#475569', lineHeight: 1.5 }}>
+              노출가능성 = (검색량 / 경쟁수) × 1000<br />
+              ratio≥100 → 30점, ratio=0 → 0점, 선형
+            </div>
+          </div>
+          <div style={{ padding: '8px', background: '#eff6ff', borderRadius: 5, border: '1px solid #bfdbfe' }}>
+            <div style={{ fontWeight: 700, color: '#1d4ed8', marginBottom: 3 }}>검색량 (25점)</div>
+            <div style={{ color: '#475569', lineHeight: 1.5 }}>
+              역U형 — 15,000 피크 25점<br />
+              3,000 / 30,000 양 끝 12점
+            </div>
+          </div>
+          <div style={{ padding: '8px', background: '#fef3c7', borderRadius: 5, border: '1px solid #fde68a' }}>
+            <div style={{ fontWeight: 700, color: '#b45309', marginBottom: 3 }}>리뷰 (25점)</div>
+            <div style={{ color: '#475569', lineHeight: 1.5 }}>
+              0개 → 25점, 50개 → 0점<br />
+              선형 (50개 이상은 자동 탈락)
+            </div>
+          </div>
+          <div style={{ padding: '8px', background: '#dcfce7', borderRadius: 5, border: '1px solid #bbf7d0' }}>
+            <div style={{ fontWeight: 700, color: '#15803d', marginBottom: 3 }}>마진 (20점)</div>
+            <div style={{ color: '#475569', lineHeight: 1.5 }}>
+              30% → 0점, 60% → 20점<br />
+              선형 (30% 미만은 자동 탈락)
+            </div>
+          </div>
+        </div>
+        <div style={{ marginTop: 8, fontSize: 10, color: '#64748b' }}>
+          등급: <strong>S</strong> 85+ · <strong>A</strong> 70+ · <strong>B</strong> 55+ · <strong>C</strong> 40+ · <strong>D</strong> 39 이하
+        </div>
+      </div>
+
+      <div style={{ marginTop: 10, fontSize: 10, color: '#64748b', lineHeight: 1.6 }}>
+        💡 <strong>다음 단계 (시드 → 위너):</strong> 발굴된 30개 시드를 위탁으로 등록 → 2주 운영 → 위너 확정 기준
+        (클릭 100+, 전환율 1.5%+, ROAS 250%+, 판매 5건+, 별점 4.0+) 충족 5~10개를 1688 사입으로 전환.
       </div>
     </div>
   );
