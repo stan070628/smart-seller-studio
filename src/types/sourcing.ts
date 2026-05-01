@@ -185,6 +185,48 @@ export interface SalesAnalysisItem {
   alternativeSellers: number | null;
   sellerRating: number | null;
   sellerYears: number | null;
+  // 시드 발굴 필드 (051 migration)
+  seedKeyword: string | null;
+  seedScore: number | null;
+  seedSessionId: string | null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 시드 발굴 타입
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface SeedSession {
+  id: string;
+  userId: string;
+  categories: string[];
+  status: 'in_progress' | 'confirmed';
+  step: number;
+  stateJson: SeedSessionState;
+  confirmedAt: string | null;
+  winnerCount: number;
+  createdAt: string;
+}
+
+export interface SeedSessionState {
+  selectedCategories?: string[];
+  keywords?: SeedKeyword[];
+  currentStep?: number;
+}
+
+export interface SeedKeyword {
+  keyword: string;
+  searchVolume: number;
+  competitorCount: number;
+  topReviewCount: number | null;
+  marginRate: number | null;
+  seedScore: number | null;
+  seedGrade: 'S' | 'A' | 'B' | 'C' | 'D' | null;
+  domItemNo: number | null;
+  domItemTitle: string | null;
+  kiprisStatus: 'clear' | 'warning' | 'pending';
+  isSelected: boolean;
+  isBlocked: boolean;
+  blockedReason: string | null;
 }
 
 export interface PriceTier {
