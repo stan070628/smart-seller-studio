@@ -47,6 +47,19 @@ export async function POST(request: NextRequest) {
 
   const { categories, sessionId } = parsed.data;
 
+  // 환경변수 누락 조기 차단
+  const hasNaverAdKeys = !!(
+    process.env.NAVER_AD_API_KEY &&
+    process.env.NAVER_AD_SECRET_KEY &&
+    process.env.NAVER_AD_CUSTOMER_ID
+  );
+  if (!hasNaverAdKeys) {
+    return NextResponse.json(
+      { success: false, error: 'Naver Ad API 키가 서버에 설정되지 않았습니다. Vercel 환경변수(NAVER_AD_API_KEY, NAVER_AD_SECRET_KEY, NAVER_AD_CUSTOMER_ID)를 추가해 주세요.' },
+      { status: 500 },
+    );
+  }
+
   try {
     // 1. 카테고리 → 시드 키워드 수집
     const seeds: string[] = categories.flatMap((cat) => CATEGORY_SEEDS[cat] ?? []);
@@ -65,12 +78,15 @@ export async function POST(request: NextRequest) {
 
     // 3. Gate 0: 시즌 키워드 제거
     const afterGate0 = [...expanded].filter((kw) => !isSeasonKeyword(kw));
+    console.log(`[seed-discover] seeds=${seeds.length} expanded=${expanded.size} afterGate0=${afterGate0.length}`);
 
     // 4. 검색량 조회 + 필터 (3,000~30,000)
     const keywordStats = await expandKeywords(afterGate0).catch(() => []);
+    console.log(`[seed-discover] keywordStats=${keywordStats.length}`);
     const filtered = keywordStats.filter(
       (k) => k.searchVolume !== null && k.searchVolume >= 3_000 && k.searchVolume <= 30_000,
     );
+    console.log(`[seed-discover] filtered(3k-30k)=${filtered.length}`);
 
     // 5. 경쟁상품수 조회 + 필터 (<500)
     const results: SeedKeyword[] = [];
