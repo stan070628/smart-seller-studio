@@ -184,7 +184,8 @@ export default function StepProductInput() {
               type="text" value={keywordDraft}
               onChange={(e) => setKeywordDraft(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && keywordDraft.trim()) {
+                // 한글 IME 조합 중 Enter는 무시 (마지막 음절 중복 방지)
+                if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229 && keywordDraft.trim()) {
                   e.preventDefault();
                   addKeyword(keywordDraft.trim());
                   setKeywordDraft('');
