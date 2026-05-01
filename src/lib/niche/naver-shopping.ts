@@ -12,7 +12,7 @@ import type { NaverShoppingItem } from '@/types/niche';
 // ─────────────────────────────────────────────────────────────
 
 const NAVER_API_BASE = 'https://openapi.naver.com/v1';
-const NAVER_AC_BASE = 'https://ac.shopping.naver.com/ac';
+const NAVER_AC_BASE = 'https://ac.search.naver.com/nx/ac';
 
 /** API 호출 간 대기 시간 (ms) — Rate Limiting 방지 */
 const API_DELAY = 150;
@@ -66,12 +66,12 @@ interface NaverSearchApiResponse {
 
 // ─────────────────────────────────────────────────────────────
 // 자동완성 API 응답 타입 (내부용)
-// 응답 형식: { query: [...], ac: [[["키워드", "0"], ...], ...] }
+// 응답 형식: { query: [...], items: [[["키워드"], ...], ...] }
 // ─────────────────────────────────────────────────────────────
 
 interface NaverAcResponse {
   query?: string[];
-  ac?: Array<Array<[string, string]>>;
+  items?: Array<Array<[string]>>;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -170,7 +170,8 @@ export class NaverShoppingClient {
     try {
       const params = new URLSearchParams({
         q: query,
-        frm: 'shopping',
+        st: '1111',
+        frm: 'nv',
         r_format: 'json',
         r_enc: 'UTF-8',
         r_unicode: '0',
@@ -189,10 +190,10 @@ export class NaverShoppingClient {
 
       const data = (await res.json()) as NaverAcResponse;
 
-      // 응답 구조: { ac: [ [ ["키워드", "0"], ... ] ] }
+      // 응답 구조: { items: [ [ ["키워드"], ... ] ] }
       const suggestions: string[] = [];
-      if (Array.isArray(data.ac)) {
-        for (const group of data.ac) {
+      if (Array.isArray(data.items)) {
+        for (const group of data.items) {
           if (Array.isArray(group)) {
             for (const pair of group) {
               if (Array.isArray(pair) && typeof pair[0] === 'string') {
