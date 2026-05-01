@@ -2,19 +2,28 @@ import { describe, it, expect } from 'vitest';
 import { calcSeedScore, getSeedGrade } from '@/lib/sourcing/seed-scoring';
 
 describe('calcSeedScore', () => {
-  it('경쟁 100개 미만 → 30점', () => {
-    const r = calcSeedScore({ competitorCount: 50, searchVolume: 15000, topReviewCount: 0, marginRate: 60 });
+  it('노출가능성 ratio≥100 (검색량/경쟁수 ×1000) → 30점', () => {
+    // searchVolume=10000, competitorCount=50 → ratio = 200 → 30점 (cap)
+    const r = calcSeedScore({ competitorCount: 50, searchVolume: 10000, topReviewCount: 0, marginRate: 60 });
     expect(r.competitorScore).toBe(30);
   });
 
-  it('경쟁 500개 이상 → 0점', () => {
-    const r = calcSeedScore({ competitorCount: 500, searchVolume: 15000, topReviewCount: 0, marginRate: 60 });
+  it('노출가능성 ratio≈0 (경쟁수가 검색량의 1000배 이상) → 0점', () => {
+    // searchVolume=1000, competitorCount=10000000 → ratio = 0.1 → 0점
+    const r = calcSeedScore({ competitorCount: 10_000_000, searchVolume: 1000, topReviewCount: 0, marginRate: 60 });
     expect(r.competitorScore).toBe(0);
   });
 
-  it('경쟁 300개 → 선형 중간값', () => {
-    const r = calcSeedScore({ competitorCount: 300, searchVolume: 15000, topReviewCount: 0, marginRate: 60 });
+  it('노출가능성 ratio=50 → 15점 (선형 중간)', () => {
+    // searchVolume=5000, competitorCount=100000 → ratio = 50 → 15점
+    const r = calcSeedScore({ competitorCount: 100_000, searchVolume: 5000, topReviewCount: 0, marginRate: 60 });
     expect(r.competitorScore).toBe(15);
+  });
+
+  it('실제 사례: 펜트리수납함 (vol=6650, comp=102404, ratio≈64.9) → ~19점', () => {
+    const r = calcSeedScore({ competitorCount: 102_404, searchVolume: 6650, topReviewCount: 0, marginRate: 60 });
+    expect(r.competitorScore).toBeGreaterThanOrEqual(18);
+    expect(r.competitorScore).toBeLessThanOrEqual(20);
   });
 
   it('검색량 15000 → 25점 (역U형 피크)', () => {
@@ -64,6 +73,7 @@ describe('calcSeedScore', () => {
   });
 
   it('최고 점수 조건 → S등급 (100점)', () => {
+    // ratio = 15000/50*1000 = 300_000 → cap 30점
     const r = calcSeedScore({ competitorCount: 50, searchVolume: 15000, topReviewCount: 0, marginRate: 60 });
     expect(r.total).toBe(100);
     expect(r.grade).toBe('S');

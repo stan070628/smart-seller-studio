@@ -110,12 +110,13 @@ export async function POST(request: NextRequest) {
     }
     console.log(`[seed-discover] filtered(3k-30k)=${filtered.length}`);
 
-    // 5. 경쟁상품수 조회 + 필터 (<500)
+    // 5. 경쟁상품수 조회 (hard 필터 제거 - 노출가능성 점수로 정렬)
+    //    네이버 쇼핑 total은 전체 통합 카탈로그라 절대값 임계값이 비현실적
+    //    Step 6 점수 산출에서 (검색량/경쟁수) 비율로 정렬됨
     const results: SeedKeyword[] = [];
     for (const kw of filtered.slice(0, 60)) {
       try {
         const search = await naverClient.searchShopping(kw.keyword, 1).catch(() => ({ total: 9999, items: [] }));
-        if (search.total >= 500) continue;
         results.push({
           keyword: kw.keyword,
           searchVolume: kw.searchVolume,

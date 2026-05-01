@@ -335,10 +335,12 @@ function StepScoreResult({ keywords }: { keywords: SeedKeyword[] }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
       <div style={{ padding: '8px 14px', background: '#faf5ff', borderBottom: '1px solid #e9d5ff', fontSize: 11, fontWeight: 700, color: '#7c3aed' }}>
-        🎯 시드 점수 산출 완료 — 경쟁(30)+검색량(25)+리뷰(25)+마진(20) | 선택됨: {selectedCount}개
+        🎯 시드 점수 산출 완료 — 경쟁(30·노출가능성 기반)+검색량(25)+리뷰(25)+마진(20) | 선택됨: {selectedCount}개
       </div>
       <div style={{ padding: 12, flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
-        {scored.map((k, i) => (
+        {scored.map((k, i) => {
+          const ratio = k.competitorCount > 0 ? (k.searchVolume / k.competitorCount) * 1000 : 0;
+          return (
           <div
             key={k.keyword}
             onClick={() => toggleKeywordSelect(k.keyword)}
@@ -352,7 +354,15 @@ function StepScoreResult({ keywords }: { keywords: SeedKeyword[] }) {
             <input type="checkbox" checked={k.isSelected} onChange={() => {}} style={{ accentColor: '#7c3aed' }} />
             <span style={{ fontSize: 10, color: '#94a3b8', width: 18 }}>{i + 1}</span>
             <span style={{ fontWeight: 600, flex: 1, fontSize: 11 }}>{k.keyword}</span>
-            <span style={{ fontSize: 10, color: '#6b7280' }}>{k.searchVolume.toLocaleString()}</span>
+            <span style={{ fontSize: 10, color: '#6b7280', width: 70, textAlign: 'right' }} title="월 검색량">
+              {k.searchVolume.toLocaleString()}
+            </span>
+            <span style={{ fontSize: 10, color: '#9ca3af', width: 90, textAlign: 'right' }} title="네이버 쇼핑 경쟁상품수">
+              경쟁 {k.competitorCount.toLocaleString()}
+            </span>
+            <span style={{ fontSize: 10, fontWeight: 700, color: '#0891b2', width: 70, textAlign: 'right' }} title="검색량/경쟁수×1000 — 높을수록 노출 기회 큼">
+              노출 {ratio.toFixed(1)}
+            </span>
             <span style={{ fontSize: 14, fontWeight: 700, color: GRADE_COLOR[k.seedGrade ?? 'D'], width: 32, textAlign: 'right' }}>
               {k.seedScore}
             </span>
@@ -364,7 +374,8 @@ function StepScoreResult({ keywords }: { keywords: SeedKeyword[] }) {
               {k.seedGrade}
             </span>
           </div>
-        ))}
+          );
+        })}
       </div>
       <div style={{ padding: '10px 14px', background: '#f9fafb', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontSize: 10, color: '#64748b' }}>
