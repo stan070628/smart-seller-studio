@@ -102,7 +102,8 @@ export async function GET(request: NextRequest) {
     let paramIdx = 1;
 
     if (category) {
-      conditions.push(`category_name = $${paramIdx++}`);
+      // 부모 카테고리 기준 — analyze 라우트와 동일하게 parent_category_name 사용
+      conditions.push(`parent_category_name = $${paramIdx++}`);
       params.push(category);
     }
 

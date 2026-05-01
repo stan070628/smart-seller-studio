@@ -13,6 +13,7 @@ import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { getDomeggookClient } from '@/lib/sourcing/domeggook-client';
 import { getSourcingPool } from '@/lib/sourcing/db';
+import { toParentCategory } from '@/lib/sourcing/category-map';
 import type { DomeggookItemDetail } from '@/types/sourcing';
 
 // ─────────────────────────────────────────
@@ -217,6 +218,7 @@ export async function POST(request: NextRequest) {
       const priceResaleRecommend = parsePrice(detail.price?.resale?.Recommand);
       const priceDome = parsePrice(detail.price?.dome);
       const categoryName = detail.category?.current?.name ?? null;
+      const parentCategoryName = categoryName ? toParentCategory(categoryName) : null;
       if (moq !== null || priceResaleRecommend !== null || priceDome !== null || categoryName !== null) {
         await pool.query(
           `UPDATE sourcing_items SET
@@ -224,9 +226,10 @@ export async function POST(request: NextRequest) {
              price_resale_recommend = COALESCE($2, price_resale_recommend),
              price_dome             = COALESCE($3, price_dome),
              category_name          = COALESCE($4, category_name),
+             parent_category_name   = COALESCE($5, parent_category_name),
              updated_at             = now()
-           WHERE id = $5`,
-          [moq, priceResaleRecommend, priceDome, categoryName, itemId],
+           WHERE id = $6`,
+          [moq, priceResaleRecommend, priceDome, categoryName, parentCategoryName, itemId],
         );
       }
 

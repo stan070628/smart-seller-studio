@@ -15,7 +15,7 @@
 
 import { NextRequest } from 'next/server';
 import { getSourcingPool } from '@/lib/sourcing/db';
-import { toParentCategory, getSubCategories } from '@/lib/sourcing/category-map';
+import { toParentCategory } from '@/lib/sourcing/category-map';
 import type { SalesAnalysisItem } from '@/types/sourcing';
 import { logDiscoveryBatch, type DiscoveryLogEntry } from '@/lib/sourcing/analytics-logger';
 import { getActiveSeasonKeywords } from '@/lib/sourcing/shared/season-bonus';
@@ -35,14 +35,20 @@ async function getCachedCategories(pool: ReturnType<typeof getSourcingPool>): Pr
   if (categoriesPending) return categoriesPending;
   categoriesPending = (async () => {
     try {
-      const result = await pool.query<{ category_name: string }>(
-        `SELECT DISTINCT category_name FROM sourcing_items
-         WHERE category_name IS NOT NULL
-         ORDER BY category_name`,
+      // sourcing_items.parent_category_name을 직접 SELECT — 마이그레이션 052에서 채워짐
+      // category_name만 있고 parent가 비어있는 레거시 행은 toParentCategory로 fallback
+      const result = await pool.query<{ parent: string | null; category_name: string | null }>(
+        `SELECT DISTINCT
+           parent_category_name AS parent,
+           category_name
+         FROM sourcing_items
+         WHERE category_name IS NOT NULL OR parent_category_name IS NOT NULL`,
       );
-      const categories = [...new Set(
-        result.rows.map((r) => toParentCategory(r.category_name)),
-      )].sort();
+      const categories = [
+        ...new Set(
+          result.rows.map((r) => r.parent ?? toParentCategory(r.category_name)),
+        ),
+      ].sort();
       categoriesCache = { value: categories, expiresAt: Date.now() + 5 * 60 * 1000 };
       return categories;
     } finally {
@@ -92,7 +98,9 @@ function toSalesAnalysisItem(row: Record<string, unknown>): SalesAnalysisItem {
     itemNo: row.item_no as number,
     title: row.title as string,
     status: (row.status as string) ?? null,
-    categoryName: toParentCategory((row.category_name as string) ?? null),
+    categoryName:
+      (row.parent_category_name as string | null) ??
+      toParentCategory((row.category_name as string) ?? null),
     sellerNick: (row.seller_nick as string) ?? null,
     imageUrl: (row.image_url as string) ?? null,
     domeUrl: (row.dome_url as string) ?? null,
@@ -235,15 +243,10 @@ export async function GET(request: NextRequest) {
     let paramIdx = 1;
 
     if (category) {
-      const subs = getSubCategories(category);
-      if (category === '기타' || subs.length === 0) {
-        vConditions.push(`v.category_name = $${paramIdx++}`);
-        params.push(category);
-      } else {
-        const placeholders = subs.map(() => `$${paramIdx++}`).join(', ');
-        vConditions.push(`v.category_name IN (${placeholders})`);
-        params.push(...subs);
-      }
+      // parent_category_name 단일 필터 — 매핑 누락 행은 마이그레이션 052에서 '기타'로 채워졌고
+      // 새 데이터는 INSERT/UPDATE 시점에 toParentCategory()로 채움
+      vConditions.push(`v.parent_category_name = $${paramIdx++}`);
+      params.push(category);
     }
 
     if (search) {

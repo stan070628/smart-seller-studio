@@ -12,6 +12,7 @@ import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { getDomeggookClient } from '@/lib/sourcing/domeggook-client';
 import { getSourcingPool } from '@/lib/sourcing/db';
+import { toParentCategory } from '@/lib/sourcing/category-map';
 
 // URL에서 숫자 ID 추출
 // 예: "https://domeggook.com/60015467"          → 60015467
@@ -85,6 +86,7 @@ export async function POST(request: NextRequest) {
     const title    = detail.basis.title ?? '';
     const status   = detail.basis.status ?? null;
     const catName  = detail.category?.current?.name ?? null;
+    const parentCatName = catName ? toParentCategory(catName) : null;
     const sellerId = detail.seller?.id ? String(detail.seller.id) : null;
     const sellerNick = detail.seller?.nick ? String(detail.seller.nick) : null;
     const imageUrl = detail.image?.url ?? null;
@@ -102,25 +104,26 @@ export async function POST(request: NextRequest) {
 
     const result = await pool.query<{ id: string; created_at: string }>(
       `INSERT INTO sourcing_items
-         (item_no, title, status, category_name, seller_id, seller_nick,
+         (item_no, title, status, category_name, parent_category_name, seller_id, seller_nick,
           image_url, dome_url, is_tracking, price_dome, moq, deli_who, deli_fee)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9, $10, $11, $12)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, $10, $11, $12, $13)
        ON CONFLICT (item_no) DO UPDATE SET
-         title        = EXCLUDED.title,
-         status       = EXCLUDED.status,
-         category_name= EXCLUDED.category_name,
-         seller_id    = EXCLUDED.seller_id,
-         seller_nick  = EXCLUDED.seller_nick,
-         image_url    = EXCLUDED.image_url,
-         dome_url     = EXCLUDED.dome_url,
-         price_dome   = COALESCE(EXCLUDED.price_dome, sourcing_items.price_dome),
-         moq          = COALESCE(EXCLUDED.moq, sourcing_items.moq),
-         deli_who     = COALESCE(EXCLUDED.deli_who, sourcing_items.deli_who),
-         deli_fee     = COALESCE(EXCLUDED.deli_fee, sourcing_items.deli_fee),
-         is_tracking  = true,
-         updated_at   = now()
+         title                = EXCLUDED.title,
+         status               = EXCLUDED.status,
+         category_name        = EXCLUDED.category_name,
+         parent_category_name = EXCLUDED.parent_category_name,
+         seller_id            = EXCLUDED.seller_id,
+         seller_nick          = EXCLUDED.seller_nick,
+         image_url            = EXCLUDED.image_url,
+         dome_url             = EXCLUDED.dome_url,
+         price_dome           = COALESCE(EXCLUDED.price_dome, sourcing_items.price_dome),
+         moq                  = COALESCE(EXCLUDED.moq, sourcing_items.moq),
+         deli_who             = COALESCE(EXCLUDED.deli_who, sourcing_items.deli_who),
+         deli_fee             = COALESCE(EXCLUDED.deli_fee, sourcing_items.deli_fee),
+         is_tracking          = true,
+         updated_at           = now()
        RETURNING id, created_at`,
-      [itemNo, title, status, catName, sellerId, sellerNick, imageUrl, domeUrl, priceDome, moq, deliWho, deliFee],
+      [itemNo, title, status, catName, parentCatName, sellerId, sellerNick, imageUrl, domeUrl, priceDome, moq, deliWho, deliFee],
     );
 
     const row = result.rows[0];
