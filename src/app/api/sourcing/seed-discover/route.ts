@@ -80,20 +80,24 @@ export async function POST(request: NextRequest) {
     const afterGate0 = [...expanded].filter((kw) => !isSeasonKeyword(kw));
     console.log(`[seed-discover] seeds=${seeds.length} expanded=${expanded.size} afterGate0=${afterGate0.length}`);
 
-    // 4. 검색량 조회 (Naver Ad keywordstool, 5개씩 배치)
-    //    Naver Ad는 hint 외에도 무관한 키워드를 확장 반환 → 우리 자동완성 셋만 추림
+    // 4. 검색량 조회 (Naver Ad keywordstool)
+    //    - hint 키워드는 공백 없는 시드만 사용 (공백 포함 시 API 400 에러)
+    //    - hint 5개당 ~1000개 관련 키워드 반환 → 우리 자동완성 셋과 매칭만 추림
     const normalize = (s: string) => s.replace(/\s+/g, '').toLowerCase();
     const ourSet = new Set(afterGate0.map(normalize));
     const volMap = new Map<string, number>(); // normalized → volume
 
+    const hintSeeds = seeds.map((s) => s.replace(/\s+/g, ''));
     const BATCH = 5;
-    for (let i = 0; i < afterGate0.length; i += BATCH) {
-      const batch = afterGate0.slice(i, i + BATCH);
+    for (let i = 0; i < hintSeeds.length; i += BATCH) {
+      const batch = hintSeeds.slice(i, i + BATCH);
       const m = await fetchSearchVolumes(batch).catch(() => new Map<string, number>());
       for (const [kw, vol] of m) {
         const n = normalize(kw);
         if (ourSet.has(n) && !volMap.has(n)) volMap.set(n, vol);
       }
+      // rate limit 회피: 배치 사이 짧은 지연
+      if (i + BATCH < hintSeeds.length) await new Promise((r) => setTimeout(r, 300));
     }
     console.log(`[seed-discover] volMap(자동완성 매칭)=${volMap.size}`);
 
