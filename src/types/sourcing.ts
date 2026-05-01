@@ -260,3 +260,32 @@ export interface CollectionLog {
   errors: unknown | null;
   triggerType: 'cron' | 'manual';
 }
+
+// ─────────────────────────────────────────────────────────────
+// 상품 발굴 (Product Discovery) — 2026-05-01
+// ─────────────────────────────────────────────────────────────
+
+export interface ProductInfo {
+  source: 'manual' | 'domeggook';
+  title: string;
+  image?: string | null;
+  price?: number | null;        // 도매가
+  supplyPrice?: number | null;  // 공급가
+  marketPrice?: number | null;  // 시장가 (네이버 최저가)
+  itemNo?: number | null;       // 도매꾹 상품번호 (있는 경우만)
+  url?: string | null;          // 원본 URL
+}
+
+export interface ValidatedKeyword {
+  keyword: string;
+  searchVolume: number | null;
+  competitorCount: number | null;
+  compIdx: '낮음' | '중간' | '높음' | null;
+  avgCtr: number | null;
+  topReviewCount: number | null;   // 사용자 입력 (쿠팡)
+  seedScore: number | null;
+  seedGrade: 'S' | 'A' | 'B' | 'C' | 'D' | null;
+  isSelected: boolean;             // 결과 화면 체크박스
+  isBlocked: boolean;              // 리뷰 50개 이상 자동 탈락
+  blockedReason: string | null;
+}
