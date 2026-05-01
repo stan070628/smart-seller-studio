@@ -7,6 +7,7 @@
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { getCoupangClient } from '@/lib/listing/coupang-client';
+import { assertCoupangReturnEnv } from '@/lib/listing/coupang-env';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 import { requireAuth } from '@/lib/supabase/auth';
 
@@ -134,6 +135,7 @@ export async function POST(request: NextRequest) {
   const d = parseResult.data;
 
   try {
+    assertCoupangReturnEnv();
     const client = getCoupangClient();
 
     // 출고지/반품지 코드 (명시적 전달 → 환경변수 → 에러)

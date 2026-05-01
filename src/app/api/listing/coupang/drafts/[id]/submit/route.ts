@@ -13,6 +13,7 @@
 import { NextRequest } from 'next/server';
 import { getCoupangClient } from '@/lib/listing/coupang-client';
 import type { CoupangProductPayload } from '@/lib/listing/coupang-client';
+import { assertCoupangReturnEnv } from '@/lib/listing/coupang-env';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 import { requireAuth } from '@/lib/supabase/auth';
 import { ensureCoupangImages } from '@/lib/image/coupang-constraints';
@@ -129,6 +130,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   try {
+    assertCoupangReturnEnv();
     const client = getCoupangClient();
 
     // 출고지/반품지 코드 (draft_data 우선 → 환경변수 fallback)

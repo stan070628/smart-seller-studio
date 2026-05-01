@@ -119,6 +119,14 @@ describe('POST /api/listing/both', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
+    // assertCoupangReturnEnv 통과를 위한 stub
+    vi.stubEnv('COUPANG_RETURN_NAME', '담당자');
+    vi.stubEnv('COUPANG_CONTACT_NUMBER', '02-0000-0000');
+    vi.stubEnv('COUPANG_RETURN_ZIPCODE', '00000');
+    vi.stubEnv('COUPANG_RETURN_ADDRESS', '서울시 테스트구');
+    vi.stubEnv('COUPANG_RETURN_ADDRESS_DETAIL', '101호');
+    vi.stubEnv('COUPANG_VENDOR_USER_ID', 'vendor_test');
+
     // 출고지/반품지 기본 응답 (대부분 테스트에서 outbound/return 코드를 직접 지정하므로
     // 자동 조회 경로는 빈 배열 반환으로 충분)
     const { getOutboundShippingPlaces, getReturnShippingCenters } = getCoupangMocks();
