@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAuth } from '@/lib/supabase/auth';
-import { expandKeywords } from '@/lib/naver-ad';
+import { fetchSearchVolumes } from '@/lib/naver-ad';
 import { NaverShoppingClient } from '@/lib/niche/naver-shopping';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import type { SeedKeyword } from '@/types/sourcing';
@@ -80,12 +80,30 @@ export async function POST(request: NextRequest) {
     const afterGate0 = [...expanded].filter((kw) => !isSeasonKeyword(kw));
     console.log(`[seed-discover] seeds=${seeds.length} expanded=${expanded.size} afterGate0=${afterGate0.length}`);
 
-    // 4. 검색량 조회 + 필터 (3,000~30,000)
-    const keywordStats = await expandKeywords(afterGate0).catch(() => []);
-    console.log(`[seed-discover] keywordStats=${keywordStats.length}`);
-    const filtered = keywordStats.filter(
-      (k) => k.searchVolume !== null && k.searchVolume >= 3_000 && k.searchVolume <= 30_000,
-    );
+    // 4. 검색량 조회 (Naver Ad keywordstool, 5개씩 배치)
+    //    Naver Ad는 hint 외에도 무관한 키워드를 확장 반환 → 우리 자동완성 셋만 추림
+    const normalize = (s: string) => s.replace(/\s+/g, '').toLowerCase();
+    const ourSet = new Set(afterGate0.map(normalize));
+    const volMap = new Map<string, number>(); // normalized → volume
+
+    const BATCH = 5;
+    for (let i = 0; i < afterGate0.length; i += BATCH) {
+      const batch = afterGate0.slice(i, i + BATCH);
+      const m = await fetchSearchVolumes(batch).catch(() => new Map<string, number>());
+      for (const [kw, vol] of m) {
+        const n = normalize(kw);
+        if (ourSet.has(n) && !volMap.has(n)) volMap.set(n, vol);
+      }
+    }
+    console.log(`[seed-discover] volMap(자동완성 매칭)=${volMap.size}`);
+
+    const filtered: Array<{ keyword: string; searchVolume: number }> = [];
+    for (const kw of afterGate0) {
+      const vol = volMap.get(normalize(kw));
+      if (vol !== undefined && vol >= 3_000 && vol <= 30_000) {
+        filtered.push({ keyword: kw, searchVolume: vol });
+      }
+    }
     console.log(`[seed-discover] filtered(3k-30k)=${filtered.length}`);
 
     // 5. 경쟁상품수 조회 + 필터 (<500)
@@ -96,7 +114,7 @@ export async function POST(request: NextRequest) {
         if (search.total >= 500) continue;
         results.push({
           keyword: kw.keyword,
-          searchVolume: kw.searchVolume!,
+          searchVolume: kw.searchVolume,
           competitorCount: search.total,
           topReviewCount: null,
           marginRate: null,
