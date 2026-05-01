@@ -37,7 +37,25 @@ export async function extractKeywordsFromProduct(
       contents: prompt,
     });
 
-    const raw = (response as { text?: string }).text ?? '';
+    // SDK 응답 형식 — response.text getter 우선, candidates parts fallback
+    let raw = '';
+    const r = response as {
+      text?: string;
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    };
+    if (typeof r.text === 'string') {
+      raw = r.text;
+    } else if (Array.isArray(r.candidates)) {
+      raw = r.candidates
+        .flatMap((c) => c?.content?.parts ?? [])
+        .map((p) => p?.text ?? '')
+        .join('');
+    }
+    if (!raw.trim()) {
+      console.warn('[ai-keyword-extract] 빈 응답', JSON.stringify(response).slice(0, 200));
+      return null;
+    }
+
     const cleaned = raw
       .trim()
       .replace(/^```(?:json)?\s*/i, '')
