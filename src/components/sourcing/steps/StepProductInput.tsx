@@ -143,8 +143,8 @@ export default function StepProductInput() {
         </div>
       )}
 
-      {/* AI 추천 + 사용자 편집 */}
-      {(aiSuggestedKeywords.length > 0 || selectedKeywords.length > 0) && (
+      {/* AI 추천 + 사용자 편집 — productInfo 있으면 항상 표시 (AI 실패해도 사용자가 직접 입력 가능) */}
+      {productInfo && (
         <div style={{ padding: 12, background: '#fdfcff', borderRadius: 6, border: '1px solid #e0d4ff' }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: '#7c3aed', marginBottom: 8 }}>
             키워드 후보 — 채택할 것을 선택 + 직접 추가

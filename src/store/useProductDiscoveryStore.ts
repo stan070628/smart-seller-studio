@@ -92,10 +92,15 @@ export const useProductDiscoveryStore = create<ProductDiscoveryStore>()(
             set({ error: json.error ?? 'AI 추출 실패', isExtractingAI: false });
             return;
           }
+          const keywords: string[] = json.data?.keywords ?? [];
+          const aiFailed: boolean = !!json.data?.aiFailed;
           set({
-            aiSuggestedKeywords: json.data.keywords,
-            selectedKeywords: json.data.keywords, // default: 모두 선택
+            aiSuggestedKeywords: keywords,
+            selectedKeywords: keywords, // default: 모두 선택
             isExtractingAI: false,
+            error: aiFailed && keywords.length === 0
+              ? 'AI 추천 실패 — 아래 입력란에서 키워드를 직접 추가하세요'
+              : null,
           });
         } catch (e) {
           set({ error: e instanceof Error ? e.message : 'AI 추출 실패', isExtractingAI: false });

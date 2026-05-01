@@ -27,7 +27,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: '상품명이 비어 있습니다' }, { status: 400 });
   }
 
+  console.log(`[extract-keywords] productTitle="${trimmed}"`);
   const keywords = await extractKeywordsFromProduct(trimmed);
+  console.log(`[extract-keywords] result=${keywords === null ? 'null(aiFailed)' : `${keywords.length}개`}`);
+
   if (keywords === null) {
     return NextResponse.json({
       success: true,
