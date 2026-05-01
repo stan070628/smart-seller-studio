@@ -240,16 +240,16 @@ function StepCategorySelect({ categories, setCategories, customSeeds, setCustomS
       {/* 직접 입력 시드 */}
       <div style={{ marginBottom: 14, padding: '10px 12px', background: '#fefce8', border: '1px solid #fde68a', borderRadius: 6 }}>
         <div style={{ fontSize: 10, fontWeight: 700, color: '#92400e', marginBottom: 4 }}>
-          ✏️ 시드 직접 입력 — <strong>2단어 이상 조합 권장</strong> (단일 카테고리명은 경쟁자 너무 많음)
+          ✏️ 시드 직접 입력 — <strong>이미 좁은 카테고리어 권장</strong> (광범위 단일어는 경쟁자 너무 많음)
         </div>
         <div style={{ fontSize: 9, color: '#92400e', marginBottom: 6, opacity: 0.8 }}>
-          ❌ '수납함', '방향제' (모키워드) → ✅ '캠핑수납함 폴딩', '석고방향제 자동차' (2단어 시드)
+          ❌ '수납함', '방향제' (광범위) → ✅ '캠핑수납함', '석고방향제', '두부모래' (long-tail 카테고리어)
         </div>
         <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
           <input
             type="text"
             value={draft}
-            placeholder="예: 캠핑수납함 폴딩, 디퓨저 자동차, 약정리함 일주일"
+            placeholder="예: 캠핑수납함, 석고방향제, 두부모래"
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSeeds(); } }}
             style={{
