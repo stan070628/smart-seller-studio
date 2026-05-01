@@ -24,6 +24,9 @@ import { useNicheStore } from '@/store/useNicheStore';
 // 도매꾹 v2 탭
 import DomeggookTab from '@/components/sourcing/DomeggookTab';
 
+// 시드 발굴 탭
+import SeedDiscoveryTab from '@/components/sourcing/SeedDiscoveryTab';
+
 // 키워드 탭
 import KeywordTrackerTab from '@/components/sourcing/KeywordTrackerTab';
 
@@ -46,7 +49,7 @@ import CompareMode from '@/components/calculator/CompareMode';
 // 메인 컴포넌트
 // ─────────────────────────────────────────────────────────────────────────────
 export default function SourcingDashboard() {
-  const [sourcingSubTab, setSourcingSubTab] = useState<'tracking' | 'calculator' | 'niche' | 'costco' | 'costco-memo' | 'keywords'>('niche');
+  const [sourcingSubTab, setSourcingSubTab] = useState<'tracking' | 'calculator' | 'niche' | 'costco' | 'costco-memo' | 'keywords' | 'seed'>('niche');
 
   // 니치소싱 읽지 않은 알림 수
   const unreadAlertCount = useNicheStore((s) => s.unreadAlertCount);
@@ -147,6 +150,7 @@ export default function SourcingDashboard() {
       <div style={{ display: 'flex', gap: '0', backgroundColor: C.card, borderBottom: `1px solid ${C.border}`, padding: '0 24px' }}>
         {([
           { id: 'niche' as const, label: '니치소싱', icon: <Search size={13} />, badge: <NicheAlertBadge count={unreadAlertCount} /> },
+          { id: 'seed' as const, label: '🌱 시드 발굴', icon: null },
           { id: 'tracking' as const, label: '도매꾹', icon: <RefreshCw size={13} /> },
           { id: 'costco' as const, label: '코스트코', icon: <span style={{ fontSize: '13px' }}>🏬</span> },
           { id: 'costco-memo' as const, label: '발굴 메모', icon: <span style={{ fontSize: '13px' }}>📝</span> },
@@ -194,6 +198,7 @@ export default function SourcingDashboard() {
       )}
 
       {/* 도매꾹 v2 서브탭 */}
+      {sourcingSubTab === 'seed' && <SeedDiscoveryTab />}
       {sourcingSubTab === 'tracking' && <DomeggookTab />}
 
       {/* 키워드 목록 서브탭 콘텐츠 */}

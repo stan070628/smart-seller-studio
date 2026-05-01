@@ -162,6 +162,9 @@ function toSalesAnalysisItem(row: Record<string, unknown>): SalesAnalysisItem {
     alternativeSellers: (row.alternative_sellers as number) ?? null,
     sellerRating: row.seller_rating != null ? Number(row.seller_rating) : null,
     sellerYears: (row.seller_years as number) ?? null,
+    seedKeyword: (row.seed_keyword as string) ?? null,
+    seedScore: row.seed_score != null ? Number(row.seed_score) : null,
+    seedSessionId: (row.seed_session_id as string) ?? null,
   } as SalesAnalysisItem;
 }
 
@@ -448,6 +451,9 @@ export async function GET(request: NextRequest) {
            si.dropship_moq_strategy,
            si.dropship_bundle_price,
            si.dropship_price_gap_rate,
+           si.seed_keyword,
+           si.seed_score,
+           si.seed_session_id,
            CASE
              WHEN si.price_resale_recommend > 0
                THEN ROUND(

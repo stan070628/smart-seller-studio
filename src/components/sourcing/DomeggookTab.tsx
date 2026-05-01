@@ -738,6 +738,10 @@ export default function DomeggookTab() {
   const [genderFilter, setGenderFilter] = useState<'all' | 'male_only' | 'male' | 'female' | 'neutral'>('all');
   // 가격 경쟁력 로컬 필터: all | below | normal | strong
   const [priceCompFilter, setPriceCompFilter] = useState<'all' | 'below' | 'normal' | 'strong'>('all');
+  // 시드 발굴 필터
+  const [seedOnly, setSeedOnly] = useState(false);
+  const [excludeSeed, setExcludeSeed] = useState(false);
+  const [minSeedScore, setMinSeedScore] = useState<number | ''>('');
 
   // ── 단일 상품 추가 ─────────────────────────────────────────────────────────
   const [addUrl, setAddUrl] = useState('');
@@ -934,9 +938,14 @@ export default function DomeggookTab() {
         }
       }
 
+      // 시드 발굴 필터
+      if (seedOnly && item.seedScore == null) return false;
+      if (excludeSeed && item.seedScore != null) return false;
+      if (minSeedScore !== '' && (item.seedScore ?? 0) < Number(minSeedScore)) return false;
+
       return true;
     });
-  }, [items, hideHighCsRisk, hideAboveMarket, hideBlockedUnchecked, minScore, genderFilter, priceCompFilter]);
+  }, [items, hideHighCsRisk, hideAboveMarket, hideBlockedUnchecked, minScore, genderFilter, priceCompFilter, seedOnly, excludeSeed, minSeedScore]);
 
   // ── 프론트엔드 보조 정렬 (DB에 값이 없는 경우 fallback) ──────────────────
   const sortedItems = useMemo(() => {
@@ -1560,6 +1569,47 @@ export default function DomeggookTab() {
             고위험CS 숨기기
           </label>
 
+          {/* ── 시드 발굴 필터 ──────────────────────────────────────────── */}
+          <div style={{ width: '1px', height: '20px', backgroundColor: C.border, flexShrink: 0 }} />
+          <span style={{ fontSize: '10px', color: '#7c3aed', fontWeight: 700 }}>시드</span>
+          <button
+            onClick={() => { setSeedOnly(!seedOnly); if (!seedOnly) setExcludeSeed(false); }}
+            style={{
+              padding: '3px 9px', borderRadius: 5, fontSize: 11, fontWeight: seedOnly ? 700 : 500,
+              border: `1px solid ${seedOnly ? '#7c3aed' : C.border}`,
+              background: seedOnly ? '#ede9fe' : C.card,
+              color: seedOnly ? '#7c3aed' : C.text, cursor: 'pointer',
+            }}
+          >
+            🌱 시드만
+          </button>
+          <button
+            onClick={() => { setExcludeSeed(!excludeSeed); if (!excludeSeed) setSeedOnly(false); }}
+            style={{
+              padding: '3px 9px', borderRadius: 5, fontSize: 11, fontWeight: excludeSeed ? 700 : 500,
+              border: `1px solid ${excludeSeed ? '#7c3aed' : C.border}`,
+              background: excludeSeed ? '#f5f0ff' : C.card,
+              color: excludeSeed ? '#7c3aed' : C.textSub, cursor: 'pointer',
+            }}
+          >
+            시드 제외
+          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+            <span style={{ fontSize: '10px', color: '#7c3aed', fontWeight: 700 }}>시드점수</span>
+            <input
+              type="number" min={0} max={100}
+              value={minSeedScore}
+              onChange={(e) => setMinSeedScore(e.target.value === '' ? '' : Number(e.target.value))}
+              placeholder="0"
+              style={{
+                width: 38, padding: '2px 4px',
+                border: `1px solid #a78bfa`, borderRadius: 4,
+                fontSize: 11, textAlign: 'center', background: C.card,
+              }}
+            />
+            <span style={{ fontSize: '10px', color: '#7c3aed' }}>이상</span>
+          </div>
+
           {/* 필터 활성 개수 표시 */}
           {(() => {
             const activeCount = [
@@ -2032,8 +2082,10 @@ export default function DomeggookTab() {
                     onClick={() => setSelectedItem(item)}
                     style={{
                       borderBottom: `1px solid ${C.border}`,
+                      borderLeft: item.seedScore != null ? '3px solid #a78bfa' : '3px solid transparent',
                       cursor: 'pointer',
                       transition: 'background-color 0.1s',
+                      background: item.seedScore != null ? 'rgba(124,58,237,0.02)' : undefined,
                     }}
                     onMouseEnter={(e) => {
                       (e.currentTarget as HTMLTableRowElement).style.backgroundColor = C.rowHover;
@@ -2108,6 +2160,18 @@ export default function DomeggookTab() {
                         >
                           {item.categoryName}
                         </p>
+                      )}
+                      {item.seedKeyword && (
+                        <span
+                          style={{
+                            display: 'inline-block', marginTop: 2,
+                            background: '#ede9fe', color: '#7c3aed',
+                            borderRadius: 3, padding: '0px 5px',
+                            fontSize: 9, fontWeight: 700,
+                          }}
+                        >
+                          🌱 {item.seedKeyword}
+                        </span>
                       )}
                     </td>
 
