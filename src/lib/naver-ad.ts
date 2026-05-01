@@ -12,6 +12,48 @@ interface NaverAdKeywordItem {
   relKeyword: string;
   monthlyPcQcCnt: number;
   monthlyMobileQcCnt: number;
+  compIdx?: string; // '낮음' | '중간' | '높음'
+  monthlyAvePcCtr?: number;
+  monthlyAveMobileCtr?: number;
+}
+
+export interface KeywordDetail {
+  keyword: string;
+  searchVolume: number;
+  compIdx: '낮음' | '중간' | '높음' | null;
+  avgCtr: number | null; // PC + 모바일 평균 CTR (%)
+}
+
+/**
+ * 검색량/경쟁강도/CTR을 모두 포함한 상세 추출
+ */
+export function parseKeywordDetails(raw: unknown): KeywordDetail[] {
+  if (!raw || typeof raw !== 'object') return [];
+  const data = raw as Record<string, unknown>;
+  if (!Array.isArray(data.keywordList)) return [];
+  return (data.keywordList as NaverAdKeywordItem[])
+    .filter(
+      (k) =>
+        typeof k?.relKeyword === 'string' &&
+        typeof k?.monthlyPcQcCnt === 'number' &&
+        typeof k?.monthlyMobileQcCnt === 'number',
+    )
+    .map((k) => {
+      const ctrPc = typeof k.monthlyAvePcCtr === 'number' ? k.monthlyAvePcCtr : null;
+      const ctrMo = typeof k.monthlyAveMobileCtr === 'number' ? k.monthlyAveMobileCtr : null;
+      const avgCtr =
+        ctrPc !== null && ctrMo !== null ? (ctrPc + ctrMo) / 2
+        : ctrPc !== null ? ctrPc
+        : ctrMo !== null ? ctrMo
+        : null;
+      const ci = k.compIdx;
+      return {
+        keyword: k.relKeyword,
+        searchVolume: k.monthlyPcQcCnt + k.monthlyMobileQcCnt,
+        compIdx: ci === '낮음' || ci === '중간' || ci === '높음' ? ci : null,
+        avgCtr,
+      };
+    });
 }
 
 // ─── HMAC-SHA256 서명 ────────────────────────────────────────────────────────
@@ -95,6 +137,38 @@ export async function fetchSearchVolumes(
   const json = await res.json();
   const stats = parseKeywordStats(json);
   return new Map(stats.map((s) => [s.keyword, s.searchVolume]));
+}
+
+/**
+ * 검색량 + 경쟁강도(compIdx) + 평균 CTR을 함께 조회한다.
+ * fetchSearchVolumes와 동일 API 호출, 응답 파싱만 상세 버전 사용.
+ */
+export async function fetchKeywordDetails(
+  keywords: string[],
+): Promise<KeywordDetail[]> {
+  const apiKey = process.env.NAVER_AD_API_KEY;
+  const secretKey = process.env.NAVER_AD_SECRET_KEY;
+  const customerId = process.env.NAVER_AD_CUSTOMER_ID;
+  if (!apiKey || !secretKey || !customerId) return [];
+
+  const timestamp = Date.now().toString();
+  const path = '/keywordstool';
+  const signature = buildSignature(timestamp, 'GET', path, secretKey);
+  const query = keywords.map(encodeURIComponent).join(',');
+
+  const res = await fetch(
+    `https://api.searchad.naver.com${path}?hintKeywords=${query}&showDetail=1`,
+    {
+      headers: {
+        'X-Timestamp': timestamp,
+        'X-API-KEY': apiKey,
+        'X-Customer': customerId,
+        'X-Signature': signature,
+      },
+    },
+  );
+  if (!res.ok) return [];
+  return parseKeywordDetails(await res.json());
 }
 
 // ─── 네이버 쇼핑 경쟁 상품수 조회 ───────────────────────────────────────────

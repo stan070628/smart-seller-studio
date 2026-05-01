@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>시드 발굴 ↔ 도매꾹 연동 구조</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f1f5f9; padding: 24px; font-size: 12px; color: #1e293b; }
+h2 { font-size: 13px; font-weight: 700; margin-bottom: 10px; }
+
+/* ── 메인 흐름도 */
+.flow-diagram {
+  display: grid;
+  grid-template-columns: 1fr 80px 120px 80px 1fr;
+  grid-template-rows: auto auto auto auto auto auto;
+  gap: 0;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+
+/* 컬럼 헤더 */
+.col-seed  { background: #7c3aed; color: #fff; padding: 10px 16px; font-size: 11px; font-weight: 700; text-align: center; }
+.col-mid   { background: #f1f5f9; }
+.col-db    { background: #0f172a; color: #fff; padding: 10px 16px; font-size: 11px; font-weight: 700; text-align: center; }
+.col-mid2  { background: #f1f5f9; }
+.col-dome  { background: #be0014; color: #fff; padding: 10px 16px; font-size: 11px; font-weight: 700; text-align: center; }
+
+/* 셀 */
+.cell { padding: 10px 14px; border-top: 1px solid #e2e8f0; }
+.cell-seed { border-right: 1px solid #e9d5ff; background: #fdfaff; }
+.cell-db   { background: #f8fafc; border-right: 1px solid #e2e8f0; }
+.cell-dome { background: #fff5f5; }
+.cell-mid  { background: #f8fafc; display: flex; align-items: center; justify-content: center; }
+.cell-mid2 { background: #f8fafc; display: flex; align-items: center; justify-content: center; }
+
+/* 화살표 */
+.arrow-right { font-size: 20px; color: #7c3aed; font-weight: 700; }
+.arrow-left  { font-size: 20px; color: #6b7280; }
+.arrow-down  { font-size: 16px; color: #94a3b8; text-align: center; padding: 4px 0; }
+
+/* 카드 */
+.mini-card {
+  border-radius: 6px; padding: 8px 10px; margin: 4px 0;
+  border: 1px solid transparent; font-size: 10px; line-height: 1.6;
+}
+.mc-action { background: #f5f0ff; border-color: #c4b5fd; }
+.mc-data   { background: #f0f9ff; border-color: #bae6fd; }
+.mc-result { background: #f0fdf4; border-color: #bbf7d0; }
+.mc-db     { background: #fff; border-color: #e2e8f0; font-family: 'Menlo', monospace; font-size: 9px; }
+.mc-warn   { background: #fffbeb; border-color: #fde68a; }
+
+.tag { display: inline-block; border-radius: 3px; padding: 1px 5px; font-size: 9px; font-weight: 700; }
+.t-seed { background: #ede9fe; color: #7c3aed; }
+.t-db   { background: #e0f2fe; color: #0369a1; }
+.t-dome { background: #fee2e2; color: #be0014; }
+.t-auto { background: #dbeafe; color: #1d4ed8; }
+.t-new  { background: #7c3aed; color: #fff; }
+
+/* ── 엣지 케이스 */
+.edge-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 24px; }
+.edge-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; font-size: 10px; }
+.edge-title { font-size: 11px; font-weight: 700; margin-bottom: 6px; }
+
+/* ── DB 스키마 */
+.schema { background: #0f172a; border-radius: 10px; padding: 16px 20px; margin-bottom: 24px; font-family: 'Menlo', 'Courier New', monospace; font-size: 10px; color: #94a3b8; line-height: 2; overflow-x: auto; }
+.schema .t  { color: #60a5fa; }
+.schema .c  { color: #4ade80; }
+.schema .n  { color: #fb923c; }
+.schema .cm { color: #6b7280; }
+.schema .new { color: #a78bfa; font-weight: 700; }
+
+/* ── 요약 카드 */
+.summary { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.sum-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; font-size: 10px; }
+</style>
+</head>
+<body>
+
+<h2>시드 발굴 탭 ↔ 도매꾹 탭 연동 구조</h2>
+
+<!-- ── 섹션 1: 전체 흐름도 -->
+<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-bottom:24px;">
+  <div style="font-size:11px;font-weight:700;margin-bottom:14px;">① 전체 데이터 흐름 (단방향 + 역방향 참조)</div>
+
+  <div style="display:flex;gap:0;align-items:stretch;">
+
+    <!-- 시드 발굴 탭 -->
+    <div style="flex:1;background:#fdfaff;border:1px solid #a78bfa;border-radius:8px;padding:12px;">
+      <div style="font-size:11px;font-weight:700;color:#7c3aed;margin-bottom:8px;text-align:center;">🌱 시드 발굴 탭</div>
+
+      <div class="mini-card mc-action">
+        <span class="tag t-seed">Step 1~6</span><br>
+        카테고리 선택 → 키워드 분석<br>검색량·경쟁·리뷰·마진 필터<br>KIPRIS 검사 → 점수 산출
+      </div>
+      <div class="mini-card mc-action">
+        <span class="tag t-seed">Step 7</span><br>
+        <strong>30개 확정 → "도매꾹에 추가" 클릭</strong>
+      </div>
+      <div style="text-align:center;font-size:20px;color:#7c3aed;padding:4px 0;">↓</div>
+      <div class="mini-card mc-data">
+        <span class="tag t-auto">POST</span> <code>/api/sourcing/seed-discover/confirm</code><br>
+        body: { itemNos[], seedKeyword, seedScore, sessionId }
+      </div>
+
+      <div style="margin-top:12px;border-top:1px dashed #c4b5fd;padding-top:10px;">
+        <div style="font-size:10px;color:#7c3aed;font-weight:700;margin-bottom:4px;">세션 히스토리 참조</div>
+        <div class="mini-card mc-warn">
+          <span class="tag" style="background:#fef3c7;color:#92400e;">역참조</span><br>
+          도매꾹 탭의 <strong>위너 데이터</strong> (판매7d, ROAS)<br>를 세션 히스토리에서 확인 가능<br>
+          "이 세션 시드 중 위너 3개 확정됨"
+        </div>
+      </div>
+    </div>
+
+    <!-- 중앙 화살표 -->
+    <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;padding:0 16px;gap:8px;">
+      <div style="text-align:center;">
+        <div style="font-size:22px;color:#7c3aed;">→</div>
+        <div style="font-size:9px;color:#7c3aed;font-weight:700;">확정 시</div>
+      </div>
+      <div style="width:1px;flex:1;background:#e2e8f0;"></div>
+      <div style="text-align:center;">
+        <div style="font-size:22px;color:#94a3b8;">←</div>
+        <div style="font-size:9px;color:#94a3b8;">위너 참조</div>
+      </div>
+    </div>
+
+    <!-- DB -->
+    <div style="width:180px;background:#0f172a;border-radius:8px;padding:12px;">
+      <div style="font-size:11px;font-weight:700;color:#60a5fa;margin-bottom:8px;text-align:center;">🗄 DB</div>
+      <div style="background:#1e293b;border-radius:5px;padding:8px;font-family:monospace;font-size:9px;line-height:1.9;color:#94a3b8;margin-bottom:8px;">
+        <span style="color:#4ade80;">sourcing_items</span><br>
+        &nbsp;item_no<br>
+        &nbsp;title<br>
+        &nbsp;category_name<br>
+        &nbsp;price_dome<br>
+        &nbsp;<span style="color:#a78bfa;font-weight:700;">seed_keyword</span> <span style="color:#fbbf24;">NEW</span><br>
+        &nbsp;<span style="color:#a78bfa;font-weight:700;">seed_score</span> <span style="color:#fbbf24;">NEW</span><br>
+        &nbsp;<span style="color:#a78bfa;font-weight:700;">seed_session_id</span> <span style="color:#fbbf24;">NEW</span><br>
+        &nbsp;...기존 컬럼
+      </div>
+      <div style="background:#1e293b;border-radius:5px;padding:8px;font-family:monospace;font-size:9px;line-height:1.9;color:#94a3b8;">
+        <span style="color:#4ade80;">seed_sessions</span> <span style="color:#fbbf24;">NEW</span><br>
+        &nbsp;id<br>
+        &nbsp;created_at<br>
+        &nbsp;categories[]<br>
+        &nbsp;status<br>
+        &nbsp;confirmed_at<br>
+        &nbsp;winner_count
+      </div>
+    </div>
+
+    <!-- 중앙 화살표 2 -->
+    <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;padding:0 16px;gap:8px;">
+      <div style="text-align:center;">
+        <div style="font-size:22px;color:#be0014;">→</div>
+        <div style="font-size:9px;color:#be0014;font-weight:700;">즉시 표시</div>
+      </div>
+      <div style="width:1px;flex:1;background:#e2e8f0;"></div>
+      <div style="text-align:center;">
+        <div style="font-size:22px;color:#94a3b8;">←</div>
+        <div style="font-size:9px;color:#94a3b8;">위너 쓰기</div>
+      </div>
+    </div>
+
+    <!-- 도매꾹 탭 -->
+    <div style="flex:1;background:#fff5f5;border:1px solid #fca5a5;border-radius:8px;padding:12px;">
+      <div style="font-size:11px;font-weight:700;color:#be0014;margin-bottom:8px;text-align:center;">↻ 도매꾹 탭</div>
+
+      <div class="mini-card mc-result">
+        <span class="tag t-dome">읽기</span> <code>GET /api/sourcing/analyze</code><br>
+        seed_keyword, seed_score 포함 반환<br>
+        → 기존 테이블에 즉시 표시
+      </div>
+
+      <div class="mini-card" style="background:#fff;border:1px solid #e2e8f0;margin-top:4px;">
+        <span style="font-size:10px;font-weight:700;">시드 발굴 상품 식별:</span><br>
+        <span style="border-left:3px solid #a78bfa;padding-left:6px;display:block;margin-top:3px;">
+          보라 구분선 + 🌱 배지<br>
+          시드점수·키워드 컬럼<br>
+          "시드만 보기" 필터
+        </span>
+      </div>
+
+      <div style="margin-top:12px;border-top:1px dashed #fca5a5;padding-top:10px;">
+        <div style="font-size:10px;color:#be0014;font-weight:700;margin-bottom:4px;">위너 데이터 생성</div>
+        <div class="mini-card" style="background:#fff;border:1px solid #e2e8f0;">
+          2주 운영 후<br>
+          <strong>판매7d, ROAS, 전환율</strong> 자동 누적<br>
+          → 시드 발굴 세션 히스토리에 반영
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── 섹션 2: 확정 시 실제 API 흐름 -->
+<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-bottom:24px;">
+  <div style="font-size:11px;font-weight:700;margin-bottom:12px;">② "도매꾹에 추가" 클릭 시 정확한 흐름</div>
+
+  <div style="display:flex;align-items:flex-start;gap:8px;overflow-x:auto;">
+
+    <!-- Step 1 -->
+    <div style="min-width:140px;background:#f5f0ff;border:1px solid #c4b5fd;border-radius:8px;padding:10px;text-align:center;">
+      <div style="font-size:10px;font-weight:700;color:#7c3aed;margin-bottom:4px;">① 사용자</div>
+      <div style="font-size:10px;color:#374151;">"도매꾹에 추가"<br>버튼 클릭</div>
+      <div style="margin-top:6px;font-size:9px;color:#9ca3af;">선택된 30개<br>itemNo + keyword<br>+ score 포함</div>
+    </div>
+    <div style="padding-top:24px;color:#7c3aed;font-size:18px;">→</div>
+
+    <!-- Step 2 -->
+    <div style="min-width:160px;background:#f0f9ff;border:1px solid #7dd3fc;border-radius:8px;padding:10px;text-align:center;">
+      <div style="font-size:10px;font-weight:700;color:#0369a1;margin-bottom:4px;">② API 호출</div>
+      <div style="font-size:9px;font-family:monospace;background:#e0f2fe;border-radius:4px;padding:4px;color:#0369a1;margin-bottom:4px;">POST /api/sourcing<br>/seed-discover/confirm</div>
+      <div style="font-size:9px;color:#374151;">또는 기존<br>/fetch-items 확장</div>
+    </div>
+    <div style="padding-top:24px;color:#0369a1;font-size:18px;">→</div>
+
+    <!-- Step 3 -->
+    <div style="min-width:160px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px;text-align:center;">
+      <div style="font-size:10px;font-weight:700;color:#166534;margin-bottom:4px;">③ DB upsert</div>
+      <div style="font-size:9px;font-family:monospace;background:#dcfce7;border-radius:4px;padding:4px;color:#166534;margin-bottom:4px;">sourcing_items<br>ON CONFLICT item_no<br>DO UPDATE SET<br>seed_keyword=...<br>seed_score=...<br>seed_session_id=...</div>
+      <div style="font-size:9px;color:#374151;margin-top:4px;">기존 상품 있으면<br>시드 정보만 업데이트</div>
+    </div>
+    <div style="padding-top:24px;color:#166534;font-size:18px;">→</div>
+
+    <!-- Step 4 -->
+    <div style="min-width:140px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px;text-align:center;">
+      <div style="font-size:10px;font-weight:700;color:#166534;margin-bottom:4px;">④ 세션 업데이트</div>
+      <div style="font-size:9px;font-family:monospace;background:#dcfce7;border-radius:4px;padding:4px;color:#166534;">seed_sessions<br>status = 'confirmed'<br>confirmed_at = now()</div>
+    </div>
+    <div style="padding-top:24px;color:#166534;font-size:18px;">→</div>
+
+    <!-- Step 5 -->
+    <div style="min-width:140px;background:#fff5f5;border:1px solid #fca5a5;border-radius:8px;padding:10px;text-align:center;">
+      <div style="font-size:10px;font-weight:700;color:#be0014;margin-bottom:4px;">⑤ 프론트엔드</div>
+      <div style="font-size:10px;color:#374151;">도매꾹 탭 자동<br>리프레시 또는<br>탭 전환 유도</div>
+      <div style="margin-top:6px;background:#fee2e2;border-radius:4px;padding:3px 6px;font-size:9px;color:#be0014;">"30개가 도매꾹<br>탭에 추가됐습니다"<br>토스트 알림</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── 섹션 3: 엣지 케이스 처리 -->
+<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-bottom:24px;">
+  <div style="font-size:11px;font-weight:700;margin-bottom:12px;">③ 엣지 케이스 3가지</div>
+  <div class="edge-grid">
+
+    <div class="edge-card" style="border-color:#fde68a;">
+      <div class="edge-title" style="color:#92400e;">⚠️ 중복 상품</div>
+      <div style="color:#374151;line-height:1.7;">
+        도매꾹 탭에 이미 수동 수집된 상품이<br>
+        시드 발굴에서 다시 추가되면?<br><br>
+        <span style="background:#fef9c3;border-radius:3px;padding:2px 6px;">ON CONFLICT → UPDATE</span><br>
+        기존 상품 데이터 유지<br>
+        seed_keyword + seed_score만 추가<br>
+        → 기존 상품에 🌱 배지 붙음
+      </div>
+    </div>
+
+    <div class="edge-card" style="border-color:#bfdbfe;">
+      <div class="edge-title" style="color:#1d4ed8;">🔄 세션 여러 번 실행</div>
+      <div style="color:#374151;line-height:1.7;">
+        시드 발굴을 2차, 3차로 반복하면?<br><br>
+        seed_session_id로 구분<br>
+        도매꾹 탭 필터:<br>
+        <span style="background:#dbeafe;border-radius:3px;padding:2px 6px;">"2026-05-01 세션만"</span><br>
+        각 세션 결과를 독립 조회 가능<br>
+        → 총 80~100 SKU 누적 달성
+      </div>
+    </div>
+
+    <div class="edge-card" style="border-color:#bbf7d0;">
+      <div class="edge-title" style="color:#166534;">📊 위너 역참조</div>
+      <div style="color:#374151;line-height:1.7;">
+        2주 후 위너 확정 시 시드 세션과 연결?<br><br>
+        도매꾹 탭에서 위너 확정<br>
+        → seed_session_id 통해<br>
+        시드 발굴 세션 히스토리에<br>
+        <span style="background:#dcfce7;border-radius:3px;padding:2px 6px;">"이 세션 위너 3개"</span> 자동 반영<br>
+        다음 시드 발굴 시 참고 가능
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── 섹션 4: DB 스키마 변경 -->
+<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-bottom:24px;">
+  <div style="font-size:11px;font-weight:700;margin-bottom:10px;">④ DB 스키마 변경 (최소 3개 변경)</div>
+  <div class="schema">
+<span class="cm">-- sourcing_items 기존 테이블에 컬럼 3개 추가</span>
+ALTER TABLE <span class="t">sourcing_items</span> ADD COLUMN
+  <span class="new">seed_keyword</span>    <span class="n">TEXT</span>          DEFAULT NULL, <span class="cm">-- "수납함"</span>
+  <span class="new">seed_score</span>      <span class="n">SMALLINT</span>      DEFAULT NULL, <span class="cm">-- 0~100</span>
+  <span class="new">seed_session_id</span> <span class="n">UUID</span>          DEFAULT NULL; <span class="cm">-- 세션 FK</span>
+
+<span class="cm">-- 시드 발굴 세션 신규 테이블</span>
+CREATE TABLE <span class="t">seed_sessions</span> (
+  <span class="c">id</span>           <span class="n">UUID</span>        PRIMARY KEY DEFAULT gen_random_uuid(),
+  <span class="c">user_id</span>      <span class="n">UUID</span>        NOT NULL,
+  <span class="c">categories</span>   <span class="n">TEXT[]</span>,               <span class="cm">-- ['생활용품', '문구/사무']</span>
+  <span class="c">status</span>       <span class="n">TEXT</span>        DEFAULT 'in_progress', <span class="cm">-- in_progress|confirmed</span>
+  <span class="c">step</span>         <span class="n">SMALLINT</span>    DEFAULT 1, <span class="cm">-- 현재 진행 단계 1~7</span>
+  <span class="c">state_json</span>   <span class="n">JSONB</span>,                <span class="cm">-- 임시저장 데이터</span>
+  <span class="c">confirmed_at</span> <span class="n">TIMESTAMPTZ</span>,
+  <span class="c">winner_count</span> <span class="n">SMALLINT</span>    DEFAULT 0, <span class="cm">-- 2주 후 위너 수</span>
+  <span class="c">created_at</span>   <span class="n">TIMESTAMPTZ</span> DEFAULT now()
+);
+  </div>
+</div>
+
+<!-- ── 섹션 5: 요약 -->
+<div class="summary">
+  <div class="sum-card" style="border-color:#a78bfa;">
+    <div style="font-weight:700;color:#7c3aed;margin-bottom:8px;">🌱 시드 발굴 → 도매꾹 (단방향)</div>
+    <ul style="padding-left:14px;color:#374151;line-height:2;">
+      <li>확정 30개 → sourcing_items upsert</li>
+      <li>seed_keyword + seed_score + session_id 저장</li>
+      <li>도매꾹 탭 즉시 반영</li>
+      <li>토스트 알림 + 탭 전환 유도</li>
+    </ul>
+  </div>
+  <div class="sum-card" style="border-color:#fca5a5;">
+    <div style="font-weight:700;color:#be0014;margin-bottom:8px;">↻ 도매꾹 → 시드 발굴 (역참조)</div>
+    <ul style="padding-left:14px;color:#374151;line-height:2;">
+      <li>2주 후 위너 확정 → winner_count 업데이트</li>
+      <li>시드 세션 히스토리에서 결과 확인</li>
+      <li>다음 시드 발굴 시 패턴 참고</li>
+      <li>도매꾹 탭에서 시드 발굴 탭으로 직접 수정 없음</li>
+    </ul>
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,278 @@
+<h2>최종 설계 — 쿠팡/네이버 자동완성 반영</h2>
+<p class="subtitle">채널 방법론 정확히 적용: 도매꾹 힌트 → 네이버 자동완성 → 소비자 실제 검색어 → 검색량 검증</p>
+
+<!-- 수정된 파이프라인 -->
+<div class="section">
+  <h3>수정된 키워드 생성 파이프라인</h3>
+  <div style="display:flex;align-items:stretch;gap:0;overflow-x:auto;font-size:11px;">
+
+    <div style="background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px 0 0 8px;padding:12px 14px;min-width:140px;flex-shrink:0;">
+      <div style="font-size:10px;font-weight:700;color:#1d4ed8;margin-bottom:6px;">① 도매꾹 수집</div>
+      <div style="font-weight:600;color:#374151;">"스텐 정리함 소형"</div>
+      <div style="font-size:10px;color:#6b7280;margin-top:4px;">공급자 언어</div>
+    </div>
+    <div style="display:flex;align-items:center;padding:0 2px;color:#9ca3af;font-size:16px;">›</div>
+
+    <div style="background:#fef9c3;border:1px solid #fde68a;padding:12px 14px;min-width:150px;flex-shrink:0;">
+      <div style="font-size:10px;font-weight:700;color:#92400e;margin-bottom:6px;">② AI 힌트 추출</div>
+      <div style="font-size:10px;color:#374151;">불필요한 수식어 제거<br>핵심 명사만 남김</div>
+      <div style="margin-top:6px;display:flex;flex-direction:column;gap:2px;">
+        <span style="background:#fff;border:1px solid #fde68a;border-radius:3px;padding:1px 6px;font-size:10px;">"수납함"</span>
+        <span style="background:#fff;border:1px solid #fde68a;border-radius:3px;padding:1px 6px;font-size:10px;">"정리함"</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;padding:0 2px;color:#9ca3af;font-size:16px;">›</div>
+
+    <div style="background:#fff7ed;border:2px solid #fb923c;padding:12px 14px;min-width:180px;flex-shrink:0;position:relative;">
+      <div style="position:absolute;top:-9px;left:10px;background:#fb923c;color:#fff;font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;">채널 핵심 단계</div>
+      <div style="font-size:10px;font-weight:700;color:#c2410c;margin-bottom:6px;">③ 네이버 자동완성</div>
+      <div style="font-size:10px;color:#374151;">getSuggestions("수납함")<br>소비자 실제 검색어</div>
+      <div style="margin-top:6px;display:flex;flex-direction:column;gap:2px;">
+        <span style="background:#fff;border:1px solid #fed7aa;border-radius:3px;padding:1px 6px;font-size:10px;">책상 위 수납함</span>
+        <span style="background:#fff;border:1px solid #fed7aa;border-radius:3px;padding:1px 6px;font-size:10px;">싱크대 수납함</span>
+        <span style="background:#fff;border:1px solid #fed7aa;border-radius:3px;padding:1px 6px;font-size:10px;">수납함 소형</span>
+        <span style="font-size:9px;color:#9ca3af;">...최대 10개</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;padding:0 2px;color:#9ca3af;font-size:16px;">›</div>
+
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;padding:12px 14px;min-width:170px;flex-shrink:0;">
+      <div style="font-size:10px;font-weight:700;color:#166534;margin-bottom:6px;">④ 검색량 검증</div>
+      <div style="font-size:10px;color:#374151;">naver-ad expandKeywords<br>3,000~30,000 필터</div>
+      <div style="margin-top:6px;display:flex;flex-direction:column;gap:2px;">
+        <span style="background:#dcfce7;border-radius:3px;padding:1px 6px;font-size:10px;color:#166534;">수납함 18,400 ✅</span>
+        <span style="background:#dcfce7;border-radius:3px;padding:1px 6px;font-size:10px;color:#166534;">책상 위 수납함 6,200 ✅</span>
+        <span style="background:#fee2e2;border-radius:3px;padding:1px 6px;font-size:10px;color:#991b1b;">싱크대 수납함 1,200 ❌</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;padding:0 2px;color:#9ca3af;font-size:16px;">›</div>
+
+    <div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:0 8px 8px 0;padding:12px 14px;min-width:160px;flex-shrink:0;">
+      <div style="font-size:10px;font-weight:700;color:#7c3aed;margin-bottom:6px;">⑤ 사용자 선택</div>
+      <div style="font-size:10px;color:#374151;">통과 키워드 중 선택<br>기본: 검색량 1위</div>
+      <div style="margin-top:6px;display:flex;flex-direction:column;gap:2px;">
+        <div style="background:#ede9fe;border-radius:3px;padding:2px 6px;font-size:10px;color:#7c3aed;font-weight:700;">● 수납함 (18,400)</div>
+        <div style="border-radius:3px;padding:2px 6px;font-size:10px;color:#6b7280;">○ 책상 위 수납함 (6,200)</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- 전체 패널 목업 -->
+<div class="mockup" style="margin-top:20px;">
+  <div class="mockup-header">DomeggookTab — 시드 발굴 패널 (최종안)</div>
+  <div class="mockup-body" style="padding:0;font-size:12px;">
+
+    <!-- 패널 헤더 -->
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:#eff6ff;border-bottom:1px solid #bfdbfe;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span>🌱</span>
+        <span style="font-weight:700;color:#1d4ed8;">시드 발굴 패널</span>
+        <span style="font-size:10px;color:#6b7280;background:#e0e7ff;padding:2px 7px;border-radius:10px;">채널 방법론 적용</span>
+      </div>
+      <span style="font-size:11px;color:#6b7280;">▲ 접기</span>
+    </div>
+
+    <!-- 진행 상태 4단계 -->
+    <div style="padding:8px 16px;background:#f8faff;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;gap:3px;font-size:10px;">
+      <div style="background:#1d4ed8;color:#fff;border-radius:3px;padding:2px 8px;font-weight:700;">✅ 1 도매꾹 수집</div>
+      <span style="color:#d1d5db;">─</span>
+      <div style="background:#1d4ed8;color:#fff;border-radius:3px;padding:2px 8px;font-weight:700;">✅ 2 자동완성+검색량</div>
+      <span style="color:#d1d5db;">─</span>
+      <div style="background:#f59e0b;color:#fff;border-radius:3px;padding:2px 8px;font-weight:700;">▶ 3 리뷰·상표 입력</div>
+      <span style="color:#d1d5db;">─</span>
+      <div style="background:#e5e7eb;color:#6b7280;border-radius:3px;padding:2px 8px;">4 점수 확정</div>
+    </div>
+
+    <!-- 수집 설정 (완료 상태) -->
+    <div style="padding:8px 16px;background:#f0f7ff;border-bottom:1px solid #dbeafe;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div style="font-size:10px;color:#1d4ed8;font-weight:700;">🤖 자동 완료:</div>
+      <div style="display:flex;gap:4px;">
+        <span style="background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:2px 7px;font-size:10px;font-weight:600;">생활용품 ✓</span>
+        <span style="background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:2px 7px;font-size:10px;font-weight:600;">문구/사무 ✓</span>
+        <span style="background:#f3f4f6;color:#9ca3af;border-radius:4px;padding:2px 7px;font-size:10px;">반려동물</span>
+        <span style="background:#f3f4f6;color:#9ca3af;border-radius:4px;padding:2px 7px;font-size:10px;">차량용품</span>
+        <span style="background:#f3f4f6;color:#9ca3af;border-radius:4px;padding:2px 7px;font-size:10px;">가구/인테리어</span>
+      </div>
+      <div style="font-size:10px;color:#6b7280;">80개 수집 → 회피필터 → 네이버 자동완성+검색량 → <strong>38개 키워드 통과</strong></div>
+      <button style="margin-left:auto;background:#e5e7eb;border:none;border-radius:5px;padding:3px 8px;font-size:10px;color:#6b7280;cursor:pointer;">다시 수집</button>
+    </div>
+
+    <!-- 수동 입력 안내 -->
+    <div style="padding:7px 16px;background:#fffbeb;border-bottom:2px solid #f59e0b;display:flex;align-items:center;gap:8px;">
+      <span>✏️</span>
+      <div style="font-size:10px;color:#92400e;font-weight:700;">Step 3 — 직접 입력: 쿠팡에서 상위 리뷰수 확인 후 입력 · 캐릭터/도형 유사성 체크</div>
+      <span style="margin-left:auto;font-size:10px;background:#fde68a;color:#92400e;padding:1px 7px;border-radius:8px;font-weight:700;">24개 미입력</span>
+    </div>
+
+    <!-- 테이블 -->
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:11px;min-width:980px;">
+        <thead>
+          <tr style="background:#f3f4f6;border-bottom:2px solid #e5e7eb;">
+            <th style="padding:6px 8px;width:28px;"></th>
+            <th style="padding:6px 6px;text-align:left;min-width:180px;">
+              도매꾹 상품명
+              <div style="font-size:9px;font-weight:400;color:#9ca3af;">↳ 네이버 자동완성 키워드</div>
+            </th>
+            <th style="padding:6px 4px;text-align:center;">태그</th>
+            <th style="padding:6px 4px;text-align:right;background:#f0f7ff;color:#1d4ed8;border-left:1px solid #bfdbfe;">
+              월검색량
+              <div style="font-size:9px;font-weight:400;">🤖 naver-ad</div>
+            </th>
+            <th style="padding:6px 4px;text-align:right;background:#f0f7ff;color:#1d4ed8;">
+              경쟁상품
+              <div style="font-size:9px;font-weight:400;">🤖 naver shop</div>
+            </th>
+            <th style="padding:6px 4px;text-align:right;background:#f0f7ff;color:#1d4ed8;">
+              마진율
+              <div style="font-size:9px;font-weight:400;">🤖 도매꾹</div>
+            </th>
+            <th style="padding:6px 4px;text-align:center;background:#fffbeb;color:#92400e;border-left:2px solid #f59e0b;">
+              쿠팡 상위리뷰
+              <div style="font-size:9px;font-weight:400;">✏️ 직접 입력</div>
+            </th>
+            <th style="padding:6px 4px;text-align:center;background:#fffbeb;color:#92400e;">
+              캐릭터·도형
+              <div style="font-size:9px;font-weight:400;">✏️ 확인</div>
+            </th>
+            <th style="padding:6px 4px;text-align:right;background:#ede9fe;color:#7c3aed;border-left:2px solid #a78bfa;">
+              시드점수↓
+              <div style="font-size:9px;font-weight:400;">🎯 산출</div>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+
+          <!-- 행 1: 자동완성 키워드 2개 통과, 수동 입력 완료 -->
+          <tr style="border-bottom:1px solid #f3f4f6;">
+            <td style="padding:5px 8px;text-align:center;"><input type="checkbox" checked></td>
+            <td style="padding:5px 6px;">
+              <div style="font-weight:600;color:#374151;">스텐 정리함 소형</div>
+              <div style="display:flex;gap:3px;margin-top:3px;flex-wrap:wrap;">
+                <button style="background:#ede9fe;border:1px solid #a78bfa;color:#7c3aed;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;">● 수납함</button>
+                <button style="background:#f3f4f6;border:1px solid #e5e7eb;color:#6b7280;border-radius:4px;padding:1px 6px;font-size:10px;">○ 책상 위 수납함</button>
+              </div>
+            </td>
+            <td style="padding:5px 4px;text-align:center;"><span style="background:#dbeafe;color:#1d4ed8;border-radius:3px;padding:1px 5px;font-size:10px;">생활용품</span></td>
+            <td style="padding:5px 4px;text-align:right;background:#f8fbff;color:#059669;font-weight:600;border-left:1px solid #bfdbfe;">18,400</td>
+            <td style="padding:5px 4px;text-align:right;background:#f8fbff;color:#059669;font-weight:600;">312</td>
+            <td style="padding:5px 4px;text-align:right;background:#f8fbff;color:#16a34a;font-weight:600;">34%</td>
+            <td style="padding:5px 4px;text-align:center;background:#fffdf0;border-left:2px solid #f59e0b;">
+              <div style="display:flex;align-items:center;gap:3px;justify-content:center;">
+                <input type="number" value="28" style="width:40px;padding:2px 4px;border:1px solid #d1d5db;border-radius:4px;font-size:11px;text-align:center;">
+                <a href="#" style="color:#1d4ed8;font-size:10px;white-space:nowrap;">쿠팡↗</a>
+              </div>
+              <div style="font-size:9px;color:#16a34a;margin-top:1px;">✅ 50 미만</div>
+            </td>
+            <td style="padding:5px 4px;text-align:center;background:#fffdf0;">
+              <label style="display:flex;align-items:center;gap:3px;justify-content:center;cursor:pointer;font-size:10px;color:#16a34a;">
+                <input type="checkbox" checked style="accent-color:#16a34a;"> 문제없음
+              </label>
+            </td>
+            <td style="padding:5px 4px;text-align:right;background:#f5f3ff;border-left:2px solid #a78bfa;">
+              <span style="font-size:14px;font-weight:700;color:#7c3aed;">91</span>
+              <div style="font-size:9px;color:#7c3aed;">S</div>
+            </td>
+          </tr>
+
+          <!-- 행 2: 자동완성 키워드 1개 통과 -->
+          <tr style="border-bottom:1px solid #f3f4f6;">
+            <td style="padding:5px 8px;text-align:center;"><input type="checkbox" checked></td>
+            <td style="padding:5px 6px;">
+              <div style="font-weight:600;color:#374151;">A4 파일홀더 10매</div>
+              <div style="display:flex;gap:3px;margin-top:3px;">
+                <button style="background:#ede9fe;border:1px solid #a78bfa;color:#7c3aed;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;">● 파일홀더</button>
+              </div>
+              <div style="font-size:9px;color:#9ca3af;margin-top:1px;">통과 키워드 1개</div>
+            </td>
+            <td style="padding:5px 4px;text-align:center;"><span style="background:#d1fae5;color:#065f46;border-radius:3px;padding:1px 5px;font-size:10px;">문구/사무</span></td>
+            <td style="padding:5px 4px;text-align:right;background:#f8fbff;color:#059669;font-weight:600;border-left:1px solid #bfdbfe;">9,200</td>
+            <td style="padding:5px 4px;text-align:right;background:#f8fbff;color:#059669;font-weight:600;">441</td>
+            <td style="padding:5px 4px;text-align:right;background:#f8fbff;color:#16a34a;font-weight:600;">31%</td>
+            <td style="padding:5px 4px;text-align:center;background:#fffbeb;border-left:2px solid #f59e0b;">
+              <div style="display:flex;align-items:center;gap:3px;justify-content:center;">
+                <input type="number" placeholder="—" style="width:40px;padding:2px 4px;border:1px solid #f59e0b;border-radius:4px;font-size:11px;text-align:center;background:#fffbeb;">
+                <a href="#" style="color:#1d4ed8;font-size:10px;white-space:nowrap;">쿠팡↗</a>
+              </div>
+              <div style="font-size:9px;color:#f59e0b;margin-top:1px;">⚠️ 미입력</div>
+            </td>
+            <td style="padding:5px 4px;text-align:center;background:#fffbeb;">
+              <label style="display:flex;align-items:center;gap:3px;justify-content:center;cursor:pointer;font-size:10px;color:#92400e;">
+                <input type="checkbox"> 문제없음
+              </label>
+            </td>
+            <td style="padding:5px 4px;text-align:right;background:#faf5ff;border-left:2px solid #a78bfa;">
+              <span style="font-size:10px;color:#d1d5db;">—</span>
+              <div style="font-size:9px;color:#f59e0b;">입력 후</div>
+            </td>
+          </tr>
+
+          <!-- 행 3: 자동완성에서 통과 키워드 없음 -->
+          <tr style="border-bottom:1px solid #f3f4f6;background:#fff8f8;opacity:0.65;">
+            <td style="padding:5px 8px;text-align:center;"><input type="checkbox" disabled></td>
+            <td style="padding:5px 6px;">
+              <div style="font-weight:600;color:#9ca3af;text-decoration:line-through;">USB 미니 선풍기</div>
+              <div style="font-size:10px;color:#dc2626;margin-top:2px;">⛔ KC인증 필수 (전기)</div>
+            </td>
+            <td style="padding:5px 4px;text-align:center;"><span style="background:#fee2e2;color:#991b1b;border-radius:3px;padding:1px 5px;font-size:10px;">생활가전</span></td>
+            <td colspan="6" style="padding:5px 4px;text-align:center;color:#9ca3af;font-size:10px;">회피 필터 자동 제외</td>
+          </tr>
+
+          <!-- 행 4: 검색량 통과 없음 -->
+          <tr style="background:#fff8f8;opacity:0.65;">
+            <td style="padding:5px 8px;text-align:center;"><input type="checkbox" disabled></td>
+            <td style="padding:5px 6px;">
+              <div style="font-weight:600;color:#9ca3af;text-decoration:line-through;">포스트잇 메모지 형광</div>
+              <div style="font-size:9px;color:#dc2626;margin-top:2px;">⛔ 자동완성 → 전체 검색량 범위 초과</div>
+            </td>
+            <td style="padding:5px 4px;text-align:center;"><span style="background:#f3f4f6;color:#9ca3af;border-radius:3px;padding:1px 5px;font-size:10px;">문구/사무</span></td>
+            <td style="padding:5px 4px;text-align:right;background:#fff5f5;color:#dc2626;border-left:1px solid #bfdbfe;">62,000</td>
+            <td style="padding:5px 4px;text-align:right;background:#fff5f5;color:#9ca3af;">3,210</td>
+            <td style="padding:5px 4px;text-align:right;background:#fff5f5;color:#9ca3af;">29%</td>
+            <td colspan="3" style="padding:5px 4px;text-align:center;color:#9ca3af;font-size:10px;">검색량 초과 제외</td>
+          </tr>
+
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 하단 -->
+    <div style="padding:10px 16px;background:#f9fafb;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+      <div style="font-size:11px;color:#6b7280;">
+        ✅ 입력 완료 <strong>14/38</strong> · 📊 점수 산출 <strong>14개</strong> · 선택됨 <strong>1개</strong>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button style="background:#fffbeb;border:1px solid #f59e0b;border-radius:6px;padding:5px 10px;font-size:11px;color:#92400e;cursor:pointer;">미입력 24개 쿠팡 일괄 열기↗</button>
+        <button style="background:#be0014;color:#fff;border:none;border-radius:6px;padding:5px 14px;font-size:11px;font-weight:700;cursor:pointer;">선택 1개 목록에 추가 →</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- 자동 vs 수동 최종 정리 -->
+<div style="margin-top:20px;display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:11px;">
+  <div style="background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px;">
+    <div style="font-weight:700;color:#1d4ed8;margin-bottom:8px;">🤖 완전 자동 (버튼 1번)</div>
+    <ul style="margin:0;padding-left:16px;color:#374151;line-height:2;">
+      <li>도매꾹 카테고리 판매순 수집</li>
+      <li>KC·상표·시즌 회피 필터</li>
+      <li>AI 힌트 단어 추출</li>
+      <li>네이버 쇼핑 자동완성 → 소비자 키워드</li>
+      <li>네이버 Ad API → 검색량 3,000~30,000 필터</li>
+      <li>네이버 쇼핑 API → 경쟁상품수 조회</li>
+      <li>도매꾹 도매가 → 마진율 계산</li>
+    </ul>
+  </div>
+  <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px;">
+    <div style="font-weight:700;color:#92400e;margin-bottom:8px;">✏️ 사람이 하는 것 (4가지만)</div>
+    <ul style="margin:0;padding-left:16px;color:#374151;line-height:2;">
+      <li>키워드 후보 중 최종 선택 (자동완성 결과)</li>
+      <li>쿠팡 상위 3위 리뷰수 입력</li>
+      <li>캐릭터·도형 유사성 체크</li>
+      <li>최종 30개 확정 (체크박스)</li>
+    </ul>
+  </div>
+</div>

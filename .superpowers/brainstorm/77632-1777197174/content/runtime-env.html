@@ -1,0 +1,42 @@
+<h2>브라우저 자동화는 어디서 실행할까요?</h2>
+<p class="subtitle">Playwright 실행 환경에 따라 구현 방식이 완전히 달라집니다</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>로컬 전용 (개발자 PC에서만)</h3>
+      <p>앱을 로컬로 실행할 때만 보고서 수집 기능 동작. Vercel 배포 버전에는 없음</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>장점</h4><ul><li>구현 가장 단순 — 시스템 Playwright 그대로 사용</li><li>Vercel 제약 없음</li><li>로그인 세션 로컬 저장 간단</li></ul></div>
+        <div class="cons"><h4>단점</h4><ul><li>배포된 앱에서 사용 불가</li><li>팀원 각자 셋업 필요</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Vercel 서버사이드 (@sparticuz/chromium)</h3>
+      <p>serverless 환경용 경량 Chromium 패키지로 API Route에서 실행</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>장점</h4><ul><li>배포된 앱에서도 동작</li><li>클릭 한 번으로 어디서나 수집</li></ul></div>
+        <div class="cons"><h4>단점</h4><ul><li>cold start 느림 (~5-10초)</li><li>Vercel 함수 최대 실행시간 60초 제약</li><li>쿠팡 로그인 쿠키를 Supabase에 저장해야 함</li><li>패키지 크기 ~50MB</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>하이브리드: gstack 브라우저 재활용</h3>
+      <p>이미 로그인된 gstack chromium-profile 쿠키를 앱이 읽어서 API 호출에 사용</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>장점</h4><ul><li>로그인 세션 문제 해결됨 (기존 쿠키 그대로)</li><li>별도 로그인 플로우 불필요</li><li>이미 검증된 방식</li></ul></div>
+        <div class="cons"><h4>단점</h4><ul><li>gstack이 설치된 로컬 환경에서만 동작</li><li>쿠키 만료 시 수동 갱신 필요</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:1.5rem">💡 추천: <strong>B (Vercel 서버사이드)</strong> — 배포된 앱에서도 동작하려면 필요. 단, 초기 로그인은 별도 처리</p>

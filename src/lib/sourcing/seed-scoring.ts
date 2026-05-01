@@ -3,6 +3,8 @@ export interface SeedScoreInput {
   searchVolume: number;
   topReviewCount: number;
   marginRate: number;
+  compIdx?: '낮음' | '중간' | '높음' | null;
+  avgCtr?: number | null; // PC+모바일 평균 CTR (%)
 }
 
 export interface SeedScoreResult {
@@ -15,8 +17,8 @@ export interface SeedScoreResult {
 }
 
 export function calcSeedScore(input: SeedScoreInput): SeedScoreResult {
-  const competitorScore = calcCompetitorScore(input.competitorCount, input.searchVolume);
-  const searchVolumeScore = calcSearchVolumeScore(input.searchVolume);
+  const competitorScore = calcCompetitorScore(input.competitorCount, input.searchVolume, input.compIdx ?? null);
+  const searchVolumeScore = calcSearchVolumeScore(input.searchVolume, input.avgCtr ?? null);
   const reviewScore = calcReviewScore(input.topReviewCount);
   const marginScore = calcMarginScore(input.marginRate);
   const total = competitorScore + searchVolumeScore + reviewScore + marginScore;
@@ -24,24 +26,41 @@ export function calcSeedScore(input: SeedScoreInput): SeedScoreResult {
 }
 
 /**
- * 경쟁 점수: "노출 가능성" = (검색량 / 경쟁수) × 1000 기반
- *  - 네이버 쇼핑은 전체 통합 카탈로그라 절대값 <500 필터가 비현실적 (대부분 수만~수백만)
- *  - 대신 검색량 대비 경쟁수가 적을수록(=ratio 높을수록) 노출 가능성 높다고 판단
- *  - ratio ≥ 100  → 30점 (최고)
- *  - ratio = 0    → 0점
- *  - 0~100 선형
+ * 경쟁 점수 (30점)
+ *  - 베이스: 노출가능성 = (검색량 / 경쟁수) × 1000, 0~100 선형 매핑 (0~30점)
+ *  - 보정: compIdx '낮음' +5, '중간' 0, '높음' -5
+ *  - 최종 0~30 clamp
  */
-function calcCompetitorScore(competitorCount: number, searchVolume: number): number {
-  if (competitorCount <= 0) return 30;
-  const ratio = (searchVolume / competitorCount) * 1000;
-  return Math.round(30 * Math.min(ratio, 100) / 100);
+function calcCompetitorScore(
+  competitorCount: number,
+  searchVolume: number,
+  compIdx: '낮음' | '중간' | '높음' | null,
+): number {
+  let base: number;
+  if (competitorCount <= 0) base = 30;
+  else {
+    const ratio = (searchVolume / competitorCount) * 1000;
+    base = Math.round(30 * Math.min(ratio, 100) / 100);
+  }
+  const adj = compIdx === '낮음' ? 5 : compIdx === '높음' ? -5 : 0;
+  return Math.max(0, Math.min(30, base + adj));
 }
 
-function calcSearchVolumeScore(volume: number): number {
+/**
+ * 검색량 점수 (25점)
+ *  - 베이스: 역U형 (3k 12점 - 15k 25점 - 30k 12점)
+ *  - 보정: 평균 CTR 1% 미만은 정보검색성 키워드 (구매 의도 약함) → 50% 감점
+ *  - CTR 데이터 없으면 (null) 보정 없음
+ */
+function calcSearchVolumeScore(volume: number, avgCtr: number | null): number {
   const PEAK = 15_000, MIN = 3_000, MAX = 30_000, BASE = 12, PEAK_SCORE = 25;
-  if (volume <= MIN || volume >= MAX) return BASE;
-  if (volume <= PEAK) return Math.round(BASE + (PEAK_SCORE - BASE) * (volume - MIN) / (PEAK - MIN));
-  return Math.round(BASE + (PEAK_SCORE - BASE) * (MAX - volume) / (MAX - PEAK));
+  let base: number;
+  if (volume <= MIN || volume >= MAX) base = BASE;
+  else if (volume <= PEAK) base = Math.round(BASE + (PEAK_SCORE - BASE) * (volume - MIN) / (PEAK - MIN));
+  else base = Math.round(BASE + (PEAK_SCORE - BASE) * (MAX - volume) / (MAX - PEAK));
+
+  if (avgCtr !== null && avgCtr < 1) return Math.round(base * 0.5);
+  return base;
 }
 
 function calcReviewScore(count: number): number {

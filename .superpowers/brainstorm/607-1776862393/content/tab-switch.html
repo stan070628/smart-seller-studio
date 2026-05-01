@@ -1,0 +1,91 @@
+<h2>버튼 클릭 후 동작 방식</h2>
+<p class="subtitle">"N개 상품 대량등록" 버튼을 눌렀을 때 어떻게 이동할까요?</p>
+
+<div class="split">
+
+  <div class="mockup">
+    <div class="mockup-header">A. 자동 탭 전환</div>
+    <div class="mockup-body" style="padding:0;overflow:hidden;font-size:12px;">
+      <!-- Nav tabs -->
+      <div style="display:flex;background:#1e293b;border-bottom:1px solid #334155;">
+        <div style="padding:8px 16px;color:#94a3b8;font-size:11px;">소싱</div>
+        <div style="padding:8px 16px;color:#94a3b8;font-size:11px;">마진계산기</div>
+        <div style="padding:8px 16px;background:#3b82f6;color:#fff;font-size:11px;border-radius:4px 4px 0 0;margin-top:4px;">상품등록 ←</div>
+      </div>
+      <!-- Listing panel -->
+      <div style="padding:12px;background:#0f172a;min-height:120px;">
+        <div style="background:#1e293b;border-radius:8px;padding:10px;border:1px solid #334155;">
+          <div style="color:#94a3b8;font-size:10px;margin-bottom:6px;">대량등록 큐 (기존 2개 + 새로 추가 3개)</div>
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <div style="background:#1a2744;border:1px solid #334155;border-radius:4px;padding:4px 8px;color:#64748b;font-size:10px;">87654321 · 이미 있는 상품 ✓</div>
+            <div style="background:#1a2744;border:1px solid #334155;border-radius:4px;padding:4px 8px;color:#64748b;font-size:10px;">11223344 · 이미 있는 상품 ✓</div>
+            <div style="background:#162032;border:1px solid #3b82f6;border-radius:4px;padding:4px 8px;color:#93c5fd;font-size:10px;">12345678 · 스테인리스 텀블러 🆕</div>
+            <div style="background:#162032;border:1px solid #3b82f6;border-radius:4px;padding:4px 8px;color:#93c5fd;font-size:10px;">55667788 · 보냉 도시락통 🆕</div>
+            <div style="background:#162032;border:1px solid #3b82f6;border-radius:4px;padding:4px 8px;color:#93c5fd;font-size:10px;">99001122 · 실리콘 주방장갑 🆕</div>
+          </div>
+          <button style="margin-top:8px;width:100%;background:#3b82f6;color:#fff;border:none;padding:6px;border-radius:6px;font-size:11px;">AI 처리 시작</button>
+        </div>
+      </div>
+    </div>
+    <div style="padding:8px 12px;font-size:11px;color:#64748b;background:#f8fafc;border-top:1px solid #e2e8f0;">
+      즉시 등록탭으로 이동. 추가된 상품이 바로 보임.
+    </div>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-header">B. 토스트만 표시 (탭 유지)</div>
+    <div class="mockup-body" style="padding:0;overflow:hidden;font-size:12px;position:relative;">
+      <!-- Nav tabs -->
+      <div style="display:flex;background:#1e293b;border-bottom:1px solid #334155;">
+        <div style="padding:8px 16px;color:#94a3b8;font-size:11px;">소싱</div>
+        <div style="padding:8px 16px;background:#1e40af;color:#fff;font-size:11px;border-radius:4px 4px 0 0;margin-top:4px;">도매꾹 ← (그대로)</div>
+        <div style="padding:8px 16px;color:#94a3b8;font-size:11px;">마진계산기</div>
+      </div>
+      <!-- Sourcing table continues -->
+      <div style="padding:12px;background:#0f172a;min-height:120px;position:relative;">
+        <div style="background:#1e293b;border-radius:6px;overflow:hidden;border:1px solid #334155;">
+          <table style="width:100%;border-collapse:collapse;font-size:10px;">
+            <thead><tr style="background:#162032;">
+              <th style="padding:5px;color:#94a3b8;text-align:center;width:20px;">✓</th>
+              <th style="padding:5px;color:#94a3b8;text-align:left;">상품명</th>
+              <th style="padding:5px;color:#94a3b8;">점수</th>
+            </tr></thead>
+            <tbody>
+              <tr><td style="padding:5px;text-align:center;color:#64748b;">☐</td><td style="padding:5px;color:#e2e8f0;">세라믹 머그컵</td><td style="padding:5px;text-align:center;color:#94a3b8;">71</td></tr>
+              <tr style="background:#162032;"><td style="padding:5px;text-align:center;color:#64748b;">☐</td><td style="padding:5px;color:#e2e8f0;">스텐 냄비</td><td style="padding:5px;text-align:center;color:#94a3b8;">83</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <!-- Toast notification -->
+        <div style="position:absolute;top:16px;right:12px;background:#1a2744;border:1px solid #3b82f6;border-radius:8px;padding:8px 12px;box-shadow:0 4px 12px rgba(0,0,0,0.4);max-width:180px;">
+          <div style="color:#93c5fd;font-size:10px;font-weight:600;margin-bottom:2px;">✓ 3개 추가됨</div>
+          <div style="color:#64748b;font-size:9px;margin-bottom:6px;">대량등록 큐에 추가되었습니다</div>
+          <button style="width:100%;background:#3b82f6;color:#fff;border:none;padding:3px 8px;border-radius:4px;font-size:9px;">등록탭 바로가기 →</button>
+        </div>
+      </div>
+    </div>
+    <div style="padding:8px 12px;font-size:11px;color:#64748b;background:#f8fafc;border-top:1px solid #e2e8f0;">
+      소싱탭 유지. 계속 탐색 후 나중에 등록탭 이동 가능.
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:16px;text-align:center;">클릭해서 선택하거나 터미널에서 알려주세요.</p>
+
+<div class="options" style="margin-top:12px;">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>자동 탭 전환</h3>
+      <p>버튼 클릭 → 즉시 등록탭으로 이동. 추가된 상품이 바로 눈에 보임.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>토스트만 표시</h3>
+      <p>소싱탭 유지 + 우상단 토스트. "등록탭 바로가기" 버튼으로 원할 때 이동.</p>
+    </div>
+  </div>
+</div>

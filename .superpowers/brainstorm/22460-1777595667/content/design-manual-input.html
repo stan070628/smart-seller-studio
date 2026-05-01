@@ -1,0 +1,279 @@
+<h2>시드 발굴 패널 — 자동 처리 + 수동 입력 통합 목업</h2>
+<p class="subtitle">파란색 = 자동 처리 · 주황색 = 사람이 입력 · 보라색 = 점수 산출</p>
+
+<div class="mockup">
+  <div class="mockup-header">DomeggookTab — 시드 발굴 패널 (전체 흐름)</div>
+  <div class="mockup-body" style="padding:0;font-size:12px;">
+
+    <!-- 패널 헤더 -->
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:#eff6ff;border-bottom:1px solid #bfdbfe;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:14px;">🌱</span>
+        <span style="font-weight:700;color:#1d4ed8;">시드 발굴 패널</span>
+      </div>
+      <span style="font-size:11px;color:#6b7280;">▲ 접기</span>
+    </div>
+
+    <!-- 파이프라인 단계 표시 -->
+    <div style="padding:8px 16px;background:#f8faff;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;gap:4px;font-size:10px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:4px;background:#dbeafe;border-radius:4px;padding:3px 8px;color:#1d4ed8;font-weight:700;">
+        🤖 1 수집
+      </div>
+      <span style="color:#d1d5db;">──</span>
+      <div style="display:flex;align-items:center;gap:4px;background:#dbeafe;border-radius:4px;padding:3px 8px;color:#1d4ed8;font-weight:700;">
+        🤖 2 검색량·경쟁
+      </div>
+      <span style="color:#d1d5db;">──</span>
+      <div style="display:flex;align-items:center;gap:4px;background:#fef3c7;border-radius:4px;padding:3px 8px;color:#92400e;font-weight:700;">
+        ✏️ 3 리뷰·상표 입력
+      </div>
+      <span style="color:#d1d5db;">──</span>
+      <div style="display:flex;align-items:center;gap:4px;background:#ede9fe;border-radius:4px;padding:3px 8px;color:#7c3aed;font-weight:700;">
+        🎯 4 점수 확정
+      </div>
+      <span style="margin-left:auto;font-size:10px;color:#6b7280;">현재: 3단계</span>
+    </div>
+
+    <!-- Step 2: 카테고리 선택 + 수집 (자동) -->
+    <div style="padding:10px 16px;background:#f0f7ff;border-bottom:1px solid #bfdbfe;">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+        <span style="background:#1d4ed8;color:#fff;border-radius:3px;padding:1px 6px;font-size:10px;font-weight:700;">🤖 자동</span>
+        <span style="font-size:11px;font-weight:700;color:#374151;">도매꾹 판매순 수집 + 검색량/경쟁 분석</span>
+        <span style="font-size:10px;color:#16a34a;margin-left:auto;">✅ 완료 (80개 수집 → 회피필터 후 38개)</span>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+        <label style="display:flex;align-items:center;gap:4px;background:#fff;border:1px solid #3b82f6;border-radius:5px;padding:3px 8px;font-size:11px;color:#1d4ed8;font-weight:600;opacity:0.7;">
+          <input type="checkbox" checked disabled> 생활용품
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;background:#fff;border:1px solid #3b82f6;border-radius:5px;padding:3px 8px;font-size:11px;color:#1d4ed8;font-weight:600;opacity:0.7;">
+          <input type="checkbox" checked disabled> 문구/사무
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:5px;padding:3px 8px;font-size:11px;color:#9ca3af;opacity:0.7;">
+          <input type="checkbox" disabled> 반려동물
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:5px;padding:3px 8px;font-size:11px;color:#9ca3af;opacity:0.7;">
+          <input type="checkbox" disabled> 차량용품
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:5px;padding:3px 8px;font-size:11px;color:#9ca3af;opacity:0.7;">
+          <input type="checkbox" disabled> 가구/인테리어
+        </label>
+        <button style="background:#e5e7eb;color:#9ca3af;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:not-allowed;margin-left:auto;">다시 수집</button>
+      </div>
+    </div>
+
+    <!-- Step 3: 수동 입력 안내 배너 -->
+    <div style="padding:8px 16px;background:#fffbeb;border-bottom:2px solid #f59e0b;display:flex;align-items:center;gap:8px;">
+      <span style="font-size:16px;">✏️</span>
+      <div>
+        <div style="font-size:11px;font-weight:700;color:#92400e;">직접 입력이 필요합니다 (Step 3)</div>
+        <div style="font-size:10px;color:#a16207;">쿠팡에서 상위 리뷰수를 확인하고 입력하세요. 상표권 캐릭터·도형 유사성도 체크가 필요합니다.</div>
+      </div>
+      <div style="margin-left:auto;font-size:10px;color:#92400e;font-weight:600;">미입력 24개 남음</div>
+    </div>
+
+    <!-- 결과 테이블 -->
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:11px;min-width:900px;">
+        <thead>
+          <tr style="background:#f3f4f6;border-bottom:2px solid #e5e7eb;">
+            <th style="padding:6px 8px;width:28px;"></th>
+            <th style="padding:6px 4px;text-align:left;min-width:120px;">상품명·키워드</th>
+            <th style="padding:6px 4px;text-align:center;">카테고리</th>
+            <!-- 자동 컬럼들 -->
+            <th style="padding:6px 4px;text-align:right;background:#f0f7ff;color:#1d4ed8;">
+              월검색량
+              <div style="font-size:9px;font-weight:400;">🤖 자동</div>
+            </th>
+            <th style="padding:6px 4px;text-align:right;background:#f0f7ff;color:#1d4ed8;">
+              경쟁상품수
+              <div style="font-size:9px;font-weight:400;">🤖 자동</div>
+            </th>
+            <th style="padding:6px 4px;text-align:right;background:#f0f7ff;color:#1d4ed8;">
+              마진율
+              <div style="font-size:9px;font-weight:400;">🤖 자동</div>
+            </th>
+            <!-- 수동 입력 컬럼들 -->
+            <th style="padding:6px 4px;text-align:center;background:#fffbeb;color:#92400e;border-left:2px solid #f59e0b;">
+              쿠팡 상위리뷰
+              <div style="font-size:9px;font-weight:400;">✏️ 직접 입력</div>
+            </th>
+            <th style="padding:6px 4px;text-align:center;background:#fffbeb;color:#92400e;">
+              캐릭터·도형
+              <div style="font-size:9px;font-weight:400;">✏️ 직접 확인</div>
+            </th>
+            <!-- 점수 -->
+            <th style="padding:6px 4px;text-align:right;background:#ede9fe;color:#7c3aed;border-left:2px solid #a78bfa;">
+              시드점수↓
+              <div style="font-size:9px;font-weight:400;">🎯 산출</div>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+
+          <!-- 행 1: 수동 입력 완료 → 점수 산출됨 -->
+          <tr style="border-bottom:1px solid #f3f4f6;background:#fff;">
+            <td style="padding:5px 8px;text-align:center;"><input type="checkbox" checked></td>
+            <td style="padding:5px 4px;">
+              <div style="font-weight:600;color:#111;">스텐 정리함 소형</div>
+              <div style="font-size:10px;color:#6b7280;">키워드: "수납함"</div>
+            </td>
+            <td style="padding:5px 4px;text-align:center;"><span style="background:#dbeafe;color:#1d4ed8;border-radius:3px;padding:1px 6px;font-size:10px;">생활용품</span></td>
+            <!-- 자동 -->
+            <td style="padding:5px 4px;text-align:right;background:#f8fbff;color:#059669;font-weight:600;">18,400</td>
+            <td style="padding:5px 4px;text-align:right;background:#f8fbff;color:#059669;font-weight:600;">312</td>
+            <td style="padding:5px 4px;text-align:right;background:#f8fbff;color:#16a34a;font-weight:600;">34%</td>
+            <!-- 수동 입력됨 -->
+            <td style="padding:5px 4px;text-align:center;background:#fffdf0;border-left:2px solid #f59e0b;">
+              <div style="display:flex;align-items:center;gap:4px;justify-content:center;">
+                <input type="number" value="28" style="width:44px;padding:2px 4px;border:1px solid #d1d5db;border-radius:4px;font-size:11px;text-align:center;">
+                <a href="#" style="color:#1d4ed8;font-size:10px;text-decoration:none;">쿠팡↗</a>
+              </div>
+              <div style="font-size:9px;color:#16a34a;margin-top:2px;">✅ 50 미만</div>
+            </td>
+            <td style="padding:5px 4px;text-align:center;background:#fffdf0;">
+              <label style="display:flex;align-items:center;gap:4px;justify-content:center;cursor:pointer;font-size:10px;color:#16a34a;">
+                <input type="checkbox" checked style="accent-color:#16a34a;"> 문제없음
+              </label>
+            </td>
+            <!-- 점수 산출됨 -->
+            <td style="padding:5px 4px;text-align:right;background:#f5f3ff;border-left:2px solid #a78bfa;">
+              <span style="font-size:14px;font-weight:700;color:#7c3aed;">91</span>
+              <div style="font-size:9px;color:#7c3aed;">S등급</div>
+            </td>
+          </tr>
+
+          <!-- 행 2: 수동 입력 완료 -->
+          <tr style="border-bottom:1px solid #f3f4f6;background:#fff;">
+            <td style="padding:5px 8px;text-align:center;"><input type="checkbox" checked></td>
+            <td style="padding:5px 4px;">
+              <div style="font-weight:600;color:#111;">A4 파일홀더 10매</div>
+              <div style="font-size:10px;color:#6b7280;">키워드: "파일홀더"</div>
+            </td>
+            <td style="padding:5px 4px;text-align:center;"><span style="background:#d1fae5;color:#065f46;border-radius:3px;padding:1px 6px;font-size:10px;">문구/사무</span></td>
+            <td style="padding:5px 4px;text-align:right;background:#f8fbff;color:#059669;font-weight:600;">9,200</td>
+            <td style="padding:5px 4px;text-align:right;background:#f8fbff;color:#059669;font-weight:600;">441</td>
+            <td style="padding:5px 4px;text-align:right;background:#f8fbff;color:#16a34a;font-weight:600;">31%</td>
+            <td style="padding:5px 4px;text-align:center;background:#fffdf0;border-left:2px solid #f59e0b;">
+              <div style="display:flex;align-items:center;gap:4px;justify-content:center;">
+                <input type="number" value="19" style="width:44px;padding:2px 4px;border:1px solid #d1d5db;border-radius:4px;font-size:11px;text-align:center;">
+                <a href="#" style="color:#1d4ed8;font-size:10px;text-decoration:none;">쿠팡↗</a>
+              </div>
+              <div style="font-size:9px;color:#16a34a;margin-top:2px;">✅ 50 미만</div>
+            </td>
+            <td style="padding:5px 4px;text-align:center;background:#fffdf0;">
+              <label style="display:flex;align-items:center;gap:4px;justify-content:center;cursor:pointer;font-size:10px;color:#16a34a;">
+                <input type="checkbox" checked style="accent-color:#16a34a;"> 문제없음
+              </label>
+            </td>
+            <td style="padding:5px 4px;text-align:right;background:#f5f3ff;border-left:2px solid #a78bfa;">
+              <span style="font-size:14px;font-weight:700;color:#16a34a;">76</span>
+              <div style="font-size:9px;color:#16a34a;">A등급</div>
+            </td>
+          </tr>
+
+          <!-- 행 3: 미입력 상태 -->
+          <tr style="border-bottom:1px solid #f3f4f6;background:#fffef5;">
+            <td style="padding:5px 8px;text-align:center;"><input type="checkbox" disabled></td>
+            <td style="padding:5px 4px;">
+              <div style="font-weight:600;color:#374151;">고양이 배변매트</div>
+              <div style="font-size:10px;color:#6b7280;">키워드: "배변매트"</div>
+            </td>
+            <td style="padding:5px 4px;text-align:center;"><span style="background:#fce7f3;color:#9d174d;border-radius:3px;padding:1px 6px;font-size:10px;">반려동물</span></td>
+            <td style="padding:5px 4px;text-align:right;background:#f8fbff;color:#059669;font-weight:600;">7,800</td>
+            <td style="padding:5px 4px;text-align:right;background:#f8fbff;color:#059669;font-weight:600;">287</td>
+            <td style="padding:5px 4px;text-align:right;background:#f8fbff;color:#16a34a;font-weight:600;">32%</td>
+            <!-- 미입력 -->
+            <td style="padding:5px 4px;text-align:center;background:#fffbeb;border-left:2px solid #f59e0b;">
+              <div style="display:flex;align-items:center;gap:4px;justify-content:center;">
+                <input type="number" placeholder="0" style="width:44px;padding:2px 4px;border:1px solid #f59e0b;border-radius:4px;font-size:11px;text-align:center;background:#fffbeb;">
+                <a href="https://www.coupang.com/np/search?q=배변매트" target="_blank" style="color:#1d4ed8;font-size:10px;text-decoration:none;">쿠팡↗</a>
+              </div>
+              <div style="font-size:9px;color:#f59e0b;margin-top:2px;">⚠️ 입력 필요</div>
+            </td>
+            <td style="padding:5px 4px;text-align:center;background:#fffbeb;">
+              <label style="display:flex;align-items:center;gap:4px;justify-content:center;cursor:pointer;font-size:10px;color:#92400e;">
+                <input type="checkbox" style="accent-color:#f59e0b;"> 문제없음
+              </label>
+            </td>
+            <!-- 점수 미산출 -->
+            <td style="padding:5px 4px;text-align:right;background:#faf5ff;border-left:2px solid #a78bfa;">
+              <span style="font-size:11px;color:#d1d5db;">—</span>
+              <div style="font-size:9px;color:#f59e0b;">입력 후 산출</div>
+            </td>
+          </tr>
+
+          <!-- 행 4: 리뷰 초과로 제외 -->
+          <tr style="border-bottom:1px solid #f3f4f6;background:#fff8f8;opacity:0.65;">
+            <td style="padding:5px 8px;text-align:center;"><input type="checkbox" disabled></td>
+            <td style="padding:5px 4px;">
+              <div style="font-weight:600;color:#9ca3af;text-decoration:line-through;">메모지 포스트잇</div>
+              <div style="font-size:10px;color:#dc2626;">⛔ 리뷰 초과로 제외</div>
+            </td>
+            <td style="padding:5px 4px;text-align:center;"><span style="background:#f3f4f6;color:#9ca3af;border-radius:3px;padding:1px 6px;font-size:10px;">문구/사무</span></td>
+            <td style="padding:5px 4px;text-align:right;background:#f8fbff;color:#6b7280;">12,000</td>
+            <td style="padding:5px 4px;text-align:right;background:#f8fbff;color:#6b7280;">390</td>
+            <td style="padding:5px 4px;text-align:right;background:#f8fbff;color:#6b7280;">30%</td>
+            <td style="padding:5px 4px;text-align:center;background:#fee2e2;border-left:2px solid #f59e0b;">
+              <span style="font-size:11px;font-weight:700;color:#dc2626;">127개</span>
+              <div style="font-size:9px;color:#dc2626;">❌ 50 초과</div>
+            </td>
+            <td style="padding:5px 4px;text-align:center;background:#fee2e2;color:#9ca3af;">—</td>
+            <td style="padding:5px 4px;text-align:right;background:#faf5ff;border-left:2px solid #a78bfa;">
+              <span style="font-size:11px;color:#d1d5db;">제외</span>
+            </td>
+          </tr>
+
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 진행 현황 + 하단 액션 -->
+    <div style="padding:10px 16px;background:#f9fafb;border-top:1px solid #e5e7eb;">
+      <!-- 진행률 -->
+      <div style="display:flex;gap:16px;margin-bottom:10px;font-size:11px;">
+        <div style="display:flex;align-items:center;gap:4px;">
+          <div style="width:10px;height:10px;background:#1d4ed8;border-radius:2px;"></div>
+          <span style="color:#374151;">자동 완료: <strong>38개</strong></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px;">
+          <div style="width:10px;height:10px;background:#f59e0b;border-radius:2px;"></div>
+          <span style="color:#92400e;">수동 입력: <strong>14/38</strong> <span style="color:#9ca3af;">(24개 남음)</span></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px;">
+          <div style="width:10px;height:10px;background:#7c3aed;border-radius:2px;"></div>
+          <span style="color:#374151;">점수 산출: <strong>14개</strong></span>
+        </div>
+        <div style="margin-left:auto;font-size:11px;color:#6b7280;">선택됨: 2개</div>
+      </div>
+      <!-- 버튼 -->
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div style="display:flex;gap:6px;">
+          <button style="background:#f3f4f6;border:1px solid #e5e7eb;border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;">전체 선택</button>
+          <button style="background:#fffbeb;border:1px solid #f59e0b;border-radius:6px;padding:5px 10px;font-size:11px;color:#92400e;cursor:pointer;">
+            미입력 38개 일괄 쿠팡 열기
+          </button>
+        </div>
+        <button style="background:#be0014;color:#fff;border:none;border-radius:6px;padding:6px 16px;font-size:11px;font-weight:700;cursor:pointer;">
+          선택 2개 목록에 추가 →
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- 범례 -->
+<div style="margin-top:16px;display:flex;gap:16px;font-size:11px;flex-wrap:wrap;">
+  <div style="display:flex;align-items:center;gap:6px;">
+    <div style="width:14px;height:14px;background:#dbeafe;border-radius:3px;"></div>
+    <span>🤖 파란 컬럼: 시스템이 자동으로 가져옴</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:6px;">
+    <div style="width:14px;height:14px;background:#fef3c7;border-radius:3px;"></div>
+    <span>✏️ 노란 컬럼: 사람이 직접 입력</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:6px;">
+    <div style="width:14px;height:14px;background:#ede9fe;border-radius:3px;"></div>
+    <span>🎯 보라 컬럼: 입력 완료 후 자동 산출</span>
+  </div>
+</div>

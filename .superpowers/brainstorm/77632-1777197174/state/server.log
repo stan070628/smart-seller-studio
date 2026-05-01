@@ -1,0 +1,10 @@
+{"type":"server-started","port":56792,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:56792","screen_dir":"/Users/seungminlee/projects/smart_seller_studio/.superpowers/brainstorm/77632-1777197174/content","state_dir":"/Users/seungminlee/projects/smart_seller_studio/.superpowers/brainstorm/77632-1777197174/state"}
+{"type":"screen-added","file":"/Users/seungminlee/projects/smart_seller_studio/.superpowers/brainstorm/77632-1777197174/content/data-source.html"}
+{"source":"user-event","type":"click","text":"C\n    \n      브라우저 자동화 (스크래핑)\n      앱 서버에서 Puppeteer/Playwright로 쿠팡 광고 관리자 자동 접속\n      \n        장점자동화 — 클릭 한 번으로 최신 데이터정기 갱신 가능\n        단점쿠팡 로그인 세션 관리 복잡UI 변경 시 깨질 위험Vercel 환경에서 Playwright 제약","choice":"c","id":null,"timestamp":1777198382091}
+{"type":"screen-added","file":"/Users/seungminlee/projects/smart_seller_studio/.superpowers/brainstorm/77632-1777197174/content/runtime-env.html"}
+{"type":"screen-added","file":"/Users/seungminlee/projects/smart_seller_studio/.superpowers/brainstorm/77632-1777197174/content/agent-type.html"}
+{"type":"screen-added","file":"/Users/seungminlee/projects/smart_seller_studio/.superpowers/brainstorm/77632-1777197174/content/report-scope.html"}
+{"source":"user-event","type":"click","text":"C\n    \n      요청할 때마다 지정\n      \"7일 보고서 생성해줘\" 처럼 직접 명시","choice":"period-ask","id":null,"timestamp":1777198820111}
+{"source":"user-event","type":"click","text":"C\n    \n      HTML + PDF 둘 다\n      브라우저 확인 후 PDF 저장 (추천)","choice":"output-both","id":null,"timestamp":1777198826147}
+{"type":"screen-added","file":"/Users/seungminlee/projects/smart_seller_studio/.superpowers/brainstorm/77632-1777197174/content/agent-design.html"}
+{"type":"server-stopped","reason":"idle timeout"}

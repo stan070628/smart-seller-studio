@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>시드 발굴 패널 — 유저 플로우</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8fafc; color: #1e293b; padding: 24px; font-size: 12px; }
+  h1 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+  .subtitle { color: #64748b; font-size: 12px; margin-bottom: 20px; }
+
+  .legend { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+
+  .flow-container { display: grid; grid-template-columns: 1fr 40px 1fr; gap: 0; }
+
+  /* 컬럼 헤더 */
+  .col-header { padding: 10px 16px; border-radius: 8px 8px 0 0; text-align: center; font-size: 12px; font-weight: 700; }
+  .col-frontend { background: #1d4ed8; color: #fff; }
+  .col-backend  { background: #7c3aed; color: #fff; }
+  .col-mid      { background: transparent; }
+
+  /* 단계 컨테이너 */
+  .phase { border-left: 3px solid #e2e8f0; margin-left: 0; padding: 0; }
+  .phase-label {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+    padding: 6px 12px; color: #fff; border-radius: 0 4px 4px 0; display: inline-block; margin: 8px 0 4px -3px;
+  }
+
+  /* 카드 */
+  .node {
+    border-radius: 8px; padding: 10px 12px; margin: 4px 0;
+    position: relative; border: 1px solid transparent;
+  }
+  .node-title { font-weight: 700; font-size: 11px; margin-bottom: 3px; }
+  .node-desc  { font-size: 10px; color: #64748b; line-height: 1.5; }
+  .node-tag   { display: inline-block; font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 3px; margin-top: 4px; }
+
+  /* 색상 테마 */
+  .node-auto    { background: #eff6ff; border-color: #bfdbfe; }
+  .node-manual  { background: #fffbeb; border-color: #fde68a; }
+  .node-score   { background: #faf5ff; border-color: #e9d5ff; }
+  .node-api     { background: #f0fdf4; border-color: #bbf7d0; }
+  .node-ext     { background: #fff7ed; border-color: #fed7aa; }
+  .node-db      { background: #f1f5f9; border-color: #cbd5e1; }
+  .node-result  { background: #ecfdf5; border-color: #6ee7b7; }
+
+  .tag-auto   { background: #dbeafe; color: #1d4ed8; }
+  .tag-manual { background: #fef3c7; color: #92400e; }
+  .tag-score  { background: #ede9fe; color: #7c3aed; }
+  .tag-api    { background: #dcfce7; color: #166534; }
+  .tag-ext    { background: #ffedd5; color: #9a3412; }
+  .tag-db     { background: #e2e8f0; color: #475569; }
+
+  /* 화살표 컬럼 */
+  .arrows { display: flex; flex-direction: column; align-items: center; }
+  .arrow-row { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60px; }
+  .arrow-bi  { font-size: 16px; color: #94a3b8; }
+  .arrow-label { font-size: 9px; color: #94a3b8; text-align: center; max-width: 38px; line-height: 1.3; }
+
+  /* 구분선 */
+  .divider { border: none; border-top: 2px dashed #e2e8f0; margin: 12px 0; }
+
+  /* 타임라인 뱃지 */
+  .phase-badge {
+    display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 6px;
+    margin: 8px 0; font-size: 10px; font-weight: 700;
+  }
+  .phase-1 { background: #dbeafe; color: #1d4ed8; }
+  .phase-2 { background: #fef3c7; color: #92400e; }
+  .phase-3 { background: #dcfce7; color: #166534; }
+  .phase-4 { background: #ede9fe; color: #7c3aed; }
+
+  .full-row { grid-column: 1 / -1; }
+
+  code { background: #f1f5f9; padding: 1px 5px; border-radius: 3px; font-size: 10px; font-family: 'Menlo', monospace; color: #0f172a; }
+</style>
+</head>
+<body>
+
+<h1>시드 발굴 패널 — 백엔드·프론트엔드 통합 유저 플로우</h1>
+<p class="subtitle">사용자 액션 → 프론트엔드 상태 → API 호출 → 외부 서비스 → DB → 화면 반영</p>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#eff6ff;border:1px solid #bfdbfe;"></div> 프론트엔드 (자동)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#fffbeb;border:1px solid #fde68a;"></div> 프론트엔드 (수동 입력)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#faf5ff;border:1px solid #e9d5ff;"></div> 프론트엔드 (점수 산출)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f0fdf4;border:1px solid #bbf7d0;"></div> API Route (신규)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#fff7ed;border:1px solid #fed7aa;"></div> 외부 서비스</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f1f5f9;border:1px solid #cbd5e1;"></div> DB / 기존 API</div>
+</div>
+
+<!-- ───────────────────────────────────────────────────── PHASE 1 -->
+<div class="phase-badge phase-1">① 수집 단계 — 사용자가 카테고리 선택 후 수집 버튼 클릭</div>
+
+<div class="flow-container">
+  <!-- 프론트엔드 -->
+  <div>
+    <div class="col-header col-frontend">🖥 프론트엔드 (DomeggookTab)</div>
+    <div class="node node-auto" style="margin-top:8px;">
+      <div class="node-title">시드 발굴 패널 열기</div>
+      <div class="node-desc">카테고리 체크박스 선택<br>생활용품 ✓ · 문구/사무 ✓ ...</div>
+      <span class="node-tag tag-auto">🤖 자동</span>
+    </div>
+    <div class="node node-manual">
+      <div class="node-title">▶ "판매순 수집 + 분석 시작" 버튼 클릭</div>
+      <div class="node-desc">선택된 카테고리 목록 → API 전송<br>진행률 배너 표시 시작</div>
+      <span class="node-tag tag-manual">👆 사용자 액션</span>
+    </div>
+    <div class="node node-auto">
+      <div class="node-title">진행률 표시</div>
+      <div class="node-desc">Step 1→2→3→4 순차 진행 바<br>수집 중 / 키워드 분석 중 / 검색량 조회 중</div>
+      <span class="node-tag tag-auto">🤖 자동</span>
+    </div>
+  </div>
+
+  <!-- 화살표 -->
+  <div class="arrows">
+    <div class="arrow-row"><div class="arrow-bi">⇄</div><div class="arrow-label">POST<br>/seed-discover</div></div>
+    <div class="arrow-row"></div>
+    <div class="arrow-row"></div>
+  </div>
+
+  <!-- 백엔드 -->
+  <div>
+    <div class="col-header col-backend">⚙️ 백엔드 (API Routes)</div>
+    <div class="node node-api" style="margin-top:8px;">
+      <div class="node-title">POST /api/sourcing/seed-discover <span style="font-size:9px;color:#dc2626;">신규</span></div>
+      <div class="node-desc">
+        <strong>①</strong> <code>DomeggookClient.getAllItems({ sort: 'bs' })</code><br>
+        &nbsp;&nbsp;→ 카테고리별 판매순 최대 50개 수집<br>
+        <strong>②</strong> 회피 필터 적용<br>
+        &nbsp;&nbsp;→ KC인증·상표·시즌·50cm 초과 제거<br>
+        <strong>③</strong> AI 힌트 추출 <code>trend-discovery</code><br>
+        &nbsp;&nbsp;→ 상품명에서 소비자 키워드 후보 2~4개
+      </div>
+      <span class="node-tag tag-api">🤖 자동</span>
+    </div>
+    <div class="node node-ext">
+      <div class="node-title">외부 서비스 병렬 호출</div>
+      <div class="node-desc">
+        <strong>④</strong> <code>naverShop.getSuggestions(hint)</code><br>
+        &nbsp;&nbsp;→ 네이버 자동완성 (소비자 검색어)<br>
+        <strong>⑤</strong> <code>expandKeywords(suggestions)</code><br>
+        &nbsp;&nbsp;→ 네이버 Ad API 검색량 조회<br>
+        &nbsp;&nbsp;→ 3,000~30,000 범위 필터<br>
+        <strong>⑥</strong> <code>naverShop.search(keyword)</code><br>
+        &nbsp;&nbsp;→ 경쟁상품수 조회
+      </div>
+      <span class="node-tag tag-ext">🌐 외부 API</span>
+    </div>
+    <div class="node node-db">
+      <div class="node-title">마진율 계산 + 응답 반환</div>
+      <div class="node-desc">
+        도매꾹 도매가 × 1.5 = 예상 판매가<br>
+        마진율 = (판매가 - 도매가) / 판매가<br>
+        → <code>SeedItem[]</code> 배열 반환
+      </div>
+      <span class="node-tag tag-db">📦 계산</span>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ───────────────────────────────────────────────────── PHASE 2 -->
+<div class="phase-badge phase-2">② 수동 입력 단계 — 결과 테이블에서 사용자가 직접 확인</div>
+
+<div class="flow-container">
+  <div>
+    <div class="node node-auto">
+      <div class="node-title">결과 테이블 렌더링</div>
+      <div class="node-desc">
+        · 상품명 + 자동완성 키워드 버튼들 표시<br>
+        · 월검색량 · 경쟁상품수 · 마진율 자동 표시<br>
+        · 리뷰수 입력란 + 쿠팡↗ 링크 버튼<br>
+        · 캐릭터·도형 체크박스
+      </div>
+      <span class="node-tag tag-auto">🤖 자동 렌더</span>
+    </div>
+    <div class="node node-manual">
+      <div class="node-title">✏️ 키워드 선택</div>
+      <div class="node-desc">
+        자동완성 후보 중 하나 클릭<br>
+        (기본: 검색량 1위 자동 선택)<br>
+        선택 변경 시 검색량·경쟁수 즉시 갱신
+      </div>
+      <span class="node-tag tag-manual">👆 사용자 선택</span>
+    </div>
+    <div class="node node-manual">
+      <div class="node-title">✏️ 쿠팡 상위 리뷰수 입력</div>
+      <div class="node-desc">
+        "쿠팡↗" 클릭 → 쿠팡 검색 새 탭 열림<br>
+        상위 3개 상품 리뷰수 확인 후 입력<br>
+        50 초과 입력 시 → 행 자동 회색 처리
+      </div>
+      <span class="node-tag tag-manual">👆 사용자 입력</span>
+    </div>
+    <div class="node node-manual">
+      <div class="node-title">✏️ 캐릭터·도형 유사성 체크</div>
+      <div class="node-desc">
+        상품 이미지 육안 확인 후 체크<br>
+        "문제없음" 체크 → 해당 항목 통과<br>
+        미체크 시 시드 점수 산출 보류
+      </div>
+      <span class="node-tag tag-manual">👆 사용자 확인</span>
+    </div>
+  </div>
+
+  <div class="arrows">
+    <div class="arrow-row"></div>
+    <div class="arrow-row"><div class="arrow-bi">→</div><div class="arrow-label">쿠팡 새 탭</div></div>
+    <div class="arrow-row"></div>
+    <div class="arrow-row"></div>
+  </div>
+
+  <div>
+    <div class="node node-db" style="margin-top:8px;">
+      <div class="node-title">프론트엔드 로컬 상태만 업데이트</div>
+      <div class="node-desc">
+        키워드 선택 / 리뷰수 / 체크박스는<br>
+        <strong>DB 저장 없이</strong> 로컬 state로만 관리<br>
+        <code>useSeedDiscoveryStore</code> (신규 Zustand store)<br>
+        → 패널 닫아도 세션 내 유지
+      </div>
+      <span class="node-tag tag-db">💾 로컬 상태</span>
+    </div>
+    <div class="node node-ext">
+      <div class="node-title">쿠팡 검색 (외부 탭)</div>
+      <div class="node-desc">
+        `쿠팡↗` 클릭 → 새 탭으로 오픈<br>
+        URL: <code>coupang.com/np/search?q={keyword}</code><br>
+        사용자가 직접 리뷰수 확인 후 입력란으로 돌아옴
+      </div>
+      <span class="node-tag tag-ext">🌐 외부 탭</span>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ───────────────────────────────────────────────────── PHASE 3 -->
+<div class="phase-badge phase-3">③ 점수 산출 단계 — 입력 완료 행 자동 계산</div>
+
+<div class="flow-container">
+  <div>
+    <div class="node node-score">
+      <div class="node-title">시드 점수 실시간 산출</div>
+      <div class="node-desc">
+        리뷰수 + 캐릭터체크 둘 다 완료된 행만 산출<br>
+        <strong>시드점수</strong> = 검색량(40) + 경쟁(35) + 마진(25)<br>
+        · 검색량 15,000+ → 40점<br>
+        · 경쟁 200 미만 → 35점<br>
+        · 마진 35%+ → 25점<br>
+        등급: S(85+) A(70+) B(55+) C(40+)
+      </div>
+      <span class="node-tag tag-score">🎯 클라이언트 계산</span>
+    </div>
+    <div class="node node-auto">
+      <div class="node-title">자동 정렬 갱신</div>
+      <div class="node-desc">
+        점수 입력될 때마다 테이블 실시간 재정렬<br>
+        미입력 행은 하단으로 이동<br>
+        리뷰 50 초과 행은 취소선 + 회색 처리
+      </div>
+      <span class="node-tag tag-auto">🤖 자동</span>
+    </div>
+  </div>
+
+  <div class="arrows">
+    <div class="arrow-row"></div>
+    <div class="arrow-row"></div>
+  </div>
+
+  <div>
+    <div class="node node-db" style="margin-top:8px;">
+      <div class="node-title">API 호출 없음</div>
+      <div class="node-desc">
+        점수 계산은 <strong>순수 프론트엔드</strong> 연산<br>
+        <code>calcSeedScore(item)</code> 순수 함수<br>
+        서버 왕복 없이 즉시 반영
+      </div>
+      <span class="node-tag tag-db">⚡ 클라이언트 전용</span>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ───────────────────────────────────────────────────── PHASE 4 -->
+<div class="phase-badge phase-4">④ 확정 단계 — 최종 30개 선택 후 "목록에 추가"</div>
+
+<div class="flow-container">
+  <div>
+    <div class="node node-manual">
+      <div class="node-title">✏️ 시드 30개 체크박스 선택</div>
+      <div class="node-desc">
+        점수 상위 30개 수동 체크<br>
+        "전체 선택" 버튼으로 일괄 선택 가능<br>
+        선택 카운터 실시간 표시
+      </div>
+      <span class="node-tag tag-manual">👆 사용자 선택</span>
+    </div>
+    <div class="node node-manual">
+      <div class="node-title">▶ "목록에 추가" 버튼 클릭</div>
+      <div class="node-desc">
+        선택된 도매꾹 itemNo 목록 → API 전송<br>
+        선택 키워드도 함께 전송 (상품 등록 시 활용)
+      </div>
+      <span class="node-tag tag-manual">👆 사용자 액션</span>
+    </div>
+    <div class="node node-result">
+      <div class="node-title">기존 도매꾹 목록에 반영</div>
+      <div class="node-desc">
+        패널 자동 접힘<br>
+        기존 DomeggookTab 테이블에 추가된 상품 표시<br>
+        seed_source 태그로 구분 가능
+      </div>
+      <span class="node-tag tag-api">✅ 완료</span>
+    </div>
+  </div>
+
+  <div class="arrows">
+    <div class="arrow-row"></div>
+    <div class="arrow-row"><div class="arrow-bi">⇄</div><div class="arrow-label">POST<br>/fetch-items</div></div>
+    <div class="arrow-row"><div class="arrow-bi">←</div><div class="arrow-label">목록<br>갱신</div></div>
+  </div>
+
+  <div>
+    <div class="node node-db" style="margin-top:8px;">
+      <div class="node-title">기존 POST /api/sourcing/fetch-items 재사용</div>
+      <div class="node-desc">
+        신규 API 불필요 — 기존 fetch-items에<br>
+        <code>seedKeyword</code> 파라미터만 추가<br>
+        → DB upsert + inventory_snapshots 저장
+      </div>
+      <span class="node-tag tag-db">♻️ 기존 API 확장</span>
+    </div>
+    <div class="node node-ext">
+      <div class="node-title">DB 저장 항목</div>
+      <div class="node-desc">
+        <code>sourcing_items</code>: 상품 기본 정보<br>
+        <code>inventory_snapshots</code>: 현재 재고<br>
+        <code>seed_keyword</code>: 사용자 선택 키워드 (신규 컬럼)<br>
+        <code>seed_score</code>: 산출 점수 (신규 컬럼)
+      </div>
+      <span class="node-tag tag-db">💾 DB</span>
+    </div>
+    <div class="node node-api">
+      <div class="node-title">GET /api/sourcing/analyze 갱신</div>
+      <div class="node-desc">
+        기존 목록 조회 API<br>
+        seed_keyword, seed_score 컬럼 포함 반환<br>
+        → 기존 DomeggookTab 테이블에 즉시 표시
+      </div>
+      <span class="node-tag tag-api">♻️ 기존 API 확장</span>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- 요약 -->
+<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:16px;margin-top:4px;">
+  <div style="font-size:13px;font-weight:700;margin-bottom:12px;">신규 개발 범위 요약</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;font-size:11px;">
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:10px;">
+      <div style="font-weight:700;color:#166534;margin-bottom:6px;">🆕 신규 생성</div>
+      <ul style="padding-left:14px;color:#374151;line-height:1.9;">
+        <li><code>POST /api/sourcing/seed-discover</code></li>
+        <li><code>useSeedDiscoveryStore.ts</code></li>
+        <li><code>calcSeedScore()</code> 함수</li>
+        <li>DB: <code>seed_keyword</code> 컬럼</li>
+        <li>DB: <code>seed_score</code> 컬럼</li>
+      </ul>
+    </div>
+    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:10px;">
+      <div style="font-weight:700;color:#9a3412;margin-bottom:6px;">✏️ 기존 확장</div>
+      <ul style="padding-left:14px;color:#374151;line-height:1.9;">
+        <li><code>DomeggookTab.tsx</code> 패널 추가</li>
+        <li><code>fetch-items</code> seedKeyword 파라미터</li>
+        <li><code>analyze</code> API 컬럼 추가</li>
+        <li><code>DomeggookClient</code> sort=bs 지원</li>
+      </ul>
+    </div>
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:10px;">
+      <div style="font-weight:700;color:#1d4ed8;margin-bottom:6px;">♻️ 그대로 재사용</div>
+      <ul style="padding-left:14px;color:#374151;line-height:1.9;">
+        <li><code>getSuggestions()</code> naver 자동완성</li>
+        <li><code>expandKeywords()</code> naver-ad</li>
+        <li><code>naver-shopping</code> 경쟁상품수</li>
+        <li>회피 필터 <code>domeggook-cs-filter</code></li>
+        <li><code>trend-discovery</code> AI 힌트</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

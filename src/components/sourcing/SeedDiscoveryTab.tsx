@@ -379,6 +379,22 @@ function StepScoreResult({ keywords }: { keywords: SeedKeyword[] }) {
             <span style={{ fontSize: 10, fontWeight: 700, color: '#0891b2', width: 70, textAlign: 'right' }} title="검색량/경쟁수×1000 — 높을수록 노출 기회 큼">
               노출 {ratio.toFixed(1)}
             </span>
+            {k.compIdx && (
+              <span style={{
+                fontSize: 9, fontWeight: 700, borderRadius: 3, padding: '1px 6px', width: 50, textAlign: 'center',
+                background: k.compIdx === '낮음' ? '#dcfce7' : k.compIdx === '높음' ? '#fee2e2' : '#fef3c7',
+                color: k.compIdx === '낮음' ? '#15803d' : k.compIdx === '높음' ? '#b91c1c' : '#92400e',
+              }} title="네이버 광고 경쟁강도">
+                {k.compIdx}
+              </span>
+            )}
+            {k.avgCtr !== null && (
+              <span style={{
+                fontSize: 10, color: k.avgCtr < 1 ? '#dc2626' : '#059669', width: 60, textAlign: 'right', fontWeight: 600,
+              }} title="평균 CTR — 1% 미만은 정보검색성(구매 의도 약함) → 검색량 점수 50% 감점">
+                CTR {k.avgCtr.toFixed(1)}%
+              </span>
+            )}
             <span style={{ fontSize: 14, fontWeight: 700, color: GRADE_COLOR[k.seedGrade ?? 'D'], width: 32, textAlign: 'right' }}>
               {k.seedScore}
             </span>
@@ -507,14 +523,16 @@ function CriteriaPanel() {
             <div style={{ fontWeight: 700, color: '#0891b2', marginBottom: 3 }}>경쟁 (30점)</div>
             <div style={{ color: '#475569', lineHeight: 1.5 }}>
               노출가능성 = (검색량 / 경쟁수) × 1000<br />
-              ratio≥100 → 30점, ratio=0 → 0점, 선형
+              ratio≥100 → 30점, 0~100 선형<br />
+              <strong>+ 보정:</strong> compIdx 낮음 +5 / 높음 -5
             </div>
           </div>
           <div style={{ padding: '8px', background: '#eff6ff', borderRadius: 5, border: '1px solid #bfdbfe' }}>
             <div style={{ fontWeight: 700, color: '#1d4ed8', marginBottom: 3 }}>검색량 (25점)</div>
             <div style={{ color: '#475569', lineHeight: 1.5 }}>
               역U형 — 15,000 피크 25점<br />
-              3,000 / 30,000 양 끝 12점
+              3,000 / 30,000 양 끝 12점<br />
+              <strong>+ 보정:</strong> CTR &lt;1%면 50% 감점 (정보검색성)
             </div>
           </div>
           <div style={{ padding: '8px', background: '#fef3c7', borderRadius: 5, border: '1px solid #fde68a' }}>

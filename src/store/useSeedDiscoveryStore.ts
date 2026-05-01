@@ -130,6 +130,8 @@ export const useSeedDiscoveryStore = create<SeedDiscoveryStore>()(
               searchVolume: k.searchVolume,
               topReviewCount: k.topReviewCount,
               marginRate,
+              compIdx: k.compIdx,
+              avgCtr: k.avgCtr,
             });
             return { ...k, seedScore: result.total, seedGrade: getSeedGrade(result.total) };
           }),

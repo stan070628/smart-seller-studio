@@ -1,0 +1,85 @@
+<h2>쿠팡 보고서 에이전트 설계</h2>
+<p class="subtitle">.claude/agents/coupang-report.md — Claude Opus 4.6 서브에이전트</p>
+
+<div class="section">
+  <h3>실행 흐름</h3>
+  <div style="display:flex;flex-direction:column;gap:0.5rem;margin-top:0.75rem">
+    <div style="display:flex;align-items:center;gap:0.75rem">
+      <div style="background:#3b82f6;color:white;padding:0.4rem 0.8rem;border-radius:6px;font-weight:600;white-space:nowrap">1. 요청 파싱</div>
+      <div style="color:#94a3b8">"7일 보고서 생성해줘" → 기간 추출 (없으면 30일 기본값)</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:0.75rem">
+      <div style="background:#8b5cf6;color:white;padding:0.4rem 0.8rem;border-radius:6px;font-weight:600;white-space:nowrap">2. Ads 접속</div>
+      <div style="color:#94a3b8">gstack chromium-profile 쿠키로 자동 로그인 시도 → 실패 시 수동 로그인 안내</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:0.75rem">
+      <div style="background:#8b5cf6;color:white;padding:0.4rem 0.8rem;border-radius:6px;font-weight:600;white-space:nowrap">3. Ads 수집</div>
+      <div style="color:#94a3b8">노출·클릭·CTR·주문·CVR·광고비·매출·ROAS, 캠페인별 상세</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:0.75rem">
+      <div style="background:#8b5cf6;color:white;padding:0.4rem 0.8rem;border-radius:6px;font-weight:600;white-space:nowrap">4. Wing 접속</div>
+      <div style="color:#94a3b8">같은 계정이면 자동 로그인 → 실패 시 수동 안내</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:0.75rem">
+      <div style="background:#8b5cf6;color:white;padding:0.4rem 0.8rem;border-radius:6px;font-weight:600;white-space:nowrap">5. Wing 수집</div>
+      <div style="color:#94a3b8">상품 목록(재고·이미지·상태), 최근 리뷰 현황</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:0.75rem">
+      <div style="background:#f59e0b;color:white;padding:0.4rem 0.8rem;border-radius:6px;font-weight:600;white-space:nowrap">6. Opus 분석</div>
+      <div style="color:#94a3b8">펀넬 분석 · 업계 평균 비교 · 원인 진단 · 액션플랜 생성</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:0.75rem">
+      <div style="background:#10b981;color:white;padding:0.4rem 0.8rem;border-radius:6px;font-weight:600;white-space:nowrap">7. 보고서 생성</div>
+      <div style="color:#94a3b8">HTML → 브라우저 미리보기 → PDF → 바탕화면 저장</div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:2rem">
+  <h3>로그인 폴백 로직</h3>
+  <div style="display:flex;gap:1rem;margin-top:0.75rem">
+    <div style="flex:1;background:#1e293b;border-radius:8px;padding:1rem;border:1px solid #334155">
+      <div style="color:#6ee7b7;font-weight:600;margin-bottom:0.5rem">✅ 쿠키 유효 (자동)</div>
+      <div style="font-family:monospace;font-size:0.8rem;color:#94a3b8">
+        $B goto URL<br>
+        → 대시보드 감지됨<br>
+        → 데이터 수집 즉시 시작
+      </div>
+    </div>
+    <div style="flex:1;background:#1e293b;border-radius:8px;padding:1rem;border:1px solid #334155">
+      <div style="color:#fbbf24;font-weight:600;margin-bottom:0.5rem">⚠️ 쿠키 만료 (폴백)</div>
+      <div style="font-family:monospace;font-size:0.8rem;color:#94a3b8">
+        $B goto URL<br>
+        → 로그인 페이지 감지됨<br>
+        → $B handoff<br>
+        → "로그인 완료 후 '완료' 입력"<br>
+        → $B resume → 계속
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:2rem">
+  <h3>출력물</h3>
+  <div style="display:flex;gap:1rem;margin-top:0.75rem">
+    <div style="flex:1;background:#1e293b;border-radius:8px;padding:1rem;border:1px solid #334155">
+      <div style="color:#93c5fd;font-weight:600">HTML (브라우저)</div>
+      <div style="font-size:0.85rem;color:#94a3b8;margin-top:0.25rem">/tmp/YYYYMMDD_쿠팡_성과보고서.html</div>
+    </div>
+    <div style="flex:1;background:#1e293b;border-radius:8px;padding:1rem;border:1px solid #334155">
+      <div style="color:#93c5fd;font-weight:600">PDF (바탕화면)</div>
+      <div style="font-size:0.85rem;color:#94a3b8;margin-top:0.25rem">~/Desktop/YYYYMMDD_쿠팡_성과보고서.pdf</div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:2rem">
+  <h3>호출 예시</h3>
+  <div style="background:#1e293b;border-radius:8px;padding:1rem;font-family:monospace;font-size:0.85rem;color:#94a3b8;border:1px solid #334155">
+    <div style="color:#6ee7b7"># 기본 (30일)</div>
+    <div>"쿠팡 광고 보고서 생성해줘"</div>
+    <div style="margin-top:0.5rem;color:#6ee7b7"># 기간 지정</div>
+    <div>"7일 보고서 만들어줘"</div>
+    <div>"이번달 성과 보고서 뽑아줘"</div>
+  </div>
+</div>

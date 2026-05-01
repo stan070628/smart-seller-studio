@@ -217,6 +217,8 @@ export interface SeedKeyword {
   keyword: string;
   searchVolume: number;
   competitorCount: number;
+  compIdx: '낮음' | '중간' | '높음' | null;
+  avgCtr: number | null; // PC+모바일 평균 CTR (%)
   topReviewCount: number | null;
   marginRate: number | null;
   seedScore: number | null;

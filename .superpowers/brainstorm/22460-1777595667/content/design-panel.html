@@ -1,0 +1,132 @@
+<h2>설계 — 시드 발굴 패널 UI</h2>
+<p class="subtitle">DomeggookTab 상단에 추가되는 접이식 패널 전체 구조입니다</p>
+
+<div class="mockup">
+  <div class="mockup-header">DomeggookTab — 시드 발굴 패널 (펼침 상태)</div>
+  <div class="mockup-body" style="padding:0;font-size:12px;">
+
+    <!-- 패널 헤더 -->
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:#eff6ff;border-bottom:1px solid #bfdbfe;cursor:pointer;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:14px;">🌱</span>
+        <span style="font-weight:700;color:#1d4ed8;">시드 발굴 패널</span>
+        <span style="font-size:10px;color:#6b7280;background:#e0e7ff;padding:2px 7px;border-radius:10px;">Step 2 + Step 7</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span style="font-size:11px;color:#6b7280;">수집 완료: 147개 → 필터 후 38개</span>
+        <span style="font-size:11px;color:#6b7280;">▲ 접기</span>
+      </div>
+    </div>
+
+    <!-- Step 2 영역 -->
+    <div style="padding:12px 16px;border-bottom:1px solid #e5e7eb;background:#fafafa;">
+      <div style="font-size:11px;font-weight:700;color:#374151;margin-bottom:8px;">
+        Step 2 — 카테고리 베스트 탐색 <span style="font-weight:400;color:#6b7280;">(판매순 수집)</span>
+      </div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        <!-- 카테고리 체크박스들 -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <label style="display:flex;align-items:center;gap:4px;background:#fff;border:1px solid #3b82f6;border-radius:5px;padding:4px 9px;cursor:pointer;">
+            <input type="checkbox" checked style="accent-color:#3b82f6;"> <span style="font-size:11px;color:#1d4ed8;font-weight:600;">생활용품</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;background:#fff;border:1px solid #3b82f6;border-radius:5px;padding:4px 9px;cursor:pointer;">
+            <input type="checkbox" checked> <span style="font-size:11px;color:#1d4ed8;font-weight:600;">문구/사무</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;background:#fff;border:1px solid #e5e7eb;border-radius:5px;padding:4px 9px;cursor:pointer;">
+            <input type="checkbox"> <span style="font-size:11px;color:#374151;">반려동물</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;background:#fff;border:1px solid #e5e7eb;border-radius:5px;padding:4px 9px;cursor:pointer;">
+            <input type="checkbox"> <span style="font-size:11px;color:#374151;">차량용품</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;background:#fff;border:1px solid #3b82f6;border-radius:5px;padding:4px 9px;cursor:pointer;">
+            <input type="checkbox" checked> <span style="font-size:11px;color:#1d4ed8;font-weight:600;">가구/인테리어</span>
+          </label>
+        </div>
+        <!-- 수집 버튼 -->
+        <button style="background:#1d4ed8;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">
+          ★ 판매순 수집
+        </button>
+        <span style="font-size:10px;color:#9ca3af;">선택 3개 × 최대 50개 = 약 150개 수집</span>
+      </div>
+    </div>
+
+    <!-- Step 7 + 회피 필터 -->
+    <div style="padding:10px 16px;border-bottom:1px solid #e5e7eb;background:#fafafa;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div style="font-size:11px;font-weight:700;color:#374151;">Step 7 — 시드 우선순위 정렬</div>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <span style="background:#7c3aed;color:#fff;border-radius:4px;padding:3px 8px;font-size:10px;font-weight:700;">적용 중</span>
+        <span style="font-size:10px;color:#6b7280;">판매량 40% + 마진≥30% 30% + 재고≥1,000 30%</span>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:6px;">
+        <span style="background:#fee2e2;color:#dc2626;border-radius:4px;padding:3px 8px;font-size:10px;">KC/상표/시즌 자동 제외</span>
+        <span style="background:#fef9c3;color:#92400e;border-radius:4px;padding:3px 8px;font-size:10px;">50cm 초과 제외</span>
+      </div>
+    </div>
+
+    <!-- 결과 테이블 (샘플 3행) -->
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:11px;">
+        <thead>
+          <tr style="background:#f3f4f6;border-bottom:1px solid #e5e7eb;">
+            <th style="padding:6px 8px;text-align:left;width:28px;"></th>
+            <th style="padding:6px 8px;text-align:left;">#</th>
+            <th style="padding:6px 8px;text-align:left;">상품명</th>
+            <th style="padding:6px 8px;text-align:center;">카테고리</th>
+            <th style="padding:6px 8px;text-align:right;">시드점수↓</th>
+            <th style="padding:6px 8px;text-align:right;">판매7d</th>
+            <th style="padding:6px 8px;text-align:right;">마진율</th>
+            <th style="padding:6px 8px;text-align:right;">재고</th>
+            <th style="padding:6px 8px;text-align:center;">등급</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="border-bottom:1px solid #f3f4f6;background:#fff;">
+            <td style="padding:6px 8px;text-align:center;"><input type="checkbox" checked></td>
+            <td style="padding:6px 8px;color:#9ca3af;">1</td>
+            <td style="padding:6px 8px;font-weight:600;color:#111;">스텐 정리함 소형 3종세트</td>
+            <td style="padding:6px 8px;text-align:center;"><span style="background:#dbeafe;color:#1d4ed8;border-radius:3px;padding:1px 6px;font-size:10px;">생활용품</span></td>
+            <td style="padding:6px 8px;text-align:right;font-weight:700;color:#7c3aed;">87</td>
+            <td style="padding:6px 8px;text-align:right;">42</td>
+            <td style="padding:6px 8px;text-align:right;color:#16a34a;font-weight:600;">34%</td>
+            <td style="padding:6px 8px;text-align:right;">1,240</td>
+            <td style="padding:6px 8px;text-align:center;"><span style="background:rgba(124,58,237,0.08);color:#7c3aed;border-radius:3px;padding:1px 6px;font-weight:700;">S</span></td>
+          </tr>
+          <tr style="border-bottom:1px solid #f3f4f6;background:#fff;">
+            <td style="padding:6px 8px;text-align:center;"><input type="checkbox" checked></td>
+            <td style="padding:6px 8px;color:#9ca3af;">2</td>
+            <td style="padding:6px 8px;font-weight:600;color:#111;">A4 파일홀더 10매 투명</td>
+            <td style="padding:6px 8px;text-align:center;"><span style="background:#d1fae5;color:#065f46;border-radius:3px;padding:1px 6px;font-size:10px;">문구/사무</span></td>
+            <td style="padding:6px 8px;text-align:right;font-weight:700;color:#7c3aed;">81</td>
+            <td style="padding:6px 8px;text-align:right;">38</td>
+            <td style="padding:6px 8px;text-align:right;color:#16a34a;font-weight:600;">31%</td>
+            <td style="padding:6px 8px;text-align:right;">2,100</td>
+            <td style="padding:6px 8px;text-align:center;"><span style="background:rgba(22,163,74,0.08);color:#16a34a;border-radius:3px;padding:1px 6px;font-weight:700;">A</span></td>
+          </tr>
+          <tr style="background:#fff;">
+            <td style="padding:6px 8px;text-align:center;"><input type="checkbox"></td>
+            <td style="padding:6px 8px;color:#9ca3af;">3</td>
+            <td style="padding:6px 8px;font-weight:600;color:#374151;">코너 선반 3단 벽걸이</td>
+            <td style="padding:6px 8px;text-align:center;"><span style="background:#fef3c7;color:#92400e;border-radius:3px;padding:1px 6px;font-size:10px;">가구/인테리어</span></td>
+            <td style="padding:6px 8px;text-align:right;font-weight:700;color:#2563eb;">74</td>
+            <td style="padding:6px 8px;text-align:right;">29</td>
+            <td style="padding:6px 8px;text-align:right;color:#d97706;font-weight:600;">28%</td>
+            <td style="padding:6px 8px;text-align:right;">870</td>
+            <td style="padding:6px 8px;text-align:center;"><span style="background:rgba(37,99,235,0.08);color:#2563eb;border-radius:3px;padding:1px 6px;font-weight:700;">B</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 패널 하단 액션 -->
+    <div style="padding:10px 16px;background:#f9fafb;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:11px;color:#6b7280;">✓ 2개 선택됨 / 38개 중</span>
+      <div style="display:flex;gap:8px;">
+        <button style="background:#f3f4f6;border:1px solid #e5e7eb;border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer;">전체 선택</button>
+        <button style="background:#be0014;color:#fff;border:none;border-radius:6px;padding:5px 14px;font-size:11px;font-weight:700;cursor:pointer;">목록에 추가 →</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<p style="margin-top:16px;font-size:12px;color:#6b7280;">이 UI 구조가 의도한 대로인지 확인해주세요. 다음은 아키텍처와 데이터 흐름을 텍스트로 설명합니다.</p>

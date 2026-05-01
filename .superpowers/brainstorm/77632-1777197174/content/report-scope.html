@@ -1,0 +1,52 @@
+<h2>보고서 설정</h2>
+<p class="subtitle">두 가지를 동시에 선택해 주세요</p>
+
+<h3 style="margin-top:1.5rem">📅 기본 분석 기간</h3>
+<div class="options" data-multiselect>
+  <div class="option" data-choice="period-7" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>최근 7일</h3>
+      <p>단기 캠페인 모니터링에 적합</p>
+    </div>
+  </div>
+  <div class="option" data-choice="period-30" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>최근 30일</h3>
+      <p>월간 성과 분석 (추천)</p>
+    </div>
+  </div>
+  <div class="option" data-choice="period-ask" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>요청할 때마다 지정</h3>
+      <p>"7일 보고서 생성해줘" 처럼 직접 명시</p>
+    </div>
+  </div>
+</div>
+
+<h3 style="margin-top:2rem">📄 출력 형식</h3>
+<div class="options" data-multiselect>
+  <div class="option" data-choice="output-pdf" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>PDF 파일 (데스크탑 저장)</h3>
+      <p>바탕화면에 날짜_보고서.pdf 저장</p>
+    </div>
+  </div>
+  <div class="option" data-choice="output-html" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>HTML (브라우저에서 보기)</h3>
+      <p>생성 즉시 브라우저에서 확인</p>
+    </div>
+  </div>
+  <div class="option" data-choice="output-both" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>HTML + PDF 둘 다</h3>
+      <p>브라우저 확인 후 PDF 저장 (추천)</p>
+    </div>
+  </div>
+</div>

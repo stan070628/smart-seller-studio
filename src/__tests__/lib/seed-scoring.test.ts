@@ -26,6 +26,41 @@ describe('calcSeedScore', () => {
     expect(r.competitorScore).toBeLessThanOrEqual(20);
   });
 
+  it('compIdx 낮음 보정 → 경쟁점수 +5 (최대 30 cap)', () => {
+    // ratio=50 → base=15, 낮음 +5 → 20
+    const r = calcSeedScore({ competitorCount: 100_000, searchVolume: 5000, topReviewCount: 0, marginRate: 60, compIdx: '낮음' });
+    expect(r.competitorScore).toBe(20);
+  });
+
+  it('compIdx 높음 보정 → 경쟁점수 -5 (최소 0 cap)', () => {
+    // ratio=50 → base=15, 높음 -5 → 10
+    const r = calcSeedScore({ competitorCount: 100_000, searchVolume: 5000, topReviewCount: 0, marginRate: 60, compIdx: '높음' });
+    expect(r.competitorScore).toBe(10);
+  });
+
+  it('compIdx 낮음이라도 30점 cap', () => {
+    // ratio=300 → base=30, 낮음 +5 → cap 30
+    const r = calcSeedScore({ competitorCount: 50, searchVolume: 15000, topReviewCount: 0, marginRate: 60, compIdx: '낮음' });
+    expect(r.competitorScore).toBe(30);
+  });
+
+  it('avgCtr ≥1% → 검색량 점수 그대로', () => {
+    // 검색량 15000 = 25점, CTR 2% → 그대로
+    const r = calcSeedScore({ competitorCount: 50, searchVolume: 15000, topReviewCount: 0, marginRate: 60, avgCtr: 2.0 });
+    expect(r.searchVolumeScore).toBe(25);
+  });
+
+  it('avgCtr <1% → 검색량 점수 50% 감점', () => {
+    // 검색량 15000 = 25점, CTR 0.5% → 12 (round)
+    const r = calcSeedScore({ competitorCount: 50, searchVolume: 15000, topReviewCount: 0, marginRate: 60, avgCtr: 0.5 });
+    expect(r.searchVolumeScore).toBe(13); // round(25 * 0.5) = 13
+  });
+
+  it('avgCtr null → 보정 없음', () => {
+    const r = calcSeedScore({ competitorCount: 50, searchVolume: 15000, topReviewCount: 0, marginRate: 60, avgCtr: null });
+    expect(r.searchVolumeScore).toBe(25);
+  });
+
   it('검색량 15000 → 25점 (역U형 피크)', () => {
     const r = calcSeedScore({ competitorCount: 50, searchVolume: 15000, topReviewCount: 0, marginRate: 60 });
     expect(r.searchVolumeScore).toBe(25);

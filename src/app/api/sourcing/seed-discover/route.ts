@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAuth } from '@/lib/supabase/auth';
-import { fetchSearchVolumes } from '@/lib/naver-ad';
+import { fetchKeywordDetails } from '@/lib/naver-ad';
 import { NaverShoppingClient } from '@/lib/niche/naver-shopping';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import type { SeedKeyword } from '@/types/sourcing';
@@ -80,39 +80,38 @@ export async function POST(request: NextRequest) {
     const afterGate0 = [...expanded].filter((kw) => !isSeasonKeyword(kw));
     console.log(`[seed-discover] seeds=${seeds.length} expanded=${expanded.size} afterGate0=${afterGate0.length}`);
 
-    // 4. 검색량 조회 (Naver Ad keywordstool)
+    // 4. 검색량 + 경쟁강도(compIdx) + 평균 CTR 조회 (Naver Ad keywordstool)
     //    - hint 키워드는 공백 없는 시드만 사용 (공백 포함 시 API 400 에러)
     //    - hint 5개당 ~1000개 관련 키워드 반환 → 우리 자동완성 셋과 매칭만 추림
     const normalize = (s: string) => s.replace(/\s+/g, '').toLowerCase();
     const ourSet = new Set(afterGate0.map(normalize));
-    const volMap = new Map<string, number>(); // normalized → volume
+    const detailMap = new Map<string, { vol: number; compIdx: '낮음'|'중간'|'높음'|null; avgCtr: number | null }>();
 
     const hintSeeds = seeds.map((s) => s.replace(/\s+/g, ''));
     const BATCH = 5;
     for (let i = 0; i < hintSeeds.length; i += BATCH) {
       const batch = hintSeeds.slice(i, i + BATCH);
-      const m = await fetchSearchVolumes(batch).catch(() => new Map<string, number>());
-      for (const [kw, vol] of m) {
-        const n = normalize(kw);
-        if (ourSet.has(n) && !volMap.has(n)) volMap.set(n, vol);
+      const list = await fetchKeywordDetails(batch).catch(() => []);
+      for (const d of list) {
+        const n = normalize(d.keyword);
+        if (ourSet.has(n) && !detailMap.has(n)) {
+          detailMap.set(n, { vol: d.searchVolume, compIdx: d.compIdx, avgCtr: d.avgCtr });
+        }
       }
-      // rate limit 회피: 배치 사이 짧은 지연
       if (i + BATCH < hintSeeds.length) await new Promise((r) => setTimeout(r, 300));
     }
-    console.log(`[seed-discover] volMap(자동완성 매칭)=${volMap.size}`);
+    console.log(`[seed-discover] detailMap(자동완성 매칭)=${detailMap.size}`);
 
-    const filtered: Array<{ keyword: string; searchVolume: number }> = [];
+    const filtered: Array<{ keyword: string; searchVolume: number; compIdx: '낮음'|'중간'|'높음'|null; avgCtr: number | null }> = [];
     for (const kw of afterGate0) {
-      const vol = volMap.get(normalize(kw));
-      if (vol !== undefined && vol >= 3_000 && vol <= 30_000) {
-        filtered.push({ keyword: kw, searchVolume: vol });
+      const d = detailMap.get(normalize(kw));
+      if (d && d.vol >= 3_000 && d.vol <= 30_000) {
+        filtered.push({ keyword: kw, searchVolume: d.vol, compIdx: d.compIdx, avgCtr: d.avgCtr });
       }
     }
     console.log(`[seed-discover] filtered(3k-30k)=${filtered.length}`);
 
     // 5. 경쟁상품수 조회 (hard 필터 제거 - 노출가능성 점수로 정렬)
-    //    네이버 쇼핑 total은 전체 통합 카탈로그라 절대값 임계값이 비현실적
-    //    Step 6 점수 산출에서 (검색량/경쟁수) 비율로 정렬됨
     const results: SeedKeyword[] = [];
     for (const kw of filtered.slice(0, 60)) {
       try {
@@ -121,6 +120,8 @@ export async function POST(request: NextRequest) {
           keyword: kw.keyword,
           searchVolume: kw.searchVolume,
           competitorCount: search.total,
+          compIdx: kw.compIdx,
+          avgCtr: kw.avgCtr,
           topReviewCount: null,
           marginRate: null,
           seedScore: null,
