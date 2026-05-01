@@ -40,9 +40,9 @@ const GRADE_COLOR: Record<string, string> = {
 
 export default function SeedDiscoveryTab() {
   const {
-    currentStep, sessions, sessionId, selectedCategories,
+    currentStep, sessions, sessionId, selectedCategories, customSeeds,
     keywords, isAnalyzing, isConfirming, error,
-    setSelectedCategories, startAnalysis, loadSessions, reset,
+    setSelectedCategories, setCustomSeeds, startAnalysis, loadSessions, reset,
   } = useSeedDiscoveryStore();
 
   const [showCriteria, setShowCriteria] = React.useState(false);
@@ -155,6 +155,8 @@ export default function SeedDiscoveryTab() {
             <StepCategorySelect
               categories={selectedCategories}
               setCategories={setSelectedCategories}
+              customSeeds={customSeeds}
+              setCustomSeeds={setCustomSeeds}
               onStart={startAnalysis}
               isLoading={isAnalyzing}
             />
@@ -183,18 +185,36 @@ export default function SeedDiscoveryTab() {
 }
 
 // ── Step 1: 카테고리 선택 ──────────────────────────────────────────────────
-function StepCategorySelect({ categories, setCategories, onStart, isLoading }: {
+function StepCategorySelect({ categories, setCategories, customSeeds, setCustomSeeds, onStart, isLoading }: {
   categories: string[];
   setCategories: (c: string[]) => void;
+  customSeeds: string[];
+  setCustomSeeds: (s: string[]) => void;
   onStart: () => void;
   isLoading: boolean;
 }) {
+  const [draft, setDraft] = React.useState('');
   const toggle = (cat: string) =>
     setCategories(categories.includes(cat) ? categories.filter((c) => c !== cat) : [...categories, cat]);
 
+  const addSeeds = () => {
+    const tokens = draft.split(/[,\n\s]+/).map((s) => s.trim()).filter(Boolean);
+    if (tokens.length === 0) return;
+    const merged = Array.from(new Set([...customSeeds, ...tokens])).slice(0, 20);
+    setCustomSeeds(merged);
+    setDraft('');
+  };
+
+  const removeSeed = (s: string) => setCustomSeeds(customSeeds.filter((x) => x !== s));
+  const canStart = (categories.length > 0 || customSeeds.length > 0) && !isLoading;
+
   return (
     <div style={{ padding: 16 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 10, color: '#374151' }}>카테고리 선택 후 시드 발굴 시작</div>
+      <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 10, color: '#374151' }}>
+        카테고리 선택 또는 시드 직접 입력 (둘 다 가능)
+      </div>
+
+      {/* 카테고리 체크박스 */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
         {CATEGORIES.map((cat) => {
           const on = categories.includes(cat);
@@ -216,14 +236,62 @@ function StepCategorySelect({ categories, setCategories, onStart, isLoading }: {
           );
         })}
       </div>
+
+      {/* 직접 입력 시드 */}
+      <div style={{ marginBottom: 14, padding: '10px 12px', background: '#fefce8', border: '1px solid #fde68a', borderRadius: 6 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: '#92400e', marginBottom: 6 }}>
+          ✏️ 시드 직접 입력 — 자기 niche topic 기반 long-tail 발굴 (최대 20개, 콤마/공백/줄바꿈으로 구분)
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+          <input
+            type="text"
+            value={draft}
+            placeholder="예: 캠핑 펜트리, 베이비 모니터 거치대, 미니 디퓨저"
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSeeds(); } }}
+            style={{
+              flex: 1, padding: '6px 10px', border: '1px solid #fcd34d', borderRadius: 5,
+              fontSize: 11, background: '#fff', outline: 'none', color: '#1f2937',
+            }}
+          />
+          <button
+            onClick={addSeeds}
+            disabled={!draft.trim()}
+            style={{
+              padding: '6px 14px', borderRadius: 5, border: 'none',
+              background: draft.trim() ? '#f59e0b' : '#fde68a',
+              color: '#fff', fontSize: 11, fontWeight: 700,
+              cursor: draft.trim() ? 'pointer' : 'not-allowed',
+            }}
+          >+ 추가</button>
+        </div>
+        {customSeeds.length > 0 && (
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            {customSeeds.map((s) => (
+              <span key={s} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                padding: '2px 8px', borderRadius: 100, fontSize: 10,
+                background: '#fff', border: '1px solid #fcd34d', color: '#92400e', fontWeight: 600,
+              }}>
+                {s}
+                <button onClick={() => removeSeed(s)} style={{ border: 'none', background: 'transparent', color: '#92400e', cursor: 'pointer', padding: 0, fontSize: 11, lineHeight: 1 }}>×</button>
+              </span>
+            ))}
+            <span style={{ fontSize: 9, color: '#92400e', alignSelf: 'center', marginLeft: 4 }}>
+              {customSeeds.length}/20
+            </span>
+          </div>
+        )}
+      </div>
+
       <button
         onClick={onStart}
-        disabled={categories.length === 0 || isLoading}
+        disabled={!canStart}
         style={{
           padding: '7px 18px', borderRadius: 6, border: 'none',
-          background: categories.length === 0 || isLoading ? '#e5e7eb' : '#1d4ed8',
+          background: canStart ? '#1d4ed8' : '#e5e7eb',
           color: '#fff', fontSize: 12, fontWeight: 700,
-          cursor: categories.length === 0 || isLoading ? 'not-allowed' : 'pointer',
+          cursor: canStart ? 'pointer' : 'not-allowed',
         }}
       >
         {isLoading ? '분석 중...' : '▶ 시드 발굴 시작'}

@@ -14,12 +14,39 @@ import { getSourcingPool } from '@/lib/sourcing/db';
 import type { SeedKeyword } from '@/types/sourcing';
 
 // ── 카테고리 → 시드 키워드 사전 정의 ───────────────────────────────────────
+//   원칙: 광범위 단일어 대신 long-tail 시드를 default로 사용
+//   ('수납함' 대신 '차량용수납함', '캠핑수납함' 등 → 자동완성하면 더 좁은 niche로 확장)
 const CATEGORY_SEEDS: Record<string, string[]> = {
-  '생활용품': ['수납함', '정리함', '욕실용품', '방향제', '발매트', '소품정리함'],
-  '문구/사무': ['파일홀더', '메모지', '필통', '볼펜', '인덱스탭', '바인더'],
-  '반려동물': ['배변패드', '강아지간식', '고양이모래', '급수기', '배변봉투'],
-  '차량용품': ['차량방향제', '핸들커버', '차량거치대', '세차용품', '차량쓰레기통'],
-  '가구/인테리어': ['선반', '수납장', '쿠션', '데코소품', '벽시계', '방향제'],
+  '생활용품': [
+    '차량용수납함', '주방수납함', '서랍수납함', '캠핑수납함', '미니수납함',
+    '냉장고수납함', '욕실수납함', '신발수납함',
+    '주방정리함', '화장대정리함', '약정리함', '약통',
+    '석고방향제', '디퓨저', '캔들워머', '룸스프레이',
+    '규조토발매트', '주방발매트', '현관발매트',
+  ],
+  '문구/사무': [
+    '데스크정리함', '문서정리함', '서류파일', 'A4파일', '클리어파일',
+    '명함정리', '독서대', '필기구홀더', '책상매트', '데스크오거나이저',
+    '인덱스탭', '하이라이터', '리빙박스', '바인더정리',
+  ],
+  '반려동물': [
+    '훈련간식', '덴탈간식', '관절영양제', '강아지영양제',
+    '두부모래', '벤토나이트모래', '실리카모래',
+    '소형견배변패드', '강아지하네스', '강아지매트',
+    '자동급수기', '자동급식기', '캣휠', '캣타워',
+  ],
+  '차량용품': [
+    '차량핸드폰거치대', '차량컵홀더', '차량쓰레기통', '차량용손잡이',
+    '핸들커버', '시트커버', '차량방향제', '디스크워셔',
+    '트렁크정리함', '차량용청소기', '차량용공기청정기', '차량용usb',
+    '블랙박스거치대', '하이패스거치대',
+  ],
+  '가구/인테리어': [
+    '벽선반', '주방선반', '욕실선반', '코너선반',
+    '미니수납장', '슬림수납장', '협탁', '서랍장',
+    '쿠션커버', '바디필로우', '인형쿠션',
+    '디지털시계', '책상시계', '무드등',
+  ],
 };
 
 // ── Gate 0: 시즌 한정 키워드 ──────────────────────────────────────────────
@@ -30,8 +57,11 @@ function isSeasonKeyword(kw: string): boolean {
 }
 
 const requestSchema = z.object({
-  categories: z.array(z.string()).min(1).max(5),
+  categories: z.array(z.string()).max(5).default([]),
+  customSeeds: z.array(z.string().min(1).max(40)).max(20).default([]),
   sessionId: z.string().uuid().nullish(),
+}).refine((d) => d.categories.length > 0 || d.customSeeds.length > 0, {
+  message: '카테고리 또는 직접 입력 시드 중 최소 하나는 필요합니다',
 });
 
 export async function POST(request: NextRequest) {
@@ -45,7 +75,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: '잘못된 요청 형식' }, { status: 400 });
   }
 
-  const { categories, sessionId } = parsed.data;
+  const { categories, customSeeds, sessionId } = parsed.data;
 
   // 환경변수 누락 조기 차단
   const hasNaverAdKeys = !!(
@@ -61,11 +91,14 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // 1. 카테고리 → 시드 키워드 수집
-    const seeds: string[] = categories.flatMap((cat) => CATEGORY_SEEDS[cat] ?? []);
+    // 1. 카테고리 default 시드 + 사용자 직접 입력 시드 통합
+    const categorySeeds = categories.flatMap((cat) => CATEGORY_SEEDS[cat] ?? []);
+    const trimmedCustom = customSeeds.map((s) => s.trim()).filter(Boolean);
+    const seeds: string[] = Array.from(new Set([...categorySeeds, ...trimmedCustom]));
     if (seeds.length === 0) {
       return NextResponse.json({ success: false, error: '매핑된 시드 키워드가 없습니다' }, { status: 400 });
     }
+    console.log(`[seed-discover] 시드: 카테고리=${categorySeeds.length}, 사용자입력=${trimmedCustom.length}, 합계=${seeds.length}`);
 
     // 2. 네이버 자동완성 확장
     const naverClient = new NaverShoppingClient();
@@ -145,14 +178,14 @@ export async function POST(request: NextRequest) {
       const row = await pool.query<{ id: string }>(
         `INSERT INTO seed_sessions (user_id, categories, state_json)
          VALUES ($1, $2, $3) RETURNING id`,
-        [userId, categories, JSON.stringify({ keywords: results })],
+        [userId, categories, JSON.stringify({ keywords: results, customSeeds: trimmedCustom })],
       );
       sid = row.rows[0].id;
     } else {
       await pool.query(
         `UPDATE seed_sessions SET state_json = $1, step = 2
          WHERE id = $2 AND user_id = $3`,
-        [JSON.stringify({ keywords: results }), sid, userId],
+        [JSON.stringify({ keywords: results, customSeeds: trimmedCustom }), sid, userId],
       );
     }
 

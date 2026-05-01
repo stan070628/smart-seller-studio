@@ -27,6 +27,9 @@ interface SeedDiscoveryStore {
   // ── 선택된 카테고리 ────────────────────────────────────────────────────────
   selectedCategories: string[];
 
+  // ── 사용자 직접 입력 시드 ──────────────────────────────────────────────────
+  customSeeds: string[];
+
   // ── 키워드 목록 ────────────────────────────────────────────────────────────
   keywords: SeedKeyword[];
 
@@ -37,6 +40,7 @@ interface SeedDiscoveryStore {
 
   // ── 액션 ──────────────────────────────────────────────────────────────────
   setSelectedCategories: (cats: string[]) => void;
+  setCustomSeeds: (seeds: string[]) => void;
   startAnalysis: () => Promise<void>;
   setTopReviewCount: (keyword: string, count: number) => void;
   setKiprisStatus: (keyword: string, status: SeedKeyword['kiprisStatus']) => void;
@@ -53,6 +57,7 @@ const initialState = {
   sessions: [],
   currentStep: 1 as Step,
   selectedCategories: [],
+  customSeeds: [],
   keywords: [],
   isAnalyzing: false,
   isConfirming: false,
@@ -65,16 +70,21 @@ export const useSeedDiscoveryStore = create<SeedDiscoveryStore>()(
       ...initialState,
 
       setSelectedCategories: (cats) => set({ selectedCategories: cats }),
+      setCustomSeeds: (seeds) => set({ customSeeds: seeds }),
 
       startAnalysis: async () => {
-        const { selectedCategories, sessionId } = get();
-        if (selectedCategories.length === 0) return;
+        const { selectedCategories, customSeeds, sessionId } = get();
+        if (selectedCategories.length === 0 && customSeeds.length === 0) return;
         set({ isAnalyzing: true, error: null, currentStep: 2 });
         try {
           const res = await fetch('/api/sourcing/seed-discover', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ categories: selectedCategories, ...(sessionId ? { sessionId } : {}) }),
+            body: JSON.stringify({
+              categories: selectedCategories,
+              customSeeds,
+              ...(sessionId ? { sessionId } : {}),
+            }),
           });
           const json = await res.json();
           if (!json.success) throw new Error(json.error);
