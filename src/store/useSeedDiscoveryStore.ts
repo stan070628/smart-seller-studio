@@ -74,7 +74,7 @@ export const useSeedDiscoveryStore = create<SeedDiscoveryStore>()(
           const res = await fetch('/api/sourcing/seed-discover', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ categories: selectedCategories, sessionId }),
+            body: JSON.stringify({ categories: selectedCategories, ...(sessionId ? { sessionId } : {}) }),
           });
           const json = await res.json();
           if (!json.success) throw new Error(json.error);

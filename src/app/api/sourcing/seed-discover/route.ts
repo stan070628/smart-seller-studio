@@ -31,7 +31,7 @@ function isSeasonKeyword(kw: string): boolean {
 
 const requestSchema = z.object({
   categories: z.array(z.string()).min(1).max(5),
-  sessionId: z.string().uuid().optional(),
+  sessionId: z.string().uuid().nullish(),
 });
 
 export async function POST(request: NextRequest) {
