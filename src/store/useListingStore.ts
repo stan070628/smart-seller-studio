@@ -289,6 +289,7 @@ interface ListingStore {
   sharedDraft: SharedDraft;
   updateSharedDraft: (patch: Partial<SharedDraft>) => void;
   resetSharedDraft: () => void;
+  loadFromDiscoveryDraft: (draftId: string) => Promise<void>;
   // 도매꾹 옵션 액션
   fetchOptions: (itemNo: number) => Promise<void>;
   updateVariantPrice: (variantId: string, platform: 'coupang' | 'naver', price: number) => void;
@@ -669,6 +670,40 @@ export const useListingStore = create<ListingStore>()(
 
       resetSharedDraft: () =>
         set({ sharedDraft: SHARED_DRAFT_INITIAL }, false, 'listing/resetSharedDraft'),
+
+      loadFromDiscoveryDraft: async (draftId: string) => {
+        try {
+          const res = await fetch(`/api/sourcing/product-discover/draft/${draftId}`);
+          const json = await res.json();
+          if (!json.success) {
+            console.warn('[loadFromDiscoveryDraft] 실패:', json.error);
+            return;
+          }
+          const { productInfo, keywords } = json.data as {
+            productInfo: { title: string; image?: string | null; price?: number | null; url?: string | null };
+            keywords: Array<{ keyword: string }>;
+          };
+
+          set(
+            (s) => ({
+              sharedDraft: {
+                ...s.sharedDraft,
+                name: productInfo.title || s.sharedDraft.name,
+                ...(productInfo.image
+                  ? { thumbnailImages: [productInfo.image, ...s.sharedDraft.thumbnailImages] }
+                  : {}),
+                ...(productInfo.price ? { salePrice: String(productInfo.price) } : {}),
+                ...(productInfo.url ? { sourceUrl: productInfo.url } : {}),
+                tags: Array.from(new Set([...s.sharedDraft.tags, ...keywords.map((k) => k.keyword)])).slice(0, 10),
+              },
+            }),
+            false,
+            'listing/loadFromDiscoveryDraft',
+          );
+        } catch (e) {
+          console.warn('[loadFromDiscoveryDraft] 에러:', e);
+        }
+      },
 
       // ─── 도매꾹 옵션 액션 ──────────────────────────────────────────────────
 

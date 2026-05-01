@@ -2212,6 +2212,15 @@ export default function ListingDashboard() {
     }
   }, [searchParams, setListingMode]);
 
+  // URL ?draftId= → 상품 발굴 결과 자동 채움
+  const draftId = searchParams.get('draftId');
+  const loadFromDiscoveryDraft = useListingStore((s) => s.loadFromDiscoveryDraft);
+  useEffect(() => {
+    if (draftId) {
+      loadFromDiscoveryDraft(draftId);
+    }
+  }, [draftId, loadFromDiscoveryDraft]);
+
   // 탭 전환 + URL 동기화 헬퍼
   const goTab = (mode: 'register' | 'browse' | 'assets' | 'drafts') => {
     setListingMode(mode);
