@@ -33,7 +33,7 @@ export async function extractKeywordsFromProduct(
     const ai = getGeminiGenAI();
     const prompt = PROMPT_TEMPLATE.replace('{{TITLE}}', trimmed);
     const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.5-flash',
       contents: prompt,
     });
 
