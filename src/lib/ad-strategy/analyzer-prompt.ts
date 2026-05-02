@@ -81,5 +81,16 @@ ${JSON.stringify(data.campaigns, null, 2)}
 export function parseAdStrategyResponse(raw: string): AdStrategyReport {
   const match = raw.match(/\{[\s\S]*\}/);
   if (!match) throw new Error('AI 응답에서 JSON을 파싱할 수 없습니다.');
-  return JSON.parse(match[0]) as AdStrategyReport;
+
+  // trailing comma 제거 (,} 또는 ,])
+  const cleaned = match[0]
+    .replace(/,\s*([}\]])/g, '$1');
+
+  try {
+    return JSON.parse(cleaned) as AdStrategyReport;
+  } catch (e) {
+    throw new Error(
+      `AI 응답 JSON 파싱 실패: ${e instanceof Error ? e.message : String(e)}\n원본 (처음 200자): ${cleaned.slice(0, 200)}`,
+    );
+  }
 }
