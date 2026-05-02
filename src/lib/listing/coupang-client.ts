@@ -342,12 +342,29 @@ export class CoupangClient {
     const lower = keyword.toLowerCase();
     const matched = all.filter((c) => c.fullPath.toLowerCase().includes(lower));
 
-    // 리프 노드 우선 정렬 후 최대 8개
-    const leaves = matched.filter((c) => c.isLeaf);
-    const nonLeaves = matched.filter((c) => !c.isLeaf);
-    const sorted = [...leaves, ...nonLeaves];
+    // 정렬 우선순위:
+    // 1. 마지막 뎁스 exact match (예: "잠옷" → fullPath가 ".../잠옷"으로 끝나는 것)
+    // 2. 마지막 뎁스 contains match (예: "잠옷" → 마지막 노드에 "잠옷"이 포함)
+    // 3. 리프 노드 우선
+    // 4. 나머지
+    matched.sort((a, b) => {
+      const aLast = a.fullPath.split('/').pop()?.toLowerCase() ?? '';
+      const bLast = b.fullPath.split('/').pop()?.toLowerCase() ?? '';
 
-    return sorted.slice(0, 8).map(({ displayCategoryCode, displayCategoryName, fullPath }) => ({
+      const aExact = aLast === lower;
+      const bExact = bLast === lower;
+      if (aExact !== bExact) return aExact ? -1 : 1;
+
+      const aContains = aLast.includes(lower);
+      const bContains = bLast.includes(lower);
+      if (aContains !== bContains) return aContains ? -1 : 1;
+
+      if (a.isLeaf !== b.isLeaf) return a.isLeaf ? -1 : 1;
+
+      return 0;
+    });
+
+    return matched.slice(0, 8).map(({ displayCategoryCode, displayCategoryName, fullPath }) => ({
       displayCategoryCode,
       displayCategoryName,
       fullPath,
