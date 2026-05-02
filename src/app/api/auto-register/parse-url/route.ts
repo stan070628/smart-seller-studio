@@ -171,13 +171,17 @@ async function suggestTagsFromNaver(title: string): Promise<string[]> {
       ),
     ]);
 
-    // 씨드 단어 중 하나라도 포함하는 태그만 남겨 상품과 무관한 연관어를 걸러냄
-    const seedSet = seeds.map((s) => s.toLowerCase());
+    // 씨드 단어를 2자 이상만 남기고 소문자화
+    const seedSet = seeds.map((s) => s.toLowerCase()).filter((s) => s.length >= 2);
+    // 씨드가 3개 이상이면 최소 2개 씨드가 포함된 키워드만 통과 (단일 씨드 OR 조건은 "골프화" 같은 오탐 유발)
+    const minMatchCount = seedSet.length >= 3 ? 2 : 1;
     return stats
       .filter((k) => {
         if ((k.searchVolume ?? 0) < 100) return false;
         const kw = k.keyword.toLowerCase();
-        return seedSet.some((s) => kw.includes(s) || s.includes(kw));
+        // 키워드가 씨드를 포함해야 함 (역방향 s.includes(kw) 제거 — 오탐 원인)
+        const matchCount = seedSet.filter((s) => kw.includes(s)).length;
+        return matchCount >= minMatchCount;
       })
       .sort((a, b) => (b.searchVolume ?? 0) - (a.searchVolume ?? 0))
       .slice(0, 10)
@@ -450,9 +454,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       let cosCertification: string | undefined;
       let cosCountryOfOrigin: string | undefined;
       const allFeatures = (item.classifications ?? []).flatMap((c: { features?: { name?: string; featureValues?: { value?: string }[] }[] }) => c.features ?? []);
+
+      // 고시정보 AI용 추가 필드
+      let cosColor: string | undefined;
+      let cosSize: string | undefined;
+      let cosManufactureDate: string | undefined;
+      let cosMaterial: string | undefined;
+      let cosManufacturer: string | undefined;
+      let cosManufacturerFromFeature: string | undefined;
+      let cosColors: string | undefined;
+
       for (const f of allFeatures) {
         const fname = f.name ?? '';
         const fval = (f.featureValues ?? [])[0]?.value ?? '';
+        const fvalAll = (f.featureValues ?? []).map((v: { value?: string }) => v.value ?? '').filter(Boolean).join(', ');
+
         if (/인증/i.test(fname) && fval) {
           const certMatch = extractKcCert(fval);
           if (certMatch) { cosCertification = certMatch; }
@@ -461,7 +477,30 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         if (!cosCountryOfOrigin && /원산지|country.of.origin|제조국|made.in/i.test(fname) && fval) {
           cosCountryOfOrigin = fval.trim();
         }
+        if (!cosManufacturer && /제조자|수입자|제조사|브랜드/i.test(fname) && fvalAll) {
+          cosManufacturer = fvalAll.trim();
+        }
+        if (!cosColors && /색상|color/i.test(fname) && fvalAll) {
+          cosColors = fvalAll.trim();
+        }
+        // 고시정보 AI용 추가 필드
+        if (!cosColor && /색상|color|컬러/i.test(fname) && fvalAll) {
+          cosColor = fvalAll.trim();
+        }
+        if (!cosSize && /치수|사이즈|size/i.test(fname) && fvalAll) {
+          cosSize = fvalAll.trim();
+        }
+        if (!cosManufactureDate && /제조연월|제조년월|제조일|manufactured/i.test(fname) && fval) {
+          cosManufactureDate = fval.trim();
+        }
+        if (!cosMaterial && /소재|원단|재질|material|composition/i.test(fname) && fvalAll) {
+          cosMaterial = fvalAll.trim();
+        }
+        if (!costooBrand && !cosManufacturerFromFeature && /제조사|제조자|브랜드|manufacturer|brand/i.test(fname) && fval) {
+          cosManufacturerFromFeature = fval.trim();
+        }
       }
+
       // 2순위: 페이지 HTML 텍스트에서 추출
       const cosPlainText = cosPageHtml ? cosPageHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ') : '';
       if (!cosCertification && cosPlainText) {
@@ -568,6 +607,24 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         `\n</div>` +
         appendPrivacyFooter('');
 
+      // 구조화된 스펙 텍스트 (고시정보 AI용) — detailHtml과 별개
+      const cosSpecParts: string[] = [];
+      if (costooBrand) cosSpecParts.push(`브랜드/제조사: ${costooBrand}`);
+      if (cosCountryOfOrigin) cosSpecParts.push(`원산지/제조국: ${cosCountryOfOrigin}`);
+      if (cosColor) cosSpecParts.push(`색상: ${cosColor}`);
+      if (cosSize) cosSpecParts.push(`치수/사이즈: ${cosSize}`);
+      if (cosMaterial) cosSpecParts.push(`소재: ${cosMaterial}`);
+      if (cosManufactureDate) cosSpecParts.push(`제조연월: ${cosManufactureDate}`);
+      // API features에서 추가로 수집 (이미 위에서 추출한 필드는 skip)
+      for (const f of features) {
+        if (!f.name || !f.featureValues?.length) continue;
+        const n = f.name;
+        if (/색상|color|컬러|치수|사이즈|size|소재|원단|재질|material|원산지|제조국|제조연월|인증|브랜드/i.test(n)) continue;
+        const v = f.featureValues.map((fv: { value?: string }) => fv.value ?? '').filter(Boolean).join(', ');
+        if (v) cosSpecParts.push(`${n}: ${v}`);
+      }
+      const cosSpecText = cosSpecParts.length > 0 ? cosSpecParts.join('\n') : undefined;
+
       console.log(`[parse-url/costco] imageUrls=${allImageUrls.length}, detailImageUrls=${cosDetailImageUrls.length}, galleryImages=${item.galleryImages?.length ?? 0}, specFeatures=${features.length}`);
 
       product = {
@@ -578,17 +635,27 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         originalPrice: item.originalPrice,
         imageUrls: allImageUrls,
         detailImageUrls: cosDetailImageUrls.length > 0 ? cosDetailImageUrls : undefined,
-        description: features.length > 0
-          ? features.filter(f => f.featureValues?.length > 0)
-              .map(f => `${f.name}: ${f.featureValues.map(v => v.value).join(', ')}`)
+        description: cosSpecText || (features.length > 0
+          ? features.filter((f: { featureValues?: { value?: string }[] }) => f.featureValues?.length ?? 0 > 0)
+              .map((f: { name: string; featureValues: { value?: string }[] }) => `${f.name}: ${f.featureValues.map((v: { value?: string }) => v.value).join(', ')}`)
               .join('\n')
-          : (item.description?.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim() || pageDetail.description || item.title),
+          : (item.description?.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim() || pageDetail.description || item.title)),
+        specText: cosSpecText,
         detailHtml: cosDetailHtml,
         brand: costooBrand,
-        manufacturer: costooBrand,
+        manufacturer: costooBrand || cosManufacturer || cosManufacturerFromFeature || undefined,
         countryOfOrigin: cosCountryOfOrigin,
         categoryHint: item.categoryName,
         certification: cosCertification,
+        specs: features.length > 0
+          ? features
+              .filter((f: { name?: string; featureValues?: { value?: string }[] }) =>
+                f.name && f.featureValues?.length && f.featureValues[0]?.value)
+              .map((f: { name: string; featureValues: { value?: string }[] }) => ({
+                label: f.name,
+                value: f.featureValues.map((v: { value?: string }) => v.value ?? '').join(', '),
+              }))
+          : undefined,
       };
 
       // 코스트코도 네이버 연관검색어 태그 제안

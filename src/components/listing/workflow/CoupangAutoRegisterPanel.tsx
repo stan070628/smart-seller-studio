@@ -106,7 +106,7 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
 
   // ── 상품 주요 정보 ─────────────────────────────────────────────────────────
   const [brand, setBrand] = useState('');
-  const [manufacturer, setManufacturer] = useState('');
+  const [manufacturer, setManufacturer] = useState(sharedDraft.manufacturer || '');
   const [adultOnly, setAdultOnly] = useState<'EVERYONE' | 'ADULTS_ONLY'>('EVERYONE');
   const [taxType, setTaxType] = useState<'TAX' | 'TAX_FREE'>('TAX');
   const [parallelImported, setParallelImported] = useState<
@@ -243,11 +243,11 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
       setIsNoticeFetching(true);
       try {
         const cert = sharedDraft.certification ?? '';
-        // description: 코스트코 features 텍스트(정격전압·크기·출시년월 등)가 담겨 있어 고시정보 AI 품질 향상
-        const desc = sharedDraft.description ?? '';
+        // productSpecText: 구조화된 스펙 텍스트 (Costco features 등). 없으면 description HTML을 텍스트로 변환.
+        const rawDesc = sharedDraft.productSpecText ?? (sharedDraft.description ?? '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
         const params = new URLSearchParams({ categoryCode: code, productName: name });
         if (cert) params.set('certification', cert);
-        if (desc) params.set('productDesc', desc.slice(0, 800)); // 너무 길면 잘라서 전달
+        if (rawDesc) params.set('productDesc', rawDesc.slice(0, 1000));
         if (sharedDraft.countryOfOrigin) params.set('countryOfOrigin', sharedDraft.countryOfOrigin);
         const url = `/api/auto-register/category-notices?${params.toString()}`;
         const res = await fetch(url);
@@ -609,7 +609,7 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
             </button>
           </div>
           {categoryResults.length > 0 && (
-            <div style={{ border: `1px solid ${C.border}`, borderRadius: '8px', overflow: 'hidden', marginTop: '4px' }}>
+            <div style={{ border: `1px solid ${C.border}`, borderRadius: '8px', overflow: 'hidden', overflowY: 'auto', maxHeight: '240px', marginTop: '4px' }}>
               {categoryResults.map((c) => (
                 <button
                   key={c.displayCategoryCode}

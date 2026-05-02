@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useListingStore } from '@/store/useListingStore';
 import { C } from '@/lib/design-tokens';
+import SharedAiEditModal from '@/components/listing/AiEditModal';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 내부 타입
@@ -79,6 +80,19 @@ export default function Step2ImagePicker() {
   const [saveErrors, setSaveErrors] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ── 썸네일 합치기 (다중 선택 → 2장 합치기 모달) ────────────────────────────
+  const [selectedMergeKeys, setSelectedMergeKeys] = useState<string[]>([]);
+  const [mergeTarget, setMergeTarget] = useState<{ url1: string; url2: string } | null>(null);
+
+  const toggleMergeSelect = (key: string) => {
+    setSelectedMergeKeys((prev) => {
+      if (prev.includes(key)) return prev.filter((k) => k !== key);
+      // 최대 2장: 이미 2장이면 가장 먼저 선택한 것을 밀어낸다
+      if (prev.length >= 2) return [prev[1], key];
+      return [...prev, key];
+    });
+  };
+
   // ── store 동기화 ──────────────────────────────────────────────────────────
   const syncStore = useCallback(
     (nextEntries: ImageEntry[], nextThumbOrder: string[], nextDetailOrder: string[]) => {
@@ -106,6 +120,33 @@ export default function Step2ImagePicker() {
     syncStore(entries, thumbOrder, detailOrder);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── 합치기 시작 / 결과 적용 ──────────────────────────────────────────────
+  const handleStartMerge = () => {
+    if (selectedMergeKeys.length !== 2) return;
+    const [k1, k2] = selectedMergeKeys;
+    const e1 = entries.find((e) => e.key === k1);
+    const e2 = entries.find((e) => e.key === k2);
+    if (!e1 || !e2) return;
+    setMergeTarget({ url1: e1.url, url2: e2.url });
+  };
+
+  // 합쳐진 결과를 새 ImageEntry로 추가하고 썸네일 버킷 끝에 붙인다.
+  const handleMergeSaved = (resultUrl: string) => {
+    const newEntry: ImageEntry = {
+      key: resultUrl,
+      url: resultUrl,
+      inThumb: true,
+      inDetail: false,
+    };
+    applyUpdate(
+      [...entries, newEntry],
+      [...thumbOrder, resultUrl],
+      detailOrder,
+    );
+    setSelectedMergeKeys([]);
+    setMergeTarget(null);
+  };
 
   // ── 토글 / 삭제 ──────────────────────────────────────────────────────────
   const toggleThumb = (key: string) => {
@@ -253,6 +294,34 @@ export default function Step2ImagePicker() {
           onAiEdit={openEditModal}
           onRemove={(key) => applyUpdate(entries, thumbOrder.filter((k) => k !== key), detailOrder)}
           onPreview={setPreviewUrl}
+          selectable
+          selectedKeys={selectedMergeKeys}
+          onToggleSelect={toggleMergeSelect}
+          headerExtra={
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: 'auto' }}>
+              {selectedMergeKeys.length > 0 && (
+                <span style={{ fontSize: '11px', color: '#7c3aed', fontWeight: 600 }}>
+                  {selectedMergeKeys.length}장 선택
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={handleStartMerge}
+                disabled={selectedMergeKeys.length !== 2}
+                title={selectedMergeKeys.length === 2 ? '두 이미지를 한 컷으로 합치기' : '체크박스로 정확히 2장을 선택하세요'}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '4px',
+                  padding: '4px 9px', fontSize: '11px', fontWeight: 600,
+                  backgroundColor: selectedMergeKeys.length === 2 ? '#7c3aed' : '#ede9fe',
+                  color: selectedMergeKeys.length === 2 ? '#fff' : '#a78bfa',
+                  border: 'none', borderRadius: '6px',
+                  cursor: selectedMergeKeys.length === 2 ? 'pointer' : 'not-allowed',
+                }}
+              >
+                <Sparkles size={11} />선택한 2장 합치기
+              </button>
+            </div>
+          }
         />
 
         {/* ── 상세페이지 버킷 ──────────────────────────────────────────────── */}
@@ -375,6 +444,17 @@ export default function Step2ImagePicker() {
         />
       )}
 
+      {/* ── 두 이미지 합치기 모달 ────────────────────────────────────────────── */}
+      {mergeTarget && (
+        <SharedAiEditModal
+          imageUrl={mergeTarget.url1}
+          imageUrl2={mergeTarget.url2}
+          imageFile={null}
+          onClose={() => setMergeTarget(null)}
+          onSave={handleMergeSaved}
+        />
+      )}
+
       {/* ── 이미지 미리보기 라이트박스 ────────────────────────────────────────── */}
       {previewUrl && (
         <div
@@ -430,9 +510,19 @@ interface BucketPanelProps {
   onAiEdit: (entry: ImageEntry) => void;
   onRemove: (key: string) => void;
   onPreview: (url: string) => void;
+  /** 합치기 등 다중 선택 모드 활성화 */
+  selectable?: boolean;
+  selectedKeys?: string[];
+  onToggleSelect?: (key: string) => void;
+  /** 헤더 우측에 노출할 추가 컨트롤 (예: 합치기 버튼) */
+  headerExtra?: React.ReactNode;
 }
 
-function BucketPanel({ title, accentColor, bg, borderColor, entries, emptyText, onAiEdit, onRemove, onPreview }: BucketPanelProps) {
+function BucketPanel({
+  title, accentColor, bg, borderColor, entries, emptyText,
+  onAiEdit, onRemove, onPreview,
+  selectable = false, selectedKeys, onToggleSelect, headerExtra,
+}: BucketPanelProps) {
   return (
     <div
       style={{
@@ -458,6 +548,7 @@ function BucketPanel({ title, accentColor, bg, borderColor, entries, emptyText, 
         >
           {entries.length}
         </span>
+        {headerExtra}
       </div>
 
       {entries.length === 0 ? (
@@ -466,57 +557,87 @@ function BucketPanel({ title, accentColor, bg, borderColor, entries, emptyText, 
         </div>
       ) : (
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', padding: '10px 12px' }}>
-          {entries.map((entry, idx) => (
-            <div key={entry.key} style={{ position: 'relative', width: '60px', height: '60px' }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={entry.url}
-                alt={`이미지 ${idx + 1}`}
-                style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '7px', border: `1.5px solid ${borderColor}`, display: 'block', cursor: 'zoom-in' }}
-                onClick={() => onPreview(entry.url)}
-                onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }}
-              />
-              {/* 순서 번호 */}
-              <span
-                style={{
-                  position: 'absolute', top: '3px', left: '3px',
-                  fontSize: '8px', fontWeight: 800,
-                  background: accentColor, color: '#fff',
-                  borderRadius: '3px', padding: '0 4px',
-                  pointerEvents: 'none',
-                }}
-              >
-                {idx + 1}
-              </span>
-              {/* AI 편집 */}
-              <button
-                onClick={(e) => { e.stopPropagation(); onAiEdit(entry); }}
-                title="AI 편집"
-                style={{
-                  position: 'absolute', bottom: '3px', left: '3px',
-                  fontSize: '8px', fontWeight: 700,
-                  background: 'rgba(0,0,0,0.62)', color: '#fff',
-                  border: 'none', borderRadius: '3px', padding: '1px 5px', cursor: 'pointer',
-                }}
-              >
-                AI
-              </button>
-              {/* 제거 */}
-              <button
-                onClick={(e) => { e.stopPropagation(); onRemove(entry.key); }}
-                title="제거"
-                style={{
-                  position: 'absolute', top: '3px', right: '3px',
-                  width: '15px', height: '15px', borderRadius: '50%',
-                  background: 'rgba(0,0,0,0.5)', border: 'none',
-                  color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  cursor: 'pointer', fontSize: '10px', lineHeight: 1,
-                }}
-              >
-                ×
-              </button>
-            </div>
-          ))}
+          {entries.map((entry, idx) => {
+            const isSelected = selectable && selectedKeys?.includes(entry.key);
+            return (
+              <div key={entry.key} style={{ position: 'relative', width: '60px', height: '60px' }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={entry.url}
+                  alt={`이미지 ${idx + 1}`}
+                  style={{
+                    width: '60px', height: '60px', objectFit: 'cover',
+                    borderRadius: '7px',
+                    border: isSelected ? '2px solid #7c3aed' : `1.5px solid ${borderColor}`,
+                    display: 'block', cursor: 'zoom-in',
+                  }}
+                  onClick={() => onPreview(entry.url)}
+                  onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }}
+                />
+                {/* 순서 번호 */}
+                <span
+                  style={{
+                    position: 'absolute', top: '3px', left: '3px',
+                    fontSize: '8px', fontWeight: 800,
+                    background: accentColor, color: '#fff',
+                    borderRadius: '3px', padding: '0 4px',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  {idx + 1}
+                </span>
+                {/* 합치기 선택 체크박스 (selectable 모드에서만) */}
+                {selectable && onToggleSelect && (
+                  <button
+                    type="button"
+                    role="checkbox"
+                    aria-checked={!!isSelected}
+                    aria-label={`${idx + 1}번 이미지 합치기 대상 선택`}
+                    title="합치기 대상으로 선택"
+                    onClick={(e) => { e.stopPropagation(); onToggleSelect(entry.key); }}
+                    style={{
+                      position: 'absolute', bottom: '3px', right: '3px',
+                      width: '16px', height: '16px', padding: 0,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      backgroundColor: isSelected ? '#7c3aed' : 'rgba(255,255,255,0.92)',
+                      border: isSelected ? '1px solid #7c3aed' : '1px solid rgba(0,0,0,0.2)',
+                      borderRadius: '4px', cursor: 'pointer',
+                      color: '#fff', fontSize: '10px', lineHeight: 1, fontWeight: 800,
+                    }}
+                  >
+                    {isSelected ? '✓' : ''}
+                  </button>
+                )}
+                {/* AI 편집 */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); onAiEdit(entry); }}
+                  title="AI 편집"
+                  style={{
+                    position: 'absolute', bottom: '3px', left: '3px',
+                    fontSize: '8px', fontWeight: 700,
+                    background: 'rgba(0,0,0,0.62)', color: '#fff',
+                    border: 'none', borderRadius: '3px', padding: '1px 5px', cursor: 'pointer',
+                  }}
+                >
+                  AI
+                </button>
+                {/* 제거 */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); onRemove(entry.key); }}
+                  title="제거"
+                  style={{
+                    position: 'absolute', top: '3px', right: '3px',
+                    width: '15px', height: '15px', borderRadius: '50%',
+                    background: 'rgba(0,0,0,0.5)', border: 'none',
+                    color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: 'pointer', fontSize: '10px', lineHeight: 1,
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

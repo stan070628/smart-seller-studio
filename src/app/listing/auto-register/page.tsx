@@ -731,6 +731,7 @@ export default function AutoRegisterPage() {
           ...(imageUrls.length > 0 ? { imageUrls } : {}),
           productName: name,
           existingHtml: detailHtml,
+          ...(product?.specs?.length ? { productSpecs: product.specs } : {}),
         }),
       });
       const data = (await res.json()) as { success: boolean; html?: string; error?: string };
@@ -764,6 +765,7 @@ export default function AutoRegisterPage() {
           productName: name,
           ...(detailHtml ? { existingHtml: detailHtml } : {}),
           studioMode: true,
+          ...(product?.specs?.length ? { productSpecs: product.specs } : {}),
         }),
       });
       const data = (await res.json()) as { success: boolean; html?: string; error?: string };
@@ -791,6 +793,7 @@ export default function AutoRegisterPage() {
         body: JSON.stringify({
           productName: name,
           existingHtml: detailHtml,
+          ...(product?.specs?.length ? { productSpecs: product.specs } : {}),
         }),
       });
       const data = (await res.json()) as { success: boolean; html?: string; error?: string };

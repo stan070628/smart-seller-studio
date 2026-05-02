@@ -67,6 +67,9 @@ interface SharedDraft {
   // ─── KC 인증 ────────────────────────────────────────────────────────────────
   certification?: string; // KC 인증번호 (parse-url에서 추출)
 
+  // ─── 상품 스펙 텍스트 ────────────────────────────────────────────────────────
+  productSpecText?: string; // 구조화된 상품 스펙 텍스트 (고시정보 AI용) — detailHtml과 별개
+
   // ─── 쿠팡 임시저장 ID ────────────────────────────────────────────────────────
   coupangDraftId?: string; // 임시저장 후 또는 draft 불러오기 시 세팅 → 제출 활성화에 사용
   naverDraftId?: string; // 네이버 임시저장 ID
@@ -118,6 +121,8 @@ const SHARED_DRAFT_INITIAL: SharedDraft = {
   // 제조사 / 원산지
   manufacturer: undefined,
   countryOfOrigin: undefined,
+  // 상품 스펙 텍스트
+  productSpecText: undefined,
   // 네이버 임시저장 ID
   naverDraftId: undefined,
 };

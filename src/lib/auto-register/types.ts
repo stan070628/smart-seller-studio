@@ -84,4 +84,6 @@ export interface NormalizedProduct {
   options?: NormalizedProductOption[]; // 상품 옵션 (도매꾹 selectOpt 파싱)
   certification?: string; // KC 인증번호 (도매꾹 상세 HTML에서 추출)
   suggestedTags?: string[]; // 네이버 연관검색어 기반 추천 검색태그
+  specs?: Array<{ label: string; value: string }>; // 소스 URL에서 추출한 정형 스펙 (AI 상세페이지 생성 시 우선 반영)
+  specText?: string; // 구조화된 피처 텍스트 (고시정보 AI용) — detailHtml과 별개
 }

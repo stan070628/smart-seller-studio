@@ -156,7 +156,8 @@ export function buildDetailPageUserPrompt(
   lines.push(`주요 구성 요소: ${imageAnalysis.keyComponents.join(", ")}`);
 
   if (productSpecs && productSpecs.length > 0) {
-    lines.push('\n[홈페이지 스펙 정보 — specs 필드에 반드시 반영할 것]');
+    lines.push('\n[소스 URL 실측 스펙 — 이미지 분석보다 최우선 적용]');
+    lines.push('⚠ 이미지에서 임의로 추론한 핏·색상·소재 정보는 절대 사용하지 마세요. 아래 텍스트 스펙 데이터를 그대로 따르세요:');
     productSpecs.forEach(({ label, value }) => {
       lines.push(`${label}: ${value}`);
     });

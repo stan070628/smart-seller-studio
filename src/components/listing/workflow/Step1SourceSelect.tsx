@@ -90,6 +90,7 @@ export default function Step1SourceSelect() {
         certification: p.certification,
         manufacturer: p.manufacturer ?? p.brand,
         countryOfOrigin: p.countryOfOrigin,
+        productSpecText: p.specText || (p.description && !p.description.startsWith('<') ? p.description : undefined),
         detailPageStatus: 'idle',
         detailPageSkipped: !p.detailHtml,
       });

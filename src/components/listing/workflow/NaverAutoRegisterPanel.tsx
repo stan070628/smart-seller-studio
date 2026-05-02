@@ -246,7 +246,7 @@ export default function NaverAutoRegisterPanel({ onSuccess }: NaverAutoRegisterP
             </button>
           </div>
           {categoryResults.length > 0 && (
-            <div style={{ border: `1px solid ${C.border}`, borderRadius: '8px', overflow: 'hidden', marginTop: '4px' }}>
+            <div style={{ border: `1px solid ${C.border}`, borderRadius: '8px', overflow: 'hidden', overflowY: 'auto', maxHeight: '240px', marginTop: '4px' }}>
               {categoryResults.map((c) => (
                 <button
                   key={c.id}
