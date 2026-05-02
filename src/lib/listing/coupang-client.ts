@@ -324,11 +324,20 @@ export class CoupangClient {
 
     // 쿠팡 상품 등록 가능한 최하위(리프) 노드만 검색 대상으로 한정
     const keyword_lower = keyword.toLowerCase();
-    const matched = all.filter((c) => c.isLeaf && c.fullPath.toLowerCase().includes(keyword_lower));
+    // 공백 제거 정규화: '잠옷세트' → '여성 잠옷 세트' 처럼 공백 유무 차이 극복
+    const keyword_norm = keyword_lower.replace(/\s/g, '');
+
+    const matched = all.filter((c) => {
+      if (!c.isLeaf) return false;
+      const pathLower = c.fullPath.toLowerCase();
+      if (pathLower.includes(keyword_lower)) return true;
+      // 공백 제거 후 재비교
+      return pathLower.replace(/\s/g, '').includes(keyword_norm);
+    });
 
     // 정렬 우선순위:
-    // 1. 마지막 뎁스 exact match
-    // 2. 마지막 뎁스 contains match
+    // 1. 마지막 뎁스 exact match (공백 정규화 포함)
+    // 2. 마지막 뎁스 contains match (공백 정규화 포함)
     // 3. (동순위 내) 경로 깊이 얕을수록 우선 — 더 범용적인 카테고리
     // 4. (동순위 내) 마지막 노드 이름 길이 짧을수록 우선 — 단순/일반 카테고리
     matched.sort((a, b) => {
@@ -336,13 +345,15 @@ export class CoupangClient {
       const bSegs = b.fullPath.split('/');
       const aLast = (aSegs.at(-1) ?? '').toLowerCase();
       const bLast = (bSegs.at(-1) ?? '').toLowerCase();
+      const aLastNorm = aLast.replace(/\s/g, '');
+      const bLastNorm = bLast.replace(/\s/g, '');
 
-      const aExact = aLast === keyword_lower;
-      const bExact = bLast === keyword_lower;
+      const aExact = aLast === keyword_lower || aLastNorm === keyword_norm;
+      const bExact = bLast === keyword_lower || bLastNorm === keyword_norm;
       if (aExact !== bExact) return aExact ? -1 : 1;
 
-      const aContains = aLast.includes(keyword_lower);
-      const bContains = bLast.includes(keyword_lower);
+      const aContains = aLast.includes(keyword_lower) || aLastNorm.includes(keyword_norm);
+      const bContains = bLast.includes(keyword_lower) || bLastNorm.includes(keyword_norm);
       if (aContains !== bContains) return aContains ? -1 : 1;
 
       // 같은 rank: 경로 깊이 얕은 것 우선
