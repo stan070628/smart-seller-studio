@@ -168,12 +168,21 @@ export async function POST(request: NextRequest, context: RouteContext) {
             contentDetails: [{ content: sellerProductName, detailType: 'TEXT' as const }],
           }];
 
-    // 공통 notice 목록
-    const itemNotices = (d.notices ?? []).map((n) => ({
-      noticeCategoryName: n.categoryName,
-      noticeCategoryDetailName: n.detailName,
-      content: n.content,
-    }));
+    // 공통 notice 목록 — 중복 detailName 제거 (같은 키가 2개 이상이면 400 오류)
+    const seenNoticeKeys = new Set<string>();
+    const itemNotices = (d.notices ?? [])
+      .filter((n) => {
+        if (!n.detailName) return false;
+        const key = n.detailName;
+        if (seenNoticeKeys.has(key)) return false;
+        seenNoticeKeys.add(key);
+        return true;
+      })
+      .map((n) => ({
+        noticeCategoryName: n.categoryName,
+        noticeCategoryDetailName: n.detailName,
+        content: n.content,
+      }));
 
     // draft_data에서 읽은 상품 속성 값 (없으면 기본값)
     const adultOnly = d.adultOnly || 'EVERYONE';

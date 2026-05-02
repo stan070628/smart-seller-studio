@@ -234,24 +234,37 @@ function correctNoticeCategories(notices: NoticeItem[], groups: NoticeGroup[]): 
     groups.find((g) => g.categoryName.startsWith(name) || name.startsWith(g.categoryName)) ??
     groups.find((g) => g.categoryName.includes(name) || name.includes(g.categoryName));
 
-  return notices
+  const corrected = notices
     .map((n) => {
       const group = findGroup(n.categoryName);
-      if (!group) return null; // 매칭 불가 항목 제거
+      if (!group) return null;
 
       const matchedDetail =
         group.detailNames.find((d) => d === n.detailName) ??
         group.detailNames.find((d) => d.includes(n.detailName) || n.detailName.includes(d)) ??
-        group.detailNames[0] ??   // API 첫 항목 폴백 (AI 임의값 방지)
-        n.detailName;
+        // group.detailNames[0] 폴백 제거 — 모든 항목이 '품명 및 모델명'으로 중복 매핑되는 원인
+        n.detailName; // 매칭 실패 시 AI 원본값 유지
 
       return {
-        categoryName: group.categoryName,   // 정확한 값으로 교체
+        categoryName: group.categoryName,
         detailName: matchedDetail,
         content: n.content,
       };
     })
     .filter((n): n is NoticeItem => n !== null);
+
+  // 중복 detailName 제거: 같은 detailName이 여러 개면 content를 줄바꿈으로 합쳐 1개로
+  const seen = new Map<string, NoticeItem>();
+  for (const n of corrected) {
+    const key = n.detailName;
+    if (seen.has(key)) {
+      const prev = seen.get(key)!;
+      prev.content = prev.content ? `${prev.content}\n${n.content}` : n.content;
+    } else {
+      seen.set(key, { ...n });
+    }
+  }
+  return [...seen.values()];
 }
 
 // ─────────────────────────────────────────────────────────────

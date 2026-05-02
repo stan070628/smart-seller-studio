@@ -199,7 +199,7 @@ export async function POST(request: NextRequest) {
             cats.find((c) => (c.noticeCategoryName ?? '').includes(name) || name.includes(c.noticeCategoryName ?? ''));
         };
 
-        return d.notices
+        const mapped = d.notices
           .map((n) => {
             const cat = findCat(n.noticeCategoryName);
             if (!cat?.noticeCategoryName) return null;
@@ -209,11 +209,19 @@ export async function POST(request: NextRequest) {
             const matchedDetail =
               details.find((det) => det === n.noticeCategoryDetailName) ??
               details.find((det) => det.includes(n.noticeCategoryDetailName) || n.noticeCategoryDetailName.includes(det)) ??
-              details[0] ??
+              // details[0] 폴백 제거 — 모든 항목이 첫 번째 필드로 중복 매핑되는 원인
               n.noticeCategoryDetailName;
             return { noticeCategoryName: cat.noticeCategoryName, noticeCategoryDetailName: matchedDetail, content: n.content };
           })
           .filter((n): n is { noticeCategoryName: string; noticeCategoryDetailName: string; content: string } => n !== null);
+
+        // 중복 detailName 제거 (첫 번째 항목 우선)
+        const seenKeys = new Set<string>();
+        return mapped.filter((n) => {
+          if (seenKeys.has(n.noticeCategoryDetailName)) return false;
+          seenKeys.add(n.noticeCategoryDetailName);
+          return true;
+        });
       } catch {
         // getCategoryMeta 실패 시 입력값 그대로 사용
         return d.notices.map((n) => ({
