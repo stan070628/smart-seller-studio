@@ -99,7 +99,7 @@ async function scrapeWingProducts(): Promise<RawProduct[]> {
     await context.addCookies(cookies);
 
     const page = await context.newPage();
-    await page.goto(WING_INVENTORY_URL, { waitUntil: 'networkidle', timeout: 30_000 });
+    await page.goto(WING_INVENTORY_URL, { waitUntil: 'domcontentloaded', timeout: 30_000 });
 
     if (
       page.url().includes('xauth.coupang.com') ||
@@ -216,7 +216,7 @@ async function scrapeAdsCampaigns(): Promise<RawCampaign[]> {
     const page = await context.newPage();
     await page.goto(
       'https://advertising.coupang.com/marketing/dashboard/sales',
-      { waitUntil: 'networkidle', timeout: 30_000 },
+      { waitUntil: 'domcontentloaded', timeout: 30_000 },
     );
 
     if (page.url().includes('login') || page.url().includes('sign-in')) {
