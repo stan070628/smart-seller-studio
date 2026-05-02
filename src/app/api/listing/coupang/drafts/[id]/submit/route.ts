@@ -209,7 +209,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     // variants가 있으면 각 조합을 별도 item으로, 없으면 단일 item(기존 동작)
     const variants = Array.isArray(d.variants) && d.variants.length > 0 ? d.variants : null;
     const items: import('@/lib/listing/coupang-client').CoupangProductItem[] = variants
-      ? variants.map((v) => ({
+      ? variants.map((v, idx) => ({
           itemName: v.itemName,
           originalPrice: v.originalPrice ?? originalPrice,
           salePrice: v.salePrice,
@@ -225,7 +225,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           images: itemImages,
           attributes: v.attributes,
           contents,
-          notices: itemNotices,
+          notices: idx === 0 ? itemNotices : [],
           ...(certifications.length > 0 && { certifications }),
         }))
       : [
