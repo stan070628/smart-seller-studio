@@ -117,7 +117,7 @@ export default function AdStrategyPanel() {
               <strong>세션 오류:</strong> {error}
               <br />
               <small style={{ display: 'block', marginTop: '6px', color: '#991b1b' }}>
-                Wing: <code>PLAYWRIGHT_USER_DATA_DIR</code> 경로의 세션을 갱신하세요.
+                Wing: 터미널에서 <code>$B state save wing-session</code> 을 실행해 세션을 갱신하세요.
                 광고센터: <code>.env.local</code>의 <code>COUPANG_ADS_COOKIE</code>를 갱신하세요.
               </small>
             </>
