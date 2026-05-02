@@ -248,6 +248,7 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
         const params = new URLSearchParams({ categoryCode: code, productName: name });
         if (cert) params.set('certification', cert);
         if (desc) params.set('productDesc', desc.slice(0, 800)); // 너무 길면 잘라서 전달
+        if (sharedDraft.countryOfOrigin) params.set('countryOfOrigin', sharedDraft.countryOfOrigin);
         const url = `/api/auto-register/category-notices?${params.toString()}`;
         const res = await fetch(url);
         if (res.ok) {

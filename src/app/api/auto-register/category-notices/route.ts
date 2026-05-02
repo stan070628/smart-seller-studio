@@ -5,10 +5,11 @@
  * Claude AI로 상품 정보 기반 초안을 자동 생성하여 반환합니다.
  *
  * Query params:
- *   - categoryCode   (number, 필수) : 쿠팡 displayCategoryCode
- *   - productName    (string, 필수) : 상품명
- *   - productDesc    (string, 선택) : 상품 설명
- *   - certification  (string, 선택) : KC 인증번호 (있으면 고시정보에 반영)
+ *   - categoryCode      (number, 필수) : 쿠팡 displayCategoryCode
+ *   - productName       (string, 필수) : 상품명
+ *   - productDesc       (string, 선택) : 상품 설명
+ *   - certification     (string, 선택) : KC 인증번호 (있으면 고시정보에 반영)
+ *   - countryOfOrigin   (string, 선택) : 원산지 (있으면 고시정보에 반영)
  *
  * Response 200:
  *   { notices: [{ categoryName: string; detailName: string; content: string }] }
@@ -132,6 +133,7 @@ async function generateNoticesWithAI(
   groups: NoticeGroup[],
   productDesc?: string,
   certification?: string,
+  countryOfOrigin?: string,
 ): Promise<NoticeItem[]> {
   // 카테고리별 세부항목 목록 구성
   const categoryListLines = groups
@@ -170,8 +172,12 @@ ${certification
   ? `- KC 인증/인증 관련: "${certification}"\n- 인증번호: "${certification}"`
   : '- KC 인증/인증 관련: "해당사항없음"\n- 인증번호: "해당사항없음"'
 }
-- 제조국: 중국 (특별히 명시되지 않은 경우)
-- 모르는 경우: "상품 상세 참조"
+${countryOfOrigin
+  ? `- 원산지/제조국 관련 항목: 반드시 "${countryOfOrigin}" 사용 (절대 다른 나라명이나 "상품상세 참조" 금지)`
+  : '- 원산지/제조국 관련 항목: 상품명에서 유추하거나 "확인 필요"로 작성 (절대 임의로 "중국"으로 추정하지 말 것)'
+}
+- "상품상세 참조" 사용 가능 필드: 사용시 주의사항, 품질보증기준, 식품첨가물 등 세부 안내가 필요한 항목에만 허용
+- 원산지, 품명, 소재, 크기, 무게 등 기본 스펙 항목에는 절대 "상품상세 참조" 사용 금지 — 상품명에서 유추하거나 "확인 필요"로 작성
 - A/S 책임자 관련 항목: "청연코퍼레이션"
 - A/S 전화번호 관련 항목: "010-5169-2357"
 - 품명: 상품명 그대로 사용`;
@@ -210,6 +216,40 @@ ${certification
 }
 
 // ─────────────────────────────────────────────────────────────
+// 헬퍼: AI 응답 교정 — getCategoryMeta 실제 값으로 정확히 매핑
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * AI가 반환한 categoryName/detailName을 getCategoryMeta 응답의 실제 값으로 교정.
+ * AI가 "의류"를 반환했을 때 실제 값은 "의류 (섬유 제품)"처럼 다를 수 있어
+ * 쿠팡 API 제출 시 유효성 오류가 발생한다. 부분 문자열 매칭으로 교정.
+ */
+function correctNoticeCategories(notices: NoticeItem[], groups: NoticeGroup[]): NoticeItem[] {
+  const findGroup = (name: string) =>
+    groups.find((g) => g.categoryName === name) ??
+    groups.find((g) => g.categoryName.startsWith(name) || name.startsWith(g.categoryName)) ??
+    groups.find((g) => g.categoryName.includes(name) || name.includes(g.categoryName));
+
+  return notices
+    .map((n) => {
+      const group = findGroup(n.categoryName);
+      if (!group) return null; // 매칭 불가 항목 제거
+
+      const matchedDetail =
+        group.detailNames.find((d) => d === n.detailName) ??
+        group.detailNames.find((d) => d.includes(n.detailName) || n.detailName.includes(d)) ??
+        n.detailName;
+
+      return {
+        categoryName: group.categoryName,   // 정확한 값으로 교체
+        detailName: matchedDetail,
+        content: n.content,
+      };
+    })
+    .filter((n): n is NoticeItem => n !== null);
+}
+
+// ─────────────────────────────────────────────────────────────
 // Route Handler
 // ─────────────────────────────────────────────────────────────
 
@@ -226,6 +266,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const productName = params.get('productName')?.trim() ?? '';
   const productDesc = params.get('productDesc')?.trim() || undefined;
   const certification = params.get('certification')?.trim() || undefined;
+  const countryOfOrigin = params.get('countryOfOrigin')?.trim() || undefined;
 
   if (!categoryCodeStr) {
     return NextResponse.json({ error: 'categoryCode가 필요합니다.' }, { status: 400 });
@@ -271,7 +312,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   // ── 3. Claude AI로 고시정보 내용 자동 생성 ──────────────────
 
   try {
-    const notices = await generateNoticesWithAI(productName, groups, productDesc, certification);
+    const raw = await generateNoticesWithAI(productName, groups, productDesc, certification, countryOfOrigin);
+    const notices = correctNoticeCategories(raw, groups);
+    console.log('[category-notices] AI 생성 완료. 교정 전:', raw.length, '교정 후:', notices.length);
     return NextResponse.json({ notices });
   } catch (err) {
     console.error('[category-notices] AI 생성 실패 — fallback 반환:', err);
