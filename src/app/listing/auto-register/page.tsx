@@ -449,7 +449,7 @@ export default function AutoRegisterPage() {
     setCategoryCode(f?.displayCategoryCode.value ? String(f.displayCategoryCode.value) : '');
     // AI가 '' 또는 '기타'를 반환하면 NormalizedProduct의 brand(판매자명)로 폴백
     const aiBrand = f?.brand.value;
-    setBrand((aiBrand && aiBrand !== '기타') ? aiBrand : (p.brand || '기타'));
+    setBrand((aiBrand && aiBrand !== '기타') ? aiBrand : (p.brand || ''));
     // 제조사: NormalizedProduct에서 추출된 값 우선
     if (p.manufacturer) setManufacturer(p.manufacturer);
     setCertification(p.certification);

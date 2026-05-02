@@ -102,6 +102,7 @@ const RegisterSchema = z.object({
   })).optional(),
   // 상품 옵션(variant) — 있으면 각 조합마다 별도 item 생성
   variants: z.array(VariantSchema).optional(),
+  searchTags: z.array(z.string()).max(10).optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -293,6 +294,7 @@ export async function POST(request: NextRequest) {
       returnCharge: d.returnCharge,
       vendorUserId: process.env.COUPANG_VENDOR_USER_ID ?? '',
       items,
+      searchTags: d.searchTags ?? [],
     };
 
     const result = await client.registerProduct(payload);

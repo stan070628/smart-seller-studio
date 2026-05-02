@@ -25,7 +25,7 @@ function buildPrompt(product: NormalizedProduct): string {
 {
   "sellerProductName": { "value": "string (쿠팡 상품명, 최대 100자)", "confidence": 0.0~1.0 },
   "displayCategoryCode": { "value": number (쿠팡 카테고리 코드, 모르면 0), "confidence": 0.0~1.0 },
-  "brand": { "value": "string (브랜드명, 없으면 '기타')", "confidence": 0.0~1.0 },
+  "brand": { "value": "string (브랜드명. 상품 제목에서 추론 가능하면 추론. 확실하지 않으면 빈 문자열)", "confidence": 0.0~1.0 },
   "salePrice": { "value": number (원 단위 정수), "confidence": 0.0~1.0 },
   "originalPrice": { "value": number (정가, 없으면 salePrice와 동일), "confidence": 0.0~1.0 },
   "stockQuantity": { "value": number (권장: 100), "confidence": 0.0~1.0 },

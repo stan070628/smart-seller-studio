@@ -463,11 +463,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       let cosManufacturer: string | undefined;
       let cosManufacturerFromFeature: string | undefined;
       let cosColors: string | undefined;
+      // 옵션 조합용 개별 색상/사이즈 값 배열
+      let cosColorValues: string[] = [];
+      let cosSizeValues: string[] = [];
 
       for (const f of allFeatures) {
         const fname = f.name ?? '';
         const fval = (f.featureValues ?? [])[0]?.value ?? '';
         const fvalAll = (f.featureValues ?? []).map((v: { value?: string }) => v.value ?? '').filter(Boolean).join(', ');
+        const fvalList = (f.featureValues ?? []).map((v: { value?: string }) => v.value ?? '').filter(Boolean);
 
         if (/인증/i.test(fname) && fval) {
           const certMatch = extractKcCert(fval);
@@ -498,6 +502,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         }
         if (!costooBrand && !cosManufacturerFromFeature && /제조사|제조자|브랜드|manufacturer|brand/i.test(fname) && fval) {
           cosManufacturerFromFeature = fval.trim();
+        }
+        // 옵션 조합용: 색상/사이즈 개별 값 수집
+        if (cosColorValues.length === 0 && /색상|color|컬러/i.test(fname) && fvalList.length > 0) {
+          cosColorValues = fvalList;
+        }
+        if (cosSizeValues.length === 0 && /치수|사이즈|size/i.test(fname) && fvalList.length > 0) {
+          cosSizeValues = fvalList;
         }
       }
 
@@ -657,6 +668,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               }))
           : undefined,
       };
+
+      // 코스트코 색상/사이즈 옵션 매핑 (featureValues 2개 이상인 경우만 옵션으로 처리)
+      const cosOptions: NormalizedProductOption[] = [];
+      if (cosColorValues.length >= 2) {
+        cosOptions.push({
+          typeName: '색상',
+          values: cosColorValues.map((v) => ({ label: v, fullName: v, priceAdjustment: 0, stock: 0 })),
+        });
+      }
+      if (cosSizeValues.length >= 2) {
+        cosOptions.push({
+          typeName: '사이즈',
+          values: cosSizeValues.map((v) => ({ label: v, fullName: v, priceAdjustment: 0, stock: 0 })),
+        });
+      }
+      if (cosOptions.length > 0) product.options = cosOptions;
 
       // 코스트코도 네이버 연관검색어 태그 제안
       const suggestedTags = await suggestTagsFromNaver(product.title);
