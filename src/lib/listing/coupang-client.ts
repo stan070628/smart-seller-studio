@@ -208,7 +208,16 @@ export class CoupangClient {
     const text = await res.text();
 
     if (!res.ok) {
-      throw new Error(`[쿠팡 API] ${res.status}: ${text}`);
+      let errorMsg: string;
+      try {
+        const errJson = JSON.parse(text) as Record<string, unknown>;
+        const msg = typeof errJson.message === 'string' ? errJson.message : '';
+        const code = typeof errJson.code === 'string' && errJson.code !== 'SUCCESS' ? errJson.code : '';
+        errorMsg = [code, msg].filter(Boolean).join(': ') || text.slice(0, 300);
+      } catch {
+        errorMsg = text.slice(0, 300);
+      }
+      throw new Error(`쿠팡 API 오류 (${res.status}): ${errorMsg}`);
     }
 
     return JSON.parse(text) as CoupangApiResponse<T>;
@@ -355,7 +364,7 @@ export class CoupangClient {
     const res = await this.request<{ sellerProductId: number }>('POST', url, payload);
 
     if (res.code !== 'SUCCESS' || !res.data) {
-      throw new Error(`[쿠팡] 상품 등록 실패: ${res.message}`);
+      throw new Error(res.message || '쿠팡 상품 등록에 실패했습니다.');
     }
 
     return res.data;

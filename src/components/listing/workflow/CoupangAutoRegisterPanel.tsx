@@ -836,8 +836,12 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
       {/* ── 액션 바 ─────────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingTop: '4px' }}>
         {submitError && (
-          <div style={{ padding: '10px 14px', backgroundColor: '#fee2e2', border: '1px solid #fca5a5', borderRadius: '8px', fontSize: '12px', color: '#b91c1c' }}>
-            {submitError}
+          <div style={{ padding: '12px 14px', backgroundColor: '#fee2e2', border: '1px solid #fca5a5', borderRadius: '8px', fontSize: '12px', color: '#b91c1c' }}>
+            <div style={{ fontWeight: 700, marginBottom: '4px' }}>쿠팡 등록 실패</div>
+            <div style={{ lineHeight: '1.5', wordBreak: 'break-word' }}>{submitError}</div>
+            <div style={{ marginTop: '6px', fontSize: '11px', color: '#991b1b', opacity: 0.85 }}>
+              고시정보·카테고리 코드를 확인하고 임시저장 후 다시 제출해 주세요.
+            </div>
           </div>
         )}
         {/* 개선 4: 임시저장 / 제출 버튼 분리 — 실수 클릭 방지 */}

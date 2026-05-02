@@ -306,6 +306,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
   } catch (err) {
     console.error('[POST /api/listing/coupang/drafts/[id]/submit]', err);
     const message = err instanceof Error ? err.message : '알 수 없는 오류';
-    return Response.json({ success: false, error: message }, { status: 500 });
+    // 쿠팡 API 오류(4xx)는 클라이언트 측 데이터 문제 → 400, 그 외는 서버 오류 → 500
+    const isCoupangApiError = message.startsWith('쿠팡 API 오류');
+    return Response.json(
+      { success: false, error: message },
+      { status: isCoupangApiError ? 400 : 500 },
+    );
   }
 }

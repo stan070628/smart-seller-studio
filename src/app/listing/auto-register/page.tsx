@@ -2086,7 +2086,11 @@ export default function AutoRegisterPage() {
             ) : (
               <div className="flex flex-col gap-3">
                 {registerError && (
-                  <p className="text-sm text-red-600 bg-red-50 rounded-lg px-4 py-3">{registerError}</p>
+                  <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+                    <p className="text-sm font-bold text-red-700 mb-1">쿠팡 등록 실패</p>
+                    <p className="text-sm text-red-600 break-words">{registerError}</p>
+                    <p className="text-xs text-red-500 mt-1.5 opacity-80">고시정보·카테고리 코드를 확인하고 다시 시도해 주세요.</p>
+                  </div>
                 )}
                 <div className="flex gap-3">
                   <button
