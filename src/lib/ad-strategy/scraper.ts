@@ -112,58 +112,57 @@ async function scrapeWingProducts(): Promise<RawProduct[]> {
       );
     }
 
-    // 상품 테이블이 로드될 때까지 대기
+    // 상품 테이블이 로드될 때까지 대기 (DOM 렌더링 후 추가 5초)
     await page
-      .waitForSelector('table tbody tr, [class*="inventory-row"]', { timeout: 15_000 })
+      .waitForSelector('table tbody tr', { timeout: 15_000 })
       .catch(() => null);
+    await page.waitForTimeout(3_000);
 
     const products = await page.evaluate((): RawProduct[] => {
-      const rows = Array.from(
-        document.querySelectorAll('table tbody tr, [class*="inventory-row"]'),
-      );
+      const rows = Array.from(document.querySelectorAll('table tbody tr'));
       return rows
         .map((row) => {
-          const cells = Array.from(row.querySelectorAll('td, [class*="cell"]'));
-          const nameEl =
-            row.querySelector('[class*="product-name"], [data-label*="상품명"]') ||
-            cells[1];
+          const cells = Array.from(row.querySelectorAll('td'));
+
+          // 상품명: a.ip-title 또는 cells[1] fallback
+          const nameEl = row.querySelector('a.ip-title') ?? cells[1];
           const name = nameEl?.textContent?.trim() ?? '';
           if (!name) return null;
 
-          const idEl = cells[0];
-          const sellerProductId = idEl?.textContent?.trim() ?? '';
+          // Inventory ID: URL 파라미터 or 텍스트에서 추출
+          const href = (row.querySelector('a.ip-title') as HTMLAnchorElement | null)?.href ?? '';
+          const idMatch = href.match(/vendorInventoryId=(\d+)/) ?? name.match(/Inventory ID (\d+)/);
+          const sellerProductId = idMatch?.[1] ?? '';
 
+          // 아이템위너: cells[3]에 "Item winner" 또는 "아이템위너" 텍스트
           const isItemWinner =
             row.querySelector('[class*="winner"], [class*="item-winner"]') !== null ||
             cells.some(
               (c) =>
+                c.textContent?.includes('Item winner') ||
                 c.textContent?.includes('아이템위너') ||
                 c.textContent?.includes('위너 보유'),
             );
 
-          const stockCell = cells.find(
-            (c) =>
-              c.getAttribute('data-label')?.includes('재고') ||
-              c.querySelector('[class*="stock"]') !== null,
-          );
+          // 재고: .is-top 숫자
+          const stockEl = row.querySelector('.is-top');
           const stock =
-            parseInt((stockCell?.textContent ?? '0').replace(/[^0-9]/g, ''), 10) || 0;
+            parseInt((stockEl?.textContent ?? cells[2]?.textContent ?? '0').replace(/[^0-9]/g, ''), 10) || 0;
 
-          const priceCell = cells.find(
-            (c) =>
-              c.getAttribute('data-label')?.includes('판매가') ||
-              c.getAttribute('data-label')?.includes('가격'),
-          );
+          // 판매가: .isp-top 에서 숫자 추출 (예: "41,900KRW~")
+          const priceEl = row.querySelector('.isp-top');
           const salePrice =
-            parseInt((priceCell?.textContent ?? '0').replace(/[^0-9]/g, ''), 10) || 0;
+            parseInt((priceEl?.textContent ?? cells[4]?.textContent ?? '0').replace(/[^0-9]/g, ''), 10) || 0;
 
+          // 이미지 위반: 위반/반려 텍스트
           const imageViolation =
-            row.querySelector('[class*="violation"], [class*="block"], [class*="error"]') !==
-              null ||
+            row.querySelector('[class*="violation"], [class*="block"], [class*="error"]') !== null ||
             cells.some(
               (c) =>
                 c.textContent?.includes('이미지 위반') ||
-                c.textContent?.includes('검수 반려'),
+                c.textContent?.includes('검수 반려') ||
+                c.textContent?.includes('Image violation') ||
+                c.textContent?.includes('Rejected'),
             );
 
           return {
