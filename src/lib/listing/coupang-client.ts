@@ -262,8 +262,8 @@ export class CoupangClient {
     return (res.data ?? {}) as Record<string, unknown>;
   }
 
-  // 카테고리 코드로 fullPath 조회 (트리 캐시 활용)
-  async findCategoryFullPath(code: number): Promise<string | null> {
+  // 카테고리 코드로 FlatCategory 노드 조회 (fullPath + isLeaf 포함)
+  private async getFlatCategoryNodes(): Promise<FlatCategory[]> {
     const now = Date.now();
     if (!categoryTreeCache || now - categoryTreeCache.ts > 5 * 60 * 1000) {
       const raw = await this.getCategoryTree();
@@ -282,8 +282,20 @@ export class CoupangClient {
     } else {
       roots = [];
     }
-    const all = flattenCategories(roots, '');
+    return flattenCategories(roots, '');
+  }
+
+  async findCategoryFullPath(code: number): Promise<string | null> {
+    const all = await this.getFlatCategoryNodes();
     return all.find((c) => c.displayCategoryCode === code)?.fullPath ?? null;
+  }
+
+  // 카테고리 코드로 노드 정보(fullPath + isLeaf) 조회
+  async findCategoryNode(code: number): Promise<{ fullPath: string; isLeaf: boolean } | null> {
+    const all = await this.getFlatCategoryNodes();
+    const node = all.find((c) => c.displayCategoryCode === code);
+    if (!node) return null;
+    return { fullPath: node.fullPath, isLeaf: node.isLeaf };
   }
 
   // ─── 카테고리 조회 ─────────────────────────────────────────
@@ -307,59 +319,27 @@ export class CoupangClient {
     displayCategoryName: string;
     fullPath: string;
   }[]> {
-    // 캐시 히트 확인 (5분 = 300,000ms)
-    const now = Date.now();
-    if (!categoryTreeCache || now - categoryTreeCache.ts > 5 * 60 * 1000) {
-      const raw = await this.getCategoryTree();
-      categoryTreeCache = { data: raw, ts: now };
-    }
+    // 캐시된 플랫 노드 재사용 (getFlatCategoryNodes 내부에서 5분 TTL 캐시 처리)
+    const all = await this.getFlatCategoryNodes();
 
-    // 트리를 배열로 정규화 (방어적 파싱)
-    const rawData = categoryTreeCache.data;
-    let roots: CoupangCategory[];
-    if (Array.isArray(rawData)) {
-      roots = normalizeCategoryNodes(rawData);
-    } else if (rawData && typeof rawData === 'object') {
-      // { data: [...] } 혹은 { displayCategoryCode: ..., children: [...] } 형태 대응
-      const obj = rawData as Record<string, unknown>;
-      if (Array.isArray(obj['data'])) {
-        roots = normalizeCategoryNodes(obj['data'] as unknown[]);
-      } else if (Array.isArray(obj['children'])) {
-        roots = normalizeCategoryNodes(obj['children'] as unknown[]);
-      } else if (Array.isArray(obj['child'])) {
-        roots = normalizeCategoryNodes(obj['child'] as unknown[]);
-      } else {
-        roots = normalizeCategoryNodes([rawData]);
-      }
-    } else {
-      roots = [];
-    }
-
-    // 전체 flatten (fullPath 포함)
-    const all = flattenCategories(roots, '');
-
-    // keyword 필터링 (대소문자 무시)
-    const lower = keyword.toLowerCase();
-    const matched = all.filter((c) => c.fullPath.toLowerCase().includes(lower));
+    // 쿠팡 상품 등록 가능한 최하위(리프) 노드만 검색 대상으로 한정
+    const keyword_lower = keyword.toLowerCase();
+    const matched = all.filter((c) => c.isLeaf && c.fullPath.toLowerCase().includes(keyword_lower));
 
     // 정렬 우선순위:
-    // 1. 마지막 뎁스 exact match (예: "잠옷" → fullPath가 ".../잠옷"으로 끝나는 것)
-    // 2. 마지막 뎁스 contains match (예: "잠옷" → 마지막 노드에 "잠옷"이 포함)
-    // 3. 리프 노드 우선
-    // 4. 나머지
+    // 1. 마지막 뎁스 exact match
+    // 2. 마지막 뎁스 contains match
     matched.sort((a, b) => {
       const aLast = a.fullPath.split('/').pop()?.toLowerCase() ?? '';
       const bLast = b.fullPath.split('/').pop()?.toLowerCase() ?? '';
 
-      const aExact = aLast === lower;
-      const bExact = bLast === lower;
+      const aExact = aLast === keyword_lower;
+      const bExact = bLast === keyword_lower;
       if (aExact !== bExact) return aExact ? -1 : 1;
 
-      const aContains = aLast.includes(lower);
-      const bContains = bLast.includes(lower);
+      const aContains = aLast.includes(keyword_lower);
+      const bContains = bLast.includes(keyword_lower);
       if (aContains !== bContains) return aContains ? -1 : 1;
-
-      if (a.isLeaf !== b.isLeaf) return a.isLeaf ? -1 : 1;
 
       return 0;
     });

@@ -78,6 +78,7 @@ export default function AutoRegisterPage() {
   const [categoryResults, setCategoryResults] = useState<{ displayCategoryCode: number; displayCategoryName: string; fullPath: string }[]>([]);
   const [isCategorySearching, setIsCategorySearching] = useState(false);
   const [categoryCodeValid, setCategoryCodeValid] = useState<boolean | null>(null);
+  const [categoryInvalidReason, setCategoryInvalidReason] = useState<'not_found' | 'not_leaf' | null>(null);
   const [isCategoryValidating, setIsCategoryValidating] = useState(false);
   const [categoryFullPath, setCategoryFullPath] = useState(''); // 선택된 카테고리 전체 경로
   const [customFeeRate, setCustomFeeRate] = useState<string>(''); // 사용자 직접 입력 수수료율 (%)
@@ -567,13 +568,15 @@ export default function AutoRegisterPage() {
     const timer = setTimeout(async () => {
       try {
         const res = await fetch(`/api/auto-register/validate-category?categoryCode=${encodeURIComponent(code)}`);
-        const data = (await res.json()) as { valid: boolean; fullPath?: string };
+        const data = (await res.json()) as { valid: boolean; reason?: 'not_found' | 'not_leaf'; fullPath?: string };
         setCategoryCodeValid(data.valid);
-        if (data.valid && data.fullPath) {
+        setCategoryInvalidReason(data.valid ? null : (data.reason ?? 'not_found'));
+        if (data.fullPath) {
           setCategoryFullPath(data.fullPath);
         }
       } catch {
         setCategoryCodeValid(null);
+        setCategoryInvalidReason(null);
       } finally {
         setIsCategoryValidating(false);
       }
@@ -1156,7 +1159,8 @@ export default function AutoRegisterPage() {
                   카테고리 코드 <span className="text-orange-500 font-normal">*직접 입력 필요</span>
                   {isCategoryValidating && <span className="ml-2 text-xs text-gray-400">확인 중...</span>}
                   {!isCategoryValidating && categoryCodeValid === true && <span className="ml-2 text-xs text-green-600">✓ 유효</span>}
-                  {!isCategoryValidating && categoryCodeValid === false && <span className="ml-2 text-xs text-red-500">✗ 없는 코드</span>}
+                  {!isCategoryValidating && categoryCodeValid === false && categoryInvalidReason === 'not_leaf' && <span className="ml-2 text-xs text-red-500">✗ 중간 카테고리 — 최하위 카테고리를 선택하세요</span>}
+                  {!isCategoryValidating && categoryCodeValid === false && categoryInvalidReason !== 'not_leaf' && <span className="ml-2 text-xs text-red-500">✗ 없는 코드</span>}
                 </label>
                 {/* AI 참고값 */}
                 {!!mappedFields?.displayCategoryCode.value && (
