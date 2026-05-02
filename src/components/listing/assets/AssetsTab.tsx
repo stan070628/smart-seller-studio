@@ -4,13 +4,14 @@ import React from 'react';
 import AssetsInputPanel from './AssetsInputPanel';
 import AssetsResultPanel from './AssetsResultPanel';
 import { useListingStore } from '@/store/useListingStore';
+import { parseSpecText } from '@/lib/utils/parseSpecText';
 
 /** 상세페이지용 이미지를 자동 편집할 때 적용할 기본 프롬프트 (가이드라인 강제) */
 const DETAIL_AUTO_EDIT_PROMPT =
   'Replace the background with pure white (#FFFFFF). Reframe and zoom so the product is centered and fills at least 85% of the image. Square 1:1 framing. Keep the product unchanged. Add only a small soft shadow under the product. No text, no logo, no badge, no people.';
 
 export default function AssetsTab() {
-  const { assetsDraft, updateAssetsDraft } = useListingStore();
+  const { assetsDraft, updateAssetsDraft, sharedDraft } = useListingStore();
 
   /** 단일 이미지 URL을 /api/ai/edit-thumbnail로 보내 편집된 URL을 반환 */
   const editOneImage = async (imageUrl: string, prompt: string): Promise<string> => {
@@ -36,12 +37,14 @@ export default function AssetsTab() {
   /** 이미지 URL 배열을 /api/ai/generate-detail-html에 보내 상세 HTML 생성 */
   const generateDetailHtml = async (imageUrls: string[]): Promise<string> => {
     if (imageUrls.length === 0) return '';
+    const productSpecs = parseSpecText(sharedDraft.productSpecText);
     const res = await fetch('/api/ai/generate-detail-html', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         imageUrls: imageUrls.slice(0, 5),
         studioMode: true,
+        ...(productSpecs ? { productSpecs } : {}),
       }),
     });
     const ct = res.headers.get('content-type') ?? '';

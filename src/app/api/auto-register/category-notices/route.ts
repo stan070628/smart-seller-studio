@@ -242,6 +242,7 @@ function correctNoticeCategories(notices: NoticeItem[], groups: NoticeGroup[]): 
       const matchedDetail =
         group.detailNames.find((d) => d === n.detailName) ??
         group.detailNames.find((d) => d.includes(n.detailName) || n.detailName.includes(d)) ??
+        group.detailNames[0] ??   // API 첫 항목 폴백 (AI 임의값 방지)
         n.detailName;
 
       return {

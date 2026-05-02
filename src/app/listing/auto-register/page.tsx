@@ -2032,7 +2032,7 @@ export default function AutoRegisterPage() {
                 <input
                   value={tagInput}
                   onChange={(e) => setTagInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
+                  onKeyDown={(e) => { if (e.nativeEvent.isComposing) return; if (e.key === 'Enter') { e.preventDefault(); addTag(); } }}
                   placeholder="태그 입력 후 Enter (최대 10개)"
                   className={INPUT}
                 />

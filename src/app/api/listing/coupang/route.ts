@@ -138,6 +138,18 @@ export async function POST(request: NextRequest) {
     assertCoupangReturnEnv();
     const client = getCoupangClient();
 
+    if (d.dryRun) {
+      return Response.json({
+        success: true,
+        dryRun: true,
+        data: {
+          sellerProductId: 99999999,
+          productUrl: 'https://www.coupang.com/vp/products/99999999',
+          wingsUrl: 'https://wing.coupang.com',
+        },
+      });
+    }
+
     // 출고지/반품지 코드 (명시적 전달 → 환경변수 → 에러)
     const outboundCode = d.outboundShippingPlaceCode || client.getOutboundShippingPlaceCode();
     const returnCode = d.returnCenterCode || client.getReturnCenterCode();
@@ -163,12 +175,53 @@ export async function POST(request: NextRequest) {
       })),
     ];
 
-    // 공통 notice 목록
-    const itemNotices = d.notices?.map((n) => ({
-      noticeCategoryName: n.noticeCategoryName,
-      noticeCategoryDetailName: n.noticeCategoryDetailName,
-      content: n.content,
-    })) ?? [];
+    // 공통 notice 목록 — getCategoryMeta 실제값으로 재교정
+    // draft 로드나 AI 오류로 잘못된 값(예: "의류", "품명")이 들어와도 여기서 최종 교정됨
+    const itemNotices = await (async () => {
+      if (!d.notices || d.notices.length === 0) return [];
+      try {
+        const meta = await client.getCategoryMeta(d.displayCategoryCode) as Record<string, unknown>;
+        type RawCat = { noticeCategoryName?: string; noticeCategoryDetailNames?: { noticeCategoryDetailName?: string }[] };
+        const cats = (meta['noticeCategories'] as RawCat[] | undefined) ?? [];
+        if (cats.length === 0) {
+          // 메타 없음 → 그대로 전달
+          return d.notices.map((n) => ({
+            noticeCategoryName: n.noticeCategoryName,
+            noticeCategoryDetailName: n.noticeCategoryDetailName,
+            content: n.content,
+          }));
+        }
+        const findCat = (name: string) => {
+          if (!name) return undefined;
+          return cats.find((c) => c.noticeCategoryName === name) ??
+            cats.find((c) => (c.noticeCategoryName ?? '').startsWith(name) || name.startsWith(c.noticeCategoryName ?? '')) ??
+            cats.find((c) => (c.noticeCategoryName ?? '').includes(name) || name.includes(c.noticeCategoryName ?? ''));
+        };
+
+        return d.notices
+          .map((n) => {
+            const cat = findCat(n.noticeCategoryName);
+            if (!cat?.noticeCategoryName) return null;
+            const details = (cat.noticeCategoryDetailNames ?? [])
+              .map((det) => det.noticeCategoryDetailName ?? '')
+              .filter(Boolean);
+            const matchedDetail =
+              details.find((det) => det === n.noticeCategoryDetailName) ??
+              details.find((det) => det.includes(n.noticeCategoryDetailName) || n.noticeCategoryDetailName.includes(det)) ??
+              details[0] ??
+              n.noticeCategoryDetailName;
+            return { noticeCategoryName: cat.noticeCategoryName, noticeCategoryDetailName: matchedDetail, content: n.content };
+          })
+          .filter((n): n is { noticeCategoryName: string; noticeCategoryDetailName: string; content: string } => n !== null);
+      } catch {
+        // getCategoryMeta 실패 시 입력값 그대로 사용
+        return d.notices.map((n) => ({
+          noticeCategoryName: n.noticeCategoryName,
+          noticeCategoryDetailName: n.noticeCategoryDetailName,
+          content: n.content,
+        }));
+      }
+    })();
 
     // variants가 있으면 각 조합을 별도 item으로, 없으면 단일 item(기존 동작)
     const items: import('@/lib/listing/coupang-client').CoupangProductItem[] =
@@ -241,18 +294,6 @@ export async function POST(request: NextRequest) {
       vendorUserId: process.env.COUPANG_VENDOR_USER_ID ?? '',
       items,
     };
-
-    if (d.dryRun) {
-      return Response.json({
-        success: true,
-        dryRun: true,
-        data: {
-          sellerProductId: 99999999,
-          productUrl: 'https://www.coupang.com/vp/products/99999999',
-          wingsUrl: 'https://wing.coupang.com',
-        },
-      });
-    }
 
     const result = await client.registerProduct(payload);
 

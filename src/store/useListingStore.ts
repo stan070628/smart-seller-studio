@@ -7,6 +7,7 @@ import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import type { PlatformId, ProductListing } from '@/types/listing';
 import type { ProductOptions } from '@/types/product-option';
+import { parseSpecText } from '@/lib/utils/parseSpecText';
 
 // ─── SharedDraft 타입 ────────────────────────────────────────────────────────
 // 탭 이동 시에도 입력값이 유지되도록 공통 필드를 스토어에서 관리
@@ -1097,6 +1098,8 @@ export const useListingStore = create<ListingStore>()(
           };
           if (imageUrls.length > 0) requestBody.imageUrls = imageUrls;
           if (fallbackImages.length > 0) requestBody.images = fallbackImages;
+          const parsedSpecsA = parseSpecText(currentDraft.productSpecText);
+          if (parsedSpecsA) requestBody.productSpecs = parsedSpecsA;
 
           const res = await fetch('/api/ai/generate-detail-html', {
             method: 'POST',
@@ -1187,6 +1190,8 @@ export const useListingStore = create<ListingStore>()(
 
           if (externalUrls.length > 0) requestBody.imageUrls = externalUrls;
           if (base64Images.length > 0) requestBody.images = base64Images;
+          const parsedSpecsB = parseSpecText(get().sharedDraft.productSpecText);
+          if (parsedSpecsB) requestBody.productSpecs = parsedSpecsB;
 
           // generating 상태
           set(
