@@ -6,8 +6,9 @@ const WING_INVENTORY_URL =
 
 /**
  * Wing 벤더 인벤토리 + 광고센터 캠페인 데이터를 수집한다.
- * Wing: 로그인된 Chromium 프로파일(PLAYWRIGHT_USER_DATA_DIR) 재사용.
+ * Wing: COUPANG_WING_COOKIE env var 쿠키 주입 방식.
  * 광고센터: COUPANG_ADS_COOKIE env var 사용.
+ * 쿠키 갱신: 브라우저 DevTools → Application → Cookies → wing.coupang.com에서 복사.
  */
 export async function scrapeAdData(): Promise<CollectedData> {
   const [products, campaigns] = await Promise.all([
@@ -18,21 +19,41 @@ export async function scrapeAdData(): Promise<CollectedData> {
 }
 
 async function scrapeWingProducts(): Promise<RawProduct[]> {
-  const userDataDir =
-    process.env.PLAYWRIGHT_USER_DATA_DIR || '/tmp/pw-wing';
+  const wingCookie = process.env.COUPANG_WING_COOKIE;
+  if (!wingCookie) {
+    throw new Error(
+      'Wing 세션 쿠키가 없습니다. .env.local의 COUPANG_WING_COOKIE를 설정해 주세요.',
+    );
+  }
 
-  const browser = await chromium.launchPersistentContext(userDataDir, {
+  const browser = await chromium.launch({
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
   });
 
   try {
-    const page = await browser.newPage();
+    const context = await browser.newContext();
+
+    // 쿠키 파싱 후 주입
+    const cookiePairs = wingCookie
+      .split(';')
+      .map((c) => {
+        const eqIdx = c.indexOf('=');
+        if (eqIdx < 0) return null;
+        const name = c.slice(0, eqIdx).trim();
+        const value = c.slice(eqIdx + 1).trim();
+        return { name, value, domain: '.wing.coupang.com', path: '/' };
+      })
+      .filter((c): c is NonNullable<typeof c> => c !== null && c.name.length > 0);
+
+    await context.addCookies(cookiePairs);
+
+    const page = await context.newPage();
     await page.goto(WING_INVENTORY_URL, { waitUntil: 'networkidle', timeout: 30_000 });
 
-    if (page.url().includes('login') || page.url().includes('sign-in')) {
+    if (page.url().includes('login') || page.url().includes('sign-in') || page.url().includes('xauth')) {
       throw new Error(
-        'Wing 세션이 만료되었습니다. PLAYWRIGHT_USER_DATA_DIR 경로의 세션을 갱신해 주세요.',
+        'Wing 세션이 만료되었습니다. .env.local의 COUPANG_WING_COOKIE를 갱신해 주세요.',
       );
     }
 
