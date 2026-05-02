@@ -201,8 +201,8 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
 
         const aiBrand = f.brand.value;
         setBrand((prev) => (!prev && aiBrand && aiBrand !== '기타') ? aiBrand : (prev || '기타'));
-        if (f.displayCategoryCode.value)
-          setCategoryCode((prev) => prev || String(f.displayCategoryCode.value));
+        // 카테고리 코드는 AI 자동 채움 안 함 — 검증 안 된 코드라 사용자가 명시적으로 검색·선택해야 함
+        // (참고용으로 mappedFields에만 보존되어 화면에 "AI 추천 참고: ..." 표시됨)
         setTags((prev) => (f.searchTags.value.length > 0 && prev.length === 0)
           ? f.searchTags.value.slice(0, 10)
           : prev);
@@ -314,6 +314,17 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
 
   // ── 임시저장 ─────────────────────────────────────────────────────────────
   async function handleSaveDraft() {
+    // 카테고리 코드 가드 — 비어있거나 검증 실패 시 임시저장 차단
+    const code = categoryCode.trim();
+    if (!code || !/^\d+$/.test(code)) {
+      alert('카테고리를 먼저 선택하세요.\n\n"이름으로 검색"에서 키워드(예: 반팔티)로 검색 후 결과를 클릭하면 코드가 자동 입력됩니다.');
+      return;
+    }
+    if (categoryValid === false) {
+      alert('유효하지 않은 카테고리 코드입니다.\n\n"이름으로 검색"으로 다시 선택하세요.');
+      return;
+    }
+
     setIsSavingDraft(true);
     setDraftFeedback(null);
 
@@ -564,19 +575,16 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
             }}
             value={categoryCode}
             onChange={(e) => {
-              const v = e.target.value;
-              if (v && /\D/.test(v)) {
-                setCategoryCode('');
-                setCategorySearch(v);
-                setCategoryResults([]);
-                doCategorySearch(v);
-              } else {
-                setCategoryCode(v);
+              // 숫자만 허용 — 비숫자 문자는 자동 제거. 한글로 검색하려면 아래 "이름으로 검색" 사용.
+              const v = e.target.value.replace(/\D/g, '');
+              setCategoryCode(v);
+              if (v !== categoryCode) {
                 setCategoryResults([]);
                 setCategoryFullPath('');
               }
             }}
-            placeholder="숫자 코드 입력 (예: 78780)"
+            inputMode="numeric"
+            placeholder="숫자 코드 입력 (예: 78780) — 모르면 아래 '이름으로 검색' 사용"
           />
           {categoryFullPath && (
             <p style={{ fontSize: '11px', color: C.textSub, margin: '4px 0 0' }}>{categoryFullPath}</p>
