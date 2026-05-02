@@ -329,9 +329,13 @@ export class CoupangClient {
     // 정렬 우선순위:
     // 1. 마지막 뎁스 exact match
     // 2. 마지막 뎁스 contains match
+    // 3. (동순위 내) 경로 깊이 얕을수록 우선 — 더 범용적인 카테고리
+    // 4. (동순위 내) 마지막 노드 이름 길이 짧을수록 우선 — 단순/일반 카테고리
     matched.sort((a, b) => {
-      const aLast = a.fullPath.split('/').pop()?.toLowerCase() ?? '';
-      const bLast = b.fullPath.split('/').pop()?.toLowerCase() ?? '';
+      const aSegs = a.fullPath.split('/');
+      const bSegs = b.fullPath.split('/');
+      const aLast = (aSegs.at(-1) ?? '').toLowerCase();
+      const bLast = (bSegs.at(-1) ?? '').toLowerCase();
 
       const aExact = aLast === keyword_lower;
       const bExact = bLast === keyword_lower;
@@ -341,10 +345,14 @@ export class CoupangClient {
       const bContains = bLast.includes(keyword_lower);
       if (aContains !== bContains) return aContains ? -1 : 1;
 
-      return 0;
+      // 같은 rank: 경로 깊이 얕은 것 우선
+      if (aSegs.length !== bSegs.length) return aSegs.length - bSegs.length;
+
+      // 같은 깊이: 마지막 노드 이름이 짧은 것 우선 (단순·범용 카테고리)
+      return aLast.length - bLast.length;
     });
 
-    return matched.slice(0, 8).map(({ displayCategoryCode, displayCategoryName, fullPath }) => ({
+    return matched.slice(0, 12).map(({ displayCategoryCode, displayCategoryName, fullPath }) => ({
       displayCategoryCode,
       displayCategoryName,
       fullPath,
