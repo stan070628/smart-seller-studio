@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { href: '/listing', label: '상품등록' },
   { href: '/orders', label: '주문/매출', active: true },
   { href: '/plan', label: '플랜' },
+  { href: '/ad-strategy', label: '광고전략' },
 ];
 
 const SUB_TABS: { id: SubTab; label: string; icon: React.ReactNode }[] = [
@@ -40,7 +41,7 @@ export default function OrdersClient() {
           </Link>
           <nav style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             {NAV_ITEMS.map((item) => (
-              <Link key={item.href} href={item.href} style={{ padding: '5px 12px', borderRadius: '6px', fontSize: '13px', fontWeight: item.active ? 600 : 500, color: item.active ? '#be0014' : '#71717a', textDecoration: 'none', backgroundColor: item.active ? 'rgba(190,0,20,0.07)' : 'transparent', border: item.active ? '1px solid rgba(190,0,20,0.15)' : '1px solid transparent' }}>
+              <Link key={item.href} href={item.href} style={{ padding: '5px 10px', borderRadius: '6px', fontSize: '13px', fontWeight: item.active ? 600 : 500, color: item.active ? '#be0014' : '#71717a', textDecoration: 'none', backgroundColor: item.active ? 'rgba(190,0,20,0.07)' : 'transparent', border: item.active ? '1px solid rgba(190,0,20,0.15)' : '1px solid transparent', whiteSpace: 'nowrap' }}>
                 {item.label}
               </Link>
             ))}

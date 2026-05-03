@@ -88,12 +88,13 @@ const EditorClient: React.FC = () => {
               { href: '/listing', label: '상품등록' },
               { href: '/orders', label: '주문/매출' },
               { href: '/plan', label: '플랜' },
+              { href: '/ad-strategy', label: '광고전략' },
             ].map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
                 style={{
-                  padding: '5px 12px',
+                  padding: '5px 10px',
                   borderRadius: '6px',
                   fontSize: '13px',
                   fontWeight: item.active ? '600' : '500',
@@ -101,6 +102,7 @@ const EditorClient: React.FC = () => {
                   textDecoration: 'none',
                   backgroundColor: item.active ? 'rgba(190, 0, 20, 0.07)' : 'transparent',
                   border: item.active ? '1px solid rgba(190, 0, 20, 0.15)' : '1px solid transparent',
+                  whiteSpace: 'nowrap',
                 }}
               >
                 {item.label}

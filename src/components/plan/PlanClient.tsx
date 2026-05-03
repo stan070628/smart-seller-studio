@@ -63,6 +63,7 @@ const NAV_ITEMS = [
   { href: '/listing', label: '상품등록' },
   { href: '/orders', label: '주문/매출' },
   { href: '/plan', label: '플랜' },
+  { href: '/ad-strategy', label: '광고전략' },
 ];
 
 // ─── 위너 선별 타입 ──────────────────────────────────────────────────────────
@@ -1739,7 +1740,7 @@ export default function PlanClient() {
                 key={item.href}
                 href={item.href}
                 style={{
-                  padding: '6px 14px',
+                  padding: '5px 10px',
                   fontSize: 13,
                   fontWeight: isActive ? 700 : 400,
                   color: isActive ? C.accent : C.textSub,
@@ -1747,6 +1748,7 @@ export default function PlanClient() {
                   textDecoration: 'none',
                   background: isActive ? C.accentBg : 'transparent',
                   transition: 'all 0.15s',
+                  whiteSpace: 'nowrap',
                 }}
               >
                 {item.label}
