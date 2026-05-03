@@ -12,17 +12,146 @@ const WING_SESSION_FILE = path.resolve(
   '.gstack/browse-states/wing-session.json',
 );
 
+interface ProductAdStat {
+  name: string;
+  adSpend: number;   // 원
+  adRoas: number;    // %
+  adOrders: number;
+}
+
+async function scrapeAdProductReport(): Promise<ProductAdStat[]> {
+  const cookie = process.env.COUPANG_ADS_COOKIE;
+  if (!cookie) {
+    console.warn('[scraper] COUPANG_ADS_COOKIE 미설정 — 상품별 광고 데이터 없이 진행');
+    return [];
+  }
+
+  const browser = await chromium.launch({
+    headless: true,
+    args: ['--no-sandbox'],
+  });
+
+  try {
+    const context = await browser.newContext();
+
+    const cookiePairs = cookie
+      .split(';')
+      .map((c) => {
+        const eqIdx = c.indexOf('=');
+        if (eqIdx < 0) return null;
+        const name = c.slice(0, eqIdx).trim();
+        const value = c.slice(eqIdx + 1).trim();
+        return { name, value, domain: '.advertising.coupang.com', path: '/' };
+      })
+      .filter((c): c is NonNullable<typeof c> => c !== null && c.name.length > 0);
+
+    await context.addCookies(cookiePairs);
+
+    const page = await context.newPage();
+
+    // 30일 상품별 보고서 페이지
+    await page.goto(
+      'https://advertising.coupang.com/marketing/report/product?period=30d',
+      { waitUntil: 'domcontentloaded', timeout: 30_000 },
+    );
+
+    if (page.url().includes('login') || page.url().includes('sign-in')) {
+      console.warn('[scraper] 광고센터 세션 만료 — 상품별 광고 데이터 없이 진행');
+      return [];
+    }
+
+    // 테이블 로드 대기 (최대 15초, 없으면 빈 배열)
+    await page
+      .waitForSelector('table tbody tr', { timeout: 15_000 })
+      .catch(() => null);
+    await page.waitForTimeout(2_000);
+
+    const stats = await page.evaluate((): ProductAdStat[] => {
+      interface ProductAdStat {
+        name: string;
+        adSpend: number;
+        adRoas: number;
+        adOrders: number;
+      }
+
+      const rows = Array.from(document.querySelectorAll('table tbody tr'));
+      return rows
+        .map((row) => {
+          const cells = Array.from(row.querySelectorAll('td'));
+          if (cells.length < 3) return null;
+
+          // 상품명: 첫 번째 셀 (또는 a 태그 텍스트)
+          const nameEl = row.querySelector('a') ?? cells[0];
+          const name = nameEl?.textContent?.trim() ?? '';
+          if (!name) return null;
+
+          const allText = row.textContent ?? '';
+
+          // 광고비: "N원" 패턴
+          const spendMatch = allText.match(/([0-9,]+)\s*원/);
+          const adSpend = spendMatch
+            ? parseInt(spendMatch[1].replace(/,/g, ''), 10)
+            : 0;
+
+          // ROAS: "N%" 패턴
+          const roasMatch = allText.match(/([0-9]+(?:\.[0-9]+)?)\s*%/);
+          const adRoas = roasMatch ? parseFloat(roasMatch[1]) : 0;
+
+          // 전환 주문수
+          const orderMatch = allText.match(/전환[^0-9]*([0-9]+)/);
+          const adOrders = orderMatch ? parseInt(orderMatch[1], 10) : 0;
+
+          return { name, adSpend, adRoas, adOrders } as ProductAdStat;
+        })
+        .filter((s): s is ProductAdStat => s !== null && s.name.length > 0);
+    });
+
+    await page.close();
+    return stats;
+  } catch (err) {
+    console.warn('[scraper] 상품별 광고 보고서 스크래핑 실패 (무시):', err);
+    return [];
+  } finally {
+    await browser.close();
+  }
+}
+
+/** 두 문자열이 앞 10자 기준으로 포함 관계면 true */
+function levenshteinSimilar(a: string, b: string): boolean {
+  const short = a.length < b.length ? a : b;
+  const long = a.length < b.length ? b : a;
+  const prefix = short.slice(0, 10);
+  return long.includes(prefix);
+}
+
 /**
- * Wing 벤더 인벤토리 + 광고센터 캠페인 데이터를 수집한다.
+ * Wing 벤더 인벤토리 + 광고센터 캠페인 + 상품별 광고 보고서를 수집한다.
  *
  * Wing 세션: `.gstack/browse-states/wing-session.json` (browse 스킬 `$B state save wing-session`으로 갱신)
  * 광고센터: COUPANG_ADS_COOKIE env var
  */
 export async function scrapeAdData(): Promise<CollectedData> {
-  const [products, campaigns] = await Promise.all([
+  const [products, campaigns, adStats] = await Promise.all([
     scrapeWingProducts(),
     scrapeAdsCampaigns(),
+    scrapeAdProductReport(),
   ]);
+
+  // 상품명 부분 매칭으로 광고 성과 주입
+  for (const product of products) {
+    const stat = adStats.find(
+      (s) =>
+        product.name.includes(s.name) ||
+        s.name.includes(product.name) ||
+        levenshteinSimilar(product.name, s.name),
+    );
+    if (stat) {
+      product.adSpend = stat.adSpend;
+      product.adRoas = stat.adRoas;
+      product.adOrders = stat.adOrders;
+    }
+  }
+
   return { products, campaigns, collectedAt: new Date().toISOString() };
 }
 
