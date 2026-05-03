@@ -2,11 +2,9 @@ import { NextRequest } from 'next/server';
 import { requireAuth } from '@/lib/supabase/auth';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 import { getCoupangClient } from '@/lib/listing/coupang-client';
-import { scrapeAdData } from '@/lib/ad-strategy/scraper';
 import type { CollectedData } from '@/lib/ad-strategy/types';
 
 const CACHE_HOURS = 24;
-const FIXED_USER_ID = 'cheong-yeon';
 
 export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -17,59 +15,33 @@ export async function POST(request: NextRequest) {
 
   const supabase = getSupabaseServerClient();
 
-  // 24h 캐시 확인 (force=false 이면 재사용)
-  if (!force) {
-    const cutoff = new Date(Date.now() - CACHE_HOURS * 60 * 60 * 1000).toISOString();
-    const { data: cached } = await supabase
-      .from('ad_strategy_cache')
-      .select('collected_data, collected_at')
-      .gte('collected_at', cutoff)
-      .order('collected_at', { ascending: false })
-      .limit(1)
-      .single();
+  // 캐시 조회 (force=true이면 가장 최근 캐시도 재사용)
+  const cutoff = force
+    ? new Date(0).toISOString()
+    : new Date(Date.now() - CACHE_HOURS * 60 * 60 * 1000).toISOString();
 
-    if (cached?.collected_data) {
-      return Response.json({
-        success: true,
-        data: cached.collected_data as CollectedData,
-        fromCache: true,
-      });
-    }
-  }
+  const { data: cached } = await supabase
+    .from('ad_strategy_cache')
+    .select('collected_data, collected_at')
+    .gte('collected_at', cutoff)
+    .order('collected_at', { ascending: false })
+    .limit(1)
+    .single();
 
-  // Vercel 배포 환경에서는 Playwright 스크래퍼를 실행할 수 없음
-  if (process.env.VERCEL === '1') {
-    return Response.json(
-      {
-        success: false,
-        error:
-          '스크래핑 기능은 로컬 개발 환경에서만 실행할 수 있습니다.\n' +
-          '로컬에서 "npm run dev"를 실행하고 분석을 진행하면 결과가 Supabase에 캐시되어 ' +
-          '이 화면에서도 최대 24시간 동안 조회할 수 있습니다.',
-      },
-      { status: 400 },
-    );
-  }
+  if (cached?.collected_data) {
+    const data = cached.collected_data as CollectedData;
 
-  try {
-    // 1. Playwright 스크래핑
-    const scraped = await scrapeAdData();
-
-    // 2. CoupangClient 주문 API로 30일 판매 수량 보완
-    const client = getCoupangClient();
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-      .toISOString()
-      .slice(0, 10);
-    const today = new Date().toISOString().slice(0, 10);
-
+    // 주문 API로 monthlySales 보완 (캐시 데이터도 최신 판매량으로 갱신)
     try {
+      const client = getCoupangClient();
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const today = new Date().toISOString().slice(0, 10);
       const ordersRes = await client.getOrders({
         createdAtFrom: thirtyDaysAgo,
         createdAtTo: today,
         status: 'ACCEPT',
         maxPerPage: 100,
       });
-
       const salesMap = new Map<string, number>();
       for (const order of ordersRes.items ?? []) {
         for (const item of order.orderItems ?? []) {
@@ -77,25 +49,24 @@ export async function POST(request: NextRequest) {
           salesMap.set(name, (salesMap.get(name) ?? 0) + (item.shippingCount ?? 1));
         }
       }
-
-      for (const product of scraped.products) {
-        product.monthlySales = salesMap.get(product.name) ?? 0;
+      for (const product of data.products) {
+        product.monthlySales = salesMap.get(product.name) ?? product.monthlySales;
       }
-    } catch (orderErr) {
-      console.warn('[ad-strategy/collect] 주문 API 실패 (무시):', orderErr);
+    } catch {
+      // 주문 API 실패는 무시 — 캐시의 기존 값 그대로 사용
     }
 
-    // 3. Supabase 캐시 저장
-    await supabase.from('ad_strategy_cache').insert({
-      user_id: FIXED_USER_ID,
-      collected_data: scraped,
-      collected_at: scraped.collectedAt,
-    });
-
-    return Response.json({ success: true, data: scraped, fromCache: false });
-  } catch (err) {
-    console.error('[ad-strategy/collect]', err);
-    const message = err instanceof Error ? err.message : '수집 실패';
-    return Response.json({ success: false, error: message }, { status: 500 });
+    return Response.json({ success: true, data, fromCache: true });
   }
+
+  // 캐시 없음 → 로컬 스크래퍼 실행 필요
+  return Response.json(
+    {
+      success: false,
+      error:
+        '수집된 데이터가 없습니다. 로컬에서 스크래퍼를 실행해 주세요:\n' +
+        'cd scripts/ad-scraper && npm run scrape',
+    },
+    { status: 404 },
+  );
 }

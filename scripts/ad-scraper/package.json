@@ -1,0 +1,14 @@
+{
+  "name": "ad-scraper",
+  "version": "1.0.0",
+  "description": "쿠팡 Wing + 광고센터 로컬 스크래퍼 → Supabase 저장",
+  "type": "module",
+  "scripts": {
+    "scrape": "node scrape.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.100.1",
+    "dotenv": "^16.4.5",
+    "playwright": "^1.48.0"
+  }
+}
