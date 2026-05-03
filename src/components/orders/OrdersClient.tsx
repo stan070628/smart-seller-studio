@@ -16,7 +16,6 @@ const NAV_ITEMS = [
   { href: '/listing', label: '상품등록' },
   { href: '/orders', label: '주문/매출', active: true },
   { href: '/plan', label: '플랜' },
-  { href: '/ad-strategy', label: '광고전략' },
 ];
 
 const SUB_TABS: { id: SubTab; label: string; icon: React.ReactNode }[] = [

@@ -88,7 +88,6 @@ const EditorClient: React.FC = () => {
               { href: '/listing', label: '상품등록' },
               { href: '/orders', label: '주문/매출' },
               { href: '/plan', label: '플랜' },
-              { href: '/ad-strategy', label: '광고전략' },
             ].map((item) => (
               <Link
                 key={item.href}
