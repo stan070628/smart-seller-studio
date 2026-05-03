@@ -226,7 +226,7 @@ export function calcShopee(p: {
   affiliateRate: number;
   shippingFeeKRW: number;
   adCostKRW: number;
-  conversionRateKRW?: number;
+  conversionRate?: number;
 }): CalcResult & { currency: string } {
   const countryData = SHOPEE_DATA[p.country];
   const commissionRate = countryData.commission[p.category] ?? 0.04;
@@ -255,7 +255,7 @@ export function calcShopee(p: {
   ];
 
   const breakEvenCost = sellingPriceKRW - totalFeesKRW - p.shippingFeeKRW - p.adCostKRW;
-  const adMetrics = calcAdMetrics(sellingPriceKRW, totalFeesKRW + p.shippingFeeKRW, p.costPriceKRW, p.conversionRateKRW ?? 0);
+  const adMetrics = calcAdMetrics(sellingPriceKRW, totalFeesKRW + p.shippingFeeKRW, p.costPriceKRW, p.conversionRate ?? 0);
 
   return {
     items,
