@@ -56,28 +56,38 @@ function ProductPickerModal({ onAdd, onClose }: ProductPickerModalProps) {
   // 상품 클릭 — 상세 조회 후 BundleProduct 생성
   const handleSelect = async (pr: (typeof coupangProducts)[number]) => {
     setFetchingId(pr.sellerProductId);
-    await fetchCoupangProductDetail(pr.sellerProductId);
-    // editingProduct는 fetchCoupangProductDetail 호출 후 스토어에 반영됨
-    // get() 패턴 대신 스토어 현재값을 직접 읽는다
-    const detail = useListingStore.getState().editingProduct;
-    const salePrice: number = detail?.items?.[0]?.salePrice ?? 0;
+    try {
+      await fetchCoupangProductDetail(pr.sellerProductId);
+      // editingProduct는 fetchCoupangProductDetail 호출 후 스토어에 반영됨
+      // get() 패턴 대신 스토어 현재값을 직접 읽는다
+      const detail = useListingStore.getState().editingProduct;
+      const salePrice: number = detail?.items?.[0]?.salePrice ?? 0;
 
-    const newProduct: BundleProduct = {
-      id: crypto.randomUUID(),
-      sellerProductId: pr.sellerProductId,
-      name: pr.sellerProductName,
-      categoryCode: String(pr.displayCategoryCode),
-      sellingPrice: salePrice,
-      costPrice: 0,
-      monthlySales: 0,
-      allocatedAdCost: 0,
-      netProfit: 0,
-      marginRate: 0,
-    };
+      // 판매가가 유효하지 않으면 상품 추가를 중단하고 사용자에게 알린다
+      if (!salePrice || salePrice <= 0) {
+        alert('판매가를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.');
+        return;
+      }
 
-    setFetchingId(null);
-    onAdd(newProduct);
-    onClose();
+      onAdd({
+        id: crypto.randomUUID(),
+        sellerProductId: pr.sellerProductId,
+        name: pr.sellerProductName,
+        categoryCode: String(pr.displayCategoryCode),
+        sellingPrice: salePrice,
+        costPrice: 0,
+        monthlySales: 0,
+        allocatedAdCost: 0,
+        netProfit: 0,
+        marginRate: 0,
+      });
+      onClose();
+    } catch (err) {
+      // 네트워크 오류 등 예외 발생 시 사용자에게 알린다
+      alert('상품 정보를 불러오는 중 오류가 발생했습니다.');
+    } finally {
+      setFetchingId(null);
+    }
   };
 
   return (
