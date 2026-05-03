@@ -104,7 +104,10 @@ export function RadioGroup<T extends string>({
 }
 
 // ─── 결과 패널 ────────────────────────────────────────────────
-export function ResultPanel({ result }: { result: CalcResult | null }) {
+export function ResultPanel({ result, isAdRunning = false }: {
+  result: CalcResult | null;
+  isAdRunning?: boolean;
+}) {
   if (!result) {
     return (
       <div className="flex items-center justify-center rounded-2xl border border-dashed border-[#e5e5e5] bg-white p-8">
@@ -191,7 +194,7 @@ export function ResultPanel({ result }: { result: CalcResult | null }) {
       </div>
 
       {/* 광고 시뮬레이션 */}
-      {result.breakEvenRoas != null && (
+      {isAdRunning && result.breakEvenRoas != null && (
         <div className="border-t border-[#f4f4f5] p-4">
           <h3 className="mb-3 text-xs font-semibold text-[#71717a]">광고 시뮬레이션</h3>
           <div className="flex flex-col gap-2.5">
@@ -216,6 +219,16 @@ export function ResultPanel({ result }: { result: CalcResult | null }) {
                 </span>
                 <span className="text-sm font-bold text-[#2563eb]">
                   {result.targetRoas}%
+                </span>
+              </div>
+            )}
+            {result.maxCpc != null && (
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-[#71717a]" title="이 금액 이하로 입찰해야 광고 흑자">
+                  최대 CPC
+                </span>
+                <span className="text-sm font-bold text-[#7c3aed]">
+                  {result.maxCpc.toLocaleString()}원
                 </span>
               </div>
             )}
