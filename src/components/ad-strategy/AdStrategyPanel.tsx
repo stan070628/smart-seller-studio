@@ -73,10 +73,12 @@ export default function AdStrategyPanel() {
   }, []);
 
   const isLoading = status === 'collecting' || status === 'analyzing';
+  const isLocalOnlyError = error?.includes('로컬 개발 환경');
   const isSessionError =
-    error?.includes('쿠키') ||
+    !isLocalOnlyError &&
+    (error?.includes('쿠키') ||
     error?.includes('세션') ||
-    error?.includes('만료');
+    error?.includes('만료'));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: '#f5f5f7', fontFamily: "'Noto Sans KR', sans-serif" }}>
@@ -175,7 +177,18 @@ export default function AdStrategyPanel() {
             fontSize: '13px',
           }}
         >
-          {isSessionError ? (
+          {isLocalOnlyError ? (
+            <>
+              <strong>로컬 전용 기능:</strong>
+              <br />
+              <small style={{ display: 'block', marginTop: '6px', color: '#991b1b', lineHeight: '1.6' }}>
+                스크래핑은 로컬 개발 환경에서만 실행됩니다.
+                <br />
+                터미널에서 <code>npm run dev</code>를 실행하고 <strong>localhost:3000</strong>에서 분석을 시작하면
+                결과가 캐시에 저장되어 이 화면에서도 24시간 동안 조회할 수 있습니다.
+              </small>
+            </>
+          ) : isSessionError ? (
             <>
               <strong>세션 오류:</strong> {error}
               <br />

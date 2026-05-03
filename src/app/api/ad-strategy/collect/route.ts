@@ -37,6 +37,20 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Vercel 배포 환경에서는 Playwright 스크래퍼를 실행할 수 없음
+  if (process.env.VERCEL === '1') {
+    return Response.json(
+      {
+        success: false,
+        error:
+          '스크래핑 기능은 로컬 개발 환경에서만 실행할 수 있습니다.\n' +
+          '로컬에서 "npm run dev"를 실행하고 분석을 진행하면 결과가 Supabase에 캐시되어 ' +
+          '이 화면에서도 최대 24시간 동안 조회할 수 있습니다.',
+      },
+      { status: 400 },
+    );
+  }
+
   try {
     // 1. Playwright 스크래핑
     const scraped = await scrapeAdData();
