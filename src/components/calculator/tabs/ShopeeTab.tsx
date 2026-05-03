@@ -33,6 +33,8 @@ export default function ShopeeTab({ initialCostPrice = 0 }: ShopeeTabProps) {
   const [affiliateRate, setAffiliateRate] = useState(0);
   const [shippingFeeKRW, setShippingFeeKRW] = useState(0);
   const [adCostKRW, setAdCostKRW] = useState(0);
+  const [isAdRunning, setIsAdRunning] = useState(false);
+  const [conversionRate, setConversionRate] = useState(3);
 
   const countryData = SHOPEE_DATA[country];
   const categoryOptions = Object.keys(countryData.commission);
@@ -55,9 +57,10 @@ export default function ShopeeTab({ initialCostPrice = 0 }: ShopeeTabProps) {
       program,
       affiliateRate,
       shippingFeeKRW,
-      adCostKRW,
+      adCostKRW: isAdRunning ? adCostKRW : 0,
+      conversionRate: isAdRunning ? conversionRate / 100 : 0,
     });
-  }, [costPriceKRW, sellingPriceLocal, exchangeRate, country, category, program, affiliateRate, shippingFeeKRW, adCostKRW]);
+  }, [costPriceKRW, sellingPriceLocal, exchangeRate, country, category, program, affiliateRate, shippingFeeKRW, adCostKRW, isAdRunning, conversionRate]);
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -80,7 +83,32 @@ export default function ShopeeTab({ initialCostPrice = 0 }: ShopeeTabProps) {
         <SelectInput label="서비스 프로그램" value={program} onChange={setProgram} options={programs} />
         <NumberInput label="Affiliate 커미션율" value={affiliateRate} onChange={setAffiliateRate} suffix="%" />
         <NumberInput label="배송비 (KRW)" value={shippingFeeKRW} onChange={setShippingFeeKRW} />
-        <NumberInput label="광고비 (KRW)" value={adCostKRW} onChange={setAdCostKRW} />
+
+        {/* 광고 운영 여부 토글 */}
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium text-[#52525b]">광고 운영 중</span>
+          <button
+            type="button"
+            onClick={() => setIsAdRunning(!isAdRunning)}
+            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+              isAdRunning ? 'bg-[#18181b]' : 'bg-[#e5e5e5]'
+            }`}
+          >
+            <span
+              className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                isAdRunning ? 'translate-x-[18px]' : 'translate-x-0.5'
+              }`}
+            />
+          </button>
+        </div>
+
+        {/* 광고 운영 중일 때만 표시 */}
+        {isAdRunning && (
+          <>
+            <NumberInput label="광고비 (KRW)" value={adCostKRW} onChange={setAdCostKRW} />
+            <NumberInput label="전환율" value={conversionRate} onChange={setConversionRate} suffix="%" />
+          </>
+        )}
       </Card>
 
       <div className="flex flex-col gap-4">
@@ -94,7 +122,7 @@ export default function ShopeeTab({ initialCostPrice = 0 }: ShopeeTabProps) {
             </p>
           </div>
         )}
-        <ResultPanel result={result} />
+        <ResultPanel result={result} isAdRunning={isAdRunning} />
       </div>
     </div>
   );

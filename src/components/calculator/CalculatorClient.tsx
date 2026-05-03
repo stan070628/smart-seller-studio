@@ -2,13 +2,14 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { Calculator, BarChart3 } from 'lucide-react';
+import { Calculator, BarChart3, Package } from 'lucide-react';
 import CoupangTab from './tabs/CoupangTab';
 import NaverTab from './tabs/NaverTab';
 import GmarketTab from './tabs/GmarketTab';
 import ElevenstTab from './tabs/ElevenstTab';
 import ShopeeTab from './tabs/ShopeeTab';
 import CompareMode from './CompareMode';
+import BundleAdMode from './BundleAdMode';
 
 type Tab = 'coupang' | 'naver' | 'gmarket' | 'elevenst' | 'shopee';
 
@@ -23,6 +24,7 @@ const TABS: { id: Tab; label: string; color: string }[] = [
 export default function CalculatorClient() {
   const [activeTab, setActiveTab] = useState<Tab>('coupang');
   const [showCompare, setShowCompare] = useState(false);
+  const [showBundleAd, setShowBundleAd] = useState(false);
 
   return (
     <div className="flex min-h-screen flex-col bg-[#f5f5f7]">
@@ -72,21 +74,44 @@ export default function CalculatorClient() {
               <p className="text-xs text-[#71717a]">플랫폼별 수수료 자동 계산</p>
             </div>
           </div>
-          <button
-            onClick={() => setShowCompare(!showCompare)}
-            className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors md:text-sm ${
-              showCompare
-                ? 'border-[#be0014]/30 bg-[#be0014]/5 text-[#be0014]'
-                : 'border-[#e5e5e5] bg-white text-[#52525b] hover:border-[#d4d4d8]'
-            }`}
-          >
-            <BarChart3 size={15} />
-            {showCompare ? '개별 계산 모드' : '플랫폼 비교 모드'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setShowCompare(!showCompare);
+                // 비교 모드 활성화 시 묶음 광고 모드 해제 (상호 배타)
+                if (!showCompare) setShowBundleAd(false);
+              }}
+              className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors md:text-sm ${
+                showCompare
+                  ? 'border-[#be0014]/30 bg-[#be0014]/5 text-[#be0014]'
+                  : 'border-[#e5e5e5] bg-white text-[#52525b] hover:border-[#d4d4d8]'
+              }`}
+            >
+              <BarChart3 size={15} />
+              {showCompare ? '개별 계산 모드' : '플랫폼 비교 모드'}
+            </button>
+            <button
+              onClick={() => {
+                setShowBundleAd(!showBundleAd);
+                // 묶음 광고 모드 활성화 시 비교 모드 해제 (상호 배타)
+                if (!showBundleAd) setShowCompare(false);
+              }}
+              className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors md:text-sm ${
+                showBundleAd
+                  ? 'border-[#be0014]/30 bg-[#be0014]/5 text-[#be0014]'
+                  : 'border-[#e5e5e5] bg-white text-[#52525b] hover:border-[#d4d4d8]'
+              }`}
+            >
+              <Package size={15} />
+              묶음 광고
+            </button>
+          </div>
         </div>
 
         {showCompare ? (
           <CompareMode />
+        ) : showBundleAd ? (
+          <BundleAdMode />
         ) : (
           <>
             {/* 플랫폼 탭 */}

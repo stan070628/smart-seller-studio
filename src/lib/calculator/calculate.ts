@@ -33,16 +33,27 @@ export interface CalcResult {
   breakEvenRoas: number | null;
   /** 권장 목표 ROAS (%) — 손익분기 + 200% */
   targetRoas: number | null;
+  /** 최대 허용 CPC (원) — 전환율 기반 */
+  maxCpc: number | null;
 }
 
 /** 광고 전 마진과 ROAS를 계산하는 공통 헬퍼 */
-function calcAdMetrics(sellingPrice: number, totalFeesExcludingAd: number, costPrice: number) {
+function calcAdMetrics(
+  sellingPrice: number,
+  totalFeesExcludingAd: number,
+  costPrice: number,
+  conversionRate: number = 0,
+) {
   const profitBeforeAd = sellingPrice - costPrice - totalFeesExcludingAd;
+  // ×1.1 보정: 쿠팡 광고비는 부가세 제외로 표시되므로 실제 최소 ROAS는 더 높아야 함
   const breakEvenRoas = profitBeforeAd > 0
-    ? Math.round((sellingPrice / profitBeforeAd) * 100)
+    ? Math.round((sellingPrice / profitBeforeAd) * 1.1 * 100)
     : null;
   const targetRoas = breakEvenRoas != null ? breakEvenRoas + 200 : null;
-  return { profitBeforeAd, breakEvenRoas, targetRoas };
+  const maxCpc = (conversionRate > 0 && profitBeforeAd > 0)
+    ? Math.round(profitBeforeAd * conversionRate)
+    : null;
+  return { profitBeforeAd, breakEvenRoas, targetRoas, maxCpc };
 }
 
 // ─── 쿠팡 윙 ──────────────────────────────────────────────────
@@ -53,6 +64,7 @@ export function calcCoupangWing(p: {
   feeRate: number;
   shippingFee: number;
   adCost: number;
+  conversionRate?: number;
 }): CalcResult {
   const rate = p.feeRate;
   const commission = Math.round(p.sellingPrice * rate);
@@ -68,7 +80,7 @@ export function calcCoupangWing(p: {
   const netProfit = p.sellingPrice - p.costPrice - totalFees;
   const marginRate = p.sellingPrice > 0 ? (netProfit / p.sellingPrice) * 100 : 0;
   const breakEvenCost = p.sellingPrice - totalFees;
-  const adMetrics = calcAdMetrics(p.sellingPrice, commission + shippingCommission, p.costPrice);
+  const adMetrics = calcAdMetrics(p.sellingPrice, commission + shippingCommission, p.costPrice, p.conversionRate ?? 0);
 
   return { items, totalFees, netProfit, marginRate, breakEvenCost, ...adMetrics };
 }
@@ -81,6 +93,7 @@ export function calcCoupangRocket(p: {
   size: RocketSize;
   monthlyQty: number;
   adCost: number;
+  conversionRate?: number;
 }): CalcResult {
   const rate = p.feeRate;
   const commission = Math.round(p.sellingPrice * rate);
@@ -102,7 +115,7 @@ export function calcCoupangRocket(p: {
   const netProfit = p.sellingPrice - p.costPrice - totalFees;
   const marginRate = p.sellingPrice > 0 ? (netProfit / p.sellingPrice) * 100 : 0;
   const breakEvenCost = p.sellingPrice - totalFees;
-  const adMetrics = calcAdMetrics(p.sellingPrice, commission + logistics + storageFee, p.costPrice);
+  const adMetrics = calcAdMetrics(p.sellingPrice, commission + logistics + storageFee, p.costPrice, p.conversionRate ?? 0);
 
   return { items, totalFees, netProfit, marginRate, breakEvenCost, ...adMetrics };
 }
@@ -115,6 +128,7 @@ export function calcNaver(p: {
   grade: NaverGrade;
   inflow: NaverInflow;
   adCost: number;
+  conversionRate?: number;
 }): CalcResult {
   const orderMgmtRate = NAVER_ORDER_MGMT_FEE[p.grade] ?? 0.0363;
   const salesRate = NAVER_SALES_FEE[p.inflow] ?? 0.0273;
@@ -132,7 +146,7 @@ export function calcNaver(p: {
   const netProfit = p.sellingPrice - p.costPrice - totalFees;
   const marginRate = p.sellingPrice > 0 ? (netProfit / p.sellingPrice) * 100 : 0;
   const breakEvenCost = p.sellingPrice - totalFees;
-  const adMetrics = calcAdMetrics(p.sellingPrice, orderMgmtFee + salesFee, p.costPrice);
+  const adMetrics = calcAdMetrics(p.sellingPrice, orderMgmtFee + salesFee, p.costPrice, p.conversionRate ?? 0);
 
   return { items, totalFees, netProfit, marginRate, breakEvenCost, ...adMetrics };
 }
@@ -145,6 +159,7 @@ export function calcGmarket(p: {
   shippingFee: number;
   couponDiscount: number;
   adCost: number;
+  conversionRate?: number;
 }): CalcResult {
   const rate = GMARKET_CATEGORIES[p.category] ?? 0.11;
   const commission = Math.round(p.sellingPrice * rate);
@@ -162,7 +177,7 @@ export function calcGmarket(p: {
   const netProfit = p.sellingPrice - p.costPrice - totalFees;
   const marginRate = p.sellingPrice > 0 ? (netProfit / p.sellingPrice) * 100 : 0;
   const breakEvenCost = p.sellingPrice - totalFees;
-  const adMetrics = calcAdMetrics(p.sellingPrice, commission + shippingCommission + couponBurden, p.costPrice);
+  const adMetrics = calcAdMetrics(p.sellingPrice, commission + shippingCommission + couponBurden, p.costPrice, p.conversionRate ?? 0);
 
   return { items, totalFees, netProfit, marginRate, breakEvenCost, ...adMetrics };
 }
@@ -176,6 +191,7 @@ export function calcElevenst(p: {
   couponDiscount: number;
   isNewSeller: boolean;
   adCost: number;
+  conversionRate?: number;
 }): CalcResult {
   const baseRate = ELEVENST_CATEGORIES[p.category] ?? 0.13;
   const rate = p.isNewSeller ? Math.min(baseRate, ELEVENST.newSellerPromoRate) : baseRate;
@@ -194,7 +210,7 @@ export function calcElevenst(p: {
   const netProfit = p.sellingPrice - p.costPrice - totalFees;
   const marginRate = p.sellingPrice > 0 ? (netProfit / p.sellingPrice) * 100 : 0;
   const breakEvenCost = p.sellingPrice - totalFees;
-  const adMetrics = calcAdMetrics(p.sellingPrice, commission + shippingCommission + couponBurden, p.costPrice);
+  const adMetrics = calcAdMetrics(p.sellingPrice, commission + shippingCommission + couponBurden, p.costPrice, p.conversionRate ?? 0);
 
   return { items, totalFees, netProfit, marginRate, breakEvenCost, ...adMetrics };
 }
@@ -210,6 +226,7 @@ export function calcShopee(p: {
   affiliateRate: number;
   shippingFeeKRW: number;
   adCostKRW: number;
+  conversionRate?: number;
 }): CalcResult & { currency: string } {
   const countryData = SHOPEE_DATA[p.country];
   const commissionRate = countryData.commission[p.category] ?? 0.04;
@@ -238,7 +255,7 @@ export function calcShopee(p: {
   ];
 
   const breakEvenCost = sellingPriceKRW - totalFeesKRW - p.shippingFeeKRW - p.adCostKRW;
-  const adMetrics = calcAdMetrics(sellingPriceKRW, totalFeesKRW + p.shippingFeeKRW, p.costPriceKRW);
+  const adMetrics = calcAdMetrics(sellingPriceKRW, totalFeesKRW + p.shippingFeeKRW, p.costPriceKRW, p.conversionRate ?? 0);
 
   return {
     items,
