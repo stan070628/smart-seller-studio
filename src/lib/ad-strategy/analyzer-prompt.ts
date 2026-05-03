@@ -12,6 +12,7 @@ export const AD_STRATEGY_SYSTEM_PROMPT = `당신은 한국 쿠팡 셀러 광고 
 5. **계절 판단**: 입력 날짜 기준 시즌 자동 판단. 5~8월(여름) = 반팔티셔츠·선풍기·비치백 광고 집중.
 6. **위너 분리 우선**: 브랜드 병행수입 상품은 광고 전 카탈로그 분리 시도 먼저 권장.
 7. **이미지 위반 최우선**: IMAGE_FIX 항목은 urgentActions 배열 맨 앞에 위치.
+8. **adSpend/adRoas 반영**: 수집 데이터에 adSpend가 있으면 productAdRanking에 그대로 포함. 없으면 생략(null 아닌 omit).
 
 # 등급 기준
 - A: 아이템위너 있음 + 최근 30일 판매 1건 이상 → 즉시 광고
@@ -57,7 +58,9 @@ ${JSON.stringify(data.campaigns, null, 2)}
       "stock": 23,
       "currentPrice": 29900,
       "reason": "등급 이유 1문장",
-      "suggestedDailyBudget": 5000
+      "suggestedDailyBudget": 5000,
+      "adSpend": 45000,
+      "adRoas": 320
     }
   ],
   "sourcingAlerts": [
