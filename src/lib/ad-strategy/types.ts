@@ -24,6 +24,9 @@ export interface ProductAdGrade {
   currentPrice: number;
   reason: string;
   suggestedDailyBudget?: number;
+  // ── 순이익 관련 (스크래핑 + 사용자 입력으로 채워짐) ──
+  adSpend?: number;          // 월 광고비 (원)
+  adRoas?: number;           // 광고 ROAS (%)
 }
 
 export interface SourcingAlert {
@@ -57,6 +60,10 @@ export interface RawProduct {
   salePrice: number;
   monthlySales: number;
   imageViolation: boolean;
+  // ── 광고 성과 (광고센터 상품별 보고서에서 추가) ──
+  adSpend?: number;    // 30일 광고비 합계 (원)
+  adRoas?: number;     // 30일 ROAS (%)
+  adOrders?: number;   // 30일 광고 전환 주문수
 }
 
 export interface RawCampaign {
@@ -73,4 +80,11 @@ export interface CollectedData {
   products: RawProduct[];
   campaigns: RawCampaign[];
   collectedAt: string;
+}
+
+// ── 원가 스토어 (localStorage) ──
+export interface CostEntry {
+  productName: string;
+  costPrice: number;   // 원가 (VAT 포함, 원)
+  feeRate: number;     // 쿠팡 수수료율 (0~1, 기본 0.108)
 }
