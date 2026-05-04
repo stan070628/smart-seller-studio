@@ -40,19 +40,20 @@ export default function ImageDropzone({ onUploaded }: Props) {
     setUploading(true);
 
     try {
-      const urls: string[] = [];
-      for (const file of fileArr) {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('usageContext', 'listing_detail');
-        const res = await fetch('/api/listing/upload-image', {
-          method: 'POST',
-          body: formData,
-        });
-        const json = await res.json();
-        if (!json.success) throw new Error(json.error ?? '업로드 실패');
-        urls.push(json.data.url);
-      }
+      const urls = await Promise.all(
+        fileArr.map(async (file) => {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('usageContext', 'listing_detail');
+          const res = await fetch('/api/listing/upload-image', {
+            method: 'POST',
+            body: formData,
+          });
+          const json = await res.json();
+          if (!json.success) throw new Error(json.error ?? '업로드 실패');
+          return json.data.url as string;
+        })
+      );
       onUploaded(urls);
     } catch (err) {
       setError(err instanceof Error ? err.message : '업로드 중 오류가 발생했습니다.');
