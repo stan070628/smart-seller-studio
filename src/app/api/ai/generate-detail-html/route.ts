@@ -10,11 +10,12 @@ import { z } from "zod";
 import sharp from "sharp";
 import { getAnthropicClient } from "@/lib/ai/claude";
 import {
-  DETAIL_PAGE_SYSTEM_PROMPT,
-  STUDIO_DETAIL_PAGE_SYSTEM_PROMPT,
   buildDetailPageUserPrompt,
+  buildCategorySystemPrompt,
   parseDetailPageResponse,
+  checkProhibitedPhrases,
   type ProductImageAnalysis,
+  type DetailPageCategory,
 } from "@/lib/ai/prompts/detail-page";
 import { buildDetailPageHtml, buildDetailPageSnippet } from "@/lib/detail-page/html-builder";
 import { checkRateLimit, getRateLimitKey } from "@/lib/rate-limit";
@@ -79,6 +80,8 @@ const RequestSchema = z.object({
   existingHtml: z.string().optional(),
   /** 스튜디오 감성 프롬프트 사용 여부 (신규 생성 모드에서만 적용) */
   studioMode: z.boolean().optional(),
+  /** 카테고리별 최적화 프롬프트 선택 (기본값: 'basic') */
+  category: z.enum(['basic', 'fashion', 'living', 'food'] as const).optional(),
   /** 소스 URL에서 추출한 실측 스펙 (이미지 분석보다 우선 반영) */
   productSpecs: z.array(z.object({ label: z.string(), value: z.string() })).max(20).optional(),
 }).refine(
@@ -286,7 +289,7 @@ export async function POST(
     );
   }
 
-  const { images: rawImages, imageUrls, productName, existingHtml, studioMode, productSpecs } = parseResult.data;
+  const { images: rawImages, imageUrls, productName, existingHtml, studioMode, productSpecs, category } = parseResult.data;
 
   // imageUrls가 있으면 서버에서 fetch → base64 변환 후 rawImages와 합산
   let images: Array<{ imageBase64: string; mimeType: AllowedMimeType }>;
@@ -439,7 +442,10 @@ export async function POST(
         client.messages.create({
           model: "claude-sonnet-4-6",
           max_tokens: 2048,
-          system: studioMode ? STUDIO_DETAIL_PAGE_SYSTEM_PROMPT : DETAIL_PAGE_SYSTEM_PROMPT,
+          system: buildCategorySystemPrompt(
+        (category ?? 'basic') as DetailPageCategory,
+        studioMode ?? false,
+      ),
           messages: [{ role: "user", content: userMessage }],
         }),
       { label: "Claude generateDetailPageContent" }
@@ -496,6 +502,24 @@ export async function POST(
             : "AI 응답 파싱 중 오류가 발생했습니다.",
       },
       { status: 502 }
+    );
+  }
+
+  // 금지 문구 검사 — 위반 발견 시 서버 로그로 경고 (응답은 차단하지 않음)
+  const allText = [
+    content.headline,
+    content.subheadline,
+    ...content.sellingPoints.map((sp) => `${sp.title} ${sp.description}`),
+    ...content.features.map((f) => `${f.title} ${f.description}`),
+    ...content.usageSteps,
+    ...content.warnings,
+  ].join(' ');
+
+  const { violations } = checkProhibitedPhrases(allText);
+  if (violations.length > 0) {
+    console.warn(
+      `[generate-detail-html] 금지 문구 감지 (category=${category ?? 'basic'}):`,
+      violations,
     );
   }
 
