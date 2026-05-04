@@ -12,15 +12,19 @@ import { buildDetailPageHtml } from '@/lib/detail-page/html-builder';
 import { generateAndUploadThumbnail } from '@/lib/listing/import-1688-thumbnail';
 import type { GenerateResponse } from '@/lib/listing/import-1688-types';
 
+export const maxDuration = 120;
+
+const httpsUrl = z.string().url().refine((u) => u.startsWith('https://'), '이미지 URL은 https만 허용됩니다.');
+
 const classifiedImageSchema = z.object({
-  url: z.string().url(),
+  url: httpsUrl,
   type: z.enum(['main_product', 'lifestyle', 'infographic', 'size_chart']),
 });
 
 const requestSchema = z.object({
   images: z.array(classifiedImageSchema).min(1).max(20),
-  thumbnailUrl: z.string().url(),
-  sessionId: z.string().min(1).max(64),
+  thumbnailUrl: httpsUrl,
+  sessionId: z.string().uuid(),
 });
 
 export async function POST(request: NextRequest): Promise<Response> {
@@ -67,7 +71,9 @@ export async function POST(request: NextRequest): Promise<Response> {
     });
 
     const rawText =
-      response.content[0].type === 'text' ? response.content[0].text : '';
+      response.content.length > 0 && response.content[0].type === 'text'
+        ? response.content[0].text
+        : '';
     const content = parseGenerateContent(rawText);
     headlineForThumbnail = content.headline;
 

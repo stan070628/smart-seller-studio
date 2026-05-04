@@ -78,6 +78,7 @@ export default function ClassificationGrid({
               <img
                 src={img.url}
                 alt=""
+                loading="lazy"
                 style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', display: 'block' }}
               />
               <div style={{ padding: '8px 10px' }}>

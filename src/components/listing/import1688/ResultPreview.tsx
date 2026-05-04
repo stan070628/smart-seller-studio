@@ -22,10 +22,16 @@ export default function ResultPreview({ thumbnailUrl, detailPageHtml }: Props) {
   const [copied, setCopied] = React.useState(false);
 
   function handleDownloadThumbnail() {
-    const a = document.createElement('a');
-    a.href = thumbnailUrl;
-    a.download = 'thumbnail.jpg';
-    a.click();
+    try {
+      const url = new URL(thumbnailUrl);
+      if (url.protocol !== 'https:') return;
+      const a = document.createElement('a');
+      a.href = thumbnailUrl;
+      a.download = 'thumbnail.jpg';
+      a.click();
+    } catch {
+      // invalid URL
+    }
   }
 
   async function handleCopyHtml() {
@@ -74,6 +80,7 @@ export default function ResultPreview({ thumbnailUrl, detailPageHtml }: Props) {
           }}>
             <iframe
               srcDoc={detailPageHtml}
+              sandbox="allow-same-origin"
               style={{ width: '100%', height: '100%', border: 'none' }}
               title="상세페이지 미리보기"
             />

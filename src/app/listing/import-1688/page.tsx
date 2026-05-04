@@ -24,6 +24,7 @@ export default function Import1688Page() {
   const [thumbnailUrl, setThumbnailUrl] = useState('');
   const [result, setResult] = useState<{ thumbnailUrl: string; detailPageHtml: string } | null>(null);
   const [classifyError, setClassifyError] = useState<string | null>(null);
+  const [generateError, setGenerateError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
 
   async function handleUploaded(urls: string[]) {
@@ -62,7 +63,7 @@ export default function Import1688Page() {
       setResult(json);
       setStep('result');
     } catch (err) {
-      alert(err instanceof Error ? err.message : '생성 중 오류가 발생했습니다.');
+      setGenerateError(err instanceof Error ? err.message : '생성 중 오류가 발생했습니다.');
     } finally {
       setGenerating(false);
     }
@@ -100,13 +101,18 @@ export default function Import1688Page() {
       )}
 
       {step === 'classify' && (
-        <ClassificationGrid
+        <>
+          {generateError && (
+            <p style={{ textAlign: 'center', color: C.accent, fontSize: 13, margin: '12px 0 0' }}>{generateError}</p>
+          )}
+          <ClassificationGrid
           images={classifiedImages}
           thumbnailUrl={thumbnailUrl}
           onThumbnailChange={setThumbnailUrl}
           onGenerate={handleGenerate}
           generating={generating}
         />
+        </>
       )}
 
       {step === 'result' && result && (

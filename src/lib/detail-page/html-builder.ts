@@ -15,7 +15,7 @@ interface ImageInput {
 // ─────────────────────────────────────────
 
 function toDataUrl(img: ImageInput): string {
-  if (img.publicUrl) return img.publicUrl;
+  if (img.publicUrl) return escapeHtml(img.publicUrl);
   return `data:${img.mimeType};base64,${img.imageBase64}`;
 }
 
@@ -41,8 +41,8 @@ function buildHeroSection(content: DetailPageContent, heroImage: ImageInput): st
         style="width:100%;height:auto;display:block;"
       />
       <div style="padding:28px 24px 32px;background:#fff;">
-        <h1 style="margin:0 0 10px;font-size:24px;font-weight:800;color:#1a1a1a;line-height:1.35;letter-spacing:-0.5px;">${escapeHtml(content.headline)}</h1>
-        <p style="margin:0;font-size:15px;color:#555;line-height:1.7;">${escapeHtml(content.subheadline)}</p>
+        <h1 style="margin:0 0 10px;font-size:28px;font-weight:800;color:#1a1a1a;line-height:1.35;letter-spacing:-0.5px;">${escapeHtml(content.headline)}</h1>
+        <p style="margin:0;font-size:17px;color:#555;line-height:1.7;">${escapeHtml(content.subheadline)}</p>
       </div>
     </section>`;
 }
@@ -53,8 +53,8 @@ function buildSellingPointsSection(content: DetailPageContent): string {
       (sp) => `
         <div style="flex:1;min-width:0;background:#fff;border-radius:16px;padding:24px 16px;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,0.07);">
           <div style="font-size:32px;margin-bottom:12px;">${escapeHtml(sp.icon)}</div>
-          <div style="font-size:15px;font-weight:700;color:#1a1a1a;margin-bottom:8px;line-height:1.4;">${escapeHtml(sp.title)}</div>
-          <div style="font-size:13px;color:#555;line-height:1.6;">${escapeHtml(sp.description)}</div>
+          <div style="font-size:17px;font-weight:700;color:#1a1a1a;margin-bottom:8px;line-height:1.4;">${escapeHtml(sp.title)}</div>
+          <div style="font-size:15px;color:#555;line-height:1.6;">${escapeHtml(sp.description)}</div>
         </div>`
     )
     .join("");
@@ -94,15 +94,15 @@ function buildFeaturesSection(content: DetailPageContent): string {
     .map(
       (f) => `
         <li style="padding:20px 0;border-bottom:1px solid #f0f0f0;">
-          <div style="font-size:16px;font-weight:700;color:#1a1a1a;margin-bottom:6px;">${escapeHtml(f.title)}</div>
-          <div style="font-size:14px;color:#555;line-height:1.7;">${escapeHtml(f.description)}</div>
+          <div style="font-size:18px;font-weight:700;color:#1a1a1a;margin-bottom:6px;">${escapeHtml(f.title)}</div>
+          <div style="font-size:16px;color:#555;line-height:1.7;">${escapeHtml(f.description)}</div>
         </li>`
     )
     .join("");
 
   return `
     <section style="padding:48px 20px;">
-      <h2 style="margin:0 0 24px;font-size:22px;font-weight:800;color:#1a1a1a;letter-spacing:-0.3px;">상품 특징</h2>
+      <h2 style="margin:0 0 24px;font-size:24px;font-weight:800;color:#1a1a1a;letter-spacing:-0.3px;">상품 특징</h2>
       <ul style="list-style:none;margin:0;padding:0;border-top:2px solid #1a1a1a;">
         ${items}
       </ul>
@@ -116,15 +116,15 @@ function buildSpecsSection(specs: Array<{ label: string; value: string }>): stri
     .map(
       (s, idx) => `
         <tr style="background:${idx % 2 === 0 ? "#fff" : "#f7f8fa"};">
-          <td style="padding:14px 16px;font-size:14px;font-weight:600;color:#444;width:40%;border-bottom:1px solid #eee;">${escapeHtml(s.label)}</td>
-          <td style="padding:14px 16px;font-size:14px;color:#1a1a1a;border-bottom:1px solid #eee;">${escapeHtml(s.value)}</td>
+          <td style="padding:14px 16px;font-size:15px;font-weight:600;color:#444;width:40%;border-bottom:1px solid #eee;">${escapeHtml(s.label)}</td>
+          <td style="padding:14px 16px;font-size:15px;color:#1a1a1a;border-bottom:1px solid #eee;">${escapeHtml(s.value)}</td>
         </tr>`
     )
     .join("");
 
   return `
     <section style="padding:0 20px 48px;">
-      <h2 style="margin:0 0 20px;font-size:22px;font-weight:800;color:#1a1a1a;letter-spacing:-0.3px;">스펙</h2>
+      <h2 style="margin:0 0 20px;font-size:24px;font-weight:800;color:#1a1a1a;letter-spacing:-0.3px;">스펙</h2>
       <table style="width:100%;border-collapse:collapse;border-radius:12px;overflow:hidden;border:1px solid #eee;">
         <tbody>
           ${rows}
@@ -139,14 +139,14 @@ function buildUsageSection(content: DetailPageContent): string {
       (step, idx) => `
         <li style="display:flex;align-items:flex-start;gap:16px;padding:16px 0;border-bottom:1px solid #f0f0f0;">
           <div style="flex-shrink:0;width:32px;height:32px;border-radius:50%;background:#1a1a1a;color:#fff;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;">${idx + 1}</div>
-          <div style="font-size:15px;color:#333;line-height:1.6;padding-top:6px;">${escapeHtml(step)}</div>
+          <div style="font-size:16px;color:#333;line-height:1.6;padding-top:6px;">${escapeHtml(step)}</div>
         </li>`
     )
     .join("");
 
   return `
     <section style="padding:0 20px 48px;background:#fff;">
-      <h2 style="margin:0 0 20px;font-size:22px;font-weight:800;color:#1a1a1a;letter-spacing:-0.3px;">사용법</h2>
+      <h2 style="margin:0 0 20px;font-size:24px;font-weight:800;color:#1a1a1a;letter-spacing:-0.3px;">사용법</h2>
       <ul style="list-style:none;margin:0;padding:0;border-top:2px solid #1a1a1a;">
         ${steps}
       </ul>
@@ -158,8 +158,8 @@ function buildWarningsSection(content: DetailPageContent): string {
     .map(
       (w) => `
         <li style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;">
-          <span style="flex-shrink:0;font-size:16px;">&#9888;</span>
-          <span style="font-size:14px;color:#7a5500;line-height:1.6;">${escapeHtml(w)}</span>
+          <span style="flex-shrink:0;font-size:18px;">&#9888;</span>
+          <span style="font-size:15px;color:#7a5500;line-height:1.6;">${escapeHtml(w)}</span>
         </li>`
     )
     .join("");
@@ -167,7 +167,7 @@ function buildWarningsSection(content: DetailPageContent): string {
   return `
     <section style="padding:0 20px 48px;">
       <div style="background:#fffbeb;border:1.5px solid #f5d060;border-radius:16px;padding:24px 20px;">
-        <h3 style="margin:0 0 16px;font-size:16px;font-weight:700;color:#7a5500;">주의사항</h3>
+        <h3 style="margin:0 0 16px;font-size:17px;font-weight:700;color:#7a5500;">주의사항</h3>
         <ul style="list-style:none;margin:0;padding:0;">
           ${items}
         </ul>
@@ -179,9 +179,9 @@ function buildCtaSection(content: DetailPageContent): string {
   return `
     <section style="padding:0 20px 64px;">
       <div style="background:#1a1a1a;border-radius:20px;padding:40px 24px;text-align:center;">
-        <p style="margin:0 0 24px;font-size:18px;font-weight:700;color:#fff;line-height:1.5;">${escapeHtml(content.headline)}</p>
+        <p style="margin:0 0 24px;font-size:20px;font-weight:700;color:#fff;line-height:1.5;">${escapeHtml(content.headline)}</p>
         <button
-          style="display:inline-block;background:#fff;color:#1a1a1a;font-size:17px;font-weight:800;padding:16px 48px;border-radius:50px;border:none;cursor:pointer;letter-spacing:-0.3px;box-shadow:0 4px 20px rgba(0,0,0,0.3);"
+          style="display:inline-block;background:#fff;color:#1a1a1a;font-size:18px;font-weight:800;padding:16px 48px;border-radius:50px;border:none;cursor:pointer;letter-spacing:-0.3px;box-shadow:0 4px 20px rgba(0,0,0,0.3);"
         >${escapeHtml(content.ctaText)}</button>
       </div>
     </section>`;
@@ -200,8 +200,8 @@ function buildStudioHeroSection(content: DetailPageContent, heroImage: ImageInpu
         style="width:100%;height:auto;display:block;"
       />
       <div style="padding:40px 28px 32px;text-align:center;">
-        <h1 style="margin:0 0 14px;font-size:28px;font-weight:300;color:#111;line-height:1.3;letter-spacing:-0.5px;">${escapeHtml(content.headline)}</h1>
-        <p style="margin:0;font-size:15px;font-weight:400;color:#777;line-height:1.8;letter-spacing:0.2px;">${escapeHtml(content.subheadline)}</p>
+        <h1 style="margin:0 0 14px;font-size:30px;font-weight:300;color:#111;line-height:1.3;letter-spacing:-0.5px;">${escapeHtml(content.headline)}</h1>
+        <p style="margin:0;font-size:17px;font-weight:400;color:#777;line-height:1.8;letter-spacing:0.2px;">${escapeHtml(content.subheadline)}</p>
       </div>
     </section>`;
 }
@@ -212,8 +212,8 @@ function buildStudioSellingPointsSection(content: DetailPageContent): string {
       (sp, idx) => `
         <div style="flex:1;min-width:0;padding:28px 16px;text-align:center;${idx < content.sellingPoints.length - 1 ? 'border-right:1px solid #e8e8e8;' : ''}">
           <div style="font-size:28px;margin-bottom:10px;">${escapeHtml(sp.icon)}</div>
-          <div style="font-size:13px;font-weight:600;color:#111;margin-bottom:6px;line-height:1.4;letter-spacing:0.5px;text-transform:uppercase;">${escapeHtml(sp.title)}</div>
-          <div style="font-size:12px;color:#888;line-height:1.7;">${escapeHtml(sp.description)}</div>
+          <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:6px;line-height:1.4;letter-spacing:0.5px;text-transform:uppercase;">${escapeHtml(sp.title)}</div>
+          <div style="font-size:13px;color:#888;line-height:1.7;">${escapeHtml(sp.description)}</div>
         </div>`
     )
     .join("");
@@ -251,8 +251,8 @@ function buildStudioFeaturesSection(content: DetailPageContent): string {
     .map(
       (f) => `
         <li style="padding:24px 0;border-bottom:1px solid #ebebeb;">
-          <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:6px;letter-spacing:0.3px;">${escapeHtml(f.title)}</div>
-          <div style="font-size:13px;color:#888;line-height:1.8;">${escapeHtml(f.description)}</div>
+          <div style="font-size:16px;font-weight:600;color:#111;margin-bottom:6px;letter-spacing:0.3px;">${escapeHtml(f.title)}</div>
+          <div style="font-size:15px;color:#888;line-height:1.8;">${escapeHtml(f.description)}</div>
         </li>`
     )
     .join("");
@@ -273,8 +273,8 @@ function buildStudioSpecsSection(specs: Array<{ label: string; value: string }>)
     .map(
       (s) => `
         <tr>
-          <td style="padding:14px 0;font-size:13px;font-weight:500;color:#888;width:40%;border-bottom:1px solid #ebebeb;">${escapeHtml(s.label)}</td>
-          <td style="padding:14px 0;font-size:13px;color:#111;border-bottom:1px solid #ebebeb;">${escapeHtml(s.value)}</td>
+          <td style="padding:14px 0;font-size:15px;font-weight:500;color:#888;width:40%;border-bottom:1px solid #ebebeb;">${escapeHtml(s.label)}</td>
+          <td style="padding:14px 0;font-size:15px;color:#111;border-bottom:1px solid #ebebeb;">${escapeHtml(s.value)}</td>
         </tr>`
     )
     .join("");
@@ -294,7 +294,7 @@ function buildStudioUsageSection(content: DetailPageContent): string {
       (step, idx) => `
         <li style="display:flex;align-items:flex-start;gap:20px;padding:20px 0;border-bottom:1px solid #ebebeb;">
           <div style="flex-shrink:0;width:28px;height:28px;border:1px solid #ddd;border-radius:50%;font-size:12px;font-weight:500;color:#888;display:flex;align-items:center;justify-content:center;">${idx + 1}</div>
-          <div style="font-size:14px;color:#444;line-height:1.7;padding-top:5px;">${escapeHtml(step)}</div>
+          <div style="font-size:16px;color:#444;line-height:1.7;padding-top:5px;">${escapeHtml(step)}</div>
         </li>`
     )
     .join("");
@@ -315,8 +315,8 @@ function buildStudioWarningsSection(content: DetailPageContent): string {
     .map(
       (w) => `
         <li style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;">
-          <span style="flex-shrink:0;font-size:14px;color:#bbb;">—</span>
-          <span style="font-size:13px;color:#888;line-height:1.7;">${escapeHtml(w)}</span>
+          <span style="flex-shrink:0;font-size:16px;color:#bbb;">—</span>
+          <span style="font-size:15px;color:#888;line-height:1.7;">${escapeHtml(w)}</span>
         </li>`
     )
     .join("");
@@ -335,8 +335,8 @@ function buildStudioCtaSection(content: DetailPageContent): string {
   return `
     <section style="padding:0 28px 64px;background:#fafafa;">
       <div style="border:1px solid #111;padding:40px 24px;text-align:center;">
-        <p style="margin:0 0 20px;font-size:16px;font-weight:300;color:#111;line-height:1.6;letter-spacing:0.2px;">${escapeHtml(content.headline)}</p>
-        <span style="display:inline-block;background:#111;color:#fff;font-size:14px;font-weight:500;padding:14px 44px;letter-spacing:1.5px;text-transform:uppercase;">${escapeHtml(content.ctaText)}</span>
+        <p style="margin:0 0 20px;font-size:18px;font-weight:300;color:#111;line-height:1.6;letter-spacing:0.2px;">${escapeHtml(content.headline)}</p>
+        <span style="display:inline-block;background:#111;color:#fff;font-size:16px;font-weight:500;padding:14px 44px;letter-spacing:1.5px;text-transform:uppercase;">${escapeHtml(content.ctaText)}</span>
       </div>
     </section>`;
 }

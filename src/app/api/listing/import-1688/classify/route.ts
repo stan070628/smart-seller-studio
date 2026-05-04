@@ -10,8 +10,10 @@ import {
 } from '@/lib/ai/prompts/import-1688';
 import type { ClassifyResponse } from '@/lib/listing/import-1688-types';
 
+export const maxDuration = 60;
+
 const requestSchema = z.object({
-  imageUrls: z.array(z.string().url()).min(1).max(20),
+  imageUrls: z.array(z.string().url().refine((u) => u.startsWith('https://'), '이미지 URL은 https만 허용됩니다.')).min(1).max(20),
 });
 
 export async function POST(request: NextRequest): Promise<Response> {
@@ -55,7 +57,9 @@ export async function POST(request: NextRequest): Promise<Response> {
     });
 
     const rawText =
-      response.content[0].type === 'text' ? response.content[0].text : '';
+      response.content.length > 0 && response.content[0].type === 'text'
+        ? response.content[0].text
+        : '';
     const images = parseClassifyResponse(rawText, imageUrls);
 
     return Response.json({ images } satisfies ClassifyResponse);

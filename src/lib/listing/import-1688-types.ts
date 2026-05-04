@@ -13,12 +13,6 @@ export interface ClassifyResponse {
   images: ClassifiedImage[];
 }
 
-export interface GenerateRequest {
-  images: ClassifiedImage[];
-  thumbnailUrl: string;
-  sessionId: string;
-}
-
 export interface GenerateResponse {
   thumbnailUrl: string;
   detailPageHtml: string;

@@ -64,4 +64,28 @@ describe('parseGenerateContent', () => {
     const raw = JSON.stringify({ subheadline: '부제목' });
     expect(() => parseGenerateContent(raw)).toThrow();
   });
+
+  it('headline이 공백 문자열이면 Error를 throw한다', () => {
+    const raw = JSON.stringify({ headline: '   ' });
+    expect(() => parseGenerateContent(raw)).toThrow();
+  });
+
+  it('JSON 객체가 아예 없으면 Error를 throw한다', () => {
+    expect(() => parseGenerateContent('no json here')).toThrow('JSON을 찾을 수 없습니다');
+  });
+
+  it('sellingPoints가 배열이 아니면 빈 배열로 코어스한다', () => {
+    const raw = JSON.stringify({ headline: '상품', sellingPoints: '잘못된값' });
+    const result = parseGenerateContent(raw);
+    expect(Array.isArray(result.sellingPoints)).toBe(true);
+    expect(result.sellingPoints).toHaveLength(0);
+  });
+});
+
+describe('parseClassifyResponse — 추가 엣지케이스', () => {
+  it('알 수 없는 type 문자열은 lifestyle로 fallback한다', () => {
+    const raw = '[{"index":0,"type":"unknown_type"}]';
+    const result = parseClassifyResponse(raw, ['https://a.com/1.jpg']);
+    expect(result[0].type).toBe('lifestyle');
+  });
 });

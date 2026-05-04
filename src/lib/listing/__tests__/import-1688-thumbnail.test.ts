@@ -28,4 +28,25 @@ describe('buildSvgOverlay', () => {
     expect(svg).not.toContain('<script>');
     expect(svg).toContain('&lt;script&gt;');
   });
+
+  it('빈 문자열 title도 유효한 SVG를 반환한다', () => {
+    const svg = buildSvgOverlay('');
+    expect(svg).toContain('<svg');
+    expect(svg).toContain('</svg>');
+  });
+});
+
+describe('truncateTitle — 경계값', () => {
+  it('정확히 20자는 그대로 반환한다', () => {
+    const title = '가'.repeat(20);
+    expect(truncateTitle(title)).toBe(title);
+  });
+
+  it('이모지가 포함된 경우 서로게이트 쌍을 분리하지 않는다', () => {
+    const title = '😀'.repeat(21);
+    const result = truncateTitle(title);
+    expect(result.endsWith('...')).toBe(true);
+    // 이모지가 온전히 유지되어야 함 (홀수 코드 유닛이 없어야 함)
+    expect([...result.slice(0, -3)].length).toBe(20);
+  });
 });

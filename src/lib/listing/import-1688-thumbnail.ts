@@ -3,9 +3,28 @@ import { uploadToStorage } from '@/lib/supabase/server';
 
 const SIZE = 500;
 const FETCH_TIMEOUT_MS = 15_000;
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024; // 20MB
+
+// SSRF 방어: https-only + private/loopback/link-local 차단
+function assertSafeUrl(rawUrl: string): void {
+  const url = new URL(rawUrl);
+  if (url.protocol !== 'https:') throw new Error('이미지 URL은 https만 허용됩니다.');
+  const h = url.hostname;
+  if (
+    h === 'localhost' ||
+    /^127\./.test(h) ||
+    /^169\.254\./.test(h) ||
+    /^10\./.test(h) ||
+    /^172\.(1[6-9]|2[0-9]|3[01])\./.test(h) ||
+    /^192\.168\./.test(h)
+  ) {
+    throw new Error('허용되지 않는 이미지 URL입니다.');
+  }
+}
 
 export function truncateTitle(title: string): string {
-  return title.length > 20 ? title.slice(0, 20) + '...' : title;
+  const chars = [...title];
+  return chars.length > 20 ? chars.slice(0, 20).join('') + '...' : title;
 }
 
 function escapeXml(str: string): string {
@@ -35,10 +54,15 @@ export async function generateAndUploadThumbnail(
   title: string,
   sessionId: string
 ): Promise<string> {
+  assertSafeUrl(imageUrl);
   const res = await fetch(imageUrl, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
   if (!res.ok) throw new Error(`이미지 다운로드 실패: ${res.status}`);
 
+  const contentLength = Number(res.headers.get('content-length') ?? '0');
+  if (contentLength > MAX_IMAGE_BYTES) throw new Error('이미지 크기가 너무 큽니다.');
+
   const inputBuffer = Buffer.from(await res.arrayBuffer());
+  if (inputBuffer.length > MAX_IMAGE_BYTES) throw new Error('이미지 크기가 너무 큽니다.');
 
   const baseBuffer = await sharp(inputBuffer)
     .resize(SIZE, SIZE, {

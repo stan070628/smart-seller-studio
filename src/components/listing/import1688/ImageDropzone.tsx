@@ -25,6 +25,7 @@ export default function ImageDropzone({ onUploaded }: Props) {
   const [dragOver, setDragOver] = useState(false);
 
   async function handleFiles(files: FileList | null) {
+    if (uploading) return;
     if (!files || files.length === 0) return;
     const fileArr = Array.from(files).filter((f) => ALLOWED_TYPES.includes(f.type));
     if (fileArr.length === 0) {
