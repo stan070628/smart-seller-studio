@@ -57,16 +57,36 @@ export default function LabelEditor() {
   const previewRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // 라벨 인쇄용 최적 해상도(1400px)로 자동 리사이즈 → JPEG 변환
+  const resizeImage = (file: File): Promise<Blob> =>
+    new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const MAX_PX = 1400;
+        let { naturalWidth: w, naturalHeight: h } = img;
+        if (w > MAX_PX || h > MAX_PX) {
+          if (w >= h) { h = Math.round((h * MAX_PX) / w); w = MAX_PX; }
+          else        { w = Math.round((w * MAX_PX) / h); h = MAX_PX; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+        canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('변환 실패')), 'image/jpeg', 0.92);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('이미지 로드 실패')); };
+      img.src = url;
+    });
+
   const handleImageFile = async (file: File) => {
     setUploadError(null);
-    if (file.size > 10 * 1024 * 1024) {
-      setUploadError('파일이 너무 큽니다. 10MB 이하 이미지를 사용해주세요.');
-      return;
-    }
     setUploading(true);
     try {
+      // 3MB 초과 시 자동 리사이즈·압축
+      const uploadBlob = file.size > 3 * 1024 * 1024 ? await resizeImage(file) : file;
       const fd = new FormData();
-      fd.append('file', file);
+      fd.append('file', new File([uploadBlob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }));
       const res = await fetch('/api/label/upload-image', { method: 'POST', body: fd });
       const json = await res.json().catch(() => ({}));
       if (json.success) {
@@ -75,13 +95,11 @@ export default function LabelEditor() {
         setUploadError(
           res.status === 401
             ? '로그인이 필요합니다. 다시 로그인 후 시도해주세요.'
-            : res.status === 413
-            ? '파일이 너무 큽니다. 더 작은 이미지를 사용해주세요.'
             : json.error ?? '이미지 업로드에 실패했습니다.',
         );
       }
-    } catch {
-      setUploadError('네트워크 오류. 연결 상태를 확인해주세요.');
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : '업로드 중 오류가 발생했습니다.');
     } finally {
       setUploading(false);
     }
