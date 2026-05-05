@@ -2,7 +2,7 @@ export async function generatePdf(element: HTMLElement): Promise<void> {
   const html2pdf = (await import('html2pdf.js')).default;
 
   const opts = {
-    margin: [7, 5, 7, 5] as [number, number, number, number],
+    margin: 0,  // HTML 요소 자체가 정확히 210×297mm이므로 추가 마진 불필요
     filename: 'label.pdf',
     image: { type: 'jpeg' as const, quality: 0.98 },
     html2canvas: { scale: 2, useCORS: true },

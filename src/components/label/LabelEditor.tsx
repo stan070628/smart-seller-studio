@@ -53,17 +53,29 @@ export default function LabelEditor() {
   });
   const [imageUrl, setImageUrl] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageFile = async (file: File) => {
     setUploading(true);
+    setUploadError(null);
     try {
       const fd = new FormData();
       fd.append('file', file);
       const res = await fetch('/api/label/upload-image', { method: 'POST', body: fd });
       const json = await res.json();
-      if (json.success) setImageUrl(json.data.url);
+      if (json.success) {
+        setImageUrl(json.data.url);
+      } else {
+        setUploadError(
+          res.status === 401
+            ? '로그인이 필요합니다. 다시 로그인 후 시도해주세요.'
+            : json.error ?? '이미지 업로드에 실패했습니다.',
+        );
+      }
+    } catch {
+      setUploadError('네트워크 오류. 연결 상태를 확인해주세요.');
     } finally {
       setUploading(false);
     }
@@ -141,6 +153,9 @@ export default function LabelEditor() {
                 if (f) handleImageFile(f);
               }}
             />
+            {uploadError && (
+              <p style={{ fontSize: 11, color: '#dc2626', margin: '6px 0 0' }}>{uploadError}</p>
+            )}
             {imageUrl && (
               <img
                 src={imageUrl}

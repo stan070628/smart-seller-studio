@@ -23,8 +23,9 @@ const GRID_STYLE: React.CSSProperties = {
   rowGap: `${GAP_V_MM}mm`,
   padding: '7mm 5mm',
   width: '210mm',
-  minHeight: '297mm',
-  boxSizing: 'border-box',
+  height: '297mm',      // minHeight 대신 고정 → 정확히 A4 한 장
+  boxSizing: 'border-box', // 패딩 포함 계산: 컨텐츠 = 297-14=283mm (그리드 필요량 281.6mm ✓)
+  overflow: 'hidden',
   background: '#fff',
 };
 
