@@ -14,6 +14,8 @@ const INPUT_STYLE: React.CSSProperties = {
   borderRadius: 4,
   fontSize: 12,
   boxSizing: 'border-box',
+  background: '#fff',
+  color: '#111',
 };
 
 const FIELD_CONFIGS: { key: keyof QualityFields; placeholder: string }[] = [

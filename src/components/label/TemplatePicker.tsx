@@ -23,6 +23,7 @@ const BTN: React.CSSProperties = {
   fontSize: 12,
   cursor: 'pointer',
   background: '#fff',
+  color: '#111',
 };
 
 const INPUT: React.CSSProperties = {
@@ -31,6 +32,8 @@ const INPUT: React.CSSProperties = {
   borderRadius: 4,
   border: '1px solid #d1d5db',
   fontSize: 12,
+  background: '#fff',
+  color: '#111',
 };
 
 export default function TemplatePicker({ currentImageUrl, currentFields, onLoad, onImageLoad }: Props) {

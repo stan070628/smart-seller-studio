@@ -20,7 +20,12 @@ export default function LabelImageCell({ imageUrl }: Props) {
         <img
           src={imageUrl}
           alt="상표 이미지"
-          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'contain',
+            display: 'block',
+          }}
         />
       ) : (
         <span style={{ color: '#9ca3af', fontSize: 11 }}>이미지 없음</span>

@@ -41,7 +41,7 @@ export default function LabelTextCell({ fields }: Props) {
       >
         <tbody>
           {rows.map((row) => (
-            <tr key={row.label}>
+            <tr key={row.label} style={{ height: 1 }}>
               <td
                 style={{
                   border: '1px solid #000',

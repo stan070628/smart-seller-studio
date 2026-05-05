@@ -96,6 +96,8 @@ export default function LabelEditor() {
           width: 300,
           flexShrink: 0,
           background: '#fff',
+          color: '#111',
+          colorScheme: 'light',
           borderRight: `1px solid ${C.border}`,
           padding: 16,
           overflowY: 'auto',
