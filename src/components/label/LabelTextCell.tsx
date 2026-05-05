@@ -39,6 +39,25 @@ export default function LabelTextCell({ fields }: Props) {
           tableLayout: 'fixed',
         }}
       >
+        <thead>
+          <tr>
+            <th
+              colSpan={2}
+              style={{
+                border: '1px solid #000',
+                padding: '3px 4px',
+                textAlign: 'center',
+                fontWeight: 700,
+                fontSize: 13,
+                backgroundColor: '#e8e8e8',
+                color: '#000',
+                letterSpacing: '0.05em',
+              }}
+            >
+              제품 품질 표시
+            </th>
+          </tr>
+        </thead>
         <tbody>
           {rows.map((row) => (
             <tr key={row.label} style={{ height: 1 }}>
