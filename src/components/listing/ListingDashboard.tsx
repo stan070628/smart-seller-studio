@@ -2293,6 +2293,7 @@ export default function ListingDashboard() {
               { href: '/sourcing', label: '소싱' },
               { href: '/editor', label: '에디터' },
               { href: '/listing', label: '상품등록', active: true },
+              { href: '/label', label: '라벨 인쇄' },
               { href: '/orders', label: '주문/매출' },
               { href: '/plan', label: '플랜' },
             ].map((item) => (
@@ -2317,48 +2318,47 @@ export default function ListingDashboard() {
           </nav>
         </div>
 
-        {/* 우측: 라벨 인쇄 */}
-        <Link
-          href={`/label?productName=${encodeURIComponent(sharedDraft.name || '')}`}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '6px 14px',
-            borderRadius: 8,
-            border: `1px solid ${C.border}`,
-            background: C.btnSecondaryBg,
-            color: C.btnSecondaryText,
-            fontSize: 13,
-            fontWeight: 600,
-            textDecoration: 'none',
-            whiteSpace: 'nowrap',
-            marginRight: 6,
-          }}
-        >
-          🏷 라벨 인쇄
-        </Link>
-
-        {/* 우측: 1688 가져오기 */}
-        <Link
-          href="/listing/import-1688"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '6px 14px',
-            borderRadius: 8,
-            border: `1px solid ${C.border}`,
-            background: C.btnSecondaryBg,
-            color: C.btnSecondaryText,
-            fontSize: 13,
-            fontWeight: 600,
-            textDecoration: 'none',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          1688에서 가져오기
-        </Link>
+        {/* 우측: 버튼 그룹 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Link
+            href={`/label?productName=${encodeURIComponent(sharedDraft.name || '')}`}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '6px 14px',
+              borderRadius: 8,
+              border: `1px solid ${C.border}`,
+              background: C.btnSecondaryBg,
+              color: C.btnSecondaryText,
+              fontSize: 13,
+              fontWeight: 600,
+              textDecoration: 'none',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            🏷 라벨 인쇄
+          </Link>
+          <Link
+            href="/listing/import-1688"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '6px 14px',
+              borderRadius: 8,
+              border: `1px solid ${C.border}`,
+              background: C.btnSecondaryBg,
+              color: C.btnSecondaryText,
+              fontSize: 13,
+              fontWeight: 600,
+              textDecoration: 'none',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            1688에서 가져오기
+          </Link>
+        </div>
 
       </header>
 

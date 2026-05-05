@@ -120,6 +120,7 @@ export default function SourcingDashboard() {
               { href: '/sourcing', label: '소싱', active: true },
               { href: '/editor', label: '에디터' },
               { href: '/listing', label: '상품등록' },
+              { href: '/label', label: '라벨 인쇄' },
               { href: '/orders', label: '주문/매출' },
               { href: '/plan', label: '플랜' },
             ].map((item) => (
