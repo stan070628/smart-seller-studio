@@ -5,6 +5,7 @@
 
 # dependencies
 /node_modules
+scripts/ad-scraper/node_modules
 /.pnp
 .pnp.*
 .yarn/*
