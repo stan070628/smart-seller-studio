@@ -58,19 +58,25 @@ export default function LabelEditor() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageFile = async (file: File) => {
-    setUploading(true);
     setUploadError(null);
+    if (file.size > 10 * 1024 * 1024) {
+      setUploadError('파일이 너무 큽니다. 10MB 이하 이미지를 사용해주세요.');
+      return;
+    }
+    setUploading(true);
     try {
       const fd = new FormData();
       fd.append('file', file);
       const res = await fetch('/api/label/upload-image', { method: 'POST', body: fd });
-      const json = await res.json();
+      const json = await res.json().catch(() => ({}));
       if (json.success) {
         setImageUrl(json.data.url);
       } else {
         setUploadError(
           res.status === 401
             ? '로그인이 필요합니다. 다시 로그인 후 시도해주세요.'
+            : res.status === 413
+            ? '파일이 너무 큽니다. 더 작은 이미지를 사용해주세요.'
             : json.error ?? '이미지 업로드에 실패했습니다.',
         );
       }

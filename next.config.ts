@@ -2,6 +2,11 @@ import type { NextConfig } from "next";
 import path from "path";
 
 const nextConfig: NextConfig = {
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '10mb',
+    },
+  },
   /**
    * Turbopack resolve alias 설정
    * - canvas: Fabric.js 선택적 서버 의존성 무력화
