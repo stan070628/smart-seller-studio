@@ -6,18 +6,6 @@ interface Props {
   fields: QualityFields;
 }
 
-const ROW_STYLE: React.CSSProperties = {
-  display: 'flex',
-  gap: 4,
-  lineHeight: 1.5,
-};
-
-const LABEL_STYLE: React.CSSProperties = {
-  flexShrink: 0,
-  fontWeight: 600,
-  width: 48,
-};
-
 export default function LabelTextCell({ fields }: Props) {
   const rows: { label: string; value: string }[] = [
     { label: '품  명', value: fields.productName },
@@ -27,6 +15,7 @@ export default function LabelTextCell({ fields }: Props) {
     { label: '수입원', value: fields.importer },
     { label: '주  소', value: fields.address },
     { label: '전  화', value: fields.phone },
+    ...(fields.extra ? [{ label: '기  타', value: fields.extra }] : []),
   ];
 
   return (
@@ -34,27 +23,55 @@ export default function LabelTextCell({ fields }: Props) {
       style={{
         width: '100%',
         height: '100%',
-        padding: '6px 8px',
         boxSizing: 'border-box',
-        fontSize: 8,
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'center',
-        gap: 2,
+        color: '#000',
       }}
     >
-      {rows.map((row) => (
-        <div key={row.label} style={ROW_STYLE}>
-          <span style={LABEL_STYLE}>{row.label}:</span>
-          <span>{row.value}</span>
-        </div>
-      ))}
-      {fields.extra && (
-        <div style={ROW_STYLE}>
-          <span style={LABEL_STYLE}>기  타:</span>
-          <span>{fields.extra}</span>
-        </div>
-      )}
+      <table
+        style={{
+          width: '100%',
+          height: '100%',
+          borderCollapse: 'collapse',
+          fontSize: 12,
+          color: '#000',
+          tableLayout: 'fixed',
+        }}
+      >
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.label}>
+              <td
+                style={{
+                  border: '1px solid #000',
+                  padding: '2px 4px',
+                  fontWeight: 700,
+                  whiteSpace: 'nowrap',
+                  width: '34%',
+                  textAlign: 'center',
+                  backgroundColor: '#f5f5f5',
+                  verticalAlign: 'middle',
+                  color: '#000',
+                }}
+              >
+                {row.label}
+              </td>
+              <td
+                style={{
+                  border: '1px solid #000',
+                  padding: '2px 4px',
+                  wordBreak: 'break-all',
+                  verticalAlign: 'middle',
+                  color: '#000',
+                }}
+              >
+                {row.value}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
