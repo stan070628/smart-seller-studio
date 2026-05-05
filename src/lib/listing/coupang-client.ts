@@ -206,21 +206,28 @@ export class CoupangClient {
     });
 
     const text = await res.text();
+    console.log(`[coupang] ${method} ${urlWithQuery.split('?')[0]} → HTTP ${res.status} | ${text.slice(0, 500)}`);
 
     if (!res.ok) {
       let errorMsg: string;
       try {
         const errJson = JSON.parse(text) as Record<string, unknown>;
-        const msg = typeof errJson.message === 'string' ? errJson.message : '';
+        const msg = typeof errJson.message === 'string' ? errJson.message : JSON.stringify(errJson.message ?? '');
         const code = typeof errJson.code === 'string' && errJson.code !== 'SUCCESS' ? errJson.code : '';
-        errorMsg = [code, msg].filter(Boolean).join(': ') || text.slice(0, 300);
+        errorMsg = [code, msg].filter(Boolean).join(': ') || text.slice(0, 500);
       } catch {
-        errorMsg = text.slice(0, 300);
+        errorMsg = text.slice(0, 500);
       }
       throw new Error(`쿠팡 API 오류 (${res.status}): ${errorMsg}`);
     }
 
-    return JSON.parse(text) as CoupangApiResponse<T>;
+    let parsed: CoupangApiResponse<T>;
+    try {
+      parsed = JSON.parse(text) as CoupangApiResponse<T>;
+    } catch (e) {
+      throw new Error(`쿠팡 API 응답 파싱 실패 (HTTP ${res.status}): ${text.slice(0, 200)}`);
+    }
+    return parsed;
   }
 
   // ─── 인증 테스트 (판매자 상품 1건 조회) ────────────────────
@@ -380,7 +387,12 @@ export class CoupangClient {
     const res = await this.request<{ sellerProductId: number }>('POST', url, payload);
 
     if (res.code !== 'SUCCESS' || !res.data) {
-      throw new Error(res.message || '쿠팡 상품 등록에 실패했습니다.');
+      console.error('[registerProduct] 실패 응답:', JSON.stringify({ code: res.code, message: res.message, data: res.data }));
+      throw new Error(res.message || `쿠팡 상품 등록 실패 (code: ${res.code})`);
+    }
+
+    if (!res.data.sellerProductId) {
+      console.error('[registerProduct] sellerProductId 누락:', JSON.stringify(res.data));
     }
 
     return res.data;

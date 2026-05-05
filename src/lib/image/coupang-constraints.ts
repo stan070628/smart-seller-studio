@@ -24,10 +24,8 @@ const FETCH_TIMEOUT_MS = 15_000;
  * 보정이 필요 없으면 원본 URL을 반환합니다.
  */
 export async function ensureCoupangImage(imageUrl: string): Promise<string> {
-  // Supabase Storage에 이미 저장된 이미지는 그대로 사용
-  // (생성 시 이미 규격 적용됨)
-  if (imageUrl.includes('supabase.co/storage')) {
-    // 파일 크기만 확인할 수 없으므로 치수 검사는 생략하고 그대로 사용
+  // 이미 규격 처리된 이미지(coupang-images/ 경로)는 재처리 불필요
+  if (imageUrl.includes('supabase.co/storage') && imageUrl.includes('/coupang-images/')) {
     return imageUrl;
   }
 

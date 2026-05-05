@@ -314,27 +314,12 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
   }
 
   // ── 임시저장 ─────────────────────────────────────────────────────────────
-  async function handleSaveDraft() {
-    // 카테고리 코드 가드 — 비어있거나 검증 실패 시 임시저장 차단
-    const code = categoryCode.trim();
-    if (!code || !/^\d+$/.test(code)) {
-      alert('카테고리를 먼저 선택하세요.\n\n"이름으로 검색"에서 키워드(예: 반팔티)로 검색 후 결과를 클릭하면 코드가 자동 입력됩니다.');
-      return;
-    }
-    if (categoryValid === false) {
-      alert('유효하지 않은 카테고리 코드입니다.\n\n"이름으로 검색"으로 다시 선택하세요.');
-      return;
-    }
-
-    setIsSavingDraft(true);
-    setDraftFeedback(null);
-
+  // ── draft 데이터 조립 (handleSaveDraft / handleSubmit 공용) ──────────────
+  function buildCurrentDraftData() {
     const detailImages = sharedDraft.pickedDetailImages.length > 0
       ? sharedDraft.pickedDetailImages
       : sharedDraft.detailImages;
-
-    const draftData = {
-      // 쿠팡 등록 폼 필드
+    return {
       ...buildDraftData({
         name,
         categoryCode,
@@ -356,7 +341,6 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
         taxType,
         parallelImported,
       }),
-      // sharedDraft 복원용 미디어·AI 필드 (불러오기 시 초기화 방지)
       thumbnailImages: sharedDraft.thumbnailImages,
       detailImages: sharedDraft.detailImages,
       pickedDetailImages: sharedDraft.pickedDetailImages,
@@ -375,6 +359,23 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
       originalPrice: String(originalPrice),
       sourceUrl: sharedDraft.sourceUrl,
     };
+  }
+
+  async function handleSaveDraft() {
+    // 카테고리 코드 가드 — 비어있거나 검증 실패 시 임시저장 차단
+    const code = categoryCode.trim();
+    if (!code || !/^\d+$/.test(code)) {
+      alert('카테고리를 먼저 선택하세요.\n\n"이름으로 검색"에서 키워드(예: 반팔티)로 검색 후 결과를 클릭하면 코드가 자동 입력됩니다.');
+      return;
+    }
+    if (categoryValid === false) {
+      alert('유효하지 않은 카테고리 코드입니다.\n\n"이름으로 검색"으로 다시 선택하세요.');
+      return;
+    }
+
+    setIsSavingDraft(true);
+    setDraftFeedback(null);
+    const draftData = buildCurrentDraftData();
 
     try {
       if (draftId) {
@@ -398,7 +399,6 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
         const data = (await res.json()) as { id?: string; error?: string };
         if (!res.ok || !data.id) throw new Error(data.error ?? '임시저장 실패');
         setDraftId(data.id);
-        // sharedDraft에도 저장 — 이후 draft 불러오기 시 제출 즉시 활성화
         useListingStore.getState().updateSharedDraft({ coupangDraftId: data.id });
       }
       setDraftFeedback('saved');
@@ -421,28 +421,51 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
     if (!confirmed) return;
     setIsSubmitting(true);
     setSubmitError(null);
+
+    // 제출 전 현재 패널 상태를 draft에 자동 저장 (가격·재고 변경 반영 보장)
+    try {
+      const draftData = buildCurrentDraftData();
+      const saveRes = await fetch(`/api/listing/coupang/drafts/${draftId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productName: name, draftData }),
+      });
+      if (!saveRes.ok) {
+        const errText = await saveRes.text();
+        setSubmitError(`제출 전 저장 실패: ${errText}`);
+        setIsSubmitting(false);
+        return;
+      }
+    } catch (saveErr) {
+      setSubmitError(`제출 전 저장 오류: ${saveErr instanceof Error ? saveErr.message : String(saveErr)}`);
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
       const res = await fetch(`/api/listing/coupang/drafts/${draftId}/submit`, {
         method: 'POST',
       });
-      const data = (await res.json()) as {
-        success: boolean;
-        sellerProductId?: number;
-        wingsUrl?: string;
-        error?: string;
-      };
-      if (data.success && data.sellerProductId) {
+      const rawText = await res.text();
+      let data: { success?: boolean; sellerProductId?: number; wingsUrl?: string; error?: string } = {};
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        setSubmitError(`서버 응답 파싱 실패 (HTTP ${res.status}): ${rawText.slice(0, 200)}`);
+        return;
+      }
+      if (data.success) {
         setSubmitResult({
-          sellerProductId: data.sellerProductId,
+          sellerProductId: data.sellerProductId ?? 0,
           wingsUrl: data.wingsUrl ?? 'https://wing.coupang.com',
         });
         setSubmitSuccess(true);
         setTimeout(() => onSuccess(), 1500);
       } else {
-        setSubmitError(data.error ?? '제출 실패');
+        setSubmitError(data.error || `제출 실패 (HTTP ${res.status})`);
       }
-    } catch {
-      setSubmitError('네트워크 오류');
+    } catch (e) {
+      setSubmitError(`네트워크 오류: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setIsSubmitting(false);
     }

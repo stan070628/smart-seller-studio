@@ -1,8 +1,80 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { ProductAdGrade, AdGrade } from '@/lib/ad-strategy/types';
 import { useCostStore } from '@/lib/ad-strategy/use-cost-store';
+
+const SALES_LS_KEY = 'ad_strategy_sales_overrides';
+const WINNER_LS_KEY = 'ad_strategy_winner_overrides';
+
+function loadSalesOverrides(): Record<string, number> {
+  try { return JSON.parse(localStorage.getItem(SALES_LS_KEY) ?? '{}'); } catch { return {}; }
+}
+
+function loadWinnerOverrides(): Record<string, boolean> {
+  try { return JSON.parse(localStorage.getItem(WINNER_LS_KEY) ?? '{}'); } catch { return {}; }
+}
+
+function SalesInput({ name, fallback, overrides, onSave }: {
+  name: string;
+  fallback: number;
+  overrides: Record<string, number>;
+  onSave: (name: string, qty: number) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const value = overrides[name] ?? fallback;
+  const [draft, setDraft] = useState(String(value || ''));
+
+  if (!editing) {
+    return (
+      <button
+        onClick={() => { setDraft(String(value || '')); setEditing(true); }}
+        style={{
+          background: 'none',
+          border: '1px dashed #d1d5db',
+          borderRadius: '4px',
+          padding: '3px 8px',
+          fontSize: '12px',
+          color: value > 0 ? '#111' : '#6b7280',
+          fontWeight: value > 0 ? 600 : 400,
+          cursor: 'pointer',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {value > 0 ? `${fmt(value)}건` : '입력'}
+      </button>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+      <input
+        autoFocus
+        type="number"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            const v = parseInt(draft, 10);
+            if (!isNaN(v) && v >= 0) { onSave(name, v); setEditing(false); }
+          }
+          if (e.key === 'Escape') setEditing(false);
+        }}
+        placeholder="판매건수"
+        style={{ width: '70px', padding: '3px 6px', fontSize: '12px', border: '1px solid #6366f1', borderRadius: '4px', outline: 'none' }}
+      />
+      <button
+        onClick={() => {
+          const v = parseInt(draft, 10);
+          if (!isNaN(v) && v >= 0) { onSave(name, v); setEditing(false); }
+        }}
+        style={{ padding: '3px 8px', fontSize: '11px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+      >
+        저장
+      </button>
+    </div>
+  );
+}
 import {
   calcMarginPerUnit,
   calcBreakEvenRoas,
@@ -35,14 +107,26 @@ function ProfitCell({ value, monthly }: { value: number; monthly: number }) {
 }
 
 function RoasCell({ actual, breakEven }: { actual?: number; breakEven: number }) {
-  if (!actual) return <span style={{ color: '#9ca3af' }}>-</span>;
+  if (breakEven === Infinity) {
+    return <span style={{ color: '#dc2626', fontSize: '12px' }}>마진 없음</span>;
+  }
+  if (!actual) {
+    return (
+      <div style={{ textAlign: 'right' }}>
+        <div style={{ fontSize: '11px', color: '#9ca3af' }}>실ROAS 미집계</div>
+        <div style={{ fontSize: '12px', fontWeight: 600, color: '#374151' }}>
+          손익기준 {fmt(Math.round(breakEven))}%
+        </div>
+      </div>
+    );
+  }
   const ok = actual >= breakEven;
   return (
     <div style={{ textAlign: 'right' }}>
       <div style={{ fontWeight: 700, color: ok ? '#059669' : '#dc2626', fontSize: '13px' }}>
         {fmt(actual)}%
       </div>
-      <div style={{ fontSize: '11px', color: '#9ca3af' }}>손익 {fmt(Math.round(breakEven))}%</div>
+      <div style={{ fontSize: '11px', color: '#9ca3af' }}>손익기준 {fmt(Math.round(breakEven))}%</div>
     </div>
   );
 }
@@ -67,7 +151,7 @@ function CostInput({
           borderRadius: '4px',
           padding: '3px 8px',
           fontSize: '12px',
-          color: initialCost ? '#374151' : '#9ca3af',
+          color: initialCost ? '#374151' : '#6b7280',
           cursor: 'pointer',
           whiteSpace: 'nowrap',
         }}
@@ -124,6 +208,25 @@ function CostInput({
 
 export default function ProductAdTable({ products }: { products: ProductAdGrade[] }) {
   const { get, upsert, DEFAULT_FEE_RATE } = useCostStore();
+  const [salesOverrides, setSalesOverrides] = useState<Record<string, number>>({});
+  const [winnerOverrides, setWinnerOverrides] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    setSalesOverrides(loadSalesOverrides());
+    setWinnerOverrides(loadWinnerOverrides());
+  }, []);
+
+  function handleSalesOverride(name: string, qty: number) {
+    const next = { ...salesOverrides, [name]: qty };
+    setSalesOverrides(next);
+    localStorage.setItem(SALES_LS_KEY, JSON.stringify(next));
+  }
+
+  function handleWinnerToggle(name: string, current: boolean) {
+    const next = { ...winnerOverrides, [name]: !current };
+    setWinnerOverrides(next);
+    localStorage.setItem(WINNER_LS_KEY, JSON.stringify(next));
+  }
 
   if (products.length === 0) {
     return <p style={{ color: '#9ca3af', fontSize: '13px', margin: 0 }}>등급 데이터 없음</p>;
@@ -160,9 +263,12 @@ export default function ProductAdTable({ products }: { products: ProductAdGrade[
             const entry = get(p.name);
             const costPrice = entry?.costPrice;
             const feeRate = entry?.feeRate ?? DEFAULT_FEE_RATE;
+            const monthlySales = salesOverrides[p.name] ?? p.monthlySales;
+            const isWinner = winnerOverrides[p.name] ?? p.isItemWinner;
+            const winnerOverridden = p.name in winnerOverrides;
 
             let profitCell: React.ReactNode = (
-              <span style={{ color: '#9ca3af', fontSize: '12px' }}>원가 입력 후 계산</span>
+              <span style={{ color: '#6b7280', fontSize: '12px' }}>원가 입력 후 계산</span>
             );
             let roasCell: React.ReactNode = <span style={{ color: '#9ca3af' }}>-</span>;
 
@@ -170,7 +276,7 @@ export default function ProductAdTable({ products }: { products: ProductAdGrade[
               const margin = calcMarginPerUnit(p.currentPrice, costPrice, feeRate);
               const breakEven = calcBreakEvenRoas(p.currentPrice, margin);
               const { perUnit, monthly } = calcNetProfit({
-                monthlySales: p.monthlySales,
+                monthlySales,
                 monthlyAdSpend: p.adSpend ?? 0,
                 marginPerUnit: margin,
               });
@@ -211,17 +317,34 @@ export default function ProductAdTable({ products }: { products: ProductAdGrade[
                 >
                   {p.name}
                 </td>
-                <td
-                  style={{
-                    padding: '10px 12px',
-                    color: p.isItemWinner ? '#059669' : '#dc2626',
-                    fontWeight: 600,
-                  }}
-                >
-                  {p.isItemWinner ? 'O' : 'X'}
+                <td style={{ padding: '10px 12px' }}>
+                  <button
+                    onClick={() => handleWinnerToggle(p.name, isWinner)}
+                    title={winnerOverridden ? '직접 수정됨 (클릭해서 토글)' : '클릭해서 수정'}
+                    style={{
+                      background: 'none',
+                      border: winnerOverridden ? '1px solid' : 'none',
+                      borderColor: isWinner ? '#059669' : '#dc2626',
+                      borderRadius: '4px',
+                      padding: winnerOverridden ? '2px 6px' : '0',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                      fontSize: '14px',
+                      color: isWinner ? '#059669' : '#dc2626',
+                    }}
+                  >
+                    {isWinner ? 'O' : 'X'}
+                  </button>
                 </td>
-                <td style={{ padding: '10px 12px', textAlign: 'right' }}>{p.monthlySales}건</td>
-                <td style={{ padding: '10px 12px', textAlign: 'right' }}>{p.stock}개</td>
+                <td style={{ padding: '10px 12px' }}>
+                  <SalesInput
+                    name={p.name}
+                    fallback={p.monthlySales}
+                    overrides={salesOverrides}
+                    onSave={handleSalesOverride}
+                  />
+                </td>
+                <td style={{ padding: '10px 12px', textAlign: 'right', color: '#111', fontWeight: 500 }}>{p.stock}개</td>
                 <td style={{ padding: '10px 12px' }}>
                   <CostInput
                     initialCost={costPrice}
@@ -230,10 +353,10 @@ export default function ProductAdTable({ products }: { products: ProductAdGrade[
                 </td>
                 <td style={{ padding: '10px 12px' }}>{profitCell}</td>
                 <td style={{ padding: '10px 12px' }}>{roasCell}</td>
-                <td style={{ padding: '10px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                <td style={{ padding: '10px 12px', textAlign: 'right', whiteSpace: 'nowrap', color: '#111', fontWeight: 500 }}>
                   {p.suggestedDailyBudget ? fmt(p.suggestedDailyBudget) + '원' : '-'}
                 </td>
-                <td style={{ padding: '10px 12px', color: '#6b7280', maxWidth: '220px' }}>
+                <td style={{ padding: '10px 12px', color: '#374151', minWidth: '160px', maxWidth: '260px', wordBreak: 'keep-all', lineHeight: '1.5' }}>
                   {p.reason}
                 </td>
               </tr>

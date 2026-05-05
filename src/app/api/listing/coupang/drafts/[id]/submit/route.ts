@@ -138,13 +138,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const returnCenterCode = d.returnCode || client.getReturnCenterCode();
 
     // ── 쿠팡 이미지 규격 적용 (min 500×500, max 5000×5000, max 10MB) ──────────
-    // thumbnailImages만 규격 검사 — detailImages는 itemImages에 넣지 않음
+    // pickedDetailImages(상세 버킷 이미지)는 thumbnailImages에서 제외:
+    // 상세 이미지가 대표이미지/추가이미지 슬롯에 잘못 등록되는 문제 방지
     console.log('[submit] 이미지 규격 검사 시작...');
-    const safeThumbUrls = await ensureCoupangImages(thumbnailImages);
+    const pickedDetailSet = new Set(pickedDetailImages);
+    const thumbsOnly = thumbnailImages.filter((url) => !pickedDetailSet.has(url));
+    const safeThumbUrls = await ensureCoupangImages(thumbsOnly);
 
     // ── 대표이미지 + 추가이미지 (itemImages) ─────────────────────────────────
-    // thumbnailImages만 사용: [0] = REPRESENTATION, [1..9] = DETAIL (추가이미지)
-    // detailImages는 상세설명(contents)에만 사용 — 추가이미지 슬롯에 넣지 않음
+    // thumbnailImages(상세 이미지 제외)만 사용: [0] = REPRESENTATION, [1..9] = DETAIL (추가이미지)
+    // pickedDetailImages는 상세설명(contents)에만 사용 — 추가이미지 슬롯에 넣지 않음
     const itemImages = safeThumbUrls.map((url: string, i: number) => ({
       imageOrder: i,
       imageType: i === 0 ? 'REPRESENTATION' as const : 'DETAIL' as const,
@@ -168,21 +171,53 @@ export async function POST(request: NextRequest, context: RouteContext) {
             contentDetails: [{ content: sellerProductName, detailType: 'TEXT' as const }],
           }];
 
-    // 공통 notice 목록 — 중복 detailName 제거 (같은 키가 2개 이상이면 400 오류)
-    const seenNoticeKeys = new Set<string>();
-    const itemNotices = (d.notices ?? [])
-      .filter((n) => {
-        if (!n.detailName) return false;
-        const key = n.detailName;
-        if (seenNoticeKeys.has(key)) return false;
-        seenNoticeKeys.add(key);
+    // 공통 notice 목록 — getCategoryMeta 실제값으로 재교정 후 중복 detailName 제거
+    // draft에 저장된 값이 AI 약식 표현('의류', '품명')일 경우 정확한 API 허용값으로 보정
+    const itemNotices = await (async () => {
+      if (!d.notices || d.notices.length === 0) return [];
+      type RawCat = { noticeCategoryName?: string; noticeCategoryDetailNames?: { noticeCategoryDetailName?: string }[] };
+      let cats: RawCat[] = [];
+      try {
+        const meta = await client.getCategoryMeta(displayCategoryCode) as Record<string, unknown>;
+        cats = (meta['noticeCategories'] as RawCat[] | undefined) ?? [];
+      } catch {
+        // getCategoryMeta 실패 시 원본값 그대로 사용
+      }
+
+      const findCat = (name: string) => {
+        if (!name || cats.length === 0) return undefined;
+        return cats.find((c) => c.noticeCategoryName === name) ??
+          cats.find((c) => (c.noticeCategoryName ?? '').startsWith(name) || name.startsWith(c.noticeCategoryName ?? '')) ??
+          cats.find((c) => (c.noticeCategoryName ?? '').includes(name) || name.includes(c.noticeCategoryName ?? ''));
+      };
+
+      const mapped = d.notices.map((n) => {
+        if (!n.detailName) return null;
+        const cat = findCat(n.categoryName);
+        const correctedCategoryName = cat?.noticeCategoryName ?? n.categoryName;
+        const details = (cat?.noticeCategoryDetailNames ?? [])
+          .map((det) => det.noticeCategoryDetailName ?? '')
+          .filter(Boolean);
+        const correctedDetailName =
+          details.find((det) => det === n.detailName) ??
+          details.find((det) => det.includes(n.detailName) || n.detailName.includes(det)) ??
+          n.detailName;
+        return {
+          noticeCategoryName: correctedCategoryName,
+          noticeCategoryDetailName: correctedDetailName,
+          content: n.content,
+        };
+      });
+
+      // null 제거 + 중복 detailName 제거 (같은 키가 2개 이상이면 400 오류)
+      const seenNoticeKeys = new Set<string>();
+      return mapped.filter((n): n is { noticeCategoryName: string; noticeCategoryDetailName: string; content: string } => {
+        if (!n || !n.noticeCategoryDetailName) return false;
+        if (seenNoticeKeys.has(n.noticeCategoryDetailName)) return false;
+        seenNoticeKeys.add(n.noticeCategoryDetailName);
         return true;
-      })
-      .map((n) => ({
-        noticeCategoryName: n.categoryName,
-        noticeCategoryDetailName: n.detailName,
-        content: n.content,
-      }));
+      });
+    })();
 
     // draft_data에서 읽은 상품 속성 값 (없으면 기본값)
     const adultOnly = d.adultOnly || 'EVERYONE';
@@ -282,6 +317,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     };
 
     // Coupang API 실제 호출
+    console.log('[submit] notices 전송:', JSON.stringify(itemNotices));
+    console.log('[submit] payload 요약:', JSON.stringify({ displayCategoryCode, sellerProductName, salePrice, itemCount: items.length, noticeCount: itemNotices.length }));
     const result = await client.registerProduct(payload);
     const sellerProductId = result.sellerProductId;
     const wingsUrl = 'https://wing.coupang.com';

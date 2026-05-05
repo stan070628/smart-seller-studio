@@ -32,15 +32,15 @@ interface ProductPickerModalProps {
 }
 
 function ProductPickerModal({ onAdd, onClose }: ProductPickerModalProps) {
-  const { coupangProducts, fetchCoupangProducts, fetchCoupangProductDetail, editingProduct, isLoading } =
+  const { coupangProducts, fetchCoupangProducts, fetchCoupangProductDetail, editingProduct, isLoading, error } =
     useListingStore();
 
   const [keyword, setKeyword] = useState('');
   const [fetchingId, setFetchingId] = useState<number | null>(null);
 
-  // 모달 열릴 때 상품 목록 로드
+  // 모달 열릴 때 상품 목록 로드 (status 생략 → 기본값 'APPROVED' 사용)
   React.useEffect(() => {
-    fetchCoupangProducts(true, '');
+    fetchCoupangProducts(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -57,17 +57,16 @@ function ProductPickerModal({ onAdd, onClose }: ProductPickerModalProps) {
   const handleSelect = async (pr: (typeof coupangProducts)[number]) => {
     setFetchingId(pr.sellerProductId);
     try {
-      await fetchCoupangProductDetail(pr.sellerProductId);
-      // editingProduct는 fetchCoupangProductDetail 호출 후 스토어에 반영됨
-      // get() 패턴 대신 스토어 현재값을 직접 읽는다
-      const detail = useListingStore.getState().editingProduct;
-      const salePrice: number = detail?.items?.[0]?.salePrice ?? 0;
+      const detail = await fetchCoupangProductDetail(pr.sellerProductId);
 
-      // 판매가가 유효하지 않으면 상품 추가를 중단하고 사용자에게 알린다
-      if (!salePrice || salePrice <= 0) {
-        alert('판매가를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.');
+      if (!detail) {
+        const storeError = useListingStore.getState().error;
+        alert(storeError ?? '상품 정보를 불러올 수 없습니다.');
         return;
       }
+
+      const items: { salePrice?: number }[] = (detail as Record<string, unknown>)?.items as { salePrice?: number }[] ?? [];
+      const salePrice = items.find((item) => (item.salePrice ?? 0) > 0)?.salePrice ?? 0;
 
       onAdd({
         id: crypto.randomUUID(),
@@ -83,8 +82,7 @@ function ProductPickerModal({ onAdd, onClose }: ProductPickerModalProps) {
       });
       onClose();
     } catch (err) {
-      // 네트워크 오류 등 예외 발생 시 사용자에게 알린다
-      alert('상품 정보를 불러오는 중 오류가 발생했습니다.');
+      alert(err instanceof Error ? err.message : '상품 정보를 불러오는 중 오류가 발생했습니다.');
     } finally {
       setFetchingId(null);
     }
@@ -113,6 +111,7 @@ function ProductPickerModal({ onAdd, onClose }: ProductPickerModalProps) {
               type="text"
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
+              onCompositionEnd={(e) => setKeyword((e.target as HTMLInputElement).value)}
               placeholder="상품명으로 검색"
               className="w-full bg-transparent text-xs text-[#18181b] outline-none placeholder:text-[#a1a1aa]"
             />
@@ -125,6 +124,10 @@ function ProductPickerModal({ onAdd, onClose }: ProductPickerModalProps) {
             <div className="flex items-center justify-center py-10">
               <Loader2 size={20} className="animate-spin text-[#a1a1aa]" />
             </div>
+          ) : error ? (
+            <p className="py-10 text-center text-xs text-[#ef4444]">
+              {error}
+            </p>
           ) : filtered.length === 0 ? (
             <p className="py-10 text-center text-xs text-[#a1a1aa]">
               {keyword ? '검색 결과가 없습니다.' : '등록된 상품이 없습니다.'}
@@ -205,8 +208,8 @@ export default function BundleAdMode() {
     });
   }, [products, totalAdCostNum]);
 
-  // 합계
-  const totalNetProfit = computed.reduce((sum, p) => sum + p.netProfit, 0);
+  // 합계 — 순이익은 판매량 반영, 마진율은 단순 평균
+  const totalNetProfit = computed.reduce((sum, p) => sum + p.netProfit * (p.monthlySales || 1), 0);
   const avgMarginRate =
     computed.length > 0
       ? computed.reduce((sum, p) => sum + p.marginRate, 0) / computed.length
@@ -220,6 +223,12 @@ export default function BundleAdMode() {
   // 상품 삭제
   const handleRemove = (id: string) => {
     setProducts((prev) => prev.filter((p) => p.id !== id));
+  };
+
+  // 인라인 편집 — 판매가
+  const handleSellingPriceChange = (id: string, value: string) => {
+    const num = Number(value.replace(/[^0-9]/g, '')) || 0;
+    setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, sellingPrice: num } : p)));
   };
 
   // 인라인 편집 — 원가
@@ -341,9 +350,20 @@ export default function BundleAdMode() {
                       />
                     </td>
 
-                    {/* 판매가 — 읽기 전용 */}
-                    <td className="px-2 py-2 text-right text-[#52525b]">
-                      {fmt(p.sellingPrice)}
+                    {/* 판매가 — 직접 입력 (API에서 못 가져오는 경우 대비) */}
+                    <td className="px-2 py-2">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={p.sellingPrice === 0 ? '' : fmt(p.sellingPrice)}
+                        onChange={(e) => handleSellingPriceChange(p.id, e.target.value)}
+                        placeholder="입력"
+                        className={`w-full rounded border bg-transparent text-right text-xs text-[#18181b] outline-none focus:bg-white focus:px-1 ${
+                          p.sellingPrice === 0
+                            ? 'border-[#fca5a5] placeholder:text-[#fca5a5]'
+                            : 'border-transparent focus:border-[#d4d4d8]'
+                        }`}
+                      />
                     </td>
 
                     {/* 판매량 — 직접 입력 */}

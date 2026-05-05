@@ -1,8 +1,10 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useListingStore } from '@/store/useListingStore';
 import { C } from '@/lib/design-tokens';
+import { calcNaver } from '@/lib/calculator/calculate';
+import type { NaverGrade, NaverInflow } from '@/lib/calculator/fees';
 
 interface NaverAutoRegisterPanelProps {
   onSuccess?: (originProductNo: number) => void;
@@ -67,6 +69,21 @@ export default function NaverAutoRegisterPanel({ onSuccess }: NaverAutoRegisterP
   const [countryOfOrigin, setCountryOfOrigin] = useState(sharedDraft.countryOfOrigin ?? '');
   const [tags, setTags] = useState<string[]>(sharedDraft.tags ?? []);
   const [tagInput, setTagInput] = useState('');
+  const [naverGrade, setNaverGrade] = useState<NaverGrade>('일반');
+  const [naverInflow, setNaverInflow] = useState<NaverInflow>('네이버쇼핑');
+
+  // ── 수익 계산 ─────────────────────────────────────────────
+  const sourcingCost = Number(sharedDraft.costPrice) || 0;
+  const naverCalc = salePrice > 0
+    ? calcNaver({
+        costPrice: sourcingCost,
+        sellingPrice: salePrice,
+        shippingFee: deliveryCharge,
+        grade: naverGrade,
+        inflow: naverInflow,
+        adCost: 0,
+      })
+    : null;
 
   // ── 카테고리 검색 ─────────────────────────────────────────
   const [categorySearch, setCategorySearch] = useState('');
@@ -83,6 +100,10 @@ export default function NaverAutoRegisterPanel({ onSuccess }: NaverAutoRegisterP
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  // ── AI 태그 생성 ──────────────────────────────────────────
+  const [isAiTagging, setIsAiTagging] = useState(false);
+  const aiTagDone = useRef(false);
+
   // 상세설명: 네이버 전용 → 공통 순서로 폴백
   const hasDetailHtml = !!(sharedDraft.detailPageSnippetNaver || sharedDraft.detailPageSnippet);
 
@@ -93,6 +114,40 @@ export default function NaverAutoRegisterPanel({ onSuccess }: NaverAutoRegisterP
       initialSyncDone.current = true;
     }
   }, [sharedDraft.name, name]);
+
+  // AI 태그 자동 생성 (마운트 시 1회, 태그가 비어있을 때만)
+  useEffect(() => {
+    if (aiTagDone.current || !sharedDraft.name || tags.length > 0) {
+      return;
+    }
+    aiTagDone.current = true;
+    setIsAiTagging(true);
+
+    const product = {
+      itemId: '',
+      title: sharedDraft.name,
+      price: Number(sharedDraft.salePrice) || 0,
+      imageUrls: sharedDraft.thumbnailImages || [],
+      description: (sharedDraft.description || '').replace(/<[^>]*>/g, '').slice(0, 500),
+      categoryHint: sharedDraft.categoryHint || '',
+    };
+
+    fetch('/api/auto-register/ai-map', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product }),
+    })
+      .then((r) => r.json())
+      .then((data: { fields?: { searchTags: { value: string[] } } }) => {
+        const fetchedTags = data.fields?.searchTags.value ?? [];
+        if (fetchedTags.length > 0) {
+          setTags((prev) => prev.length === 0 ? fetchedTags.slice(0, 10) : prev);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setIsAiTagging(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── 카테고리 검색 ─────────────────────────────────────────
   async function handleCategorySearch() {
@@ -199,6 +254,7 @@ export default function NaverAutoRegisterPanel({ onSuccess }: NaverAutoRegisterP
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       {/* 헤더 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', backgroundColor: '#f0fdf4', border: '1px solid #86efac', borderRadius: '12px' }}>
         <span style={{ fontSize: '18px' }}>🟢</span>
@@ -330,11 +386,106 @@ export default function NaverAutoRegisterPanel({ onSuccess }: NaverAutoRegisterP
             <input style={{ ...inputStyle, backgroundColor: '#f3f4f6', color: C.textSub }} type="number" value={returnCharge * 2} readOnly />
           </div>
         </div>
+        {/* ── 수익 계산 ── */}
+        {naverCalc && (
+          <div style={{ padding: '10px 12px', backgroundColor: '#f8f9fa', border: `1px solid ${C.border}`, borderRadius: '8px', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '6px' }}>
+              <div>
+                <label style={{ ...label, marginBottom: '3px' }}>판매자 등급</label>
+                <select
+                  style={{ ...inputStyle, fontSize: '12px', padding: '6px 8px' }}
+                  value={naverGrade}
+                  onChange={(e) => setNaverGrade(e.target.value as NaverGrade)}
+                >
+                  <option value="스타트제로">스타트제로 (0%)</option>
+                  <option value="영세">영세 (1.98%)</option>
+                  <option value="중소1">중소1 (2.64%)</option>
+                  <option value="중소2">중소2 (2.97%)</option>
+                  <option value="일반">일반 (3.63%)</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ ...label, marginBottom: '3px' }}>유입경로</label>
+                <select
+                  style={{ ...inputStyle, fontSize: '12px', padding: '6px 8px' }}
+                  value={naverInflow}
+                  onChange={(e) => setNaverInflow(e.target.value as NaverInflow)}
+                >
+                  <option value="네이버쇼핑">네이버쇼핑 (2.73%)</option>
+                  <option value="마케팅링크">마케팅링크 (0.91%)</option>
+                </select>
+              </div>
+            </div>
+            {sourcingCost > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: C.textSub }}>소싱 원가</span>
+                <span style={{ color: '#b91c1c' }}>-{sourcingCost.toLocaleString()}원</span>
+              </div>
+            )}
+            {naverCalc.items.slice(0, 2).map((item) => (
+              <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: C.textSub }}>
+                  {item.label}{item.rate != null ? ` (${(item.rate * 100).toFixed(2)}%)` : ''}
+                </span>
+                <span style={{ color: '#b91c1c' }}>-{item.amount.toLocaleString()}원</span>
+              </div>
+            ))}
+            {deliveryCharge > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: C.textSub }}>배송비 (수수료 과세 기준)</span>
+                <span style={{ color: C.textSub, fontSize: '11px' }}>포함됨</span>
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: `1px solid ${C.border}`, paddingTop: '5px', marginTop: '2px' }}>
+              <span style={{ fontWeight: 700, color: C.text }}>예상 수익</span>
+              <span style={{ fontWeight: 700, color: naverCalc.netProfit >= 0 ? '#15803d' : '#b91c1c' }}>
+                {naverCalc.netProfit.toLocaleString()}원
+                <span style={{ marginLeft: '6px', fontSize: '11px', fontWeight: 400, color: naverCalc.netProfit >= 0 ? '#15803d' : '#b91c1c' }}>
+                  ({naverCalc.marginRate.toFixed(1)}%)
+                </span>
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── 섹션 3: 검색 태그 ────────────────────────────────── */}
       <div style={section}>
-        <p style={sectionTitle}>검색 태그 (최대 10개)</p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <p style={sectionTitle}>검색 태그 (최대 10개)</p>
+          <button
+            type="button"
+            disabled={isAiTagging || !sharedDraft.name}
+            onClick={() => {
+              setIsAiTagging(true);
+              const product = {
+                itemId: '',
+                title: sharedDraft.name,
+                price: Number(sharedDraft.salePrice) || 0,
+                imageUrls: sharedDraft.thumbnailImages || [],
+                description: (sharedDraft.description || '').replace(/<[^>]*>/g, '').slice(0, 500),
+                categoryHint: sharedDraft.categoryHint || '',
+              };
+              fetch('/api/auto-register/ai-map', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ product }),
+              })
+                .then((r) => r.json())
+                .then((data: { fields?: { searchTags: { value: string[] } } }) => {
+                  const fetchedTags = data.fields?.searchTags.value ?? [];
+                  if (fetchedTags.length > 0) setTags(fetchedTags.slice(0, 10));
+                })
+                .catch(() => {})
+                .finally(() => setIsAiTagging(false));
+            }}
+            style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 10px', fontSize: '11px', fontWeight: 600, backgroundColor: isAiTagging ? '#e5e7eb' : '#f0fdf4', color: isAiTagging ? C.textSub : '#15803d', border: '1px solid #86efac', borderRadius: '6px', cursor: isAiTagging ? 'not-allowed' : 'pointer' }}
+          >
+            {isAiTagging
+              ? <><span style={{ width: '10px', height: '10px', border: '2px solid #86efac', borderTopColor: '#15803d', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />생성 중...</>
+              : 'AI 태그 생성'}
+          </button>
+        </div>
         <div style={{ display: 'flex', gap: '6px' }}>
           <input
             style={{ ...inputStyle, flex: 1 }}

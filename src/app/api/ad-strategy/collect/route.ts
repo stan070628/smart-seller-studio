@@ -50,7 +50,17 @@ export async function POST(request: NextRequest) {
         }
       }
       for (const product of data.products) {
-        product.monthlySales = salesMap.get(product.name) ?? product.monthlySales;
+        // 완전 일치 → 앞 10자 부분 매칭 순으로 폴백
+        const exactMatch = salesMap.get(product.name);
+        if (exactMatch !== undefined) {
+          product.monthlySales = exactMatch;
+        } else {
+          const prefix = product.name.slice(0, 10);
+          const partialEntry = [...salesMap.entries()].find(
+            ([k]) => k.includes(prefix) || product.name.includes(k.slice(0, 10)),
+          );
+          if (partialEntry) product.monthlySales = partialEntry[1];
+        }
       }
     } catch {
       // 주문 API 실패는 무시 — 캐시의 기존 값 그대로 사용

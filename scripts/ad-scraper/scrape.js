@@ -107,22 +107,44 @@ async function scrapeWingProducts() {
           const idMatch = href.match(/vendorInventoryId=(\d+)/);
           const sellerProductId = idMatch?.[1] ?? '';
 
+          // Wing은 아이템위너 배지를 이미지·아이콘·텍스트 등 다양한 방식으로 표시함
           const isItemWinner =
-            row.querySelector('[class*="winner"], [class*="item-winner"]') !== null ||
+            row.querySelector(
+              '[class*="winner"], [class*="item-winner"], [class*="itemWinner"], ' +
+              '[data-winner="true"], [aria-label*="winner"], [title*="winner"], ' +
+              '[title*="위너"], [alt*="winner"], img[src*="winner"]',
+            ) !== null ||
             cells.some(
               (c) =>
                 c.textContent?.includes('Item winner') ||
+                c.textContent?.includes('item winner') ||
                 c.textContent?.includes('아이템위너') ||
-                c.textContent?.includes('위너 보유'),
+                c.textContent?.includes('아이템 위너') ||
+                c.textContent?.includes('위너 보유') ||
+                c.textContent?.includes('위너보유') ||
+                c.querySelector('img[src*="winner"], img[alt*="winner"]') !== null,
             );
 
           const stockEl = row.querySelector('.is-top');
-          const stock =
-            parseInt((stockEl?.textContent ?? cells[2]?.textContent ?? '0').replace(/[^0-9]/g, ''), 10) || 0;
+          const stockText = stockEl?.textContent ?? cells[2]?.textContent ?? '0';
+          const stock = parseInt(stockText.replace(/[^0-9]/g, ''), 10) || 0;
+
+          // Wing 재고 셀에 "내 판매량 N개" 텍스트가 함께 표시됨 (판매자배송 기준)
+          const salesEl = row.querySelector('.is-bottom, [class*="sales-count"], [class*="salesCount"]');
+          let monthlySales = 0;
+          if (salesEl) {
+            const m = salesEl.textContent?.match(/([0-9,]+)\s*개/);
+            monthlySales = m ? parseInt(m[1].replace(/,/g, ''), 10) : 0;
+          } else {
+            // 재고 셀 전체 텍스트에서 "내 판매량 N개" 패턴 추출
+            const cellText = cells[3]?.textContent ?? cells[2]?.textContent ?? '';
+            const m = cellText.match(/내\s*판매량\s*([0-9,]+)\s*개/);
+            monthlySales = m ? parseInt(m[1].replace(/,/g, ''), 10) : 0;
+          }
 
           const priceEl = row.querySelector('.isp-top');
           const salePrice =
-            parseInt((priceEl?.textContent ?? cells[4]?.textContent ?? '0').replace(/[^0-9]/g, ''), 10) || 0;
+            parseInt((priceEl?.textContent ?? cells[5]?.textContent ?? cells[4]?.textContent ?? '0').replace(/[^0-9]/g, ''), 10) || 0;
 
           const imageViolation =
             row.querySelector('[class*="violation"], [class*="block"], [class*="error"]') !== null ||
@@ -134,7 +156,7 @@ async function scrapeWingProducts() {
                 c.textContent?.includes('Rejected'),
             );
 
-          return { name, sellerProductId, isItemWinner, stock, salePrice, monthlySales: 0, imageViolation };
+          return { name, sellerProductId, isItemWinner, stock, salePrice, monthlySales, imageViolation };
         })
         .filter((p) => p !== null && p.name.length > 0);
     });
