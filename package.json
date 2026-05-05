@@ -22,6 +22,7 @@
     "bcryptjs": "^3.0.3",
     "dompurify": "^3.4.1",
     "html-to-image": "^1.11.13",
+    "html2pdf.js": "^0.14.0",
     "jose": "^6.2.2",
     "jsonrepair": "^3.13.3",
     "jszip": "^3.10.1",
