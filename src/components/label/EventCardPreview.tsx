@@ -27,11 +27,10 @@ const GRID_STYLE: React.CSSProperties = {
 };
 
 // 섹션별 고정 높이 (합계 = CELL_HEIGHT_MM = 92mm)
-// flex/table 없이 block 레이아웃 + 명시적 height → html2canvas PDF 완전 호환
-const H_HEADER  = 24; // mm
-const H_THANKS  = 22; // mm
-const H_FOOTER  =  8; // mm
-const H_STEPS   = CELL_HEIGHT_MM - H_HEADER - H_THANKS - H_FOOTER; // 38mm
+const H_HEADER  = 26; // mm
+const H_THANKS  = 26; // mm
+const H_FOOTER  =  9; // mm
+const H_STEPS   = CELL_HEIGHT_MM - H_HEADER - H_THANKS - H_FOOTER; // 31mm
 
 function EventCard({ companyName, phone, prizeText, thanksMsg }: Props) {
   const steps = [
@@ -48,7 +47,7 @@ function EventCard({ companyName, phone, prizeText, thanksMsg }: Props) {
       border: '0.5px solid #ccc',
       boxSizing: 'border-box',
     }}>
-      {/* 헤더 — 고정 높이 */}
+      {/* 헤더 */}
       <div style={{
         height: `${H_HEADER}mm`,
         overflow: 'hidden',
@@ -58,22 +57,22 @@ function EventCard({ companyName, phone, prizeText, thanksMsg }: Props) {
         textAlign: 'center',
         padding: '4mm 3mm 2mm',
       }}>
-        <div style={{ fontSize: 8, fontWeight: 500, opacity: 0.85, letterSpacing: 1, marginBottom: 2 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.9, letterSpacing: 1, marginBottom: 3 }}>
           ☕ REVIEW EVENT
         </div>
-        <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: -0.3 }}>
+        <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: -0.5 }}>
           리뷰 이벤트
         </div>
         <div style={{
-          marginTop: 3, fontSize: 8, fontWeight: 600,
-          background: 'rgba(255,255,255,0.18)',
-          borderRadius: 20, padding: '2px 8px', display: 'inline-block',
+          marginTop: 4, fontSize: 10, fontWeight: 600,
+          background: 'rgba(255,255,255,0.22)',
+          borderRadius: 20, padding: '3px 10px', display: 'inline-block',
         }}>
           {prizeText}
         </div>
       </div>
 
-      {/* 감사 메시지 — 고정 높이 */}
+      {/* 감사 메시지 */}
       <div style={{
         height: `${H_THANKS}mm`,
         overflow: 'hidden',
@@ -82,34 +81,34 @@ function EventCard({ companyName, phone, prizeText, thanksMsg }: Props) {
         textAlign: 'center',
         padding: '3mm 4mm 2mm',
       }}>
-        <div style={{ fontSize: 14, marginBottom: 2 }}>🙏</div>
-        <div style={{ fontSize: 9.5, fontWeight: 700, color: '#1e1e1e', lineHeight: 1.5 }}>
+        <div style={{ fontSize: 18, marginBottom: 3 }}>🙏</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#1e1e1e', lineHeight: 1.5 }}>
           {thanksMsg}
         </div>
-        <div style={{ fontSize: 8, color: '#6b6b6b', marginTop: 2, lineHeight: 1.4 }}>
+        <div style={{ fontSize: 10, color: '#6b6b6b', marginTop: 3, lineHeight: 1.4 }}>
           소중한 리뷰 한 줄이 저희에게 큰 힘이 됩니다 ☕
         </div>
       </div>
 
-      {/* 참여 방법 — 고정 높이, paddingTop으로 세로 중앙 근사 */}
+      {/* 참여 방법 */}
       <div style={{
         height: `${H_STEPS}mm`,
         overflow: 'hidden',
         boxSizing: 'border-box',
         background: '#fff',
-        padding: '6mm 4mm 2mm',
+        padding: '3mm 4mm 2mm',
       }}>
-        <div style={{ fontSize: 7.5, fontWeight: 700, color: '#00704A', letterSpacing: 0.5, borderBottom: '1px solid #e5e5e5', paddingBottom: '1.5mm', marginBottom: '2mm' }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: '#00704A', letterSpacing: 0.5, borderBottom: '1px solid #e5e5e5', paddingBottom: '1.5mm', marginBottom: '2mm' }}>
           ✦ 참여 방법
         </div>
         {steps.map((text, idx) => (
-          <div key={idx} style={{ display: 'flex', alignItems: 'center', fontSize: 8.5, color: '#2d2d2d', lineHeight: 1.4, marginBottom: idx < 2 ? '2mm' : 0 }}>
+          <div key={idx} style={{ display: 'flex', alignItems: 'center', fontSize: 11, color: '#2d2d2d', lineHeight: 1.35, marginBottom: idx < 2 ? '2mm' : 0 }}>
             <div style={{
-              width: 15, height: 15, flexShrink: 0, marginRight: 5,
+              width: 18, height: 18, flexShrink: 0, marginRight: 6,
               background: '#00704A', color: '#fff',
               borderRadius: '50%',
-              textAlign: 'center', lineHeight: '15px',
-              fontSize: 8, fontWeight: 700,
+              textAlign: 'center', lineHeight: '18px',
+              fontSize: 10, fontWeight: 700,
             }}>
               {idx + 1}
             </div>
@@ -118,16 +117,16 @@ function EventCard({ companyName, phone, prizeText, thanksMsg }: Props) {
         ))}
       </div>
 
-      {/* 푸터 — 고정 높이 */}
+      {/* 푸터 */}
       <div style={{
         height: `${H_FOOTER}mm`,
         overflow: 'hidden',
         boxSizing: 'border-box',
         background: '#1E3932',
-        color: 'rgba(255,255,255,0.75)',
+        color: 'rgba(255,255,255,0.8)',
         textAlign: 'center',
-        padding: '2mm 2mm',
-        fontSize: 7.5,
+        padding: '2.5mm 2mm',
+        fontSize: 10,
       }}>
         문자 발송 <span style={{ color: '#fff', fontWeight: 700 }}>{companyName}</span>
         {phone && <> &nbsp;|&nbsp; <span style={{ color: '#fff', fontWeight: 700 }}>{phone}</span></>}

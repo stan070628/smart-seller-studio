@@ -45,8 +45,9 @@ export default function EventCardEditor() {
     <>
       <style>{`
         @media print {
-          body > * { display: none !important; }
-          #event-card-preview { display: grid !important; }
+          body * { visibility: hidden; }
+          #event-card-preview, #event-card-preview * { visibility: visible; }
+          #event-card-preview { position: fixed; top: 0; left: 0; margin: 0; }
           @page { margin: 0; size: A4; }
         }
       `}</style>
