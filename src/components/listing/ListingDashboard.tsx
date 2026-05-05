@@ -2317,6 +2317,28 @@ export default function ListingDashboard() {
           </nav>
         </div>
 
+        {/* 우측: 라벨 인쇄 */}
+        <Link
+          href={`/label?productName=${encodeURIComponent(sharedDraft.name || '')}`}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '6px 14px',
+            borderRadius: 8,
+            border: `1px solid ${C.border}`,
+            background: C.btnSecondaryBg,
+            color: C.btnSecondaryText,
+            fontSize: 13,
+            fontWeight: 600,
+            textDecoration: 'none',
+            whiteSpace: 'nowrap',
+            marginRight: 6,
+          }}
+        >
+          🏷 라벨 인쇄
+        </Link>
+
         {/* 우측: 1688 가져오기 */}
         <Link
           href="/listing/import-1688"
