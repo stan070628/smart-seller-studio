@@ -38,16 +38,20 @@ const CELL_STYLE: React.CSSProperties = {
 const LabelPreview = forwardRef<HTMLDivElement, Props>(({ imageUrl, fields }, ref) => {
   return (
     <div id="label-preview" ref={ref} style={GRID_STYLE}>
-      {[0, 1, 2].map((i) => (
-        <>
-          <div key={`img-${i}`} style={CELL_STYLE}>
-            <LabelImageCell imageUrl={imageUrl} />
-          </div>
-          <div key={`text-${i}`} style={CELL_STYLE}>
-            <LabelTextCell fields={fields} />
-          </div>
-        </>
-      ))}
+      {[0, 1, 2].map((i) => {
+        // 실물 라벨지: 3번째 행이 위 행보다 3mm 아래에 위치
+        const rowExtra: React.CSSProperties = i === 2 ? { marginTop: '3mm' } : {};
+        return (
+          <>
+            <div key={`img-${i}`} style={{ ...CELL_STYLE, ...rowExtra }}>
+              <LabelImageCell imageUrl={imageUrl} />
+            </div>
+            <div key={`text-${i}`} style={{ ...CELL_STYLE, ...rowExtra }}>
+              <LabelTextCell fields={fields} />
+            </div>
+          </>
+        );
+      })}
     </div>
   );
 });

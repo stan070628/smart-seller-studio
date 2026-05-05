@@ -40,13 +40,14 @@ export default function LabelTextCell({ fields }: Props) {
         }}
       >
         <thead>
-          <tr>
+          <tr style={{ height: 1 }}>
             <th
               colSpan={2}
               style={{
                 border: '1px solid #000',
                 padding: '3px 4px',
                 textAlign: 'center',
+                verticalAlign: 'middle',
                 fontWeight: 700,
                 fontSize: 13,
                 backgroundColor: '#e8e8e8',

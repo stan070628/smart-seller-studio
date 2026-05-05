@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import LabelPreview from './LabelPreview';
 import QualityFieldsForm from './QualityFieldsForm';
 import TemplatePicker from './TemplatePicker';
+import CoupangProductPicker from './CoupangProductPicker';
 import { generatePdf, printLabel } from '@/lib/label/label-pdf';
 import type { QualityFields } from '@/lib/label/label-templates';
 
@@ -138,6 +139,16 @@ export default function LabelEditor() {
           padding: 16,
           overflowY: 'auto',
         }}>
+          <div style={SECTION}>
+            <div style={SECTION_TITLE}>내 쿠팡 상품 불러오기</div>
+            <CoupangProductPicker
+              onLoad={(url, name) => {
+                if (url) setImageUrl(url);
+                setFields((prev) => ({ ...prev, productName: name }));
+              }}
+            />
+          </div>
+
           <div style={SECTION}>
             <div style={SECTION_TITLE}>템플릿</div>
             <TemplatePicker
