@@ -90,32 +90,42 @@ function EventCard({ companyName, phone, prizeText, thanksMsg }: Props) {
         </div>
       </div>
 
-      {/* 참여 방법 */}
-      <div style={{
+      {/* 참여 방법 — 실제 <table> 엘리먼트 + verticalAlign:middle (html2canvas가 신뢰하는 유일한 방식) */}
+      <table style={{
+        width: '100%',
         height: `${H_STEPS}mm`,
-        overflow: 'hidden',
-        boxSizing: 'border-box',
         background: '#fff',
-        padding: '3mm 4mm 2mm',
+        borderCollapse: 'collapse',
+        tableLayout: 'fixed',
       }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: '#00704A', letterSpacing: 0.5, borderBottom: '1px solid #e5e5e5', paddingBottom: '1.5mm', marginBottom: '2mm' }}>
-          ✦ 참여 방법
-        </div>
-        {steps.map((text, idx) => (
-          <div key={idx} style={{ display: 'flex', alignItems: 'center', fontSize: 11, color: '#2d2d2d', lineHeight: 1.35, marginBottom: idx < 2 ? '2mm' : 0 }}>
-            <div style={{
-              width: 18, height: 18, flexShrink: 0, marginRight: 6,
-              background: '#00704A', color: '#fff',
-              borderRadius: '50%',
-              textAlign: 'center', lineHeight: '18px',
-              fontSize: 10, fontWeight: 700,
+        <tbody>
+          <tr>
+            <td style={{
+              verticalAlign: 'middle',
+              padding: '0 4mm',
+              overflow: 'hidden',
             }}>
-              {idx + 1}
-            </div>
-            {text}
-          </div>
-        ))}
-      </div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#00704A', letterSpacing: 0.5, borderBottom: '1px solid #e5e5e5', paddingBottom: '1.5mm', marginBottom: '2mm' }}>
+                ✦ 참여 방법
+              </div>
+              {steps.map((text, idx) => (
+                <div key={idx} style={{ display: 'flex', alignItems: 'center', fontSize: 11, color: '#2d2d2d', lineHeight: 1.35, marginBottom: idx < 2 ? '2mm' : 0 }}>
+                  <div style={{
+                    width: 18, height: 18, flexShrink: 0, marginRight: 6,
+                    background: '#00704A', color: '#fff',
+                    borderRadius: '50%',
+                    textAlign: 'center', lineHeight: '18px',
+                    fontSize: 10, fontWeight: 700,
+                  }}>
+                    {idx + 1}
+                  </div>
+                  {text}
+                </div>
+              ))}
+            </td>
+          </tr>
+        </tbody>
+      </table>
 
       {/* 푸터 */}
       <div style={{

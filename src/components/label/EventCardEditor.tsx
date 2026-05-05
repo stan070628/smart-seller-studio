@@ -45,6 +45,12 @@ export default function EventCardEditor() {
     <>
       <style>{`
         @media print {
+          /* 배경색·그라디언트 강제 인쇄 (브라우저 기본은 잉크 절약 위해 미인쇄) */
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
           body * { visibility: hidden; }
           #event-card-preview, #event-card-preview * { visibility: visible; }
           #event-card-preview { position: fixed; top: 0; left: 0; margin: 0; }

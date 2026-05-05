@@ -121,8 +121,14 @@ export default function LabelEditor() {
     <>
       <style>{`
         @media print {
-          body > * { display: none !important; }
-          #label-preview { display: grid !important; }
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          body * { visibility: hidden; }
+          #label-preview, #label-preview * { visibility: visible; }
+          #label-preview { position: fixed; top: 0; left: 0; margin: 0; }
           @page { margin: 0; size: A4; }
         }
       `}</style>
