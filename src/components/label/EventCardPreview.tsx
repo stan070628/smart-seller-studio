@@ -27,105 +27,103 @@ const GRID_STYLE: React.CSSProperties = {
 };
 
 function EventCard({ companyName, phone, prizeText, thanksMsg }: Props) {
+  const steps = [
+    '구매하신 쇼핑몰에 사진 리뷰 남기기 📸',
+    `${companyName}으로 구매 인증 문자 보내기`,
+    '스타벅스 아메리카노 기프트콘 수령 🎁',
+  ];
+
   return (
-    <div style={{
-      width: '100%',
-      height: '100%',
-      display: 'flex',
-      flexDirection: 'column',
-      overflow: 'hidden',
-      border: '0.5px solid #ccc',
-    }}>
-      {/* 상단 헤더 - 스타벅스 그린 */}
-      <div style={{
-        background: 'linear-gradient(135deg, #00704A 0%, #1E3932 100%)',
-        color: '#fff',
-        textAlign: 'center',
-        padding: '4mm 3mm 3mm',
-        flexShrink: 0,
-      }}>
-        <div style={{ fontSize: 8, fontWeight: 500, opacity: 0.85, letterSpacing: 1, marginBottom: 2 }}>
-          ☕ REVIEW EVENT
-        </div>
-        <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: -0.3 }}>
-          리뷰 이벤트
-        </div>
-        <div style={{
-          marginTop: 3,
-          fontSize: 8,
-          fontWeight: 600,
-          background: 'rgba(255,255,255,0.18)',
-          borderRadius: 20,
-          padding: '2px 8px',
-          display: 'inline-block',
-        }}>
-          {prizeText}
-        </div>
-      </div>
-
-      {/* 중단 감사 메시지 */}
-      <div style={{
-        background: '#f9f6f0',
-        padding: '3mm 4mm',
-        textAlign: 'center',
-        flexShrink: 0,
-      }}>
-        <div style={{ fontSize: 14, marginBottom: 2 }}>🙏</div>
-        <div style={{ fontSize: 9.5, fontWeight: 700, color: '#1e1e1e', lineHeight: 1.5 }}>
-          {thanksMsg}
-        </div>
-        <div style={{ fontSize: 8, color: '#6b6b6b', marginTop: 2, lineHeight: 1.4 }}>
-          소중한 리뷰 한 줄이 저희에게 큰 힘이 됩니다 ☕
-        </div>
-      </div>
-
-      {/* 하단 참여 방법 - 내부 div로 묶어 세로 중앙 정렬 (gap 미지원 PDF 대응) */}
-      <div style={{
-        flex: 1,
-        padding: '0 4mm',
-        background: '#fff',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-      }}>
-        <div>
-          <div style={{ fontSize: 7.5, fontWeight: 700, color: '#00704A', letterSpacing: 0.5, borderBottom: '1px solid #e5e5e5', paddingBottom: '1.5mm', marginBottom: '2mm' }}>
-            ✦ 참여 방법
-          </div>
-          {[
-            '구매하신 쇼핑몰에 사진 리뷰 남기기 📸',
-            `${companyName}으로 구매 인증 문자 보내기`,
-            '스타벅스 아메리카노 기프트콘 수령 🎁',
-          ].map((text, idx) => (
-            <div key={idx} style={{ display: 'flex', alignItems: 'center', fontSize: 8.5, color: '#2d2d2d', lineHeight: 1.4, marginBottom: idx < 2 ? '2mm' : 0 }}>
-              <div style={{
-                width: 15, height: 15,
-                background: '#00704A', color: '#fff',
-                borderRadius: '50%',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 8, fontWeight: 700, flexShrink: 0,
-                marginRight: 5,
-              }}>
-                {idx + 1}
+    <div style={{ width: '100%', height: '100%', overflow: 'hidden', border: '0.5px solid #ccc', boxSizing: 'border-box' }}>
+      {/* table 레이아웃: flex column 세로 중앙 정렬 대신 사용 (html2canvas PDF 호환) */}
+      <table style={{ width: '100%', height: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+        <tbody>
+          {/* 상단 헤더 */}
+          <tr>
+            <td style={{
+              background: 'linear-gradient(135deg, #00704A 0%, #1E3932 100%)',
+              color: '#fff',
+              textAlign: 'center',
+              padding: '4mm 3mm 3mm',
+              verticalAlign: 'middle',
+            }}>
+              <div style={{ fontSize: 8, fontWeight: 500, opacity: 0.85, letterSpacing: 1, marginBottom: 2 }}>
+                ☕ REVIEW EVENT
               </div>
-              {text}
-            </div>
-          ))}
-        </div>
-      </div>
+              <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: -0.3 }}>
+                리뷰 이벤트
+              </div>
+              <div style={{
+                marginTop: 3, fontSize: 8, fontWeight: 600,
+                background: 'rgba(255,255,255,0.18)',
+                borderRadius: 20, padding: '2px 8px', display: 'inline-block',
+              }}>
+                {prizeText}
+              </div>
+            </td>
+          </tr>
 
-      {/* 푸터 */}
-      <div style={{
-        background: '#1E3932',
-        color: 'rgba(255,255,255,0.75)',
-        textAlign: 'center',
-        padding: '1.5mm 2mm',
-        fontSize: 7.5,
-        flexShrink: 0,
-      }}>
-        문자 발송 <span style={{ color: '#fff', fontWeight: 700 }}>{companyName}</span>
-        {phone && <> &nbsp;|&nbsp; <span style={{ color: '#fff', fontWeight: 700 }}>{phone}</span></>}
-      </div>
+          {/* 중단 감사 메시지 */}
+          <tr>
+            <td style={{
+              background: '#f9f6f0',
+              padding: '3mm 4mm',
+              textAlign: 'center',
+              verticalAlign: 'middle',
+            }}>
+              <div style={{ fontSize: 14, marginBottom: 2 }}>🙏</div>
+              <div style={{ fontSize: 9.5, fontWeight: 700, color: '#1e1e1e', lineHeight: 1.5 }}>
+                {thanksMsg}
+              </div>
+              <div style={{ fontSize: 8, color: '#6b6b6b', marginTop: 2, lineHeight: 1.4 }}>
+                소중한 리뷰 한 줄이 저희에게 큰 힘이 됩니다 ☕
+              </div>
+            </td>
+          </tr>
+
+          {/* 참여 방법 - height:100%로 잔여 공간 차지, vertical-align:middle로 중앙 정렬 */}
+          <tr style={{ height: '100%' }}>
+            <td style={{
+              background: '#fff',
+              padding: '2mm 4mm',
+              verticalAlign: 'middle',
+            }}>
+              <div style={{ fontSize: 7.5, fontWeight: 700, color: '#00704A', letterSpacing: 0.5, borderBottom: '1px solid #e5e5e5', paddingBottom: '1.5mm', marginBottom: '2mm' }}>
+                ✦ 참여 방법
+              </div>
+              {steps.map((text, idx) => (
+                <div key={idx} style={{ display: 'flex', alignItems: 'center', fontSize: 8.5, color: '#2d2d2d', lineHeight: 1.4, marginBottom: idx < 2 ? '2mm' : 0 }}>
+                  <div style={{
+                    width: 15, height: 15, flexShrink: 0, marginRight: 5,
+                    background: '#00704A', color: '#fff',
+                    borderRadius: '50%',
+                    textAlign: 'center', lineHeight: '15px',
+                    fontSize: 8, fontWeight: 700,
+                  }}>
+                    {idx + 1}
+                  </div>
+                  {text}
+                </div>
+              ))}
+            </td>
+          </tr>
+
+          {/* 푸터 */}
+          <tr>
+            <td style={{
+              background: '#1E3932',
+              color: 'rgba(255,255,255,0.75)',
+              textAlign: 'center',
+              padding: '1.5mm 2mm',
+              fontSize: 7.5,
+              verticalAlign: 'middle',
+            }}>
+              문자 발송 <span style={{ color: '#fff', fontWeight: 700 }}>{companyName}</span>
+              {phone && <> &nbsp;|&nbsp; <span style={{ color: '#fff', fontWeight: 700 }}>{phone}</span></>}
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   );
 }
