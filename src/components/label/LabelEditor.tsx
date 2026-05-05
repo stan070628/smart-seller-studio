@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import LabelPreview from './LabelPreview';
 import QualityFieldsForm from './QualityFieldsForm';
@@ -219,6 +220,19 @@ export default function LabelEditor() {
             <span style={{ flex: 1, fontSize: 12, color: '#6b7280' }}>
               미리보기 — A4 · 99.1×93mm × 6칸
             </span>
+            <Link
+              href="/label/event"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '7px 14px', borderRadius: 6,
+                border: '1px solid #e5e7eb',
+                background: '#fff', color: '#374151',
+                fontSize: 12, fontWeight: 600, textDecoration: 'none',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              🎁 이벤트 카드
+            </Link>
             <button
               style={{ ...BTN_PRIMARY, background: '#6366f1' }}
               onClick={handlePdf}
