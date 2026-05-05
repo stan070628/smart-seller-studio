@@ -82,6 +82,7 @@ export default function LabelTextCell({ fields }: Props) {
                   padding: '2px 4px',
                   wordBreak: 'break-all',
                   verticalAlign: 'middle',
+                  textAlign: 'center',
                   color: '#000',
                 }}
               >

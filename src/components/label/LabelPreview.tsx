@@ -11,7 +11,7 @@ interface Props {
 }
 
 const CELL_WIDTH_MM = 99.1;
-const CELL_HEIGHT_MM = 93;
+const CELL_HEIGHT_MM = 92;   // 93mm 규격에서 1mm 여유 → 총 높이 292.6mm < 297mm (1페이지 보장)
 const GAP_H_MM = 0.9;
 const GAP_V_MM = 1.3;
 
@@ -23,9 +23,7 @@ const GRID_STYLE: React.CSSProperties = {
   rowGap: `${GAP_V_MM}mm`,
   padding: '7mm 5mm',
   width: '210mm',
-  height: '297mm',      // minHeight 대신 고정 → 정확히 A4 한 장
-  boxSizing: 'border-box', // 패딩 포함 계산: 컨텐츠 = 297-14=283mm (그리드 필요량 281.6mm ✓)
-  overflow: 'hidden',
+  boxSizing: 'border-box',
   background: '#fff',
 };
 
