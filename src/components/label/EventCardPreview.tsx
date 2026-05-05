@@ -79,36 +79,39 @@ function EventCard({ companyName, phone, prizeText, thanksMsg }: Props) {
         </div>
       </div>
 
-      {/* 하단 참여 방법 */}
+      {/* 하단 참여 방법 - 내부 div로 묶어 세로 중앙 정렬 (gap 미지원 PDF 대응) */}
       <div style={{
         flex: 1,
-        padding: '2.5mm 4mm 2mm',
+        padding: '0 4mm',
         background: '#fff',
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'space-around',
+        justifyContent: 'center',
       }}>
-        <div style={{ fontSize: 7.5, fontWeight: 700, color: '#00704A', letterSpacing: 0.5, borderBottom: '1px solid #e5e5e5', paddingBottom: '1.5mm', marginBottom: '1.5mm' }}>
-          ✦ 참여 방법
-        </div>
-        {[
-          '구매하신 쇼핑몰에 사진 리뷰 남기기 📸',
-          `${companyName}으로 구매 인증 문자 보내기`,
-          '스타벅스 아메리카노 기프트콘 수령 🎁',
-        ].map((text, idx) => (
-          <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 8.5, color: '#2d2d2d', lineHeight: 1.4 }}>
-            <div style={{
-              width: 15, height: 15,
-              background: '#00704A', color: '#fff',
-              borderRadius: '50%',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 8, fontWeight: 700, flexShrink: 0,
-            }}>
-              {idx + 1}
-            </div>
-            {text}
+        <div>
+          <div style={{ fontSize: 7.5, fontWeight: 700, color: '#00704A', letterSpacing: 0.5, borderBottom: '1px solid #e5e5e5', paddingBottom: '1.5mm', marginBottom: '2mm' }}>
+            ✦ 참여 방법
           </div>
-        ))}
+          {[
+            '구매하신 쇼핑몰에 사진 리뷰 남기기 📸',
+            `${companyName}으로 구매 인증 문자 보내기`,
+            '스타벅스 아메리카노 기프트콘 수령 🎁',
+          ].map((text, idx) => (
+            <div key={idx} style={{ display: 'flex', alignItems: 'center', fontSize: 8.5, color: '#2d2d2d', lineHeight: 1.4, marginBottom: idx < 2 ? '2mm' : 0 }}>
+              <div style={{
+                width: 15, height: 15,
+                background: '#00704A', color: '#fff',
+                borderRadius: '50%',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 8, fontWeight: 700, flexShrink: 0,
+                marginRight: 5,
+              }}>
+                {idx + 1}
+              </div>
+              {text}
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* 푸터 */}
@@ -127,6 +130,13 @@ function EventCard({ companyName, phone, prizeText, thanksMsg }: Props) {
   );
 }
 
+const CELL_STYLE: React.CSSProperties = {
+  width: `${CELL_WIDTH_MM}mm`,
+  height: `${CELL_HEIGHT_MM}mm`,
+  overflow: 'hidden',
+  boxSizing: 'border-box',
+};
+
 const EventCardPreview = forwardRef<HTMLDivElement, Props>((props, ref) => {
   return (
     <div id="event-card-preview" ref={ref} style={GRID_STYLE}>
@@ -134,10 +144,10 @@ const EventCardPreview = forwardRef<HTMLDivElement, Props>((props, ref) => {
         const rowExtra: React.CSSProperties = i === 2 ? { marginTop: '3mm' } : {};
         return (
           <>
-            <div key={`a-${i}`} style={{ ...rowExtra, overflow: 'hidden' }}>
+            <div key={`a-${i}`} style={{ ...CELL_STYLE, ...rowExtra }}>
               <EventCard {...props} />
             </div>
-            <div key={`b-${i}`} style={{ ...rowExtra, overflow: 'hidden' }}>
+            <div key={`b-${i}`} style={{ ...CELL_STYLE, ...rowExtra }}>
               <EventCard {...props} />
             </div>
           </>
