@@ -176,6 +176,23 @@ const saveCanvasHandler = http.patch('/api/projects/:id/canvas', () => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /api/label/upload-image 핸들러
+// ---------------------------------------------------------------------------
+
+const labelUploadHandler = http.post('/api/label/upload-image', () => {
+  return HttpResponse.json(
+    {
+      success: true,
+      data: {
+        url: 'https://example.supabase.co/storage/v1/object/public/smart-seller-studio/labels/user-123/1700000000000_logo.png',
+        fileName: 'logo.png',
+      },
+    },
+    { status: 201 },
+  );
+});
+
+// ---------------------------------------------------------------------------
 // 핸들러 배열 export
 // ---------------------------------------------------------------------------
 
@@ -188,4 +205,5 @@ export const handlers = [
   createProjectHandler,
   getProjectHandler,
   saveCanvasHandler,
+  labelUploadHandler,
 ];
