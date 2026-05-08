@@ -1,26 +1,10 @@
 import sharp from 'sharp';
 import { uploadToStorage } from '@/lib/supabase/server';
+import { assertSafeUrl } from '@/lib/listing/url-safety';
 
 const SIZE = 500;
 const FETCH_TIMEOUT_MS = 15_000;
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024; // 20MB
-
-// SSRF 방어: https-only + private/loopback/link-local 차단
-function assertSafeUrl(rawUrl: string): void {
-  const url = new URL(rawUrl);
-  if (url.protocol !== 'https:') throw new Error('이미지 URL은 https만 허용됩니다.');
-  const h = url.hostname;
-  if (
-    h === 'localhost' ||
-    /^127\./.test(h) ||
-    /^169\.254\./.test(h) ||
-    /^10\./.test(h) ||
-    /^172\.(1[6-9]|2[0-9]|3[01])\./.test(h) ||
-    /^192\.168\./.test(h)
-  ) {
-    throw new Error('허용되지 않는 이미지 URL입니다.');
-  }
-}
 
 export function truncateTitle(title: string): string {
   const chars = [...title];

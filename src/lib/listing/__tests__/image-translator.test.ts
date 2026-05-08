@@ -13,14 +13,17 @@ vi.mock('@/lib/listing/translation-cache', () => ({
 vi.mock('@/lib/listing/sharp-overlay', () => ({
   composeOverlay: vi.fn(async () => Buffer.from('jpeg-out')),
 }));
-vi.mock('@/lib/supabase/server', () => ({
-  uploadToStorage: vi.fn(async (path: string) => ({
-    url: `https://cdn/${path}`,
-    path,
-    size: 1,
-  })),
-  STORAGE_BUCKET: 'test',
-}));
+vi.mock('@/lib/supabase/server', () => {
+  const upload = vi.fn(async () => ({ error: null }));
+  const getPublicUrl = vi.fn((path: string) => ({
+    data: { publicUrl: `https://cdn/${path}` },
+  }));
+  const from = vi.fn(() => ({ upload, getPublicUrl }));
+  return {
+    getSupabaseServerClient: () => ({ storage: { from } }),
+    STORAGE_BUCKET: 'test',
+  };
+});
 vi.mock('@/lib/ai/claude', () => ({
   getAnthropicClient: () => ({
     messages: {
@@ -100,5 +103,29 @@ describe('translateImage', () => {
     expect(result.status).toBe('failed');
     expect(result.translatedUrl).toBeNull();
     expect(visionMod.extractTextBlocks).toHaveBeenCalledTimes(2);
+  });
+
+  it('failed 상태 캐시는 hit하지 않고 다시 시도한다', async () => {
+    cacheMod.getCachedTranslation.mockResolvedValueOnce({
+      image_url_hash: 'h',
+      original_url: 'https://a/retry.jpg',
+      translated_url: null,
+      status: 'failed',
+    });
+    visionMod.extractTextBlocks.mockResolvedValueOnce([
+      { text: '产品', bbox: { x: 0, y: 0, w: 50, h: 20 } },
+    ]);
+
+    const result = await translateImage('https://a/retry.jpg');
+    expect(result.status).toBe('ok');
+    expect(visionMod.extractTextBlocks).toHaveBeenCalled();
+  });
+
+  it('SSRF: 사설 IP 호스트는 즉시 status=failed', async () => {
+    cacheMod.getCachedTranslation.mockResolvedValueOnce(null);
+    const result = await translateImage('https://192.168.1.1/x.jpg');
+    expect(result.status).toBe('failed');
+    expect(result.translatedUrl).toBeNull();
+    expect(visionMod.extractTextBlocks).not.toHaveBeenCalled();
   });
 });
