@@ -1,7 +1,13 @@
 // @vitest-environment node
 
 import { describe, it, expect } from 'vitest';
-import { measureTextWidth, fitFontSize } from '@/lib/listing/sharp-overlay';
+import sharp from 'sharp';
+import {
+  measureTextWidth,
+  fitFontSize,
+  composeOverlay,
+  type OverlayBlock,
+} from '@/lib/listing/sharp-overlay';
 
 describe('measureTextWidth', () => {
   it('한국어 문자열의 픽셀 폭을 양수로 반환한다', () => {
@@ -44,5 +50,56 @@ describe('fitFontSize', () => {
       minSize: 8,
     });
     expect(size).toBe(8);
+  });
+});
+
+describe('composeOverlay', () => {
+  async function makeRedSquare(size = 200): Promise<Buffer> {
+    return sharp({
+      create: {
+        width: size,
+        height: size,
+        channels: 3,
+        background: { r: 255, g: 0, b: 0 },
+      },
+    })
+      .jpeg()
+      .toBuffer();
+  }
+
+  it('블록이 0개면 원본과 동일한 크기의 JPEG을 반환한다', async () => {
+    const base = await makeRedSquare(200);
+    const out = await composeOverlay(base, []);
+    const meta = await sharp(out).metadata();
+    expect(meta.width).toBe(200);
+    expect(meta.height).toBe(200);
+    expect(meta.format).toBe('jpeg');
+  });
+
+  it('흰 박스가 합성되면 해당 픽셀이 흰색에 가까워진다', async () => {
+    const base = await makeRedSquare(200);
+    const blocks: OverlayBlock[] = [
+      { text_ko: '테스트', bbox: { x: 50, y: 50, w: 100, h: 30 } },
+    ];
+    const out = await composeOverlay(base, blocks);
+    const center = await sharp(out)
+      .extract({ left: 100, top: 65, width: 1, height: 1 })
+      .raw()
+      .toBuffer();
+    expect(center[0]).toBeGreaterThan(200);
+    expect(center[1]).toBeGreaterThan(200);
+    expect(center[2]).toBeGreaterThan(200);
+  });
+
+  it('블록 텍스트가 길어도 에러 없이 출력한다', async () => {
+    const base = await makeRedSquare(400);
+    const blocks: OverlayBlock[] = [
+      {
+        text_ko: '아주아주아주아주아주아주아주긴 한국어 텍스트입니다',
+        bbox: { x: 10, y: 10, w: 80, h: 20 },
+      },
+    ];
+    const out = await composeOverlay(base, blocks);
+    expect(out.length).toBeGreaterThan(0);
   });
 });
