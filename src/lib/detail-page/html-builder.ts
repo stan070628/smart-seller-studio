@@ -8,6 +8,8 @@ interface ImageInput {
   imageBase64: string;
   mimeType: string;
   publicUrl?: string;
+  /** 1688 이미지 번역본 URL. 있으면 src에 우선 사용, publicUrl은 data-original-src에 보존. */
+  translatedUrl?: string | null;
 }
 
 // ─────────────────────────────────────────
@@ -15,8 +17,17 @@ interface ImageInput {
 // ─────────────────────────────────────────
 
 function toDataUrl(img: ImageInput): string {
+  if (img.translatedUrl) return escapeHtml(img.translatedUrl);
   if (img.publicUrl) return escapeHtml(img.publicUrl);
   return `data:${img.mimeType};base64,${img.imageBase64}`;
+}
+
+/** translatedUrl이 사용된 경우 원본 URL을 보존하기 위한 data-original-src 속성 */
+function originalSrcAttr(img: ImageInput): string {
+  if (img.translatedUrl && img.publicUrl) {
+    return ` data-original-src="${escapeHtml(img.publicUrl)}"`;
+  }
+  return '';
 }
 
 function escapeHtml(str: string): string {
@@ -38,7 +49,7 @@ function buildHeroSection(content: DetailPageContent, heroImage: ImageInput): st
       <img
         src="${toDataUrl(heroImage)}"
         alt="${escapeHtml(content.headline)}"
-        style="width:100%;height:auto;display:block;"
+        style="width:100%;height:auto;display:block;"${originalSrcAttr(heroImage)}
       />
       <div style="padding:28px 24px 32px;background:#fff;">
         <h1 style="margin:0 0 10px;font-size:28px;font-weight:800;color:#1a1a1a;line-height:1.35;letter-spacing:-0.5px;">${escapeHtml(content.headline)}</h1>
@@ -77,7 +88,7 @@ function buildGallerySection(images: ImageInput[]): string {
           <img
             src="${toDataUrl(img)}"
             alt="상품 이미지 ${idx + 2}"
-            style="width:100%;display:block;border-radius:12px;"
+            style="width:100%;display:block;border-radius:12px;"${originalSrcAttr(img)}
           />
         </div>`
     )
@@ -197,7 +208,7 @@ function buildStudioHeroSection(content: DetailPageContent, heroImage: ImageInpu
       <img
         src="${toDataUrl(heroImage)}"
         alt="${escapeHtml(content.headline)}"
-        style="width:100%;height:auto;display:block;"
+        style="width:100%;height:auto;display:block;"${originalSrcAttr(heroImage)}
       />
       <div style="padding:40px 28px 32px;text-align:center;">
         <h1 style="margin:0 0 14px;font-size:30px;font-weight:300;color:#111;line-height:1.3;letter-spacing:-0.5px;">${escapeHtml(content.headline)}</h1>
@@ -235,7 +246,7 @@ function buildStudioGallerySection(images: ImageInput[]): string {
           <img
             src="${toDataUrl(img)}"
             alt="상품 이미지 ${idx + 2}"
-            style="width:100%;display:block;"
+            style="width:100%;display:block;"${originalSrcAttr(img)}
           />
         </div>`
     )
