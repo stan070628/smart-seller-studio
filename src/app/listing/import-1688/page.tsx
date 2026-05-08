@@ -6,7 +6,10 @@ import { ChevronLeft } from 'lucide-react';
 import ImageDropzone from '@/components/listing/import1688/ImageDropzone';
 import ClassificationGrid from '@/components/listing/import1688/ClassificationGrid';
 import ResultPreview from '@/components/listing/import1688/ResultPreview';
-import type { ClassifiedImage } from '@/lib/listing/import-1688-types';
+import type {
+  ClassifiedImage,
+  TranslatedImage,
+} from '@/lib/listing/import-1688-types';
 
 const C = {
   bg: '#f9f9f9',
@@ -16,11 +19,12 @@ const C = {
   border: '#eeeeee',
 };
 
-type Step = 'upload' | 'classify' | 'result';
+type Step = 'upload' | 'classify' | 'translating' | 'result';
 
 export default function Import1688Page() {
   const [step, setStep] = useState<Step>('upload');
   const [classifiedImages, setClassifiedImages] = useState<ClassifiedImage[]>([]);
+  const [translatedImages, setTranslatedImages] = useState<TranslatedImage[]>([]);
   const [thumbnailUrl, setThumbnailUrl] = useState('');
   const [result, setResult] = useState<{ thumbnailUrl: string; detailPageHtml: string } | null>(null);
   const [classifyError, setClassifyError] = useState<string | null>(null);
@@ -51,12 +55,35 @@ export default function Import1688Page() {
 
   async function handleGenerate() {
     setGenerating(true);
+    setGenerateError(null);
     try {
+      // 1. 이미지 번역 (lifestyle 제외)
+      setStep('translating');
+      const transRes = await fetch('/api/listing/import-1688/translate-images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images: classifiedImages }),
+      });
+      const transJson = await transRes.json();
+      if (!transRes.ok) throw new Error(transJson.error ?? '이미지 번역 실패');
+
+      const translated: TranslatedImage[] = transJson.images;
+      setTranslatedImages(translated);
+
+      // 2. 한국어 콘텐츠 생성 (translatedUrl 포함하여 generate에 전달)
       const sessionId = crypto.randomUUID();
       const res = await fetch('/api/listing/import-1688/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ images: classifiedImages, thumbnailUrl, sessionId }),
+        body: JSON.stringify({
+          images: translated.map((t) => ({
+            url: t.url,
+            type: t.type,
+            translatedUrl: t.translatedUrl,
+          })),
+          thumbnailUrl,
+          sessionId,
+        }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? '생성 실패');
@@ -64,6 +91,7 @@ export default function Import1688Page() {
       setStep('result');
     } catch (err) {
       setGenerateError(err instanceof Error ? err.message : '생성 중 오류가 발생했습니다.');
+      setStep('classify');
     } finally {
       setGenerating(false);
     }
@@ -83,9 +111,16 @@ export default function Import1688Page() {
           1688에서 가져오기
         </h1>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, fontSize: 13 }}>
-          {(['upload', 'classify', 'result'] as Step[]).map((s, i) => (
+          {(['upload', 'classify', 'translating', 'result'] as Step[]).map((s, i) => (
             <span key={s} style={{ color: step === s ? C.accent : C.textSub, fontWeight: step === s ? 700 : 400 }}>
-              {i + 1}. {s === 'upload' ? '업로드' : s === 'classify' ? '분류확인' : '결과'}
+              {i + 1}.{' '}
+              {s === 'upload'
+                ? '업로드'
+                : s === 'classify'
+                  ? '분류확인'
+                  : s === 'translating'
+                    ? '번역 중'
+                    : '결과'}
             </span>
           ))}
         </div>
@@ -115,10 +150,22 @@ export default function Import1688Page() {
         </>
       )}
 
+      {step === 'translating' && (
+        <div style={{ padding: '64px 20px', textAlign: 'center', color: C.textSub }}>
+          <p style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 8px' }}>
+            이미지 번역 중...
+          </p>
+          <p style={{ fontSize: 13, margin: 0 }}>
+            중국어 텍스트를 한국어로 변환하고 있습니다 (이미지당 1.5~3초).
+          </p>
+        </div>
+      )}
+
       {step === 'result' && result && (
         <ResultPreview
           thumbnailUrl={result.thumbnailUrl}
           detailPageHtml={result.detailPageHtml}
+          translatedImages={translatedImages}
         />
       )}
     </div>

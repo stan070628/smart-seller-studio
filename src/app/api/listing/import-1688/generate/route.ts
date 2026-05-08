@@ -19,6 +19,7 @@ const httpsUrl = z.string().url().refine((u) => u.startsWith('https://'), 'Ïù¥ÎØ
 const classifiedImageSchema = z.object({
   url: httpsUrl,
   type: z.enum(['main_product', 'lifestyle', 'infographic', 'size_chart']),
+  translatedUrl: httpsUrl.nullable().optional(),
 });
 
 const requestSchema = z.object({
@@ -81,6 +82,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       imageBase64: '',
       mimeType: 'image/jpeg' as const,
       publicUrl: img.url,
+      translatedUrl: img.translatedUrl ?? null,
     }));
 
     detailPageHtml = buildDetailPageHtml(content, imageInputs);
