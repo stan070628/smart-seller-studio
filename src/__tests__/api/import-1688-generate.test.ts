@@ -20,6 +20,9 @@ vi.mock('@/lib/detail-page/html-builder', () => ({
   buildDetailPageHtml: vi.fn().mockReturnValue('<html>detail</html>'),
 }));
 
+import { buildDetailPageHtml } from '@/lib/detail-page/html-builder';
+const mockBuildHtml = buildDetailPageHtml as ReturnType<typeof vi.fn>;
+
 import { requireAuth } from '@/lib/supabase/auth';
 import { getAnthropicClient } from '@/lib/ai/claude';
 import { generateAndUploadThumbnail } from '@/lib/listing/import-1688-thumbnail';
@@ -153,5 +156,54 @@ describe('POST /api/listing/import-1688/generate', () => {
       makeRequest({ images: VALID_IMAGES, thumbnailUrl: VALID_THUMBNAIL_URL, sessionId: VALID_SESSION_ID })
     );
     expect(res.status).toBe(502);
+  });
+
+  // ── translatedUrl 통합 ────────────────────────────────────────────────────
+
+  it('images에 translatedUrl이 포함되어도 zod 검증을 통과한다', async () => {
+    const res = await POST(
+      makeRequest({
+        images: [
+          {
+            url: 'https://cdn.example.com/1.jpg',
+            type: 'main_product',
+            translatedUrl: 'https://cdn.example.com/1-ko.jpg',
+          },
+          {
+            url: 'https://cdn.example.com/2.jpg',
+            type: 'lifestyle',
+            translatedUrl: null,
+          },
+        ],
+        thumbnailUrl: VALID_THUMBNAIL_URL,
+        sessionId: VALID_SESSION_ID,
+      })
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it('translatedUrl이 buildDetailPageHtml에 그대로 전달된다', async () => {
+    await POST(
+      makeRequest({
+        images: [
+          {
+            url: 'https://cdn.example.com/1.jpg',
+            type: 'main_product',
+            translatedUrl: 'https://cdn.example.com/1-ko.jpg',
+          },
+        ],
+        thumbnailUrl: VALID_THUMBNAIL_URL,
+        sessionId: VALID_SESSION_ID,
+      })
+    );
+    expect(mockBuildHtml).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.arrayContaining([
+        expect.objectContaining({
+          publicUrl: 'https://cdn.example.com/1.jpg',
+          translatedUrl: 'https://cdn.example.com/1-ko.jpg',
+        }),
+      ])
+    );
   });
 });
