@@ -7,6 +7,11 @@ const nextConfig: NextConfig = {
       bodySizeLimit: '10mb',
     },
   },
+  outputFileTracingIncludes: {
+    '/api/listing/import-1688/translate-images': [
+      './src/lib/listing/fonts/**',
+    ],
+  },
   /**
    * Turbopack resolve alias 설정
    * - canvas: Fabric.js 선택적 서버 의존성 무력화
