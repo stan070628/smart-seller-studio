@@ -2,7 +2,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('@/lib/listing/google-vision-client', () => ({
+vi.mock('@/lib/listing/gemini-vision-client', () => ({
   extractTextBlocks: vi.fn(),
 }));
 vi.mock('@/lib/listing/translation-cache', () => ({
@@ -40,7 +40,7 @@ global.fetch = vi.fn(async () =>
   })
 ) as unknown as typeof fetch;
 
-const visionMod = (await import('@/lib/listing/google-vision-client')) as unknown as {
+const visionMod = (await import('@/lib/listing/gemini-vision-client')) as unknown as {
   extractTextBlocks: ReturnType<typeof vi.fn>;
 };
 const cacheMod = (await import('@/lib/listing/translation-cache')) as unknown as {

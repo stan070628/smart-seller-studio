@@ -5,7 +5,7 @@ import {
   buildTranslateOverlayUserPrompt,
   parseTranslateOverlayResponse,
 } from '@/lib/ai/prompts/translate-overlay';
-import { extractTextBlocks, type TextBlock } from '@/lib/listing/google-vision-client';
+import { extractTextBlocks, type TextBlock } from '@/lib/listing/gemini-vision-client';
 import { composeOverlay, type OverlayBlock } from '@/lib/listing/sharp-overlay';
 import {
   getCachedTranslation,
