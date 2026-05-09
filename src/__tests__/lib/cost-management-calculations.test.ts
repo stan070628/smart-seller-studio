@@ -13,7 +13,6 @@ const makeEntry = (overrides: Partial<CostEntryRow>): CostEntryRow => ({
   quantity: 10,
   unit_cost: 10000,
   unit_shipping_fee: 1000,
-  selling_price: 20000,
   shipping_group_id: null,
   ...overrides,
 });
@@ -39,28 +38,38 @@ describe('calculateWeightedAvg', () => {
 });
 
 describe('calculateProductMetrics', () => {
-  it('정상 계산 — 순이익·마진율', () => {
-    const entries = [makeEntry({ unit_cost: 10000, unit_shipping_fee: 1000, selling_price: 20000, quantity: 10 })];
-    const metrics = calculateProductMetrics(entries, 0.108);
-    // 수수료 = 20000 × 0.108 = 2160
-    // 순이익 = 20000 - 10000 - 1000 - 2160 = 6840
-    // 마진율 = 6840 / 20000 × 100 = 34.2
-    expect(metrics.fee).toBe(2160);
-    expect(metrics.net_profit).toBe(6840);
-    expect(Math.round(metrics.margin_rate * 10) / 10).toBe(34.2);
+  it('정상 계산 — 가중평균·총수량·총매입금액', () => {
+    const entries = [
+      makeEntry({ unit_cost: 10000, unit_shipping_fee: 1000, quantity: 10 }),
+    ];
+    const metrics = calculateProductMetrics(entries);
+    // weighted_avg_cost = 10000, weighted_avg_shipping = 1000
+    // total_quantity = 10, total_purchase_amount = 100000
+    expect(metrics.weighted_avg_cost).toBe(10000);
+    expect(metrics.weighted_avg_shipping).toBe(1000);
+    expect(metrics.total_quantity).toBe(10);
+    expect(metrics.total_purchase_amount).toBe(100000);
   });
 
-  it('순이익 음수 → 마진율 음수', () => {
-    const entries = [makeEntry({ unit_cost: 18000, unit_shipping_fee: 3000, selling_price: 20000, quantity: 5 })];
-    const metrics = calculateProductMetrics(entries, 0.108);
-    expect(metrics.net_profit).toBeLessThan(0);
-    expect(metrics.margin_rate).toBeLessThan(0);
+  it('두 건 수량 가중 평균', () => {
+    const entries = [
+      makeEntry({ id: 'e1', unit_cost: 10000, unit_shipping_fee: 500, quantity: 3 }),
+      makeEntry({ id: 'e2', unit_cost: 20000, unit_shipping_fee: 1500, quantity: 7 }),
+    ];
+    const metrics = calculateProductMetrics(entries);
+    // weighted_avg_cost = (10000×3 + 20000×7) / 10 = 17000
+    // total_purchase_amount = 10000×3 + 20000×7 = 170000
+    expect(metrics.weighted_avg_cost).toBe(17000);
+    expect(metrics.total_quantity).toBe(10);
+    expect(metrics.total_purchase_amount).toBe(170000);
   });
 
   it('빈 entries → 모두 0', () => {
-    const metrics = calculateProductMetrics([], 0.108);
-    expect(metrics.net_profit).toBe(0);
+    const metrics = calculateProductMetrics([]);
+    expect(metrics.weighted_avg_cost).toBe(0);
+    expect(metrics.weighted_avg_shipping).toBe(0);
     expect(metrics.total_quantity).toBe(0);
+    expect(metrics.total_purchase_amount).toBe(0);
   });
 });
 

@@ -12,23 +12,28 @@ export async function GET(
   const { id } = await params;
   const pool = getSourcingPool();
 
-  const { rows: check } = await pool.query(
-    `SELECT id FROM product_costs WHERE id = $1 AND user_id = $2`,
-    [id, user.userId],
-  );
-  if (check.length === 0) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
+  try {
+    const { rows: check } = await pool.query(
+      `SELECT id FROM product_costs WHERE id = $1 AND user_id = $2`,
+      [id, user.userId],
+    );
+    if (check.length === 0) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
 
-  const { rows } = await pool.query(
-    `SELECT ce.id, ce.received_at, ce.quantity, ce.unit_cost, ce.unit_shipping_fee,
-            ce.shipping_group_id, sg.name as shipping_group_name, ce.created_at
-     FROM cost_entries ce
-     LEFT JOIN shipping_groups sg ON sg.id = ce.shipping_group_id
-     WHERE ce.product_cost_id = $1
-     ORDER BY ce.received_at DESC, ce.created_at DESC`,
-    [id],
-  );
+    const { rows } = await pool.query(
+      `SELECT ce.id, ce.received_at, ce.quantity, ce.unit_cost, ce.unit_shipping_fee,
+              ce.shipping_group_id, sg.name as shipping_group_name, ce.created_at
+       FROM cost_entries ce
+       LEFT JOIN shipping_groups sg ON sg.id = ce.shipping_group_id
+       WHERE ce.product_cost_id = $1
+       ORDER BY ce.received_at DESC, ce.created_at DESC`,
+      [id],
+    );
 
-  return NextResponse.json({ success: true, data: rows });
+    return NextResponse.json({ success: true, data: rows });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : '서버 오류';
+    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+  }
 }
 
 export async function POST(
@@ -45,7 +50,7 @@ export async function POST(
   if (
     !received_at ||
     quantity == null || !Number.isInteger(quantity) || quantity <= 0 ||
-    unit_cost == null || unit_cost < 0
+    unit_cost == null || !Number.isInteger(unit_cost) || unit_cost < 0
   ) {
     return NextResponse.json(
       { success: false, error: 'received_at, quantity(>0), unit_cost(>=0) required' },
@@ -54,18 +59,24 @@ export async function POST(
   }
 
   const pool = getSourcingPool();
-  const { rows: check } = await pool.query(
-    `SELECT id FROM product_costs WHERE id = $1 AND user_id = $2`,
-    [id, user.userId],
-  );
-  if (check.length === 0) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
 
-  const { rows } = await pool.query(
-    `INSERT INTO cost_entries (user_id, product_cost_id, received_at, quantity, unit_cost, unit_shipping_fee)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     RETURNING *`,
-    [user.userId, id, received_at, quantity, unit_cost, unit_shipping_fee ?? 0],
-  );
+  try {
+    const { rows: check } = await pool.query(
+      `SELECT id FROM product_costs WHERE id = $1 AND user_id = $2`,
+      [id, user.userId],
+    );
+    if (check.length === 0) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
 
-  return NextResponse.json({ success: true, data: rows[0] }, { status: 201 });
+    const { rows } = await pool.query(
+      `INSERT INTO cost_entries (user_id, product_cost_id, received_at, quantity, unit_cost, unit_shipping_fee)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [user.userId, id, received_at, quantity, unit_cost, unit_shipping_fee ?? 0],
+    );
+
+    return NextResponse.json({ success: true, data: rows[0] }, { status: 201 });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : '서버 오류';
+    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+  }
 }
