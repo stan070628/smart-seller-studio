@@ -25,7 +25,10 @@ export interface LabelTemplate {
 
 export async function getLabelTemplates(labelType: LabelType): Promise<LabelTemplate[]> {
   const res = await fetch(`/api/label/templates?type=${encodeURIComponent(labelType)}`);
-  if (!res.ok) return [];
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new Error((json as { error?: string }).error ?? '템플릿 목록 로드 실패');
+  }
   const json = await res.json();
   return json.templates ?? [];
 }
