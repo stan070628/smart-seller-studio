@@ -45,9 +45,11 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // total_shipping_fee 검증: sum(qty × unit_rg_fee) ≈ total_shipping_fee (±items.length 허용)
+  // total_shipping_fee 검증: sum(qty × unit_rg_fee) ≈ total_shipping_fee (±totalShippedQty 허용)
+  // 2단계 반올림 알고리즘 특성상 최대 단위당 1원 오차가 발생할 수 있으므로 총 수량 기준으로 허용
   const computedTotal = (items as RgShipmentItem[]).reduce((s, i) => s + i.quantity * i.unit_rg_fee, 0);
-  if (Math.abs(computedTotal - total_shipping_fee) > items.length) {
+  const totalShippedQty = (items as RgShipmentItem[]).reduce((s, i) => s + i.quantity, 0);
+  if (Math.abs(computedTotal - total_shipping_fee) > totalShippedQty) {
     return NextResponse.json(
       { success: false, error: `sum(quantity × unit_rg_fee)=${computedTotal}가 total_shipping_fee=${total_shipping_fee}와 일치하지 않습니다.` },
       { status: 400 },
