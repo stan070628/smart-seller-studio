@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { readFileSync } from 'node:fs';
-import opentype, { type Font } from 'opentype.js';
+import * as opentype from 'opentype.js';
+import type { Font } from 'opentype.js';
 
 const FONT_PATH = path.join(
   process.cwd(),
