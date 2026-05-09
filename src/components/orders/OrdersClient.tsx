@@ -1,20 +1,17 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ShoppingCart, BarChart3, Settings, ClipboardList, DollarSign } from 'lucide-react';
+import { ShoppingCart, BarChart3, Settings, ClipboardList } from 'lucide-react';
 import OrdersTab from './OrdersTab';
-import AnalyticsTab from './AnalyticsTab';
 import ChannelsTab from './ChannelsTab';
 import CostManagementTab from './CostManagementTab';
 
-type SubTab = 'orders' | 'analytics' | 'channels' | 'cost';
-
+type SubTab = 'orders' | 'channels' | 'cost';
 
 const SUB_TABS: { id: SubTab; label: string; icon: React.ReactNode }[] = [
-  { id: 'orders', label: '주문관리', icon: <ClipboardList size={14} /> },
-  { id: 'analytics', label: '매출분석', icon: <BarChart3 size={14} /> },
+  { id: 'orders', label: '주문·배송', icon: <ClipboardList size={14} /> },
+  { id: 'cost', label: '수익·원가', icon: <BarChart3 size={14} /> },
   { id: 'channels', label: '채널설정', icon: <Settings size={14} /> },
-  { id: 'cost', label: '원가관리', icon: <DollarSign size={14} /> },
 ];
 
 export default function OrdersClient() {
@@ -23,18 +20,16 @@ export default function OrdersClient() {
   return (
     <div style={{ backgroundColor: '#f5f5f7', minHeight: '100%' }}>
       <main style={{ maxWidth: '1100px', width: '100%', margin: '0 auto', padding: '28px 24px' }}>
-        {/* 타이틀 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
           <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: 'rgba(190,0,20,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <ShoppingCart size={18} color="#be0014" />
           </div>
           <div>
             <h1 style={{ fontSize: '20px', fontWeight: 700, color: '#18181b', margin: 0 }}>주문 / 매출</h1>
-            <p style={{ fontSize: '12px', color: '#71717a', margin: 0 }}>주문 라우팅 · 매출 분석 · 채널 관리</p>
+            <p style={{ fontSize: '12px', color: '#71717a', margin: 0 }}>주문 배송 · 수익·원가 관리 · 채널 설정</p>
           </div>
         </div>
 
-        {/* 서브탭 */}
         <div style={{ display: 'flex', gap: '4px', padding: '4px', borderRadius: '12px', backgroundColor: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', marginBottom: '20px', border: '1px solid #e5e5e5' }}>
           {SUB_TABS.map((tab) => (
             <button
@@ -54,11 +49,9 @@ export default function OrdersClient() {
           ))}
         </div>
 
-        {/* 콘텐츠 */}
         {activeSubTab === 'orders' && <OrdersTab />}
-        {activeSubTab === 'analytics' && <AnalyticsTab />}
-        {activeSubTab === 'channels' && <ChannelsTab />}
         {activeSubTab === 'cost' && <CostManagementTab />}
+        {activeSubTab === 'channels' && <ChannelsTab />}
       </main>
     </div>
   );
