@@ -38,7 +38,25 @@ export async function GET(request: NextRequest) {
       ALL_STATUSES.map((s) => client.getOrders({ createdAtFrom: from, createdAtTo: to, status: s, maxPerPage: 50 }))
     );
 
-    const items = results.flatMap((r) => r.status === 'fulfilled' ? r.value.items : []);
+    const failedStatuses: string[] = [];
+    const items = results.flatMap((r, i) => {
+      if (r.status === 'rejected') {
+        failedStatuses.push(ALL_STATUSES[i]);
+        console.warn(`[GET /api/orders/coupang] status=${ALL_STATUSES[i]} 조회 실패:`, r.reason instanceof Error ? r.reason.message : r.reason);
+        return [];
+      }
+      return r.value.items;
+    });
+
+    if (failedStatuses.length === ALL_STATUSES.length) {
+      console.error(`[GET /api/orders/coupang] 전체 status 조회 실패 (${from}~${to}). 첫 번째 오류:`, (results[0] as PromiseRejectedResult).reason);
+      return Response.json({ success: false, error: '쿠팡 주문 조회에 실패했습니다. 서버 로그를 확인하세요.' }, { status: 502 });
+    }
+
+    if (failedStatuses.length > 0) {
+      console.warn(`[GET /api/orders/coupang] 일부 status 조회 실패: [${failedStatuses.join(', ')}] — 나머지 데이터로 집계`);
+    }
+
     // 주문일시 내림차순 정렬
     items.sort((a, b) => new Date(b.orderedAt).getTime() - new Date(a.orderedAt).getTime());
 

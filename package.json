@@ -12,7 +12,8 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "fix:wing-inventory": "node scripts/fix-wing-inventory.mjs"
+    "fix:wing-inventory": "node scripts/fix-wing-inventory.mjs",
+    "fix:chrome-cookies": "node scripts/fix-chrome-cookies.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",

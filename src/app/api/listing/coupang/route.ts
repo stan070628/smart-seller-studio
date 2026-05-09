@@ -185,12 +185,8 @@ export async function POST(request: NextRequest) {
         type RawCat = { noticeCategoryName?: string; noticeCategoryDetailNames?: { noticeCategoryDetailName?: string }[] };
         const cats = (meta['noticeCategories'] as RawCat[] | undefined) ?? [];
         if (cats.length === 0) {
-          // 메타 없음 → 그대로 전달
-          return d.notices.map((n) => ({
-            noticeCategoryName: n.noticeCategoryName,
-            noticeCategoryDetailName: n.noticeCategoryDetailName,
-            content: n.content,
-          }));
+          // 메타 없음 → 빈 배열 반환 (잘못된 카테고리명 그대로 전달 방지)
+          return [];
         }
         const findCat = (name: string) => {
           if (!name) return undefined;
@@ -223,12 +219,8 @@ export async function POST(request: NextRequest) {
           return true;
         });
       } catch {
-        // getCategoryMeta 실패 시 입력값 그대로 사용
-        return d.notices.map((n) => ({
-          noticeCategoryName: n.noticeCategoryName,
-          noticeCategoryDetailName: n.noticeCategoryDetailName,
-          content: n.content,
-        }));
+        // getCategoryMeta 실패 시 빈 배열 반환 (잘못된 카테고리명 그대로 전달 방지)
+        return [];
       }
     })();
 

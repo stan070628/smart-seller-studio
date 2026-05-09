@@ -178,13 +178,14 @@ async function registerCoupang(
     notices: d.coupang.notices,
   };
 
-  // 카테고리 메타에서 고시정보 자동 생성 (첫 번째 noticeCategory의 "기타 재화" 우선, 없으면 첫 항목)
+  // 카테고리 메타에서 고시정보 자동 생성 — getCategoryMeta 첫 번째 카테고리 사용
+  // '기타 재화' 하드코딩 금지: 의류·식품·가전 등 전용 카테고리 코드에서는 유효하지 않음
   let autoNotices: { noticeCategoryName: string; noticeCategoryDetailName: string; content: string }[] = [];
   try {
     const meta = await client.getCategoryMeta(d.coupang.displayCategoryCode);
     const cats = meta.noticeCategories as { noticeCategoryName: string; noticeCategoryDetailNames: { noticeCategoryDetailName: string }[] }[] | undefined;
     if (cats && cats.length > 0) {
-      const chosen = cats.find((c) => c.noticeCategoryName === '기타 재화') ?? cats[0];
+      const chosen = cats[0];
       autoNotices = chosen.noticeCategoryDetailNames.map((det) => ({
         noticeCategoryName: chosen.noticeCategoryName,
         noticeCategoryDetailName: det.noticeCategoryDetailName,
@@ -323,7 +324,7 @@ export async function POST(request: NextRequest) {
         const meta = await client.getCategoryMeta(d.coupang.displayCategoryCode);
         const cats = meta.noticeCategories as { noticeCategoryName: string; noticeCategoryDetailNames: { noticeCategoryDetailName: string }[] }[] | undefined;
         if (cats && cats.length > 0) {
-          const chosen = cats.find((c) => c.noticeCategoryName === '기타 재화') ?? cats[0];
+          const chosen = cats[0];
           autoNotices = chosen.noticeCategoryDetailNames.map((det) => ({
             noticeCategoryName: chosen.noticeCategoryName,
             noticeCategoryDetailName: det.noticeCategoryDetailName,
