@@ -1,3 +1,7 @@
+// src/lib/label/label-templates.ts
+
+export type LabelType = 'quality' | 'quality2x3' | 'event' | 'image2x2' | 'nutrition2x3';
+
 export interface QualityFields {
   productName: string;
   material: string;
@@ -14,12 +18,13 @@ export interface LabelTemplate {
   user_id: string;
   name: string;
   image_url: string;
-  fields: QualityFields;
+  label_type: LabelType;
+  fields: Record<string, unknown>;
   created_at: string;
 }
 
-export async function getLabelTemplates(): Promise<LabelTemplate[]> {
-  const res = await fetch('/api/label/templates');
+export async function getLabelTemplates(labelType: LabelType): Promise<LabelTemplate[]> {
+  const res = await fetch(`/api/label/templates?type=${encodeURIComponent(labelType)}`);
   if (!res.ok) return [];
   const json = await res.json();
   return json.templates ?? [];
@@ -27,13 +32,13 @@ export async function getLabelTemplates(): Promise<LabelTemplate[]> {
 
 export async function saveLabelTemplate(
   name: string,
-  imageUrl: string,
-  fields: QualityFields,
+  labelType: LabelType,
+  fields: Record<string, unknown>,
 ): Promise<LabelTemplate> {
   const res = await fetch('/api/label/templates', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, imageUrl, fields }),
+    body: JSON.stringify({ name, labelType, fields }),
   });
   const json = await res.json();
   if (!res.ok) throw new Error(json.error ?? '템플릿 저장 실패');
