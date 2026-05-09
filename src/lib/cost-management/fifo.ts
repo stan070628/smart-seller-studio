@@ -9,7 +9,7 @@
 /** 입고 배치 */
 export interface PurchaseBatch {
   id: string;
-  /** ISO 8601 날짜 문자열 (YYYY-MM-DD) */
+  /** 입고일 (ISO 8601 YYYY-MM-DD 문자열, Date 객체 불가) */
   received_at: string;
   /** 입고 수량 */
   quantity: number;
@@ -22,7 +22,7 @@ export interface PurchaseBatch {
 /** 판매 행 */
 export interface SaleRow {
   id: string;
-  /** ISO 8601 날짜 문자열 (YYYY-MM-DD) */
+  /** 판매일 (ISO 8601 YYYY-MM-DD 문자열, Date 객체 불가) */
   sold_at: string;
   /** 판매 수량 */
   quantity: number;
@@ -91,6 +91,13 @@ export function calculateFifo(
       totalCost += (batch.unit_cost + batch.unit_shipping_fee) * take;
       batch.remaining -= take;
       qtyLeft -= take;
+    }
+
+    // 재고 부족 시 에러: 판매 수량이 가용 재고를 초과하면 원가가 왜곡됨
+    if (qtyLeft > 0) {
+      throw new RangeError(
+        `판매 수량(${sale.quantity})이 남은 재고(${sale.quantity - qtyLeft})를 초과합니다. sale.id=${sale.id}`,
+      );
     }
 
     // 단위 FIFO 원가: 총 소진 원가 / 판매 수량 (반올림)

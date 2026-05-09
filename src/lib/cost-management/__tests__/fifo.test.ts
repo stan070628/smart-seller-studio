@@ -69,4 +69,19 @@ describe('calculateFifo', () => {
     expect(result.sale_details[0].fifo_cost_per_unit).toBe(15000);
     expect(result.current_stock).toBe(5);
   });
+
+  it('복수 판매 시 total_realized_profit 누적', () => {
+    const batches = [
+      { id: 'b1', received_at: '2026-04-01', quantity: 20, unit_cost: 10000, unit_shipping_fee: 0 },
+    ];
+    const sales = [
+      { id: 's1', sold_at: '2026-05-01', quantity: 5, selling_price: 20000 },
+      { id: 's2', sold_at: '2026-05-10', quantity: 5, selling_price: 25000 },
+    ];
+    const result = calculateFifo(batches, sales, 0);
+    // s1: (20000 - 10000) * 5 = 50000
+    // s2: (25000 - 10000) * 5 = 75000
+    expect(result.total_realized_profit).toBe(125000);
+    expect(result.current_stock).toBe(10);
+  });
 });
