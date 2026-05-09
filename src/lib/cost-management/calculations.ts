@@ -53,8 +53,9 @@ export function calculateWeightedAvg(
 /**
  * 상품 수익성 지표를 계산한다.
  * @param entries         - 원가 입력 항목 배열
- * @param platformFeeRate - 플랫폼 수수료율 (0~1 범위, 예: 0.108 = 10.8%)
+ * @param platformFeeRate - 플랫폼 수수료율 (0 < rate < 1 범위, 예: 0.108 = 10.8%)
  * @returns ProductMetrics. 빈 배열이면 모든 값이 0인 객체 반환.
+ * @remarks 각 가중평균이 Math.round 처리되므로 net_profit/margin_rate에 최대 ±2원 오차 가능
  */
 export function calculateProductMetrics(
   entries: CostEntryRow[],
@@ -107,7 +108,7 @@ export function calculateProductMetrics(
  * 반올림 오차는 첫 번째 항목에 흡수된다.
  *
  * @param entries          - id와 quantity를 가진 항목 배열
- * @param totalShippingFee - 배분할 총 배송비
+ * @param totalShippingFee - 배분할 총 배송비. 0 이상의 정수 (음수 전달 시 결과 미보장)
  * @returns id → 배분된 배송비 Map. 빈 배열이면 빈 Map 반환.
  */
 export function distributeShippingFee(
