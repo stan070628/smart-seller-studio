@@ -78,22 +78,6 @@ function NutritionCell({
 }: Props) {
   return (
     <>
-      {/* ── 제품명 헤더 ── */}
-      <div style={{
-        background: '#111', color: '#fff',
-        textAlign: 'center', padding: '1mm 2mm',
-        fontSize: '7px', fontWeight: 800,
-        letterSpacing: '-0.01em', lineHeight: 1.25,
-        flexShrink: 0,
-      }}>
-        {productName || '제품명'}
-        {itemInfo && (
-          <div style={{ fontSize: '4.8px', fontWeight: 400, opacity: 0.85, marginTop: '0.3mm' }}>
-            {itemInfo}
-          </div>
-        )}
-      </div>
-
       {/* ── 한글 표시사항 ── */}
       <div style={{ flexShrink: 0, borderBottom: '1px solid #111' }}>
         <div style={{
