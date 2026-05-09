@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import Link from 'next/link';
 import EventCardPreview from './EventCardPreview';
 import { generatePdf, printLabel } from '@/lib/label/label-pdf';
 
@@ -58,7 +57,7 @@ export default function EventCardEditor() {
         }
       `}</style>
 
-      <div style={{ display: 'flex', height: 'calc(100vh - 60px)', background: C.bg }}>
+      <div style={{ display: 'flex', height: '100%', background: C.bg }}>
 
         {/* 좌측 폼 */}
         <div style={{
@@ -67,13 +66,6 @@ export default function EventCardEditor() {
           borderRight: `1px solid ${C.border}`,
           padding: 16, overflowY: 'auto',
         }}>
-          {/* 라벨 인쇄로 돌아가기 */}
-          <div style={{ marginBottom: 16 }}>
-            <Link href="/label" style={{ fontSize: 12, color: '#6366f1', textDecoration: 'none', fontWeight: 600 }}>
-              ← 품질표시 라벨 인쇄로 돌아가기
-            </Link>
-          </div>
-
           <div style={SECTION}>
             <div style={SECTION_TITLE}>회사 / 연락처</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

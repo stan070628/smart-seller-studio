@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
-import Link from 'next/link';
+import { useState, useRef, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import LabelPreview from './LabelPreview';
 import QualityFieldsForm from './QualityFieldsForm';
@@ -9,6 +8,8 @@ import TemplatePicker from './TemplatePicker';
 import CoupangProductPicker from './CoupangProductPicker';
 import { generatePdf, printLabel } from '@/lib/label/label-pdf';
 import type { QualityFields } from '@/lib/label/label-templates';
+
+const DRAFT_KEY = 'label_editor_draft';
 
 const EMPTY_FIELDS: QualityFields = {
   productName: '',
@@ -49,15 +50,42 @@ export default function LabelEditor() {
   const searchParams = useSearchParams();
   const initialProductName = searchParams.get('productName') ?? '';
 
-  const [fields, setFields] = useState<QualityFields>({
-    ...EMPTY_FIELDS,
-    productName: initialProductName,
+  const [fields, setFields] = useState<QualityFields>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem(DRAFT_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved) as { fields?: QualityFields };
+          if (parsed.fields) return { ...parsed.fields, ...(initialProductName ? { productName: initialProductName } : {}) };
+        }
+      } catch { /* ignore */ }
+    }
+    return { ...EMPTY_FIELDS, productName: initialProductName };
   });
-  const [imageUrl, setImageUrl] = useState('');
+
+  const [imageUrl, setImageUrl] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem(DRAFT_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved) as { imageUrl?: string };
+          return parsed.imageUrl ?? '';
+        }
+      } catch { /* ignore */ }
+    }
+    return '';
+  });
+
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({ fields, imageUrl }));
+    } catch { /* ignore */ }
+  }, [fields, imageUrl]);
 
   // 라벨 인쇄용 최적 해상도(1400px)로 자동 리사이즈 → JPEG 변환
   const resizeImage = (file: File): Promise<Blob> =>
@@ -133,7 +161,7 @@ export default function LabelEditor() {
         }
       `}</style>
 
-      <div style={{ display: 'flex', height: 'calc(100vh - 60px)', background: C.bg }}>
+      <div style={{ display: 'flex', height: '100%', background: C.bg }}>
 
         {/* 좌측 폼 패널 */}
         <div style={{
@@ -226,19 +254,6 @@ export default function LabelEditor() {
             <span style={{ flex: 1, fontSize: 12, color: '#6b7280' }}>
               미리보기 — A4 · 99.1×93mm × 6칸
             </span>
-            <Link
-              href="/label/event"
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '7px 14px', borderRadius: 6,
-                border: '1px solid #e5e7eb',
-                background: '#fff', color: '#374151',
-                fontSize: 12, fontWeight: 600, textDecoration: 'none',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              🎁 이벤트 카드
-            </Link>
             <button
               style={{ ...BTN_PRIMARY, background: '#6366f1' }}
               onClick={handlePdf}

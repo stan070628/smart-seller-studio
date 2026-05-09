@@ -1,10 +1,5 @@
-import { Suspense } from 'react';
-import EventCardEditor from '@/components/label/EventCardEditor';
+import { redirect } from 'next/navigation';
 
-export default function EventCardPage() {
-  return (
-    <Suspense>
-      <EventCardEditor />
-    </Suspense>
-  );
+export default function LabelEventPage() {
+  redirect('/label');
 }

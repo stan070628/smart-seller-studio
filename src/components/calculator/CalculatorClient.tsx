@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState } from 'react';
-import Link from 'next/link';
 import { Calculator, BarChart3, Package } from 'lucide-react';
 import CoupangTab from './tabs/CoupangTab';
 import NaverTab from './tabs/NaverTab';
@@ -27,41 +26,7 @@ export default function CalculatorClient() {
   const [showBundleAd, setShowBundleAd] = useState(false);
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#f5f5f7]">
-      {/* 헤더 */}
-      <header className="sticky top-0 z-50 flex h-[52px] flex-shrink-0 items-center justify-between border-b border-[#eee] bg-white px-4 md:px-5">
-        <div className="flex items-center gap-4 md:gap-6">
-          <Link href="/editor" className="flex items-center gap-2 no-underline">
-            <span className="text-sm font-bold tracking-tight text-[#1a1c1c] md:text-base">
-              Smart<span className="text-[#be0014]">Seller</span>Studio
-            </span>
-            <span className="rounded-full border border-[rgba(190,0,20,0.2)] bg-[rgba(190,0,20,0.08)] px-2 py-0.5 text-[10px] font-semibold text-[#be0014] md:text-[11px]">
-              Beta
-            </span>
-          </Link>
-
-          <nav className="flex items-center gap-1">
-            {[
-              { href: '/dashboard', label: '대시보드' },
-              { href: '/sourcing', label: '소싱' },
-              { href: '/editor', label: '에디터' },
-              { href: '/detail', label: '상세페이지' },
-              { href: '/listing', label: '상품등록' },
-              { href: '/label', label: '라벨 인쇄' },
-              { href: '/orders', label: '주문/매출' },
-            ].map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="rounded-md px-2.5 py-1 text-xs font-medium text-[#71717a] no-underline md:px-3 md:text-[13px]"
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-        </div>
-      </header>
-
+    <div className="flex flex-col bg-[#f5f5f7]">
       {/* 메인 */}
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-5 md:px-6 md:py-8">
         {/* 타이틀 */}

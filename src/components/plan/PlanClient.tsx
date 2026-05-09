@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import Link from 'next/link';
+import AlertList from '@/components/alerts/AlertList';
+import InboundReturnForm from '@/components/retro/InboundReturnForm';
 import {
   CheckSquare,
   Square,
@@ -55,15 +56,6 @@ const C = {
   blueBorder: 'rgba(37,99,235,0.20)',
 } as const;
 
-// ─── 네비게이션 ─────────────────────────────────────────────────
-const NAV_ITEMS = [
-  { href: '/dashboard', label: '대시보드' },
-  { href: '/sourcing', label: '소싱' },
-  { href: '/editor', label: '에디터' },
-  { href: '/listing', label: '상품등록' },
-  { href: '/orders', label: '주문/매출' },
-  { href: '/plan', label: '플랜' },
-];
 
 // ─── 위너 선별 타입 ──────────────────────────────────────────────────────────
 interface WinnerProduct {
@@ -1691,7 +1683,7 @@ function ProgressTab() {
 }
 
 // ─── 메인 PlanClient 컴포넌트 ────────────────────────────────────
-type TabId = 'today' | 'daily' | 'progress' | 'winner' | 'keyword';
+type TabId = 'today' | 'daily' | 'progress' | 'winner' | 'keyword' | 'alerts' | 'retro';
 
 interface Tab {
   id: TabId;
@@ -1709,53 +1701,12 @@ export default function PlanClient() {
     { id: 'progress', label: '목표 진행도', icon: <TrendingUp size={15} /> },
     { id: 'winner' as const, label: '위너 선별', icon: <Target size={15} /> },
     { id: 'keyword' as const, label: '틈새 키워드 발굴', icon: <Search size={15} /> },
+    { id: 'alerts' as const, label: '알림', icon: <span style={{ fontSize: 14 }}>🔔</span> },
+    { id: 'retro' as const, label: '회고', icon: <span style={{ fontSize: 14 }}>📊</span> },
   ];
 
   return (
-    <div style={{ minHeight: '100vh', background: C.bg, fontFamily: 'Pretendard, -apple-system, sans-serif' }}>
-      {/* 네비게이션 */}
-      <nav
-        style={{
-          background: C.card,
-          borderBottom: `1px solid ${C.border}`,
-          padding: '0 24px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 0,
-          height: 52,
-          position: 'sticky',
-          top: 0,
-          zIndex: 100,
-        }}
-      >
-        <span style={{ fontWeight: 800, fontSize: 16, color: C.text, marginRight: 32, letterSpacing: -0.3 }}>
-          Smart<span style={{ color: C.accent }}>Seller</span>
-        </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          {NAV_ITEMS.map((item) => {
-            const isActive = item.href === '/plan';
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                style={{
-                  padding: '5px 10px',
-                  fontSize: 13,
-                  fontWeight: isActive ? 700 : 400,
-                  color: isActive ? C.accent : C.textSub,
-                  borderRadius: 6,
-                  textDecoration: 'none',
-                  background: isActive ? C.accentBg : 'transparent',
-                  transition: 'all 0.15s',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
-        </div>
-      </nav>
+    <div style={{ background: C.bg, fontFamily: 'Pretendard, -apple-system, sans-serif' }}>
 
       {/* 페이지 헤더 */}
       <div
@@ -1834,6 +1785,14 @@ export default function PlanClient() {
         {activeTab === 'progress' && <ProgressTab />}
         {activeTab === 'winner' && <WinnerTab />}
         {activeTab === 'keyword' && <KeywordTab />}
+        {activeTab === 'alerts' && <AlertList />}
+        {activeTab === 'retro' && (
+          <div>
+            <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16, color: C.text }}>회고 + 학습 대시보드</h2>
+            <p style={{ fontSize: 13, color: C.textSub, marginBottom: 24 }}>회송 사례 / CS 패턴 / 채널 분배 누적 분석</p>
+            <InboundReturnForm />
+          </div>
+        )}
       </div>
     </div>
   );

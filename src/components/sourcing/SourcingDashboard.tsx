@@ -9,7 +9,6 @@
  */
 
 import React, { useState } from 'react';
-import Link from 'next/link';
 import { RefreshCw, Calculator, Search } from 'lucide-react';
 import { C } from '@/lib/design-tokens';
 
@@ -59,93 +58,11 @@ export default function SourcingDashboard() {
       style={{
         display: 'flex',
         flexDirection: 'column',
-        minHeight: '100vh',
         backgroundColor: C.bg,
         fontFamily: "'Noto Sans KR', sans-serif",
         color: C.text,
       }}
     >
-      {/* ──────────────────────────────────────────────────────────────────── */}
-      {/* 헤더                                                                  */}
-      {/* ──────────────────────────────────────────────────────────────────── */}
-      <header
-        style={{
-          flexShrink: 0,
-          height: '52px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0 20px',
-          borderBottom: `1px solid ${C.border}`,
-          backgroundColor: C.card,
-          position: 'sticky',
-          top: 0,
-          zIndex: 50,
-        }}
-      >
-        {/* 로고 + 탭 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span
-              style={{
-                fontSize: '16px',
-                fontWeight: '700',
-                letterSpacing: '-0.3px',
-                color: C.text,
-              }}
-            >
-              Smart
-              <span style={{ color: C.accent }}>Seller</span>
-              Studio
-            </span>
-            <span
-              style={{
-                backgroundColor: 'rgba(190, 0, 20, 0.08)',
-                color: C.accent,
-                fontSize: '11px',
-                fontWeight: '600',
-                padding: '2px 9px',
-                borderRadius: '100px',
-                border: '1px solid rgba(190, 0, 20, 0.2)',
-              }}
-            >
-              Beta
-            </span>
-          </div>
-
-          {/* 네비게이션 탭 */}
-          <nav style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            {[
-              { href: '/dashboard', label: '대시보드' },
-              { href: '/sourcing', label: '소싱', active: true },
-              { href: '/editor', label: '에디터' },
-              { href: '/listing', label: '상품등록' },
-              { href: '/label', label: '라벨 인쇄' },
-              { href: '/orders', label: '주문/매출' },
-              { href: '/plan', label: '플랜' },
-            ].map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                style={{
-                  padding: '5px 10px',
-                  borderRadius: '6px',
-                  fontSize: '13px',
-                  fontWeight: item.active ? '600' : '500',
-                  color: item.active ? C.accent : '#71717a',
-                  textDecoration: 'none',
-                  backgroundColor: item.active ? 'rgba(190, 0, 20, 0.07)' : 'transparent',
-                  border: item.active ? '1px solid rgba(190, 0, 20, 0.15)' : '1px solid transparent',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-        </div>
-      </header>
-
       {/* ──────────────────────────────────────────────────────────────────── */}
       {/* 서브탭 (니치소싱 / 도매꾹 / 코스트코 / 마진계산기)                    */}
       {/* ──────────────────────────────────────────────────────────────────── */}

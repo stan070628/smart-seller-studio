@@ -1,6 +1,5 @@
-import { Suspense } from 'react';
 import type { Metadata } from 'next';
-import LabelEditor from '@/components/label/LabelEditor';
+import LabelPageWrapper from '@/components/label/LabelPageWrapper';
 
 export const metadata: Metadata = {
   title: '라벨 인쇄 | SmartSellerStudio',
@@ -8,9 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function LabelPage() {
-  return (
-    <Suspense>
-      <LabelEditor />
-    </Suspense>
-  );
+  return <LabelPageWrapper />;
 }

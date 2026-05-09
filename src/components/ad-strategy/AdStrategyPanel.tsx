@@ -1,22 +1,11 @@
 'use client';
 
 import React, { useState, useCallback } from 'react';
-import Link from 'next/link';
 import type { AdStrategyReport, CollectedData } from '@/lib/ad-strategy/types';
 import UrgentActionCard from './UrgentActionCard';
 import ProductAdTable from './ProductAdTable';
 import SourcingAlertList from './SourcingAlertList';
 
-const NAV_ITEMS = [
-  { href: '/dashboard', label: '대시보드' },
-  { href: '/sourcing', label: '소싱' },
-  { href: '/editor', label: '에디터' },
-  { href: '/listing', label: '상품등록' },
-              { href: '/label', label: '라벨 인쇄' },
-  { href: '/orders', label: '주문/매출' },
-  { href: '/plan', label: '플랜' },
-  { href: '/ad-strategy', label: '광고전략', active: true },
-];
 
 type Status = 'idle' | 'collecting' | 'analyzing' | 'done' | 'error';
 
@@ -82,56 +71,7 @@ export default function AdStrategyPanel() {
     error?.includes('만료'));
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: '#f5f5f7', fontFamily: "'Noto Sans KR', sans-serif" }}>
-      {/* 앱 헤더 */}
-      <header
-        style={{
-          flexShrink: 0,
-          height: '52px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0 20px',
-          borderBottom: '1px solid #e5e5e5',
-          backgroundColor: '#fff',
-          position: 'sticky',
-          top: 0,
-          zIndex: 50,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-          <Link href="/dashboard" style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}>
-            <span style={{ fontSize: '16px', fontWeight: 700, letterSpacing: '-0.3px', color: '#18181b' }}>
-              Smart<span style={{ color: '#be0014' }}>Seller</span>Studio
-            </span>
-            <span style={{ backgroundColor: 'rgba(190,0,20,0.08)', color: '#be0014', fontSize: '11px', fontWeight: 600, padding: '2px 9px', borderRadius: '100px', border: '1px solid rgba(190,0,20,0.2)' }}>
-              Beta
-            </span>
-          </Link>
-          <nav style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            {NAV_ITEMS.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                style={{
-                  padding: '5px 10px',
-                  borderRadius: '6px',
-                  fontSize: '13px',
-                  fontWeight: item.active ? 600 : 500,
-                  color: item.active ? '#be0014' : '#71717a',
-                  textDecoration: 'none',
-                  backgroundColor: item.active ? 'rgba(190,0,20,0.07)' : 'transparent',
-                  border: item.active ? '1px solid rgba(190,0,20,0.15)' : '1px solid transparent',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-        </div>
-      </header>
-
+    <div style={{ backgroundColor: '#f5f5f7', fontFamily: "'Noto Sans KR', sans-serif" }}>
       {/* 본문 */}
       <main style={{ flex: 1, maxWidth: '1200px', width: '100%', margin: '0 auto', padding: '28px 24px' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>

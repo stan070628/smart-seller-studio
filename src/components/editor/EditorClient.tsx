@@ -9,7 +9,6 @@
  */
 
 import React, { useRef } from 'react';
-import Link from 'next/link';
 import Sidebar from './Sidebar';
 import FrameGrid from './FrameGrid';
 import DownloadAllButton from './DownloadAllButton';
@@ -27,95 +26,27 @@ const EditorClient: React.FC = () => {
       style={{
         display: 'flex',
         flexDirection: 'column',
-        height: '100vh',
-        width: '100vw',
+        flex: 1,
         overflow: 'hidden',
         backgroundColor: '#f9f9f9',
       }}
     >
-      {/* ------------------------------------------------------------------ */}
-      {/* 헤더                                                                */}
-      {/* ------------------------------------------------------------------ */}
-      <header
+      {/* ── 툴바 ── */}
+      <div
         style={{
           flexShrink: 0,
-          height: '52px',
+          height: '48px',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
+          justifyContent: 'flex-end',
           padding: '0 20px',
           borderBottom: '1px solid #eeeeee',
           backgroundColor: '#ffffff',
-          zIndex: 50,
+          gap: '10px',
         }}
       >
-        {/* 로고 + 탭 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span
-              style={{
-                fontSize: '16px',
-                fontWeight: '700',
-                letterSpacing: '-0.3px',
-                color: '#1a1c1c',
-              }}
-            >
-              Smart
-              <span style={{ color: '#be0014' }}>Seller</span>
-              Studio
-            </span>
-            <span
-              style={{
-                backgroundColor: 'rgba(190, 0, 20, 0.08)',
-                color: '#be0014',
-                fontSize: '11px',
-                fontWeight: '600',
-                padding: '2px 9px',
-                borderRadius: '100px',
-                border: '1px solid rgba(190, 0, 20, 0.2)',
-              }}
-            >
-              Beta
-            </span>
-          </div>
-
-          {/* 네비게이션 탭 */}
-          <nav style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            {[
-              { href: '/dashboard', label: '대시보드' },
-              { href: '/sourcing', label: '소싱' },
-              { href: '/editor', label: '에디터', active: true },
-              { href: '/listing', label: '상품등록' },
-              { href: '/label', label: '라벨 인쇄' },
-              { href: '/orders', label: '주문/매출' },
-              { href: '/plan', label: '플랜' },
-            ].map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                style={{
-                  padding: '5px 10px',
-                  borderRadius: '6px',
-                  fontSize: '13px',
-                  fontWeight: item.active ? '600' : '500',
-                  color: item.active ? '#be0014' : '#71717a',
-                  textDecoration: 'none',
-                  backgroundColor: item.active ? 'rgba(190, 0, 20, 0.07)' : 'transparent',
-                  border: item.active ? '1px solid rgba(190, 0, 20, 0.15)' : '1px solid transparent',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-        </div>
-
-        {/* 우측 버튼 영역 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <DownloadAllButton frameGridRef={frameGridRef} />
-        </div>
-      </header>
+        <DownloadAllButton frameGridRef={frameGridRef} />
+      </div>
 
       {/* ------------------------------------------------------------------ */}
       {/* 본문: Sidebar + FrameGrid + InspectorPanel                        */}

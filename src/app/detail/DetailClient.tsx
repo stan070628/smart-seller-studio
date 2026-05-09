@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useCallback, useRef, useState } from 'react';
-import Link from 'next/link';
 import { Upload, X, Download, Copy, Loader2, CheckCheck, AlertCircle } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -258,46 +257,7 @@ const DetailClient: React.FC = () => {
   // -------------------------------------------------------------------------
 
   return (
-    <div className="flex min-h-screen flex-col bg-gray-50">
-      {/* 헤더 */}
-      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '56px', padding: '0 24px', backgroundColor: '#fff', borderBottom: '1px solid #e5e5e5' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Link href="/dashboard" style={{ textDecoration: 'none', fontSize: '14px', fontWeight: 700, color: '#18181b', letterSpacing: '-0.3px' }}>
-            Smart<span style={{ color: '#be0014' }}>Seller</span>Studio
-          </Link>
-          <span style={{ backgroundColor: 'rgba(190,0,20,0.07)', color: '#be0014', fontSize: '11px', fontWeight: 600, padding: '2px 9px', borderRadius: '100px', border: '1px solid rgba(190,0,20,0.2)' }}>
-            Beta
-          </span>
-        </div>
-        <nav style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          {[
-            { href: '/dashboard', label: '대시보드' },
-            { href: '/sourcing', label: '소싱' },
-            { href: '/editor', label: '에디터' },
-            { href: '/detail', label: '상세페이지', active: true },
-            { href: '/listing', label: '상품등록' },
-            { href: '/orders', label: '주문/매출' },
-          ].map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              style={{
-                padding: '5px 12px',
-                borderRadius: '6px',
-                fontSize: '13px',
-                fontWeight: item.active ? 600 : 500,
-                color: item.active ? '#be0014' : '#71717a',
-                textDecoration: 'none',
-                backgroundColor: item.active ? 'rgba(190,0,20,0.07)' : 'transparent',
-                border: item.active ? '1px solid rgba(190,0,20,0.15)' : '1px solid transparent',
-              }}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-      </header>
-
+    <div className="flex flex-col bg-gray-50">
       {/* 본문 */}
       <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8 md:flex-row md:items-start">
 

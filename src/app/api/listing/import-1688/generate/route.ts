@@ -10,6 +10,7 @@ import {
 } from '@/lib/ai/prompts/import-1688';
 import { buildDetailPageHtml } from '@/lib/detail-page/html-builder';
 import { generateAndUploadThumbnail } from '@/lib/listing/import-1688-thumbnail';
+import { getSupabaseServerClient } from '@/lib/supabase/server';
 import type { GenerateResponse } from '@/lib/listing/import-1688-types';
 
 export const maxDuration = 120;
@@ -100,6 +101,20 @@ export async function POST(request: NextRequest): Promise<Response> {
   } catch (err) {
     console.error('[generate] 썸네일 생성 오류:', err);
     return Response.json({ error: '썸네일 생성 중 오류가 발생했습니다.' }, { status: 502 });
+  }
+
+  // 3. DB 저장 (실패해도 응답은 성공으로 반환)
+  try {
+    const supabase = getSupabaseServerClient();
+    await supabase.from('generated_assets').insert({
+      user_id: auth.userId,
+      source_type: 'upload',
+      thumbnails: images.map((img) => img.url),
+      detail_html: detailPageHtml,
+      detail_image: generatedThumbnailUrl,
+    });
+  } catch (err) {
+    console.error('[generate] DB 저장 오류 (무시):', err);
   }
 
   return Response.json({

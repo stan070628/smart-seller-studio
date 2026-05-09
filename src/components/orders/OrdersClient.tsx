@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState } from 'react';
-import Link from 'next/link';
 import { ShoppingCart, BarChart3, Settings, ClipboardList } from 'lucide-react';
 import OrdersTab from './OrdersTab';
 import AnalyticsTab from './AnalyticsTab';
@@ -9,15 +8,6 @@ import ChannelsTab from './ChannelsTab';
 
 type SubTab = 'orders' | 'analytics' | 'channels';
 
-const NAV_ITEMS = [
-  { href: '/dashboard', label: '대시보드' },
-  { href: '/sourcing', label: '소싱' },
-  { href: '/editor', label: '에디터' },
-  { href: '/listing', label: '상품등록' },
-              { href: '/label', label: '라벨 인쇄' },
-  { href: '/orders', label: '주문/매출', active: true },
-  { href: '/plan', label: '플랜' },
-];
 
 const SUB_TABS: { id: SubTab; label: string; icon: React.ReactNode }[] = [
   { id: 'orders', label: '주문관리', icon: <ClipboardList size={14} /> },
@@ -29,26 +19,7 @@ export default function OrdersClient() {
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('orders');
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: '#f5f5f7' }}>
-      {/* 헤더 */}
-      <header style={{ position: 'sticky', top: 0, zIndex: 50, height: '52px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', borderBottom: '1px solid #eee', backgroundColor: '#fff' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-          <Link href="/dashboard" style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}>
-            <span style={{ fontSize: '16px', fontWeight: 700, letterSpacing: '-0.3px', color: '#1a1c1c' }}>
-              Smart<span style={{ color: '#be0014' }}>Seller</span>Studio
-            </span>
-            <span style={{ backgroundColor: 'rgba(190,0,20,0.08)', color: '#be0014', fontSize: '11px', fontWeight: 600, padding: '2px 9px', borderRadius: '100px', border: '1px solid rgba(190,0,20,0.2)' }}>Beta</span>
-          </Link>
-          <nav style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            {NAV_ITEMS.map((item) => (
-              <Link key={item.href} href={item.href} style={{ padding: '5px 10px', borderRadius: '6px', fontSize: '13px', fontWeight: item.active ? 600 : 500, color: item.active ? '#be0014' : '#71717a', textDecoration: 'none', backgroundColor: item.active ? 'rgba(190,0,20,0.07)' : 'transparent', border: item.active ? '1px solid rgba(190,0,20,0.15)' : '1px solid transparent', whiteSpace: 'nowrap' }}>
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-        </div>
-      </header>
-
+    <div style={{ backgroundColor: '#f5f5f7' }}>
       <main style={{ flex: 1, maxWidth: '1100px', width: '100%', margin: '0 auto', padding: '28px 24px' }}>
         {/* 타이틀 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
