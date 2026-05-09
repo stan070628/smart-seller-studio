@@ -1,21 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-// getBrowserClient 모킹
-const mockSelect = vi.fn();
-const mockEq = vi.fn();
-const mockOrder = vi.fn();
-const mockInsert = vi.fn();
-const mockDelete = vi.fn();
-const mockFrom = vi.fn();
-const mockSingle = vi.fn();
-const mockGetUser = vi.fn();
-
-vi.mock('@/lib/supabase/client', () => ({
-  getBrowserClient: () => ({
-    from: mockFrom,
-    auth: { getUser: mockGetUser },
-  }),
-}));
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { http, HttpResponse } from 'msw';
+import { server } from '../mocks/server';
 
 import {
   getLabelTemplates,
@@ -48,30 +33,35 @@ const mockTemplate: LabelTemplate = {
 
 describe('getLabelTemplates', () => {
   beforeEach(() => {
-    mockGetUser.mockResolvedValue({ data: { user: { id: 'user-123' } } });
-    mockFrom.mockReturnValue({
-      select: mockSelect.mockReturnValue({
-        eq: mockEq.mockReturnValue({
-          order: mockOrder.mockResolvedValue({ data: [mockTemplate], error: null }),
-        }),
+    server.use(
+      http.get('/api/label/templates', () => {
+        return HttpResponse.json({ templates: [mockTemplate] });
       }),
-    });
+    );
   });
 
   it('현재 유저의 템플릿 목록을 반환한다', async () => {
     const result = await getLabelTemplates('quality');
     expect(result).toEqual([mockTemplate]);
-    expect(mockFrom).toHaveBeenCalledWith('label_templates');
   });
 
   it('Supabase 에러 시 빈 배열을 반환한다', async () => {
-    mockOrder.mockResolvedValueOnce({ data: null, error: { message: 'DB error' } });
+    // 서버 에러 응답을 핸들러 오버라이드로 시뮬레이션
+    server.use(
+      http.get('/api/label/templates', () => {
+        return HttpResponse.json({ error: 'DB error' }, { status: 500 });
+      }),
+    );
     const result = await getLabelTemplates('quality');
     expect(result).toEqual([]);
   });
 
   it('유저 없으면 빈 배열을 반환한다', async () => {
-    mockGetUser.mockResolvedValueOnce({ data: { user: null } });
+    server.use(
+      http.get('/api/label/templates', () => {
+        return HttpResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
+      }),
+    );
     const result = await getLabelTemplates('quality');
     expect(result).toEqual([]);
   });
@@ -79,41 +69,40 @@ describe('getLabelTemplates', () => {
 
 describe('saveLabelTemplate', () => {
   beforeEach(() => {
-    mockGetUser.mockResolvedValue({ data: { user: { id: 'user-123' } } });
-    mockFrom.mockReturnValue({
-      insert: mockInsert.mockReturnValue({
-        select: mockSelect.mockReturnValue({
-          single: mockSingle.mockResolvedValue({ data: mockTemplate, error: null }),
-        }),
+    server.use(
+      http.post('/api/label/templates', () => {
+        return HttpResponse.json({ template: mockTemplate }, { status: 201 });
       }),
-    });
+    );
   });
 
   it('템플릿을 저장하고 반환한다', async () => {
     const result = await saveLabelTemplate('기본 세차타월', 'quality', mockFields as unknown as Record<string, unknown>);
     expect(result).toEqual(mockTemplate);
-    expect(mockInsert).toHaveBeenCalledWith(
-      expect.objectContaining({ name: '기본 세차타월', user_id: 'user-123' })
-    );
   });
 
   it('유저 없으면 에러를 던진다', async () => {
-    mockGetUser.mockResolvedValueOnce({ data: { user: null } });
-    await expect(saveLabelTemplate('test', 'quality', mockFields as unknown as Record<string, unknown>)).rejects.toThrow('로그인');
+    server.use(
+      http.post('/api/label/templates', () => {
+        return HttpResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
+      }),
+    );
+    await expect(
+      saveLabelTemplate('test', 'quality', mockFields as unknown as Record<string, unknown>),
+    ).rejects.toThrow('로그인');
   });
 });
 
 describe('deleteLabelTemplate', () => {
   beforeEach(() => {
-    mockFrom.mockReturnValue({
-      delete: mockDelete.mockReturnValue({
-        eq: mockEq.mockResolvedValue({ error: null }),
+    server.use(
+      http.delete('/api/label/templates', () => {
+        return HttpResponse.json({ success: true });
       }),
-    });
+    );
   });
 
   it('id로 템플릿을 삭제한다', async () => {
     await expect(deleteLabelTemplate('tmpl-1')).resolves.not.toThrow();
-    expect(mockDelete).toHaveBeenCalled();
   });
 });
