@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { getCurrentUser } from '@/lib/auth';
+import { computeFifoBatchOps } from '@/lib/cost-management/rg-shipment';
 
 interface RgShipmentItem {
   product_cost_id: string;
@@ -100,39 +101,34 @@ export async function POST(request: NextRequest) {
         [product_cost_id],
       );
 
-      let remaining = rgQty;
-      for (const batch of batches) {
-        if (remaining <= 0) break;
-        const batchQty = Number(batch.quantity);
-        const take = Math.min(batchQty, remaining);
+      const ops = computeFifoBatchOps(
+        batches.map((b) => ({ id: b.id, quantity: Number(b.quantity) })),
+        rgQty,
+        unit_rg_fee,
+      );
 
-        if (take === batchQty) {
-          // 배치 전량 → unit_rg_shipping_fee만 업데이트
+      for (const op of ops) {
+        if (op.type === 'update') {
           await client.query(
             `UPDATE cost_entries SET unit_rg_shipping_fee = $1 WHERE id = $2`,
-            [unit_rg_fee, batch.id],
+            [op.unitRgFee, op.batchId],
           );
           affectedEntries++;
         } else {
-          // 배치 일부만 필요 → 분할
-          // 1. 원본 배치를 take 수량으로 줄이고 unit_rg_shipping_fee 설정
           await client.query(
             `UPDATE cost_entries SET quantity = $1, unit_rg_shipping_fee = $2 WHERE id = $3`,
-            [take, unit_rg_fee, batch.id],
+            [op.take, op.unitRgFee, op.batchId],
           );
-          // 2. 나머지 수량으로 새 배치 INSERT (원본 모든 필드 복사, quantity만 차감, unit_rg_shipping_fee=0)
           await client.query(
             `INSERT INTO cost_entries
                (user_id, product_cost_id, received_at, quantity, unit_cost, unit_shipping_fee, unit_rg_shipping_fee, shipping_group_id, created_at)
              SELECT user_id, product_cost_id, received_at, $1, unit_cost, unit_shipping_fee, 0, shipping_group_id, now()
              FROM cost_entries WHERE id = $2`,
-            [batchQty - take, batch.id],
+            [op.remainder, op.batchId],
           );
           affectedEntries++;
           splitEntries++;
         }
-
-        remaining -= take;
       }
     }
 

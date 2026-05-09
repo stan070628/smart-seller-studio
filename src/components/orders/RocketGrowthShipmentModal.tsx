@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { X, Package } from 'lucide-react';
+import { distributeRgFee } from '@/lib/cost-management/rg-shipment';
 
 interface ProductForRg {
   id: string;
@@ -35,30 +36,7 @@ export default function RocketGrowthShipmentModal({ products, onClose, onCreated
 
   const totalQty = activeItems.reduce((s, i) => s + i.qty, 0);
 
-  function previewUnitFees(): Map<string, number> {
-    const result = new Map<string, number>();
-    if (totalQty === 0 || feeNum === 0) return result;
-
-    // Step 1: 전체 배송비를 수량 비례로 상품별 합계 배분
-    // 마지막 상품부터 계산하고, 첫 번째 상품이 나머지 금액을 흡수해 반올림 오차를 최소화
-    let remainingFee = feeNum;
-    const productTotals = new Map<string, number>();
-    for (let i = activeItems.length - 1; i >= 1; i--) {
-      const t = Math.round((feeNum * activeItems[i].qty) / totalQty);
-      productTotals.set(activeItems[i].id, t);
-      remainingFee -= t;
-    }
-    if (activeItems.length > 0) productTotals.set(activeItems[0].id, remainingFee);
-
-    // Step 2: 상품별 합계 배송비를 수량으로 나눠 단위 배송비 산출
-    for (const item of activeItems) {
-      const total = productTotals.get(item.id) ?? 0;
-      result.set(item.id, item.qty > 0 ? Math.round(total / item.qty) : 0);
-    }
-    return result;
-  }
-
-  const unitFees = previewUnitFees();
+  const unitFees = distributeRgFee(activeItems, feeNum);
   const canSubmit = activeItems.length > 0 && feeNum > 0 && !!shippedAt;
 
   async function submit() {
