@@ -22,13 +22,15 @@ interface EntryForm {
   selling_price: string;
 }
 
-const EMPTY_FORM: EntryForm = {
-  received_at: new Date().toISOString().slice(0, 10),
-  quantity: '',
-  unit_cost: '',
-  unit_shipping_fee: '0',
-  selling_price: '',
-};
+function emptyForm(): EntryForm {
+  return {
+    received_at: new Date().toISOString().slice(0, 10),
+    quantity: '',
+    unit_cost: '',
+    unit_shipping_fee: '0',
+    selling_price: '',
+  };
+}
 
 function fmt(n: number) { return n.toLocaleString('ko-KR'); }
 
@@ -44,7 +46,7 @@ export default function CostEntryDrawer({ productId, productName, onClose, onCha
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [addingNew, setAddingNew] = useState(false);
-  const [form, setForm] = useState<EntryForm>(EMPTY_FORM);
+  const [form, setForm] = useState<EntryForm>(emptyForm);
   const [saving, setSaving] = useState(false);
 
   async function load() {
@@ -59,27 +61,30 @@ export default function CostEntryDrawer({ productId, productName, onClose, onCha
 
   async function save() {
     setSaving(true);
-    const payload = {
-      received_at: form.received_at,
-      quantity: Number(form.quantity),
-      unit_cost: Number(form.unit_cost),
-      unit_shipping_fee: Number(form.unit_shipping_fee),
-      selling_price: Number(form.selling_price),
-    };
-    const url = editingId
-      ? `/api/cost-management/entries/${editingId}`
-      : `/api/cost-management/products/${productId}/entries`;
-    const method = editingId ? 'PATCH' : 'POST';
-    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    const json = await res.json();
-    if (json.success) {
-      await load();
-      onChanged();
-      setEditingId(null);
-      setAddingNew(false);
-      setForm(EMPTY_FORM);
+    try {
+      const payload = {
+        received_at: form.received_at,
+        quantity: Number(form.quantity),
+        unit_cost: Number(form.unit_cost),
+        unit_shipping_fee: Number(form.unit_shipping_fee),
+        selling_price: Number(form.selling_price),
+      };
+      const url = editingId
+        ? `/api/cost-management/entries/${editingId}`
+        : `/api/cost-management/products/${productId}/entries`;
+      const method = editingId ? 'PATCH' : 'POST';
+      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const json = await res.json();
+      if (json.success) {
+        await load();
+        onChanged();
+        setEditingId(null);
+        setAddingNew(false);
+        setForm(emptyForm());
+      }
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   }
 
   async function deleteEntry(id: string) {
@@ -104,35 +109,6 @@ export default function CostEntryDrawer({ productId, productName, onClose, onCha
   const totalQty = entries.reduce((s, e) => s + e.quantity, 0);
   const wavgCost = totalQty > 0 ? Math.round(entries.reduce((s, e) => s + e.unit_cost * e.quantity, 0) / totalQty) : 0;
   const wavgShip = totalQty > 0 ? Math.round(entries.reduce((s, e) => s + e.unit_shipping_fee * e.quantity, 0) / totalQty) : 0;
-
-  const formFields: (keyof EntryForm)[] = ['received_at', 'quantity', 'unit_cost', 'unit_shipping_fee', 'selling_price'];
-
-  function FormRow() {
-    return (
-      <tr style={{ background: '#f0fdf4', borderBottom: '1px solid #bbf7d0' }}>
-        {formFields.map((field) => (
-          <td key={field} style={{ padding: '6px 8px' }}>
-            <input
-              type={field === 'received_at' ? 'date' : 'number'}
-              value={form[field]}
-              onChange={(e) => setForm((f) => ({ ...f, [field]: e.target.value }))}
-              style={{ width: '100%', padding: '4px 6px', borderRadius: '6px', border: '1px solid #86efac', fontSize: '11px', boxSizing: 'border-box' }}
-            />
-          </td>
-        ))}
-        <td style={{ padding: '6px 8px' }} colSpan={2}>
-          <div style={{ display: 'flex', gap: '4px' }}>
-            <button onClick={save} disabled={saving} style={{ padding: '4px 10px', borderRadius: '6px', background: '#16a34a', color: '#fff', border: 'none', fontSize: '11px', cursor: 'pointer' }}>
-              {saving ? '저장중' : '저장'}
-            </button>
-            <button onClick={() => { setEditingId(null); setAddingNew(false); setForm(EMPTY_FORM); }} style={{ padding: '4px 8px', borderRadius: '6px', background: '#f3f4f6', border: 'none', fontSize: '11px', cursor: 'pointer' }}>
-              취소
-            </button>
-          </div>
-        </td>
-      </tr>
-    );
-  }
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex' }}>
@@ -176,7 +152,28 @@ export default function CostEntryDrawer({ productId, productName, onClose, onCha
                   <tr><td colSpan={7} style={{ padding: '20px', textAlign: 'center', color: '#71717a' }}>불러오는 중...</td></tr>
                 ) : entries.map((e) => (
                   editingId === e.id ? (
-                    <FormRow key={e.id} />
+                    <tr key={e.id} style={{ background: '#f0fdf4', borderBottom: '1px solid #bbf7d0' }}>
+                      {(['received_at', 'quantity', 'unit_cost', 'unit_shipping_fee', 'selling_price'] as (keyof EntryForm)[]).map((field) => (
+                        <td key={field} style={{ padding: '6px 8px' }}>
+                          <input
+                            type={field === 'received_at' ? 'date' : 'number'}
+                            value={form[field]}
+                            onChange={(ev) => setForm((f) => ({ ...f, [field]: ev.target.value }))}
+                            style={{ width: '100%', padding: '4px 6px', borderRadius: '6px', border: '1px solid #86efac', fontSize: '11px', boxSizing: 'border-box' }}
+                          />
+                        </td>
+                      ))}
+                      <td style={{ padding: '6px 8px' }} colSpan={2}>
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <button onClick={save} disabled={saving} style={{ padding: '4px 10px', borderRadius: '6px', background: '#16a34a', color: '#fff', border: 'none', fontSize: '11px', cursor: 'pointer' }}>
+                            {saving ? '저장중' : '저장'}
+                          </button>
+                          <button onClick={() => { setEditingId(null); setAddingNew(false); setForm(emptyForm()); }} style={{ padding: '4px 8px', borderRadius: '6px', background: '#f3f4f6', border: 'none', fontSize: '11px', cursor: 'pointer' }}>
+                            취소
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
                   ) : (
                     <tr key={e.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
                       <td style={{ padding: '8px', color: '#555' }}>{e.received_at.slice(0, 10)}</td>
@@ -201,14 +198,37 @@ export default function CostEntryDrawer({ productId, productName, onClose, onCha
                     </tr>
                   )
                 ))}
-                {addingNew && !editingId && <FormRow />}
+                {addingNew && !editingId && (
+                  <tr style={{ background: '#f0fdf4', borderBottom: '1px solid #bbf7d0' }}>
+                    {(['received_at', 'quantity', 'unit_cost', 'unit_shipping_fee', 'selling_price'] as (keyof EntryForm)[]).map((field) => (
+                      <td key={field} style={{ padding: '6px 8px' }}>
+                        <input
+                          type={field === 'received_at' ? 'date' : 'number'}
+                          value={form[field]}
+                          onChange={(ev) => setForm((f) => ({ ...f, [field]: ev.target.value }))}
+                          style={{ width: '100%', padding: '4px 6px', borderRadius: '6px', border: '1px solid #86efac', fontSize: '11px', boxSizing: 'border-box' }}
+                        />
+                      </td>
+                    ))}
+                    <td style={{ padding: '6px 8px' }} colSpan={2}>
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <button onClick={save} disabled={saving} style={{ padding: '4px 10px', borderRadius: '6px', background: '#16a34a', color: '#fff', border: 'none', fontSize: '11px', cursor: 'pointer' }}>
+                          {saving ? '저장중' : '저장'}
+                        </button>
+                        <button onClick={() => { setEditingId(null); setAddingNew(false); setForm(emptyForm()); }} style={{ padding: '4px 8px', borderRadius: '6px', background: '#f3f4f6', border: 'none', fontSize: '11px', cursor: 'pointer' }}>
+                          취소
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
 
           {!addingNew && !editingId && (
             <button
-              onClick={() => { setAddingNew(true); setForm(EMPTY_FORM); }}
+              onClick={() => { setAddingNew(true); setForm(emptyForm()); }}
               style={{ width: '100%', marginTop: '12px', padding: '8px', borderRadius: '8px', border: '1px dashed #e5e5e5', background: '#fafafa', fontSize: '12px', color: '#555', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
             >
               <Plus size={13} /> 새 입고 건 추가

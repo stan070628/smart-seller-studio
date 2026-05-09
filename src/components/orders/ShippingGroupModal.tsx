@@ -72,7 +72,7 @@ export default function ShippingGroupModal({ products, onClose, onCreated }: Pro
     if (totalQty === 0 || !feeNum) return [];
     return selectedEntries.map((e) => {
       const product = products.find((p) => p.id === e.product_cost_id);
-      const perUnit = Math.round((feeNum * e.quantity) / totalQty / e.quantity);
+      const perUnit = Math.round(feeNum / totalQty);
       return { name: product?.product_name ?? '', qty: e.quantity, perUnit };
     });
   }
@@ -80,21 +80,24 @@ export default function ShippingGroupModal({ products, onClose, onCreated }: Pro
   async function create() {
     if (selectedEntries.length === 0 || !feeNum) return;
     setSaving(true);
-    const res = await fetch('/api/cost-management/shipping-groups', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: groupName,
-        total_shipping_fee: feeNum,
-        entry_ids: selectedEntries.map((e) => e.id),
-      }),
-    });
-    const json = await res.json();
-    if (json.success) {
-      onCreated();
-      onClose();
+    try {
+      const res = await fetch('/api/cost-management/shipping-groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: groupName,
+          total_shipping_fee: feeNum,
+          entry_ids: selectedEntries.map((e) => e.id),
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        onCreated();
+        onClose();
+      }
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   }
 
   const rows = previewRows();

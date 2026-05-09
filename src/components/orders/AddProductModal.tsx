@@ -37,18 +37,21 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
     if (!isCoupang && !isManual) return;
 
     setSaving(true);
-    const body = isCoupang
-      ? { product_name: selectedCoupang!.seller_product_name, seller_product_id: selectedCoupang!.seller_product_id, platform_fee_rate: Number(feeRate) / 100 }
-      : { product_name: manualName.trim(), platform_fee_rate: Number(feeRate) / 100 };
+    try {
+      const body = isCoupang
+        ? { product_name: selectedCoupang!.seller_product_name, seller_product_id: selectedCoupang!.seller_product_id, platform_fee_rate: Number(feeRate) / 100 }
+        : { product_name: manualName.trim(), platform_fee_rate: Number(feeRate) / 100 };
 
-    const res = await fetch('/api/cost-management/products', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const json = await res.json();
-    if (json.success) { onAdded(); onClose(); }
-    setSaving(false);
+      const res = await fetch('/api/cost-management/products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (json.success) { onAdded(); onClose(); }
+    } finally {
+      setSaving(false);
+    }
   }
 
   const canSave = mode === 'coupang' ? !!selectedCoupang : manualName.trim().length > 0;
