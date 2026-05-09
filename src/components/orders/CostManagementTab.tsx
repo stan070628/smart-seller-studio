@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Truck, Search } from 'lucide-react';
+import { Plus, Truck, Search, Trash2 } from 'lucide-react';
 import CostEntryDrawer from './CostEntryDrawer';
 import ShippingGroupModal from './ShippingGroupModal';
 import AddProductModal from './AddProductModal';
@@ -94,6 +94,14 @@ export default function CostManagementTab() {
   }, [preset, customFrom, customTo]);
 
   useEffect(() => { load(); }, [load]);
+
+  async function deleteProduct(id: string, name: string) {
+    if (!confirm(`"${name}" 상품을 삭제할까요?\n입고 내역도 모두 함께 삭제됩니다.`)) return;
+    const res = await fetch(`/api/cost-management/products/${id}`, { method: 'DELETE' });
+    const json = await res.json();
+    if (json.success) load();
+    else alert(json.error ?? '삭제에 실패했습니다.');
+  }
 
   const filtered = products.filter((p) =>
     p.product_name.toLowerCase().includes(search.toLowerCase()),
@@ -194,7 +202,7 @@ export default function CostManagementTab() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
             <thead>
               <tr style={{ background: '#f9f9f9', borderBottom: '1px solid #e5e5e5' }}>
-                {['상품명', '판매가(가중평균)', '원가(가중평균)', '배송비(배분)', '수수료', '순이익', '마진율', '재고', '내역'].map((h) => (
+                {['상품명', '판매가(가중평균)', '원가(가중평균)', '배송비(배분)', '수수료', '순이익', '마진율', '재고', '내역', ''].map((h) => (
                   <th key={h} style={{ padding: '10px 12px', textAlign: h === '상품명' ? 'left' : 'right', fontWeight: 600, color: '#555', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
@@ -229,6 +237,17 @@ export default function CostManagementTab() {
                         style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid #e5e5e5', background: '#fff', fontSize: '11px', cursor: 'pointer', color: '#555' }}
                       >
                         📋 {p.entry_count}건
+                      </button>
+                    </td>
+                    <td style={{ padding: '10px 8px', textAlign: 'right' }}>
+                      <button
+                        onClick={() => deleteProduct(p.id, p.product_name)}
+                        style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '4px', borderRadius: '4px', opacity: 0.25 }}
+                        onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
+                        onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.25')}
+                        title="상품 삭제"
+                      >
+                        <Trash2 size={13} color="#ef4444" />
                       </button>
                     </td>
                   </tr>
