@@ -1,0 +1,77 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getSourcingPool } from '@/lib/sourcing/db';
+import { getCurrentUser } from '@/lib/auth';
+
+// GET /api/cost-management/products/[id]/sales
+// 특정 상품에 대한 판매 내역 목록을 반환한다.
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+
+  const { id } = await params;
+  const pool = getSourcingPool();
+
+  // 요청 유저가 소유한 상품인지 확인
+  const { rows: check } = await pool.query(
+    `SELECT id FROM product_costs WHERE id = $1 AND user_id = $2`,
+    [id, user.userId],
+  );
+  if (check.length === 0) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
+
+  const { rows } = await pool.query(
+    `SELECT id, sold_at, quantity, selling_price, channel, coupang_order_item_id, created_at
+     FROM sale_records
+     WHERE product_cost_id = $1
+     ORDER BY sold_at DESC, created_at DESC`,
+    [id],
+  );
+
+  return NextResponse.json({ success: true, data: rows });
+}
+
+// POST /api/cost-management/products/[id]/sales
+// 특정 상품에 수동 판매 내역을 추가한다.
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+
+  const { id } = await params;
+  const body = await request.json().catch(() => null);
+  const { sold_at, quantity, selling_price } = body ?? {};
+
+  // 입력값 유효성 검증: sold_at 필수, quantity 양의 정수, selling_price 0 이상 정수
+  if (
+    !sold_at ||
+    quantity == null || !Number.isInteger(quantity) || quantity <= 0 ||
+    selling_price == null || !Number.isInteger(selling_price) || selling_price < 0
+  ) {
+    return NextResponse.json(
+      { success: false, error: 'sold_at, quantity(>0), selling_price(>=0) required' },
+      { status: 400 },
+    );
+  }
+
+  const pool = getSourcingPool();
+
+  // 요청 유저가 소유한 상품인지 확인
+  const { rows: check } = await pool.query(
+    `SELECT id FROM product_costs WHERE id = $1 AND user_id = $2`,
+    [id, user.userId],
+  );
+  if (check.length === 0) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
+
+  const { rows } = await pool.query(
+    `INSERT INTO sale_records (user_id, product_cost_id, sold_at, quantity, selling_price, channel)
+     VALUES ($1, $2, $3, $4, $5, 'manual')
+     RETURNING *`,
+    [user.userId, id, sold_at, quantity, selling_price],
+  );
+
+  return NextResponse.json({ success: true, data: rows[0] }, { status: 201 });
+}
