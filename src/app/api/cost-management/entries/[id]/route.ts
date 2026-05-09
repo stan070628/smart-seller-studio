@@ -18,6 +18,16 @@ export async function PATCH(
   const body = await request.json().catch(() => null);
   const { received_at, quantity, unit_cost, unit_shipping_fee, selling_price } = body ?? {};
 
+  // 빈 body 방어: 최소 하나의 필드가 있어야 PATCH를 허용
+  const hasField = [received_at, quantity, unit_cost, unit_shipping_fee, selling_price]
+    .some((v) => v !== undefined);
+  if (!hasField) {
+    return NextResponse.json(
+      { success: false, error: 'At least one field must be provided' },
+      { status: 400 },
+    );
+  }
+
   const pool = getSourcingPool();
   try {
     // 해당 입고 건이 현재 유저 소유인지 확인 (RLS 대체)
@@ -38,7 +48,7 @@ export async function PATCH(
          unit_shipping_fee = COALESCE($4, unit_shipping_fee),
          selling_price     = COALESCE($5, selling_price)
        WHERE id = $6
-       RETURNING *`,
+       RETURNING id, product_cost_id, received_at, quantity, unit_cost, unit_shipping_fee, selling_price, shipping_group_id, created_at`,
       [received_at ?? null, quantity ?? null, unit_cost ?? null, unit_shipping_fee ?? null, selling_price ?? null, id],
     );
 

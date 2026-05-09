@@ -30,6 +30,11 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   }
+  // UUID 형식 사전 검증 — 잘못된 값이 DB 쿼리까지 도달하지 않도록 차단
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!entry_ids.every((e: unknown) => typeof e === 'string' && UUID_RE.test(e))) {
+    return NextResponse.json({ success: false, error: 'entry_ids must be an array of UUIDs' }, { status: 400 });
+  }
 
   const pool = getSourcingPool();
   // 트랜잭션: 그룹 INSERT + 다수 entries UPDATE를 원자적으로 처리
@@ -51,9 +56,13 @@ export async function POST(request: NextRequest) {
       [entry_ids, user.userId],
     );
 
-    if (entries.length === 0) {
+    // 요청한 ID 수와 실제 조회된 수가 다르면 일부가 존재하지 않거나 타 유저 소유
+    if (entries.length !== entry_ids.length) {
       await client.query('ROLLBACK');
-      return NextResponse.json({ success: false, error: 'No valid entries found' }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: `${entry_ids.length - entries.length} entry IDs not found or not owned by you` },
+        { status: 400 },
+      );
     }
 
     // 수량 비례로 배송비 배분 계산 (반올림 오차는 첫 항목 흡수)
