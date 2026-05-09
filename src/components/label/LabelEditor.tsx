@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import LabelPreview from './LabelPreview';
 import QualityFieldsForm from './QualityFieldsForm';
-import TemplatePicker from './TemplatePicker';
+import LabelSaveLoad from './LabelSaveLoad';
 import CoupangProductPicker from './CoupangProductPicker';
 import { generatePdf, printLabel } from '@/lib/label/label-pdf';
 import type { QualityFields } from '@/lib/label/label-templates';
@@ -184,13 +184,17 @@ export default function LabelEditor() {
             />
           </div>
 
+          {/* 저장 / 불러오기 */}
           <div style={SECTION}>
-            <div style={SECTION_TITLE}>템플릿</div>
-            <TemplatePicker
-              currentImageUrl={imageUrl}
-              currentFields={fields}
-              onLoad={setFields}
-              onImageLoad={setImageUrl}
+            <div style={SECTION_TITLE}>저장 / 불러오기</div>
+            <LabelSaveLoad
+              labelType="quality"
+              currentData={{ imageUrl, ...fields }}
+              onLoad={(data) => {
+                const { imageUrl: loadedUrl, ...rest } = data as { imageUrl?: string } & Record<string, unknown>;
+                if (loadedUrl) setImageUrl(loadedUrl);
+                setFields(rest as unknown as QualityFields);
+              }}
             />
           </div>
 
