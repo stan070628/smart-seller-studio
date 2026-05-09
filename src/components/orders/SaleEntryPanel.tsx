@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Pencil, Trash2, CloudDownload } from 'lucide-react';
 
 interface SaleRecord {
@@ -42,6 +42,7 @@ export default function SaleEntryPanel({ productId, sellerProductId, onChanged }
   const [addingNew, setAddingNew] = useState(false);
   const [form, setForm] = useState<SaleForm>(emptyForm());
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [showImportForm, setShowImportForm] = useState(false);
   const [importForm, setImportForm] = useState<ImportForm>({
@@ -49,15 +50,20 @@ export default function SaleEntryPanel({ productId, sellerProductId, onChanged }
     to: new Date().toISOString().slice(0, 10),
   });
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
-    const res = await fetch(`/api/cost-management/products/${productId}/sales`);
-    const json = await res.json();
-    if (json.success) setSales(json.data);
-    setLoading(false);
-  }
+    try {
+      const res = await fetch(`/api/cost-management/products/${productId}/sales`);
+      const json = await res.json();
+      if (json.success) setSales(json.data);
+    } catch (e) {
+      console.error('판매 내역 로드 실패:', e);
+    } finally {
+      setLoading(false);
+    }
+  }, [productId]);
 
-  useEffect(() => { load(); }, [productId]);
+  useEffect(() => { load(); }, [load]);
 
   async function save() {
     const qty = Math.round(Number(form.quantity));
@@ -88,10 +94,15 @@ export default function SaleEntryPanel({ productId, sellerProductId, onChanged }
 
   async function deleteSale(id: string) {
     if (!confirm('이 판매 건을 삭제할까요?')) return;
-    const res = await fetch(`/api/cost-management/sales/${id}`, { method: 'DELETE' });
-    const json = await res.json();
-    if (json.success) { await load(); onChanged(); }
-    else alert(json.error ?? '삭제에 실패했습니다.');
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/cost-management/sales/${id}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (json.success) { await load(); onChanged(); }
+      else alert(json.error ?? '삭제에 실패했습니다.');
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   function startEdit(s: SaleRecord) {
@@ -213,7 +224,7 @@ export default function SaleEntryPanel({ productId, sellerProductId, onChanged }
                   <td style={{ padding: '6px 8px', textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end' }}>
                       <button onClick={() => startEdit(s)} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '2px' }}><Pencil size={12} color="#6b7280" /></button>
-                      <button onClick={() => deleteSale(s.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '2px' }}><Trash2 size={12} color="#ef4444" /></button>
+                      <button onClick={() => deleteSale(s.id)} disabled={deletingId === s.id} style={{ border: 'none', background: 'none', cursor: deletingId === s.id ? 'not-allowed' : 'pointer', padding: '2px', opacity: deletingId === s.id ? 0.4 : 1 }}><Trash2 size={12} color="#ef4444" /></button>
                     </div>
                   </td>
                 </tr>
