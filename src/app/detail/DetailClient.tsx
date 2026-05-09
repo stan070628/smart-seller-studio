@@ -257,9 +257,9 @@ const DetailClient: React.FC = () => {
   // -------------------------------------------------------------------------
 
   return (
-    <div className="flex flex-col bg-gray-50">
+    <div className="flex min-h-full flex-col bg-gray-50">
       {/* 본문 */}
-      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8 md:flex-row md:items-start">
+      <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 md:flex-row md:items-start">
 
         {/* ---------------------------------------------------------------- */}
         {/* 좌측: 입력 패널                                                   */}

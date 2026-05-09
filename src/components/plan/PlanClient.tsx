@@ -1706,7 +1706,7 @@ export default function PlanClient() {
   ];
 
   return (
-    <div style={{ background: C.bg, fontFamily: 'Pretendard, -apple-system, sans-serif' }}>
+    <div style={{ background: C.bg, minHeight: '100%', fontFamily: 'Pretendard, -apple-system, sans-serif' }}>
 
       {/* 페이지 헤더 */}
       <div

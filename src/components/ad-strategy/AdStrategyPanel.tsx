@@ -71,9 +71,9 @@ export default function AdStrategyPanel() {
     error?.includes('만료'));
 
   return (
-    <div style={{ backgroundColor: '#f5f5f7', fontFamily: "'Noto Sans KR', sans-serif" }}>
+    <div style={{ backgroundColor: '#f5f5f7', minHeight: '100%', fontFamily: "'Noto Sans KR', sans-serif" }}>
       {/* 본문 */}
-      <main style={{ flex: 1, maxWidth: '1200px', width: '100%', margin: '0 auto', padding: '28px 24px' }}>
+      <main style={{ maxWidth: '1200px', width: '100%', margin: '0 auto', padding: '28px 24px' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* 페이지 헤더 */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

@@ -2236,6 +2236,7 @@ export default function ListingDashboard() {
       style={{
         display: 'flex',
         flexDirection: 'column',
+        minHeight: '100%',
         backgroundColor: C.bg,
       }}
     >

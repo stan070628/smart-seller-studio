@@ -58,6 +58,7 @@ export default function SourcingDashboard() {
       style={{
         display: 'flex',
         flexDirection: 'column',
+        minHeight: '100%',
         backgroundColor: C.bg,
         fontFamily: "'Noto Sans KR', sans-serif",
         color: C.text,

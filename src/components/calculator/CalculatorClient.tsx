@@ -26,9 +26,9 @@ export default function CalculatorClient() {
   const [showBundleAd, setShowBundleAd] = useState(false);
 
   return (
-    <div className="flex flex-col bg-[#f5f5f7]">
+    <div className="flex min-h-full flex-col bg-[#f5f5f7]">
       {/* 메인 */}
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-5 md:px-6 md:py-8">
+      <main className="mx-auto w-full max-w-3xl px-4 py-5 md:px-6 md:py-8">
         {/* 타이틀 */}
         <div className="mb-5 flex flex-col gap-2 md:mb-6 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-2.5">

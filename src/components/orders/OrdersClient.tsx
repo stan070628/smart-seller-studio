@@ -19,8 +19,8 @@ export default function OrdersClient() {
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('orders');
 
   return (
-    <div style={{ backgroundColor: '#f5f5f7' }}>
-      <main style={{ flex: 1, maxWidth: '1100px', width: '100%', margin: '0 auto', padding: '28px 24px' }}>
+    <div style={{ backgroundColor: '#f5f5f7', minHeight: '100%' }}>
+      <main style={{ maxWidth: '1100px', width: '100%', margin: '0 auto', padding: '28px 24px' }}>
         {/* 타이틀 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
           <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: 'rgba(190,0,20,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
