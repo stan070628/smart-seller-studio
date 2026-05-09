@@ -25,7 +25,7 @@ export async function GET(
 
     const [{ rows: entryRows }, { rows: saleRows }] = await Promise.all([
       pool.query(
-        `SELECT id, received_at, quantity, unit_cost, unit_shipping_fee FROM cost_entries WHERE product_cost_id = $1`,
+        `SELECT id, received_at, quantity, unit_cost, unit_shipping_fee, unit_rg_shipping_fee FROM cost_entries WHERE product_cost_id = $1`,
         [id],
       ),
       pool.query(
@@ -40,6 +40,7 @@ export async function GET(
       quantity: Number(e.quantity),
       unit_cost: Number(e.unit_cost),
       unit_shipping_fee: Number(e.unit_shipping_fee),
+      unit_rg_shipping_fee: Number(e.unit_rg_shipping_fee),
     }));
 
     const sales: SaleRow[] = saleRows.map((s) => ({

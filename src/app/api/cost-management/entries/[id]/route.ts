@@ -16,10 +16,10 @@ export async function PATCH(
 
   const { id } = await params;
   const body = await request.json().catch(() => null);
-  const { received_at, quantity, unit_cost, unit_shipping_fee } = body ?? {};
+  const { received_at, quantity, unit_cost, unit_shipping_fee, unit_rg_shipping_fee } = body ?? {};
 
   // 빈 body 방어: 최소 하나의 필드가 있어야 PATCH를 허용
-  const hasField = [received_at, quantity, unit_cost, unit_shipping_fee]
+  const hasField = [received_at, quantity, unit_cost, unit_shipping_fee, unit_rg_shipping_fee]
     .some((v) => v !== undefined);
   if (!hasField) {
     return NextResponse.json(
@@ -42,13 +42,14 @@ export async function PATCH(
     // COALESCE를 사용하여 null 전달 시 기존 값을 유지
     const { rows } = await pool.query(
       `UPDATE cost_entries SET
-         received_at       = COALESCE($1, received_at),
-         quantity          = COALESCE($2, quantity),
-         unit_cost         = COALESCE($3, unit_cost),
-         unit_shipping_fee = COALESCE($4, unit_shipping_fee)
-       WHERE id = $5
-       RETURNING id, product_cost_id, received_at, quantity, unit_cost, unit_shipping_fee, shipping_group_id, created_at`,
-      [received_at ?? null, quantity ?? null, unit_cost ?? null, unit_shipping_fee ?? null, id],
+         received_at            = COALESCE($1, received_at),
+         quantity               = COALESCE($2, quantity),
+         unit_cost              = COALESCE($3, unit_cost),
+         unit_shipping_fee      = COALESCE($4, unit_shipping_fee),
+         unit_rg_shipping_fee   = COALESCE($5, unit_rg_shipping_fee)
+       WHERE id = $6
+       RETURNING id, product_cost_id, received_at, quantity, unit_cost, unit_shipping_fee, unit_rg_shipping_fee, shipping_group_id, created_at`,
+      [received_at ?? null, quantity ?? null, unit_cost ?? null, unit_shipping_fee ?? null, unit_rg_shipping_fee ?? null, id],
     );
 
     return NextResponse.json({ success: true, data: rows[0] });

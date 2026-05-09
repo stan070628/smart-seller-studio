@@ -6,6 +6,7 @@ export interface CostEntryRow {
   quantity: number;
   unit_cost: number;
   unit_shipping_fee: number;
+  unit_rg_shipping_fee?: number;
   shipping_group_id: string | null;
 }
 

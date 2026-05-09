@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
 
     // 입고 전체 조회 (기간 필터 없음 — 재고는 전체 입고 기준)
     const { rows: allEntries } = await pool.query(
-      `SELECT id, product_cost_id, received_at, quantity, unit_cost, unit_shipping_fee, shipping_group_id
+      `SELECT id, product_cost_id, received_at, quantity, unit_cost, unit_shipping_fee, unit_rg_shipping_fee, shipping_group_id
        FROM cost_entries WHERE user_id = $1`,
       [user.userId],
     );
@@ -98,6 +98,7 @@ export async function GET(request: NextRequest) {
           quantity: e.quantity,
           unit_cost: e.unit_cost,
           unit_shipping_fee: e.unit_shipping_fee,
+          unit_rg_shipping_fee: e.unit_rg_shipping_fee ?? 0,
         }));
         fifoResult = calculateFifo(batches, pSales, feeRate);
       } catch (e) {

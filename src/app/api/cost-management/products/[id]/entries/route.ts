@@ -21,6 +21,7 @@ export async function GET(
 
     const { rows } = await pool.query(
       `SELECT ce.id, ce.received_at, ce.quantity, ce.unit_cost, ce.unit_shipping_fee,
+              ce.unit_rg_shipping_fee,
               ce.shipping_group_id, sg.name as shipping_group_name, ce.created_at
        FROM cost_entries ce
        LEFT JOIN shipping_groups sg ON sg.id = ce.shipping_group_id
