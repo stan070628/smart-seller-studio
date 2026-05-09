@@ -19,6 +19,7 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
   const [mode, setMode] = useState<Mode>('coupang');
   const [coupangProducts, setCoupangProducts] = useState<CoupangProduct[]>([]);
   const [loadingCoupang, setLoadingCoupang] = useState(true);
+  const [coupangError, setCoupangError] = useState<string | null>(null);
   const [selectedCoupang, setSelectedCoupang] = useState<CoupangProduct | null>(null);
   const [manualName, setManualName] = useState('');
   const [feeRate, setFeeRate] = useState('10.8');
@@ -27,7 +28,11 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
   useEffect(() => {
     fetch('/api/cost-management/coupang-products')
       .then((r) => r.json())
-      .then((j) => { if (j.success) setCoupangProducts(j.data); })
+      .then((j) => {
+        if (j.success) setCoupangProducts(j.data);
+        else setCoupangError(j.error ?? '상품 목록을 불러오지 못했습니다.');
+      })
+      .catch(() => setCoupangError('네트워크 오류가 발생했습니다.'))
       .finally(() => setLoadingCoupang(false));
   }, []);
 
@@ -86,6 +91,11 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
               <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid #e5e5e5', borderRadius: '8px' }}>
                 {loadingCoupang ? (
                   <div style={{ padding: '20px', textAlign: 'center', color: '#999', fontSize: '12px' }}>로딩중...</div>
+                ) : coupangError ? (
+                  <div style={{ padding: '20px', textAlign: 'center', fontSize: '12px' }}>
+                    <div style={{ color: '#ef4444', marginBottom: '6px' }}>상품 목록 로드 실패</div>
+                    <div style={{ color: '#999', fontSize: '11px' }}>{coupangError}</div>
+                  </div>
                 ) : coupangProducts.length === 0 ? (
                   <div style={{ padding: '20px', textAlign: 'center', color: '#999', fontSize: '12px' }}>연동 가능한 상품이 없습니다</div>
                 ) : coupangProducts.map((p) => (

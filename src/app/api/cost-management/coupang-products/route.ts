@@ -20,17 +20,23 @@ export async function GET() {
     }
 
     // 1) Render PostgreSQL 에서 이미 원가관리에 등록된 seller_product_id 목록 조회
+    // product_costs 테이블이 아직 없을 경우(마이그레이션 미적용) graceful fallback
     const pool = getSourcingPool();
-    const { rows: registeredRows } = await pool.query(
-      `SELECT seller_product_id
-       FROM product_costs
-       WHERE user_id = $1
-         AND seller_product_id IS NOT NULL`,
-      [user.userId],
-    );
-    const registeredIds = new Set<number>(
-      registeredRows.map((r) => Number(r.seller_product_id)),
-    );
+    let registeredIds = new Set<number>();
+    try {
+      const { rows: registeredRows } = await pool.query(
+        `SELECT seller_product_id
+         FROM product_costs
+         WHERE user_id = $1
+           AND seller_product_id IS NOT NULL`,
+        [user.userId],
+      );
+      registeredIds = new Set<number>(
+        registeredRows.map((r) => Number(r.seller_product_id)),
+      );
+    } catch {
+      // 테이블 미생성 등 DB 오류 시 필터 없이 전체 목록 반환
+    }
 
     // 2) Supabase 에서 쿠팡 등록 상품 조회
     const supabase = getSupabaseServerClient();
