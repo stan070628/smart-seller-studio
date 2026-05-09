@@ -48,10 +48,11 @@ export function calculateWeightedAvg(
   entries: Pick<CostEntryRow, 'quantity' | 'unit_cost' | 'unit_shipping_fee' | 'selling_price'>[],
   field: 'unit_cost' | 'unit_shipping_fee' | 'selling_price',
 ): number {
-  const totalQty = entries.reduce((s, e) => s + e.quantity, 0);
+  // 판매가 가중평균은 판매가가 설정된(> 0) 항목만 포함
+  const pool = field === 'selling_price' ? entries.filter((e) => e.selling_price > 0) : entries;
+  const totalQty = pool.reduce((s, e) => s + e.quantity, 0);
   if (totalQty === 0) return 0;
-  const weightedSum = entries.reduce((s, e) => s + e[field] * e.quantity, 0);
-  return Math.round(weightedSum / totalQty);
+  return Math.round(pool.reduce((s, e) => s + e[field] * e.quantity, 0) / totalQty);
 }
 
 /**
@@ -95,15 +96,19 @@ export function calculateProductMetrics(
     weighted_avg_selling_price > 0 ? (net_profit / weighted_avg_selling_price) * 100 : 0;
 
   const total_quantity = entries.reduce((s, e) => s + e.quantity, 0);
+  // 매입비는 전체 항목 (판매가 미설정 포함)
   const total_purchase_amount = entries.reduce((s, e) => s + e.unit_cost * e.quantity, 0);
-  const total_revenue = entries.reduce((s, e) => s + e.selling_price * e.quantity, 0);
-  const total_shipping_amount = entries.reduce((s, e) => s + e.unit_shipping_fee * e.quantity, 0);
-  const total_fee_amount = entries.reduce(
+
+  // 매출·순이익은 판매가가 설정된(> 0) 항목만 집계
+  const pricedEntries = entries.filter((e) => e.selling_price > 0);
+  const total_revenue = pricedEntries.reduce((s, e) => s + e.selling_price * e.quantity, 0);
+  const priced_cost = pricedEntries.reduce((s, e) => s + e.unit_cost * e.quantity, 0);
+  const priced_shipping = pricedEntries.reduce((s, e) => s + e.unit_shipping_fee * e.quantity, 0);
+  const total_fee_amount = pricedEntries.reduce(
     (s, e) => s + Math.round(e.selling_price * platformFeeRate) * e.quantity,
     0,
   );
-  const total_net_profit_amount =
-    total_revenue - total_purchase_amount - total_shipping_amount - total_fee_amount;
+  const total_net_profit_amount = total_revenue - priced_cost - priced_shipping - total_fee_amount;
 
   return {
     weighted_avg_cost,

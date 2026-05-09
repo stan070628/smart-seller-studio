@@ -61,15 +61,15 @@ export async function POST(
   const body = await request.json().catch(() => null);
   const { received_at, quantity, unit_cost, unit_shipping_fee, selling_price } = body ?? {};
 
-  // 필수 필드 검증 — 타입·범위까지 엄격하게 확인
+  // 필수: 입고일·수량·원가. 판매가는 선택(0 허용 — 미설정 입고)
   if (
     !received_at ||
     quantity == null || !Number.isInteger(quantity) || quantity <= 0 ||
     unit_cost == null || unit_cost < 0 ||
-    selling_price == null || !Number.isInteger(selling_price) || selling_price <= 0
+    selling_price == null || !Number.isInteger(selling_price) || selling_price < 0
   ) {
     return NextResponse.json(
-      { success: false, error: 'received_at, quantity, unit_cost, selling_price required' },
+      { success: false, error: 'received_at, quantity(>0), unit_cost(>=0) required' },
       { status: 400 },
     );
   }

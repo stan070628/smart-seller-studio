@@ -149,7 +149,7 @@ export default function CostManagementTab() {
         {[
           { label: '관리 상품 수', value: `${products.length}개`, color: '#18181b', sub: undefined },
           { label: '기간 총 매입비', value: `${fmt(summary.total_purchase_amount)}원`, color: '#ef4444', sub: '입고 단가 × 수량 합계' },
-          { label: '기간 추정 매출', value: `${fmt(summary.total_revenue)}원`, color: '#2563eb', sub: '판매가 × 수량 합계' },
+          { label: '기간 추정 매출', value: `${fmt(summary.total_revenue)}원`, color: '#2563eb', sub: '판매가 설정 항목만 집계' },
           {
             label: '기간 순이익',
             value: `${fmt(summary.total_net_profit_amount)}원`,
@@ -209,20 +209,25 @@ export default function CostManagementTab() {
             </thead>
             <tbody>
               {filtered.map((p) => {
-                const isRisk = p.entry_count > 0 && p.margin_rate < 5;
+                const isRisk = p.entry_count > 0 && p.weighted_avg_selling_price > 0 && p.margin_rate < 5;
                 const noEntries = p.entry_count === 0;
+                const noPriceSet = p.entry_count > 0 && p.weighted_avg_selling_price === 0;
                 return (
                   <tr key={p.id} style={{ borderBottom: '1px solid #f0f0f0', background: isRisk ? '#fff9f9' : '#fff' }}>
                     <td style={{ padding: '10px 12px', fontWeight: 500, color: noEntries ? '#999' : '#18181b' }}>{p.product_name}</td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', color: noEntries ? '#ccc' : undefined }}>{noEntries ? '—' : fmt(p.weighted_avg_selling_price)}</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', color: (noEntries || noPriceSet) ? '#a1a1aa' : undefined }}>
+                      {noEntries ? '—' : noPriceSet ? '미설정' : fmt(p.weighted_avg_selling_price)}
+                    </td>
                     <td style={{ padding: '10px 12px', textAlign: 'right', color: noEntries ? '#ccc' : '#ef4444' }}>{noEntries ? '—' : fmt(p.weighted_avg_cost)}</td>
                     <td style={{ padding: '10px 12px', textAlign: 'right', color: noEntries ? '#ccc' : '#f97316' }}>{noEntries ? '—' : fmt(p.weighted_avg_shipping)}</td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', color: noEntries ? '#ccc' : '#f97316' }}>{noEntries ? '—' : fmt(p.fee)}</td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, color: noEntries ? '#ccc' : p.net_profit >= 0 ? '#16a34a' : '#ef4444' }}>
-                      {noEntries ? '—' : fmt(p.net_profit)}
+                    <td style={{ padding: '10px 12px', textAlign: 'right', color: (noEntries || noPriceSet) ? '#ccc' : '#f97316' }}>{(noEntries || noPriceSet) ? '—' : fmt(p.fee)}</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, color: (noEntries || noPriceSet) ? '#ccc' : p.net_profit >= 0 ? '#16a34a' : '#ef4444' }}>
+                      {(noEntries || noPriceSet) ? '—' : fmt(p.net_profit)}
                     </td>
                     <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                      {noEntries ? <span style={{ color: '#ccc' }}>—</span> : (
+                      {noEntries ? <span style={{ color: '#ccc' }}>—</span>
+                        : noPriceSet ? <span style={{ background: '#f5f5f7', color: '#a1a1aa', padding: '2px 6px', borderRadius: '4px', fontSize: '11px' }}>판매가 미설정</span>
+                        : (
                         <span style={{ background: isRisk ? '#fef2f2' : p.margin_rate >= 10 ? '#f0fdf4' : '#fefce8', color: isRisk ? '#ef4444' : p.margin_rate >= 10 ? '#16a34a' : '#ca8a04', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}>
                           {p.margin_rate.toFixed(1)}%
                         </span>

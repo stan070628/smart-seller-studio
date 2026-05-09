@@ -64,8 +64,8 @@ export default function CostEntryDrawer({ productId, productName, onClose, onCha
     const qty = Math.round(Number(form.quantity));
     const cost = Math.round(Number(form.unit_cost));
     const price = Math.round(Number(form.selling_price));
-    if (!form.received_at || qty <= 0 || price <= 0) {
-      alert('입고일, 수량, 판매가를 입력해 주세요.');
+    if (!form.received_at || qty <= 0) {
+      alert('입고일과 수량을 입력해 주세요.');
       return;
     }
     setSaving(true);
@@ -116,7 +116,7 @@ export default function CostEntryDrawer({ productId, productName, onClose, onCha
     });
   }
 
-  const canSave = !!form.received_at && Number(form.quantity) > 0 && Number(form.selling_price) > 0;
+  const canSave = !!form.received_at && Number(form.quantity) > 0;
 
   const totalQty = entries.reduce((s, e) => s + e.quantity, 0);
   const wavgCost = totalQty > 0 ? Math.round(entries.reduce((s, e) => s + e.unit_cost * e.quantity, 0) / totalQty) : 0;
@@ -170,6 +170,7 @@ export default function CostEntryDrawer({ productId, productName, onClose, onCha
                           <input
                             type={field === 'received_at' ? 'date' : 'number'}
                             value={form[field]}
+                            placeholder={field === 'selling_price' ? '0=미설정' : undefined}
                             onChange={(ev) => setForm((f) => ({ ...f, [field]: ev.target.value }))}
                             style={{ width: '100%', padding: '4px 6px', borderRadius: '6px', border: '1px solid #86efac', fontSize: '11px', boxSizing: 'border-box', color: '#18181b' }}
                           />
@@ -195,7 +196,9 @@ export default function CostEntryDrawer({ productId, productName, onClose, onCha
                         {fmt(e.unit_shipping_fee)}
                         {e.shipping_group_name && <span style={{ marginLeft: '4px', fontSize: '9px', color: '#999' }}>({e.shipping_group_name})</span>}
                       </td>
-                      <td style={{ padding: '8px', textAlign: 'right' }}>{fmt(e.selling_price)}</td>
+                      <td style={{ padding: '8px', textAlign: 'right', color: e.selling_price === 0 ? '#a1a1aa' : undefined }}>
+                        {e.selling_price === 0 ? '미설정' : fmt(e.selling_price)}
+                      </td>
                       <td style={{ padding: '8px', textAlign: 'right' }}>
                         {e.shipping_group_id
                           ? <span style={{ background: '#dbeafe', color: '#1d4ed8', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>그룹</span>
