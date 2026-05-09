@@ -29,8 +29,6 @@ function fmt(n: number): string {
 // ─── 타입 ──────────────────────────────────────────────────────────────────
 
 interface OrderItem {
-  sellerProductName: string;
-  shippingCount: number;
   orderPrice: number;
 }
 
@@ -63,7 +61,6 @@ function toDateStr(d: Date): string {
 
 function getDateRange(p: Preset, customFrom: string, customTo: string): { from: string; to: string } | null {
   const today = new Date();
-  const fmtDate = (d: Date) => d.toISOString().slice(0, 10);
   if (p === 'all') return null;
   if (p === 'custom') {
     if (customFrom && customTo) return { from: customFrom, to: customTo };
@@ -71,25 +68,25 @@ function getDateRange(p: Preset, customFrom: string, customTo: string): { from: 
   }
   if (p === 'this_month') {
     return {
-      from: fmtDate(new Date(today.getFullYear(), today.getMonth(), 1)),
-      to: fmtDate(new Date(today.getFullYear(), today.getMonth() + 1, 0)),
+      from: toDateStr(new Date(today.getFullYear(), today.getMonth(), 1)),
+      to: toDateStr(new Date(today.getFullYear(), today.getMonth() + 1, 0)),
     };
   }
   if (p === 'last_month') {
     return {
-      from: fmtDate(new Date(today.getFullYear(), today.getMonth() - 1, 1)),
-      to: fmtDate(new Date(today.getFullYear(), today.getMonth(), 0)),
+      from: toDateStr(new Date(today.getFullYear(), today.getMonth() - 1, 1)),
+      to: toDateStr(new Date(today.getFullYear(), today.getMonth(), 0)),
     };
   }
   if (p === '3months') {
     return {
-      from: fmtDate(new Date(today.getFullYear(), today.getMonth() - 2, 1)),
-      to: fmtDate(today),
+      from: toDateStr(new Date(today.getFullYear(), today.getMonth() - 2, 1)),
+      to: toDateStr(today),
     };
   }
   return {
-    from: fmtDate(new Date(today.getFullYear(), today.getMonth() - 5, 1)),
-    to: fmtDate(today),
+    from: toDateStr(new Date(today.getFullYear(), today.getMonth() - 5, 1)),
+    to: toDateStr(today),
   };
 }
 
@@ -275,9 +272,11 @@ export default function CostManagementTab() {
       </div>
 
       {/* 섹션 A — 실제 매출 (API 기반) */}
-      {preset === 'all' ? (
+      {(preset === 'all' || (preset === 'custom' && (!customFrom || !customTo))) ? (
         <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '10px', padding: '12px 16px', marginBottom: '12px', fontSize: '12px', color: '#92400e' }}>
-          전체 기간 선택 시 API 매출 조회는 생략됩니다. 특정 기간을 선택해주세요.
+          {preset === 'all'
+            ? '전체 기간 선택 시 API 매출 조회는 생략됩니다. 특정 기간을 선택해주세요.'
+            : '시작일과 종료일을 모두 입력하면 실제 매출이 조회됩니다.'}
         </div>
       ) : apiLoading ? (
         <div style={{ textAlign: 'center', padding: '24px', color: '#71717a', fontSize: '12px', marginBottom: '12px' }}>
