@@ -46,27 +46,31 @@ const DEFAULT_ROWS: NutritionRow[] = [
 let nextId = 100;
 
 export default function NutritionLabel2x3Editor() {
-  /* 한글 표시 사항 */
+  /* 한글 표시사항 */
   const [productName, setProductName] = useState('');
   const [itemInfo, setItemInfo] = useState('');
   const [foodType, setFoodType] = useState('');
   const [importer, setImporter] = useState('');
   const [manufacturer, setManufacturer] = useState('');
+  const [originCountry, setOriginCountry] = useState('');
   const [contentAmount, setContentAmount] = useState('');
   const [expiryDate, setExpiryDate] = useState('');
-  const [originCountry, setOriginCountry] = useState('');
   const [storageMethod, setStorageMethod] = useState('');
   const [ingredients, setIngredients] = useState('');
+  const [returnAddress, setReturnAddress] = useState('');
+  const [caution, setCaution] = useState('');
 
   /* 소분 계산기 */
   const [unitCount, setUnitCount] = useState('');
   const [unitWeight, setUnitWeight] = useState('');
   const [unitUnit, setUnitUnit] = useState('봉');
 
-  /* 영양 정보 */
+  /* 영양정보 */
   const [servingSize, setServingSize] = useState('');
   const [calories, setCalories] = useState('');
   const [rows, setRows] = useState<NutritionRow[]>(DEFAULT_ROWS);
+
+  const previewRef = useRef<HTMLDivElement>(null);
 
   const applySubdivision = () => {
     const count = parseInt(unitCount, 10);
@@ -79,8 +83,6 @@ export default function NutritionLabel2x3Editor() {
     setContentAmount(`${totalWeight}g (${weight}g × ${count}${unitUnit})${kcalStr}`);
     if (!servingSize) setServingSize(`1${unitUnit}(${weight}g)`);
   };
-
-  const previewRef = useRef<HTMLDivElement>(null);
 
   const updateRow = (id: string, patch: Partial<NutritionRow>) => {
     setRows((prev) => prev.map((r) => r.id === id ? { ...r, ...patch } : r));
@@ -113,42 +115,45 @@ export default function NutritionLabel2x3Editor() {
       <div style={{ display: 'flex', height: '100%', background: C.bg }}>
         {/* 좌측 폼 */}
         <div style={{
-          width: 320, flexShrink: 0,
+          width: 340, flexShrink: 0,
           background: '#fff', color: '#111', colorScheme: 'light',
           borderRight: `1px solid ${C.border}`,
           padding: 16, overflowY: 'auto',
         }}>
 
-          {/* 저장 / 불러오기 */}
+          {/* 1. 저장 / 불러오기 */}
           <div style={SECTION}>
             <div style={SECTION_TITLE}>저장 / 불러오기</div>
             <LabelSaveLoad
               labelType="nutrition2x3"
               currentData={{
                 productName, itemInfo, foodType, importer, manufacturer,
-                contentAmount, expiryDate, originCountry, storageMethod, ingredients,
+                originCountry, contentAmount, expiryDate, storageMethod, ingredients,
+                returnAddress, caution,
                 unitCount, unitWeight, unitUnit,
                 servingSize, calories, rows,
               }}
               onLoad={(data) => {
                 const d = data as {
                   productName?: string; itemInfo?: string; foodType?: string;
-                  importer?: string; manufacturer?: string; contentAmount?: string;
-                  expiryDate?: string; originCountry?: string; storageMethod?: string;
-                  ingredients?: string; unitCount?: string; unitWeight?: string;
-                  unitUnit?: string; servingSize?: string; calories?: string;
-                  rows?: NutritionRow[];
+                  importer?: string; manufacturer?: string; originCountry?: string;
+                  contentAmount?: string; expiryDate?: string; storageMethod?: string;
+                  ingredients?: string; returnAddress?: string; caution?: string;
+                  unitCount?: string; unitWeight?: string; unitUnit?: string;
+                  servingSize?: string; calories?: string; rows?: NutritionRow[];
                 };
                 if (d.productName !== undefined) setProductName(d.productName);
                 if (d.itemInfo !== undefined) setItemInfo(d.itemInfo);
                 if (d.foodType !== undefined) setFoodType(d.foodType);
                 if (d.importer !== undefined) setImporter(d.importer);
                 if (d.manufacturer !== undefined) setManufacturer(d.manufacturer);
+                if (d.originCountry !== undefined) setOriginCountry(d.originCountry);
                 if (d.contentAmount !== undefined) setContentAmount(d.contentAmount);
                 if (d.expiryDate !== undefined) setExpiryDate(d.expiryDate);
-                if (d.originCountry !== undefined) setOriginCountry(d.originCountry);
                 if (d.storageMethod !== undefined) setStorageMethod(d.storageMethod);
                 if (d.ingredients !== undefined) setIngredients(d.ingredients);
+                if (d.returnAddress !== undefined) setReturnAddress(d.returnAddress);
+                if (d.caution !== undefined) setCaution(d.caution);
                 if (d.unitCount !== undefined) setUnitCount(d.unitCount);
                 if (d.unitWeight !== undefined) setUnitWeight(d.unitWeight);
                 if (d.unitUnit !== undefined) setUnitUnit(d.unitUnit);
@@ -159,9 +164,9 @@ export default function NutritionLabel2x3Editor() {
             />
           </div>
 
-          {/* 한글 표시 사항 */}
+          {/* 2. 한글 표시사항 */}
           <div style={SECTION}>
-            <div style={SECTION_TITLE}>한글 표시 사항</div>
+            <div style={SECTION_TITLE}>한글 표시사항</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <input
                 style={{ ...INPUT_STYLE, width: '100%' }}
@@ -183,17 +188,24 @@ export default function NutritionLabel2x3Editor() {
               />
               <input
                 style={{ ...INPUT_STYLE, width: '100%' }}
-                placeholder="수입/판매원 (예: (주)코스트코 코리아 T.1899-9900)"
+                placeholder="수입/판매업소 (예: (주)코스트코 코리아 T.1899-9900)"
                 value={importer}
                 onChange={(e) => setImporter(e.target.value)}
               />
               <input
                 style={{ ...INPUT_STYLE, width: '100%' }}
-                placeholder="제조원 (예: Weaver Popcorn Manufacturing, Inc.)"
+                placeholder="제조업소 (예: Weaver Popcorn Manufacturing, Inc.)"
                 value={manufacturer}
                 onChange={(e) => setManufacturer(e.target.value)}
               />
-              {/* 소분 계산기 */}
+              <input
+                style={{ ...INPUT_STYLE, width: '100%' }}
+                placeholder="원산지 (예: 미국)"
+                value={originCountry}
+                onChange={(e) => setOriginCountry(e.target.value)}
+              />
+
+              {/* 내용량 + 소분 계산기 */}
               <div style={{
                 border: '1px solid #e0e7ff', borderRadius: 6,
                 background: '#f5f3ff', padding: '8px 10px',
@@ -244,17 +256,12 @@ export default function NutritionLabel2x3Editor() {
                 value={contentAmount}
                 onChange={(e) => setContentAmount(e.target.value)}
               />
+
               <input
                 style={{ ...INPUT_STYLE, width: '100%' }}
                 placeholder="소비기한 (예: 제품 표면 표기일까지)"
                 value={expiryDate}
                 onChange={(e) => setExpiryDate(e.target.value)}
-              />
-              <input
-                style={{ ...INPUT_STYLE, width: '100%' }}
-                placeholder="원산지 (예: 미국)"
-                value={originCountry}
-                onChange={(e) => setOriginCountry(e.target.value)}
               />
               <input
                 style={{ ...INPUT_STYLE, width: '100%' }}
@@ -264,16 +271,28 @@ export default function NutritionLabel2x3Editor() {
               />
               <textarea
                 style={{ ...TEXTAREA_STYLE, width: '100%' }}
-                placeholder="원재료명 (예: 옥수수(미국), 정제소금, 정제소금(버터향), 버터(유크림,정제소금), 비타민C, 버터향(유크림,정제소금), 소금)"
+                placeholder="원재료명 (예: 옥수수(미국), 정제소금, 버터향, 비타민C)"
                 value={ingredients}
                 onChange={(e) => setIngredients(e.target.value)}
+              />
+              <input
+                style={{ ...INPUT_STYLE, width: '100%' }}
+                placeholder="반품 및 교환 장소 (예: 구매처)"
+                value={returnAddress}
+                onChange={(e) => setReturnAddress(e.target.value)}
+              />
+              <textarea
+                style={{ ...TEXTAREA_STYLE, width: '100%', minHeight: 40 }}
+                placeholder="기타 주의사항 (예: 개봉 후 빨리 드세요)"
+                value={caution}
+                onChange={(e) => setCaution(e.target.value)}
               />
             </div>
           </div>
 
-          {/* 영양 정보 */}
+          {/* 3. 영양정보 */}
           <div style={SECTION}>
-            <div style={SECTION_TITLE}>영양 정보</div>
+            <div style={SECTION_TITLE}>영양정보</div>
             <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
               <input
                 style={{ ...INPUT_STYLE, flex: 2 }}
@@ -398,8 +417,8 @@ export default function NutritionLabel2x3Editor() {
             <span style={{ flex: 1, fontSize: 12, color: '#6b7280' }}>
               미리보기 — A4 · 2×3 (한글표시사항 + 영양정보 라벨)
             </span>
-            <button style={{ ...BTN_PRIMARY, background: '#6366f1' }} onClick={handlePdf}>⬇ PDF 저장</button>
-            <button style={{ ...BTN_PRIMARY, background: '#059669' }} onClick={handlePrint}>🖨 바로 인쇄</button>
+            <button style={{ ...BTN_PRIMARY, background: '#6366f1' }} onClick={handlePdf}>PDF 저장</button>
+            <button style={{ ...BTN_PRIMARY, background: '#059669' }} onClick={handlePrint}>바로 인쇄</button>
           </div>
 
           <div style={{
@@ -413,11 +432,13 @@ export default function NutritionLabel2x3Editor() {
               foodType={foodType}
               importer={importer}
               manufacturer={manufacturer}
+              originCountry={originCountry}
               contentAmount={contentAmount}
               expiryDate={expiryDate}
-              originCountry={originCountry}
               storageMethod={storageMethod}
               ingredients={ingredients}
+              returnAddress={returnAddress}
+              caution={caution}
               servingSize={servingSize}
               calories={calories}
               rows={rows}
