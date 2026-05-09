@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import EventCardPreview from './EventCardPreview';
 import { generatePdf, printLabel } from '@/lib/label/label-pdf';
+import LabelSaveLoad from './LabelSaveLoad';
 
 const C = { border: '#e5e7eb', bg: '#f9fafb' };
 
@@ -66,6 +67,22 @@ export default function EventCardEditor() {
           borderRight: `1px solid ${C.border}`,
           padding: 16, overflowY: 'auto',
         }}>
+          {/* 저장 / 불러오기 */}
+          <div style={SECTION}>
+            <div style={SECTION_TITLE}>저장 / 불러오기</div>
+            <LabelSaveLoad
+              labelType="event"
+              currentData={{ companyName, phone, prizeText, thanksMsg }}
+              onLoad={(data) => {
+                const d = data as { companyName?: string; phone?: string; prizeText?: string; thanksMsg?: string };
+                if (d.companyName !== undefined) setCompanyName(d.companyName);
+                if (d.phone !== undefined) setPhone(d.phone);
+                if (d.prizeText !== undefined) setPrizeText(d.prizeText);
+                if (d.thanksMsg !== undefined) setThanksMsg(d.thanksMsg);
+              }}
+            />
+          </div>
+
           <div style={SECTION}>
             <div style={SECTION_TITLE}>회사 / 연락처</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
