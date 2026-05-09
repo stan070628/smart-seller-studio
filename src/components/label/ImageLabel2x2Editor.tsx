@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react';
 import ImageLabel2x2Preview from './ImageLabel2x2Preview';
+import LabelSaveLoad from './LabelSaveLoad';
 import { generatePdf, printLabel } from '@/lib/label/label-pdf';
 
 const C = { border: '#e5e7eb', bg: '#f9fafb' };
@@ -102,6 +103,20 @@ export default function ImageLabel2x2Editor() {
           borderRight: `1px solid ${C.border}`,
           padding: 16, overflowY: 'auto',
         }}>
+          {/* 저장 / 불러오기 */}
+          <div style={SECTION}>
+            <div style={SECTION_TITLE}>저장 / 불러오기</div>
+            <LabelSaveLoad
+              labelType="image2x2"
+              currentData={{ imageUrl, imagePosition }}
+              onLoad={(data) => {
+                const d = data as { imageUrl?: string; imagePosition?: { x: number; y: number } };
+                if (d.imageUrl) setImageUrl(d.imageUrl);
+                if (d.imagePosition) setImagePosition(d.imagePosition);
+              }}
+            />
+          </div>
+
           <div style={SECTION}>
             <div style={SECTION_TITLE}>제품 이미지</div>
             <div
