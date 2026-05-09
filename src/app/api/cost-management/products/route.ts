@@ -38,13 +38,22 @@ export async function GET(request: NextRequest) {
       [user.userId],
     );
 
-    // 판매는 기간 필터 적용
-    const saleQuery =
-      from && to
-        ? `SELECT id, product_cost_id, sold_at, quantity, selling_price FROM sale_records WHERE user_id = $1 AND sold_at BETWEEN $2 AND $3`
-        : `SELECT id, product_cost_id, sold_at, quantity, selling_price FROM sale_records WHERE user_id = $1`;
-    const saleParams = from && to ? [user.userId, from, to] : [user.userId];
-    const { rows: allSales } = await pool.query(saleQuery, saleParams);
+    // 판매는 전체 조회 (재고/FIFO 계산 기준)
+    const { rows: allSales } = await pool.query(
+      `SELECT id, product_cost_id, sold_at, quantity, selling_price FROM sale_records WHERE user_id = $1`,
+      [user.userId],
+    );
+
+    // 기간 필터된 판매 ID 집합 — 실현손익/매출액 집계에만 사용
+    const filteredSaleIds: Set<string> = new Set();
+    if (from && to) {
+      for (const s of allSales) {
+        const soldAt = s.sold_at instanceof Date ? s.sold_at.toISOString().slice(0, 10) : String(s.sold_at).slice(0, 10);
+        if (soldAt >= from && soldAt <= to) filteredSaleIds.add(s.id);
+      }
+    } else {
+      for (const s of allSales) filteredSaleIds.add(s.id);
+    }
 
     const entriesByProduct = new Map<string, CostEntryRow[]>();
     for (const e of allEntries) {
@@ -80,6 +89,7 @@ export async function GET(request: NextRequest) {
 
       const metrics = calculateProductMetrics(pEntries);
 
+      // 전체 판매로 FIFO 실행 → current_stock, stock_value 정확히 계산
       let fifoResult: FifoSummary = { current_stock: 0, stock_value: 0, total_realized_profit: 0, sale_details: [] };
       try {
         const batches: PurchaseBatch[] = pEntries.map((e) => ({
@@ -90,9 +100,17 @@ export async function GET(request: NextRequest) {
           unit_shipping_fee: e.unit_shipping_fee,
         }));
         fifoResult = calculateFifo(batches, pSales, feeRate);
-      } catch {
-        // 재고 초과 판매 등 예외 — 기본값 유지
+      } catch (e) {
+        console.warn(`FIFO 계산 실패 product=${p.id}:`, e instanceof Error ? e.message : e);
       }
+
+      // 기간 필터된 판매만 집계
+      const pFilteredSales = pSales.filter((s) => filteredSaleIds.has(s.id));
+      const periodSaleIds = new Set(pFilteredSales.map((s) => s.id));
+      const periodRealizedProfit = fifoResult.sale_details
+        .filter((d) => periodSaleIds.has(d.saleId))
+        .reduce((sum, d) => sum + d.realized_profit_per_unit * (pSales.find((s) => s.id === d.saleId)?.quantity ?? 0), 0);
+      const periodSalesAmount = pFilteredSales.reduce((s, sale) => s + sale.selling_price * sale.quantity, 0);
 
       return {
         id: p.id,
@@ -101,14 +119,14 @@ export async function GET(request: NextRequest) {
         platform: p.platform,
         platform_fee_rate: feeRate,
         entry_count: pEntries.length,
-        sale_count: pSales.length,
+        sale_count: pFilteredSales.length,
         weighted_avg_cost: metrics.weighted_avg_cost,
         weighted_avg_shipping: metrics.weighted_avg_shipping,
         total_purchase_amount: metrics.total_purchase_amount,
         current_stock: fifoResult.current_stock,
         stock_value: fifoResult.stock_value,
-        total_realized_profit: fifoResult.total_realized_profit,
-        total_sales_amount: pSales.reduce((s, sale) => s + sale.selling_price * sale.quantity, 0),
+        total_realized_profit: periodRealizedProfit,
+        total_sales_amount: periodSalesAmount,
       };
     });
 
