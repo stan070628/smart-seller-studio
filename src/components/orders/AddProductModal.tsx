@@ -70,16 +70,16 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
             <Package size={15} color="#be0014" />
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: '14px', fontWeight: 700 }}>상품 추가</div>
-            <div style={{ fontSize: '11px', color: '#71717a' }}>원가 관리할 상품을 선택하거나 직접 입력하세요</div>
+            <div style={{ fontSize: '14px', fontWeight: 700, color: '#18181b' }}>상품 추가</div>
+            <div style={{ fontSize: '11px', color: '#52525b' }}>원가 관리할 상품을 선택하거나 직접 입력하세요</div>
           </div>
-          <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer' }}><X size={16} color="#71717a" /></button>
+          <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer' }}><X size={16} color="#52525b" /></button>
         </div>
 
         <div style={{ padding: '16px 24px 20px' }}>
           <div style={{ display: 'flex', gap: '4px', padding: '4px', borderRadius: '10px', background: '#f5f5f7', marginBottom: '16px' }}>
             {(['coupang', 'manual'] as Mode[]).map((m) => (
-              <button key={m} onClick={() => setMode(m)} style={{ flex: 1, padding: '8px', borderRadius: '7px', border: 'none', fontSize: '12px', fontWeight: mode === m ? 600 : 500, color: mode === m ? '#be0014' : '#71717a', background: mode === m ? '#fff' : 'transparent', cursor: 'pointer', boxShadow: mode === m ? '0 1px 3px rgba(0,0,0,0.08)' : 'none' }}>
+              <button key={m} onClick={() => setMode(m)} style={{ flex: 1, padding: '8px', borderRadius: '7px', border: 'none', fontSize: '12px', fontWeight: mode === m ? 600 : 500, color: mode === m ? '#be0014' : '#3f3f46', background: mode === m ? '#fff' : 'transparent', cursor: 'pointer', boxShadow: mode === m ? '0 1px 3px rgba(0,0,0,0.08)' : 'none' }}>
                 {m === 'coupang' ? '쿠팡 등록 상품' : '직접 입력'}
               </button>
             ))}
@@ -87,17 +87,17 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
 
           {mode === 'coupang' ? (
             <div>
-              <div style={{ fontSize: '11px', fontWeight: 600, color: '#555', marginBottom: '8px' }}>쿠팡 등록 상품 선택</div>
-              <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid #e5e5e5', borderRadius: '8px' }}>
+              <div style={{ fontSize: '11px', fontWeight: 600, color: '#27272a', marginBottom: '8px' }}>쿠팡 등록 상품 선택</div>
+              <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid #d4d4d8', borderRadius: '8px' }}>
                 {loadingCoupang ? (
-                  <div style={{ padding: '20px', textAlign: 'center', color: '#999', fontSize: '12px' }}>로딩중...</div>
+                  <div style={{ padding: '20px', textAlign: 'center', color: '#52525b', fontSize: '12px' }}>로딩중...</div>
                 ) : coupangError ? (
                   <div style={{ padding: '20px', textAlign: 'center', fontSize: '12px' }}>
                     <div style={{ color: '#ef4444', marginBottom: '6px' }}>상품 목록 로드 실패</div>
-                    <div style={{ color: '#999', fontSize: '11px' }}>{coupangError}</div>
+                    <div style={{ color: '#52525b', fontSize: '11px' }}>{coupangError}</div>
                   </div>
                 ) : coupangProducts.length === 0 ? (
-                  <div style={{ padding: '20px', textAlign: 'center', color: '#999', fontSize: '12px' }}>연동 가능한 상품이 없습니다</div>
+                  <div style={{ padding: '20px', textAlign: 'center', color: '#52525b', fontSize: '12px' }}>연동 가능한 상품이 없습니다</div>
                 ) : coupangProducts.map((p) => (
                   <div
                     key={p.seller_product_id}
@@ -105,22 +105,22 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
                     style={{ padding: '10px 14px', cursor: 'pointer', fontSize: '12px', borderBottom: '1px solid #f0f0f0', background: selectedCoupang?.seller_product_id === p.seller_product_id ? '#fef2f2' : '#fff', color: selectedCoupang?.seller_product_id === p.seller_product_id ? '#be0014' : '#18181b', fontWeight: selectedCoupang?.seller_product_id === p.seller_product_id ? 600 : 400 }}
                   >
                     {p.seller_product_name}
-                    <span style={{ fontSize: '10px', color: '#999', marginLeft: '8px' }}>#{p.seller_product_id}</span>
+                    <span style={{ fontSize: '10px', color: '#71717a', marginLeft: '8px' }}>#{p.seller_product_id}</span>
                   </div>
                 ))}
               </div>
             </div>
           ) : (
             <div>
-              <div style={{ fontSize: '11px', fontWeight: 600, color: '#555', marginBottom: '6px' }}>상품명</div>
-              <input value={manualName} onChange={(e) => setManualName(e.target.value)} placeholder="상품명을 입력하세요" style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #e5e5e5', fontSize: '12px', boxSizing: 'border-box' }} />
+              <div style={{ fontSize: '11px', fontWeight: 600, color: '#27272a', marginBottom: '6px' }}>상품명</div>
+              <input value={manualName} onChange={(e) => setManualName(e.target.value)} placeholder="상품명을 입력하세요" style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #d4d4d8', fontSize: '12px', boxSizing: 'border-box', color: '#18181b' }} />
             </div>
           )}
 
           <div style={{ marginTop: '16px' }}>
-            <div style={{ fontSize: '11px', fontWeight: 600, color: '#555', marginBottom: '6px' }}>플랫폼 수수료율 (%)</div>
-            <input type="number" value={feeRate} onChange={(e) => setFeeRate(e.target.value)} step="0.1" min="0" max="50" style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #e5e5e5', fontSize: '12px', boxSizing: 'border-box', color: '#18181b' }} />
-            <div style={{ fontSize: '10px', color: '#71717a', marginTop: '4px' }}>로켓그로스 기본 10.8% — 필요 시 수정하세요</div>
+            <div style={{ fontSize: '11px', fontWeight: 600, color: '#27272a', marginBottom: '6px' }}>플랫폼 수수료율 (%)</div>
+            <input type="number" value={feeRate} onChange={(e) => setFeeRate(e.target.value)} step="0.1" min="0" max="50" style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #d4d4d8', fontSize: '12px', boxSizing: 'border-box', color: '#18181b' }} />
+            <div style={{ fontSize: '10px', color: '#52525b', marginTop: '4px' }}>로켓그로스 기본 10.8% — 필요 시 수정하세요</div>
           </div>
 
           <button
