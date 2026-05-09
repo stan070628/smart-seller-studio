@@ -19,43 +19,77 @@ const INPUT_STYLE: React.CSSProperties = {
   boxSizing: 'border-box' as const,
 };
 
+const TEXTAREA_STYLE: React.CSSProperties = {
+  ...INPUT_STYLE,
+  resize: 'vertical' as const,
+  minHeight: 52,
+  lineHeight: 1.5,
+};
+
 const BTN_PRIMARY: React.CSSProperties = {
   padding: '7px 16px', borderRadius: 6, border: 'none',
   fontSize: 12, fontWeight: 600, cursor: 'pointer', color: '#fff',
 };
 
 const DEFAULT_ROWS: NutritionRow[] = [
-  { id: '1', name: '나트륨',    amount: '840', unit: 'mg', percent: '42',  isSubItem: false, isHighlight: true  },
-  { id: '2', name: '탄수화물',  amount: '45',  unit: 'g',  percent: '14',  isSubItem: false, isHighlight: false },
-  { id: '3', name: '당류',      amount: '1',   unit: 'g',  percent: '1',   isSubItem: true,  isHighlight: false },
-  { id: '4', name: '지방',      amount: '32',  unit: 'g',  percent: '59',  isSubItem: false, isHighlight: true  },
-  { id: '5', name: '트랜스지방',amount: '0',   unit: 'g',  percent: '—',   isSubItem: true,  isHighlight: false },
-  { id: '6', name: '포화지방',  amount: '16',  unit: 'g',  percent: '107', isSubItem: true,  isHighlight: false },
-  { id: '7', name: '콜레스테롤',amount: '0',   unit: 'mg', percent: '0',   isSubItem: false, isHighlight: false },
-  { id: '8', name: '단백질',    amount: '6',   unit: 'g',  percent: '11',  isSubItem: false, isHighlight: true  },
+  { id: '1', name: '나트륨',     amount: '840', unit: 'mg', percent: '42',  isSubItem: false, isHighlight: true  },
+  { id: '2', name: '탄수화물',   amount: '45',  unit: 'g',  percent: '14',  isSubItem: false, isHighlight: false },
+  { id: '3', name: '당류',       amount: '1',   unit: 'g',  percent: '1',   isSubItem: true,  isHighlight: false },
+  { id: '4', name: '지방',       amount: '32',  unit: 'g',  percent: '59',  isSubItem: false, isHighlight: true  },
+  { id: '5', name: '트랜스지방', amount: '0',   unit: 'g',  percent: '—',   isSubItem: true,  isHighlight: false },
+  { id: '6', name: '포화지방',   amount: '16',  unit: 'g',  percent: '107', isSubItem: true,  isHighlight: false },
+  { id: '7', name: '콜레스테롤', amount: '0',   unit: 'mg', percent: '0',   isSubItem: false, isHighlight: false },
+  { id: '8', name: '단백질',     amount: '6',   unit: 'g',  percent: '11',  isSubItem: false, isHighlight: true  },
 ];
 
 let nextId = 100;
 
 export default function NutritionLabel2x3Editor() {
+  /* 한글 표시 사항 */
   const [productName, setProductName] = useState('');
   const [itemInfo, setItemInfo] = useState('');
+  const [foodType, setFoodType] = useState('');
+  const [importer, setImporter] = useState('');
+  const [manufacturer, setManufacturer] = useState('');
+  const [contentAmount, setContentAmount] = useState('');
+  const [expiryDate, setExpiryDate] = useState('');
+  const [originCountry, setOriginCountry] = useState('');
+  const [storageMethod, setStorageMethod] = useState('');
+  const [ingredients, setIngredients] = useState('');
+
+  /* 소분 계산기 */
+  const [unitCount, setUnitCount] = useState('');
+  const [unitWeight, setUnitWeight] = useState('');
+  const [unitUnit, setUnitUnit] = useState('봉');
+
+  /* 영양 정보 */
   const [servingSize, setServingSize] = useState('');
   const [calories, setCalories] = useState('');
   const [rows, setRows] = useState<NutritionRow[]>(DEFAULT_ROWS);
+
+  const applySubdivision = () => {
+    const count = parseInt(unitCount, 10);
+    const weight = parseFloat(unitWeight);
+    const kcal = parseFloat(calories);
+    if (!count || !weight) return;
+    const totalWeight = (count * weight).toLocaleString('ko-KR', { maximumFractionDigits: 1 });
+    const totalKcal = kcal ? (count * kcal).toLocaleString('ko-KR', { maximumFractionDigits: 0 }) : '';
+    const kcalStr = totalKcal ? ` / 총열량 ${totalKcal}kcal` : '';
+    setContentAmount(`${totalWeight}g (${weight}g × ${count}${unitUnit})${kcalStr}`);
+    if (!servingSize) setServingSize(`1${unitUnit}(${weight}g)`);
+  };
+
   const previewRef = useRef<HTMLDivElement>(null);
 
   const updateRow = (id: string, patch: Partial<NutritionRow>) => {
     setRows((prev) => prev.map((r) => r.id === id ? { ...r, ...patch } : r));
   };
-
   const addRow = () => {
     setRows((prev) => [
       ...prev,
       { id: String(nextId++), name: '', amount: '', unit: 'g', percent: '', isSubItem: false, isHighlight: false },
     ]);
   };
-
   const removeRow = (id: string) => {
     setRows((prev) => prev.filter((r) => r.id !== id));
   };
@@ -83,9 +117,10 @@ export default function NutritionLabel2x3Editor() {
           borderRight: `1px solid ${C.border}`,
           padding: 16, overflowY: 'auto',
         }}>
-          {/* 제품 기본 정보 */}
+
+          {/* 한글 표시 사항 */}
           <div style={SECTION}>
-            <div style={SECTION_TITLE}>제품 정보</div>
+            <div style={SECTION_TITLE}>한글 표시 사항</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <input
                 style={{ ...INPUT_STYLE, width: '100%' }}
@@ -95,17 +130,110 @@ export default function NutritionLabel2x3Editor() {
               />
               <input
                 style={{ ...INPUT_STYLE, width: '100%' }}
-                placeholder="아이템 정보 (예: ITEM #1234 · 4.1kg × 44봉)"
+                placeholder="헤더 부제 (예: ITEM #1234 · 4.1kg × 44봉)"
                 value={itemInfo}
                 onChange={(e) => setItemInfo(e.target.value)}
+              />
+              <input
+                style={{ ...INPUT_STYLE, width: '100%' }}
+                placeholder="식품유형 (예: 팝콘)"
+                value={foodType}
+                onChange={(e) => setFoodType(e.target.value)}
+              />
+              <input
+                style={{ ...INPUT_STYLE, width: '100%' }}
+                placeholder="수입/판매원 (예: (주)코스트코 코리아 T.1899-9900)"
+                value={importer}
+                onChange={(e) => setImporter(e.target.value)}
+              />
+              <input
+                style={{ ...INPUT_STYLE, width: '100%' }}
+                placeholder="제조원 (예: Weaver Popcorn Manufacturing, Inc.)"
+                value={manufacturer}
+                onChange={(e) => setManufacturer(e.target.value)}
+              />
+              {/* 소분 계산기 */}
+              <div style={{
+                border: '1px solid #e0e7ff', borderRadius: 6,
+                background: '#f5f3ff', padding: '8px 10px',
+              }}>
+                <div style={{ fontSize: 10, fontWeight: 600, color: '#6d28d9', marginBottom: 6 }}>
+                  소분 계산기 — 판매 단위 입력 시 내용량 자동 생성
+                </div>
+                <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' as const }}>
+                  <input
+                    style={{ ...INPUT_STYLE, width: 52, fontSize: 11 }}
+                    placeholder="수량"
+                    value={unitCount}
+                    onChange={(e) => setUnitCount(e.target.value)}
+                  />
+                  <select
+                    style={{ ...INPUT_STYLE, fontSize: 11, padding: '5px 4px' }}
+                    value={unitUnit}
+                    onChange={(e) => setUnitUnit(e.target.value)}
+                  >
+                    <option value="봉">봉</option>
+                    <option value="개">개</option>
+                    <option value="팩">팩</option>
+                    <option value="캔">캔</option>
+                  </select>
+                  <span style={{ fontSize: 11, color: '#6b7280' }}>× 1개당</span>
+                  <input
+                    style={{ ...INPUT_STYLE, width: 56, fontSize: 11 }}
+                    placeholder="중량(g)"
+                    value={unitWeight}
+                    onChange={(e) => setUnitWeight(e.target.value)}
+                  />
+                  <span style={{ fontSize: 11, color: '#6b7280' }}>g</span>
+                  <button
+                    onClick={applySubdivision}
+                    style={{
+                      padding: '5px 10px', borderRadius: 4, border: 'none',
+                      fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                      background: '#6d28d9', color: '#fff',
+                    }}
+                  >
+                    적용
+                  </button>
+                </div>
+              </div>
+              <input
+                style={{ ...INPUT_STYLE, width: '100%' }}
+                placeholder="내용량 (소분 계산기로 자동 생성 또는 직접 입력)"
+                value={contentAmount}
+                onChange={(e) => setContentAmount(e.target.value)}
+              />
+              <input
+                style={{ ...INPUT_STYLE, width: '100%' }}
+                placeholder="소비기한 (예: 제품 표면 표기일까지)"
+                value={expiryDate}
+                onChange={(e) => setExpiryDate(e.target.value)}
+              />
+              <input
+                style={{ ...INPUT_STYLE, width: '100%' }}
+                placeholder="원산지 (예: 미국)"
+                value={originCountry}
+                onChange={(e) => setOriginCountry(e.target.value)}
+              />
+              <input
+                style={{ ...INPUT_STYLE, width: '100%' }}
+                placeholder="보관방법 (예: 직사광선을 피하고 실온에서 보관하십시오)"
+                value={storageMethod}
+                onChange={(e) => setStorageMethod(e.target.value)}
+              />
+              <textarea
+                style={{ ...TEXTAREA_STYLE, width: '100%' }}
+                placeholder="원재료명 (예: 옥수수(미국), 정제소금, 정제소금(버터향), 버터(유크림,정제소금), 비타민C, 버터향(유크림,정제소금), 소금)"
+                value={ingredients}
+                onChange={(e) => setIngredients(e.target.value)}
               />
             </div>
           </div>
 
-          {/* 1회 제공량 */}
+          {/* 영양 정보 */}
           <div style={SECTION}>
-            <div style={SECTION_TITLE}>1회 제공량 / 칼로리</div>
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div style={SECTION_TITLE}>영양 정보</div>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
               <input
                 style={{ ...INPUT_STYLE, flex: 2 }}
                 placeholder="1회 제공량 (예: 1봉(93.5g))"
@@ -119,12 +247,10 @@ export default function NutritionLabel2x3Editor() {
                 onChange={(e) => setCalories(e.target.value)}
               />
             </div>
-          </div>
 
-          {/* 영양소 목록 */}
-          <div style={SECTION}>
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
-              <span style={{ ...SECTION_TITLE, marginBottom: 0, flex: 1 }}>영양소</span>
+            {/* 영양소 목록 헤더 */}
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
+              <span style={{ ...SECTION_TITLE, marginBottom: 0, fontSize: 11, flex: 1 }}>영양소 목록</span>
               <button
                 onClick={addRow}
                 style={{
@@ -137,7 +263,6 @@ export default function NutritionLabel2x3Editor() {
               </button>
             </div>
 
-            {/* 헤더 */}
             <div style={{
               display: 'grid',
               gridTemplateColumns: '80px 50px 36px 40px 28px 28px 24px',
@@ -230,7 +355,7 @@ export default function NutritionLabel2x3Editor() {
             background: '#fff', display: 'flex', alignItems: 'center', gap: 8,
           }}>
             <span style={{ flex: 1, fontSize: 12, color: '#6b7280' }}>
-              미리보기 — A4 · 2×3 (영양정보 라벨)
+              미리보기 — A4 · 2×3 (한글표시사항 + 영양정보 라벨)
             </span>
             <button style={{ ...BTN_PRIMARY, background: '#6366f1' }} onClick={handlePdf}>⬇ PDF 저장</button>
             <button style={{ ...BTN_PRIMARY, background: '#059669' }} onClick={handlePrint}>🖨 바로 인쇄</button>
@@ -244,6 +369,14 @@ export default function NutritionLabel2x3Editor() {
               ref={previewRef}
               productName={productName}
               itemInfo={itemInfo}
+              foodType={foodType}
+              importer={importer}
+              manufacturer={manufacturer}
+              contentAmount={contentAmount}
+              expiryDate={expiryDate}
+              originCountry={originCountry}
+              storageMethod={storageMethod}
+              ingredients={ingredients}
               servingSize={servingSize}
               calories={calories}
               rows={rows}

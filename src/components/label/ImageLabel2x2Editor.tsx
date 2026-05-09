@@ -11,21 +11,22 @@ const SECTION_TITLE: React.CSSProperties = {
 };
 const SECTION: React.CSSProperties = { marginBottom: 16 };
 
-const INPUT_STYLE: React.CSSProperties = {
-  width: '100%', padding: '6px 8px',
-  border: '1px solid #d1d5db', borderRadius: 4,
-  fontSize: 12, boxSizing: 'border-box' as const,
-  background: '#fff', color: '#111',
-};
-
 const BTN_PRIMARY: React.CSSProperties = {
   padding: '7px 16px', borderRadius: 6, border: 'none',
   fontSize: 12, fontWeight: 600, cursor: 'pointer', color: '#fff',
 };
 
+const SLIDER_ROW: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8,
+};
+
+const LABEL_SM: React.CSSProperties = {
+  fontSize: 11, color: '#6b7280', width: 28, flexShrink: 0,
+};
+
 export default function ImageLabel2x2Editor() {
   const [imageUrl, setImageUrl] = useState('');
-  const [footerText, setFooterText] = useState('');
+  const [imagePosition, setImagePosition] = useState({ x: 50, y: 50 });
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -63,6 +64,7 @@ export default function ImageLabel2x2Editor() {
       const json = await res.json().catch(() => ({}));
       if (json.success) {
         setImageUrl(json.data.url);
+        setImagePosition({ x: 50, y: 50 });
       } else {
         setUploadError(
           res.status === 401
@@ -127,15 +129,35 @@ export default function ImageLabel2x2Editor() {
             )}
           </div>
 
-          <div style={SECTION}>
-            <div style={SECTION_TITLE}>하단 텍스트 (제품명 / 바코드)</div>
-            <input
-              style={INPUT_STYLE}
-              placeholder="예: 제품명 / 바코드번호"
-              value={footerText}
-              onChange={(e) => setFooterText(e.target.value)}
-            />
-          </div>
+          {imageUrl && (
+            <div style={SECTION}>
+              <div style={SECTION_TITLE}>이미지 위치 조정</div>
+              <div style={SLIDER_ROW}>
+                <span style={LABEL_SM}>좌우</span>
+                <input
+                  type="range" min={0} max={100} value={imagePosition.x}
+                  onChange={(e) => setImagePosition((p) => ({ ...p, x: Number(e.target.value) }))}
+                  style={{ flex: 1 }}
+                />
+                <span style={{ fontSize: 11, color: '#6b7280', width: 30, textAlign: 'right' }}>{imagePosition.x}%</span>
+              </div>
+              <div style={SLIDER_ROW}>
+                <span style={LABEL_SM}>상하</span>
+                <input
+                  type="range" min={0} max={100} value={imagePosition.y}
+                  onChange={(e) => setImagePosition((p) => ({ ...p, y: Number(e.target.value) }))}
+                  style={{ flex: 1 }}
+                />
+                <span style={{ fontSize: 11, color: '#6b7280', width: 30, textAlign: 'right' }}>{imagePosition.y}%</span>
+              </div>
+              <button
+                onClick={() => setImagePosition({ x: 50, y: 50 })}
+                style={{ fontSize: 11, color: '#6b7280', background: 'none', border: '1px solid #d1d5db', borderRadius: 4, padding: '3px 8px', cursor: 'pointer' }}
+              >
+                중앙으로 초기화
+              </button>
+            </div>
+          )}
         </div>
 
         {/* 우측 미리보기 */}
@@ -155,7 +177,7 @@ export default function ImageLabel2x2Editor() {
             flex: 1, overflow: 'auto', padding: 20,
             background: '#e5e7eb', display: 'flex', justifyContent: 'center',
           }}>
-            <ImageLabel2x2Preview ref={previewRef} imageUrl={imageUrl} footerText={footerText} />
+            <ImageLabel2x2Preview ref={previewRef} imageUrl={imageUrl} imagePosition={imagePosition} />
           </div>
         </div>
       </div>

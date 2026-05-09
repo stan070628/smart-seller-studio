@@ -4,7 +4,7 @@ import { forwardRef } from 'react';
 
 interface Props {
   imageUrl: string;
-  footerText: string;
+  imagePosition?: { x: number; y: number };
 }
 
 const CELL_WIDTH_MM = 99.1;
@@ -31,52 +31,32 @@ const CELL_STYLE: React.CSSProperties = {
   boxSizing: 'border-box' as const,
   border: '1.5px solid #333',
   borderRadius: '2mm',
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  padding: '3mm',
-  background: 'white',
+  background: '#fafafa',
 };
 
-function ImageCell({ imageUrl, footerText }: Props) {
-  return (
-    <>
-      <div style={{
-        flex: 1,
+function ImageCell({ imageUrl, imagePosition }: Props) {
+  const pos = imagePosition ?? { x: 50, y: 50 };
+  return imageUrl ? (
+    <img
+      src={imageUrl}
+      alt="제품 이미지"
+      style={{
         width: '100%',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: '#fafafa',
-        border: '1.5px dashed #bbb',
-        borderRadius: '1mm',
-        overflow: 'hidden',
-      }}>
-        {imageUrl ? (
-          <img
-            src={imageUrl}
-            alt="제품 이미지"
-            style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }}
-          />
-        ) : (
-          <div style={{ textAlign: 'center', color: '#aaa', fontSize: 10, padding: 8 }}>
-            <span style={{ fontSize: 36, display: 'block', marginBottom: 6, opacity: 0.4 }}>🖼️</span>
-            제품 이미지를<br />여기에 삽입
-          </div>
-        )}
-      </div>
-      <div style={{
-        width: '100%',
-        paddingTop: '2mm',
-        textAlign: 'center',
-        fontSize: 8,
-        color: '#555',
-        borderTop: '0.5px solid #eee',
-        marginTop: '2mm',
-      }}>
-        {footerText || '제품명 / 바코드'}
-      </div>
-    </>
+        height: '100%',
+        objectFit: 'cover',
+        objectPosition: `${pos.x}% ${pos.y}%`,
+        display: 'block',
+      }}
+    />
+  ) : (
+    <div style={{
+      width: '100%', height: '100%',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      flexDirection: 'column', gap: 6, color: '#aaa', fontSize: 10,
+    }}>
+      <span style={{ fontSize: 36, opacity: 0.4 }}>🖼️</span>
+      제품 이미지를<br />여기에 삽입
+    </div>
   );
 }
 

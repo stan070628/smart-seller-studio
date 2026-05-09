@@ -36,7 +36,6 @@
     /* ── 라벨 카드 ── */
     .label {
       border: 1.5px solid #111;
-      border-radius: 1.5mm;
       overflow: hidden;
       display: flex;
       flex-direction: column;
@@ -57,100 +56,120 @@
     }
 
     .label-header .sub {
-      font-size: 6px;
+      font-size: 5.5px;
       font-weight: 400;
-      opacity: 0.8;
+      opacity: 0.85;
+      margin-top: 0.5mm;
     }
 
-    /* 영양정보 섹션 제목 */
-    .section-title {
-      background: #333;
+    /* 영양정보 타이틀 */
+    .nutrition-title {
+      background: #111;
       color: white;
       text-align: center;
       padding: 1mm 2mm;
-      font-size: 7px;
-      font-weight: 700;
-      letter-spacing: 0.05em;
+      font-size: 8px;
+      font-weight: 900;
+      letter-spacing: 0.15em;
+      border-top: 0.5px solid #555;
     }
 
     /* 1회 제공량 */
     .serving-info {
-      padding: 1.5mm 2mm 1mm;
-      border-bottom: 2px solid #111;
+      padding: 1mm 2mm;
       font-size: 6px;
-      color: #333;
+      color: #222;
       line-height: 1.5;
+      border-bottom: 2.5px solid #111;
+    }
+
+    .serving-info .kcal-line {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
     }
 
     .serving-info .kcal {
-      font-size: 9px;
+      font-size: 10px;
       font-weight: 900;
       color: #111;
-      display: inline;
+    }
+
+    .serving-info .kcal-unit {
+      font-size: 6px;
+      font-weight: 600;
     }
 
     /* 영양소 테이블 */
     .nutrition-table {
       flex: 1;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-evenly;
-      padding: 0;
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 6.5px;
     }
 
-    .nutrition-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 0 2mm;
-      border-bottom: 0.5px solid #e8e8e8;
-      flex: 1;
-      min-height: 0;
+    .nutrition-table thead tr {
+      background: #111;
+      color: white;
     }
 
-    .nutrition-row:last-child {
-      border-bottom: none;
+    .nutrition-table thead th {
+      padding: 1mm 1.5mm;
+      font-weight: 700;
+      font-size: 5.5px;
+      text-align: center;
+      border: 0.5px solid #555;
     }
 
-    .nutrition-row.sub-item {
-      padding-left: 4mm;
+    .nutrition-table thead th:first-child {
+      text-align: left;
+      width: 45%;
     }
 
-    .nutrition-row.highlight {
-      background: #f5f5f5;
+    .nutrition-table tbody td {
+      padding: 0.8mm 1.5mm;
+      border: 0.5px solid #ccc;
+      color: #222;
+      vertical-align: middle;
+    }
+
+    .nutrition-table tbody td:not(:first-child) {
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .nutrition-table tbody tr:nth-child(even) {
+      background: #f7f7f7;
     }
 
     .nutrient-name {
-      color: #222;
-      font-weight: 600;
+      font-weight: 700;
+      font-size: 6.5px;
     }
 
     .nutrient-name.sub {
+      padding-left: 3mm;
       font-weight: 400;
-      color: #555;
       font-size: 6px;
+      color: #444;
     }
 
-    .nutrient-values {
-      text-align: right;
-      color: #222;
-    }
-
-    .nutrient-values .amount {
+    .amount {
       font-weight: 700;
     }
 
-    .nutrient-values .percent {
+    .percent {
       color: #555;
-      margin-left: 2mm;
+      margin-left: 1.5mm;
+      font-size: 6px;
     }
 
     /* 기준치 안내 */
     .footnote {
       padding: 1mm 2mm;
-      font-size: 5px;
-      color: #777;
-      border-top: 1px solid #ddd;
+      font-size: 4.8px;
+      color: #666;
+      border-top: 1px solid #ccc;
       line-height: 1.4;
     }
 
@@ -173,60 +192,79 @@
     <!--
       아래 .label 블록이 한 장의 라벨입니다.
       같은 블록을 6번 반복하면 2×3 레이아웃이 채워집니다.
-      제품 정보를 수정할 때는 모든 블록을 동일하게 수정하세요.
     -->
 
     <!-- ① -->
     <div class="label">
       <div class="label-header">
         커클랜드 시그니쳐 전자레인지 팝콘
-        <div class="sub">ITEM #1358897 · 4.1kg (93.5g × 44봉)</div>
+        <div class="sub">ITEM #1358897 &nbsp;·&nbsp; 4.1kg (93.5g × 44봉)</div>
       </div>
 
-      <div class="section-title">영 양 정 보</div>
+      <div class="nutrition-title">영 양 정 보</div>
 
       <div class="serving-info">
-        1봉(93.5g)당&nbsp;&nbsp;<span class="kcal">492 kcal</span>
-        &nbsp;·&nbsp;총 열량 21,648 kcal
+        <div>내용량: 4.1kg(93.5g × 44봉)</div>
+        <div class="kcal-line">
+          <span>1봉(93.5g)당</span>
+          <span><span class="kcal">492</span><span class="kcal-unit"> kcal</span></span>
+        </div>
       </div>
 
-      <div class="nutrition-table">
-        <div class="nutrition-row highlight">
-          <span class="nutrient-name">나트륨</span>
-          <span class="nutrient-values"><span class="amount">840mg</span><span class="percent">42%</span></span>
-        </div>
-        <div class="nutrition-row">
-          <span class="nutrient-name">탄수화물</span>
-          <span class="nutrient-values"><span class="amount">45g</span><span class="percent">14%</span></span>
-        </div>
-        <div class="nutrition-row sub-item">
-          <span class="nutrient-name sub">당류</span>
-          <span class="nutrient-values"><span class="amount">1g</span><span class="percent">1%</span></span>
-        </div>
-        <div class="nutrition-row highlight">
-          <span class="nutrient-name">지방</span>
-          <span class="nutrient-values"><span class="amount">32g</span><span class="percent">59%</span></span>
-        </div>
-        <div class="nutrition-row sub-item">
-          <span class="nutrient-name sub">트랜스지방</span>
-          <span class="nutrient-values"><span class="amount">0g</span><span class="percent">—</span></span>
-        </div>
-        <div class="nutrition-row sub-item">
-          <span class="nutrient-name sub">포화지방</span>
-          <span class="nutrient-values"><span class="amount">16g</span><span class="percent">107%</span></span>
-        </div>
-        <div class="nutrition-row">
-          <span class="nutrient-name">콜레스테롤</span>
-          <span class="nutrient-values"><span class="amount">0mg</span><span class="percent">0%</span></span>
-        </div>
-        <div class="nutrition-row highlight">
-          <span class="nutrient-name">단백질</span>
-          <span class="nutrient-values"><span class="amount">6g</span><span class="percent">11%</span></span>
-        </div>
-      </div>
+      <table class="nutrition-table">
+        <thead>
+          <tr>
+            <th>영양성분</th>
+            <th>1봉당 함량</th>
+            <th>%영양성분<br>기준치</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="nutrient-name">나트륨</span></td>
+            <td><span class="amount">840mg</span></td>
+            <td>42%</td>
+          </tr>
+          <tr>
+            <td><span class="nutrient-name">탄수화물</span></td>
+            <td><span class="amount">45g</span></td>
+            <td>14%</td>
+          </tr>
+          <tr>
+            <td><span class="nutrient-name sub">당류</span></td>
+            <td><span class="amount">1g</span></td>
+            <td>1%</td>
+          </tr>
+          <tr>
+            <td><span class="nutrient-name">지방</span></td>
+            <td><span class="amount">32g</span></td>
+            <td>59%</td>
+          </tr>
+          <tr>
+            <td><span class="nutrient-name sub">트랜스지방</span></td>
+            <td><span class="amount">0g</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td><span class="nutrient-name sub">포화지방</span></td>
+            <td><span class="amount">16g</span></td>
+            <td>107%</td>
+          </tr>
+          <tr>
+            <td><span class="nutrient-name">콜레스테롤</span></td>
+            <td><span class="amount">0mg</span></td>
+            <td>0%</td>
+          </tr>
+          <tr>
+            <td><span class="nutrient-name">단백질</span></td>
+            <td><span class="amount">6g</span></td>
+            <td>11%</td>
+          </tr>
+        </tbody>
+      </table>
 
       <div class="footnote">
-        %는 1일 영양성분 기준치(2,000kcal) 대비 비율. 개인 필요 열량에 따라 다를 수 있습니다.
+        %영양성분 기준치는 2,000kcal 기준이므로 개인의 필요 열량에 따라 다를 수 있습니다.
       </div>
     </div>
 
@@ -234,105 +272,135 @@
     <div class="label">
       <div class="label-header">
         커클랜드 시그니쳐 전자레인지 팝콘
-        <div class="sub">ITEM #1358897 · 4.1kg (93.5g × 44봉)</div>
+        <div class="sub">ITEM #1358897 &nbsp;·&nbsp; 4.1kg (93.5g × 44봉)</div>
       </div>
-      <div class="section-title">영 양 정 보</div>
-      <div class="serving-info">1봉(93.5g)당&nbsp;&nbsp;<span class="kcal">492 kcal</span>&nbsp;·&nbsp;총 열량 21,648 kcal</div>
-      <div class="nutrition-table">
-        <div class="nutrition-row highlight"><span class="nutrient-name">나트륨</span><span class="nutrient-values"><span class="amount">840mg</span><span class="percent">42%</span></span></div>
-        <div class="nutrition-row"><span class="nutrient-name">탄수화물</span><span class="nutrient-values"><span class="amount">45g</span><span class="percent">14%</span></span></div>
-        <div class="nutrition-row sub-item"><span class="nutrient-name sub">당류</span><span class="nutrient-values"><span class="amount">1g</span><span class="percent">1%</span></span></div>
-        <div class="nutrition-row highlight"><span class="nutrient-name">지방</span><span class="nutrient-values"><span class="amount">32g</span><span class="percent">59%</span></span></div>
-        <div class="nutrition-row sub-item"><span class="nutrient-name sub">트랜스지방</span><span class="nutrient-values"><span class="amount">0g</span><span class="percent">—</span></span></div>
-        <div class="nutrition-row sub-item"><span class="nutrient-name sub">포화지방</span><span class="nutrient-values"><span class="amount">16g</span><span class="percent">107%</span></span></div>
-        <div class="nutrition-row"><span class="nutrient-name">콜레스테롤</span><span class="nutrient-values"><span class="amount">0mg</span><span class="percent">0%</span></span></div>
-        <div class="nutrition-row highlight"><span class="nutrient-name">단백질</span><span class="nutrient-values"><span class="amount">6g</span><span class="percent">11%</span></span></div>
+      <div class="nutrition-title">영 양 정 보</div>
+      <div class="serving-info">
+        <div>내용량: 4.1kg(93.5g × 44봉)</div>
+        <div class="kcal-line"><span>1봉(93.5g)당</span><span><span class="kcal">492</span><span class="kcal-unit"> kcal</span></span></div>
       </div>
-      <div class="footnote">%는 1일 영양성분 기준치(2,000kcal) 대비 비율. 개인 필요 열량에 따라 다를 수 있습니다.</div>
+      <table class="nutrition-table">
+        <thead><tr><th>영양성분</th><th>1봉당 함량</th><th>%영양성분<br>기준치</th></tr></thead>
+        <tbody>
+          <tr><td><span class="nutrient-name">나트륨</span></td><td><span class="amount">840mg</span></td><td>42%</td></tr>
+          <tr><td><span class="nutrient-name">탄수화물</span></td><td><span class="amount">45g</span></td><td>14%</td></tr>
+          <tr><td><span class="nutrient-name sub">당류</span></td><td><span class="amount">1g</span></td><td>1%</td></tr>
+          <tr><td><span class="nutrient-name">지방</span></td><td><span class="amount">32g</span></td><td>59%</td></tr>
+          <tr><td><span class="nutrient-name sub">트랜스지방</span></td><td><span class="amount">0g</span></td><td>—</td></tr>
+          <tr><td><span class="nutrient-name sub">포화지방</span></td><td><span class="amount">16g</span></td><td>107%</td></tr>
+          <tr><td><span class="nutrient-name">콜레스테롤</span></td><td><span class="amount">0mg</span></td><td>0%</td></tr>
+          <tr><td><span class="nutrient-name">단백질</span></td><td><span class="amount">6g</span></td><td>11%</td></tr>
+        </tbody>
+      </table>
+      <div class="footnote">%영양성분 기준치는 2,000kcal 기준이므로 개인의 필요 열량에 따라 다를 수 있습니다.</div>
     </div>
 
     <!-- ③ -->
     <div class="label">
       <div class="label-header">
         커클랜드 시그니쳐 전자레인지 팝콘
-        <div class="sub">ITEM #1358897 · 4.1kg (93.5g × 44봉)</div>
+        <div class="sub">ITEM #1358897 &nbsp;·&nbsp; 4.1kg (93.5g × 44봉)</div>
       </div>
-      <div class="section-title">영 양 정 보</div>
-      <div class="serving-info">1봉(93.5g)당&nbsp;&nbsp;<span class="kcal">492 kcal</span>&nbsp;·&nbsp;총 열량 21,648 kcal</div>
-      <div class="nutrition-table">
-        <div class="nutrition-row highlight"><span class="nutrient-name">나트륨</span><span class="nutrient-values"><span class="amount">840mg</span><span class="percent">42%</span></span></div>
-        <div class="nutrition-row"><span class="nutrient-name">탄수화물</span><span class="nutrient-values"><span class="amount">45g</span><span class="percent">14%</span></span></div>
-        <div class="nutrition-row sub-item"><span class="nutrient-name sub">당류</span><span class="nutrient-values"><span class="amount">1g</span><span class="percent">1%</span></span></div>
-        <div class="nutrition-row highlight"><span class="nutrient-name">지방</span><span class="nutrient-values"><span class="amount">32g</span><span class="percent">59%</span></span></div>
-        <div class="nutrition-row sub-item"><span class="nutrient-name sub">트랜스지방</span><span class="nutrient-values"><span class="amount">0g</span><span class="percent">—</span></span></div>
-        <div class="nutrition-row sub-item"><span class="nutrient-name sub">포화지방</span><span class="nutrient-values"><span class="amount">16g</span><span class="percent">107%</span></span></div>
-        <div class="nutrition-row"><span class="nutrient-name">콜레스테롤</span><span class="nutrient-values"><span class="amount">0mg</span><span class="percent">0%</span></span></div>
-        <div class="nutrition-row highlight"><span class="nutrient-name">단백질</span><span class="nutrient-values"><span class="amount">6g</span><span class="percent">11%</span></span></div>
+      <div class="nutrition-title">영 양 정 보</div>
+      <div class="serving-info">
+        <div>내용량: 4.1kg(93.5g × 44봉)</div>
+        <div class="kcal-line"><span>1봉(93.5g)당</span><span><span class="kcal">492</span><span class="kcal-unit"> kcal</span></span></div>
       </div>
-      <div class="footnote">%는 1일 영양성분 기준치(2,000kcal) 대비 비율. 개인 필요 열량에 따라 다를 수 있습니다.</div>
+      <table class="nutrition-table">
+        <thead><tr><th>영양성분</th><th>1봉당 함량</th><th>%영양성분<br>기준치</th></tr></thead>
+        <tbody>
+          <tr><td><span class="nutrient-name">나트륨</span></td><td><span class="amount">840mg</span></td><td>42%</td></tr>
+          <tr><td><span class="nutrient-name">탄수화물</span></td><td><span class="amount">45g</span></td><td>14%</td></tr>
+          <tr><td><span class="nutrient-name sub">당류</span></td><td><span class="amount">1g</span></td><td>1%</td></tr>
+          <tr><td><span class="nutrient-name">지방</span></td><td><span class="amount">32g</span></td><td>59%</td></tr>
+          <tr><td><span class="nutrient-name sub">트랜스지방</span></td><td><span class="amount">0g</span></td><td>—</td></tr>
+          <tr><td><span class="nutrient-name sub">포화지방</span></td><td><span class="amount">16g</span></td><td>107%</td></tr>
+          <tr><td><span class="nutrient-name">콜레스테롤</span></td><td><span class="amount">0mg</span></td><td>0%</td></tr>
+          <tr><td><span class="nutrient-name">단백질</span></td><td><span class="amount">6g</span></td><td>11%</td></tr>
+        </tbody>
+      </table>
+      <div class="footnote">%영양성분 기준치는 2,000kcal 기준이므로 개인의 필요 열량에 따라 다를 수 있습니다.</div>
     </div>
 
     <!-- ④ -->
     <div class="label">
       <div class="label-header">
         커클랜드 시그니쳐 전자레인지 팝콘
-        <div class="sub">ITEM #1358897 · 4.1kg (93.5g × 44봉)</div>
+        <div class="sub">ITEM #1358897 &nbsp;·&nbsp; 4.1kg (93.5g × 44봉)</div>
       </div>
-      <div class="section-title">영 양 정 보</div>
-      <div class="serving-info">1봉(93.5g)당&nbsp;&nbsp;<span class="kcal">492 kcal</span>&nbsp;·&nbsp;총 열량 21,648 kcal</div>
-      <div class="nutrition-table">
-        <div class="nutrition-row highlight"><span class="nutrient-name">나트륨</span><span class="nutrient-values"><span class="amount">840mg</span><span class="percent">42%</span></span></div>
-        <div class="nutrition-row"><span class="nutrient-name">탄수화물</span><span class="nutrient-values"><span class="amount">45g</span><span class="percent">14%</span></span></div>
-        <div class="nutrition-row sub-item"><span class="nutrient-name sub">당류</span><span class="nutrient-values"><span class="amount">1g</span><span class="percent">1%</span></span></div>
-        <div class="nutrition-row highlight"><span class="nutrient-name">지방</span><span class="nutrient-values"><span class="amount">32g</span><span class="percent">59%</span></span></div>
-        <div class="nutrition-row sub-item"><span class="nutrient-name sub">트랜스지방</span><span class="nutrient-values"><span class="amount">0g</span><span class="percent">—</span></span></div>
-        <div class="nutrition-row sub-item"><span class="nutrient-name sub">포화지방</span><span class="nutrient-values"><span class="amount">16g</span><span class="percent">107%</span></span></div>
-        <div class="nutrition-row"><span class="nutrient-name">콜레스테롤</span><span class="nutrient-values"><span class="amount">0mg</span><span class="percent">0%</span></span></div>
-        <div class="nutrition-row highlight"><span class="nutrient-name">단백질</span><span class="nutrient-values"><span class="amount">6g</span><span class="percent">11%</span></span></div>
+      <div class="nutrition-title">영 양 정 보</div>
+      <div class="serving-info">
+        <div>내용량: 4.1kg(93.5g × 44봉)</div>
+        <div class="kcal-line"><span>1봉(93.5g)당</span><span><span class="kcal">492</span><span class="kcal-unit"> kcal</span></span></div>
       </div>
-      <div class="footnote">%는 1일 영양성분 기준치(2,000kcal) 대비 비율. 개인 필요 열량에 따라 다를 수 있습니다.</div>
+      <table class="nutrition-table">
+        <thead><tr><th>영양성분</th><th>1봉당 함량</th><th>%영양성분<br>기준치</th></tr></thead>
+        <tbody>
+          <tr><td><span class="nutrient-name">나트륨</span></td><td><span class="amount">840mg</span></td><td>42%</td></tr>
+          <tr><td><span class="nutrient-name">탄수화물</span></td><td><span class="amount">45g</span></td><td>14%</td></tr>
+          <tr><td><span class="nutrient-name sub">당류</span></td><td><span class="amount">1g</span></td><td>1%</td></tr>
+          <tr><td><span class="nutrient-name">지방</span></td><td><span class="amount">32g</span></td><td>59%</td></tr>
+          <tr><td><span class="nutrient-name sub">트랜스지방</span></td><td><span class="amount">0g</span></td><td>—</td></tr>
+          <tr><td><span class="nutrient-name sub">포화지방</span></td><td><span class="amount">16g</span></td><td>107%</td></tr>
+          <tr><td><span class="nutrient-name">콜레스테롤</span></td><td><span class="amount">0mg</span></td><td>0%</td></tr>
+          <tr><td><span class="nutrient-name">단백질</span></td><td><span class="amount">6g</span></td><td>11%</td></tr>
+        </tbody>
+      </table>
+      <div class="footnote">%영양성분 기준치는 2,000kcal 기준이므로 개인의 필요 열량에 따라 다를 수 있습니다.</div>
     </div>
 
     <!-- ⑤ -->
     <div class="label">
       <div class="label-header">
         커클랜드 시그니쳐 전자레인지 팝콘
-        <div class="sub">ITEM #1358897 · 4.1kg (93.5g × 44봉)</div>
+        <div class="sub">ITEM #1358897 &nbsp;·&nbsp; 4.1kg (93.5g × 44봉)</div>
       </div>
-      <div class="section-title">영 양 정 보</div>
-      <div class="serving-info">1봉(93.5g)당&nbsp;&nbsp;<span class="kcal">492 kcal</span>&nbsp;·&nbsp;총 열량 21,648 kcal</div>
-      <div class="nutrition-table">
-        <div class="nutrition-row highlight"><span class="nutrient-name">나트륨</span><span class="nutrient-values"><span class="amount">840mg</span><span class="percent">42%</span></span></div>
-        <div class="nutrition-row"><span class="nutrient-name">탄수화물</span><span class="nutrient-values"><span class="amount">45g</span><span class="percent">14%</span></span></div>
-        <div class="nutrition-row sub-item"><span class="nutrient-name sub">당류</span><span class="nutrient-values"><span class="amount">1g</span><span class="percent">1%</span></span></div>
-        <div class="nutrition-row highlight"><span class="nutrient-name">지방</span><span class="nutrient-values"><span class="amount">32g</span><span class="percent">59%</span></span></div>
-        <div class="nutrition-row sub-item"><span class="nutrient-name sub">트랜스지방</span><span class="nutrient-values"><span class="amount">0g</span><span class="percent">—</span></span></div>
-        <div class="nutrition-row sub-item"><span class="nutrient-name sub">포화지방</span><span class="nutrient-values"><span class="amount">16g</span><span class="percent">107%</span></span></div>
-        <div class="nutrition-row"><span class="nutrient-name">콜레스테롤</span><span class="nutrient-values"><span class="amount">0mg</span><span class="percent">0%</span></span></div>
-        <div class="nutrition-row highlight"><span class="nutrient-name">단백질</span><span class="nutrient-values"><span class="amount">6g</span><span class="percent">11%</span></span></div>
+      <div class="nutrition-title">영 양 정 보</div>
+      <div class="serving-info">
+        <div>내용량: 4.1kg(93.5g × 44봉)</div>
+        <div class="kcal-line"><span>1봉(93.5g)당</span><span><span class="kcal">492</span><span class="kcal-unit"> kcal</span></span></div>
       </div>
-      <div class="footnote">%는 1일 영양성분 기준치(2,000kcal) 대비 비율. 개인 필요 열량에 따라 다를 수 있습니다.</div>
+      <table class="nutrition-table">
+        <thead><tr><th>영양성분</th><th>1봉당 함량</th><th>%영양성분<br>기준치</th></tr></thead>
+        <tbody>
+          <tr><td><span class="nutrient-name">나트륨</span></td><td><span class="amount">840mg</span></td><td>42%</td></tr>
+          <tr><td><span class="nutrient-name">탄수화물</span></td><td><span class="amount">45g</span></td><td>14%</td></tr>
+          <tr><td><span class="nutrient-name sub">당류</span></td><td><span class="amount">1g</span></td><td>1%</td></tr>
+          <tr><td><span class="nutrient-name">지방</span></td><td><span class="amount">32g</span></td><td>59%</td></tr>
+          <tr><td><span class="nutrient-name sub">트랜스지방</span></td><td><span class="amount">0g</span></td><td>—</td></tr>
+          <tr><td><span class="nutrient-name sub">포화지방</span></td><td><span class="amount">16g</span></td><td>107%</td></tr>
+          <tr><td><span class="nutrient-name">콜레스테롤</span></td><td><span class="amount">0mg</span></td><td>0%</td></tr>
+          <tr><td><span class="nutrient-name">단백질</span></td><td><span class="amount">6g</span></td><td>11%</td></tr>
+        </tbody>
+      </table>
+      <div class="footnote">%영양성분 기준치는 2,000kcal 기준이므로 개인의 필요 열량에 따라 다를 수 있습니다.</div>
     </div>
 
     <!-- ⑥ -->
     <div class="label">
       <div class="label-header">
         커클랜드 시그니쳐 전자레인지 팝콘
-        <div class="sub">ITEM #1358897 · 4.1kg (93.5g × 44봉)</div>
+        <div class="sub">ITEM #1358897 &nbsp;·&nbsp; 4.1kg (93.5g × 44봉)</div>
       </div>
-      <div class="section-title">영 양 정 보</div>
-      <div class="serving-info">1봉(93.5g)당&nbsp;&nbsp;<span class="kcal">492 kcal</span>&nbsp;·&nbsp;총 열량 21,648 kcal</div>
-      <div class="nutrition-table">
-        <div class="nutrition-row highlight"><span class="nutrient-name">나트륨</span><span class="nutrient-values"><span class="amount">840mg</span><span class="percent">42%</span></span></div>
-        <div class="nutrition-row"><span class="nutrient-name">탄수화물</span><span class="nutrient-values"><span class="amount">45g</span><span class="percent">14%</span></span></div>
-        <div class="nutrition-row sub-item"><span class="nutrient-name sub">당류</span><span class="nutrient-values"><span class="amount">1g</span><span class="percent">1%</span></span></div>
-        <div class="nutrition-row highlight"><span class="nutrient-name">지방</span><span class="nutrient-values"><span class="amount">32g</span><span class="percent">59%</span></span></div>
-        <div class="nutrition-row sub-item"><span class="nutrient-name sub">트랜스지방</span><span class="nutrient-values"><span class="amount">0g</span><span class="percent">—</span></span></div>
-        <div class="nutrition-row sub-item"><span class="nutrient-name sub">포화지방</span><span class="nutrient-values"><span class="amount">16g</span><span class="percent">107%</span></span></div>
-        <div class="nutrition-row"><span class="nutrient-name">콜레스테롤</span><span class="nutrient-values"><span class="amount">0mg</span><span class="percent">0%</span></span></div>
-        <div class="nutrition-row highlight"><span class="nutrient-name">단백질</span><span class="nutrient-values"><span class="amount">6g</span><span class="percent">11%</span></span></div>
+      <div class="nutrition-title">영 양 정 보</div>
+      <div class="serving-info">
+        <div>내용량: 4.1kg(93.5g × 44봉)</div>
+        <div class="kcal-line"><span>1봉(93.5g)당</span><span><span class="kcal">492</span><span class="kcal-unit"> kcal</span></span></div>
       </div>
-      <div class="footnote">%는 1일 영양성분 기준치(2,000kcal) 대비 비율. 개인 필요 열량에 따라 다를 수 있습니다.</div>
+      <table class="nutrition-table">
+        <thead><tr><th>영양성분</th><th>1봉당 함량</th><th>%영양성분<br>기준치</th></tr></thead>
+        <tbody>
+          <tr><td><span class="nutrient-name">나트륨</span></td><td><span class="amount">840mg</span></td><td>42%</td></tr>
+          <tr><td><span class="nutrient-name">탄수화물</span></td><td><span class="amount">45g</span></td><td>14%</td></tr>
+          <tr><td><span class="nutrient-name sub">당류</span></td><td><span class="amount">1g</span></td><td>1%</td></tr>
+          <tr><td><span class="nutrient-name">지방</span></td><td><span class="amount">32g</span></td><td>59%</td></tr>
+          <tr><td><span class="nutrient-name sub">트랜스지방</span></td><td><span class="amount">0g</span></td><td>—</td></tr>
+          <tr><td><span class="nutrient-name sub">포화지방</span></td><td><span class="amount">16g</span></td><td>107%</td></tr>
+          <tr><td><span class="nutrient-name">콜레스테롤</span></td><td><span class="amount">0mg</span></td><td>0%</td></tr>
+          <tr><td><span class="nutrient-name">단백질</span></td><td><span class="amount">6g</span></td><td>11%</td></tr>
+        </tbody>
+      </table>
+      <div class="footnote">%영양성분 기준치는 2,000kcal 기준이므로 개인의 필요 열량에 따라 다를 수 있습니다.</div>
     </div>
 
   </div>
