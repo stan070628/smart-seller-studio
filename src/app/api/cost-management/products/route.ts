@@ -65,6 +65,7 @@ export async function GET(request: NextRequest) {
         quantity: Number(e.quantity),
         unit_cost: Number(e.unit_cost),
         unit_shipping_fee: Number(e.unit_shipping_fee),
+        unit_rg_shipping_fee: Number(e.unit_rg_shipping_fee ?? 0),
         shipping_group_id: e.shipping_group_id,
       });
       entriesByProduct.set(e.product_cost_id, list);
