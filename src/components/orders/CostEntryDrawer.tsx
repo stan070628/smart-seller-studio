@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { X, Plus, Pencil, Trash2 } from 'lucide-react';
+import SaleEntryPanel from './SaleEntryPanel';
 
 interface Entry {
   id: string;
@@ -9,7 +10,6 @@ interface Entry {
   quantity: number;
   unit_cost: number;
   unit_shipping_fee: number;
-  selling_price: number;
   shipping_group_id: string | null;
   shipping_group_name: string | null;
 }
@@ -19,64 +19,72 @@ interface EntryForm {
   quantity: string;
   unit_cost: string;
   unit_shipping_fee: string;
-  selling_price: string;
 }
 
 function emptyForm(): EntryForm {
-  return {
-    received_at: new Date().toISOString().slice(0, 10),
-    quantity: '',
-    unit_cost: '',
-    unit_shipping_fee: '0',
-    selling_price: '',
-  };
+  return { received_at: new Date().toISOString().slice(0, 10), quantity: '', unit_cost: '', unit_shipping_fee: '0' };
 }
 
 function fmt(n: number) { return n.toLocaleString('ko-KR'); }
 
+interface FifoSummary {
+  current_stock: number;
+  stock_value: number;
+  total_realized_profit: number;
+}
+
 interface Props {
   productId: string;
   productName: string;
+  sellerProductId: number | null;
+  platformFeeRate: number;
   onClose: () => void;
   onChanged: () => void;
 }
 
-export default function CostEntryDrawer({ productId, productName, onClose, onChanged }: Props) {
+export default function CostEntryDrawer({ productId, productName, sellerProductId, platformFeeRate, onClose, onChanged }: Props) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [addingNew, setAddingNew] = useState(false);
-  const [form, setForm] = useState<EntryForm>(emptyForm);
+  const [form, setForm] = useState<EntryForm>(emptyForm());
   const [saving, setSaving] = useState(false);
+  const [fifo, setFifo] = useState<FifoSummary>({ current_stock: 0, stock_value: 0, total_realized_profit: 0 });
+  const [fifoVersion, setFifoVersion] = useState(0);
 
-  async function load() {
+  // platformFeeRate를 사용하지 않는다는 TS 경고를 방지 (API에서 직접 처리)
+  void platformFeeRate;
+
+  async function loadEntries() {
     setLoading(true);
     const res = await fetch(`/api/cost-management/products/${productId}/entries`);
     const json = await res.json();
     if (json.success) setEntries(json.data);
-    else alert(json.error ?? '데이터를 불러오지 못했습니다.');
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, [productId]);
+  async function loadFifo() {
+    const res = await fetch(`/api/cost-management/products/${productId}/fifo-summary`);
+    const json = await res.json();
+    if (json.success) setFifo(json.data);
+  }
+
+  useEffect(() => { loadEntries(); }, [productId]);
+  useEffect(() => { loadFifo(); }, [productId, fifoVersion]);
+
+  function refreshAll() {
+    loadEntries();
+    setFifoVersion((v) => v + 1);
+    onChanged();
+  }
 
   async function save() {
     const qty = Math.round(Number(form.quantity));
     const cost = Math.round(Number(form.unit_cost));
-    const price = Math.round(Number(form.selling_price));
-    if (!form.received_at || qty <= 0) {
-      alert('입고일과 수량을 입력해 주세요.');
-      return;
-    }
+    if (!form.received_at || qty <= 0) { alert('입고일과 수량을 입력해 주세요.'); return; }
     setSaving(true);
     try {
-      const payload = {
-        received_at: form.received_at,
-        quantity: qty,
-        unit_cost: cost,
-        unit_shipping_fee: Math.round(Number(form.unit_shipping_fee)),
-        selling_price: price,
-      };
+      const payload = { received_at: form.received_at, quantity: qty, unit_cost: cost, unit_shipping_fee: Math.round(Number(form.unit_shipping_fee)) };
       const url = editingId
         ? `/api/cost-management/entries/${editingId}`
         : `/api/cost-management/products/${productId}/entries`;
@@ -84,8 +92,7 @@ export default function CostEntryDrawer({ productId, productName, onClose, onCha
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const json = await res.json();
       if (json.success) {
-        await load();
-        onChanged();
+        refreshAll();
         setEditingId(null);
         setAddingNew(false);
         setForm(emptyForm());
@@ -101,154 +108,142 @@ export default function CostEntryDrawer({ productId, productName, onClose, onCha
     if (!confirm('이 입고 건을 삭제할까요?')) return;
     const res = await fetch(`/api/cost-management/entries/${id}`, { method: 'DELETE' });
     const json = await res.json();
-    if (json.success) { await load(); onChanged(); } else { alert(json.error ?? '삭제에 실패했습니다.'); }
+    if (json.success) refreshAll();
+    else alert(json.error ?? '삭제에 실패했습니다.');
   }
 
   function startEdit(e: Entry) {
     setEditingId(e.id);
     setAddingNew(false);
-    setForm({
-      received_at: e.received_at.slice(0, 10),
-      quantity: String(e.quantity),
-      unit_cost: String(e.unit_cost),
-      unit_shipping_fee: String(e.unit_shipping_fee),
-      selling_price: String(e.selling_price),
-    });
+    setForm({ received_at: e.received_at.slice(0, 10), quantity: String(e.quantity), unit_cost: String(e.unit_cost), unit_shipping_fee: String(e.unit_shipping_fee) });
   }
 
   const canSave = !!form.received_at && Number(form.quantity) > 0;
 
-  const totalQty = entries.reduce((s, e) => s + e.quantity, 0);
-  const wavgCost = totalQty > 0 ? Math.round(entries.reduce((s, e) => s + e.unit_cost * e.quantity, 0) / totalQty) : 0;
-  const wavgShip = totalQty > 0 ? Math.round(entries.reduce((s, e) => s + e.unit_shipping_fee * e.quantity, 0) / totalQty) : 0;
-
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex' }}>
       <div onClick={onClose} style={{ flex: 1, background: 'rgba(0,0,0,0.3)' }} />
-      <div style={{ width: '720px', background: '#fff', overflowY: 'auto', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)' }}>
-        <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #e5e5e5', display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: '15px', fontWeight: 700, color: '#18181b' }}>입고 내역</div>
-            <div style={{ fontSize: '12px', color: '#52525b', marginTop: '2px' }}>{productName}</div>
-          </div>
+      <div style={{ width: '900px', background: '#fff', overflowY: 'auto', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column' }}>
+        {/* 헤더 */}
+        <div style={{ padding: '16px 24px 12px', borderBottom: '1px solid #e5e5e5', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+          <div style={{ flex: 1, fontSize: '14px', fontWeight: 700, color: '#18181b' }}>{productName}</div>
           <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}>
             <X size={18} color="#52525b" />
           </button>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '10px', padding: '16px 24px' }}>
+        {/* FIFO 요약 카드 */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '10px', padding: '14px 24px', flexShrink: 0 }}>
           {[
-            { label: '가중평균 원가', value: `${fmt(wavgCost)}원`, color: '#ef4444' },
-            { label: '가중평균 배송비', value: `${fmt(wavgShip)}원`, color: '#f97316' },
-            { label: '총 재고', value: `${fmt(totalQty)}개`, color: '#18181b' },
+            { label: '현재 재고', value: `${fmt(fifo.current_stock)}개`, color: '#18181b' },
+            { label: '실현손익', value: `${fmt(fifo.total_realized_profit)}원`, color: fifo.total_realized_profit >= 0 ? '#16a34a' : '#ef4444' },
+            { label: '재고가치', value: `${fmt(fifo.stock_value)}원`, color: '#18181b' },
           ].map((c) => (
-            <div key={c.label} style={{ background: '#f5f5f7', borderRadius: '8px', padding: '12px', textAlign: 'center' }}>
-              <div style={{ fontSize: '10px', color: '#52525b', marginBottom: '4px' }}>{c.label}</div>
-              <div style={{ fontSize: '16px', fontWeight: 700, color: c.color }}>{c.value}</div>
+            <div key={c.label} style={{ background: '#f5f5f7', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
+              <div style={{ fontSize: '10px', color: '#52525b', marginBottom: '3px' }}>{c.label}</div>
+              <div style={{ fontSize: '15px', fontWeight: 700, color: c.color }}>{c.value}</div>
             </div>
           ))}
         </div>
 
-        <div style={{ padding: '0 24px 16px' }}>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
-              <thead>
-                <tr style={{ background: '#f9f9f9', borderBottom: '1px solid #e5e5e5' }}>
-                  {['입고일', '수량', '단가(원가)', '배송비(배분)', '판매가', '배송그룹', ''].map((h) => (
-                    <th key={h} style={{ padding: '8px', textAlign: h === '입고일' ? 'left' : 'right', fontWeight: 600, color: '#27272a' }}>{h}</th>
+        {/* 좌우 분할 패널 */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0', flex: 1, overflow: 'hidden', borderTop: '1px solid #e5e5e5' }}>
+          {/* 좌: 입고 내역 */}
+          <div style={{ padding: '14px 16px 14px 24px', borderRight: '1px solid #e5e5e5', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#18181b', marginBottom: '8px' }}>📦 입고 내역</div>
+            <div style={{ overflowX: 'auto', flex: 1 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+                <thead>
+                  <tr style={{ background: '#f9f9f9', borderBottom: '1px solid #e5e5e5' }}>
+                    {['입고일', '수량', '단가', '배송비', ''].map((h) => (
+                      <th key={h} style={{ padding: '6px 8px', textAlign: h === '입고일' ? 'left' : 'right', fontWeight: 600, color: '#27272a' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr><td colSpan={5} style={{ padding: '16px', textAlign: 'center', color: '#52525b' }}>불러오는 중...</td></tr>
+                  ) : entries.map((e) => (
+                    editingId === e.id ? (
+                      <tr key={e.id} style={{ background: '#f0fdf4', borderBottom: '1px solid #bbf7d0' }}>
+                        {(['received_at', 'quantity', 'unit_cost', 'unit_shipping_fee'] as (keyof EntryForm)[]).map((field) => (
+                          <td key={field} style={{ padding: '4px 6px' }}>
+                            <input
+                              type={field === 'received_at' ? 'date' : 'number'}
+                              value={form[field]}
+                              onChange={(ev) => setForm((f) => ({ ...f, [field]: ev.target.value }))}
+                              style={{ width: '100%', padding: '3px 5px', borderRadius: '4px', border: '1px solid #86efac', fontSize: '11px', color: '#18181b', boxSizing: 'border-box' }}
+                            />
+                          </td>
+                        ))}
+                        <td style={{ padding: '4px 6px' }}>
+                          <div style={{ display: 'flex', gap: '3px' }}>
+                            <button onClick={save} disabled={saving || !canSave} style={{ padding: '3px 7px', borderRadius: '4px', background: canSave ? '#16a34a' : '#d4d4d4', color: canSave ? '#fff' : '#71717a', border: 'none', fontSize: '10px', cursor: canSave ? 'pointer' : 'not-allowed' }}>
+                              {saving ? '...' : '저장'}
+                            </button>
+                            <button onClick={() => { setEditingId(null); setAddingNew(false); setForm(emptyForm()); }} style={{ padding: '3px 5px', borderRadius: '4px', background: '#f3f4f6', border: 'none', fontSize: '10px', cursor: 'pointer', color: '#27272a' }}>취소</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      <tr key={e.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                        <td style={{ padding: '6px 8px', color: '#27272a' }}>{e.received_at.slice(0, 10)}</td>
+                        <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600 }}>{fmt(e.quantity)}개</td>
+                        <td style={{ padding: '6px 8px', textAlign: 'right', color: '#ef4444' }}>{fmt(e.unit_cost)}</td>
+                        <td style={{ padding: '6px 8px', textAlign: 'right', color: '#f97316' }}>
+                          {fmt(e.unit_shipping_fee)}
+                          {e.shipping_group_name && <span style={{ marginLeft: '3px', fontSize: '9px', color: '#999' }}>({e.shipping_group_name})</span>}
+                        </td>
+                        <td style={{ padding: '6px 8px', textAlign: 'right' }}>
+                          <div style={{ display: 'flex', gap: '3px', justifyContent: 'flex-end' }}>
+                            <button onClick={() => startEdit(e)} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '2px' }}><Pencil size={11} color="#6b7280" /></button>
+                            <button onClick={() => deleteEntry(e.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '2px' }}><Trash2 size={11} color="#ef4444" /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr><td colSpan={7} style={{ padding: '20px', textAlign: 'center', color: '#52525b' }}>불러오는 중...</td></tr>
-                ) : entries.map((e) => (
-                  editingId === e.id ? (
-                    <tr key={e.id} style={{ background: '#f0fdf4', borderBottom: '1px solid #bbf7d0' }}>
-                      {(['received_at', 'quantity', 'unit_cost', 'unit_shipping_fee', 'selling_price'] as (keyof EntryForm)[]).map((field) => (
-                        <td key={field} style={{ padding: '6px 8px' }}>
+                  {addingNew && !editingId && (
+                    <tr style={{ background: '#f0fdf4', borderBottom: '1px solid #bbf7d0' }}>
+                      {(['received_at', 'quantity', 'unit_cost', 'unit_shipping_fee'] as (keyof EntryForm)[]).map((field) => (
+                        <td key={field} style={{ padding: '4px 6px' }}>
                           <input
                             type={field === 'received_at' ? 'date' : 'number'}
                             value={form[field]}
-                            placeholder={field === 'selling_price' ? '0=미설정' : undefined}
                             onChange={(ev) => setForm((f) => ({ ...f, [field]: ev.target.value }))}
-                            style={{ width: '100%', padding: '4px 6px', borderRadius: '6px', border: '1px solid #86efac', fontSize: '11px', boxSizing: 'border-box', color: '#18181b' }}
+                            style={{ width: '100%', padding: '3px 5px', borderRadius: '4px', border: '1px solid #86efac', fontSize: '11px', color: '#18181b', boxSizing: 'border-box' }}
                           />
                         </td>
                       ))}
-                      <td style={{ padding: '6px 8px' }} colSpan={2}>
-                        <div style={{ display: 'flex', gap: '4px' }}>
-                          <button onClick={save} disabled={saving || !canSave} style={{ padding: '4px 10px', borderRadius: '6px', background: canSave ? '#16a34a' : '#d4d4d4', color: canSave ? '#fff' : '#71717a', border: 'none', fontSize: '11px', cursor: canSave ? 'pointer' : 'not-allowed' }}>
-                            {saving ? '저장중' : '저장'}
+                      <td style={{ padding: '4px 6px' }}>
+                        <div style={{ display: 'flex', gap: '3px' }}>
+                          <button onClick={save} disabled={saving || !canSave} style={{ padding: '3px 7px', borderRadius: '4px', background: canSave ? '#16a34a' : '#d4d4d4', color: canSave ? '#fff' : '#71717a', border: 'none', fontSize: '10px', cursor: canSave ? 'pointer' : 'not-allowed' }}>
+                            {saving ? '...' : '저장'}
                           </button>
-                          <button onClick={() => { setEditingId(null); setAddingNew(false); setForm(emptyForm()); }} style={{ padding: '4px 8px', borderRadius: '6px', background: '#f3f4f6', border: 'none', fontSize: '11px', cursor: 'pointer', color: '#27272a' }}>
-                            취소
-                          </button>
+                          <button onClick={() => { setAddingNew(false); setForm(emptyForm()); }} style={{ padding: '3px 5px', borderRadius: '4px', background: '#f3f4f6', border: 'none', fontSize: '10px', cursor: 'pointer', color: '#27272a' }}>취소</button>
                         </div>
                       </td>
                     </tr>
-                  ) : (
-                    <tr key={e.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                      <td style={{ padding: '8px', color: '#27272a' }}>{e.received_at.slice(0, 10)}</td>
-                      <td style={{ padding: '8px', textAlign: 'right', fontWeight: 600 }}>{fmt(e.quantity)}개</td>
-                      <td style={{ padding: '8px', textAlign: 'right', color: '#ef4444' }}>{fmt(e.unit_cost)}</td>
-                      <td style={{ padding: '8px', textAlign: 'right', color: '#f97316' }}>
-                        {fmt(e.unit_shipping_fee)}
-                        {e.shipping_group_name && <span style={{ marginLeft: '4px', fontSize: '9px', color: '#999' }}>({e.shipping_group_name})</span>}
-                      </td>
-                      <td style={{ padding: '8px', textAlign: 'right', color: e.selling_price === 0 ? '#a1a1aa' : undefined }}>
-                        {e.selling_price === 0 ? '미설정' : fmt(e.selling_price)}
-                      </td>
-                      <td style={{ padding: '8px', textAlign: 'right' }}>
-                        {e.shipping_group_id
-                          ? <span style={{ background: '#dbeafe', color: '#1d4ed8', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>그룹</span>
-                          : <span style={{ background: '#f3f4f6', color: '#6b7280', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>개별</span>}
-                      </td>
-                      <td style={{ padding: '8px', textAlign: 'right' }}>
-                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end' }}>
-                          <button onClick={() => startEdit(e)} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '2px' }}><Pencil size={12} color="#6b7280" /></button>
-                          <button onClick={() => deleteEntry(e.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '2px' }}><Trash2 size={12} color="#ef4444" /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                ))}
-                {addingNew && !editingId && (
-                  <tr style={{ background: '#f0fdf4', borderBottom: '1px solid #bbf7d0' }}>
-                    {(['received_at', 'quantity', 'unit_cost', 'unit_shipping_fee', 'selling_price'] as (keyof EntryForm)[]).map((field) => (
-                      <td key={field} style={{ padding: '6px 8px' }}>
-                        <input
-                          type={field === 'received_at' ? 'date' : 'number'}
-                          value={form[field]}
-                          onChange={(ev) => setForm((f) => ({ ...f, [field]: ev.target.value }))}
-                          style={{ width: '100%', padding: '4px 6px', borderRadius: '6px', border: '1px solid #86efac', fontSize: '11px', boxSizing: 'border-box', color: '#18181b' }}
-                        />
-                      </td>
-                    ))}
-                    <td style={{ padding: '6px 8px' }} colSpan={2}>
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        <button onClick={save} disabled={saving || !canSave} style={{ padding: '4px 10px', borderRadius: '6px', background: canSave ? '#16a34a' : '#d4d4d4', color: canSave ? '#fff' : '#71717a', border: 'none', fontSize: '11px', cursor: canSave ? 'pointer' : 'not-allowed' }}>
-                          {saving ? '저장중' : '저장'}
-                        </button>
-                        <button onClick={() => { setEditingId(null); setAddingNew(false); setForm(emptyForm()); }} style={{ padding: '4px 8px', borderRadius: '6px', background: '#f3f4f6', border: 'none', fontSize: '11px', cursor: 'pointer', color: '#27272a' }}>
-                          취소
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {!addingNew && !editingId && (
+              <button onClick={() => { setAddingNew(true); setForm(emptyForm()); }}
+                style={{ width: '100%', marginTop: '8px', padding: '6px', borderRadius: '6px', border: '1px dashed #e5e5e5', background: '#fafafa', fontSize: '11px', color: '#27272a', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                <Plus size={11} /> 새 입고 건 추가
+              </button>
+            )}
           </div>
 
-          {!addingNew && !editingId && (
-            <button
-              onClick={() => { setAddingNew(true); setForm(emptyForm()); }}
-              style={{ width: '100%', marginTop: '12px', padding: '8px', borderRadius: '8px', border: '1px dashed #e5e5e5', background: '#fafafa', fontSize: '12px', color: '#27272a', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
-            >
-              <Plus size={13} /> 새 입고 건 추가
-            </button>
-          )}
+          {/* 우: 판매 내역 */}
+          <div style={{ padding: '14px 24px 14px 16px', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+            <SaleEntryPanel
+              productId={productId}
+              sellerProductId={sellerProductId}
+              onChanged={() => { setFifoVersion((v) => v + 1); onChanged(); }}
+            />
+          </div>
         </div>
       </div>
     </div>

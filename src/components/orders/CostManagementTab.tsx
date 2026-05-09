@@ -11,18 +11,15 @@ interface ProductRow {
   product_name: string;
   seller_product_id: number | null;
   platform_fee_rate: number;
-  current_stock: number;
   entry_count: number;
+  sale_count: number;
   weighted_avg_cost: number;
   weighted_avg_shipping: number;
-  weighted_avg_selling_price: number;
-  fee: number;
-  net_profit: number;
-  margin_rate: number;
-  total_quantity: number;
   total_purchase_amount: number;
-  total_revenue: number;
-  total_net_profit_amount: number;
+  current_stock: number;
+  stock_value: number;
+  total_realized_profit: number;
+  total_sales_amount: number;
 }
 
 type Preset = 'this_month' | 'last_month' | '3months' | '6months' | 'all' | 'custom';
@@ -41,7 +38,7 @@ export default function CostManagementTab() {
   const [preset, setPreset] = useState<Preset>('this_month');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
-  const [summary, setSummary] = useState({ total_purchase_amount: 0, total_revenue: 0, total_net_profit_amount: 0 });
+  const [summary, setSummary] = useState({ total_purchase_amount: 0, total_sales_amount: 0, total_realized_profit: 0 });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -86,7 +83,7 @@ export default function CostManagementTab() {
       const json = await res.json();
       if (json.success) {
         setProducts(json.data);
-        setSummary(json.summary ?? { total_purchase_amount: 0, total_revenue: 0, total_net_profit_amount: 0 });
+        setSummary(json.summary ?? { total_purchase_amount: 0, total_sales_amount: 0, total_realized_profit: 0 });
       }
     } finally {
       setLoading(false);
@@ -149,12 +146,12 @@ export default function CostManagementTab() {
         {[
           { label: '관리 상품 수', value: `${products.length}개`, color: '#18181b', sub: undefined },
           { label: '기간 총 매입비', value: `${fmt(summary.total_purchase_amount)}원`, color: '#ef4444', sub: '입고 단가 × 수량 합계' },
-          { label: '기간 추정 매출', value: `${fmt(summary.total_revenue)}원`, color: '#2563eb', sub: '판매가 설정 항목만 집계' },
+          { label: '기간 총 매출', value: `${fmt(summary.total_sales_amount)}원`, color: '#2563eb', sub: '판매가 × 수량 합계' },
           {
-            label: '기간 순이익',
-            value: `${fmt(summary.total_net_profit_amount)}원`,
-            color: summary.total_net_profit_amount >= 0 ? '#16a34a' : '#ef4444',
-            sub: `마진율 ${summary.total_revenue > 0 ? ((summary.total_net_profit_amount / summary.total_revenue) * 100).toFixed(1) : '0.0'}%`,
+            label: '기간 실현손익',
+            value: `${fmt(summary.total_realized_profit)}원`,
+            color: summary.total_realized_profit >= 0 ? '#16a34a' : '#ef4444',
+            sub: `마진율 ${summary.total_sales_amount > 0 ? ((summary.total_realized_profit / summary.total_sales_amount) * 100).toFixed(1) : '0.0'}%`,
           },
         ].map((c) => (
           <div key={c.label} style={{ background: '#fff', borderRadius: '10px', padding: '14px', border: '1px solid #e5e5e5' }}>
@@ -202,75 +199,68 @@ export default function CostManagementTab() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
             <thead>
               <tr style={{ background: '#f9f9f9', borderBottom: '1px solid #e5e5e5' }}>
-                {['상품명', '판매가(가중평균)', '원가(가중평균)', '배송비(배분)', '수수료', '순이익', '마진율', '재고', '내역', ''].map((h) => (
+                {['상품명', '원가(가중평균)', '배송비(배분)', '재고', '재고가치', '실현손익', '입고', '판매', '내역', ''].map((h) => (
                   <th key={h} style={{ padding: '10px 12px', textAlign: h === '상품명' ? 'left' : 'right', fontWeight: 600, color: '#555', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {filtered.map((p) => {
-                const isRisk = p.entry_count > 0 && p.weighted_avg_selling_price > 0 && p.margin_rate < 5;
-                const noEntries = p.entry_count === 0;
-                const noPriceSet = p.entry_count > 0 && p.weighted_avg_selling_price === 0;
-                return (
-                  <tr key={p.id} style={{ borderBottom: '1px solid #f0f0f0', background: isRisk ? '#fff9f9' : '#fff' }}>
-                    <td style={{ padding: '10px 12px', fontWeight: 500, color: noEntries ? '#999' : '#18181b' }}>{p.product_name}</td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', color: (noEntries || noPriceSet) ? '#a1a1aa' : undefined }}>
-                      {noEntries ? '—' : noPriceSet ? '미설정' : fmt(p.weighted_avg_selling_price)}
-                    </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', color: noEntries ? '#ccc' : '#ef4444' }}>{noEntries ? '—' : fmt(p.weighted_avg_cost)}</td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', color: noEntries ? '#ccc' : '#f97316' }}>{noEntries ? '—' : fmt(p.weighted_avg_shipping)}</td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', color: (noEntries || noPriceSet) ? '#ccc' : '#f97316' }}>{(noEntries || noPriceSet) ? '—' : fmt(p.fee)}</td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, color: (noEntries || noPriceSet) ? '#ccc' : p.net_profit >= 0 ? '#16a34a' : '#ef4444' }}>
-                      {(noEntries || noPriceSet) ? '—' : fmt(p.net_profit)}
-                    </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                      {noEntries ? <span style={{ color: '#ccc' }}>—</span>
-                        : noPriceSet ? <span style={{ background: '#f5f5f7', color: '#a1a1aa', padding: '2px 6px', borderRadius: '4px', fontSize: '11px' }}>판매가 미설정</span>
-                        : (
-                        <span style={{ background: isRisk ? '#fef2f2' : p.margin_rate >= 10 ? '#f0fdf4' : '#fefce8', color: isRisk ? '#ef4444' : p.margin_rate >= 10 ? '#16a34a' : '#ca8a04', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}>
-                          {p.margin_rate.toFixed(1)}%
-                        </span>
-                      )}
-                    </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                      <span style={{ color: '#18181b' }}>{fmt(p.current_stock)}개</span>
-                    </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                      <button
-                        onClick={() => setDrawerProductId(p.id)}
-                        style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid #e5e5e5', background: '#fff', fontSize: '11px', cursor: 'pointer', color: '#555' }}
-                      >
-                        📋 {p.entry_count}건
-                      </button>
-                    </td>
-                    <td style={{ padding: '10px 8px', textAlign: 'right' }}>
-                      <button
-                        onClick={() => deleteProduct(p.id, p.product_name)}
-                        style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '4px', borderRadius: '4px', opacity: 0.25 }}
-                        onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
-                        onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.25')}
-                        title="상품 삭제"
-                      >
-                        <Trash2 size={13} color="#ef4444" />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
+              {filtered.map((p) => (
+                <tr key={p.id} style={{ borderBottom: '1px solid #f0f0f0', background: '#fff' }}>
+                  <td style={{ padding: '10px 12px', fontWeight: 500, color: p.entry_count === 0 ? '#999' : '#18181b' }}>{p.product_name}</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', color: p.entry_count === 0 ? '#ccc' : '#ef4444' }}>
+                    {p.entry_count === 0 ? '—' : fmt(p.weighted_avg_cost)}
+                  </td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', color: p.entry_count === 0 ? '#ccc' : '#f97316' }}>
+                    {p.entry_count === 0 ? '—' : fmt(p.weighted_avg_shipping)}
+                  </td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', color: '#18181b' }}>
+                    {fmt(p.current_stock)}개
+                  </td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', color: '#52525b' }}>
+                    {p.current_stock > 0 ? `${fmt(p.stock_value)}원` : '—'}
+                  </td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, color: p.total_realized_profit >= 0 ? '#16a34a' : '#ef4444' }}>
+                    {p.sale_count === 0 ? <span style={{ color: '#ccc' }}>—</span> : `${fmt(p.total_realized_profit)}원`}
+                  </td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', color: '#52525b' }}>{p.entry_count}건</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', color: '#52525b' }}>{p.sale_count}건</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                    <button
+                      onClick={() => setDrawerProductId(p.id)}
+                      style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid #e5e5e5', background: '#fff', fontSize: '11px', cursor: 'pointer', color: '#555' }}
+                    >
+                      📋 보기
+                    </button>
+                  </td>
+                  <td style={{ padding: '10px 8px', textAlign: 'right' }}>
+                    <button
+                      onClick={() => deleteProduct(p.id, p.product_name)}
+                      style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '4px', borderRadius: '4px', opacity: 0.25 }}
+                      onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
+                      onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.25')}
+                      title="상품 삭제"
+                    >
+                      <Trash2 size={13} color="#ef4444" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         )}
       </div>
 
       <div style={{ marginTop: '10px', fontSize: '11px', color: '#999' }}>
-        수수료 = 판매가(가중평균) × 수수료율 &nbsp;|&nbsp; 순이익 = 판매가 − 원가 − 배송비 − 수수료
+        실현손익 = FIFO 원가 기준 (판매가 − 입고원가 − 배송비 − 수수료)
       </div>
 
       {drawerProductId && (
         <CostEntryDrawer
           productId={drawerProductId}
           productName={products.find((p) => p.id === drawerProductId)?.product_name ?? ''}
+          sellerProductId={products.find((p) => p.id === drawerProductId)?.seller_product_id ?? null}
+          platformFeeRate={products.find((p) => p.id === drawerProductId)?.platform_fee_rate ?? 0.108}
           onClose={() => setDrawerProductId(null)}
           onChanged={load}
         />
