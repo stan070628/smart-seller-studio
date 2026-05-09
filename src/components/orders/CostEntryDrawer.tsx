@@ -10,6 +10,7 @@ interface Entry {
   quantity: number;
   unit_cost: number;
   unit_shipping_fee: number;
+  unit_rg_shipping_fee: number;
   shipping_group_id: string | null;
   shipping_group_name: string | null;
 }
@@ -160,14 +161,14 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
                 <thead>
                   <tr style={{ background: '#f9f9f9', borderBottom: '1px solid #e5e5e5' }}>
-                    {['입고일', '수량', '단가', '배송비', ''].map((h) => (
+                    {['입고일', '수량', '단가', '배송비', 'RG배송비', ''].map((h) => (
                       <th key={h} style={{ padding: '6px 8px', textAlign: h === '입고일' ? 'left' : 'right', fontWeight: 600, color: '#27272a' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
-                    <tr><td colSpan={5} style={{ padding: '16px', textAlign: 'center', color: '#52525b' }}>불러오는 중...</td></tr>
+                    <tr><td colSpan={6} style={{ padding: '16px', textAlign: 'center', color: '#52525b' }}>불러오는 중...</td></tr>
                   ) : entries.map((e) => (
                     editingId === e.id ? (
                       <tr key={e.id} style={{ background: '#f0fdf4', borderBottom: '1px solid #bbf7d0' }}>
@@ -198,6 +199,9 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
                         <td style={{ padding: '6px 8px', textAlign: 'right', color: '#f97316' }}>
                           {fmt(e.unit_shipping_fee)}
                           {e.shipping_group_name && <span style={{ marginLeft: '3px', fontSize: '9px', color: '#999' }}>({e.shipping_group_name})</span>}
+                        </td>
+                        <td style={{ padding: '6px 8px', textAlign: 'right', color: (e.unit_rg_shipping_fee ?? 0) > 0 ? '#0369a1' : '#ccc' }}>
+                          {(e.unit_rg_shipping_fee ?? 0) > 0 ? fmt(e.unit_rg_shipping_fee) : '—'}
                         </td>
                         <td style={{ padding: '6px 8px', textAlign: 'right' }}>
                           <div style={{ display: 'flex', gap: '3px', justifyContent: 'flex-end' }}>

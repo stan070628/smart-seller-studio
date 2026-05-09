@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Truck, Search, Trash2, TrendingUp, TrendingDown, AlertCircle } from 'lucide-react';
+import { Plus, Truck, Package, Search, Trash2, TrendingUp, TrendingDown, AlertCircle } from 'lucide-react';
 import CostEntryDrawer from './CostEntryDrawer';
 import ShippingGroupModal from './ShippingGroupModal';
 import AddProductModal from './AddProductModal';
+import RocketGrowthShipmentModal from './RocketGrowthShipmentModal';
 
 interface ProductRow {
   id: string;
@@ -162,6 +163,7 @@ export default function CostManagementTab() {
   const [drawerProductId, setDrawerProductId] = useState<string | null>(null);
   const [showShippingModal, setShowShippingModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showRgModal, setShowRgModal] = useState(false);
   const [preset, setPreset] = useState<Preset>('this_month');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
@@ -390,6 +392,12 @@ export default function CostManagementTab() {
         >
           <Truck size={13} /> 배송비 그룹 생성
         </button>
+        <button
+          onClick={() => setShowRgModal(true)}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', background: '#fff', color: '#0369a1', border: '1px solid #bae6fd', fontSize: '12px', cursor: 'pointer' }}
+        >
+          <Package size={13} /> 로켓그로스 입고 등록
+        </button>
         <div style={{ marginLeft: 'auto', position: 'relative' }}>
           <Search size={13} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#999' }} />
           <input
@@ -492,6 +500,17 @@ export default function CostManagementTab() {
         <AddProductModal
           onClose={() => setShowAddModal(false)}
           onAdded={load}
+        />
+      )}
+      {showRgModal && (
+        <RocketGrowthShipmentModal
+          products={products.filter((p) => p.current_stock > 0).map((p) => ({
+            id: p.id,
+            product_name: p.product_name,
+            current_stock: p.current_stock,
+          }))}
+          onClose={() => setShowRgModal(false)}
+          onCreated={load}
         />
       )}
     </div>
