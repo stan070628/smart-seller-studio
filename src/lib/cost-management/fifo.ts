@@ -17,6 +17,8 @@ export interface PurchaseBatch {
   unit_cost: number;
   /** 단위 배송비 (원) — 원가에 포함, 재고 평가액에서는 제외 */
   unit_shipping_fee: number;
+  /** 단위 로켓그로스 입고 배송비 (원) — 원가에 포함, 재고 평가액에서는 제외 */
+  unit_rg_shipping_fee: number;
 }
 
 /** 판매 행 */
@@ -87,8 +89,8 @@ export function calculateFifo(
     for (const batch of queue) {
       if (qtyLeft <= 0) break;
       const take = Math.min(batch.remaining, qtyLeft);
-      // 원가 = (단위매입가 + 단위배송비) × 소진수량
-      totalCost += (batch.unit_cost + batch.unit_shipping_fee) * take;
+      // 원가 = (단위매입가 + 단위배송비 + 단위RG배송비) × 소진수량
+      totalCost += (batch.unit_cost + batch.unit_shipping_fee + batch.unit_rg_shipping_fee) * take;
       batch.remaining -= take;
       qtyLeft -= take;
     }
