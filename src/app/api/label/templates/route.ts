@@ -51,6 +51,9 @@ export async function POST(request: NextRequest): Promise<Response> {
     return Response.json({ error: '템플릿 이름을 입력해주세요.' }, { status: 400 });
   }
 
+  if (labelType !== undefined && !VALID_TYPES.includes(labelType as LabelType)) {
+    return Response.json({ error: '유효하지 않은 라벨 타입입니다.' }, { status: 400 });
+  }
   const resolvedType: LabelType = VALID_TYPES.includes(labelType as LabelType)
     ? (labelType as LabelType)
     : 'quality';
@@ -79,7 +82,7 @@ export async function DELETE(request: NextRequest): Promise<Response> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
 
-  const id = new URL(request.url).searchParams.get('id');
+  const id = request.nextUrl.searchParams.get('id');
   if (!id) {
     return Response.json({ error: 'id가 필요합니다.' }, { status: 400 });
   }
