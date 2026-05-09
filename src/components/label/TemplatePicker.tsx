@@ -45,7 +45,7 @@ export default function TemplatePicker({ currentImageUrl, currentFields, onLoad,
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    getLabelTemplates()
+    getLabelTemplates('quality')
       .then(setTemplates)
       .catch(() => setLoadError('템플릿 목록을 불러오지 못했습니다. 로그인 상태를 확인해주세요.'));
   }, []);
@@ -53,7 +53,7 @@ export default function TemplatePicker({ currentImageUrl, currentFields, onLoad,
   const handleLoad = () => {
     const tmpl = templates.find((t) => t.id === selectedId);
     if (!tmpl) return;
-    onLoad(tmpl.fields);
+    onLoad(tmpl.fields as unknown as QualityFields);
     if (tmpl.image_url) onImageLoad(tmpl.image_url);
   };
 
@@ -62,7 +62,7 @@ export default function TemplatePicker({ currentImageUrl, currentFields, onLoad,
     setSaving(true);
     setSaveMsg(null);
     try {
-      const tmpl = await saveLabelTemplate(saveName.trim(), currentImageUrl, currentFields);
+      const tmpl = await saveLabelTemplate(saveName.trim(), 'quality', currentFields as unknown as Record<string, unknown>);
       setTemplates((prev) => [tmpl, ...prev]);
       setSaveName('');
       setSaveMsg({ ok: true, text: '저장 완료!' });

@@ -41,7 +41,8 @@ const mockTemplate: LabelTemplate = {
   user_id: 'user-123',
   name: '기본 세차타월',
   image_url: 'https://example.com/logo.png',
-  fields: mockFields,
+  label_type: 'quality',
+  fields: mockFields as unknown as Record<string, unknown>,
   created_at: '2026-05-05T00:00:00.000Z',
 };
 
@@ -58,20 +59,20 @@ describe('getLabelTemplates', () => {
   });
 
   it('현재 유저의 템플릿 목록을 반환한다', async () => {
-    const result = await getLabelTemplates();
+    const result = await getLabelTemplates('quality');
     expect(result).toEqual([mockTemplate]);
     expect(mockFrom).toHaveBeenCalledWith('label_templates');
   });
 
   it('Supabase 에러 시 빈 배열을 반환한다', async () => {
     mockOrder.mockResolvedValueOnce({ data: null, error: { message: 'DB error' } });
-    const result = await getLabelTemplates();
+    const result = await getLabelTemplates('quality');
     expect(result).toEqual([]);
   });
 
   it('유저 없으면 빈 배열을 반환한다', async () => {
     mockGetUser.mockResolvedValueOnce({ data: { user: null } });
-    const result = await getLabelTemplates();
+    const result = await getLabelTemplates('quality');
     expect(result).toEqual([]);
   });
 });
@@ -89,7 +90,7 @@ describe('saveLabelTemplate', () => {
   });
 
   it('템플릿을 저장하고 반환한다', async () => {
-    const result = await saveLabelTemplate('기본 세차타월', 'https://example.com/logo.png', mockFields);
+    const result = await saveLabelTemplate('기본 세차타월', 'quality', mockFields as unknown as Record<string, unknown>);
     expect(result).toEqual(mockTemplate);
     expect(mockInsert).toHaveBeenCalledWith(
       expect.objectContaining({ name: '기본 세차타월', user_id: 'user-123' })
@@ -98,7 +99,7 @@ describe('saveLabelTemplate', () => {
 
   it('유저 없으면 에러를 던진다', async () => {
     mockGetUser.mockResolvedValueOnce({ data: { user: null } });
-    await expect(saveLabelTemplate('test', '', mockFields)).rejects.toThrow('로그인');
+    await expect(saveLabelTemplate('test', 'quality', mockFields as unknown as Record<string, unknown>)).rejects.toThrow('로그인');
   });
 });
 
