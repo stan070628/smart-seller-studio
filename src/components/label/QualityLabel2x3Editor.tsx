@@ -57,7 +57,7 @@ export default function QualityLabel2x3Editor() {
             <LabelSaveLoad
               labelType="quality2x3"
               currentData={fields as unknown as Record<string, unknown>}
-              onLoad={(data) => setFields(data as unknown as QualityFields)}
+              onLoad={(data) => setFields({ ...EMPTY_FIELDS, ...(data as Partial<QualityFields>) })}
             />
           </div>
 
