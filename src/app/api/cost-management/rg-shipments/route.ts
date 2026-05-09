@@ -27,10 +27,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'total_shipping_fee must be a non-negative integer' }, { status: 400 });
   }
 
+  // 중복 product_cost_id 방지
+  const seenIds = new Set<string>();
   for (const item of items as RgShipmentItem[]) {
     if (!item.product_cost_id || typeof item.product_cost_id !== 'string') {
       return NextResponse.json({ success: false, error: 'Each item must have product_cost_id' }, { status: 400 });
     }
+    if (seenIds.has(item.product_cost_id)) {
+      return NextResponse.json({ success: false, error: `Duplicate product_cost_id: ${item.product_cost_id}` }, { status: 400 });
+    }
+    seenIds.add(item.product_cost_id);
     if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
       return NextResponse.json({ success: false, error: 'Each item quantity must be > 0' }, { status: 400 });
     }
@@ -116,7 +122,7 @@ export async function POST(request: NextRequest) {
           await client.query(
             `INSERT INTO cost_entries
                (user_id, product_cost_id, received_at, quantity, unit_cost, unit_shipping_fee, unit_rg_shipping_fee, shipping_group_id, created_at)
-             SELECT user_id, product_cost_id, received_at, $1, unit_cost, unit_shipping_fee, 0, shipping_group_id, created_at
+             SELECT user_id, product_cost_id, received_at, $1, unit_cost, unit_shipping_fee, 0, shipping_group_id, now()
              FROM cost_entries WHERE id = $2`,
             [batchQty - take, batch.id],
           );
