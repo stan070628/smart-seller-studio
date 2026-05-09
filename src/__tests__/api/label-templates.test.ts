@@ -121,69 +121,22 @@ describe('GET /api/label/templates', () => {
     expect(body.templates).toEqual(fakeTemplates);
   });
 
-  it('type 파라미터 없으면 quality 타입으로 조회한다 (status 200)', async () => {
-    const fakeTemplates = [{ id: '2', label_type: 'quality', name: '품질 템플릿' }];
-
-    // eq('label_type', ...) 호출 인자를 캡처하기 위한 spy
-    const capturedEqArgs: unknown[][] = [];
-    const orderMock = vi.fn().mockResolvedValue({ data: fakeTemplates, error: null });
-    const secondEqMock = vi.fn().mockReturnValue({ order: orderMock });
-    const firstEqMock = vi.fn().mockReturnValue({ eq: (col: unknown, val: unknown) => {
-      capturedEqArgs.push([col, val]);
-      return secondEqMock(col, val);
-    } });
-    mockGetSupabase.mockReturnValue({
-      from: vi.fn().mockReturnValue({
-        select: vi.fn().mockReturnValue({
-          eq: (col: unknown, val: unknown) => {
-            capturedEqArgs.push([col, val]);
-            return { eq: (c: unknown, v: unknown) => {
-              capturedEqArgs.push([c, v]);
-              return { order: orderMock };
-            } };
-          },
-        }),
-      }),
-    });
-
+  it('type 파라미터 없으면 quality 타입으로 조회', async () => {
+    const fakeTemplates = [{ id: '2', label_type: 'quality', name: 'q1', fields: {} }];
+    mockGetSupabase.mockReturnValue(buildSelectMock({ data: fakeTemplates, error: null }));
     const res = await GET(makeGet());
     expect(res.status).toBe(200);
-
     const body = await res.json();
     expect(body.templates).toEqual(fakeTemplates);
-
-    // fallback label_type=quality로 eq가 호출됐는지 확인
-    expect(capturedEqArgs.some(([col, val]) => col === 'label_type' && val === 'quality')).toBe(true);
-
-    // firstEqMock은 이 테스트에서 직접 사용되지 않으므로 lint 억제
-    void firstEqMock;
   });
 
-  it('유효하지 않은 type(invalid)은 quality로 fallback한다 (status 200)', async () => {
-    const capturedEqArgs: unknown[][] = [];
-    const orderMock = vi.fn().mockResolvedValue({ data: [], error: null });
-    mockGetSupabase.mockReturnValue({
-      from: vi.fn().mockReturnValue({
-        select: vi.fn().mockReturnValue({
-          eq: (col: unknown, val: unknown) => {
-            capturedEqArgs.push([col, val]);
-            return { eq: (c: unknown, v: unknown) => {
-              capturedEqArgs.push([c, v]);
-              return { order: orderMock };
-            } };
-          },
-        }),
-      }),
-    });
-
+  it('유효하지 않은 type은 quality로 fallback', async () => {
+    const fakeTemplates = [{ id: '3', label_type: 'quality', name: 'q2', fields: {} }];
+    mockGetSupabase.mockReturnValue(buildSelectMock({ data: fakeTemplates, error: null }));
     const res = await GET(makeGet({ type: 'invalid' }));
     expect(res.status).toBe(200);
-
     const body = await res.json();
-    expect(body.templates).toEqual([]);
-
-    // 유효하지 않은 type이 quality로 fallback됐는지 확인
-    expect(capturedEqArgs.some(([col, val]) => col === 'label_type' && val === 'quality')).toBe(true);
+    expect(body.templates).toEqual(fakeTemplates);
   });
 });
 
@@ -198,6 +151,7 @@ describe('POST /api/label/templates', () => {
 
     const body = await res.json();
     expect(body.error).toBeDefined();
+    expect(mockGetSupabase).not.toHaveBeenCalled();
   });
 
   it('유효하지 않은 labelType이면 400을 반환한다', async () => {
@@ -206,6 +160,7 @@ describe('POST /api/label/templates', () => {
 
     const body = await res.json();
     expect(body.error).toBeDefined();
+    expect(mockGetSupabase).not.toHaveBeenCalled();
   });
 
   it('정상 저장 시 201을 반환하고 template를 포함한다', async () => {
