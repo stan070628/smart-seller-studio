@@ -60,7 +60,11 @@ export async function GET(
       },
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : '서버 오류';
-    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+    if (err instanceof RangeError) {
+      console.error('[fifo-summary] FIFO 계산 오류:', err.message);
+      return NextResponse.json({ success: false, error: '재고 데이터를 확인해 주세요.' }, { status: 422 });
+    }
+    console.error('[fifo-summary]', err);
+    return NextResponse.json({ success: false, error: '서버 오류' }, { status: 500 });
   }
 }

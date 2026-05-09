@@ -255,16 +255,18 @@ export default function CostManagementTab() {
         실현손익 = FIFO 원가 기준 (판매가 − 입고원가 − 배송비 − 수수료)
       </div>
 
-      {drawerProductId && (
-        <CostEntryDrawer
-          productId={drawerProductId}
-          productName={products.find((p) => p.id === drawerProductId)?.product_name ?? ''}
-          sellerProductId={products.find((p) => p.id === drawerProductId)?.seller_product_id ?? null}
-          platformFeeRate={products.find((p) => p.id === drawerProductId)?.platform_fee_rate ?? 0.108}
-          onClose={() => setDrawerProductId(null)}
-          onChanged={load}
-        />
-      )}
+      {drawerProductId && (() => {
+        const dp = products.find((p) => p.id === drawerProductId);
+        return (
+          <CostEntryDrawer
+            productId={drawerProductId}
+            productName={dp?.product_name ?? ''}
+            sellerProductId={dp?.seller_product_id ?? null}
+            onClose={() => setDrawerProductId(null)}
+            onChanged={load}
+          />
+        );
+      })()}
       {showShippingModal && (
         <ShippingGroupModal
           products={products.filter((p) => p.entry_count > 0)}

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { X, Plus, Pencil, Trash2 } from 'lucide-react';
 import SaleEntryPanel from './SaleEntryPanel';
 
@@ -37,12 +37,11 @@ interface Props {
   productId: string;
   productName: string;
   sellerProductId: number | null;
-  platformFeeRate: number;
   onClose: () => void;
   onChanged: () => void;
 }
 
-export default function CostEntryDrawer({ productId, productName, sellerProductId, platformFeeRate, onClose, onChanged }: Props) {
+export default function CostEntryDrawer({ productId, productName, sellerProductId, onClose, onChanged }: Props) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -52,25 +51,31 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
   const [fifo, setFifo] = useState<FifoSummary>({ current_stock: 0, stock_value: 0, total_realized_profit: 0 });
   const [fifoVersion, setFifoVersion] = useState(0);
 
-  // platformFeeRate를 사용하지 않는다는 TS 경고를 방지 (API에서 직접 처리)
-  void platformFeeRate;
-
-  async function loadEntries() {
+  const loadEntries = useCallback(async () => {
     setLoading(true);
-    const res = await fetch(`/api/cost-management/products/${productId}/entries`);
-    const json = await res.json();
-    if (json.success) setEntries(json.data);
-    setLoading(false);
-  }
+    try {
+      const res = await fetch(`/api/cost-management/products/${productId}/entries`);
+      const json = await res.json();
+      if (json.success) setEntries(json.data);
+    } catch (e) {
+      console.error('입고 내역 로드 실패:', e);
+    } finally {
+      setLoading(false);
+    }
+  }, [productId]);
 
-  async function loadFifo() {
-    const res = await fetch(`/api/cost-management/products/${productId}/fifo-summary`);
-    const json = await res.json();
-    if (json.success) setFifo(json.data);
-  }
+  const loadFifo = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/cost-management/products/${productId}/fifo-summary`);
+      const json = await res.json();
+      if (json.success) setFifo(json.data);
+    } catch (e) {
+      console.error('FIFO 요약 로드 실패:', e);
+    }
+  }, [productId, fifoVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { loadEntries(); }, [productId]);
-  useEffect(() => { loadFifo(); }, [productId, fifoVersion]);
+  useEffect(() => { loadEntries(); }, [loadEntries]);
+  useEffect(() => { loadFifo(); }, [loadFifo]);
 
   function refreshAll() {
     loadEntries();
@@ -123,7 +128,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex' }}>
       <div onClick={onClose} style={{ flex: 1, background: 'rgba(0,0,0,0.3)' }} />
-      <div style={{ width: '900px', background: '#fff', overflowY: 'auto', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ width: '900px', height: '100vh', background: '#fff', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column' }}>
         {/* 헤더 */}
         <div style={{ padding: '16px 24px 12px', borderBottom: '1px solid #e5e5e5', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
           <div style={{ flex: 1, fontSize: '14px', fontWeight: 700, color: '#18181b' }}>{productName}</div>
