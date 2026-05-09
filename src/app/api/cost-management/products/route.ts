@@ -3,10 +3,12 @@ import { getSourcingPool } from '@/lib/sourcing/db';
 import { getCurrentUser } from '@/lib/auth';
 import { calculateProductMetrics } from '@/lib/cost-management/calculations';
 import type { CostEntryRow } from '@/lib/cost-management/calculations';
+import { calculateFifo } from '@/lib/cost-management/fifo';
+import type { PurchaseBatch, SaleRow, FifoSummary } from '@/lib/cost-management/fifo';
 
 // ─────────────────────────────────────────
 // GET /api/cost-management/products
-// 현재 유저의 상품 목록과 각 상품의 수익성 지표를 반환한다.
+// 현재 유저의 상품 목록과 FIFO 기반 수익성 지표를 반환한다.
 // ─────────────────────────────────────────
 export async function GET(request: NextRequest) {
   try {
@@ -15,74 +17,105 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    // from/to 쿼리 파라미터 파싱 (YYYY-MM-DD)
     const { searchParams } = new URL(request.url);
     const from = searchParams.get('from');
     const to = searchParams.get('to');
 
     const pool = getSourcingPool();
 
-    // 상품 기본 정보 조회
     const { rows: products } = await pool.query(
-      `SELECT id, product_name, seller_product_id, platform, platform_fee_rate, current_stock, created_at
+      `SELECT id, product_name, seller_product_id, platform, platform_fee_rate, created_at
        FROM product_costs
        WHERE user_id = $1
        ORDER BY created_at DESC`,
       [user.userId],
     );
 
-    // 날짜 범위가 주어진 경우 BETWEEN 조건 추가, 없으면 전체 조회
-    const entryQuery =
+    // 입고 전체 조회 (기간 필터 없음 — 재고는 전체 입고 기준)
+    const { rows: allEntries } = await pool.query(
+      `SELECT id, product_cost_id, received_at, quantity, unit_cost, unit_shipping_fee, shipping_group_id
+       FROM cost_entries WHERE user_id = $1`,
+      [user.userId],
+    );
+
+    // 판매는 기간 필터 적용
+    const saleQuery =
       from && to
-        ? `SELECT id, product_cost_id, received_at, quantity, unit_cost, unit_shipping_fee, selling_price, shipping_group_id
-           FROM cost_entries
-           WHERE user_id = $1 AND received_at BETWEEN $2 AND $3`
-        : `SELECT id, product_cost_id, received_at, quantity, unit_cost, unit_shipping_fee, selling_price, shipping_group_id
-           FROM cost_entries
-           WHERE user_id = $1`;
-    const entryParams = from && to ? [user.userId, from, to] : [user.userId];
+        ? `SELECT id, product_cost_id, sold_at, quantity, selling_price FROM sale_records WHERE user_id = $1 AND sold_at BETWEEN $2 AND $3`
+        : `SELECT id, product_cost_id, sold_at, quantity, selling_price FROM sale_records WHERE user_id = $1`;
+    const saleParams = from && to ? [user.userId, from, to] : [user.userId];
+    const { rows: allSales } = await pool.query(saleQuery, saleParams);
 
-    const { rows: entries } = await pool.query(entryQuery, entryParams);
-
-    // product_cost_id 기준으로 항목을 분류하고 숫자 컬럼을 Number()로 변환
-    // (pg 드라이버는 NUMERIC/DECIMAL 컬럼을 문자열로 반환)
     const entriesByProduct = new Map<string, CostEntryRow[]>();
-    for (const e of entries) {
+    for (const e of allEntries) {
       const list = entriesByProduct.get(e.product_cost_id) ?? [];
       list.push({
         id: e.id,
         product_cost_id: e.product_cost_id,
-        received_at: e.received_at,
+        received_at: e.received_at instanceof Date ? e.received_at.toISOString().slice(0, 10) : String(e.received_at).slice(0, 10),
         quantity: Number(e.quantity),
         unit_cost: Number(e.unit_cost),
         unit_shipping_fee: Number(e.unit_shipping_fee),
-        selling_price: Number(e.selling_price),
         shipping_group_id: e.shipping_group_id,
       });
       entriesByProduct.set(e.product_cost_id, list);
     }
 
-    // 각 상품에 대해 수익성 지표를 계산하여 병합
+    const salesByProduct = new Map<string, SaleRow[]>();
+    for (const s of allSales) {
+      const list = salesByProduct.get(s.product_cost_id) ?? [];
+      list.push({
+        id: s.id,
+        sold_at: s.sold_at instanceof Date ? s.sold_at.toISOString().slice(0, 10) : String(s.sold_at).slice(0, 10),
+        quantity: Number(s.quantity),
+        selling_price: Number(s.selling_price),
+      });
+      salesByProduct.set(s.product_cost_id, list);
+    }
+
     const data = products.map((p) => {
       const pEntries = entriesByProduct.get(p.id) ?? [];
-      const metrics = calculateProductMetrics(pEntries, Number(p.platform_fee_rate));
+      const pSales = salesByProduct.get(p.id) ?? [];
+      const feeRate = Number(p.platform_fee_rate);
+
+      const metrics = calculateProductMetrics(pEntries);
+
+      let fifoResult: FifoSummary = { current_stock: 0, stock_value: 0, total_realized_profit: 0, sale_details: [] };
+      try {
+        const batches: PurchaseBatch[] = pEntries.map((e) => ({
+          id: e.id,
+          received_at: e.received_at,
+          quantity: e.quantity,
+          unit_cost: e.unit_cost,
+          unit_shipping_fee: e.unit_shipping_fee,
+        }));
+        fifoResult = calculateFifo(batches, pSales, feeRate);
+      } catch {
+        // 재고 초과 판매 등 예외 — 기본값 유지
+      }
+
       return {
         id: p.id,
         product_name: p.product_name,
         seller_product_id: p.seller_product_id,
         platform: p.platform,
-        platform_fee_rate: Number(p.platform_fee_rate),
-        current_stock: Number(p.current_stock),
+        platform_fee_rate: feeRate,
         entry_count: pEntries.length,
-        ...metrics,
+        sale_count: pSales.length,
+        weighted_avg_cost: metrics.weighted_avg_cost,
+        weighted_avg_shipping: metrics.weighted_avg_shipping,
+        total_purchase_amount: metrics.total_purchase_amount,
+        current_stock: fifoResult.current_stock,
+        stock_value: fifoResult.stock_value,
+        total_realized_profit: fifoResult.total_realized_profit,
+        total_sales_amount: pSales.reduce((s, sale) => s + sale.selling_price * sale.quantity, 0),
       };
     });
 
-    // 전체 상품 집계 요약
     const summary = {
       total_purchase_amount: data.reduce((s, p) => s + p.total_purchase_amount, 0),
-      total_revenue: data.reduce((s, p) => s + p.total_revenue, 0),
-      total_net_profit_amount: data.reduce((s, p) => s + p.total_net_profit_amount, 0),
+      total_sales_amount: data.reduce((s, p) => s + p.total_sales_amount, 0),
+      total_realized_profit: data.reduce((s, p) => s + p.total_realized_profit, 0),
     };
 
     return NextResponse.json({ success: true, data, summary });
