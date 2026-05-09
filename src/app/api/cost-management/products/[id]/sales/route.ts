@@ -14,22 +14,27 @@ export async function GET(
   const { id } = await params;
   const pool = getSourcingPool();
 
-  // 요청 유저가 소유한 상품인지 확인
-  const { rows: check } = await pool.query(
-    `SELECT id FROM product_costs WHERE id = $1 AND user_id = $2`,
-    [id, user.userId],
-  );
-  if (check.length === 0) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
+  try {
+    // 요청 유저가 소유한 상품인지 확인
+    const { rows: check } = await pool.query(
+      `SELECT id FROM product_costs WHERE id = $1 AND user_id = $2`,
+      [id, user.userId],
+    );
+    if (check.length === 0) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
 
-  const { rows } = await pool.query(
-    `SELECT id, sold_at, quantity, selling_price, channel, coupang_order_item_id, created_at
-     FROM sale_records
-     WHERE product_cost_id = $1
-     ORDER BY sold_at DESC, created_at DESC`,
-    [id],
-  );
+    const { rows } = await pool.query(
+      `SELECT id, sold_at, quantity, selling_price, channel, coupang_order_item_id, created_at
+       FROM sale_records
+       WHERE product_cost_id = $1
+       ORDER BY sold_at DESC, created_at DESC`,
+      [id],
+    );
 
-  return NextResponse.json({ success: true, data: rows });
+    return NextResponse.json({ success: true, data: rows });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : '서버 오류';
+    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+  }
 }
 
 // POST /api/cost-management/products/[id]/sales
@@ -57,21 +62,34 @@ export async function POST(
     );
   }
 
+  // sold_at 날짜 형식 검증: YYYY-MM-DD
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(sold_at)) {
+    return NextResponse.json(
+      { success: false, error: 'sold_at must be YYYY-MM-DD' },
+      { status: 400 },
+    );
+  }
+
   const pool = getSourcingPool();
 
-  // 요청 유저가 소유한 상품인지 확인
-  const { rows: check } = await pool.query(
-    `SELECT id FROM product_costs WHERE id = $1 AND user_id = $2`,
-    [id, user.userId],
-  );
-  if (check.length === 0) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
+  try {
+    // 요청 유저가 소유한 상품인지 확인
+    const { rows: check } = await pool.query(
+      `SELECT id FROM product_costs WHERE id = $1 AND user_id = $2`,
+      [id, user.userId],
+    );
+    if (check.length === 0) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
 
-  const { rows } = await pool.query(
-    `INSERT INTO sale_records (user_id, product_cost_id, sold_at, quantity, selling_price, channel)
-     VALUES ($1, $2, $3, $4, $5, 'manual')
-     RETURNING *`,
-    [user.userId, id, sold_at, quantity, selling_price],
-  );
+    const { rows } = await pool.query(
+      `INSERT INTO sale_records (user_id, product_cost_id, sold_at, quantity, selling_price, channel)
+       VALUES ($1, $2, $3, $4, $5, 'manual')
+       RETURNING *`,
+      [user.userId, id, sold_at, quantity, selling_price],
+    );
 
-  return NextResponse.json({ success: true, data: rows[0] }, { status: 201 });
+    return NextResponse.json({ success: true, data: rows[0] }, { status: 201 });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : '서버 오류';
+    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+  }
 }
