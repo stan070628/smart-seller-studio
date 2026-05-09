@@ -48,7 +48,7 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
         body: JSON.stringify(body),
       });
       const json = await res.json();
-      if (json.success) { onAdded(); onClose(); }
+      if (json.success) { onAdded(); onClose(); } else { alert(json.error ?? '상품 추가에 실패했습니다.'); }
     } finally {
       setSaving(false);
     }

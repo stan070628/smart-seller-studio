@@ -54,6 +54,7 @@ export default function CostEntryDrawer({ productId, productName, onClose, onCha
     const res = await fetch(`/api/cost-management/products/${productId}/entries`);
     const json = await res.json();
     if (json.success) setEntries(json.data);
+    else alert(json.error ?? '데이터를 불러오지 못했습니다.');
     setLoading(false);
   }
 
@@ -81,6 +82,8 @@ export default function CostEntryDrawer({ productId, productName, onClose, onCha
         setEditingId(null);
         setAddingNew(false);
         setForm(emptyForm());
+      } else {
+        alert(json.error ?? '저장에 실패했습니다.');
       }
     } finally {
       setSaving(false);
@@ -91,7 +94,7 @@ export default function CostEntryDrawer({ productId, productName, onClose, onCha
     if (!confirm('이 입고 건을 삭제할까요?')) return;
     const res = await fetch(`/api/cost-management/entries/${id}`, { method: 'DELETE' });
     const json = await res.json();
-    if (json.success) { await load(); onChanged(); }
+    if (json.success) { await load(); onChanged(); } else { alert(json.error ?? '삭제에 실패했습니다.'); }
   }
 
   function startEdit(e: Entry) {

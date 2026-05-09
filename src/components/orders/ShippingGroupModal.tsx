@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { X, Truck } from 'lucide-react';
+import { distributeShippingFee } from '@/lib/cost-management/calculations';
 
 interface EntryForGroup {
   id: string;
@@ -70,9 +71,14 @@ export default function ShippingGroupModal({ products, onClose, onCreated }: Pro
 
   function previewRows() {
     if (totalQty === 0 || !feeNum) return [];
+    const distribution = distributeShippingFee(
+      selectedEntries.map((e) => ({ id: e.id, quantity: e.quantity })),
+      feeNum,
+    );
     return selectedEntries.map((e) => {
       const product = products.find((p) => p.id === e.product_cost_id);
-      const perUnit = Math.round(feeNum / totalQty);
+      const totalForEntry = distribution.get(e.id) ?? 0;
+      const perUnit = e.quantity > 0 ? Math.round(totalForEntry / e.quantity) : 0;
       return { name: product?.product_name ?? '', qty: e.quantity, perUnit };
     });
   }
@@ -94,6 +100,8 @@ export default function ShippingGroupModal({ products, onClose, onCreated }: Pro
       if (json.success) {
         onCreated();
         onClose();
+      } else {
+        alert(json.error ?? '그룹 생성에 실패했습니다.');
       }
     } finally {
       setSaving(false);
