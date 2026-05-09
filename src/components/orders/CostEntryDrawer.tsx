@@ -61,14 +61,21 @@ export default function CostEntryDrawer({ productId, productName, onClose, onCha
   useEffect(() => { load(); }, [productId]);
 
   async function save() {
+    const qty = Math.round(Number(form.quantity));
+    const cost = Math.round(Number(form.unit_cost));
+    const price = Math.round(Number(form.selling_price));
+    if (!form.received_at || qty <= 0 || price <= 0) {
+      alert('입고일, 수량, 판매가를 입력해 주세요.');
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
         received_at: form.received_at,
-        quantity: Number(form.quantity),
-        unit_cost: Number(form.unit_cost),
-        unit_shipping_fee: Number(form.unit_shipping_fee),
-        selling_price: Number(form.selling_price),
+        quantity: qty,
+        unit_cost: cost,
+        unit_shipping_fee: Math.round(Number(form.unit_shipping_fee)),
+        selling_price: price,
       };
       const url = editingId
         ? `/api/cost-management/entries/${editingId}`
@@ -109,6 +116,8 @@ export default function CostEntryDrawer({ productId, productName, onClose, onCha
     });
   }
 
+  const canSave = !!form.received_at && Number(form.quantity) > 0 && Number(form.selling_price) > 0;
+
   const totalQty = entries.reduce((s, e) => s + e.quantity, 0);
   const wavgCost = totalQty > 0 ? Math.round(entries.reduce((s, e) => s + e.unit_cost * e.quantity, 0) / totalQty) : 0;
   const wavgShip = totalQty > 0 ? Math.round(entries.reduce((s, e) => s + e.unit_shipping_fee * e.quantity, 0) / totalQty) : 0;
@@ -120,10 +129,10 @@ export default function CostEntryDrawer({ productId, productName, onClose, onCha
         <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #e5e5e5', display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: '15px', fontWeight: 700, color: '#18181b' }}>입고 내역</div>
-            <div style={{ fontSize: '12px', color: '#71717a', marginTop: '2px' }}>{productName}</div>
+            <div style={{ fontSize: '12px', color: '#52525b', marginTop: '2px' }}>{productName}</div>
           </div>
           <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}>
-            <X size={18} color="#71717a" />
+            <X size={18} color="#52525b" />
           </button>
         </div>
 
@@ -134,7 +143,7 @@ export default function CostEntryDrawer({ productId, productName, onClose, onCha
             { label: '총 재고', value: `${fmt(totalQty)}개`, color: '#18181b' },
           ].map((c) => (
             <div key={c.label} style={{ background: '#f5f5f7', borderRadius: '8px', padding: '12px', textAlign: 'center' }}>
-              <div style={{ fontSize: '10px', color: '#999', marginBottom: '4px' }}>{c.label}</div>
+              <div style={{ fontSize: '10px', color: '#52525b', marginBottom: '4px' }}>{c.label}</div>
               <div style={{ fontSize: '16px', fontWeight: 700, color: c.color }}>{c.value}</div>
             </div>
           ))}
@@ -146,13 +155,13 @@ export default function CostEntryDrawer({ productId, productName, onClose, onCha
               <thead>
                 <tr style={{ background: '#f9f9f9', borderBottom: '1px solid #e5e5e5' }}>
                   {['입고일', '수량', '단가(원가)', '배송비(배분)', '판매가', '배송그룹', ''].map((h) => (
-                    <th key={h} style={{ padding: '8px', textAlign: h === '입고일' ? 'left' : 'right', fontWeight: 600, color: '#555' }}>{h}</th>
+                    <th key={h} style={{ padding: '8px', textAlign: h === '입고일' ? 'left' : 'right', fontWeight: 600, color: '#27272a' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={7} style={{ padding: '20px', textAlign: 'center', color: '#71717a' }}>불러오는 중...</td></tr>
+                  <tr><td colSpan={7} style={{ padding: '20px', textAlign: 'center', color: '#52525b' }}>불러오는 중...</td></tr>
                 ) : entries.map((e) => (
                   editingId === e.id ? (
                     <tr key={e.id} style={{ background: '#f0fdf4', borderBottom: '1px solid #bbf7d0' }}>
@@ -162,16 +171,16 @@ export default function CostEntryDrawer({ productId, productName, onClose, onCha
                             type={field === 'received_at' ? 'date' : 'number'}
                             value={form[field]}
                             onChange={(ev) => setForm((f) => ({ ...f, [field]: ev.target.value }))}
-                            style={{ width: '100%', padding: '4px 6px', borderRadius: '6px', border: '1px solid #86efac', fontSize: '11px', boxSizing: 'border-box' }}
+                            style={{ width: '100%', padding: '4px 6px', borderRadius: '6px', border: '1px solid #86efac', fontSize: '11px', boxSizing: 'border-box', color: '#18181b' }}
                           />
                         </td>
                       ))}
                       <td style={{ padding: '6px 8px' }} colSpan={2}>
                         <div style={{ display: 'flex', gap: '4px' }}>
-                          <button onClick={save} disabled={saving} style={{ padding: '4px 10px', borderRadius: '6px', background: '#16a34a', color: '#fff', border: 'none', fontSize: '11px', cursor: 'pointer' }}>
+                          <button onClick={save} disabled={saving || !canSave} style={{ padding: '4px 10px', borderRadius: '6px', background: canSave ? '#16a34a' : '#d4d4d4', color: canSave ? '#fff' : '#71717a', border: 'none', fontSize: '11px', cursor: canSave ? 'pointer' : 'not-allowed' }}>
                             {saving ? '저장중' : '저장'}
                           </button>
-                          <button onClick={() => { setEditingId(null); setAddingNew(false); setForm(emptyForm()); }} style={{ padding: '4px 8px', borderRadius: '6px', background: '#f3f4f6', border: 'none', fontSize: '11px', cursor: 'pointer' }}>
+                          <button onClick={() => { setEditingId(null); setAddingNew(false); setForm(emptyForm()); }} style={{ padding: '4px 8px', borderRadius: '6px', background: '#f3f4f6', border: 'none', fontSize: '11px', cursor: 'pointer', color: '#27272a' }}>
                             취소
                           </button>
                         </div>
@@ -179,7 +188,7 @@ export default function CostEntryDrawer({ productId, productName, onClose, onCha
                     </tr>
                   ) : (
                     <tr key={e.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                      <td style={{ padding: '8px', color: '#555' }}>{e.received_at.slice(0, 10)}</td>
+                      <td style={{ padding: '8px', color: '#27272a' }}>{e.received_at.slice(0, 10)}</td>
                       <td style={{ padding: '8px', textAlign: 'right', fontWeight: 600 }}>{fmt(e.quantity)}개</td>
                       <td style={{ padding: '8px', textAlign: 'right', color: '#ef4444' }}>{fmt(e.unit_cost)}</td>
                       <td style={{ padding: '8px', textAlign: 'right', color: '#f97316' }}>
@@ -194,7 +203,7 @@ export default function CostEntryDrawer({ productId, productName, onClose, onCha
                       </td>
                       <td style={{ padding: '8px', textAlign: 'right' }}>
                         <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end' }}>
-                          <button onClick={() => startEdit(e)} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '2px' }}><Pencil size={12} color="#999" /></button>
+                          <button onClick={() => startEdit(e)} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '2px' }}><Pencil size={12} color="#6b7280" /></button>
                           <button onClick={() => deleteEntry(e.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '2px' }}><Trash2 size={12} color="#ef4444" /></button>
                         </div>
                       </td>
@@ -209,16 +218,16 @@ export default function CostEntryDrawer({ productId, productName, onClose, onCha
                           type={field === 'received_at' ? 'date' : 'number'}
                           value={form[field]}
                           onChange={(ev) => setForm((f) => ({ ...f, [field]: ev.target.value }))}
-                          style={{ width: '100%', padding: '4px 6px', borderRadius: '6px', border: '1px solid #86efac', fontSize: '11px', boxSizing: 'border-box' }}
+                          style={{ width: '100%', padding: '4px 6px', borderRadius: '6px', border: '1px solid #86efac', fontSize: '11px', boxSizing: 'border-box', color: '#18181b' }}
                         />
                       </td>
                     ))}
                     <td style={{ padding: '6px 8px' }} colSpan={2}>
                       <div style={{ display: 'flex', gap: '4px' }}>
-                        <button onClick={save} disabled={saving} style={{ padding: '4px 10px', borderRadius: '6px', background: '#16a34a', color: '#fff', border: 'none', fontSize: '11px', cursor: 'pointer' }}>
+                        <button onClick={save} disabled={saving || !canSave} style={{ padding: '4px 10px', borderRadius: '6px', background: canSave ? '#16a34a' : '#d4d4d4', color: canSave ? '#fff' : '#71717a', border: 'none', fontSize: '11px', cursor: canSave ? 'pointer' : 'not-allowed' }}>
                           {saving ? '저장중' : '저장'}
                         </button>
-                        <button onClick={() => { setEditingId(null); setAddingNew(false); setForm(emptyForm()); }} style={{ padding: '4px 8px', borderRadius: '6px', background: '#f3f4f6', border: 'none', fontSize: '11px', cursor: 'pointer' }}>
+                        <button onClick={() => { setEditingId(null); setAddingNew(false); setForm(emptyForm()); }} style={{ padding: '4px 8px', borderRadius: '6px', background: '#f3f4f6', border: 'none', fontSize: '11px', cursor: 'pointer', color: '#27272a' }}>
                           취소
                         </button>
                       </div>
@@ -232,7 +241,7 @@ export default function CostEntryDrawer({ productId, productName, onClose, onCha
           {!addingNew && !editingId && (
             <button
               onClick={() => { setAddingNew(true); setForm(emptyForm()); }}
-              style={{ width: '100%', marginTop: '12px', padding: '8px', borderRadius: '8px', border: '1px dashed #e5e5e5', background: '#fafafa', fontSize: '12px', color: '#555', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+              style={{ width: '100%', marginTop: '12px', padding: '8px', borderRadius: '8px', border: '1px dashed #e5e5e5', background: '#fafafa', fontSize: '12px', color: '#27272a', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
             >
               <Plus size={13} /> 새 입고 건 추가
             </button>
