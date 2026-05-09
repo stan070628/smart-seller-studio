@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS product_costs (
   seller_product_id bigint,
   product_name      text NOT NULL,
   platform          text DEFAULT 'coupang',
-  platform_fee_rate numeric(5,4) DEFAULT 0.1080,
+  platform_fee_rate numeric(5,4) DEFAULT 0.1080 CHECK (platform_fee_rate > 0 AND platform_fee_rate < 1),
   current_stock     int DEFAULT 0,
   created_at        timestamptz DEFAULT now()
 );
