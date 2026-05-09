@@ -2,7 +2,7 @@
  * 주문/매출 관리 타입 정의
  */
 
-export type OrderPlatform = 'coupang' | 'naver' | 'gmarket' | 'elevenst' | 'shopee';
+export type OrderPlatform = 'coupang' | 'naver' | 'gmarket' | 'elevenst' | 'shopee' | 'rocket_growth';
 
 export type OrderStatus =
   | 'new'          // 신규 주문
@@ -72,6 +72,7 @@ export const PLATFORM_INFO: Record<OrderPlatform, { label: string; color: string
   gmarket: { label: 'G마켓', color: '#6dbe46' },
   elevenst: { label: '11번가', color: '#ff0038' },
   shopee: { label: 'Shopee', color: '#ee4d2d' },
+  rocket_growth: { label: '로켓그로스', color: '#15803d' },
 };
 
 export const ORDER_STATUS_INFO: Record<OrderStatus, { label: string; color: string; bg: string }> = {

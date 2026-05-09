@@ -219,6 +219,8 @@ export default function SaleEntryPanel({ productId, sellerProductId, onChanged }
                   <td style={{ padding: '6px 8px', textAlign: 'right' }}>
                     {s.channel === 'coupang'
                       ? <span style={{ background: '#dbeafe', color: '#1d4ed8', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>쿠팡</span>
+                      : s.channel === 'rocket_growth'
+                      ? <span style={{ background: '#dcfce7', color: '#15803d', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>로켓그로스</span>
                       : <span style={{ background: '#f3f4f6', color: '#6b7280', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>직접</span>}
                   </td>
                   <td style={{ padding: '6px 8px', textAlign: 'right' }}>

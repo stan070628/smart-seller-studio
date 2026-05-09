@@ -40,7 +40,7 @@ export async function POST(
   try {
     const client = getCoupangClient();
 
-    // 모든 페이지 수집 (nextToken 방식 페이지네이션)
+    // ── Phase 1: 일반 쿠팡 주문 (ordersheets, FINAL_DELIVERY) ──────────────
     const allOrders = [];
     let nextToken: string | null = null;
     do {
@@ -55,8 +55,7 @@ export async function POST(
       nextToken = result.nextToken;
     } while (nextToken);
 
-    // 이 상품의 라인 아이템만 필터 (취소 제외)
-    const matchedItems = allOrders.flatMap((order) =>
+    const generalItems = allOrders.flatMap((order) =>
       order.orderItems
         .filter((item) => Number(item.sellerProductId) === Number(sellerProductId) && !item.canceled)
         .map((item) => ({
@@ -66,25 +65,71 @@ export async function POST(
             ? Math.round(item.orderPrice / item.shippingCount)
             : item.salesPrice,
           coupang_order_item_id: `${order.orderId}-${item.vendorItemId}`,
+          channel: 'coupang',
         })),
     );
+
+    // ── Phase 2: 로켓그로스 주문 (revenue-history, ROCKET_GROWTH) ──────────
+    // revenue-history는 recognitionDateTo가 어제까지만 허용
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().slice(0, 10);
+    const clampedTo = to > yesterdayStr ? yesterdayStr : to;
+
+    const rgItems: Array<{
+      sold_at: string;
+      quantity: number;
+      selling_price: number;
+      coupang_order_item_id: string;
+      channel: string;
+    }> = [];
+
+    if (clampedTo >= from) {
+      let rgToken = '';
+      do {
+        const result = await client.getRevenueHistory({
+          recognitionDateFrom: from,
+          recognitionDateTo: clampedTo,
+          maxPerPage: 50,
+          token: rgToken,
+        });
+        for (const order of result.items) {
+          if (order.saleType !== 'ROCKET_GROWTH') continue;
+          for (const item of order.items) {
+            if (Number(item.sellerProductId) !== Number(sellerProductId)) continue;
+            if (item.quantity <= 0) continue;
+            rgItems.push({
+              sold_at: order.saleDate?.slice(0, 10) || order.recognitionDate.slice(0, 10),
+              quantity: item.quantity,
+              selling_price: item.salePrice,
+              coupang_order_item_id: `rg-${order.orderId}-${item.vendorItemId}`,
+              channel: 'rocket_growth',
+            });
+          }
+        }
+        rgToken = result.nextToken ?? '';
+      } while (rgToken);
+    }
+
+    // ── 합산 후 DB 저장 ──────────────────────────────────────────────────────
+    const allItems = [...generalItems, ...rgItems];
 
     // 중복 방지: ON CONFLICT DO NOTHING으로 재임포트 시 스킵
     let imported = 0;
     let skipped = 0;
-    for (const item of matchedItems) {
+    for (const item of allItems) {
       const result = await pool.query(
         `INSERT INTO sale_records
            (user_id, product_cost_id, sold_at, quantity, selling_price, channel, coupang_order_item_id)
-         VALUES ($1, $2, $3, $4, $5, 'coupang', $6)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (coupang_order_item_id) DO NOTHING`,
-        [user.userId, id, item.sold_at, item.quantity, item.selling_price, item.coupang_order_item_id],
+        [user.userId, id, item.sold_at, item.quantity, item.selling_price, item.channel, item.coupang_order_item_id],
       );
       if ((result.rowCount ?? 0) > 0) imported++;
       else skipped++;
     }
 
-    return NextResponse.json({ success: true, data: { imported, skipped, total: matchedItems.length } });
+    return NextResponse.json({ success: true, data: { imported, skipped, total: allItems.length } });
   } catch (err) {
     const msg = err instanceof Error ? err.message : '서버 오류';
     return NextResponse.json({ success: false, error: msg }, { status: 500 });

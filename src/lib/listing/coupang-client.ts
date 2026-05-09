@@ -382,6 +382,19 @@ export class CoupangClient {
   async registerProduct(
     payload: CoupangProductPayload,
   ): Promise<{ sellerProductId: number }> {
+    // 이미지 URL 길이 사전 검증 (쿠팡 제한: 200자)
+    for (const item of payload.items) {
+      for (const img of item.images) {
+        if (img.vendorPath.length > 200) {
+          throw new Error(
+            `이미지 URL이 200자를 초과합니다 (현재 ${img.vendorPath.length}자). ` +
+            `파일명을 줄이거나 더 짧은 URL을 사용해주세요. ` +
+            `URL: ${img.vendorPath.slice(0, 100)}…`,
+          );
+        }
+      }
+    }
+
     const url = `/v2/providers/seller_api/apis/api/v1/marketplace/seller-products`;
 
     const res = await this.request<{ sellerProductId: number }>('POST', url, payload);
@@ -488,6 +501,9 @@ export class CoupangClient {
     await sleep(API_DELAY);
     try {
       const res = await this.request<CoupangOrder[]>('GET', url);
+      if (res.code !== 'SUCCESS') {
+        throw new Error(`쿠팡 주문 조회 실패 (code: ${res.code}): ${res.message}`);
+      }
       return {
         items: res.data ?? [],
         nextToken: res.nextToken ?? null,
@@ -527,7 +543,23 @@ export class CoupangClient {
     maxPerPage?: number;
     token?: string;
   }): Promise<{
-    items: Array<{ orderId: string; saleAmount: number; settlementAmount: number; recognitionDate: string }>;
+    items: Array<{
+      orderId: string;
+      saleType: string;
+      saleDate: string;
+      recognitionDate: string;
+      saleAmount: number;
+      settlementAmount: number;
+      items: Array<{
+        sellerProductId: number;
+        vendorItemId: number;
+        vendorItemName: string;
+        quantity: number;
+        salePrice: number;
+        saleAmount: number;
+        settlementAmount: number;
+      }>;
+    }>;
     nextToken: string | null;
   }> {
     const parts: string[] = [
@@ -552,9 +584,20 @@ export class CoupangClient {
         );
         return {
           orderId: String(r.orderId ?? ''),
+          saleType: String(r.saleType ?? ''),
+          saleDate: String(r.saleDate ?? r.recognitionDate ?? ''),
+          recognitionDate: String(r.recognitionDate ?? ''),
           saleAmount,
           settlementAmount,
-          recognitionDate: String(r.recognitionDate ?? ''),
+          items: innerItems.map((it) => ({
+            sellerProductId: Number(it.sellerProductId ?? 0),
+            vendorItemId: Number(it.vendorItemId ?? 0),
+            vendorItemName: String(it.vendorItemName ?? it.sellerProductItemName ?? ''),
+            quantity: Number(it.quantity ?? 0),
+            salePrice: Number(it.salePrice ?? 0),
+            saleAmount: Number(it.saleAmount ?? 0),
+            settlementAmount: Number(it.settlementAmount ?? 0),
+          })),
         };
       }),
       nextToken: res.nextToken ?? null,

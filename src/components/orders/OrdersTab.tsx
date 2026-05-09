@@ -16,6 +16,7 @@ const COUPANG_STATUS_MAP: Record<string, { label: string; color: string; bg: str
   CANCEL_DONE:      { label: '취소완료', color: '#9ca3af', bg: 'rgba(156,163,175,0.08)' },
   RETURN_REQUEST:   { label: '반품요청', color: '#f59e0b', bg: 'rgba(245,158,11,0.08)' },
   RETURN_DONE:      { label: '반품완료', color: '#9ca3af', bg: 'rgba(156,163,175,0.08)' },
+  ROCKET_GROWTH:    { label: '정산완료', color: '#15803d', bg: 'rgba(21,128,61,0.08)' },
 };
 
 // ─── 네이버 주문 상태 → 내부 레이블 매핑 ────────────────────────
@@ -88,7 +89,7 @@ interface CoupangOrder {
 interface UnifiedOrder {
   /** 화면 표시용 고유 키 (platform + orderId 조합) */
   key: string;
-  platform: 'coupang' | 'naver';
+  platform: 'coupang' | 'naver' | 'rocket_growth';
   orderId: string;
   status: string;
   orderedAt: string;
@@ -114,7 +115,7 @@ function formatDate(iso: string | null) {
 
 // ─── 상태 뱃지 ────────────────────────────────────────────────
 
-function StatusBadge({ status, platform }: { status: string; platform: 'coupang' | 'naver' }) {
+function StatusBadge({ status, platform }: { status: string; platform: 'coupang' | 'naver' | 'rocket_growth' }) {
   const map = platform === 'naver' ? NAVER_STATUS_MAP : COUPANG_STATUS_MAP;
   const info = map[status] ?? { label: status, color: '#71717a', bg: 'rgba(113,113,122,0.08)' };
   return (
@@ -195,6 +196,44 @@ function toNaverUnified(item: NaverOrderApiItem): UnifiedOrder {
   };
 }
 
+// ─── 로켓그로스 API 응답 타입 ──────────────────────────────────
+
+interface RgOrderApiItem {
+  orderId: string;
+  saleDate: string;
+  recognitionDate: string;
+  items: Array<{
+    sellerProductId: number;
+    vendorItemId: number;
+    vendorItemName: string;
+    quantity: number;
+    salePrice: number;
+    saleAmount: number;
+  }>;
+}
+
+function toRgUnified(item: RgOrderApiItem): UnifiedOrder {
+  return {
+    key: `rg-${item.orderId}`,
+    platform: 'rocket_growth',
+    orderId: item.orderId,
+    status: 'ROCKET_GROWTH',
+    orderedAt: item.saleDate || item.recognitionDate,
+    receiverName: null,
+    receiverAddr: null,
+    receiverTel: null,
+    invoiceInfo: null,
+    parcelMessage: null,
+    orderItems: item.items.map((i) => ({
+      sellerProductName: i.vendorItemName || `상품 #${i.sellerProductId}`,
+      sellerProductItemName: '',
+      shippingCount: i.quantity,
+      salesPrice: i.salePrice,
+      orderPrice: i.saleAmount,
+    })),
+  };
+}
+
 // ─── 컴포넌트 ─────────────────────────────────────────────────
 
 export default function OrdersTab() {
@@ -210,6 +249,7 @@ export default function OrdersTab() {
   const [loading, setLoading] = useState(false);
   const [coupangError, setCoupangError] = useState<string | null>(null);
   const [naverError, setNaverError] = useState<string | null>(null);
+  const [rgError, setRgError] = useState<string | null>(null);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 20;
@@ -218,12 +258,14 @@ export default function OrdersTab() {
     setLoading(true);
     setCoupangError(null);
     setNaverError(null);
+    setRgError(null);
 
     const params = new URLSearchParams({ from, to });
     if (statusFilter) params.set('status', statusFilter);
+    const rgParams = new URLSearchParams({ from, to });
 
-    // 쿠팡 + 네이버 병렬 조회 — 한 쪽 실패해도 다른 쪽 표시
-    const [coupangResult, naverResult] = await Promise.allSettled([
+    // 쿠팡 + 네이버 + 로켓그로스 병렬 조회 — 한 쪽 실패해도 나머지 표시
+    const [coupangResult, naverResult, rgResult] = await Promise.allSettled([
       fetch(`/api/orders/coupang?${params.toString()}`).then(async (res) => {
         const json = await res.json();
         if (!res.ok || !json.success) throw new Error(json.error ?? '쿠팡 주문 조회 실패');
@@ -232,6 +274,12 @@ export default function OrdersTab() {
       fetch(`/api/orders/naver?${params.toString()}`).then(async (res) => {
         const json = await res.json();
         if (!res.ok || !json.success) throw new Error(json.error ?? '네이버 주문 조회 실패');
+        return json;
+      }),
+      // 로켓그로스는 상태 필터 미적용 (revenue-history 기반, 항상 정산완료)
+      fetch(`/api/orders/coupang-rg?${rgParams.toString()}`).then(async (res) => {
+        const json = await res.json();
+        if (!res.ok || !json.success) throw new Error(json.error ?? '로켓그로스 조회 실패');
         return json;
       }),
     ]);
@@ -252,6 +300,13 @@ export default function OrdersTab() {
       unified.push(...naverItems.map(toNaverUnified));
     } else {
       setNaverError(naverResult.reason instanceof Error ? naverResult.reason.message : '네이버 오류');
+    }
+
+    if (rgResult.status === 'fulfilled') {
+      const rgItems: RgOrderApiItem[] = rgResult.value.data?.items ?? [];
+      unified.push(...rgItems.map(toRgUnified));
+    } else {
+      setRgError(rgResult.reason instanceof Error ? rgResult.reason.message : '로켓그로스 오류');
     }
 
     // 주문일시 내림차순 정렬
@@ -277,6 +332,7 @@ export default function OrdersTab() {
   // 채널별 건수
   const coupangCount = orders.filter((o) => o.platform === 'coupang').length;
   const naverCount = orders.filter((o) => o.platform === 'naver').length;
+  const rgCount = orders.filter((o) => o.platform === 'rocket_growth').length;
 
   // 현재 페이지 슬라이싱
   const totalPages = Math.max(1, Math.ceil(orders.length / PAGE_SIZE));
@@ -311,7 +367,7 @@ export default function OrdersTab() {
           조회
         </button>
         <span style={{ marginLeft: 'auto', fontSize: '12px', color: '#71717a' }}>
-          전체 주문 {orders.length}건 (쿠팡 {coupangCount}건 · 네이버 {naverCount}건) · 총 {totalRevenue.toLocaleString()}원
+          전체 주문 {orders.length}건 (쿠팡 {coupangCount}건 · 로켓그로스 {rgCount}건 · 네이버 {naverCount}건) · 총 {totalRevenue.toLocaleString()}원
         </span>
       </div>
 
@@ -326,6 +382,12 @@ export default function OrdersTab() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px 16px', marginBottom: '8px' }}>
           <AlertCircle size={15} color="#dc2626" />
           <span style={{ fontSize: '13px', color: '#dc2626' }}>네이버: {naverError}</span>
+        </div>
+      )}
+      {rgError && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px 16px', marginBottom: '8px' }}>
+          <AlertCircle size={15} color="#dc2626" />
+          <span style={{ fontSize: '13px', color: '#dc2626' }}>로켓그로스: {rgError}</span>
         </div>
       )}
 
@@ -375,7 +437,7 @@ export default function OrdersTab() {
                 const firstName = order.orderItems[0];
                 const extraCount = order.orderItems.length - 1;
                 const isExpanded = expandedKey === order.key;
-                const platformInfo = PLATFORM_INFO[order.platform];
+                const platformInfo = PLATFORM_INFO[order.platform] ?? { label: order.platform, color: '#71717a' };
 
                 return (
                   <React.Fragment key={order.key}>
