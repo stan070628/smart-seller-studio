@@ -1,18 +1,20 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ShoppingCart, BarChart3, Settings, ClipboardList } from 'lucide-react';
+import { ShoppingCart, BarChart3, Settings, ClipboardList, DollarSign } from 'lucide-react';
 import OrdersTab from './OrdersTab';
 import AnalyticsTab from './AnalyticsTab';
 import ChannelsTab from './ChannelsTab';
+import CostManagementTab from './CostManagementTab';
 
-type SubTab = 'orders' | 'analytics' | 'channels';
+type SubTab = 'orders' | 'analytics' | 'channels' | 'cost';
 
 
 const SUB_TABS: { id: SubTab; label: string; icon: React.ReactNode }[] = [
   { id: 'orders', label: '주문관리', icon: <ClipboardList size={14} /> },
   { id: 'analytics', label: '매출분석', icon: <BarChart3 size={14} /> },
   { id: 'channels', label: '채널설정', icon: <Settings size={14} /> },
+  { id: 'cost', label: '원가관리', icon: <DollarSign size={14} /> },
 ];
 
 export default function OrdersClient() {
@@ -56,6 +58,7 @@ export default function OrdersClient() {
         {activeSubTab === 'orders' && <OrdersTab />}
         {activeSubTab === 'analytics' && <AnalyticsTab />}
         {activeSubTab === 'channels' && <ChannelsTab />}
+        {activeSubTab === 'cost' && <CostManagementTab />}
       </main>
     </div>
   );
