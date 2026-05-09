@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Truck, Search, Trash2 } from 'lucide-react';
+import { Plus, Truck, Search, Trash2, TrendingUp, TrendingDown, AlertCircle } from 'lucide-react';
 import CostEntryDrawer from './CostEntryDrawer';
 import ShippingGroupModal from './ShippingGroupModal';
 import AddProductModal from './AddProductModal';
@@ -22,10 +22,140 @@ interface ProductRow {
   total_sales_amount: number;
 }
 
-type Preset = 'this_month' | 'last_month' | '3months' | '6months' | 'all' | 'custom';
-
 function fmt(n: number): string {
   return n.toLocaleString('ko-KR');
+}
+
+// ─── 타입 ──────────────────────────────────────────────────────────────────
+
+interface OrderItem {
+  sellerProductName: string;
+  shippingCount: number;
+  orderPrice: number;
+}
+
+interface UnifiedOrder {
+  status: string;
+  orderedAt: string;
+  platform: 'coupang' | 'naver';
+  orderItems: OrderItem[];
+}
+
+interface ApiRevenue {
+  totalRevenue: number;
+  totalOrders: number;
+  cancelCount: number;
+  coupangRevenue: number;
+  naverRevenue: number;
+  coupangOrders: number;
+  naverOrders: number;
+  prevTotalRevenue: number;
+  prevTotalOrders: number;
+}
+
+// ─── 유틸 ──────────────────────────────────────────────────────────────────
+
+type Preset = 'this_month' | 'last_month' | '3months' | '6months' | 'all' | 'custom';
+
+function toDateStr(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function getDateRange(p: Preset, customFrom: string, customTo: string): { from: string; to: string } | null {
+  const today = new Date();
+  const fmtDate = (d: Date) => d.toISOString().slice(0, 10);
+  if (p === 'all') return null;
+  if (p === 'custom') {
+    if (customFrom && customTo) return { from: customFrom, to: customTo };
+    return null;
+  }
+  if (p === 'this_month') {
+    return {
+      from: fmtDate(new Date(today.getFullYear(), today.getMonth(), 1)),
+      to: fmtDate(new Date(today.getFullYear(), today.getMonth() + 1, 0)),
+    };
+  }
+  if (p === 'last_month') {
+    return {
+      from: fmtDate(new Date(today.getFullYear(), today.getMonth() - 1, 1)),
+      to: fmtDate(new Date(today.getFullYear(), today.getMonth(), 0)),
+    };
+  }
+  if (p === '3months') {
+    return {
+      from: fmtDate(new Date(today.getFullYear(), today.getMonth() - 2, 1)),
+      to: fmtDate(today),
+    };
+  }
+  return {
+    from: fmtDate(new Date(today.getFullYear(), today.getMonth() - 5, 1)),
+    to: fmtDate(today),
+  };
+}
+
+const CANCELLED = new Set([
+  'CANCEL_REQUEST', 'CANCEL_DONE', 'RETURN_REQUEST', 'RETURN_DONE',
+  'CANCELED', 'RETURNED',
+]);
+
+async function fetchOrdersForPeriod(from: string, to: string): Promise<{ orders: UnifiedOrder[]; coupangError: string | null; naverError: string | null }> {
+  const params = new URLSearchParams({ from, to });
+  const [coupangResult, naverResult] = await Promise.allSettled([
+    fetch(`/api/orders/coupang?${params}`).then(async (res) => {
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error ?? '쿠팡 주문 조회 실패');
+      return (json.data?.items ?? []) as Array<{ status: string; orderedAt: string; orderItems: OrderItem[] }>;
+    }),
+    fetch(`/api/orders/naver?${params}`).then(async (res) => {
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error ?? '네이버 주문 조회 실패');
+      return (json.data?.items ?? []) as Array<{ status: string; orderedAt: string; orderItems: OrderItem[] }>;
+    }),
+  ]);
+  const orders: UnifiedOrder[] = [];
+  if (coupangResult.status === 'fulfilled') {
+    orders.push(...coupangResult.value.map((o) => ({ ...o, platform: 'coupang' as const })));
+  }
+  if (naverResult.status === 'fulfilled') {
+    orders.push(...naverResult.value.map((o) => ({ ...o, platform: 'naver' as const })));
+  }
+  return {
+    orders,
+    coupangError: coupangResult.status === 'rejected' ? (coupangResult.reason instanceof Error ? coupangResult.reason.message : '조회 실패') : null,
+    naverError: naverResult.status === 'rejected' ? (naverResult.reason instanceof Error ? naverResult.reason.message : '조회 실패') : null,
+  };
+}
+
+function computeApiRevenue(curr: UnifiedOrder[], prev: UnifiedOrder[]): ApiRevenue {
+  const active = (orders: UnifiedOrder[]) => orders.filter((o) => !CANCELLED.has(o.status));
+  const sum = (orders: UnifiedOrder[]) => active(orders).reduce((s, o) => s + o.orderItems.reduce((is, i) => is + i.orderPrice, 0), 0);
+
+  const currActive = active(curr);
+  const coupangActive = currActive.filter((o) => o.platform === 'coupang');
+  const naverActive = currActive.filter((o) => o.platform === 'naver');
+
+  return {
+    totalRevenue: sum(curr),
+    totalOrders: currActive.length,
+    cancelCount: curr.filter((o) => CANCELLED.has(o.status)).length,
+    coupangRevenue: coupangActive.reduce((s, o) => s + o.orderItems.reduce((is, i) => is + i.orderPrice, 0), 0),
+    naverRevenue: naverActive.reduce((s, o) => s + o.orderItems.reduce((is, i) => is + i.orderPrice, 0), 0),
+    coupangOrders: coupangActive.length,
+    naverOrders: naverActive.length,
+    prevTotalRevenue: sum(prev),
+    prevTotalOrders: active(prev).length,
+  };
+}
+
+function changePct(curr: number, prev: number): number | null {
+  if (prev === 0) return null;
+  return Math.round(((curr - prev) / prev) * 1000) / 10;
+}
+
+function fmtRevenue(n: number): string {
+  if (n >= 10_000_000) return `${(n / 10_000_000).toFixed(1)}천만`;
+  if (n >= 10_000) return `${(n / 10_000).toFixed(0)}만`;
+  return n.toLocaleString();
 }
 
 export default function CostManagementTab() {
@@ -39,45 +169,14 @@ export default function CostManagementTab() {
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [summary, setSummary] = useState({ total_purchase_amount: 0, total_sales_amount: 0, total_realized_profit: 0 });
+  const [apiRevenue, setApiRevenue] = useState<ApiRevenue | null>(null);
+  const [apiLoading, setApiLoading] = useState(false);
+  const [apiWarnings, setApiWarnings] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const today = new Date();
-      const fmtDate = (d: Date) => d.toISOString().slice(0, 10);
-
-      function getDateRange(p: Preset): { from: string; to: string } | null {
-        if (p === 'all') return null;
-        if (p === 'custom') {
-          if (customFrom && customTo) return { from: customFrom, to: customTo };
-          return null;
-        }
-        if (p === 'this_month') {
-          return {
-            from: fmtDate(new Date(today.getFullYear(), today.getMonth(), 1)),
-            to: fmtDate(new Date(today.getFullYear(), today.getMonth() + 1, 0)),
-          };
-        }
-        if (p === 'last_month') {
-          return {
-            from: fmtDate(new Date(today.getFullYear(), today.getMonth() - 1, 1)),
-            to: fmtDate(new Date(today.getFullYear(), today.getMonth(), 0)),
-          };
-        }
-        if (p === '3months') {
-          return {
-            from: fmtDate(new Date(today.getFullYear(), today.getMonth() - 2, 1)),
-            to: fmtDate(today),
-          };
-        }
-        // 6months
-        return {
-          from: fmtDate(new Date(today.getFullYear(), today.getMonth() - 5, 1)),
-          to: fmtDate(today),
-        };
-      }
-
-      const range = getDateRange(preset);
+      const range = getDateRange(preset, customFrom, customTo);
       const qs = range ? `?from=${range.from}&to=${range.to}` : '';
       const res = await fetch(`/api/cost-management/products${qs}`);
       const json = await res.json();
@@ -90,7 +189,41 @@ export default function CostManagementTab() {
     }
   }, [preset, customFrom, customTo]);
 
-  useEffect(() => { load(); }, [load]);
+  const fetchApiRevenue = useCallback(async () => {
+    const range = getDateRange(preset, customFrom, customTo);
+    if (!range) {
+      setApiRevenue(null);
+      return;
+    }
+    setApiLoading(true);
+    setApiWarnings([]);
+    try {
+      const { from, to } = range;
+      const fromDate = new Date(from);
+      const toDate = new Date(to);
+      const daysDiff = Math.round((toDate.getTime() - fromDate.getTime()) / 86_400_000);
+      const prevTo = new Date(fromDate.getTime() - 86_400_000);
+      const prevFrom = new Date(prevTo.getTime() - daysDiff * 86_400_000);
+
+      const [currResult, prevResult] = await Promise.all([
+        fetchOrdersForPeriod(from, to),
+        fetchOrdersForPeriod(toDateStr(prevFrom), toDateStr(prevTo)),
+      ]);
+
+      const warnings: string[] = [];
+      if (currResult.coupangError) warnings.push(`쿠팡: ${currResult.coupangError}`);
+      if (currResult.naverError) warnings.push(`네이버: ${currResult.naverError}`);
+      setApiWarnings(warnings);
+      setApiRevenue(computeApiRevenue(currResult.orders, prevResult.orders));
+    } catch {
+      setApiWarnings(['API 매출 조회 중 오류가 발생했습니다.']);
+      setApiRevenue(null);
+    } finally {
+      setApiLoading(false);
+    }
+  }, [preset, customFrom, customTo]);
+
+  useEffect(() => { load(); fetchApiRevenue(); }, [load, fetchApiRevenue]);
 
   async function deleteProduct(id: string, name: string) {
     if (!confirm(`"${name}" 상품을 삭제할까요?\n입고 내역도 모두 함께 삭제됩니다.`)) return;
@@ -139,6 +272,88 @@ export default function CostManagementTab() {
               style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #d4d4d8', fontSize: '12px', color: '#18181b' }} />
           </div>
         )}
+      </div>
+
+      {/* 섹션 A — 실제 매출 (API 기반) */}
+      {preset === 'all' ? (
+        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '10px', padding: '12px 16px', marginBottom: '12px', fontSize: '12px', color: '#92400e' }}>
+          전체 기간 선택 시 API 매출 조회는 생략됩니다. 특정 기간을 선택해주세요.
+        </div>
+      ) : apiLoading ? (
+        <div style={{ textAlign: 'center', padding: '24px', color: '#71717a', fontSize: '12px', marginBottom: '12px' }}>
+          실제 매출 데이터를 불러오는 중...
+        </div>
+      ) : (
+        <>
+          {apiWarnings.length > 0 && (
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '10px', padding: '10px 14px', marginBottom: '10px', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+              <AlertCircle size={14} color="#d97706" style={{ flexShrink: 0, marginTop: '1px' }} />
+              <div>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: '#92400e' }}>일부 채널 조회 실패</span>
+                {apiWarnings.map((w, i) => (
+                  <p key={i} style={{ fontSize: '11px', color: '#92400e', margin: '2px 0 0' }}>{w}</p>
+                ))}
+              </div>
+            </div>
+          )}
+          {apiRevenue && (
+            <>
+              <div style={{ fontSize: '11px', fontWeight: 600, color: '#71717a', marginBottom: '6px' }}>
+                실제 매출 <span style={{ fontWeight: 400 }}>(쿠팡 + 네이버 API · 취소/반품 제외)</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '10px' }}>
+                <div style={{ background: '#fff', borderRadius: '10px', padding: '14px', border: '1px solid #e5e5e5' }}>
+                  <div style={{ fontSize: '11px', color: '#71717a', marginBottom: '4px' }}>실제 총 매출</div>
+                  <div style={{ fontSize: '18px', fontWeight: 700, color: '#18181b' }}>{fmtRevenue(apiRevenue.totalRevenue)}원</div>
+                  {(() => {
+                    const pct = changePct(apiRevenue.totalRevenue, apiRevenue.prevTotalRevenue);
+                    return pct !== null ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '3px', marginTop: '4px' }}>
+                        {pct >= 0 ? <TrendingUp size={11} color="#16a34a" /> : <TrendingDown size={11} color="#dc2626" />}
+                        <span style={{ fontSize: '11px', fontWeight: 600, color: pct >= 0 ? '#16a34a' : '#dc2626' }}>{pct >= 0 ? '+' : ''}{pct}%</span>
+                        <span style={{ fontSize: '11px', color: '#a1a1aa' }}>전기 대비</span>
+                      </div>
+                    ) : <div style={{ fontSize: '11px', color: '#a1a1aa', marginTop: '4px' }}>비교 데이터 없음</div>;
+                  })()}
+                </div>
+                <div style={{ background: '#fff', borderRadius: '10px', padding: '14px', border: '1px solid #e5e5e5' }}>
+                  <div style={{ fontSize: '11px', color: '#71717a', marginBottom: '4px' }}>주문 건수</div>
+                  <div style={{ fontSize: '18px', fontWeight: 700, color: '#18181b' }}>{apiRevenue.totalOrders}건</div>
+                  {(() => {
+                    const pct = changePct(apiRevenue.totalOrders, apiRevenue.prevTotalOrders);
+                    return pct !== null ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '3px', marginTop: '4px' }}>
+                        {pct >= 0 ? <TrendingUp size={11} color="#16a34a" /> : <TrendingDown size={11} color="#dc2626" />}
+                        <span style={{ fontSize: '11px', fontWeight: 600, color: pct >= 0 ? '#16a34a' : '#dc2626' }}>{pct >= 0 ? '+' : ''}{pct}%</span>
+                        <span style={{ fontSize: '11px', color: '#a1a1aa' }}>전기 대비</span>
+                      </div>
+                    ) : <div style={{ fontSize: '11px', color: '#a1a1aa', marginTop: '4px' }}>비교 데이터 없음</div>;
+                  })()}
+                </div>
+                <div style={{ background: '#fff', borderRadius: '10px', padding: '14px', border: '1px solid #e5e5e5' }}>
+                  <div style={{ fontSize: '11px', color: '#71717a', marginBottom: '4px' }}>쿠팡</div>
+                  <div style={{ fontSize: '18px', fontWeight: 700, color: '#be0014' }}>{fmtRevenue(apiRevenue.coupangRevenue)}원</div>
+                  <div style={{ fontSize: '11px', color: '#a1a1aa', marginTop: '4px' }}>{apiRevenue.coupangOrders}건</div>
+                </div>
+                <div style={{ background: '#fff', borderRadius: '10px', padding: '14px', border: '1px solid #e5e5e5' }}>
+                  <div style={{ fontSize: '11px', color: '#71717a', marginBottom: '4px' }}>네이버</div>
+                  <div style={{ fontSize: '18px', fontWeight: 700, color: '#03c75a' }}>{fmtRevenue(apiRevenue.naverRevenue)}원</div>
+                  <div style={{ fontSize: '11px', color: '#a1a1aa', marginTop: '4px' }}>{apiRevenue.naverOrders}건</div>
+                </div>
+              </div>
+              {apiRevenue.cancelCount > 0 && (
+                <div style={{ fontSize: '11px', color: '#ef4444', marginBottom: '10px' }}>
+                  취소/반품 {apiRevenue.cancelCount}건 제외됨
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+
+      <div style={{ height: '1px', background: '#e5e5e5', margin: '4px 0 14px' }} />
+      <div style={{ fontSize: '11px', fontWeight: 600, color: '#71717a', marginBottom: '8px' }}>
+        원가·수익 <span style={{ fontWeight: 400 }}>(수동 입력 기반)</span>
       </div>
 
       {/* 요약 카드 — 기간 집계 */}
