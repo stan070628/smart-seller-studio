@@ -32,6 +32,10 @@ export interface ProductMetrics {
   total_quantity: number;
   /** 총 매입 금액 = Σ(단가 × 수량) */
   total_purchase_amount: number;
+  /** 기간 총 매출 = Σ(selling_price × qty) */
+  total_revenue: number;
+  /** 기간 총 순이익 = total_revenue - 총매입비 - 총배송비 - 총수수료 */
+  total_net_profit_amount: number;
 }
 
 /**
@@ -71,6 +75,8 @@ export function calculateProductMetrics(
       margin_rate: 0,
       total_quantity: 0,
       total_purchase_amount: 0,
+      total_revenue: 0,
+      total_net_profit_amount: 0,
     };
   }
 
@@ -90,6 +96,14 @@ export function calculateProductMetrics(
 
   const total_quantity = entries.reduce((s, e) => s + e.quantity, 0);
   const total_purchase_amount = entries.reduce((s, e) => s + e.unit_cost * e.quantity, 0);
+  const total_revenue = entries.reduce((s, e) => s + e.selling_price * e.quantity, 0);
+  const total_shipping_amount = entries.reduce((s, e) => s + e.unit_shipping_fee * e.quantity, 0);
+  const total_fee_amount = entries.reduce(
+    (s, e) => s + Math.round(e.selling_price * platformFeeRate) * e.quantity,
+    0,
+  );
+  const total_net_profit_amount =
+    total_revenue - total_purchase_amount - total_shipping_amount - total_fee_amount;
 
   return {
     weighted_avg_cost,
@@ -100,6 +114,8 @@ export function calculateProductMetrics(
     margin_rate,
     total_quantity,
     total_purchase_amount,
+    total_revenue,
+    total_net_profit_amount,
   };
 }
 

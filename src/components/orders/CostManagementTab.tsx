@@ -21,7 +21,11 @@ interface ProductRow {
   margin_rate: number;
   total_quantity: number;
   total_purchase_amount: number;
+  total_revenue: number;
+  total_net_profit_amount: number;
 }
+
+type Preset = 'this_month' | 'last_month' | '3months' | '6months' | 'all' | 'custom';
 
 function fmt(n: number): string {
   return n.toLocaleString('ko-KR');
@@ -34,17 +38,60 @@ export default function CostManagementTab() {
   const [drawerProductId, setDrawerProductId] = useState<string | null>(null);
   const [showShippingModal, setShowShippingModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [preset, setPreset] = useState<Preset>('this_month');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const [summary, setSummary] = useState({ total_purchase_amount: 0, total_revenue: 0, total_net_profit_amount: 0 });
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/cost-management/products');
+      const today = new Date();
+      const fmtDate = (d: Date) => d.toISOString().slice(0, 10);
+
+      function getDateRange(p: Preset): { from: string; to: string } | null {
+        if (p === 'all') return null;
+        if (p === 'custom') {
+          if (customFrom && customTo) return { from: customFrom, to: customTo };
+          return null;
+        }
+        if (p === 'this_month') {
+          return {
+            from: fmtDate(new Date(today.getFullYear(), today.getMonth(), 1)),
+            to: fmtDate(new Date(today.getFullYear(), today.getMonth() + 1, 0)),
+          };
+        }
+        if (p === 'last_month') {
+          return {
+            from: fmtDate(new Date(today.getFullYear(), today.getMonth() - 1, 1)),
+            to: fmtDate(new Date(today.getFullYear(), today.getMonth(), 0)),
+          };
+        }
+        if (p === '3months') {
+          return {
+            from: fmtDate(new Date(today.getFullYear(), today.getMonth() - 2, 1)),
+            to: fmtDate(today),
+          };
+        }
+        // 6months
+        return {
+          from: fmtDate(new Date(today.getFullYear(), today.getMonth() - 5, 1)),
+          to: fmtDate(today),
+        };
+      }
+
+      const range = getDateRange(preset);
+      const qs = range ? `?from=${range.from}&to=${range.to}` : '';
+      const res = await fetch(`/api/cost-management/products${qs}`);
       const json = await res.json();
-      if (json.success) setProducts(json.data);
+      if (json.success) {
+        setProducts(json.data);
+        setSummary(json.summary ?? { total_purchase_amount: 0, total_revenue: 0, total_net_profit_amount: 0 });
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [preset, customFrom, customTo]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -52,27 +99,60 @@ export default function CostManagementTab() {
     p.product_name.toLowerCase().includes(search.toLowerCase()),
   );
 
-  const totalPurchase = products.reduce((s, p) => s + p.total_purchase_amount, 0);
-  const avgMargin =
-    products.length > 0
-      ? products.reduce((s, p) => s + p.margin_rate, 0) / products.length
-      : 0;
-  const riskCount = products.filter((p) => p.entry_count > 0 && p.margin_rate < 5).length;
-
   return (
     <div>
-      {/* 요약 카드 */}
+      {/* 기간 필터 */}
+      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '12px' }}>
+        <span style={{ fontSize: '12px', color: '#52525b', fontWeight: 600, marginRight: '4px' }}>기간</span>
+        {([
+          { id: 'this_month', label: '이번 달' },
+          { id: 'last_month', label: '지난 달' },
+          { id: '3months', label: '최근 3개월' },
+          { id: '6months', label: '최근 6개월' },
+          { id: 'all', label: '전체' },
+          { id: 'custom', label: '직접 입력' },
+        ] as { id: Preset; label: string }[]).map((p) => (
+          <button
+            key={p.id}
+            onClick={() => setPreset(p.id)}
+            style={{
+              padding: '5px 12px', borderRadius: '20px', border: `1px solid ${preset === p.id ? '#be0014' : '#e5e5e5'}`,
+              background: preset === p.id ? '#be0014' : '#fff',
+              color: preset === p.id ? '#fff' : '#52525b',
+              fontSize: '12px', fontWeight: preset === p.id ? 600 : 400, cursor: 'pointer',
+            }}
+          >
+            {p.label}
+          </button>
+        ))}
+        {preset === 'custom' && (
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginLeft: '4px' }}>
+            <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)}
+              style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #d4d4d8', fontSize: '12px', color: '#18181b' }} />
+            <span style={{ color: '#71717a', fontSize: '12px' }}>~</span>
+            <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)}
+              style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #d4d4d8', fontSize: '12px', color: '#18181b' }} />
+          </div>
+        )}
+      </div>
+
+      {/* 요약 카드 — 기간 집계 */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '16px' }}>
         {[
-          { label: '관리 상품 수', value: `${products.length}개`, color: '#18181b' },
-          { label: '총 매입 금액', value: `${fmt(totalPurchase)}원`, color: '#18181b' },
-          { label: '평균 마진율', value: `${avgMargin.toFixed(1)}%`, color: avgMargin >= 10 ? '#16a34a' : avgMargin >= 0 ? '#ca8a04' : '#ef4444' },
-          { label: '마진 위험 상품', value: `${riskCount}개`, color: riskCount > 0 ? '#ef4444' : '#16a34a', sub: '마진율 5% 미만' },
+          { label: '관리 상품 수', value: `${products.length}개`, color: '#18181b', sub: undefined },
+          { label: '기간 총 매입비', value: `${fmt(summary.total_purchase_amount)}원`, color: '#ef4444', sub: '입고 단가 × 수량 합계' },
+          { label: '기간 추정 매출', value: `${fmt(summary.total_revenue)}원`, color: '#2563eb', sub: '판매가 × 수량 합계' },
+          {
+            label: '기간 순이익',
+            value: `${fmt(summary.total_net_profit_amount)}원`,
+            color: summary.total_net_profit_amount >= 0 ? '#16a34a' : '#ef4444',
+            sub: `마진율 ${summary.total_revenue > 0 ? ((summary.total_net_profit_amount / summary.total_revenue) * 100).toFixed(1) : '0.0'}%`,
+          },
         ].map((c) => (
           <div key={c.label} style={{ background: '#fff', borderRadius: '10px', padding: '14px', border: '1px solid #e5e5e5' }}>
             <div style={{ fontSize: '11px', color: '#71717a', marginBottom: '4px' }}>{c.label}</div>
-            <div style={{ fontSize: '20px', fontWeight: 700, color: c.color }}>{c.value}</div>
-            {'sub' in c && c.sub && <div style={{ fontSize: '10px', color: '#71717a' }}>{c.sub}</div>}
+            <div style={{ fontSize: '18px', fontWeight: 700, color: c.color }}>{c.value}</div>
+            {c.sub && <div style={{ fontSize: '10px', color: '#71717a', marginTop: '2px' }}>{c.sub}</div>}
           </div>
         ))}
       </div>

@@ -8,12 +8,17 @@ import type { CostEntryRow } from '@/lib/cost-management/calculations';
 // GET /api/cost-management/products
 // 현재 유저의 상품 목록과 각 상품의 수익성 지표를 반환한다.
 // ─────────────────────────────────────────
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
+
+    // from/to 쿼리 파라미터 파싱 (YYYY-MM-DD)
+    const { searchParams } = new URL(request.url);
+    const from = searchParams.get('from');
+    const to = searchParams.get('to');
 
     const pool = getSourcingPool();
 
@@ -26,13 +31,18 @@ export async function GET() {
       [user.userId],
     );
 
-    // 해당 유저의 전체 원가 입력 항목 조회
-    const { rows: entries } = await pool.query(
-      `SELECT id, product_cost_id, received_at, quantity, unit_cost, unit_shipping_fee, selling_price, shipping_group_id
-       FROM cost_entries
-       WHERE user_id = $1`,
-      [user.userId],
-    );
+    // 날짜 범위가 주어진 경우 BETWEEN 조건 추가, 없으면 전체 조회
+    const entryQuery =
+      from && to
+        ? `SELECT id, product_cost_id, received_at, quantity, unit_cost, unit_shipping_fee, selling_price, shipping_group_id
+           FROM cost_entries
+           WHERE user_id = $1 AND received_at BETWEEN $2 AND $3`
+        : `SELECT id, product_cost_id, received_at, quantity, unit_cost, unit_shipping_fee, selling_price, shipping_group_id
+           FROM cost_entries
+           WHERE user_id = $1`;
+    const entryParams = from && to ? [user.userId, from, to] : [user.userId];
+
+    const { rows: entries } = await pool.query(entryQuery, entryParams);
 
     // product_cost_id 기준으로 항목을 분류하고 숫자 컬럼을 Number()로 변환
     // (pg 드라이버는 NUMERIC/DECIMAL 컬럼을 문자열로 반환)
@@ -68,7 +78,14 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json({ success: true, data });
+    // 전체 상품 집계 요약
+    const summary = {
+      total_purchase_amount: data.reduce((s, p) => s + p.total_purchase_amount, 0),
+      total_revenue: data.reduce((s, p) => s + p.total_revenue, 0),
+      total_net_profit_amount: data.reduce((s, p) => s + p.total_net_profit_amount, 0),
+    };
+
+    return NextResponse.json({ success: true, data, summary });
   } catch (err) {
     const msg = err instanceof Error ? err.message : '서버 오류';
     return NextResponse.json({ success: false, error: msg }, { status: 500 });
