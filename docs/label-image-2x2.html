@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>제품 이미지 라벨 — 2×2</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    @page {
+      size: A4 portrait;
+      margin: 10mm;
+    }
+
+    body {
+      font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif;
+      background: #e0e0e0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .page {
+      width: 190mm;
+      height: 277mm;
+      background: white;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 4mm;
+      padding: 2mm;
+    }
+
+    .label {
+      border: 1.5px solid #333;
+      border-radius: 2mm;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 3mm;
+      overflow: hidden;
+      background: white;
+      position: relative;
+    }
+
+    .image-area {
+      width: 100%;
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #fafafa;
+      border: 1.5px dashed #bbb;
+      border-radius: 1mm;
+      position: relative;
+    }
+
+    .image-area img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    .image-placeholder {
+      text-align: center;
+      color: #aaa;
+      font-size: 10px;
+      padding: 8px;
+    }
+
+    .image-placeholder .icon {
+      font-size: 36px;
+      display: block;
+      margin-bottom: 6px;
+      opacity: 0.4;
+    }
+
+    .label-footer {
+      width: 100%;
+      padding-top: 2mm;
+      text-align: center;
+      font-size: 8px;
+      color: #555;
+      border-top: 0.5px solid #eee;
+      margin-top: 2mm;
+    }
+
+    /* 인쇄 시 배경색 포함 */
+    @media print {
+      body {
+        background: white;
+        padding: 0;
+        margin: 0;
+      }
+      .page {
+        width: 190mm;
+        height: 277mm;
+        page-break-after: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <!-- 라벨 1 -->
+    <div class="label">
+      <div class="image-area">
+        <!--
+          이미지 경로를 수정하세요.
+          예: <img src="product.jpg" alt="제품명">
+        -->
+        <div class="image-placeholder">
+          <span class="icon">🖼️</span>
+          제품 이미지를<br>여기에 삽입
+        </div>
+      </div>
+      <div class="label-footer">제품명 / 바코드</div>
+    </div>
+
+    <!-- 라벨 2 -->
+    <div class="label">
+      <div class="image-area">
+        <div class="image-placeholder">
+          <span class="icon">🖼️</span>
+          제품 이미지를<br>여기에 삽입
+        </div>
+      </div>
+      <div class="label-footer">제품명 / 바코드</div>
+    </div>
+
+    <!-- 라벨 3 -->
+    <div class="label">
+      <div class="image-area">
+        <div class="image-placeholder">
+          <span class="icon">🖼️</span>
+          제품 이미지를<br>여기에 삽입
+        </div>
+      </div>
+      <div class="label-footer">제품명 / 바코드</div>
+    </div>
+
+    <!-- 라벨 4 -->
+    <div class="label">
+      <div class="image-area">
+        <div class="image-placeholder">
+          <span class="icon">🖼️</span>
+          제품 이미지를<br>여기에 삽입
+        </div>
+      </div>
+      <div class="label-footer">제품명 / 바코드</div>
+    </div>
+
+  </div>
+</body>
+</html>
