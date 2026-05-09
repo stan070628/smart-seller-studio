@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import NutritionLabel2x3Preview from './NutritionLabel2x3Preview';
 import type { NutritionRow } from './nutrition-types';
+import LabelSaveLoad from './LabelSaveLoad';
 import { generatePdf, printLabel } from '@/lib/label/label-pdf';
 
 const C = { border: '#e5e7eb', bg: '#f9fafb' };
@@ -117,6 +118,46 @@ export default function NutritionLabel2x3Editor() {
           borderRight: `1px solid ${C.border}`,
           padding: 16, overflowY: 'auto',
         }}>
+
+          {/* 저장 / 불러오기 */}
+          <div style={SECTION}>
+            <div style={SECTION_TITLE}>저장 / 불러오기</div>
+            <LabelSaveLoad
+              labelType="nutrition2x3"
+              currentData={{
+                productName, itemInfo, foodType, importer, manufacturer,
+                contentAmount, expiryDate, originCountry, storageMethod, ingredients,
+                unitCount, unitWeight, unitUnit,
+                servingSize, calories, rows,
+              }}
+              onLoad={(data) => {
+                const d = data as {
+                  productName?: string; itemInfo?: string; foodType?: string;
+                  importer?: string; manufacturer?: string; contentAmount?: string;
+                  expiryDate?: string; originCountry?: string; storageMethod?: string;
+                  ingredients?: string; unitCount?: string; unitWeight?: string;
+                  unitUnit?: string; servingSize?: string; calories?: string;
+                  rows?: NutritionRow[];
+                };
+                if (d.productName !== undefined) setProductName(d.productName);
+                if (d.itemInfo !== undefined) setItemInfo(d.itemInfo);
+                if (d.foodType !== undefined) setFoodType(d.foodType);
+                if (d.importer !== undefined) setImporter(d.importer);
+                if (d.manufacturer !== undefined) setManufacturer(d.manufacturer);
+                if (d.contentAmount !== undefined) setContentAmount(d.contentAmount);
+                if (d.expiryDate !== undefined) setExpiryDate(d.expiryDate);
+                if (d.originCountry !== undefined) setOriginCountry(d.originCountry);
+                if (d.storageMethod !== undefined) setStorageMethod(d.storageMethod);
+                if (d.ingredients !== undefined) setIngredients(d.ingredients);
+                if (d.unitCount !== undefined) setUnitCount(d.unitCount);
+                if (d.unitWeight !== undefined) setUnitWeight(d.unitWeight);
+                if (d.unitUnit !== undefined) setUnitUnit(d.unitUnit);
+                if (d.servingSize !== undefined) setServingSize(d.servingSize);
+                if (d.calories !== undefined) setCalories(d.calories);
+                if (d.rows) setRows(d.rows);
+              }}
+            />
+          </div>
 
           {/* 한글 표시 사항 */}
           <div style={SECTION}>
