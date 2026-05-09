@@ -1,17 +1,12 @@
 import { NextResponse } from 'next/server';
 import { getSourcingPool } from '@/lib/sourcing/db';
-import { getSupabaseServerClient } from '@/lib/supabase/server';
+import { getCoupangClient } from '@/lib/listing/coupang-client';
 import { getCurrentUser } from '@/lib/auth';
 
-// ─────────────────────────────────────────
+const ALL_STATUSES = ['APPROVED', 'UNDER_REVIEW', 'SUSPENSION', 'REJECTED'];
+
 // GET /api/cost-management/coupang-products
-// 쿠팡 등록 상품 중 product_costs에 아직 연동되지 않은 목록을 반환한다.
-// 상품 추가 모달의 자동완성 소스로 사용된다.
-//
-// coupang_registered_products 는 Supabase,
-// product_costs 는 Render PostgreSQL 에 있으므로
-// 두 DB를 별도로 조회한 뒤 애플리케이션 레벨에서 필터링한다.
-// ─────────────────────────────────────────
+// 쿠팡 윙 등록 상품 중 product_costs에 아직 연동되지 않은 목록 반환
 export async function GET() {
   try {
     const user = await getCurrentUser();
@@ -19,43 +14,47 @@ export async function GET() {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    // 1) Render PostgreSQL 에서 이미 원가관리에 등록된 seller_product_id 목록 조회
-    // product_costs 테이블이 아직 없을 경우(마이그레이션 미적용) graceful fallback
-    const pool = getSourcingPool();
+    // 1) 이미 원가관리에 등록된 seller_product_id 목록 조회 (마이그레이션 미적용 시 fallback)
     let registeredIds = new Set<number>();
     try {
-      const { rows: registeredRows } = await pool.query(
-        `SELECT seller_product_id
-         FROM product_costs
-         WHERE user_id = $1
-           AND seller_product_id IS NOT NULL`,
+      const pool = getSourcingPool();
+      const { rows } = await pool.query(
+        `SELECT seller_product_id FROM product_costs
+         WHERE user_id = $1 AND seller_product_id IS NOT NULL`,
         [user.userId],
       );
-      registeredIds = new Set<number>(
-        registeredRows.map((r) => Number(r.seller_product_id)),
-      );
+      registeredIds = new Set<number>(rows.map((r) => Number(r.seller_product_id)));
     } catch {
-      // 테이블 미생성 등 DB 오류 시 필터 없이 전체 목록 반환
+      // product_costs 테이블 미생성 시 필터 없이 전체 반환
     }
 
-    // 2) Supabase 에서 쿠팡 등록 상품 조회
-    const supabase = getSupabaseServerClient();
-    const { data, error } = await supabase
-      .from('coupang_registered_products')
-      .select('seller_product_id, seller_product_name')
-      .eq('user_id', user.userId)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false })
-      .limit(100);
-
-    if (error) {
-      throw error;
-    }
-
-    // 3) 이미 원가관리에 등록된 상품을 애플리케이션 레벨에서 제외
-    const filtered = (data ?? []).filter(
-      (row) => !registeredIds.has(Number(row.seller_product_id)),
+    // 2) 쿠팡 윙 API에서 전체 상태 상품 목록 조회 (병렬)
+    const client = getCoupangClient();
+    const results = await Promise.allSettled(
+      ALL_STATUSES.map((status) => client.getSellerProducts(status, 100, '')),
     );
+
+    const allProducts = results.flatMap((r) =>
+      r.status === 'fulfilled' ? r.value.items : [],
+    );
+
+    // sellerProductId 중복 제거
+    const seen = new Set<number>();
+    const unique = allProducts.filter((p) => {
+      if (seen.has(p.sellerProductId)) return false;
+      seen.add(p.sellerProductId);
+      return true;
+    });
+
+    // 3) 이미 원가관리에 등록된 상품 제외
+    const filtered = unique
+      .filter((p) => !registeredIds.has(p.sellerProductId))
+      .map((p) => ({
+        seller_product_id: p.sellerProductId,
+        seller_product_name: p.sellerProductName,
+        status_name: p.statusName,
+      }))
+      .sort((a, b) => a.seller_product_name.localeCompare(b.seller_product_name, 'ko'));
 
     return NextResponse.json({ success: true, data: filtered });
   } catch (err) {

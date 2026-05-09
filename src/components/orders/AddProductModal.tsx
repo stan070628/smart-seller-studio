@@ -119,14 +119,14 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
 
           <div style={{ marginTop: '16px' }}>
             <div style={{ fontSize: '11px', fontWeight: 600, color: '#555', marginBottom: '6px' }}>플랫폼 수수료율 (%)</div>
-            <input type="number" value={feeRate} onChange={(e) => setFeeRate(e.target.value)} step="0.1" min="0" max="50" style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #e5e5e5', fontSize: '12px', boxSizing: 'border-box' }} />
-            <div style={{ fontSize: '10px', color: '#999', marginTop: '4px' }}>로켓그로스 기본 10.8% — 필요 시 수정하세요</div>
+            <input type="number" value={feeRate} onChange={(e) => setFeeRate(e.target.value)} step="0.1" min="0" max="50" style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #e5e5e5', fontSize: '12px', boxSizing: 'border-box', color: '#18181b' }} />
+            <div style={{ fontSize: '10px', color: '#71717a', marginTop: '4px' }}>로켓그로스 기본 10.8% — 필요 시 수정하세요</div>
           </div>
 
           <button
             onClick={add}
             disabled={saving || !canSave}
-            style={{ width: '100%', marginTop: '20px', padding: '10px', borderRadius: '8px', border: 'none', background: canSave ? '#be0014' : '#e5e5e5', color: canSave ? '#fff' : '#999', fontSize: '13px', fontWeight: 600, cursor: canSave ? 'pointer' : 'not-allowed' }}
+            style={{ width: '100%', marginTop: '20px', padding: '10px', borderRadius: '8px', border: 'none', background: canSave ? '#be0014' : '#d4d4d4', color: canSave ? '#fff' : '#525252', fontSize: '13px', fontWeight: 600, cursor: canSave ? 'pointer' : 'not-allowed' }}
           >
             {saving ? '추가 중...' : '상품 추가'}
           </button>
