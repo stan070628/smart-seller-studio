@@ -32,6 +32,10 @@ const BTN_PRIMARY: React.CSSProperties = {
   fontSize: 12, fontWeight: 600, cursor: 'pointer', color: '#fff',
 };
 
+const HINT: React.CSSProperties = {
+  fontSize: 10, color: '#555', marginTop: 3,
+};
+
 const DEFAULT_ROWS: NutritionRow[] = [
   { id: '1', name: '나트륨',     amount: '840', unit: 'mg', percent: '42',  isSubItem: false, isHighlight: true  },
   { id: '2', name: '탄수화물',   amount: '45',  unit: 'g',  percent: '14',  isSubItem: false, isHighlight: false },
@@ -42,6 +46,8 @@ const DEFAULT_ROWS: NutritionRow[] = [
   { id: '7', name: '콜레스테롤', amount: '0',   unit: 'mg', percent: '0',   isSubItem: false, isHighlight: false },
   { id: '8', name: '단백질',     amount: '6',   unit: 'g',  percent: '11',  isSubItem: false, isHighlight: true  },
 ];
+
+const DEFAULT_FOOTER = '%영양성분 기준치는 2,000kcal 기준이므로 개인의 필요 열량에 따라 다를 수 있습니다.';
 
 let nextId = 100;
 
@@ -57,6 +63,7 @@ export default function NutritionLabel2x3Editor() {
   const [expiryDate, setExpiryDate] = useState('');
   const [storageMethod, setStorageMethod] = useState('');
   const [ingredients, setIngredients] = useState('');
+  const [highlights, setHighlights] = useState('');
   const [returnAddress, setReturnAddress] = useState('');
   const [caution, setCaution] = useState('');
 
@@ -69,6 +76,7 @@ export default function NutritionLabel2x3Editor() {
   const [servingSize, setServingSize] = useState('');
   const [calories, setCalories] = useState('');
   const [rows, setRows] = useState<NutritionRow[]>(DEFAULT_ROWS);
+  const [footerText, setFooterText] = useState('');
 
   const previewRef = useRef<HTMLDivElement>(null);
 
@@ -128,19 +136,20 @@ export default function NutritionLabel2x3Editor() {
               labelType="nutrition2x3"
               currentData={{
                 productName, itemInfo, foodType, importer, manufacturer,
-                originCountry, contentAmount, expiryDate, storageMethod, ingredients,
-                returnAddress, caution,
+                originCountry, contentAmount, expiryDate, storageMethod,
+                ingredients, highlights, returnAddress, caution,
                 unitCount, unitWeight, unitUnit,
-                servingSize, calories, rows,
+                servingSize, calories, rows, footerText,
               }}
               onLoad={(data) => {
                 const d = data as {
                   productName?: string; itemInfo?: string; foodType?: string;
                   importer?: string; manufacturer?: string; originCountry?: string;
                   contentAmount?: string; expiryDate?: string; storageMethod?: string;
-                  ingredients?: string; returnAddress?: string; caution?: string;
+                  ingredients?: string; highlights?: string; returnAddress?: string; caution?: string;
                   unitCount?: string; unitWeight?: string; unitUnit?: string;
                   servingSize?: string; calories?: string; rows?: NutritionRow[];
+                  footerText?: string;
                 };
                 if (d.productName !== undefined) setProductName(d.productName);
                 if (d.itemInfo !== undefined) setItemInfo(d.itemInfo);
@@ -152,6 +161,7 @@ export default function NutritionLabel2x3Editor() {
                 if (d.expiryDate !== undefined) setExpiryDate(d.expiryDate);
                 if (d.storageMethod !== undefined) setStorageMethod(d.storageMethod);
                 if (d.ingredients !== undefined) setIngredients(d.ingredients);
+                if (d.highlights !== undefined) setHighlights(d.highlights);
                 if (d.returnAddress !== undefined) setReturnAddress(d.returnAddress);
                 if (d.caution !== undefined) setCaution(d.caution);
                 if (d.unitCount !== undefined) setUnitCount(d.unitCount);
@@ -160,6 +170,7 @@ export default function NutritionLabel2x3Editor() {
                 if (d.servingSize !== undefined) setServingSize(d.servingSize);
                 if (d.calories !== undefined) setCalories(d.calories);
                 if (d.rows) setRows(d.rows);
+                if (d.footerText !== undefined) setFooterText(d.footerText);
               }}
             />
           </div>
@@ -230,14 +241,14 @@ export default function NutritionLabel2x3Editor() {
                     <option value="팩">팩</option>
                     <option value="캔">캔</option>
                   </select>
-                  <span style={{ fontSize: 11, color: '#6b7280' }}>× 1개당</span>
+                  <span style={{ fontSize: 11, color: '#555' }}>× 1개당</span>
                   <input
                     style={{ ...INPUT_STYLE, width: 56, fontSize: 11 }}
                     placeholder="중량(g)"
                     value={unitWeight}
                     onChange={(e) => setUnitWeight(e.target.value)}
                   />
-                  <span style={{ fontSize: 11, color: '#6b7280' }}>g</span>
+                  <span style={{ fontSize: 11, color: '#555' }}>g</span>
                   <button
                     onClick={applySubdivision}
                     style={{
@@ -275,18 +286,33 @@ export default function NutritionLabel2x3Editor() {
                 value={ingredients}
                 onChange={(e) => setIngredients(e.target.value)}
               />
+
+              {/* 알레르기 강조 키워드 */}
+              <div>
+                <input
+                  style={{ ...INPUT_STYLE, width: '100%' }}
+                  placeholder="강조 표시 키워드 (쉼표로 구분, 예: 우유, 밀, 대두)"
+                  value={highlights}
+                  onChange={(e) => setHighlights(e.target.value)}
+                />
+                <div style={HINT}>원재료명에서 일치하는 단어를 노란색으로 강조 표시합니다.</div>
+              </div>
+
               <input
                 style={{ ...INPUT_STYLE, width: '100%' }}
                 placeholder="반품 및 교환 장소 (예: 구매처)"
                 value={returnAddress}
                 onChange={(e) => setReturnAddress(e.target.value)}
               />
-              <textarea
-                style={{ ...TEXTAREA_STYLE, width: '100%', minHeight: 40 }}
-                placeholder="기타 주의사항 (예: 개봉 후 빨리 드세요)"
-                value={caution}
-                onChange={(e) => setCaution(e.target.value)}
-              />
+              <div>
+                <textarea
+                  style={{ ...TEXTAREA_STYLE, width: '100%', minHeight: 40 }}
+                  placeholder="기타 주의사항 (예: 개봉 후 빨리 드세요)"
+                  value={caution}
+                  onChange={(e) => setCaution(e.target.value)}
+                />
+                <div style={HINT}>Enter로 줄바꿈 — 라벨에 그대로 반영됩니다.</div>
+              </div>
             </div>
           </div>
 
@@ -308,7 +334,7 @@ export default function NutritionLabel2x3Editor() {
               />
             </div>
 
-            {/* 영양소 목록 헤더 */}
+            {/* 영양소 목록 */}
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
               <span style={{ ...SECTION_TITLE, marginBottom: 0, fontSize: 11, flex: 1 }}>영양소 목록</span>
               <button
@@ -327,7 +353,7 @@ export default function NutritionLabel2x3Editor() {
               display: 'grid',
               gridTemplateColumns: '80px 50px 36px 40px 28px 28px 24px',
               gap: 3, marginBottom: 4,
-              fontSize: 10, color: '#9ca3af', fontWeight: 600,
+              fontSize: 10, color: '#555', fontWeight: 600,
             }}>
               <span>영양소명</span>
               <span>함량</span>
@@ -405,6 +431,20 @@ export default function NutritionLabel2x3Editor() {
                 </div>
               ))}
             </div>
+
+            {/* 하단 안내 문구 */}
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: '#374151', marginBottom: 4 }}>
+                하단 안내 문구
+              </div>
+              <textarea
+                style={{ ...TEXTAREA_STYLE, width: '100%', minHeight: 44 }}
+                placeholder={DEFAULT_FOOTER}
+                value={footerText}
+                onChange={(e) => setFooterText(e.target.value)}
+              />
+              <div style={HINT}>비워두면 기본 문구가 사용됩니다.</div>
+            </div>
           </div>
         </div>
 
@@ -414,7 +454,7 @@ export default function NutritionLabel2x3Editor() {
             padding: '10px 16px', borderBottom: `1px solid ${C.border}`,
             background: '#fff', display: 'flex', alignItems: 'center', gap: 8,
           }}>
-            <span style={{ flex: 1, fontSize: 12, color: '#6b7280' }}>
+            <span style={{ flex: 1, fontSize: 12, color: '#555' }}>
               미리보기 — A4 · 2×3 (한글표시사항 + 영양정보 라벨)
             </span>
             <button style={{ ...BTN_PRIMARY, background: '#6366f1' }} onClick={handlePdf}>PDF 저장</button>
@@ -442,6 +482,8 @@ export default function NutritionLabel2x3Editor() {
               servingSize={servingSize}
               calories={calories}
               rows={rows}
+              highlights={highlights}
+              footerText={footerText}
             />
           </div>
         </div>
