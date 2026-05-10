@@ -28,7 +28,6 @@ const PROCESS_IMAGE_RATE_LIMIT = { windowMs: 60_000, maxRequests: 30 };
 
 const RequestSchema = z.object({
   imageBase64: z.string().min(1),
-  mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
   processingMode: z.enum(['original', 'bg_removed', 'bg_composed']),
   palette: z
     .enum(['warm_cream', 'cool_white', 'deep_dark', 'nature_green', 'tech_navy'])
@@ -167,6 +166,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (authResult instanceof Response) {
     return authResult as unknown as NextResponse;
   }
+  const userId = authResult.userId;
 
   // Rate Limit 검사
   const ip =
@@ -212,7 +212,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const { imageBase64, mimeType, processingMode, palette, storagePath } = parseResult.data;
+  const { imageBase64, processingMode, palette, storagePath } = parseResult.data;
 
   // data URL prefix 제거 (클라이언트에서 그대로 전달한 경우 대비)
   const cleanBase64 = imageBase64.includes(',')
@@ -280,7 +280,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // Supabase Storage 저장
   try {
     const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.webp`;
-    const fullPath = `${storagePath}/${fileName}`;
+    const fullPath = `${storagePath}/${userId}/${fileName}`;
 
     const arrayBuffer = outputBuffer.buffer.slice(
       outputBuffer.byteOffset,
