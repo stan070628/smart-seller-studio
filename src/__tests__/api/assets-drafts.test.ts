@@ -137,3 +137,80 @@ describe('POST /api/listing/assets/drafts', () => {
     expect(res.status).toBe(500);
   });
 });
+
+// ─────────────────────────────────────────────────────────────
+// DELETE /api/listing/assets/drafts/[id] 테스트
+// ─────────────────────────────────────────────────────────────
+
+// DELETE 체인: from → delete → eq → eq
+function buildDeleteMock(result: { error: null | { message: string } }) {
+  return {
+    from: vi.fn().mockReturnValue({
+      delete: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          eq: vi.fn().mockResolvedValue(result),
+        }),
+      }),
+    }),
+  };
+}
+
+const { DELETE } = await import('@/app/api/listing/assets/drafts/[id]/route');
+
+function makeDeleteReq(id: string): NextRequest {
+  return new NextRequest(`http://localhost/api/listing/assets/drafts/${id}`, { method: 'DELETE' });
+}
+function makeDeleteCtx(id: string) {
+  return { params: Promise.resolve({ id }) };
+}
+
+describe('DELETE /api/listing/assets/drafts/[id]', () => {
+  it('인증 없으면 401을 반환한다', async () => {
+    mockAuth.mockResolvedValue(
+      new Response(JSON.stringify({ error: '인증 필요' }), { status: 401 }),
+    );
+    const res = await DELETE(makeDeleteReq('uuid-1'), makeDeleteCtx('uuid-1'));
+    expect(res.status).toBe(401);
+  });
+
+  it('존재하지 않는 id면 404를 반환한다', async () => {
+    mockGetSupabase.mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              single: vi.fn().mockResolvedValue({ data: null, error: { message: 'not found' } }),
+            }),
+          }),
+        }),
+      }),
+    });
+    const res = await DELETE(makeDeleteReq('no-such-id'), makeDeleteCtx('no-such-id'));
+    expect(res.status).toBe(404);
+  });
+
+  it('정상 삭제 시 200을 반환한다', async () => {
+    // 소유권 확인용 SELECT mock
+    const ownerMock = {
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              single: vi.fn().mockResolvedValue({ data: { id: 'uuid-1' }, error: null }),
+            }),
+          }),
+        }),
+      }),
+    };
+    const deleteMock = buildDeleteMock({ error: null });
+
+    mockGetSupabase
+      .mockReturnValueOnce(ownerMock)
+      .mockReturnValueOnce(deleteMock);
+
+    const res = await DELETE(makeDeleteReq('uuid-1'), makeDeleteCtx('uuid-1'));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.success).toBe(true);
+  });
+});
