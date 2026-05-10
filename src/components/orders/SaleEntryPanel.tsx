@@ -214,7 +214,7 @@ export default function SaleEntryPanel({ productId, sellerProductId, onChanged }
                 // 일반 표시 행
                 <tr key={s.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
                   <td style={{ padding: '6px 8px', color: '#27272a' }}>{s.sold_at.slice(0, 10)}</td>
-                  <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600 }}>{fmt(s.quantity)}개</td>
+                  <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, color: '#18181b' }}>{fmt(s.quantity)}개</td>
                   <td style={{ padding: '6px 8px', textAlign: 'right', color: '#2563eb' }}>{fmt(s.selling_price)}</td>
                   <td style={{ padding: '6px 8px', textAlign: 'right' }}>
                     {s.channel === 'coupang'
