@@ -37,6 +37,25 @@ function sanitizeUrl(url: string): string {
   return '';
 }
 
+function editableText(path: string, value: string): string {
+  return `<span data-edit-path="${escapeHtml(path)}">${escapeHtml(value)}</span>`;
+}
+
+const SECTION_LABELS: Record<DetailSection['type'], string> = {
+  hero: '히어로',
+  selling_points: '셀링 포인트',
+  features: '특징',
+  stats: '통계',
+  spec_table: '사양 테이블',
+  usage_steps: '사용법',
+  warning: '주의사항',
+  cta: '구매 유도',
+};
+
+function sectionAttrs(section: DetailSection): string {
+  return `data-section-id="${escapeHtml(section.id)}" data-section-type="${escapeHtml(section.type)}" data-section-label="${escapeHtml(SECTION_LABELS[section.type])}"`;
+}
+
 // ─────────────────────────────────────────
 // 첨부 이미지 렌더러
 // ─────────────────────────────────────────
@@ -58,10 +77,10 @@ function renderAttachedImage(section: DetailSection): string {
 function renderHero(content: HeroContent, section: DetailSection, colors: PaletteColors): string {
   const imageHtml = renderAttachedImage(section);
 
-  return `<div data-section-id="${escapeHtml(section.id)}" style="background-color:${colors.bg};color:${colors.text};padding:60px 40px;text-align:center;width:100%;box-sizing:border-box;">
+  return `<div ${sectionAttrs(section)} style="background-color:${colors.bg};color:${colors.text};padding:60px 40px;text-align:center;width:100%;box-sizing:border-box;">
   ${imageHtml}
-  <h2 style="font-size:32px;font-weight:700;color:${colors.text};margin:0 0 16px 0;line-height:1.3;">${escapeHtml(content.headline)}</h2>
-  <p style="font-size:18px;color:${colors.textSub};margin:0;line-height:1.6;">${escapeHtml(content.subheadline)}</p>
+  <h2 style="font-size:32px;font-weight:700;color:${colors.text};margin:0 0 16px 0;line-height:1.3;">${editableText('content.headline', content.headline)}</h2>
+  <p style="font-size:18px;color:${colors.textSub};margin:0;line-height:1.6;">${editableText('content.subheadline', content.subheadline)}</p>
 </div>`;
 }
 
@@ -71,15 +90,15 @@ function renderSellingPoints(content: SellingPointsContent, section: DetailSecti
 
   const pointsHtml = content.points
     .map(
-      (point) => `<div style="flex:1;min-width:calc(50% - 12px);background-color:${colors.cardBg};border:1px solid ${colors.border};border-radius:8px;padding:24px;box-sizing:border-box;">
-      <div style="font-size:28px;margin-bottom:12px;line-height:1;">${escapeHtml(point.icon)}</div>
-      <div style="font-size:16px;font-weight:700;color:${colors.text};margin-bottom:8px;">${escapeHtml(point.title)}</div>
-      <div style="font-size:14px;color:${colors.textSub};line-height:1.6;">${escapeHtml(point.description)}</div>
+      (point, index) => `<div style="flex:1;min-width:calc(50% - 12px);background-color:${colors.cardBg};border:1px solid ${colors.border};border-radius:8px;padding:24px;box-sizing:border-box;">
+      <div style="font-size:28px;margin-bottom:12px;line-height:1;">${editableText(`content.points.${index}.icon`, point.icon)}</div>
+      <div style="font-size:16px;font-weight:700;color:${colors.text};margin-bottom:8px;">${editableText(`content.points.${index}.title`, point.title)}</div>
+      <div style="font-size:14px;color:${colors.textSub};line-height:1.6;">${editableText(`content.points.${index}.description`, point.description)}</div>
     </div>`
     )
     .join('\n');
 
-  return `<div data-section-id="${escapeHtml(section.id)}" style="background-color:${colors.bg};padding:60px 40px;box-sizing:border-box;">
+  return `<div ${sectionAttrs(section)} style="background-color:${colors.bg};padding:60px 40px;box-sizing:border-box;">
   ${imageHtml}
   <div style="display:flex;flex-wrap:wrap;gap:24px;">
     ${pointsHtml}
@@ -94,13 +113,13 @@ function renderFeatures(content: FeaturesContent, section: DetailSection, colors
   const itemsHtml = content.items
     .map(
       (item, index) => `<div style="padding:24px 0;border-bottom:${index < content.items.length - 1 ? `1px solid ${colors.border}` : 'none'};">
-      <div style="font-size:18px;font-weight:700;color:${colors.text};margin-bottom:8px;">${escapeHtml(item.title)}</div>
-      <div style="font-size:15px;color:${colors.textSub};line-height:1.7;">${escapeHtml(item.description)}</div>
+      <div style="font-size:18px;font-weight:700;color:${colors.text};margin-bottom:8px;">${editableText(`content.items.${index}.title`, item.title)}</div>
+      <div style="font-size:15px;color:${colors.textSub};line-height:1.7;">${editableText(`content.items.${index}.description`, item.description)}</div>
     </div>`
     )
     .join('\n');
 
-  return `<div data-section-id="${escapeHtml(section.id)}" style="background-color:${colors.bgAlt};padding:60px 40px;box-sizing:border-box;">
+  return `<div ${sectionAttrs(section)} style="background-color:${colors.bgAlt};padding:60px 40px;box-sizing:border-box;">
   ${imageHtml}
   ${itemsHtml}
 </div>`;
@@ -112,14 +131,14 @@ function renderStats(content: StatsContent, section: DetailSection, colors: Pale
 
   const statsHtml = content.stats
     .map(
-      (stat) => `<div style="text-align:center;flex:1;min-width:120px;padding:16px;">
-      <div style="font-size:48px;font-weight:700;color:${colors.accent};line-height:1.1;margin-bottom:8px;">${escapeHtml(stat.value)}</div>
-      <div style="font-size:16px;color:${colors.textSub};">${escapeHtml(stat.label)}</div>
+      (stat, index) => `<div style="text-align:center;flex:1;min-width:120px;padding:16px;">
+      <div style="font-size:48px;font-weight:700;color:${colors.accent};line-height:1.1;margin-bottom:8px;">${editableText(`content.stats.${index}.value`, stat.value)}</div>
+      <div style="font-size:16px;color:${colors.textSub};">${editableText(`content.stats.${index}.label`, stat.label)}</div>
     </div>`
     )
     .join('\n');
 
-  return `<div data-section-id="${escapeHtml(section.id)}" style="background-color:${colors.bg};padding:60px 40px;box-sizing:border-box;">
+  return `<div ${sectionAttrs(section)} style="background-color:${colors.bg};padding:60px 40px;box-sizing:border-box;">
   ${imageHtml}
   <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:0;">
     ${statsHtml}
@@ -133,14 +152,14 @@ function renderSpecTable(content: SpecTableContent, section: DetailSection, colo
 
   const rowsHtml = content.specs
     .map(
-      (spec) => `<tr>
-      <td style="padding:12px 16px;background-color:${colors.bgAlt};color:${colors.text};font-weight:600;font-size:14px;border:1px solid ${colors.border};width:35%;vertical-align:top;">${escapeHtml(spec.label)}</td>
-      <td style="padding:12px 16px;background-color:${colors.cardBg};color:${colors.textSub};font-size:14px;border:1px solid ${colors.border};vertical-align:top;">${escapeHtml(spec.value)}</td>
+      (spec, index) => `<tr>
+      <td style="padding:12px 16px;background-color:${colors.bgAlt};color:${colors.text};font-weight:600;font-size:14px;border:1px solid ${colors.border};width:35%;vertical-align:top;word-break:break-word;">${editableText(`content.specs.${index}.label`, spec.label)}</td>
+      <td style="padding:12px 16px;background-color:${colors.cardBg};color:${colors.textSub};font-size:14px;border:1px solid ${colors.border};vertical-align:top;word-break:break-word;">${editableText(`content.specs.${index}.value`, spec.value)}</td>
     </tr>`
     )
     .join('\n');
 
-  return `<div data-section-id="${escapeHtml(section.id)}" style="background-color:${colors.bg};padding:60px 40px;box-sizing:border-box;">
+  return `<div ${sectionAttrs(section)} style="background-color:${colors.bg};padding:60px 40px;box-sizing:border-box;">
   ${imageHtml}
   <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
     ${rowsHtml}
@@ -156,12 +175,12 @@ function renderUsageSteps(content: UsageStepsContent, section: DetailSection, co
     .map(
       (step, index) => `<div style="display:flex;align-items:flex-start;gap:16px;margin-bottom:24px;">
       <div style="flex-shrink:0;width:36px;height:36px;border-radius:50%;background-color:${colors.accent};color:${colors.accentTextColor};display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;line-height:36px;text-align:center;min-width:36px;">${index + 1}</div>
-      <div style="font-size:16px;color:${colors.text};line-height:1.7;padding-top:6px;">${escapeHtml(step)}</div>
+      <div style="font-size:16px;color:${colors.text};line-height:1.7;padding-top:6px;">${editableText(`content.steps.${index}`, step)}</div>
     </div>`
     )
     .join('\n');
 
-  return `<div data-section-id="${escapeHtml(section.id)}" style="background-color:${colors.bgAlt};padding:60px 40px;box-sizing:border-box;">
+  return `<div ${sectionAttrs(section)} style="background-color:${colors.bgAlt};padding:60px 40px;box-sizing:border-box;">
   ${imageHtml}
   ${stepsHtml}
 </div>`;
@@ -172,11 +191,11 @@ function renderUsageSteps(content: UsageStepsContent, section: DetailSection, co
 function renderWarning(content: WarningContent, section: DetailSection): string {
   const itemsHtml = content.warnings
     .map(
-      (warning) => `<div style="margin-bottom:12px;font-size:15px;color:#6B4F00;line-height:1.6;">⚠️ ${escapeHtml(warning)}</div>`
+      (warning, index) => `<div style="margin-bottom:12px;font-size:15px;color:#6B4F00;line-height:1.6;">⚠️ ${editableText(`content.warnings.${index}`, warning)}</div>`
     )
     .join('\n');
 
-  return `<div data-section-id="${escapeHtml(section.id)}" style="background-color:#FFF3CD;border-left:4px solid #FFC107;padding:32px 40px;box-sizing:border-box;">
+  return `<div ${sectionAttrs(section)} style="background-color:#FFF3CD;border-left:4px solid #FFC107;padding:32px 40px;box-sizing:border-box;">
   ${itemsHtml}
 </div>`;
 }
@@ -185,9 +204,9 @@ function renderWarning(content: WarningContent, section: DetailSection): string 
 function renderCta(content: CtaContent, section: DetailSection, colors: PaletteColors): string {
   const imageHtml = renderAttachedImage(section);
 
-  return `<div data-section-id="${escapeHtml(section.id)}" style="background-color:${colors.accent};padding:60px 40px;text-align:center;box-sizing:border-box;">
+  return `<div ${sectionAttrs(section)} style="background-color:${colors.accent};padding:60px 40px;text-align:center;box-sizing:border-box;">
   ${imageHtml}
-  <p style="font-size:36px;font-weight:700;color:${colors.accentTextColor};margin:0;line-height:1.4;">${escapeHtml(content.text)}</p>
+  <p style="font-size:36px;font-weight:700;color:${colors.accentTextColor};margin:0;line-height:1.4;">${editableText('content.text', content.text)}</p>
 </div>`;
 }
 

@@ -275,6 +275,9 @@ export function buildDetailPageUserPrompt(
     productSpecs.forEach(({ label, value }) => {
       lines.push(`${label}: ${value}`);
     });
+    lines.push('- 판매 단위/소분 단위가 있으면 headline, specs, warnings에서 총중량만 단독 강조하지 말고 판매 단위를 우선 표기하세요.');
+    lines.push('- 예: "44개입 (총 4.1kg) / 개당 93.2g"처럼 소분 수량, 총량, 개당 중량을 함께 보여주세요.');
+    lines.push('- 원재료·함량·내용량 항목도 전체 중량보다 실제 판매되는 소분 포장 단위를 먼저 노출하세요.');
     lines.push('↑ 위 스펙에 명시되지 않은 속성(핏, 두께감, 질감 등)은 절대 기재하지 마세요.');
   }
 

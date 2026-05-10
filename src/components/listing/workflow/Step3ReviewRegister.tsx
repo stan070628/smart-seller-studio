@@ -5,7 +5,7 @@
  * Step 3 — 좌측: AI 생성 + 미리보기 + AI 수정 / 우측: 등록 폼 (AI 자동완성)
  */
 
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Copy, CheckCheck, Download, AlertCircle, Plus, Loader2,
   RefreshCw, AlertTriangle, Sparkles, BookmarkCheck,
@@ -15,12 +15,118 @@ import { C } from '@/lib/design-tokens';
 import CoupangAutoRegisterPanel from '@/components/listing/workflow/CoupangAutoRegisterPanel';
 import NaverAutoRegisterPanel from '@/components/listing/workflow/NaverAutoRegisterPanel';
 import DetailPageEditor from '@/components/listing/detail-editor/DetailPageEditor';
-import type { DetailSection } from '@/types/detail-page';
+import { renderAllSections } from '@/lib/detail-page/section-renderer';
+import { appendPrivacyFooter } from '@/lib/detail-page-privacy';
+import type { DetailPageTheme, DetailSection } from '@/types/detail-page';
 
 const AI_STEPS = [
   { label: '이미지 분석', activeOn: 'analyzing' as const },
   { label: 'HTML 생성', activeOn: 'generating' as const },
 ];
+
+const PREVIEW_GUIDE_CSS = `
+  [data-section-id] {
+    position: relative;
+    outline: 1px dashed transparent;
+    outline-offset: -2px;
+    transition: outline-color 120ms ease, background-color 120ms ease;
+  }
+  [data-section-id]:hover {
+    outline-color: #7c3aed;
+    background-image: linear-gradient(rgba(124, 58, 237, 0.035), rgba(124, 58, 237, 0.035));
+  }
+  [data-section-id]:hover::before {
+    content: attr(data-section-label);
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 20;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: #5b21b6;
+    color: #fff;
+    font: 700 12px/1.2 system-ui, -apple-system, sans-serif;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+    pointer-events: none;
+  }
+  [data-edit-path] {
+    border-radius: 4px;
+    cursor: text;
+    min-height: 1em;
+  }
+  [data-edit-path]:hover {
+    box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.24);
+  }
+  [data-edit-path][contenteditable="true"]:focus {
+    outline: 2px solid #7c3aed;
+    outline-offset: 2px;
+    background: rgba(255,255,255,0.72);
+  }
+`;
+
+function renderSectionsHtml(sections: DetailSection[], theme: DetailPageTheme) {
+  const renderedSections = renderAllSections(sections, theme);
+  const snippet = `<div style="max-width:780px;margin:0 auto;font-family:sans-serif;">\n${renderedSections}\n</div>`;
+  return { snippet, html: appendPrivacyFooter(snippet) };
+}
+
+function updatePathValue(target: unknown, parts: string[], value: string): unknown {
+  if (parts.length === 0) return value;
+  const [head, ...rest] = parts;
+  if (Array.isArray(target)) {
+    const index = Number(head);
+    const next = [...target];
+    next[index] = updatePathValue(next[index], rest, value);
+    return next;
+  }
+  if (target && typeof target === 'object') {
+    return {
+      ...(target as Record<string, unknown>),
+      [head]: updatePathValue((target as Record<string, unknown>)[head], rest, value),
+    };
+  }
+  return target;
+}
+
+function updateSectionText(section: DetailSection, path: string, value: string): DetailSection {
+  return updatePathValue(section, path.split('.'), value) as DetailSection;
+}
+
+function buildEditablePreviewDocument(html: string) {
+  const script = `
+    (() => {
+      const post = (type, el) => {
+        const section = el.closest('[data-section-id]');
+        if (!section) return;
+        window.parent.postMessage({
+          source: 'detail-preview-inline-editor',
+          type,
+          sectionId: section.getAttribute('data-section-id'),
+          path: el.getAttribute('data-edit-path'),
+          value: el.textContent || ''
+        }, '*');
+      };
+      document.querySelectorAll('[data-edit-path]').forEach((el) => {
+        el.setAttribute('contenteditable', 'true');
+        el.setAttribute('spellcheck', 'false');
+        el.addEventListener('input', () => post('input', el));
+        el.addEventListener('blur', () => post('commit', el));
+      });
+    })();
+  `;
+
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>${PREVIEW_GUIDE_CSS}</style>
+</head>
+<body style="margin:0;background:#fff;">
+${html}
+<script>${script}</script>
+</body>
+</html>`;
+}
 
 export default function Step3ReviewRegister() {
   const {
@@ -61,6 +167,11 @@ export default function Step3ReviewRegister() {
   // 렌더링 갱신 상태
   const [isRendering, setIsRendering] = useState(false);
   const [renderError, setRenderError] = useState<string | null>(null);
+  const sectionsRef = useRef(detailPageSections);
+
+  useEffect(() => {
+    sectionsRef.current = detailPageSections;
+  }, [detailPageSections]);
 
   // 레거시 모드: 섹션 데이터 없이 HTML만 있는 경우 iframe 표시
   const isLegacyMode = detailPageSections.length === 0 && !!detailPageFullHtml;
@@ -79,6 +190,70 @@ export default function Step3ReviewRegister() {
 
   const isGenerating =
     detailPageStatus === 'analyzing' || detailPageStatus === 'generating';
+
+  const applyRenderedSections = useCallback(
+    (sections: DetailSection[], theme = detailPageTheme) => {
+      const rendered = renderSectionsHtml(sections, theme);
+      updateSharedDraft({
+        detailPageFullHtml: rendered.html,
+        detailPageSnippet: rendered.snippet,
+        description: rendered.snippet,
+      });
+    },
+    [detailPageTheme, updateSharedDraft],
+  );
+
+  const handleSectionsChange = useCallback(
+    (sections: DetailSection[]) => {
+      sectionsRef.current = sections;
+      setDetailPageSections(sections);
+      applyRenderedSections(sections);
+    },
+    [applyRenderedSections, setDetailPageSections],
+  );
+
+  const handleThemeChange = useCallback(
+    (theme: DetailPageTheme) => {
+      setDetailPageTheme(theme);
+      applyRenderedSections(sectionsRef.current, theme);
+    },
+    [applyRenderedSections, setDetailPageTheme],
+  );
+
+  const editablePreviewHtml = useMemo(
+    () => (detailPageFullHtml ? buildEditablePreviewDocument(detailPageFullHtml) : ''),
+    [detailPageFullHtml],
+  );
+
+  const handleInlinePreviewEdit = useCallback(
+    (sectionId: string, path: string, value: string, commit: boolean) => {
+      const next = sectionsRef.current.map((section) =>
+        section.id === sectionId ? updateSectionText(section, path, value) : section,
+      );
+      sectionsRef.current = next;
+      setDetailPageSections(next);
+      if (commit) applyRenderedSections(next);
+    },
+    [applyRenderedSections, setDetailPageSections],
+  );
+
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as {
+        source?: string;
+        type?: string;
+        sectionId?: string;
+        path?: string;
+        value?: string;
+      };
+      if (data?.source !== 'detail-preview-inline-editor') return;
+      if (!data.sectionId || !data.path || typeof data.value !== 'string') return;
+      handleInlinePreviewEdit(data.sectionId, data.path, data.value, data.type === 'commit');
+    };
+
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [handleInlinePreviewEdit]);
 
   const getStepState = (index: number): 'done' | 'active' | 'idle' | 'error' => {
     if (detailPageStatus === 'error') return index === 0 ? 'error' : 'idle';
@@ -148,17 +323,7 @@ export default function Step3ReviewRegister() {
     setIsRendering(true);
     setRenderError(null);
     try {
-      const res = await fetch('/api/detail-page/render', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sections: detailPageSections, theme: detailPageTheme }),
-      });
-      const json = await res.json();
-      if (res.ok) {
-        updateSharedDraft({ detailPageFullHtml: json.html, detailPageSnippet: json.snippet });
-      } else {
-        setRenderError(json.error ?? '미리보기 갱신에 실패했습니다.');
-      }
+      applyRenderedSections(detailPageSections);
     } catch {
       setRenderError('미리보기 갱신 중 오류가 발생했습니다.');
     } finally {
@@ -418,12 +583,8 @@ export default function Step3ReviewRegister() {
               sections={detailPageSections}
               theme={detailPageTheme}
               isGenerating={isRendering}
-              onSectionsChange={(sections) => {
-                setDetailPageSections(sections);
-              }}
-              onThemeChange={(theme) => {
-                setDetailPageTheme(theme);
-              }}
+              onSectionsChange={handleSectionsChange}
+              onThemeChange={handleThemeChange}
               onSectionAiEdit={handleSectionAiEdit}
               onRegenerateAll={generateDetailPageFromPicked}
               generatedHtml={detailPageFullHtml ?? undefined}
@@ -569,7 +730,7 @@ export default function Step3ReviewRegister() {
               {/* iframe 미리보기 */}
               {detailPageFullHtml ? (
                 <iframe
-                  srcDoc={detailPageFullHtml}
+                  srcDoc={editablePreviewHtml}
                   title="상세페이지 미리보기"
                   style={{
                     width: '100%',

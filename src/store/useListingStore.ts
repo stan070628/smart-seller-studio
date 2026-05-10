@@ -8,6 +8,7 @@ import { devtools } from 'zustand/middleware';
 import type { PlatformId, ProductListing } from '@/types/listing';
 import type { ProductOptions } from '@/types/product-option';
 import { parseSpecText } from '@/lib/utils/parseSpecText';
+import { normalizeSalesUnitSpecs } from '@/lib/listing/sales-unit';
 import type { DetailSection, DetailPageTheme } from '@/types/detail-page';
 import { DEFAULT_THEME } from '@/lib/detail-page/palette-config';
 import { contentToSections } from '@/lib/detail-page/section-parser';
@@ -1055,7 +1056,7 @@ export const useListingStore = create<ListingStore>()(
           if (imageUrls.length > 0) requestBody.imageUrls = imageUrls;
           if (fallbackImages.length > 0) requestBody.images = fallbackImages;
           const parsedSpecsA = parseSpecText(currentDraft.productSpecText);
-          if (parsedSpecsA) requestBody.productSpecs = parsedSpecsA;
+          if (parsedSpecsA) requestBody.productSpecs = normalizeSalesUnitSpecs(parsedSpecsA);
 
           const res = await fetch('/api/ai/generate-detail-html', {
             method: 'POST',
@@ -1168,7 +1169,7 @@ export const useListingStore = create<ListingStore>()(
           if (externalUrls.length > 0) requestBody.imageUrls = externalUrls;
           if (base64Images.length > 0) requestBody.images = base64Images;
           const parsedSpecsB = parseSpecText(get().sharedDraft.productSpecText);
-          if (parsedSpecsB) requestBody.productSpecs = parsedSpecsB;
+          if (parsedSpecsB) requestBody.productSpecs = normalizeSalesUnitSpecs(parsedSpecsB);
 
           // generating 상태
           set(
