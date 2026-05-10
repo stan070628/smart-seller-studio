@@ -28,6 +28,8 @@ interface SectionCardProps {
   onImagesChange: (id: string, images: AttachedImage[]) => void;
   /** 현재 테마 팔레트 (배경 합성 모드에 사용) */
   palette: PaletteName;
+  /** 섹션 이미지 AI 편집 콜백 */
+  onSectionImageAiEdit?: (sectionId: string, imageUrl: string, imageIndex: number) => void;
 }
 
 // 섹션 타입별 한국어 레이블
@@ -81,6 +83,7 @@ export default function SectionCard({
   onClick,
   onImagesChange,
   palette,
+  onSectionImageAiEdit,
 }: SectionCardProps) {
   // AI 지시어 패널 표시 여부
   const [showPanel, setShowPanel] = useState(false);
@@ -267,6 +270,11 @@ export default function SectionCard({
           images={section.attachedImages}
           palette={palette}
           onChange={(imgs) => onImagesChange(section.id, imgs)}
+          onAiEdit={
+            onSectionImageAiEdit
+              ? (url, idx) => onSectionImageAiEdit(section.id, url, idx)
+              : undefined
+          }
         />
       </div>
     </div>
