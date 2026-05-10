@@ -26,14 +26,19 @@ const PROCESS_IMAGE_RATE_LIMIT = { windowMs: 60_000, maxRequests: 30 };
 // 요청 검증 스키마 (Zod)
 // ─────────────────────────────────────────
 
-const RequestSchema = z.object({
-  imageBase64: z.string().min(1),
-  processingMode: z.enum(['original', 'bg_removed', 'bg_composed']),
-  palette: z
-    .enum(['warm_cream', 'cool_white', 'deep_dark', 'nature_green', 'tech_navy'])
-    .optional(),
-  // storagePath는 클라이언트에서 받지 않는다. 경로 트래버설 취약점 방지.
-});
+const RequestSchema = z
+  .object({
+    imageBase64: z.string().optional(),
+    imageUrl: z.string().url().optional(),
+    processingMode: z.enum(['original', 'bg_removed', 'bg_composed']),
+    palette: z
+      .enum(['warm_cream', 'cool_white', 'deep_dark', 'nature_green', 'tech_navy'])
+      .optional(),
+    // storagePath는 클라이언트에서 받지 않는다. 경로 트래버설 취약점 방지.
+  })
+  .refine((d) => d.imageBase64 || d.imageUrl, {
+    message: 'imageBase64 또는 imageUrl 중 하나가 필요합니다.',
+  });
 
 type ValidatedRequest = z.infer<typeof RequestSchema>;
 
@@ -215,12 +220,33 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const { imageBase64, processingMode, palette } = parseResult.data;
+  const { imageBase64, imageUrl, processingMode, palette } = parseResult.data;
 
-  // data URL prefix 제거 (클라이언트에서 그대로 전달한 경우 대비)
-  const cleanBase64 = imageBase64.includes(',')
-    ? imageBase64.split(',')[1]
-    : imageBase64;
+  // imageUrl이 주어진 경우 서버에서 fetch → base64 변환
+  let cleanBase64: string;
+  if (imageUrl) {
+    let fetchedBuffer: Buffer;
+    try {
+      const fetchRes = await fetch(imageUrl, { signal: AbortSignal.timeout(15_000) });
+      if (!fetchRes.ok) {
+        return NextResponse.json(
+          { error: `이미지 URL fetch 실패 (${fetchRes.status})` },
+          { status: 400 },
+        );
+      }
+      fetchedBuffer = Buffer.from(await fetchRes.arrayBuffer());
+    } catch (err) {
+      return NextResponse.json(
+        { error: err instanceof Error ? `이미지 URL 요청 오류: ${err.message}` : '이미지 URL 요청 오류' },
+        { status: 400 },
+      );
+    }
+    cleanBase64 = fetchedBuffer.toString('base64');
+  } else {
+    // data URL prefix 제거 (클라이언트에서 그대로 전달한 경우 대비)
+    const raw = imageBase64!;
+    cleanBase64 = raw.includes(',') ? raw.split(',')[1] : raw;
+  }
 
   // 파일 크기 검증 (base64 디코딩 후 기준 10MB)
   const estimatedBytes = Math.ceil((cleanBase64.length * 3) / 4);

@@ -194,6 +194,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
       const mapped = d.notices.map((n) => {
         if (!n.detailName) return null;
         const cat = findCat(n.categoryName);
+        // cats가 있는데 매칭 실패 → 유효하지 않은 카테고리명이므로 제외
+        if (!cat && cats.length > 0) return null;
         const correctedCategoryName = cat?.noticeCategoryName ?? n.categoryName;
         const details = (cat?.noticeCategoryDetailNames ?? [])
           .map((det) => det.noticeCategoryDetailName ?? '')
@@ -209,10 +211,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
         };
       });
 
-      // null 제거 + 중복 detailName 제거 (같은 키가 2개 이상이면 400 오류)
+      // null 제거 + 빈 content 제거 + 중복 detailName 제거 (같은 키가 2개 이상이면 400 오류)
       const seenNoticeKeys = new Set<string>();
       return mapped.filter((n): n is { noticeCategoryName: string; noticeCategoryDetailName: string; content: string } => {
         if (!n || !n.noticeCategoryDetailName) return false;
+        if (!n.content?.trim()) return false;
         if (seenNoticeKeys.has(n.noticeCategoryDetailName)) return false;
         seenNoticeKeys.add(n.noticeCategoryDetailName);
         return true;
