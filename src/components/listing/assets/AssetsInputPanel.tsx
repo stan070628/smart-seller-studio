@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
+import AiEditModal from '@/components/listing/AiEditModal';
 import { useListingStore } from '@/store/useListingStore';
 import { C } from '@/lib/design-tokens';
 import { prepareUpload } from '@/lib/image/prepare-upload';
@@ -23,6 +24,11 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
   } = assetsDraft;
   const thumbInputRef = useRef<HTMLInputElement | null>(null);
   const detailInputRef = useRef<HTMLInputElement | null>(null);
+  const [inputImageEditTarget, setInputImageEditTarget] = useState<{
+    slot: 'thumbnail' | 'detail';
+    index: number;
+    url: string;
+  } | null>(null);
 
   // 생성 가능 조건: URL 모드면 URL이 있거나, 업로드 모드면 두 슬롯 중 하나라도 채워져야 함
   const canGenerate = !isGenerating && (
@@ -83,6 +89,21 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
   const clearSlot = (slot: UploadSlot) => {
     if (slot === 'thumbnail') updateAssetsDraft({ thumbnailFiles: [] });
     else updateAssetsDraft({ detailFiles: [] });
+  };
+
+  const handleInputImageAiEditSaved = (resultUrl: string) => {
+    if (!inputImageEditTarget) return;
+    const { slot, index } = inputImageEditTarget;
+    if (slot === 'thumbnail') {
+      const next = [...thumbnailFiles];
+      next[index] = resultUrl;
+      updateAssetsDraft({ thumbnailFiles: next });
+    } else {
+      const next = [...detailFiles];
+      next[index] = resultUrl;
+      updateAssetsDraft({ detailFiles: next });
+    }
+    setInputImageEditTarget(null);
   };
 
   const renderSlot = (
@@ -208,6 +229,32 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
               >
                 ×
               </button>
+              {!isGenerating && (
+                <button
+                  type="button"
+                  onClick={() => setInputImageEditTarget({ slot, index: i, url: u })}
+                  title="AI로 편집"
+                  aria-label="AI로 편집"
+                  style={{
+                    position: 'absolute',
+                    bottom: 4,
+                    left: 4,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 2,
+                    padding: '2px 6px',
+                    fontSize: 10,
+                    fontWeight: 600,
+                    background: '#7c3aed',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 4,
+                    cursor: 'pointer',
+                  }}
+                >
+                  🪄
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -310,6 +357,15 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
       >
         {isGenerating ? '생성 중...' : '자산 생성'}
       </button>
+      {/* 업로드 이미지 AI 편집 모달 */}
+      {inputImageEditTarget && (
+        <AiEditModal
+          imageUrl={inputImageEditTarget.url}
+          imageFile={null}
+          onClose={() => setInputImageEditTarget(null)}
+          onSave={handleInputImageAiEditSaved}
+        />
+      )}
     </div>
   );
 }
