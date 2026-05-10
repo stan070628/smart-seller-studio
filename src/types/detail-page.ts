@@ -28,35 +28,43 @@ export interface AttachedImage {
 }
 
 export interface HeroContent {
+  type: 'hero';
   headline: string;
   subheadline: string;
 }
 
 export interface SellingPointsContent {
+  type: 'selling_points';
   points: Array<{ icon: string; title: string; description: string }>;
 }
 
 export interface FeaturesContent {
+  type: 'features';
   items: Array<{ title: string; description: string }>;
 }
 
 export interface StatsContent {
+  type: 'stats';
   stats: Array<{ value: string; label: string }>;
 }
 
 export interface SpecTableContent {
+  type: 'spec_table';
   specs: Array<{ label: string; value: string }>;
 }
 
 export interface UsageStepsContent {
+  type: 'usage_steps';
   steps: string[];
 }
 
 export interface WarningContent {
+  type: 'warning';
   warnings: string[];
 }
 
 export interface CtaContent {
+  type: 'cta';
   text: string;
 }
 
@@ -95,26 +103,26 @@ export interface DetailPageData {
 
 // 타입 가드 헬퍼
 export function isHeroContent(c: SectionContent): c is HeroContent {
-  return 'headline' in c;
+  return c.type === 'hero';
 }
 export function isSellingPointsContent(c: SectionContent): c is SellingPointsContent {
-  return 'points' in c;
+  return c.type === 'selling_points';
 }
 export function isFeaturesContent(c: SectionContent): c is FeaturesContent {
-  return 'items' in c;
+  return c.type === 'features';
 }
 export function isStatsContent(c: SectionContent): c is StatsContent {
-  return 'stats' in c;
+  return c.type === 'stats';
 }
 export function isSpecTableContent(c: SectionContent): c is SpecTableContent {
-  return 'specs' in c;
+  return c.type === 'spec_table';
 }
 export function isUsageStepsContent(c: SectionContent): c is UsageStepsContent {
-  return 'steps' in c;
+  return c.type === 'usage_steps';
 }
 export function isWarningContent(c: SectionContent): c is WarningContent {
-  return 'warnings' in c;
+  return c.type === 'warning';
 }
 export function isCtaContent(c: SectionContent): c is CtaContent {
-  return 'text' in c;
+  return c.type === 'cta';
 }
