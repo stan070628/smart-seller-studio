@@ -30,6 +30,12 @@ export default function AssetsResultPanel() {
   // 합치기 모달 타겟 (선택된 썸네일 2장의 URL)
   const [mergeTarget, setMergeTarget] = useState<{ url1: string; url2: string } | null>(null);
 
+  const [sectionImageEditTarget, setSectionImageEditTarget] = useState<{
+    sectionId: string;
+    imageUrl: string;
+    imageIndex: number;
+  } | null>(null);
+
   const toggleSelect = (idx: number) => {
     setSelectedIndices((prev) => {
       if (prev.includes(idx)) return prev.filter((i) => i !== idx);
@@ -53,6 +59,20 @@ export default function AssetsResultPanel() {
     updateAssetsDraft({ generatedThumbnails: [...generatedThumbnails, resultUrl] });
     setMergeTarget(null);
     setSelectedIndices([]);
+  };
+
+  const handleSectionImageAiEditSaved = (resultUrl: string) => {
+    if (!sectionImageEditTarget) return;
+    const { sectionId, imageIndex } = sectionImageEditTarget;
+    const updated = detailPageSections.map((s) => {
+      if (s.id !== sectionId) return s;
+      const newImages = [...s.attachedImages];
+      newImages[imageIndex] = { ...newImages[imageIndex], url: resultUrl };
+      return { ...s, attachedImages: newImages };
+    });
+    updateAssetsDraft({ detailPageSections: updated });
+    refreshRenderedHtml(updated, detailPageTheme);
+    setSectionImageEditTarget(null);
   };
 
   // 결과가 없을 때 안내 문구 표시
@@ -363,6 +383,9 @@ export default function AssetsResultPanel() {
                   URL.revokeObjectURL(url);
                 }}
                 generatedHtml={generatedDetailHtml}
+                onSectionImageAiEdit={(sectionId, imageUrl, imageIndex) =>
+                  setSectionImageEditTarget({ sectionId, imageUrl, imageIndex })
+                }
               />
             </div>
           ) : (
@@ -401,6 +424,16 @@ export default function AssetsResultPanel() {
           imageFile={null}
           onClose={() => setImageEditTarget(null)}
           onSave={handleImageEditSaved}
+        />
+      )}
+
+      {/* 섹션 이미지 AI 편집 모달 */}
+      {sectionImageEditTarget && (
+        <AiEditModal
+          imageUrl={sectionImageEditTarget.imageUrl}
+          imageFile={null}
+          onClose={() => setSectionImageEditTarget(null)}
+          onSave={handleSectionImageAiEditSaved}
         />
       )}
 
