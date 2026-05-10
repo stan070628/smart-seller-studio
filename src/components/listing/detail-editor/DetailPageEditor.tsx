@@ -318,10 +318,10 @@ export default function DetailPageEditor({
         position: 'relative',
       }}
     >
-      {/* ────────────── 왼쪽 패널 (380px 고정) ────────────── */}
+      {/* ────────────── 왼쪽 패널 (300px 고정) ────────────── */}
       <div
         style={{
-          width: 380,
+          width: 300,
           flexShrink: 0,
           display: 'flex',
           flexDirection: 'column',

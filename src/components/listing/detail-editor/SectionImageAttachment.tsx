@@ -27,6 +27,7 @@ interface SectionImageAttachmentProps {
 // ─────────────────────────────────────────
 
 const MAX_IMAGES = 2;
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
 const MODE_LABELS: Record<ImageProcessingMode, string> = {
   bg_composed: '배경 합성',
@@ -110,6 +111,11 @@ export default function SectionImageAttachment({
           throw new Error(`지원하지 않는 이미지 형식입니다: ${file.type}`);
         }
 
+        // 파일 크기 검증 (클라이언트 단 사전 차단)
+        if (file.size > MAX_FILE_SIZE) {
+          throw new Error(`이미지 파일이 너무 큽니다 (최대 5MB 이하 권장). 현재 파일: ${(file.size / 1024 / 1024).toFixed(1)}MB`);
+        }
+
         // base64 변환
         const imageBase64 = await toBase64(file);
 
@@ -125,6 +131,9 @@ export default function SectionImageAttachment({
         });
 
         if (!res.ok) {
+          if (res.status === 413) {
+            throw new Error('이미지 파일이 너무 큽니다 (최대 5MB 이하 권장).');
+          }
           const errJson = await res.json().catch(() => ({ error: '알 수 없는 오류' }));
           throw new Error((errJson as { error?: string }).error ?? `업로드 실패 (${res.status})`);
         }
@@ -169,6 +178,9 @@ export default function SectionImageAttachment({
         body: JSON.stringify({ imageUrl, processingMode, palette }),
       });
       if (!res.ok) {
+        if (res.status === 413) {
+          throw new Error('이미지 파일이 너무 큽니다 (최대 5MB 이하 권장).');
+        }
         const errJson = await res.json().catch(() => ({ error: '알 수 없는 오류' }));
         throw new Error((errJson as { error?: string }).error ?? `처리 실패 (${res.status})`);
       }
@@ -292,6 +304,45 @@ export default function SectionImageAttachment({
               }}
             >
               <X size={11} color="#ffffff" />
+            </button>
+
+            {/* 다운로드 버튼 */}
+            <button
+              type="button"
+              aria-label="이미지 다운로드"
+              onClick={async (e) => {
+                e.stopPropagation();
+                try {
+                  const res = await fetch(img.url);
+                  const blob = await res.blob();
+                  const ext = blob.type === 'image/png' ? 'png' : blob.type === 'image/webp' ? 'webp' : 'jpg';
+                  const objUrl = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = objUrl;
+                  a.download = `section-image-${idx + 1}.${ext}`;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(objUrl);
+                } catch {
+                  window.open(img.url, '_blank', 'noopener,noreferrer');
+                }
+              }}
+              title="다운로드"
+              style={{
+                position: 'absolute',
+                bottom: 2,
+                right: 2,
+                background: 'rgba(0,0,0,0.6)',
+                border: 'none',
+                borderRadius: 4,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                padding: '2px 5px',
+              }}
+            >
+              <span style={{ fontSize: 9, color: '#fff', fontFamily: 'system-ui, sans-serif', fontWeight: 600 }}>↓</span>
             </button>
 
             {/* AI 편집 버튼 */}

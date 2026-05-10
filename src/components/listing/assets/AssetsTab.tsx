@@ -185,7 +185,7 @@ export default function AssetsTab() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: '20px', alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '20px', alignItems: 'start' }}>
         <AssetsInputPanel onGenerate={handleGenerate} />
         <AssetsResultPanel />
       </div>
