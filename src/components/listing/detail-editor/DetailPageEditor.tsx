@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -22,6 +22,105 @@ import { C } from '@/lib/design-tokens';
 import ThemeBar from './ThemeBar';
 import SectionCard from './SectionCard';
 
+// ─── 인라인 편집 헬퍼 ─────────────────────────────────────────────────────────
+
+const PREVIEW_GUIDE_CSS = `
+  [data-section-id] {
+    position: relative;
+    outline: 1px dashed transparent;
+    outline-offset: -2px;
+    transition: outline-color 120ms ease, background-color 120ms ease;
+  }
+  [data-section-id]:hover {
+    outline-color: #7c3aed;
+    background-image: linear-gradient(rgba(124, 58, 237, 0.035), rgba(124, 58, 237, 0.035));
+  }
+  [data-section-id]:hover::before {
+    content: attr(data-section-label);
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 20;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: #5b21b6;
+    color: #fff;
+    font: 700 12px/1.2 system-ui, -apple-system, sans-serif;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+    pointer-events: none;
+  }
+  [data-edit-path] {
+    border-radius: 4px;
+    cursor: text;
+    min-height: 1em;
+  }
+  [data-edit-path]:hover {
+    box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.24);
+  }
+  [data-edit-path][contenteditable="true"]:focus {
+    outline: 2px solid #7c3aed;
+    outline-offset: 2px;
+    background: rgba(255,255,255,0.72);
+  }
+`;
+
+function updatePathValue(target: unknown, parts: string[], value: string): unknown {
+  if (parts.length === 0) return value;
+  const [head, ...rest] = parts;
+  if (Array.isArray(target)) {
+    const index = Number(head);
+    const next = [...target];
+    next[index] = updatePathValue(next[index], rest, value);
+    return next;
+  }
+  if (target && typeof target === 'object') {
+    return {
+      ...(target as Record<string, unknown>),
+      [head]: updatePathValue((target as Record<string, unknown>)[head], rest, value),
+    };
+  }
+  return target;
+}
+
+function updateSectionText(section: DetailSection, path: string, value: string): DetailSection {
+  return updatePathValue(section, path.split('.'), value) as DetailSection;
+}
+
+function buildEditablePreviewDocument(html: string): string {
+  const script = `
+    (() => {
+      const post = (type, el) => {
+        const section = el.closest('[data-section-id]');
+        if (!section) return;
+        window.parent.postMessage({
+          source: 'detail-preview-inline-editor',
+          type,
+          sectionId: section.getAttribute('data-section-id'),
+          path: el.getAttribute('data-edit-path'),
+          value: el.textContent || ''
+        }, '*');
+      };
+      document.querySelectorAll('[data-edit-path]').forEach((el) => {
+        el.setAttribute('contenteditable', 'true');
+        el.setAttribute('spellcheck', 'false');
+        el.addEventListener('input', () => post('input', el));
+        el.addEventListener('blur', () => post('commit', el));
+      });
+    })();
+  `;
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>${PREVIEW_GUIDE_CSS}</style>
+</head>
+<body style="margin:0;background:#fff;">
+${html}
+<script>${script}<\/script>
+</body>
+</html>`;
+}
+
 export interface DetailPageEditorProps {
   sections: DetailSection[];
   theme: DetailPageTheme;
@@ -40,6 +139,8 @@ export interface DetailPageEditorProps {
   generatedHtml?: string;
   /** true이면 내부 오른쪽 미리보기 패널 숨김 (외부에서 별도 렌더링할 때 사용) */
   hidePreview?: boolean;
+  /** 섹션 이미지 AI 편집 — 없으면 버튼 미노출 */
+  onSectionImageAiEdit?: (sectionId: string, imageUrl: string, imageIndex: number) => void;
 }
 
 // 섹션 추가 드롭다운 옵션
@@ -66,6 +167,7 @@ export default function DetailPageEditor({
   onDownload,
   generatedHtml,
   hidePreview = false,
+  onSectionImageAiEdit,
 }: DetailPageEditorProps) {
   // 섹션 추가 드롭다운 열림 여부
   const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -73,6 +175,46 @@ export default function DetailPageEditor({
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
   // 드롭다운 메뉴 닫기를 위한 Blur 처리용 ref
   const addMenuRef = useRef<HTMLDivElement>(null);
+
+  // 인라인 편집: message handler에서 stale closure 방지
+  const sectionsRef = useRef<DetailSection[]>(sections);
+  sectionsRef.current = sections;
+
+  // 인라인 편집: generatedHtml을 contenteditable 문서로 래핑
+  const editablePreviewHtml = useMemo(
+    () => (!hidePreview && generatedHtml ? buildEditablePreviewDocument(generatedHtml) : ''),
+    [hidePreview, generatedHtml],
+  );
+
+  // 인라인 편집: iframe → parent postMessage 수신
+  const handleInlineEdit = useCallback(
+    (sectionId: string, path: string, value: string) => {
+      const next = sectionsRef.current.map((s) =>
+        s.id === sectionId ? updateSectionText(s, path, value) : s,
+      );
+      sectionsRef.current = next;
+      onSectionsChange(next);
+    },
+    [onSectionsChange],
+  );
+
+  useEffect(() => {
+    if (hidePreview) return;
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as {
+        source?: string;
+        type?: string;
+        sectionId?: string;
+        path?: string;
+        value?: string;
+      };
+      if (data?.source !== 'detail-preview-inline-editor') return;
+      if (!data.sectionId || !data.path || typeof data.value !== 'string') return;
+      handleInlineEdit(data.sectionId, data.path, data.value);
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [hidePreview, handleInlineEdit]);
 
   // dnd-kit 센서 설정
   const sensors = useSensors(
@@ -330,6 +472,7 @@ export default function DetailPageEditor({
                       onClick={handleSectionClick}
                       onImagesChange={handleImagesChange}
                       palette={theme.palette}
+                      onSectionImageAiEdit={onSectionImageAiEdit}
                     />
                   ))
                 )}
@@ -417,8 +560,9 @@ export default function DetailPageEditor({
           <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
             {generatedHtml ? (
               <iframe
-                srcDoc={generatedHtml}
+                srcDoc={editablePreviewHtml}
                 title="상세페이지 미리보기"
+                sandbox="allow-scripts allow-same-origin"
                 style={{
                   width: '100%',
                   height: '100%',
