@@ -203,6 +203,7 @@ function renderUsageSteps(content: UsageStepsContent, section: DetailSection, co
 // warning 섹션: 배경 #FFF3CD, border-left 4px solid #FFC107, 각 항목 앞에 ⚠️ 접두
 // 경고 섹션은 WCAG 가시성 보장을 위해 고정 색상 사용 (palette 색상 미적용)
 function renderWarning(content: WarningContent, section: DetailSection): string {
+  const imageHtml = renderAttachedImage(section);
   const itemsHtml = content.warnings
     .map(
       (warning, index) => `<div style="margin-bottom:12px;font-size:15px;color:#6B4F00;line-height:1.6;">⚠️ ${editableText(`content.warnings.${index}`, warning)}</div>`
@@ -210,6 +211,7 @@ function renderWarning(content: WarningContent, section: DetailSection): string 
     .join('\n');
 
   return `<div ${sectionAttrs(section)} style="background-color:#FFF3CD;border-left:4px solid #FFC107;padding:32px 40px;box-sizing:border-box;">
+  ${imageHtml}
   ${itemsHtml}
 </div>`;
 }

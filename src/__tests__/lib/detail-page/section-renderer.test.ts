@@ -589,6 +589,20 @@ describe('renderSection — attachedImages 2장', () => {
     expect(html).toContain('https://example.com/img2.jpg');
   });
 
+  it('2장 모두 악성 URL이면 빈 문자열 반환', () => {
+    const bothMaliciousSection = baseSection({
+      type: 'hero',
+      content: { type: 'hero', headline: '제목', subheadline: '부제목' },
+      attachedImages: [
+        { url: 'javascript:alert(1)', order: 0, processingMode: 'original' },
+        { url: 'javascript:alert(2)', order: 1, processingMode: 'original' },
+      ],
+    });
+    const html = renderSection(bothMaliciousSection, WARM_CREAM_THEME);
+    expect(html).not.toContain('display:flex');
+    expect(html).not.toContain('javascript:');
+  });
+
   it('1장만 있을 때는 단일 이미지 렌더링(width:100%)', () => {
     const oneImageSection = baseSection({
       type: 'hero',

@@ -73,7 +73,7 @@ export default function AssetsResultPanel() {
       return { ...s, attachedImages: newImages };
     });
     updateAssetsDraft({ detailPageSections: updated });
-    refreshRenderedHtml(updated, detailPageTheme);
+    void refreshRenderedHtml(updated, detailPageTheme);
     setSectionImageEditTarget(null);
   };
 
