@@ -179,9 +179,14 @@ export default function Step3ReviewRegister() {
         existingSections: detailPageSections.map((s) => ({ type: s.type, content: s.content })),
       }),
     });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error ?? '섹션 편집 실패');
-    updateDetailPageSection(section.id, json.section);
+    let json: Record<string, unknown>;
+    try {
+      json = await res.json();
+    } catch {
+      throw new Error(`섹션 편집 실패 (${res.status})`);
+    }
+    if (!res.ok) throw new Error((json.error as string | undefined) ?? '섹션 편집 실패');
+    updateDetailPageSection(section.id, json.section as DetailSection);
     await refreshRenderedHtml();
   };
 

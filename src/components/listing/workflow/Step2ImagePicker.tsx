@@ -80,6 +80,10 @@ export default function Step2ImagePicker() {
   const [saveErrors, setSaveErrors] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // detailImages를 항상 최신값으로 참조 (stale closure 방지)
+  const detailImagesRef = useRef(detailImages);
+  detailImagesRef.current = detailImages;
+
   // ── 썸네일 합치기 (다중 선택 → 2장 합치기 모달) ────────────────────────────
   const [selectedMergeKeys, setSelectedMergeKeys] = useState<string[]>([]);
   const [mergeTarget, setMergeTarget] = useState<{ url1: string; url2: string } | null>(null);
@@ -97,9 +101,12 @@ export default function Step2ImagePicker() {
   const syncStore = useCallback(
     (nextEntries: ImageEntry[], nextThumbOrder: string[], nextDetailOrder: string[]) => {
       const entryMap = new Map(nextEntries.map((e) => [e.key, e.url]));
+      const remainingUrls = new Set(nextEntries.map((e) => e.url));
       updateSharedDraft({
         thumbnailImages: nextThumbOrder.map((k) => entryMap.get(k) ?? k),
         pickedDetailImages: nextDetailOrder.map((k) => entryMap.get(k) ?? k),
+        // 삭제된 항목을 detailImages에서도 제거 — generateDetailPageFromPicked fallback에 영향
+        detailImages: detailImagesRef.current.filter((url) => remainingUrls.has(url)),
       });
     },
     [updateSharedDraft],

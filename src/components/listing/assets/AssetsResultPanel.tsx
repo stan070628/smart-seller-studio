@@ -192,11 +192,17 @@ export default function AssetsResultPanel() {
         existingSections: detailPageSections.map(s => ({ type: s.type, content: s.content })),
       }),
     });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error ?? '섹션 편집 실패');
+    let json: Record<string, unknown>;
+    try {
+      json = await res.json();
+    } catch {
+      throw new Error(`섹션 편집 실패 (${res.status})`);
+    }
+    if (!res.ok) throw new Error((json.error as string | undefined) ?? '섹션 편집 실패');
     // 편집된 섹션으로 업데이트
+    const updatedSection = json.section as DetailSection;
     const updated = detailPageSections.map(s =>
-      s.id === section.id ? { ...s, ...json.section } : s
+      s.id === section.id ? { ...s, ...updatedSection } : s
     );
     updateAssetsDraft({ detailPageSections: updated });
     await refreshRenderedHtml(updated, detailPageTheme);

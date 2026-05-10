@@ -1120,13 +1120,15 @@ export const useListingStore = create<ListingStore>()(
 
       generateDetailPageFromPicked: async () => {
         const { sharedDraft } = get();
-        const { pickedDetailImages, detailImages, name } = sharedDraft;
+        const { pickedDetailImages, detailImages, thumbnailImages, name } = sharedDraft;
 
-        // pickedDetailImages가 있으면 사용자 선택 순서 우선.
-        // 없으면 detailImages만 사용 (thumbnailImages는 제외 — 썸네일은 상세페이지용이 아님)
+        // 우선순위: 사용자 선택 → detailImages → thumbnailImages(최후 수단)
+        // detailImages는 Step2에서 이미지 삭제 시 함께 업데이트되므로 삭제된 이미지 미포함.
         const allImageUrls = pickedDetailImages.length > 0
           ? pickedDetailImages
-          : detailImages;
+          : detailImages.length > 0
+            ? detailImages
+            : thumbnailImages;
 
         if (allImageUrls.length === 0) return;
 
