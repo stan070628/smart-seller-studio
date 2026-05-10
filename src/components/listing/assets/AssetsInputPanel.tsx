@@ -4,6 +4,7 @@ import React, { useRef } from 'react';
 import { useListingStore } from '@/store/useListingStore';
 import { C } from '@/lib/design-tokens';
 import { prepareUpload } from '@/lib/image/prepare-upload';
+import AssetsSaveLoad from './AssetsSaveLoad';
 
 interface Props {
   onGenerate: () => void;
@@ -14,6 +15,12 @@ type UploadSlot = 'thumbnail' | 'detail';
 export default function AssetsInputPanel({ onGenerate }: Props) {
   const { assetsDraft, updateAssetsDraft } = useListingStore();
   const { mode, url, thumbnailFiles, detailFiles, isGenerating } = assetsDraft;
+  const {
+    isGenerating: _ig,
+    generatingMessage: _gm,
+    lastError: _le,
+    ...currentDraftData
+  } = assetsDraft;
   const thumbInputRef = useRef<HTMLInputElement | null>(null);
   const detailInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -218,6 +225,12 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
       flexDirection: 'column',
       gap: '16px',
     }}>
+      {/* 임시저장·불러오기 */}
+      <AssetsSaveLoad
+        currentDraftData={currentDraftData as Record<string, unknown>}
+        onLoad={(data) => updateAssetsDraft(data as Parameters<typeof updateAssetsDraft>[0])}
+      />
+      <hr style={{ border: 'none', borderTop: '1px solid #eeeeee', margin: 0 }} />
       {/* 모드 선택 라디오 버튼 */}
       <div style={{ display: 'flex', gap: '16px' }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
