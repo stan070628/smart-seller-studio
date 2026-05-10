@@ -101,16 +101,14 @@ export default function SectionImageAttachment({
         // base64 변환
         const imageBase64 = await toBase64(file);
 
-        // API 호출
+        // API 호출 — storagePath는 서버에서 고정 경로 사용, 클라이언트에서 전달하지 않음
         const res = await fetch('/api/detail-page/process-image', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             imageBase64,
-            mimeType: file.type as AllowedMime,
             processingMode,
             palette,
-            storagePath: 'detail-pages/section-images',
           }),
         });
 

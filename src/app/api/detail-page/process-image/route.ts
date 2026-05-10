@@ -32,10 +32,13 @@ const RequestSchema = z.object({
   palette: z
     .enum(['warm_cream', 'cool_white', 'deep_dark', 'nature_green', 'tech_navy'])
     .optional(),
-  storagePath: z.string().default('detail-pages/section-images'),
+  // storagePath는 클라이언트에서 받지 않는다. 경로 트래버설 취약점 방지.
 });
 
 type ValidatedRequest = z.infer<typeof RequestSchema>;
+
+// 서버에서 고정된 저장 경로 — 클라이언트 입력으로 변경 불가
+const STORAGE_PATH = 'detail-pages/section-images';
 
 // ─────────────────────────────────────────
 // 헬퍼 함수
@@ -212,7 +215,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const { imageBase64, processingMode, palette, storagePath } = parseResult.data;
+  const { imageBase64, processingMode, palette } = parseResult.data;
 
   // data URL prefix 제거 (클라이언트에서 그대로 전달한 경우 대비)
   const cleanBase64 = imageBase64.includes(',')
@@ -280,7 +283,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // Supabase Storage 저장
   try {
     const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.webp`;
-    const fullPath = `${storagePath}/${userId}/${fileName}`;
+    // STORAGE_PATH 상수를 사용하여 경로 트래버설 공격 차단
+    const fullPath = `${STORAGE_PATH}/${userId}/${fileName}`;
 
     const arrayBuffer = outputBuffer.buffer.slice(
       outputBuffer.byteOffset,

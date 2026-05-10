@@ -10,6 +10,8 @@ import type { ProductOptions } from '@/types/product-option';
 import { parseSpecText } from '@/lib/utils/parseSpecText';
 import type { DetailSection, DetailPageTheme } from '@/types/detail-page';
 import { DEFAULT_THEME } from '@/lib/detail-page/palette-config';
+import { contentToSections } from '@/lib/detail-page/section-parser';
+import type { DetailPageContent } from '@/lib/ai/prompts/detail-page';
 
 // ─── SharedDraft 타입 ────────────────────────────────────────────────────────
 // 탭 이동 시에도 입력값이 유지되도록 공통 필드를 스토어에서 관리
@@ -1082,6 +1084,25 @@ export const useListingStore = create<ListingStore>()(
             false,
             'listing/generateDetailPage/done',
           );
+
+          // content가 있으면 섹션 편집기 초기화 (DetailPageEditor 활성화)
+          if (data.content) {
+            try {
+              const sections = contentToSections(data.content as DetailPageContent);
+              set(
+                (s) => ({
+                  sharedDraft: {
+                    ...s.sharedDraft,
+                    detailPageSections: sections,
+                  },
+                }),
+                false,
+                'listing/generateDetailPage/setSections',
+              );
+            } catch {
+              // 파싱 실패 시 silent fallback — 기존 HTML 모드로 표시
+            }
+          }
         } catch (err) {
           set(
             (s) => ({
@@ -1179,6 +1200,25 @@ export const useListingStore = create<ListingStore>()(
             false,
             'listing/generateDetailPageFromPicked/done',
           );
+
+          // content가 있으면 섹션 편집기 초기화 (DetailPageEditor 활성화)
+          if (data.content) {
+            try {
+              const sections = contentToSections(data.content as DetailPageContent);
+              set(
+                (s) => ({
+                  sharedDraft: {
+                    ...s.sharedDraft,
+                    detailPageSections: sections,
+                  },
+                }),
+                false,
+                'listing/generateDetailPageFromPicked/setSections',
+              );
+            } catch {
+              // 파싱 실패 시 silent fallback — 기존 HTML 모드로 표시
+            }
+          }
         } catch (err) {
           set(
             (s) => ({

@@ -16,6 +16,7 @@ import {
   checkProhibitedPhrases,
   type ProductImageAnalysis,
   type DetailPageCategory,
+  type DetailPageContent,
 } from "@/lib/ai/prompts/detail-page";
 import { buildDetailPageHtml, buildDetailPageSnippet } from "@/lib/detail-page/html-builder";
 import { checkRateLimit, getRateLimitKey } from "@/lib/rate-limit";
@@ -219,8 +220,9 @@ async function analyzeImages(
 interface ApiSuccessResponse {
   success: true;
   html: string;
-  snippet: string;      // 쿠팡용 780px
-  naverSnippet: string; // 네이버용 860px
+  snippet: string;           // 쿠팡용 780px
+  naverSnippet: string;      // 네이버용 860px
+  content?: DetailPageContent; // 섹션 편집기 초기화용 구조화 데이터 (신규 생성 모드에서만 포함)
 }
 
 interface ApiErrorResponse {
@@ -545,10 +547,12 @@ export async function POST(
     );
   }
 
+  // content 필드를 포함시켜 클라이언트의 섹션 편집기(DetailPageEditor)를 활성화할 수 있도록 한다.
   return NextResponse.json({
     success: true,
     html: appendPrivacyFooter(html),
     snippet: appendPrivacyFooter(snippet),
     naverSnippet: appendPrivacyFooter(naverSnippet),
+    content,
   }, { status: 200 });
 }

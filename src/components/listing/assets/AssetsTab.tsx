@@ -5,6 +5,8 @@ import AssetsInputPanel from './AssetsInputPanel';
 import AssetsResultPanel from './AssetsResultPanel';
 import { useListingStore } from '@/store/useListingStore';
 import { parseSpecText } from '@/lib/utils/parseSpecText';
+import { contentToSections } from '@/lib/detail-page/section-parser';
+import type { DetailPageContent } from '@/lib/ai/prompts/detail-page';
 
 /** 상세페이지용 이미지를 자동 편집할 때 적용할 기본 프롬프트 (가이드라인 강제) */
 const DETAIL_AUTO_EDIT_PROMPT =
@@ -34,9 +36,11 @@ export default function AssetsTab() {
     return json.data.editedUrl;
   };
 
-  /** 이미지 URL 배열을 /api/ai/generate-detail-html에 보내 상세 HTML 생성 */
-  const generateDetailHtml = async (imageUrls: string[]): Promise<string> => {
-    if (imageUrls.length === 0) return '';
+  /** 이미지 URL 배열을 /api/ai/generate-detail-html에 보내 상세 HTML 및 content 생성 */
+  const generateDetailHtml = async (
+    imageUrls: string[],
+  ): Promise<{ html: string; content?: DetailPageContent }> => {
+    if (imageUrls.length === 0) return { html: '' };
     const productSpecs = parseSpecText(sharedDraft.productSpecText);
     const res = await fetch('/api/ai/generate-detail-html', {
       method: 'POST',
@@ -52,11 +56,11 @@ export default function AssetsTab() {
       const text = await res.text();
       throw new Error(`상세페이지 생성 실패 (HTTP ${res.status}): ${text.slice(0, 160)}`);
     }
-    const data = (await res.json()) as { html?: string; error?: string };
+    const data = (await res.json()) as { html?: string; content?: DetailPageContent; error?: string };
     if (!res.ok || !data.html) {
       throw new Error(data.error ?? '상세페이지 생성 실패');
     }
-    return data.html;
+    return { html: data.html, content: data.content };
   };
 
   const handleGenerate = async () => {
@@ -92,15 +96,30 @@ export default function AssetsTab() {
         }
         const thumbnails = json.data.thumbnails ?? [];
         let detailHtml = json.data.detailHtml ?? '';
+        let detailContent: DetailPageContent | undefined;
         if (!detailHtml && thumbnails.length > 0) {
           updateAssetsDraft({ generatingMessage: '상세페이지 HTML 생성 중...' });
-          detailHtml = await generateDetailHtml(thumbnails);
+          const result = await generateDetailHtml(thumbnails);
+          detailHtml = result.html;
+          detailContent = result.content;
         }
+
+        // content가 있으면 섹션 편집기 초기화 (DetailPageEditor 활성화)
+        let detailPageSections = assetsDraft.detailPageSections;
+        if (detailContent) {
+          try {
+            detailPageSections = contentToSections(detailContent);
+          } catch {
+            // 파싱 실패 시 silent fallback
+          }
+        }
+
         updateAssetsDraft({
           isGenerating: false,
           generatingMessage: null,
           generatedThumbnails: thumbnails,
           generatedDetailHtml: detailHtml,
+          detailPageSections,
         });
         return;
       }
@@ -128,11 +147,24 @@ export default function AssetsTab() {
       }
 
       let detailHtml = '';
+      let detailContent: DetailPageContent | undefined;
       if (editedDetail.length > 0) {
         updateAssetsDraft({
           generatingMessage: '편집된 상세 이미지로 상세페이지 HTML 생성 중...',
         });
-        detailHtml = await generateDetailHtml(editedDetail);
+        const result = await generateDetailHtml(editedDetail);
+        detailHtml = result.html;
+        detailContent = result.content;
+      }
+
+      // content가 있으면 섹션 편집기 초기화 (DetailPageEditor 활성화)
+      let detailPageSections = assetsDraft.detailPageSections;
+      if (detailContent) {
+        try {
+          detailPageSections = contentToSections(detailContent);
+        } catch {
+          // 파싱 실패 시 silent fallback
+        }
       }
 
       updateAssetsDraft({
@@ -140,6 +172,7 @@ export default function AssetsTab() {
         generatingMessage: null,
         generatedThumbnails: thumbnails,
         generatedDetailHtml: detailHtml,
+        detailPageSections,
       });
     } catch (e) {
       updateAssetsDraft({
