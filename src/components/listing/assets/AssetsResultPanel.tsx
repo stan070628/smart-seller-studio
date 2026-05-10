@@ -67,7 +67,9 @@ export default function AssetsResultPanel() {
     const updated = detailPageSections.map((s) => {
       if (s.id !== sectionId) return s;
       const newImages = [...s.attachedImages];
-      newImages[imageIndex] = { ...newImages[imageIndex], url: resultUrl };
+      const existing = newImages[imageIndex];
+      if (!existing) return s;
+      newImages[imageIndex] = { ...existing, url: resultUrl };
       return { ...s, attachedImages: newImages };
     });
     updateAssetsDraft({ detailPageSections: updated });
