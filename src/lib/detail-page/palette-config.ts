@@ -1,5 +1,5 @@
 // src/lib/detail-page/palette-config.ts
-import type { PaletteName } from '@/types/detail-page';
+import type { DetailPageTheme, PaletteName } from '@/types/detail-page';
 
 export interface PaletteColors {
   bg: string;
@@ -9,6 +9,8 @@ export interface PaletteColors {
   accent: string;
   border: string;
   cardBg: string;
+  // accent 배경 위 텍스트 색상 (WCAG AA 기준)
+  accentTextColor: string;
 }
 
 export const PALETTES: Record<PaletteName, PaletteColors> = {
@@ -17,9 +19,10 @@ export const PALETTES: Record<PaletteName, PaletteColors> = {
     bgAlt: '#FFFFFF',
     text: '#1A1A1A',
     textSub: '#5C5243',
-    accent: '#8B6914',
+    accent: '#7A5C10',  // #8B6914 → 4.484:1 WCAG AA 미달, #7A5C10 → ~5.1:1 통과
     border: '#D4C5A9',
     cardBg: '#FFFDF8',
+    accentTextColor: '#FFFFFF', // accent #7A5C10 (어두운 갈색) → 흰색 텍스트
   },
   cool_white: {
     bg: '#FFFFFF',
@@ -29,6 +32,7 @@ export const PALETTES: Record<PaletteName, PaletteColors> = {
     accent: '#2563EB',
     border: '#E5E7EB',
     cardBg: '#FFFFFF',
+    accentTextColor: '#FFFFFF', // accent #2563EB (어두운 파랑) → 흰색 텍스트
   },
   deep_dark: {
     bg: '#1A1A1A',
@@ -38,6 +42,7 @@ export const PALETTES: Record<PaletteName, PaletteColors> = {
     accent: '#FFC107',
     border: '#333333',
     cardBg: '#2A2A2A',
+    accentTextColor: '#111111', // accent #FFC107 (밝은 노랑) → 어두운 텍스트
   },
   nature_green: {
     bg: '#F0F7F0',
@@ -47,6 +52,7 @@ export const PALETTES: Record<PaletteName, PaletteColors> = {
     accent: '#2D6A2D',
     border: '#C8E0C8',
     cardBg: '#F8FBF8',
+    accentTextColor: '#FFFFFF', // accent #2D6A2D (어두운 녹색) → 흰색 텍스트
   },
   tech_navy: {
     bg: '#0F172A',
@@ -56,6 +62,7 @@ export const PALETTES: Record<PaletteName, PaletteColors> = {
     accent: '#38BDF8',
     border: '#334155',
     cardBg: '#1E293B',
+    accentTextColor: '#111111', // accent #38BDF8 (밝은 하늘색) → 어두운 텍스트
   },
 };
 
@@ -67,10 +74,10 @@ export const PALETTE_LABELS: Record<PaletteName, string> = {
   tech_navy: '테크 네이비',
 };
 
-export const DEFAULT_THEME = {
-  palette: 'warm_cream' as PaletteName,
+export const DEFAULT_THEME: DetailPageTheme = {
+  palette: 'warm_cream',
   primaryColor: '#F5F0E8',
-  accentColor: '#8B6914',
-  fontStyle: 'mixed' as const,
-  imageLayout: 'fullbleed' as const,
+  accentColor: '#7A5C10',
+  fontStyle: 'mixed',
+  imageLayout: 'fullbleed',
 };
