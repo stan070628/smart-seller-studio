@@ -364,6 +364,7 @@ export default function AssetsResultPanel() {
             <div style={{ padding: '8px' }}>
               <iframe
                 srcDoc={generatedDetailHtml}
+                sandbox="allow-same-origin"
                 style={{ width: '100%', height: '500px', border: 'none', borderRadius: '4px' }}
                 title="상세페이지 미리보기"
               />

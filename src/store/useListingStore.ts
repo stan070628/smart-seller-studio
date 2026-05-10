@@ -213,9 +213,6 @@ interface AssetsDraft {
   /** 사람이 읽는 진행 메시지 ("상세 이미지 AI 편집 중 (2/5)..." 등) */
   generatingMessage: string | null;
   lastError: string | null;
-  // 상세 HTML AI 수정 상태
-  detailEditStatus: 'idle' | 'editing' | 'done' | 'error';
-  detailEditError: string | null;
   // 상세페이지 섹션 편집 (DetailPageEditor용)
   detailPageSections: DetailSection[];
   detailPageTheme: DetailPageTheme;
@@ -231,8 +228,6 @@ const ASSETS_DRAFT_INITIAL: AssetsDraft = {
   isGenerating: false,
   generatingMessage: null,
   lastError: null,
-  detailEditStatus: 'idle',
-  detailEditError: null,
   detailPageSections: [],
   detailPageTheme: DEFAULT_THEME,
 };
@@ -268,8 +263,6 @@ interface ListingStore {
   assetsDraft: AssetsDraft;
   updateAssetsDraft: (patch: Partial<AssetsDraft>) => void;
   resetAssetsDraft: () => void;
-  /** assets 탭의 generatedDetailHtml을 instruction에 따라 AI로 수정 */
-  editAssetsDetail: (instruction: string) => Promise<void>;
 
   // ─── 소싱탭 → 대량등록 연결 ─────────────────────────────────────────────
   pendingBulkItems: string[];
@@ -399,66 +392,6 @@ export const useListingStore = create<ListingStore>()(
         ),
       resetAssetsDraft: () =>
         set({ assetsDraft: ASSETS_DRAFT_INITIAL }, false, 'listing/resetAssetsDraft'),
-
-      editAssetsDetail: async (instruction) => {
-        const { assetsDraft } = get();
-        const currentHtml = assetsDraft.generatedDetailHtml;
-        if (!currentHtml || !instruction.trim()) return;
-
-        set(
-          (s) => ({
-            assetsDraft: {
-              ...s.assetsDraft,
-              detailEditStatus: 'editing',
-              detailEditError: null,
-            },
-          }),
-          false,
-          'listing/editAssetsDetail/start',
-        );
-
-        try {
-          const res = await fetch('/api/ai/edit-detail-html', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ currentHtml, instruction }),
-          });
-          const ct = res.headers.get('content-type') ?? '';
-          if (!ct.includes('application/json')) {
-            const text = await res.text();
-            throw new Error(`수정 실패 (HTTP ${res.status}): ${text.slice(0, 160)}`);
-          }
-          const data = (await res.json()) as { html?: string; error?: string };
-          if (!res.ok || !data.html) {
-            throw new Error(data.error ?? '수정에 실패했습니다.');
-          }
-          set(
-            (s) => ({
-              assetsDraft: {
-                ...s.assetsDraft,
-                generatedDetailHtml: data.html!,
-                detailEditStatus: 'done',
-                detailEditError: null,
-              },
-            }),
-            false,
-            'listing/editAssetsDetail/done',
-          );
-        } catch (err) {
-          set(
-            (s) => ({
-              assetsDraft: {
-                ...s.assetsDraft,
-                detailEditStatus: 'error',
-                detailEditError:
-                  err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.',
-              },
-            }),
-            false,
-            'listing/editAssetsDetail/error',
-          );
-        }
-      },
 
       // ─── Browse 모드 액션 ─────────────────────────────────────────────────
       setListingMode: (mode) => set({ listingMode: mode }, false, 'listing/setListingMode'),
