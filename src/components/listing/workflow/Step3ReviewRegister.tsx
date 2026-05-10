@@ -8,7 +8,7 @@
 import React, { useState } from 'react';
 import {
   Copy, CheckCheck, Download, AlertCircle, Plus, Loader2,
-  RefreshCw, ExternalLink, AlertTriangle, Sparkles, BookmarkCheck,
+  RefreshCw, AlertTriangle, Sparkles, BookmarkCheck,
 } from 'lucide-react';
 import { useListingStore } from '@/store/useListingStore';
 import { C } from '@/lib/design-tokens';
@@ -249,10 +249,10 @@ export default function Step3ReviewRegister() {
         </div>
       )}
 
-      {/* ── 2컬럼 레이아웃 ──────────────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', alignItems: 'start' }}>
+      {/* ── 3컬럼 레이아웃 ──────────────────────────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr 380px', gap: '20px', alignItems: 'start' }}>
 
-        {/* ══ 좌측: 상세페이지 미리보기 + AI 생성/수정 ══════════════════════ */}
+        {/* ══ 열 1: 섹션 에디터 + 썸네일 ══════════════════════ */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', position: 'sticky', top: '16px', alignSelf: 'start' }}>
 
           {/* 썸네일 이미지 + 소스 URL */}
@@ -412,42 +412,8 @@ export default function Step3ReviewRegister() {
             </div>
           )}
 
-          {/* 상세페이지 편집 영역 */}
-          {isLegacyMode ? (
-            /* 레거시 모드: 섹션 데이터 없이 HTML만 존재하는 경우 */
-            <div style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: '12px', overflow: 'hidden' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 14px', borderBottom: `1px solid ${C.border}`, backgroundColor: C.tableHeader }}>
-                <span style={{ fontSize: '12px', fontWeight: 700, color: C.text }}>상세페이지 미리보기</span>
-                <div style={{ display: 'flex', gap: '5px' }}>
-                  <button
-                    onClick={() => { const blob = new Blob([detailPageFullHtml!], { type: 'text/html' }); window.open(URL.createObjectURL(blob), '_blank'); }}
-                    style={{ display: 'flex', alignItems: 'center', gap: '3px', padding: '4px 9px', fontSize: '11px', fontWeight: 600, backgroundColor: '#fff', color: C.text, border: `1px solid ${C.border}`, borderRadius: '5px', cursor: 'pointer' }}
-                  >
-                    <ExternalLink size={10} />전체 보기
-                  </button>
-                  <button
-                    onClick={handleCopy}
-                    style={{ display: 'flex', alignItems: 'center', gap: '3px', padding: '4px 9px', fontSize: '11px', fontWeight: 600, backgroundColor: '#fff', color: C.text, border: `1px solid ${C.border}`, borderRadius: '5px', cursor: 'pointer' }}
-                  >
-                    {copied ? <><CheckCheck size={10} color="#15803d" />복사됨</> : <><Copy size={10} />HTML 복사</>}
-                  </button>
-                  <button
-                    onClick={handleDownload}
-                    style={{ display: 'flex', alignItems: 'center', gap: '3px', padding: '4px 9px', fontSize: '11px', fontWeight: 600, backgroundColor: C.text, color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer' }}
-                  >
-                    <Download size={10} />다운로드
-                  </button>
-                </div>
-              </div>
-              <iframe
-                srcDoc={detailPageFullHtml!}
-                title="상세 페이지 미리보기"
-                style={{ width: '100%', height: '500px', border: 'none', display: 'block' }}
-                sandbox="allow-same-origin"
-              />
-            </div>
-          ) : detailPageSections.length > 0 ? (
-            /* 섹션 에디터 모드 */
+          {/* 상세페이지 섹션 에디터 (sections 있을 때 hidePreview=true로 렌더링) */}
+          {detailPageSections.length > 0 && (
             <DetailPageEditor
               sections={detailPageSections}
               theme={detailPageTheme}
@@ -460,11 +426,10 @@ export default function Step3ReviewRegister() {
               }}
               onSectionAiEdit={handleSectionAiEdit}
               onRegenerateAll={generateDetailPageFromPicked}
-              onHtmlCopy={handleCopy}
-              onDownload={handleDownload}
               generatedHtml={detailPageFullHtml ?? undefined}
+              hidePreview
             />
-          ) : null}
+          )}
 
           {/* 미리보기 갱신 에러 */}
           {renderError && (
@@ -486,7 +451,7 @@ export default function Step3ReviewRegister() {
             </div>
           )}
 
-          {/* HTML 스니펫 (쿠팡 + 네이버) */}
+          {/* HTML 스니펫 (쿠팡 + 네이버) — 열 1 하단에 유지 */}
           {(detailPageSnippet || detailPageSnippetNaver) && (
             <div style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: '12px', overflow: 'hidden' }}>
               <div style={{ padding: '11px 14px', borderBottom: `1px solid ${C.border}`, backgroundColor: C.tableHeader }}>
@@ -560,8 +525,135 @@ export default function Step3ReviewRegister() {
           </div>
         </div>
 
-        {/* ══ 우측: 등록 폼 (AI 자동완성) ════════════════════════════════════ */}
-        <div>
+        {/* ══ 열 2: 대형 미리보기 패널 ══════════════════════ */}
+        <div style={{ position: 'sticky', top: '16px', alignSelf: 'start' }}>
+          {(detailPageSections.length > 0 || isLegacyMode) ? (
+            <>
+              {/* 미리보기 헤더 */}
+              <div
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '10px 16px',
+                  background: '#fff',
+                  border: `1px solid ${C.border}`,
+                  borderRadius: '12px 12px 0 0',
+                  borderBottom: 'none',
+                }}
+              >
+                <span style={{ fontSize: '13px', fontWeight: 700, color: C.text }}>미리보기</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {/* 렌더링 스피너 */}
+                  {isRendering && (
+                    <Loader2 size={13} style={{ animation: 'spin 1s linear infinite', color: C.textSub }} />
+                  )}
+                  {/* 렌더 에러 */}
+                  {renderError && (
+                    <span style={{ fontSize: '11px', color: '#b91c1c', fontWeight: 600 }}>갱신 오류</span>
+                  )}
+                  {/* HTML 복사 버튼 */}
+                  <button
+                    onClick={handleCopy}
+                    style={{ display: 'flex', alignItems: 'center', gap: '3px', padding: '4px 9px', fontSize: '11px', fontWeight: 600, backgroundColor: '#fff', color: C.text, border: `1px solid ${C.border}`, borderRadius: '5px', cursor: 'pointer' }}
+                  >
+                    {copied ? <><CheckCheck size={10} color="#15803d" />복사됨</> : <><Copy size={10} />HTML 복사</>}
+                  </button>
+                  {/* 다운로드 버튼 */}
+                  <button
+                    onClick={handleDownload}
+                    style={{ display: 'flex', alignItems: 'center', gap: '3px', padding: '4px 9px', fontSize: '11px', fontWeight: 600, backgroundColor: C.text, color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer' }}
+                  >
+                    <Download size={10} />다운로드
+                  </button>
+                </div>
+              </div>
+              {/* iframe 미리보기 */}
+              {detailPageFullHtml ? (
+                <iframe
+                  srcDoc={detailPageFullHtml}
+                  title="상세페이지 미리보기"
+                  style={{
+                    width: '100%',
+                    height: '780px',
+                    border: `1px solid ${C.border}`,
+                    borderRadius: '0 0 12px 12px',
+                    background: '#fff',
+                    display: 'block',
+                  }}
+                  sandbox="allow-same-origin allow-scripts"
+                />
+              ) : (
+                /* 빈 상태 */
+                <div
+                  style={{
+                    height: '780px',
+                    border: `1px solid ${C.border}`,
+                    borderRadius: '0 0 12px 12px',
+                    background: '#fff',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '12px',
+                    color: C.textSub,
+                    textAlign: 'center',
+                    padding: '32px',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '56px', height: '56px', borderRadius: '50%',
+                      background: '#f5f5f5',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}
+                  >
+                    <Download size={24} style={{ color: '#cccccc' }} />
+                  </div>
+                  <p style={{ margin: 0, fontSize: '14px', lineHeight: 1.6 }}>
+                    AI로 상세페이지를 생성하면
+                    <br />
+                    여기에 미리보기가 표시됩니다.
+                  </p>
+                </div>
+              )}
+            </>
+          ) : (
+            /* 섹션도 레거시 HTML도 없을 때 빈 안내 */
+            <div
+              style={{
+                height: '400px',
+                border: `2px dashed ${C.border}`,
+                borderRadius: '12px',
+                background: '#fafafa',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '12px',
+                color: C.textSub,
+                textAlign: 'center',
+                padding: '32px',
+              }}
+            >
+              <div
+                style={{
+                  width: '56px', height: '56px', borderRadius: '50%',
+                  background: '#f5f5f5',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                <Download size={24} style={{ color: '#cccccc' }} />
+              </div>
+              <p style={{ margin: 0, fontSize: '14px', lineHeight: 1.6 }}>
+                AI로 상세페이지를 생성하면
+                <br />
+                여기에 미리보기가 표시됩니다.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* ══ 열 3: 등록 폼 ══════════════════════ */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {showRegisterForm && !registered && (
             <>
               <CoupangAutoRegisterPanel onSuccess={handleCoupangRegistered} />

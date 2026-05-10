@@ -38,6 +38,8 @@ export interface DetailPageEditorProps {
   onDownload?: () => void;
   /** 오른쪽 iframe 미리보기용 HTML */
   generatedHtml?: string;
+  /** true이면 내부 오른쪽 미리보기 패널 숨김 (외부에서 별도 렌더링할 때 사용) */
+  hidePreview?: boolean;
 }
 
 // 섹션 추가 드롭다운 옵션
@@ -63,6 +65,7 @@ export default function DetailPageEditor({
   onHtmlCopy,
   onDownload,
   generatedHtml,
+  hidePreview = false,
 }: DetailPageEditorProps) {
   // 섹션 추가 드롭다운 열림 여부
   const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -383,90 +386,92 @@ export default function DetailPageEditor({
         )}
       </div>
 
-      {/* ────────────── 오른쪽 미리보기 패널 (flex-1) ────────────── */}
-      <div
-        style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          background: '#f0f0f0',
-          overflow: 'hidden',
-          position: 'relative',
-        }}
-      >
-        {/* 미리보기 헤더 레이블 */}
+      {/* 오른쪽 미리보기 패널 — hidePreview=true이면 숨김 */}
+      {!hidePreview && (
         <div
           style={{
-            padding: '8px 16px',
-            borderBottom: `1px solid ${C.border}`,
-            background: '#ffffff',
-            fontSize: 12,
-            color: C.textSub,
-            fontWeight: 600,
-            letterSpacing: '0.02em',
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            background: '#f0f0f0',
+            overflow: 'hidden',
+            position: 'relative',
           }}
         >
-          미리보기
-        </div>
+          {/* 미리보기 헤더 레이블 */}
+          <div
+            style={{
+              padding: '8px 16px',
+              borderBottom: `1px solid ${C.border}`,
+              background: '#ffffff',
+              fontSize: 12,
+              color: C.textSub,
+              fontWeight: 600,
+              letterSpacing: '0.02em',
+            }}
+          >
+            미리보기
+          </div>
 
-        {/* iframe 또는 빈 상태 */}
-        <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
-          {generatedHtml ? (
-            <iframe
-              srcDoc={generatedHtml}
-              title="상세페이지 미리보기"
-              style={{
-                width: '100%',
-                height: '100%',
-                border: 'none',
-                minHeight: 600,
-                borderRadius: 8,
-                background: '#ffffff',
-                boxShadow: '0 2px 12px rgba(0,0,0,0.10)',
-              }}
-            />
-          ) : (
-            // 빈 상태 메시지
-            <div
-              style={{
-                height: '100%',
-                minHeight: 400,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 12,
-                background: '#ffffff',
-                borderRadius: 8,
-                border: `2px dashed ${C.border}`,
-                color: C.textSub,
-                textAlign: 'center',
-                padding: 32,
-              }}
-            >
-              {/* 미리보기 플레이스홀더 아이콘 */}
+          {/* iframe 또는 빈 상태 */}
+          <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
+            {generatedHtml ? (
+              <iframe
+                srcDoc={generatedHtml}
+                title="상세페이지 미리보기"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  border: 'none',
+                  minHeight: 600,
+                  borderRadius: 8,
+                  background: '#ffffff',
+                  boxShadow: '0 2px 12px rgba(0,0,0,0.10)',
+                }}
+              />
+            ) : (
+              // 빈 상태 메시지
               <div
                 style={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: '50%',
-                  background: '#f5f5f5',
+                  height: '100%',
+                  minHeight: 400,
                   display: 'flex',
+                  flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  gap: 12,
+                  background: '#ffffff',
+                  borderRadius: 8,
+                  border: `2px dashed ${C.border}`,
+                  color: C.textSub,
+                  textAlign: 'center',
+                  padding: 32,
                 }}
               >
-                <Download size={24} style={{ color: '#cccccc' }} />
+                {/* 미리보기 플레이스홀더 아이콘 */}
+                <div
+                  style={{
+                    width: 56,
+                    height: 56,
+                    borderRadius: '50%',
+                    background: '#f5f5f5',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Download size={24} style={{ color: '#cccccc' }} />
+                </div>
+                <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6 }}>
+                  AI로 상세페이지를 생성하면
+                  <br />
+                  여기에 미리보기가 표시됩니다.
+                </p>
               </div>
-              <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6 }}>
-                AI로 상세페이지를 생성하면
-                <br />
-                여기에 미리보기가 표시됩니다.
-              </p>
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ────────────── 전체 생성 중 로딩 오버레이 ────────────── */}
       {isGenerating && (

@@ -218,9 +218,14 @@ export default function Step2ImagePicker() {
         credentials: 'include',
         body: JSON.stringify({ imageUrl: editModal.imageUrl, prompt: editModal.prompt.trim() }),
       });
-      const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.error ?? `AI 편집 실패 (${res.status})`);
-      const editedUrl: string = json.data?.editedUrl;
+      let json: Record<string, unknown>;
+      try {
+        json = await res.json();
+      } catch {
+        throw new Error(`AI 편집 실패 (${res.status})`);
+      }
+      if (!res.ok || !json.success) throw new Error((json.error as string | undefined) ?? `AI 편집 실패 (${res.status})`);
+      const editedUrl: string = (json.data as Record<string, unknown> | undefined)?.editedUrl as string;
       if (!editedUrl) throw new Error('편집된 이미지 URL을 받지 못했습니다.');
       const oldKey = editModal.targetKey;
       const nextEntries = entries.map((e) =>
