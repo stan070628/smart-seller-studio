@@ -297,6 +297,8 @@ export default function SectionImageAttachment({
             {/* AI 편집 버튼 */}
             {onAiEdit && (
               <button
+                type="button"
+                aria-label="AI로 편집"
                 onClick={(e) => {
                   e.stopPropagation();
                   onAiEdit(img.url, idx);
