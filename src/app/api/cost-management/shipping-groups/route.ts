@@ -72,10 +72,14 @@ export async function POST(request: NextRequest) {
     );
 
     // 각 입고 건에 배분된 배송비와 그룹 ID를 반영
-    for (const [entryId, fee] of distribution) {
+    // distributeShippingFee는 입고건 전체 배송비를 반환하므로 수량으로 나눠 단위당 배송비로 변환
+    const entryQtyMap = new Map(entries.map((e) => [e.id, Number(e.quantity)]));
+    for (const [entryId, totalFeeForEntry] of distribution) {
+      const qty = entryQtyMap.get(entryId) ?? 1;
+      const unitFee = qty > 0 ? Math.round(totalFeeForEntry / qty) : 0;
       await client.query(
         `UPDATE cost_entries SET unit_shipping_fee = $1, shipping_group_id = $2 WHERE id = $3`,
-        [fee, groupId, entryId],
+        [unitFee, groupId, entryId],
       );
     }
 
