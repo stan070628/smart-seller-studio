@@ -4,7 +4,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, Sparkles, Trash2 } from 'lucide-react';
 import { C } from '@/lib/design-tokens';
-import type { DetailSection, SectionType, SectionContent } from '@/types/detail-page';
+import type { DetailSection, SectionType, SectionContent, AttachedImage, PaletteName } from '@/types/detail-page';
 import {
   isHeroContent,
   isSellingPointsContent,
@@ -16,6 +16,7 @@ import {
   isCtaContent,
 } from '@/types/detail-page';
 import SectionInstructionPanel from './SectionInstructionPanel';
+import SectionImageAttachment from './SectionImageAttachment';
 
 interface SectionCardProps {
   section: DetailSection;
@@ -23,6 +24,10 @@ interface SectionCardProps {
   onAiEdit: (section: DetailSection, instruction: string) => Promise<void>;
   onDelete: (id: string) => void;
   onClick: (id: string) => void;
+  /** 섹션 이미지 변경 콜백 */
+  onImagesChange: (id: string, images: AttachedImage[]) => void;
+  /** 현재 테마 팔레트 (배경 합성 모드에 사용) */
+  palette: PaletteName;
 }
 
 // 섹션 타입별 한국어 레이블
@@ -74,6 +79,8 @@ export default function SectionCard({
   onAiEdit,
   onDelete,
   onClick,
+  onImagesChange,
+  palette,
 }: SectionCardProps) {
   // AI 지시어 패널 표시 여부
   const [showPanel, setShowPanel] = useState(false);
@@ -254,6 +261,13 @@ export default function SectionCard({
             onSubmit={handleAiSubmit}
           />
         )}
+
+        {/* 이미지 첨부 패널 */}
+        <SectionImageAttachment
+          images={section.attachedImages}
+          palette={palette}
+          onChange={(imgs) => onImagesChange(section.id, imgs)}
+        />
       </div>
     </div>
   );

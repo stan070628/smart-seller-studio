@@ -16,7 +16,7 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable';
 import { Plus, RefreshCw, Copy, Download, Loader2, ChevronDown } from 'lucide-react';
-import type { DetailSection, DetailPageTheme, SectionType } from '@/types/detail-page';
+import type { DetailSection, DetailPageTheme, SectionType, AttachedImage } from '@/types/detail-page';
 import { createEmptySection } from '@/lib/detail-page/section-parser';
 import { C } from '@/lib/design-tokens';
 import ThemeBar from './ThemeBar';
@@ -125,6 +125,17 @@ export default function DetailPageEditor({
   const handleSectionClick = (id: string) => {
     setActiveSectionId((prev) => (prev === id ? null : id));
   };
+
+  // 섹션 이미지 변경 — 해당 섹션의 attachedImages 업데이트
+  const handleImagesChange = useCallback(
+    (id: string, images: AttachedImage[]) => {
+      const updated = sections.map((s) =>
+        s.id === id ? { ...s, attachedImages: images } : s,
+      );
+      onSectionsChange(updated);
+    },
+    [sections, onSectionsChange],
+  );
 
   // 드롭다운 외부 클릭 시 닫기
   const handleAddButtonBlur = (e: React.FocusEvent<HTMLDivElement>) => {
@@ -314,6 +325,8 @@ export default function DetailPageEditor({
                       onAiEdit={onSectionAiEdit}
                       onDelete={handleDelete}
                       onClick={handleSectionClick}
+                      onImagesChange={handleImagesChange}
+                      palette={theme.palette}
                     />
                   ))
                 )}
