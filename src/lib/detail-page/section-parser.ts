@@ -8,6 +8,13 @@ import type { DetailPageContent } from '@/lib/ai/prompts/detail-page';
  * 빈 배열에 해당하는 선택적 섹션은 생략하며, order는 0부터 시작하는 연속 인덱스를 사용한다.
  */
 export function contentToSections(content: DetailPageContent): DetailSection[] {
+  if (!content.headline?.trim()) {
+    throw new Error('contentToSections: headline must not be empty');
+  }
+  if (!content.ctaText?.trim()) {
+    throw new Error('contentToSections: ctaText must not be empty');
+  }
+
   const sections: DetailSection[] = [];
   let order = 0;
 
@@ -112,6 +119,9 @@ export function contentToSections(content: DetailPageContent): DetailSection[] {
     attachedImages: [],
     aiInstruction: undefined,
   });
+
+  // 'stats' 섹션은 DetailPageContent에 해당 데이터가 없으므로 생성하지 않음.
+  // 사용자가 수동으로 '섹션 추가' 버튼을 통해서만 추가 가능.
 
   return sections;
 }
