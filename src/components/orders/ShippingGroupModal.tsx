@@ -142,7 +142,7 @@ export default function ShippingGroupModal({ products, onClose, onCreated }: Pro
                 const disabled = !entry;
                 const selected = selectedProductIds.has(p.id);
                 return (
-                  <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', cursor: disabled ? 'not-allowed' : 'pointer', padding: '8px', borderRadius: '6px', background: '#fff', border: `1px solid ${selected ? '#93c5fd' : '#e5e5e5'}`, opacity: disabled ? 0.5 : 1 }}>
+                  <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#111111', cursor: disabled ? 'not-allowed' : 'pointer', padding: '8px', borderRadius: '6px', background: '#fff', border: `1px solid ${selected ? '#93c5fd' : '#e5e5e5'}`, opacity: disabled ? 0.5 : 1 }}>
                     <input type="checkbox" checked={selected} disabled={disabled} onChange={() => toggleProduct(p.id)} />
                     <span style={{ flex: 1 }}>{p.product_name}</span>
                     {entry
