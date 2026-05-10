@@ -60,9 +60,23 @@ function sectionAttrs(section: DetailSection): string {
 // 첨부 이미지 렌더러
 // ─────────────────────────────────────────
 
-// 첨부 이미지가 있으면 첫 번째 이미지를 반환, 없으면 빈 문자열
+// 첨부 이미지가 없으면 빈 문자열, 2장 이상이면 flex 컨테이너로 나란히, 1장이면 단일 이미지 반환
 function renderAttachedImage(section: DetailSection): string {
   if (section.attachedImages.length === 0) return '';
+
+  if (section.attachedImages.length >= 2) {
+    const img1 = section.attachedImages[0];
+    const img2 = section.attachedImages[1];
+    const safeUrl1 = sanitizeUrl(img1.url);
+    const safeUrl2 = sanitizeUrl(img2.url);
+    if (!safeUrl1 && !safeUrl2) return '';
+    const imgTag = (url: string) =>
+      url
+        ? `<img src="${escapeHtml(url)}" alt="" style="flex:1;min-width:0;width:50%;display:block;height:auto;" />`
+        : `<div style="flex:1;min-width:0;width:50%;"></div>`;
+    return `<div style="display:flex;gap:8px;width:100%;box-sizing:border-box;">${imgTag(safeUrl1)}${imgTag(safeUrl2)}</div>`;
+  }
+
   const img = section.attachedImages[0];
   const safeUrl = sanitizeUrl(img.url);
   if (!safeUrl) return '';

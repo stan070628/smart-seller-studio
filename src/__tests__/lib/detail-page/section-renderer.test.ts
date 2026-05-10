@@ -545,3 +545,42 @@ describe('팔레트 색상 반영', () => {
     expect(darkHtml).toContain(PALETTES['deep_dark'].cardBg);
   });
 });
+
+// ---------------------------------------------------------------------------
+// renderSection — attachedImages 2장 나란히 렌더링
+// ---------------------------------------------------------------------------
+describe('renderSection — attachedImages 2장', () => {
+  const twoImageSection = baseSection({
+    type: 'hero',
+    content: { type: 'hero', headline: '제목', subheadline: '부제목' },
+    attachedImages: [
+      { url: 'https://example.com/img1.jpg', order: 0, processingMode: 'original' },
+      { url: 'https://example.com/img2.jpg', order: 1, processingMode: 'original' },
+    ],
+  });
+
+  it('2장 모두 img 태그로 렌더링된다', () => {
+    const html = renderSection(twoImageSection, WARM_CREAM_THEME);
+    expect(html).toContain('https://example.com/img1.jpg');
+    expect(html).toContain('https://example.com/img2.jpg');
+  });
+
+  it('flex 컨테이너로 나란히 배치된다', () => {
+    const html = renderSection(twoImageSection, WARM_CREAM_THEME);
+    expect(html).toContain('display:flex');
+    expect(html).toContain('width:50%');
+  });
+
+  it('1장만 있을 때는 단일 이미지 렌더링(width:100%)', () => {
+    const oneImageSection = baseSection({
+      type: 'hero',
+      content: { type: 'hero', headline: '제목', subheadline: '부제목' },
+      attachedImages: [
+        { url: 'https://example.com/img1.jpg', order: 0, processingMode: 'original' },
+      ],
+    });
+    const html = renderSection(oneImageSection, WARM_CREAM_THEME);
+    expect(html).toContain('width:100%');
+    expect(html).not.toContain('width:50%');
+  });
+});
