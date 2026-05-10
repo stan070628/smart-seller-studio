@@ -8,6 +8,8 @@ import { devtools } from 'zustand/middleware';
 import type { PlatformId, ProductListing } from '@/types/listing';
 import type { ProductOptions } from '@/types/product-option';
 import { parseSpecText } from '@/lib/utils/parseSpecText';
+import type { DetailSection, DetailPageTheme } from '@/types/detail-page';
+import { DEFAULT_THEME } from '@/lib/detail-page/palette-config';
 
 // ─── SharedDraft 타입 ────────────────────────────────────────────────────────
 // 탭 이동 시에도 입력값이 유지되도록 공통 필드를 스토어에서 관리
@@ -60,6 +62,10 @@ interface SharedDraft {
   // ─── AI 상세페이지 수정 ─────────────────────────────────────────────────────
   detailPageEditStatus: 'idle' | 'editing' | 'done' | 'error';
   detailPageEditError: string | null;
+
+  // ─── 상세페이지 섹션 편집 ──────────────────────────────────────────────────
+  detailPageSections: DetailSection[];
+  detailPageTheme: DetailPageTheme;
 
   // ─── 제조사 / 원산지 ─────────────────────────────────────────────────────────
   manufacturer?: string;   // 제조사/브랜드 (parse-url에서 추출, 네이버 등록에 사용)
@@ -119,6 +125,9 @@ const SHARED_DRAFT_INITIAL: SharedDraft = {
   // AI 상세페이지 수정
   detailPageEditStatus: 'idle',
   detailPageEditError: null,
+  // 상세페이지 섹션 편집
+  detailPageSections: [],
+  detailPageTheme: DEFAULT_THEME,
   // 제조사 / 원산지
   manufacturer: undefined,
   countryOfOrigin: undefined,
@@ -312,6 +321,13 @@ interface ListingStore {
   editDetailPage: (instruction: string) => Promise<void>;
   saveImagesToStorage: () => Promise<Array<{ url: string; error: string }>>;
   resetWorkflow: () => void;
+
+  // ─── 상세페이지 섹션 편집 액션 ──────────────────────────────────────────────
+  setDetailPageSections: (sections: DetailSection[]) => void;
+  setDetailPageTheme: (theme: DetailPageTheme) => void;
+  updateDetailPageSection: (id: string, patch: Partial<Omit<DetailSection, 'id'>>) => void;
+  removeDetailPageSection: (id: string) => void;
+  reorderDetailPageSections: (orderedIds: string[]) => void;
 
   // ─── BothRegistration 액션 ──────────────────────────────────────────────────
   bothRegistration: BothRegistrationState;
@@ -1356,6 +1372,68 @@ export const useListingStore = create<ListingStore>()(
           { sharedDraft: SHARED_DRAFT_INITIAL },
           false,
           'listing/resetWorkflow',
+        ),
+
+      // ─── 상세페이지 섹션 편집 액션 ────────────────────────────────────────────
+
+      setDetailPageSections: (sections) =>
+        set(
+          (state) => ({ sharedDraft: { ...state.sharedDraft, detailPageSections: sections } }),
+          false,
+          'listing/setDetailPageSections'
+        ),
+
+      setDetailPageTheme: (theme) =>
+        set(
+          (state) => ({ sharedDraft: { ...state.sharedDraft, detailPageTheme: theme } }),
+          false,
+          'listing/setDetailPageTheme'
+        ),
+
+      updateDetailPageSection: (id, patch) =>
+        set(
+          (state) => ({
+            sharedDraft: {
+              ...state.sharedDraft,
+              detailPageSections: state.sharedDraft.detailPageSections.map((s) =>
+                s.id === id ? { ...s, ...patch } : s
+              ),
+            },
+          }),
+          false,
+          'listing/updateDetailPageSection'
+        ),
+
+      removeDetailPageSection: (id) =>
+        set(
+          (state) => ({
+            sharedDraft: {
+              ...state.sharedDraft,
+              detailPageSections: state.sharedDraft.detailPageSections.filter((s) => s.id !== id),
+            },
+          }),
+          false,
+          'listing/removeDetailPageSection'
+        ),
+
+      reorderDetailPageSections: (orderedIds) =>
+        set(
+          (state) => {
+            const sectionMap = new Map(
+              state.sharedDraft.detailPageSections.map((s) => [s.id, s])
+            );
+            const reordered = orderedIds
+              .map((id, index) => {
+                const s = sectionMap.get(id);
+                return s ? { ...s, order: index } : null;
+              })
+              .filter((s): s is DetailSection => s !== null);
+            return {
+              sharedDraft: { ...state.sharedDraft, detailPageSections: reordered },
+            };
+          },
+          false,
+          'listing/reorderDetailPageSections'
         ),
     }),
     { name: 'ListingStore' },

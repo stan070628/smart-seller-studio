@@ -11,6 +11,7 @@ import { act, renderHook } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { server } from '../mocks/server';
 import { useListingStore } from '@/store/useListingStore';
+import { DEFAULT_THEME } from '@/lib/detail-page/palette-config';
 
 // ---------------------------------------------------------------------------
 // 헬퍼: 공통 등록 요청 데이터
@@ -73,6 +74,8 @@ function resetStore() {
       pickedDetailImages: [],
       detailPageSnippetNaver: null,
       categoryHint: '',
+      detailPageSections: [],
+      detailPageTheme: DEFAULT_THEME,
     },
     bothRegistration: {
       coupang: { status: 'idle' },
