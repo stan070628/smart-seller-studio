@@ -49,6 +49,33 @@ function dedupe(urls: string[]): string[] {
   return urls.filter((u) => { if (seen.has(u)) return false; seen.add(u); return true; });
 }
 
+// data URL을 1280px / q0.8 JPEG로 압축 — Vercel 4.5MB 요청 한도 초과 방지
+function compressDataUrl(dataUrl: string, maxDimension = 1280, quality = 0.8): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new window.Image();
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > maxDimension || height > maxDimension) {
+        if (width >= height) {
+          height = Math.round((height * maxDimension) / width);
+          width = maxDimension;
+        } else {
+          width = Math.round((width * maxDimension) / height);
+          height = maxDimension;
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 메인 컴포넌트
 // ─────────────────────────────────────────────────────────────────────────────
@@ -212,11 +239,15 @@ export default function Step2ImagePicker() {
     if (!editModal || !editModal.prompt.trim()) return;
     setEditModal((prev) => prev && { ...prev, loading: true, error: null });
     try {
+      // 로컬 업로드 data URL은 압축 후 전송 (미압축 시 Vercel 4.5MB 한도 초과 → 413)
+      const imageUrl = editModal.imageUrl.startsWith('data:')
+        ? await compressDataUrl(editModal.imageUrl)
+        : editModal.imageUrl;
       const res = await fetch('/api/ai/edit-thumbnail', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ imageUrl: editModal.imageUrl, prompt: editModal.prompt.trim() }),
+        body: JSON.stringify({ imageUrl, prompt: editModal.prompt.trim() }),
       });
       let json: Record<string, unknown>;
       try {

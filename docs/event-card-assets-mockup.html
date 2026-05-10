@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Assets 탭 — 리뷰 이벤트 카드 기능 추가 목업</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, 'Apple SD Gothic Neo', sans-serif;
+    background: #f3f4f6;
+    padding: 32px;
+    color: #111;
+    font-size: 13px;
+  }
+
+  h2 { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+  .page-label {
+    font-size: 12px;
+    color: #6b7280;
+    margin-bottom: 20px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 12px 16px;
+    line-height: 1.7;
+  }
+  .page-label strong { color: #111; }
+  .page-label .badge {
+    display: inline-block;
+    background: #7c3aed;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 100px;
+    margin-left: 4px;
+    vertical-align: middle;
+  }
+  .page-label .badge.green { background: #059669; }
+
+  /* ── 패널 레이아웃 ── */
+  .panel-wrap {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+
+  .panel {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .panel-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid #e5e7eb;
+    font-weight: 700;
+    font-size: 13px;
+    background: #f9fafb;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .panel-body { padding: 16px; }
+
+  /* ── 인풋 패널 ── */
+  .input-section { margin-bottom: 14px; }
+  .input-section label { font-size: 12px; font-weight: 600; color: #374151; display: block; margin-bottom: 5px; }
+  .input-section input, .input-section textarea {
+    width: 100%;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 7px 10px;
+    font-size: 12px;
+    color: #374151;
+    background: #fff;
+  }
+  .btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 7px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .btn-primary { background: #111; color: #fff; }
+  .btn-purple { background: #7c3aed; color: #fff; }
+  .btn-green { background: #059669; color: #fff; }
+  .btn-outline { background: #fff; color: #374151; border: 1px solid #e5e7eb; }
+
+  /* ── 결과 패널 ── */
+  .result-panel { display: flex; flex-direction: column; gap: 16px; }
+
+  /* 썸네일 그리드 */
+  .thumb-grid { display: flex; gap: 8px; flex-wrap: wrap; }
+  .thumb-item {
+    width: 100px; height: 100px;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+    color: #9ca3af; font-size: 11px;
+  }
+
+  /* 상세 HTML 미리보기 */
+  .detail-preview {
+    background: #f9fafb;
+    border: 1px dashed #d1d5db;
+    border-radius: 8px;
+    height: 160px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #9ca3af;
+    font-size: 12px;
+  }
+
+  /* ── 새로 추가될 섹션 ── */
+  .new-section {
+    border: 2px dashed #7c3aed;
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+  }
+  .new-badge {
+    position: absolute;
+    top: -1px;
+    right: 12px;
+    background: #7c3aed;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 10px;
+    border-radius: 0 0 6px 6px;
+  }
+
+  .event-card-header {
+    padding: 11px 14px;
+    border-bottom: 1px solid #ede9fe;
+    background: #faf5ff;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .event-card-title { font-size: 12px; font-weight: 700; color: #7c3aed; }
+  .event-card-desc { font-size: 11px; color: #a78bfa; margin-top: 2px; }
+
+  .event-card-body { padding: 12px 14px; }
+
+  /* 이벤트 카드 미니 미리보기 */
+  .event-mini-card {
+    width: 100%;
+    height: 100px;
+    background: linear-gradient(135deg, #00704A 0%, #1E3932 100%);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    margin-bottom: 10px;
+  }
+  .event-mini-top {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-weight: 800;
+    font-size: 13px;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .event-mini-label { font-size: 9px; opacity: 0.75; }
+  .event-mini-bottom {
+    background: #1E3932;
+    color: rgba(255,255,255,0.8);
+    font-size: 9px;
+    text-align: center;
+    padding: 4px;
+  }
+
+  /* 설정 필드 */
+  .field-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+    align-items: center;
+  }
+  .field-row label { font-size: 11px; font-weight: 600; color: #374151; min-width: 60px; }
+  .field-row input {
+    flex: 1;
+    border: 1px solid #ddd6fe;
+    border-radius: 6px;
+    padding: 5px 8px;
+    font-size: 11px;
+    color: #374151;
+    background: #faf5ff;
+  }
+
+  /* 액션 버튼 */
+  .action-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+
+  /* 상세 HTML 에 삽입 */
+  .insert-section {
+    border-top: 1px solid #ede9fe;
+    padding: 10px 14px;
+    background: #f5f3ff;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .insert-desc { font-size: 11px; color: #6d28d9; }
+  .insert-desc strong { display: block; font-weight: 700; font-size: 12px; margin-bottom: 2px; }
+
+  /* ── 화살표 설명 ── */
+  .annotation {
+    font-size: 11px;
+    color: #7c3aed;
+    margin-top: 8px;
+    padding: 6px 10px;
+    background: #faf5ff;
+    border-left: 3px solid #7c3aed;
+    border-radius: 0 4px 4px 0;
+  }
+
+  /* 하단 전체 액션 */
+  .bottom-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+</style>
+</head>
+<body>
+
+<div class="page-label">
+  <strong>AssetsResultPanel 개선안</strong> — 썸네일·상세만들기 탭 결과 패널에 두 가지 기능 추가<br>
+  <strong>① 이벤트 카드 이미지 저장</strong> <span class="badge green">NEW</span> — 리뷰 이벤트 카드(EventCardPreview)를 PNG로 다운로드<br>
+  <strong>② 상세 HTML에 이벤트 섹션 삽입</strong> <span class="badge">NEW</span> — 생성된 detail HTML 최상단에 이벤트 카드 HTML 블록 prepend<br>
+  구현 위치: <code>AssetsResultPanel.tsx</code> — 기존 "ZIP 다운로드" 버튼 위에 새 카드 섹션 추가
+</div>
+
+<div class="panel-wrap">
+
+  <!-- 좌측: 인풋 패널 (기존 그대로, 참고용) -->
+  <div class="panel">
+    <div class="panel-header">
+      입력 설정
+    </div>
+    <div class="panel-body">
+      <div class="input-section">
+        <label>모드</label>
+        <div style="display:flex; gap:6px;">
+          <button class="btn btn-primary" style="flex:1; font-size:11px;">URL 가져오기</button>
+          <button class="btn btn-outline" style="flex:1; font-size:11px;">이미지 업로드</button>
+        </div>
+      </div>
+      <div class="input-section">
+        <label>상품 URL</label>
+        <input type="text" placeholder="도매꾹·코스트코·외부 상품 URL" />
+      </div>
+      <div class="input-section">
+        <label>상품 스펙</label>
+        <textarea rows="3" placeholder="소재, 크기 등 스펙 입력 (선택)"></textarea>
+      </div>
+      <button class="btn btn-primary" style="width:100%; justify-content:center; padding: 10px;">
+        ✦ 자산 생성하기
+      </button>
+    </div>
+  </div>
+
+  <!-- 우측: 결과 패널 (개선안) -->
+  <div class="result-panel">
+
+    <!-- 기존: 썸네일 섹션 -->
+    <div class="panel">
+      <div class="panel-header">
+        썸네일 (3)
+        <button class="btn btn-outline" style="font-size:11px; padding:4px 10px;">
+          <span style="color:#7c3aed;">✦</span> 선택한 2장 합치기
+        </button>
+      </div>
+      <div class="panel-body">
+        <div class="thumb-grid">
+          <div class="thumb-item">thumb 1</div>
+          <div class="thumb-item">thumb 2</div>
+          <div class="thumb-item">thumb 3</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 기존: 상세 HTML 미리보기 -->
+    <div class="panel">
+      <div class="panel-header">상세 HTML</div>
+      <div class="panel-body">
+        <div class="detail-preview">상세 HTML 미리보기 (iframe)</div>
+      </div>
+    </div>
+
+    <!-- 기존: AI 수정 패널 (생략) -->
+
+    <!-- ★ 신규: 리뷰 이벤트 카드 섹션 -->
+    <div class="panel new-section">
+      <div class="new-badge">NEW</div>
+
+      <div class="event-card-header">
+        <div>
+          <div class="event-card-title">🎁 리뷰 이벤트 카드</div>
+          <div class="event-card-desc">이미지로 저장하거나 상세페이지 HTML에 삽입할 수 있어요</div>
+        </div>
+      </div>
+
+      <div class="event-card-body">
+        <!-- 미니 미리보기 -->
+        <div class="event-mini-card">
+          <div class="event-mini-top">
+            <div class="event-mini-label">☕ REVIEW EVENT</div>
+            리뷰 이벤트
+          </div>
+          <div class="event-mini-bottom">문자 발송 <strong style="color:#fff;">청연코퍼레이션</strong> | 010-0000-0000</div>
+        </div>
+
+        <!-- 설정 필드 -->
+        <div class="field-row">
+          <label>업체명</label>
+          <input type="text" value="청연코퍼레이션" />
+        </div>
+        <div class="field-row">
+          <label>연락처</label>
+          <input type="text" placeholder="010-0000-0000" />
+        </div>
+        <div class="field-row">
+          <label>경품</label>
+          <input type="text" value="100% 전원 스타벅스 아메리카노 기프트콘 증정" />
+        </div>
+
+        <!-- 버튼 1: 이미지 저장 / HTML 복사 -->
+        <div class="action-row">
+          <button class="btn btn-green">
+            ⬇ PNG 이미지 저장
+          </button>
+          <button class="btn btn-outline">
+            📋 HTML 복사
+          </button>
+          <button class="btn btn-outline" style="font-size:11px;">
+            🔗 이벤트 카드 전체 편집
+          </button>
+        </div>
+      </div>
+
+      <!-- 버튼 2: 상세 HTML에 삽입 (detailHtml이 있을 때만 표시) -->
+      <div class="insert-section">
+        <div class="insert-desc">
+          <strong>상세페이지 최상단에 이벤트 카드 삽입</strong>
+          위에서 생성된 상세 HTML 맨 앞에 이벤트 카드 섹션을 추가합니다
+        </div>
+        <button class="btn btn-purple" style="white-space:nowrap;">
+          ↑ 상단에 삽입
+        </button>
+      </div>
+    </div>
+
+    <!-- 기존: 하단 액션 버튼 -->
+    <div class="bottom-actions">
+      <button class="btn btn-primary">ZIP 다운로드</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- 구현 설명 -->
+<div style="margin-top:32px; background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:20px;">
+  <h2 style="margin-bottom:12px;">구현 방법</h2>
+
+  <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
+    <div>
+      <h3 style="font-size:12px; font-weight:700; color:#059669; margin-bottom:8px;">① PNG 이미지 저장</h3>
+      <div style="font-size:11px; color:#374151; line-height:1.7; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:12px;">
+        <strong>라이브러리:</strong> html2canvas (이미 html2pdf.js에 포함)<br>
+        <strong>흐름:</strong><br>
+        1. <code>EventCardPreview</code> 컴포넌트를 숨겨진 div에 렌더링<br>
+        2. html2canvas로 캡처 (scale: 2, 고해상도)<br>
+        3. <code>canvas.toBlob()</code> → PNG 다운로드<br>
+        <br>
+        <strong>또는:</strong> 기존 <code>generatePdf</code> 방식 대신<br>
+        <code>/api/label/generate-image</code> 서버 API 호출<br>
+        → Sharp로 렌더링 (향후 서버사이드 방식)
+      </div>
+    </div>
+
+    <div>
+      <h3 style="font-size:12px; font-weight:700; color:#7c3aed; margin-bottom:8px;">② 상세 HTML 최상단 삽입</h3>
+      <div style="font-size:11px; color:#374151; line-height:1.7; background:#faf5ff; border:1px solid #ddd6fe; border-radius:8px; padding:12px;">
+        <strong>핵심 코드:</strong><br>
+        <code style="background:#ede9fe; padding:2px 6px; border-radius:4px; font-size:10px;">
+          const eventHtml = getEventCardHtml(fields);<br>
+          const merged = eventHtml + generatedDetailHtml;<br>
+          updateAssetsDraft({ generatedDetailHtml: merged });
+        </code>
+        <br><br>
+        <strong>getEventCardHtml():</strong><br>
+        EventCard 컴포넌트를 <code>renderToStaticMarkup</code>으로<br>
+        정적 HTML 문자열로 변환하거나, 또는<br>
+        별도 HTML 템플릿 함수로 직접 생성
+      </div>
+    </div>
+
+    <div>
+      <h3 style="font-size:12px; font-weight:700; color:#b45309; margin-bottom:8px;">③ 이미 생성된 상세 HTML에 리뷰 섹션 추가 방법</h3>
+      <div style="font-size:11px; color:#374151; line-height:1.7; background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:12px;">
+        <strong>클라이언트에서 직접:</strong><br>
+        1. AssetsResultPanel에서 <code>generatedDetailHtml</code> 상태 앞에<br>
+        &nbsp;&nbsp; 이벤트 카드 HTML 블록을 prepend<br>
+        2. 상태 업데이트 → iframe이 자동으로 다시 렌더링됨<br>
+        3. ZIP 다운로드 시 merged HTML이 포함됨<br>
+        <br>
+        <strong>되돌리기:</strong> undo 패턴 (prevHtmlRef 방식 재사용)
+      </div>
+    </div>
+
+    <div>
+      <h3 style="font-size:12px; font-weight:700; color:#374151; margin-bottom:8px;">파일 변경 범위</h3>
+      <div style="font-size:11px; color:#374151; line-height:1.7; background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px; padding:12px;">
+        <strong>수정:</strong> <code>AssetsResultPanel.tsx</code><br>
+        → 이벤트 카드 설정 state 추가<br>
+        → EventCardPreview 렌더링 (hidden)<br>
+        → PNG 저장 / HTML 복사 / 삽입 버튼 추가<br>
+        <br>
+        <strong>신규:</strong> <code>lib/label/event-card-html.ts</code><br>
+        → getEventCardHtml(fields) 함수<br>
+        → 인라인 스타일 포함 독립 HTML 블록 생성
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
