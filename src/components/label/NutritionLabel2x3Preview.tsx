@@ -53,24 +53,24 @@ const CELL_STYLE: React.CSSProperties = {
 };
 
 const TH: React.CSSProperties = {
-  padding: '0.5mm 1mm',
+  padding: '0.35mm 0.8mm',
   border: '0.4px solid #bbb',
   fontWeight: 700,
   background: '#efefef',
   color: '#222',
   verticalAlign: 'middle',
   whiteSpace: 'nowrap' as const,
-  fontSize: '8.5px',
+  fontSize: '7px',
   textAlign: 'left' as const,
   width: '28%',
 };
 const TD: React.CSSProperties = {
-  padding: '0.5mm 1mm',
+  padding: '0.35mm 0.8mm',
   border: '0.4px solid #bbb',
   color: '#111',
   verticalAlign: 'middle',
-  fontSize: '8.5px',
-  lineHeight: 1.25,
+  fontSize: '7px',
+  lineHeight: 1.2,
   wordBreak: 'break-all' as const,
   whiteSpace: 'pre-wrap' as const,
 };
@@ -192,8 +192,8 @@ function NutritionCell({
         {/* 제목 */}
         <div style={{
           background: '#111', color: '#fff',
-          textAlign: 'center', padding: '0.5mm 1mm',
-          fontSize: '8px', fontWeight: 900, letterSpacing: '0.15em',
+          textAlign: 'center', padding: '0.4mm 1mm',
+          fontSize: '7.5px', fontWeight: 900, letterSpacing: '0.15em',
         }}>
           영 양 정 보
         </div>
@@ -201,13 +201,13 @@ function NutritionCell({
         {/* 1회 제공량 */}
         <div style={{
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          padding: '0.45mm 2mm', borderBottom: '1.2px solid #111',
-          fontSize: '6.5px', color: '#111', fontWeight: 600,
+          padding: '0.35mm 1.5mm', borderBottom: '1.2px solid #111',
+          fontSize: '6px', color: '#111', fontWeight: 600,
         }}>
           <span>{servingSize || '1회 제공량'}당</span>
           <span>
-            <span style={{ fontSize: '11px', fontWeight: 900 }}>{calories || '0'}</span>
-            <span style={{ fontSize: '5.5px', fontWeight: 600, marginLeft: '0.4mm' }}>kcal</span>
+            <span style={{ fontSize: '10px', fontWeight: 900 }}>{calories || '0'}</span>
+            <span style={{ fontSize: '5px', fontWeight: 600, marginLeft: '0.4mm' }}>kcal</span>
           </span>
         </div>
 
@@ -219,17 +219,17 @@ function NutritionCell({
                 {group.map((row) => (
                   <td key={row.id} style={{
                     border: '0.4px solid #ccc',
-                    padding: '0.5mm 0.9mm',
+                    padding: '0.4mm 0.8mm',
                     verticalAlign: 'middle',
                     width: '33.33%',
                     background: row.isSubItem
                       ? (idx % 2 === 0 ? '#e8e8e8' : '#f0f0f0')
                       : (row.isHighlight ? '#fff3cd' : undefined),
                   }}>
-                    <div style={{ fontSize: '8px', fontWeight: 700, color: '#111', marginBottom: '0.2mm' }}>
+                    <div style={{ fontSize: '6.5px', fontWeight: 700, color: '#111', marginBottom: '0.1mm' }}>
                       {row.name}
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '7px', color: '#444' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '6px', color: '#444' }}>
                       <span>{row.amount}{row.unit}</span>
                       <span style={{ fontWeight: 600, color: '#333' }}>
                         {row.percent !== '' ? `${row.percent}%` : '—'}
@@ -248,10 +248,10 @@ function NutritionCell({
 
         {/* 각주 */}
         <div style={{
-          padding: '0.5mm 1mm',
-          fontSize: '5.5px', color: '#444',
+          padding: '0.4mm 0.8mm',
+          fontSize: '5px', color: '#444',
           borderTop: '0.4px solid #ccc',
-          lineHeight: 1.35,
+          lineHeight: 1.3,
         }}>
           {footnote}
         </div>
