@@ -7,8 +7,9 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { Upload, X, Loader2 } from 'lucide-react';
+import { Upload, X, Loader2, FolderOpen } from 'lucide-react';
 import type { AttachedImage, ImageProcessingMode, PaletteName } from '@/types/detail-page';
+import { useListingStore } from '@/store/useListingStore';
 
 // ─────────────────────────────────────────
 // Props
@@ -18,13 +19,14 @@ interface SectionImageAttachmentProps {
   images: AttachedImage[];
   palette: PaletteName;
   onChange: (images: AttachedImage[]) => void;
+  onAiEdit?: (imageUrl: string, index: number) => void;
 }
 
 // ─────────────────────────────────────────
 // 상수
 // ─────────────────────────────────────────
 
-const MAX_IMAGES = 3;
+const MAX_IMAGES = 2;
 
 const MODE_LABELS: Record<ImageProcessingMode, string> = {
   bg_composed: '배경 합성',
@@ -59,6 +61,7 @@ export default function SectionImageAttachment({
   images,
   palette,
   onChange,
+  onAiEdit,
 }: SectionImageAttachmentProps) {
   // 현재 선택된 처리 모드
   const [processingMode, setProcessingMode] = useState<ImageProcessingMode>('bg_composed');
@@ -66,8 +69,17 @@ export default function SectionImageAttachment({
   const [isUploading, setIsUploading] = useState(false);
   // 업로드 에러 메시지
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // 소스 이미지 픽커 모달
+  const [showPicker, setShowPicker] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { sharedDraft } = useListingStore();
+  const sourceImages = [
+    ...sharedDraft.thumbnailImages,
+    ...sharedDraft.detailImages,
+    ...sharedDraft.pickedDetailImages,
+  ].filter((url, idx, arr) => url && arr.indexOf(url) === idx);
 
   const canAddMore = images.length < MAX_IMAGES;
 
@@ -141,6 +153,32 @@ export default function SectionImageAttachment({
       .filter((_, i) => i !== index)
       .map((img, i) => ({ ...img, order: i }));
     onChange(updated);
+  };
+
+  // 소스 이미지 URL 선택 → process-image API 호출
+  const handleSourceImageSelect = async (imageUrl: string) => {
+    setShowPicker(false);
+    if (images.length >= MAX_IMAGES) return;
+
+    setIsUploading(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch('/api/detail-page/process-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl, processingMode, palette }),
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({ error: '알 수 없는 오류' }));
+        throw new Error((errJson as { error?: string }).error ?? `처리 실패 (${res.status})`);
+      }
+      const data = (await res.json()) as { url: string; processingMode: ImageProcessingMode };
+      onChange([...images, { url: data.url, order: images.length, processingMode: data.processingMode }]);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : '이미지 불러오기 중 오류가 발생했습니다.');
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (
@@ -255,6 +293,32 @@ export default function SectionImageAttachment({
             >
               <X size={11} color="#ffffff" />
             </button>
+
+            {/* AI 편집 버튼 */}
+            {onAiEdit && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAiEdit(img.url, idx);
+                }}
+                title="AI로 편집"
+                style={{
+                  position: 'absolute',
+                  bottom: 2,
+                  left: 2,
+                  background: '#7c3aed',
+                  border: 'none',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 2,
+                  padding: '2px 5px',
+                }}
+              >
+                <span style={{ fontSize: 9, color: '#fff', fontFamily: 'system-ui, sans-serif', fontWeight: 600 }}>🪄</span>
+              </button>
+            )}
           </div>
         ))}
 
@@ -326,6 +390,45 @@ export default function SectionImageAttachment({
               </span>
             </button>
 
+            {/* 소스 이미지 불러오기 버튼 */}
+            {sourceImages.length > 0 && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowPicker(true);
+                }}
+                title="소스 이미지 불러오기"
+                style={{
+                  width: 60,
+                  height: 60,
+                  borderRadius: 6,
+                  border: '1.5px dashed #93c5fd',
+                  background: '#eff6ff',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 4,
+                  flexShrink: 0,
+                  transition: 'border-color 0.15s, background 0.15s',
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = '#3b82f6';
+                  (e.currentTarget as HTMLButtonElement).style.background = '#dbeafe';
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = '#93c5fd';
+                  (e.currentTarget as HTMLButtonElement).style.background = '#eff6ff';
+                }}
+              >
+                <FolderOpen size={16} color="#3b82f6" />
+                <span style={{ fontSize: 10, color: '#3b82f6', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+                  소스
+                </span>
+              </button>
+            )}
+
             <input
               ref={fileInputRef}
               type="file"
@@ -337,6 +440,99 @@ export default function SectionImageAttachment({
           </>
         )}
       </div>
+
+      {/* 소스 이미지 픽커 모달 */}
+      {showPicker && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            background: 'rgba(0,0,0,0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowPicker(false);
+          }}
+        >
+          <div
+            style={{
+              background: '#ffffff',
+              borderRadius: 12,
+              width: '100%',
+              maxWidth: 560,
+              maxHeight: '80vh',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+            }}
+          >
+            {/* 모달 헤더 */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '14px 16px',
+                borderBottom: '1px solid #eeeeee',
+              }}
+            >
+              <div>
+                <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#111111', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+                  소스 이미지 불러오기
+                </p>
+                <p style={{ margin: '2px 0 0', fontSize: 11, color: '#888888', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+                  선택 시 현재 처리 모드({MODE_LABELS[processingMode]})로 처리됩니다
+                </p>
+              </div>
+              <button
+                onClick={() => setShowPicker(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#888888', fontSize: 20, lineHeight: 1, padding: '0 4px' }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* 이미지 그리드 */}
+            <div style={{ padding: 12, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+              {sourceImages.map((url) => (
+                <button
+                  key={url}
+                  onClick={() => handleSourceImageSelect(url)}
+                  style={{
+                    padding: 0,
+                    border: '2px solid transparent',
+                    borderRadius: 8,
+                    overflow: 'hidden',
+                    cursor: 'pointer',
+                    aspectRatio: '1',
+                    background: '#f5f5f5',
+                    transition: 'border-color 0.15s',
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.borderColor = '#3b82f6';
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.borderColor = 'transparent';
+                  }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={url}
+                    alt="소스 이미지"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 에러 메시지 */}
       {errorMsg && (
