@@ -43,7 +43,15 @@ export async function GET(request: NextRequest) {
   } catch (err) {
     console.error('[GET /api/listing/assets/drafts]', err);
     return Response.json(
-      { success: false, error: err instanceof Error ? err.message : '알 수 없는 오류' },
+      {
+        success: false,
+        error:
+          err instanceof Error
+            ? err.message
+            : typeof err === 'object' && err !== null && 'message' in err
+              ? String((err as { message: unknown }).message)
+              : JSON.stringify(err),
+      },
       { status: 500 },
     );
   }
@@ -103,7 +111,15 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     console.error('[POST /api/listing/assets/drafts]', err);
     return Response.json(
-      { success: false, error: err instanceof Error ? err.message : '알 수 없는 오류' },
+      {
+        success: false,
+        error:
+          err instanceof Error
+            ? err.message
+            : typeof err === 'object' && err !== null && 'message' in err
+              ? String((err as { message: unknown }).message)
+              : JSON.stringify(err),
+      },
       { status: 500 },
     );
   }

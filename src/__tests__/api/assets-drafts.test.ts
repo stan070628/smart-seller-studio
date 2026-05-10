@@ -87,6 +87,14 @@ describe('GET /api/listing/assets/drafts', () => {
     expect(body.drafts[0].name).toBe('작업1');
     expect(body.drafts[0].draftData).toEqual({ mode: 'url' });
   });
+
+  it('DB 오류 시 500을 반환한다', async () => {
+    mockGetSupabase.mockReturnValue(
+      buildSelectMock({ data: null, error: { message: 'DB connection failed' } }),
+    );
+    const res = await GET(makeGet());
+    expect(res.status).toBe(500);
+  });
 });
 
 describe('POST /api/listing/assets/drafts', () => {
@@ -109,5 +117,23 @@ describe('POST /api/listing/assets/drafts', () => {
     expect(res.status).toBe(201);
     const body = await res.json();
     expect(body.id).toBe('new-uuid');
+  });
+
+  it('유효하지 않은 JSON body 시 400을 반환한다', async () => {
+    const req = new NextRequest('http://localhost/api/listing/assets/drafts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: 'invalid-json',
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+  });
+
+  it('DB 오류 시 500을 반환한다', async () => {
+    mockGetSupabase.mockReturnValue(
+      buildInsertMock({ data: null, error: { message: 'insert failed' } }),
+    );
+    const res = await POST(makePost({ name: '작업1', draftData: { mode: 'url' } }));
+    expect(res.status).toBe(500);
   });
 });
