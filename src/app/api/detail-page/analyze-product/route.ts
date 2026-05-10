@@ -29,6 +29,7 @@ import { PALETTES } from '@/lib/detail-page/palette-config';
 import type { PaletteName, SectionType, DetailPageTheme } from '@/types/detail-page';
 import { requireAuth } from '@/lib/supabase/auth';
 import { checkRateLimit, getRateLimitKey } from '@/lib/rate-limit';
+import { withRetry } from '@/lib/ai/resilience';
 
 // ─────────────────────────────────────────
 // 상수
@@ -162,7 +163,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: msg }, { status: 400 });
     }
 
-    const { images, productName } = parsed.data;
+    const { images, productName, categoryCode } = parsed.data;
 
     // 5. Gemini parts 구성
     type GeminiPart =
@@ -192,20 +193,25 @@ export async function POST(request: NextRequest) {
         textPrompt = `상품명: ${productName}\n\n` + textPrompt;
       }
     }
+    // categoryCode가 있으면 프롬프트 앞에 추가
+    if (categoryCode) textPrompt = `카테고리 코드: ${categoryCode}\n` + textPrompt;
     contents.push({ text: textPrompt });
 
     // 6. Gemini API 호출
     let rawText: string;
     try {
       const ai = getGeminiGenAI();
-      const response = await ai.models.generateContent({
-        model: MODEL,
-        contents: [{ role: 'user', parts: contents }],
-        config: {
-          systemInstruction: ANALYZE_SYSTEM_PROMPT,
-          temperature: 0.3,
-        },
-      });
+      const response = await withRetry(
+        () => ai.models.generateContent({
+          model: MODEL,
+          contents: [{ role: 'user', parts: contents }],
+          config: {
+            systemInstruction: ANALYZE_SYSTEM_PROMPT,
+            temperature: 0.3,
+          },
+        }),
+        { label: 'analyze-product' },
+      );
 
       const candidates = response.candidates;
       if (!candidates?.length || !candidates[0]?.content?.parts?.length) {
@@ -267,8 +273,12 @@ export async function POST(request: NextRequest) {
           typeof s === 'string' && VALID_SECTION_TYPES.has(s),
       ) as SectionType[];
 
-    // hero가 없으면 첫 번째로 추가
-    if (!suggestedSections.includes('hero')) {
+    // hero를 항상 첫 번째 위치로 강제
+    const heroIdx = suggestedSections.indexOf('hero');
+    if (heroIdx > 0) {
+      suggestedSections.splice(heroIdx, 1);
+      suggestedSections.unshift('hero');
+    } else if (heroIdx === -1) {
       suggestedSections.unshift('hero');
     }
 
