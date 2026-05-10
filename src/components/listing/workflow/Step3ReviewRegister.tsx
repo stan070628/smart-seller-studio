@@ -14,6 +14,8 @@ import { useListingStore } from '@/store/useListingStore';
 import { C } from '@/lib/design-tokens';
 import CoupangAutoRegisterPanel from '@/components/listing/workflow/CoupangAutoRegisterPanel';
 import NaverAutoRegisterPanel from '@/components/listing/workflow/NaverAutoRegisterPanel';
+import DetailPageEditor from '@/components/listing/detail-editor/DetailPageEditor';
+import type { DetailSection } from '@/types/detail-page';
 
 const AI_STEPS = [
   { label: '이미지 분석', activeOn: 'analyzing' as const },
@@ -35,6 +37,9 @@ export default function Step3ReviewRegister() {
     resetWorkflow,
     editDetailPage,
     generateDetailPageFromPicked,
+    setDetailPageSections,
+    setDetailPageTheme,
+    updateDetailPageSection,
   } = useListingStore();
 
   const {
@@ -52,6 +57,8 @@ export default function Step3ReviewRegister() {
     detailImages,
     sourceUrl,
     selectedPlatform,
+    detailPageSections,
+    detailPageTheme,
   } = sharedDraft;
 
   const [copied, setCopied] = useState(false);
@@ -66,6 +73,12 @@ export default function Step3ReviewRegister() {
   const [editInstruction, setEditInstruction] = useState('');
   const prevHtmlRef = useRef<string | null>(null);
   const prevSnippetRef = useRef<string | null>(null);
+
+  // 렌더링 갱신 상태
+  const [isRendering, setIsRendering] = useState(false);
+
+  // 레거시 모드: 섹션 데이터 없이 HTML만 있는 경우 iframe 표시
+  const isLegacyMode = detailPageSections.length === 0 && !!detailPageFullHtml;
 
   // 쿠팡 임시저장
   const [draftSaving, setDraftSaving] = useState(false);
@@ -144,7 +157,45 @@ export default function Step3ReviewRegister() {
     URL.revokeObjectURL(url);
   };
 
-  // AI 수정
+  // 전체 HTML 재렌더링
+  const refreshRenderedHtml = async () => {
+    if (detailPageSections.length === 0) return;
+    setIsRendering(true);
+    try {
+      const res = await fetch('/api/detail-page/render', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sections: detailPageSections, theme: detailPageTheme }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        updateSharedDraft({ detailPageFullHtml: json.html, detailPageSnippet: json.snippet });
+      }
+    } finally {
+      setIsRendering(false);
+    }
+  };
+
+  // 섹션 단위 AI 편집
+  const handleSectionAiEdit = async (section: DetailSection, instruction: string): Promise<void> => {
+    const res = await fetch('/api/detail-page/edit-section', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        section,
+        instruction,
+        theme: detailPageTheme,
+        productName: name,
+        existingSections: detailPageSections.map((s) => ({ type: s.type, content: s.content })),
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error ?? '섹션 편집 실패');
+    updateDetailPageSection(section.id, json.section);
+    await refreshRenderedHtml();
+  };
+
+  // AI 수정 (레거시 전체 HTML 수정)
   const handleAiEdit = async () => {
     if (!editInstruction.trim() || detailPageEditStatus === 'editing') return;
     prevHtmlRef.current = detailPageFullHtml;
@@ -391,8 +442,9 @@ export default function Step3ReviewRegister() {
             </div>
           )}
 
-          {/* AI 생성 상세페이지 미리보기 */}
-          {hasHtml && (
+          {/* 상세페이지 편집 영역 */}
+          {isLegacyMode ? (
+            /* 레거시 모드: 섹션 데이터 없이 HTML만 존재하는 경우 */
             <div style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: '12px', overflow: 'hidden' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 14px', borderBottom: `1px solid ${C.border}`, backgroundColor: C.tableHeader }}>
                 <span style={{ fontSize: '12px', fontWeight: 700, color: C.text }}>상세페이지 미리보기</span>
@@ -420,11 +472,29 @@ export default function Step3ReviewRegister() {
               <iframe
                 srcDoc={detailPageFullHtml!}
                 title="상세 페이지 미리보기"
-                style={{ width: '100%', height: '480px', border: 'none', display: 'block' }}
+                style={{ width: '100%', height: '500px', border: 'none', display: 'block' }}
                 sandbox="allow-same-origin"
               />
             </div>
-          )}
+          ) : detailPageSections.length > 0 ? (
+            /* 섹션 에디터 모드 */
+            <DetailPageEditor
+              sections={detailPageSections}
+              theme={detailPageTheme}
+              isGenerating={isRendering}
+              onSectionsChange={(sections) => {
+                setDetailPageSections(sections);
+              }}
+              onThemeChange={(theme) => {
+                setDetailPageTheme(theme);
+              }}
+              onSectionAiEdit={handleSectionAiEdit}
+              onRegenerateAll={generateDetailPageFromPicked}
+              onHtmlCopy={handleCopy}
+              onDownload={handleDownload}
+              generatedHtml={detailPageFullHtml ?? undefined}
+            />
+          ) : null}
 
           {/* 원본 description만 있을 때 */}
           {!hasHtml && hasDescription && (
@@ -436,74 +506,6 @@ export default function Step3ReviewRegister() {
                 </button>
               </div>
               <iframe srcDoc={description} title="원본 상세페이지" style={{ width: '100%', height: '360px', border: 'none', display: 'block' }} sandbox="allow-same-origin" />
-            </div>
-          )}
-
-          {/* AI 수정 패널 */}
-          {hasHtml && (
-            <div style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: '12px', overflow: 'hidden' }}>
-              <div style={{ padding: '11px 14px', borderBottom: `1px solid ${C.border}`, backgroundColor: '#faf5ff' }}>
-                <span style={{ fontSize: '12px', fontWeight: 700, color: '#7c3aed' }}>✦ AI로 상세페이지 수정</span>
-                <p style={{ fontSize: '11px', color: '#a78bfa', margin: '2px 0 0' }}>수정 요청을 입력하면 AI가 반영합니다</p>
-              </div>
-              <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-                  {AI_EDIT_CHIPS.map((chip) => (
-                    <button
-                      key={chip}
-                      type="button"
-                      onClick={() => setEditInstruction(chip)}
-                      style={{
-                        padding: '3px 10px', fontSize: '11px', fontWeight: 500,
-                        backgroundColor: editInstruction === chip ? '#ede9fe' : '#f5f3ff',
-                        color: '#7c3aed',
-                        border: `1px solid ${editInstruction === chip ? '#8b5cf6' : '#ddd6fe'}`,
-                        borderRadius: '100px', cursor: 'pointer',
-                      }}
-                    >
-                      {chip}
-                    </button>
-                  ))}
-                </div>
-                <textarea
-                  rows={2}
-                  value={editInstruction}
-                  onChange={(e) => setEditInstruction(e.target.value)}
-                  placeholder="수정 요청을 자유롭게 입력하세요"
-                  style={{ width: '100%', padding: '8px 12px', fontSize: '12px', border: '1px solid #ddd6fe', borderRadius: '7px', outline: 'none', color: C.text, backgroundColor: '#fff', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }}
-                />
-                <button
-                  type="button"
-                  onClick={handleAiEdit}
-                  disabled={!editInstruction.trim() || detailPageEditStatus === 'editing'}
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px',
-                    padding: '8px 16px', fontSize: '12px', fontWeight: 600,
-                    backgroundColor: !editInstruction.trim() || detailPageEditStatus === 'editing' ? '#ede9fe' : '#7c3aed',
-                    color: !editInstruction.trim() || detailPageEditStatus === 'editing' ? '#a78bfa' : '#fff',
-                    border: 'none', borderRadius: '7px',
-                    cursor: !editInstruction.trim() || detailPageEditStatus === 'editing' ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  {detailPageEditStatus === 'editing'
-                    ? <><Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />AI 수정 중...</>
-                    : '✦ AI 수정 적용'}
-                </button>
-                {detailPageEditStatus === 'done' && (
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: '#dcfce7', border: '1px solid #86efac', borderRadius: '7px', fontSize: '12px' }}>
-                    <span style={{ color: '#15803d', fontWeight: 600 }}><CheckCheck size={13} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'middle' }} />수정 완료!</span>
-                    {prevHtmlRef.current !== null && (
-                      <button type="button" onClick={handleUndo} style={{ fontSize: '11px', color: '#15803d', background: 'none', border: '1px solid #86efac', borderRadius: '5px', padding: '2px 8px', cursor: 'pointer' }}>되돌리기</button>
-                    )}
-                  </div>
-                )}
-                {detailPageEditStatus === 'error' && (
-                  <div style={{ padding: '8px 12px', backgroundColor: '#fee2e2', border: '1px solid #fca5a5', borderRadius: '7px', fontSize: '11px', color: '#b91c1c', display: 'flex', alignItems: 'flex-start', gap: '5px' }}>
-                    <AlertCircle size={12} style={{ flexShrink: 0, marginTop: '1px' }} />
-                    {detailPageEditError ?? '수정 중 오류가 발생했습니다.'}
-                  </div>
-                )}
-              </div>
             </div>
           )}
 
