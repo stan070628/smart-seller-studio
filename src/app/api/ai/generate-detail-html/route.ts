@@ -105,16 +105,30 @@ const CLAUDE_MAX_IMAGE_DIMENSION = 7500;
  */
 async function resizeForClaude(
   imageBase64: string,
-  mimeType: AllowedMimeType,
+  _mimeType: AllowedMimeType,
 ): Promise<{ imageBase64: string; mimeType: AllowedMimeType }> {
   const buffer = Buffer.from(imageBase64, "base64");
   const metadata = await sharp(buffer).metadata();
-  const { width = 0, height = 0 } = metadata;
+  const { width = 0, height = 0, format } = metadata;
+
+  // Sharp로 실제 포맷을 감지해 mimeType을 교정한다.
+  // Content-Type 헤더나 클라이언트 제공값이 틀릴 수 있으므로 바이트 기준이 우선이다.
+  const detectedMime: AllowedMimeType =
+    format === 'png' ? 'image/png' :
+    format === 'webp' ? 'image/webp' :
+    'image/jpeg';
 
   if (width <= CLAUDE_MAX_IMAGE_DIMENSION && height <= CLAUDE_MAX_IMAGE_DIMENSION) {
-    return { imageBase64, mimeType };
+    // 크기 내 + 지원 포맷: 그대로 반환 (감지된 mimeType 사용)
+    if (format === 'jpeg' || format === 'png' || format === 'webp') {
+      return { imageBase64, mimeType: detectedMime };
+    }
+    // 지원하지 않는 포맷(gif, tiff 등): JPEG으로 변환
+    const converted = await sharp(buffer).jpeg({ quality: 85 }).toBuffer();
+    return { imageBase64: converted.toString("base64"), mimeType: "image/jpeg" };
   }
 
+  // 크기 초과: 리사이즈 후 JPEG 출력
   const resized = await sharp(buffer)
     .resize(CLAUDE_MAX_IMAGE_DIMENSION, CLAUDE_MAX_IMAGE_DIMENSION, {
       fit: "inside",
