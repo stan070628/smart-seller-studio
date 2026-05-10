@@ -120,7 +120,7 @@ export default function ShippingGroupModal({ products, onClose, onCreated }: Pro
             <Truck size={15} color="#be0014" />
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: '14px', fontWeight: 700 }}>배송비 그룹 생성</div>
+            <div style={{ fontSize: '14px', fontWeight: 700, color: '#18181b' }}>배송비 그룹 생성</div>
             <div style={{ fontSize: '11px', color: '#71717a' }}>로켓그로스 공동 입고 배송비 자동 배분</div>
           </div>
           <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer' }}><X size={16} color="#71717a" /></button>

@@ -76,7 +76,7 @@ export default function RocketGrowthShipmentModal({ products, onClose, onCreated
             <Package size={15} color="#0369a1" />
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: '14px', fontWeight: 700 }}>로켓그로스 입고 등록</div>
+            <div style={{ fontSize: '14px', fontWeight: 700, color: '#18181b' }}>로켓그로스 입고 등록</div>
             <div style={{ fontSize: '11px', color: '#71717a' }}>배송비를 수량 비례로 자동 배분합니다</div>
           </div>
           <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer' }}><X size={16} color="#71717a" /></button>

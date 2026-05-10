@@ -194,7 +194,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
                     ) : (
                       <tr key={e.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
                         <td style={{ padding: '6px 8px', color: '#27272a' }}>{e.received_at.slice(0, 10)}</td>
-                        <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600 }}>{fmt(e.quantity)}개</td>
+                        <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, color: '#18181b' }}>{fmt(e.quantity)}개</td>
                         <td style={{ padding: '6px 8px', textAlign: 'right', color: '#ef4444' }}>{fmt(e.unit_cost)}</td>
                         <td style={{ padding: '6px 8px', textAlign: 'right', color: '#f97316' }}>
                           {fmt(e.unit_shipping_fee)}

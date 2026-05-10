@@ -501,7 +501,7 @@ export class CoupangClient {
     await sleep(API_DELAY);
     try {
       const res = await this.request<CoupangOrder[]>('GET', url);
-      if (res.code !== 'SUCCESS') {
+      if (res.code !== 'SUCCESS' && String(res.code) !== '200') {
         throw new Error(`쿠팡 주문 조회 실패 (code: ${res.code}): ${res.message}`);
       }
       return {
