@@ -39,6 +39,10 @@ export default function LabelTextCell({ fields }: Props) {
           tableLayout: 'fixed',
         }}
       >
+        <colgroup>
+          <col style={{ width: '33.33%' }} />
+          <col style={{ width: '66.67%' }} />
+        </colgroup>
         <thead>
           <tr style={{ height: 1 }}>
             <th
@@ -68,7 +72,6 @@ export default function LabelTextCell({ fields }: Props) {
                   padding: '2px 4px',
                   fontWeight: 700,
                   whiteSpace: 'nowrap',
-                  width: '33.33%',
                   textAlign: 'center',
                   backgroundColor: '#f5f5f5',
                   verticalAlign: 'middle',
