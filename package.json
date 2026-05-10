@@ -37,6 +37,7 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "sharp": "^0.34.5",
+    "uuid": "^14.0.0",
     "zod": "^4.3.6",
     "zustand": "^5.0.12"
   },
@@ -51,6 +52,7 @@
     "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/uuid": "^10.0.0",
     "@vitest/coverage-v8": "^4.1.2",
     "@vitest/ui": "^4.1.2",
     "eslint": "^9",
