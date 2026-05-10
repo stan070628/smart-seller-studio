@@ -5,6 +5,7 @@ import { calcCoupangWing } from '@/lib/calculator/calculate';
 import { resolveCoupangFee } from '@/lib/calculator/coupang-fees';
 import { calcRecommendedSalePrice } from '@/lib/sourcing/shared/channel-policy';
 import { calcCostcoPrice } from '@/lib/sourcing/costco-pricing';
+import { normalizeSalesUnitSpecs } from '@/lib/listing/sales-unit';
 import type {
   NormalizedProduct,
   NormalizedProductOptionValue,
@@ -53,6 +54,74 @@ function buildVariants(
 
 const INPUT = 'px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-full';
 const SECTION = 'flex flex-col gap-4 bg-white border border-gray-200 rounded-xl p-5';
+
+const DETAIL_SECTION_LABELS = ['히어로', '셀링 포인트', '특징', '사양 테이블', '사용법', '주의사항', '구매 유도'];
+const EDITABLE_TEXT_SELECTOR = [
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'p',
+  'li',
+  'td',
+  'th',
+  'strong',
+  'em',
+  'span',
+  'button',
+].join(',');
+
+function getNormalizedProductSpecs(product: NormalizedProduct | null) {
+  return product?.specs?.length ? normalizeSalesUnitSpecs(product.specs) : undefined;
+}
+
+function labelFromSection(section: Element, index: number): string {
+  const text = section.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+  if (/주의|교환|반품|배송|보관|알레르기|경고/.test(text)) return '주의사항';
+  if (/스펙|사양|규격|원재료|함량|용량|중량|판매\s*단위/.test(text)) return '사양 테이블';
+  if (/사용|조리|방법|단계/.test(text)) return '사용법';
+  if (/구매|주문|장바구니/.test(text)) return '구매 유도';
+  return DETAIL_SECTION_LABELS[Math.min(index, DETAIL_SECTION_LABELS.length - 1)];
+}
+
+function enhanceDetailPreviewHtml(html: string): string {
+  if (typeof window === 'undefined' || !html.trim()) return html;
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const body = doc.body;
+  const sectionCandidates = Array.from(body.querySelectorAll('section, [data-section-id]'));
+  const sections = sectionCandidates.length > 0
+    ? sectionCandidates
+    : Array.from(body.children).filter((el) => el.tagName !== 'STYLE' && el.tagName !== 'SCRIPT');
+
+  sections.forEach((section, index) => {
+    section.setAttribute('data-auto-section', 'true');
+    section.setAttribute('data-auto-section-label', labelFromSection(section, index));
+  });
+
+  Array.from(body.querySelectorAll(EDITABLE_TEXT_SELECTOR)).forEach((el) => {
+    if (el.closest('script, style')) return;
+    const hasText = (el.textContent ?? '').trim().length > 0;
+    const hasEditableChild = el.querySelector(EDITABLE_TEXT_SELECTOR) !== null;
+    if (!hasText || hasEditableChild) return;
+    el.setAttribute('contenteditable', 'true');
+    el.setAttribute('spellcheck', 'false');
+    el.setAttribute('data-auto-editable', 'true');
+  });
+
+  return body.innerHTML;
+}
+
+function cleanEditedDetailHtml(root: HTMLElement): string {
+  const clone = root.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll('[data-auto-section], [data-auto-editable]').forEach((el) => {
+    el.removeAttribute('data-auto-section');
+    el.removeAttribute('data-auto-section-label');
+    el.removeAttribute('data-auto-editable');
+    el.removeAttribute('contenteditable');
+    el.removeAttribute('spellcheck');
+  });
+  return clone.innerHTML;
+}
 
 export default function AutoRegisterPage() {
   const [urlDone, setUrlDone] = useState(false);
@@ -129,6 +198,8 @@ export default function AutoRegisterPage() {
   // 상세페이지
   const [detailHtml, setDetailHtml] = useState('');
   const [isPreview, setIsPreview] = useState(true);
+  const detailPreviewRef = useRef<HTMLDivElement>(null);
+  const pendingInlineDetailHtmlRef = useRef<string | null>(null);
   const safeHtml = useMemo(() => {
     if (typeof window === 'undefined') return detailHtml;
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -136,6 +207,19 @@ export default function AutoRegisterPage() {
     const sanitize = purify.sanitize ?? purify.default?.sanitize;
     return sanitize ? sanitize(detailHtml) : detailHtml;
   }, [detailHtml]);
+  const editableSafeHtml = useMemo(() => enhanceDetailPreviewHtml(safeHtml), [safeHtml]);
+
+  function syncInlinePreviewDraft() {
+    const nextHtml = pendingInlineDetailHtmlRef.current;
+    if (nextHtml == null) return;
+    pendingInlineDetailHtmlRef.current = null;
+    setDetailHtml(nextHtml);
+  }
+
+  function handleDetailPreviewInput() {
+    if (!detailPreviewRef.current) return;
+    pendingInlineDetailHtmlRef.current = cleanEditedDetailHtml(detailPreviewRef.current);
+  }
 
   // 배송
   const [deliveryMethod, setDeliveryMethod] = useState<'SEQUENCIAL' | 'VENDOR_DIRECT'>('SEQUENCIAL');
@@ -734,7 +818,7 @@ export default function AutoRegisterPage() {
           ...(imageUrls.length > 0 ? { imageUrls } : {}),
           productName: name,
           existingHtml: detailHtml,
-          ...(product?.specs?.length ? { productSpecs: product.specs } : {}),
+          ...(getNormalizedProductSpecs(product) ? { productSpecs: getNormalizedProductSpecs(product) } : {}),
         }),
       });
       const data = (await res.json()) as { success: boolean; html?: string; error?: string };
@@ -768,7 +852,7 @@ export default function AutoRegisterPage() {
           productName: name,
           ...(detailHtml ? { existingHtml: detailHtml } : {}),
           studioMode: true,
-          ...(product?.specs?.length ? { productSpecs: product.specs } : {}),
+          ...(getNormalizedProductSpecs(product) ? { productSpecs: getNormalizedProductSpecs(product) } : {}),
         }),
       });
       const data = (await res.json()) as { success: boolean; html?: string; error?: string };
@@ -796,7 +880,7 @@ export default function AutoRegisterPage() {
         body: JSON.stringify({
           productName: name,
           existingHtml: detailHtml,
-          ...(product?.specs?.length ? { productSpecs: product.specs } : {}),
+          ...(getNormalizedProductSpecs(product) ? { productSpecs: getNormalizedProductSpecs(product) } : {}),
         }),
       });
       const data = (await res.json()) as { success: boolean; html?: string; error?: string };
@@ -1786,6 +1870,44 @@ export default function AutoRegisterPage() {
             {/* 섹션 4: 상세페이지 */}
             <div className={SECTION}>
               <h3 className="font-semibold text-gray-900">상세페이지</h3>
+              <style>{`
+                .auto-detail-preview [data-auto-section="true"] {
+                  position: relative;
+                  outline: 1px dashed transparent;
+                  outline-offset: -2px;
+                  transition: outline-color 120ms ease, background-color 120ms ease;
+                }
+                .auto-detail-preview [data-auto-section="true"]:hover {
+                  outline-color: #2563eb;
+                  background-image: linear-gradient(rgba(37, 99, 235, 0.035), rgba(37, 99, 235, 0.035));
+                }
+                .auto-detail-preview [data-auto-section="true"]:hover::before {
+                  content: attr(data-auto-section-label);
+                  position: absolute;
+                  top: 8px;
+                  left: 8px;
+                  z-index: 20;
+                  padding: 4px 8px;
+                  border-radius: 6px;
+                  background: #1d4ed8;
+                  color: #fff;
+                  font: 700 12px/1.2 system-ui, -apple-system, sans-serif;
+                  box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+                  pointer-events: none;
+                }
+                .auto-detail-preview [data-auto-editable="true"] {
+                  border-radius: 4px;
+                  cursor: text;
+                }
+                .auto-detail-preview [data-auto-editable="true"]:hover {
+                  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.22);
+                }
+                .auto-detail-preview [data-auto-editable="true"]:focus {
+                  outline: 2px solid #2563eb;
+                  outline-offset: 2px;
+                  background: rgba(255,255,255,0.76);
+                }
+              `}</style>
 
               {/* HTML 에디터 — detailHtml이 있을 때만 표시 */}
               {detailHtml && (
@@ -1799,7 +1921,10 @@ export default function AutoRegisterPage() {
                         미리보기
                       </button>
                       <button
-                        onClick={() => setIsPreview(false)}
+                        onClick={() => {
+                          syncInlinePreviewDraft();
+                          setIsPreview(false);
+                        }}
                         className={`px-3 py-1.5 ${!isPreview ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
                       >
                         HTML 편집
@@ -1815,8 +1940,11 @@ export default function AutoRegisterPage() {
 
                   {isPreview ? (
                     <div
-                      className="border border-gray-200 rounded-lg p-4 max-h-72 overflow-y-auto text-sm"
-                      dangerouslySetInnerHTML={{ __html: safeHtml }}
+                      ref={detailPreviewRef}
+                      className="auto-detail-preview border border-gray-200 rounded-lg p-4 max-h-72 overflow-y-auto text-sm"
+                      onInput={handleDetailPreviewInput}
+                      onBlur={syncInlinePreviewDraft}
+                      dangerouslySetInnerHTML={{ __html: editableSafeHtml }}
                     />
                   ) : (
                     <textarea
