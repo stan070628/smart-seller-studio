@@ -3,7 +3,7 @@
  * SectionImageAttachment
  *
  * 섹션 카드 하단에 표시되는 이미지 첨부 패널입니다.
- * 최대 3장까지 업로드 가능하며, 처리 모드(bg_composed / bg_removed / original)를 선택할 수 있습니다.
+ * 최대 2장까지 업로드 가능하며, 처리 모드(bg_composed / bg_removed / original)를 선택할 수 있습니다.
  */
 
 import React, { useState, useRef } from 'react';
