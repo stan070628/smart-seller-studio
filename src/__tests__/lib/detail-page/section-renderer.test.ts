@@ -567,8 +567,26 @@ describe('renderSection — attachedImages 2장', () => {
 
   it('flex 컨테이너로 나란히 배치된다', () => {
     const html = renderSection(twoImageSection, WARM_CREAM_THEME);
-    expect(html).toContain('display:flex');
+    expect(html).toContain('display:flex;gap:8px;width:100%;box-sizing:border-box;');
     expect(html).toContain('width:50%');
+  });
+
+  it('한 장이 악성 URL이면 placeholder div가 삽입되고 flex 컨테이너는 유지된다', () => {
+    const mixedSection = baseSection({
+      type: 'hero',
+      content: { type: 'hero', headline: '제목', subheadline: '부제목' },
+      attachedImages: [
+        { url: 'javascript:alert(1)', order: 0, processingMode: 'original' },
+        { url: 'https://example.com/img2.jpg', order: 1, processingMode: 'original' },
+      ],
+    });
+    const html = renderSection(mixedSection, WARM_CREAM_THEME);
+    // flex 컨테이너는 유지되어야 함
+    expect(html).toContain('display:flex;gap:8px;width:100%;box-sizing:border-box;');
+    // 악성 URL은 출력에 포함되지 않아야 함
+    expect(html).not.toContain('javascript:');
+    // 유효한 URL은 렌더링되어야 함
+    expect(html).toContain('https://example.com/img2.jpg');
   });
 
   it('1장만 있을 때는 단일 이미지 렌더링(width:100%)', () => {
