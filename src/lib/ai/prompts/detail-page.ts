@@ -1,3 +1,5 @@
+import type { DetailSection } from '@/types/detail-page';
+
 // ─────────────────────────────────────────
 // 이미지 분석 입력 타입 (schemas.ts 의존성 제거, visualPrompt 불필요)
 // ─────────────────────────────────────────
@@ -328,4 +330,58 @@ export function parseDetailPageResponse(rawText: string): DetailPageContent {
   }
 
   return data as unknown as DetailPageContent;
+}
+
+// ─────────────────────────────────────────
+// 섹션 편집 프롬프트 빌더 (edit-section API 공유 유틸)
+// ─────────────────────────────────────────
+
+/**
+ * 섹션 편집 요청에 대한 유저 프롬프트를 생성한다.
+ * existingSections가 있으면 현재 상세페이지 구성 맥락을 추가하여 AI 일관성을 높인다.
+ */
+export function buildSectionEditPrompt(
+  section: DetailSection,
+  instruction: string,
+  productName?: string,
+  existingSections?: Array<{ type: string; content: Record<string, unknown> }>,
+): string {
+  const lines: string[] = [
+    `## 섹션 타입: ${section.type}`,
+    `## 편집 지시어: ${instruction}`,
+  ];
+  if (productName) {
+    lines.push(`## 상품명: ${productName}`);
+  }
+  if (existingSections && existingSections.length > 0) {
+    const sectionTypes = existingSections.map(s => s.type).join(', ');
+    lines.push(`## 현재 상세페이지 섹션 구성: ${sectionTypes}`);
+  }
+  lines.push(
+    ``,
+    `## 현재 섹션 데이터 (JSON):`,
+    JSON.stringify(section.content, null, 2),
+    ``,
+    `위 섹션을 지시어에 따라 개선한 새 섹션 content를 JSON으로 반환하세요.`,
+    `반드시 type 필드를 "${section.type}"으로 유지하세요.`,
+  );
+  return lines.join('\n');
+}
+
+// ─────────────────────────────────────────
+// AI 응답 JSON 추출 헬퍼 (섹션 편집 전용)
+// ─────────────────────────────────────────
+
+/**
+ * AI 응답 텍스트에서 JSON 객체를 추출한다.
+ * 코드 블록 래퍼를 제거한 뒤 첫 번째 JSON 객체({...})를 정규식으로 탐색하여 파싱한다.
+ * AI가 앞뒤에 설명 텍스트를 추가하는 경우에도 안전하게 동작한다.
+ */
+export function parseJsonFromText(text: string): unknown {
+  // 코드 블록 제거
+  const withoutCodeBlock = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+  // JSON 객체 추출 (AI가 앞뒤에 텍스트를 추가할 경우 대비)
+  const match = withoutCodeBlock.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error('JSON 블록을 찾을 수 없습니다.');
+  return JSON.parse(match[0]);
 }

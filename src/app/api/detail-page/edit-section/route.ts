@@ -11,7 +11,7 @@ import { requireAuth } from '@/lib/supabase/auth';
 import { checkRateLimit, getRateLimitKey } from '@/lib/rate-limit';
 import { getAnthropicClient } from '@/lib/ai/claude';
 import { withRetry } from '@/lib/ai/resilience';
-import { checkProhibitedPhrases } from '@/lib/ai/prompts/detail-page';
+import { checkProhibitedPhrases, buildSectionEditPrompt, parseJsonFromText } from '@/lib/ai/prompts/detail-page';
 import { renderSection } from '@/lib/detail-page/section-renderer';
 import type { DetailSection, DetailPageTheme, SectionContent } from '@/types/detail-page';
 
@@ -89,42 +89,6 @@ const SECTION_EDIT_SYSTEM_PROMPT = `당신은 한국 이커머스 상세페이�
 - type 필드는 반드시 원본과 동일하게 유지`;
 
 // ─────────────────────────────────────────
-// AI 유저 프롬프트 생성
-// ─────────────────────────────────────────
-
-function buildSectionEditPrompt(
-  section: DetailSection,
-  instruction: string,
-  productName?: string,
-): string {
-  const lines = [
-    `## 섹션 타입: ${section.type}`,
-    `## 편집 지시어: ${instruction}`,
-    ``,
-    `## 현재 섹션 데이터 (JSON):`,
-    JSON.stringify(section.content, null, 2),
-    ``,
-    `위 섹션을 지시어에 따라 개선한 새 섹션 content를 JSON으로 반환하세요.`,
-    `반드시 type 필드를 "${section.type}"으로 유지하세요.`,
-  ];
-  // 상품명이 있으면 지시어 바로 앞에 삽입
-  if (productName) {
-    lines.splice(1, 0, `## 상품명: ${productName}`);
-  }
-  return lines.join('\n');
-}
-
-// ─────────────────────────────────────────
-// JSON 파싱 헬퍼
-// ─────────────────────────────────────────
-
-function parseJsonFromText(text: string): unknown {
-  // 코드 블록 래퍼 제거 후 파싱
-  const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-  return JSON.parse(cleaned);
-}
-
-// ─────────────────────────────────────────
 // Route Handler
 // ─────────────────────────────────────────
 
@@ -177,7 +141,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const { section: rawSection, instruction, theme, productName } = parseResult.data;
+  const { section: rawSection, instruction, theme, productName, existingSections } = parseResult.data;
 
   // Zod 파싱 결과를 DetailSection 타입으로 재구성
   const section: DetailSection = {
@@ -204,7 +168,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           messages: [
             {
               role: 'user',
-              content: buildSectionEditPrompt(section, instruction, productName),
+              content: buildSectionEditPrompt(section, instruction, productName, existingSections),
             },
           ],
         }),
@@ -231,6 +195,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     console.error('[edit-section] AI 응답 JSON 파싱 실패:', error, '\n응답 원문:', aiResponseText);
     return NextResponse.json(
       { error: 'AI 응답을 파싱하지 못했습니다.' },
+      { status: 500 },
+    );
+  }
+
+  // 배열·null 응답 가드: AI가 객체가 아닌 값을 반환한 경우 즉시 거부
+  if (typeof parsedContent !== 'object' || parsedContent === null || Array.isArray(parsedContent)) {
+    return NextResponse.json(
+      { error: 'AI가 올바른 JSON 객체를 반환하지 않았습니다.' },
       { status: 500 },
     );
   }
