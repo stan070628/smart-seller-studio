@@ -16,6 +16,7 @@ interface ProductRow {
   sale_count: number;
   weighted_avg_cost: number;
   weighted_avg_shipping: number;
+  weighted_avg_rg_shipping: number;
   total_purchase_amount: number;
   current_stock: number;
   stock_value: number;
@@ -421,7 +422,7 @@ export default function CostManagementTab() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
             <thead>
               <tr style={{ background: '#f9f9f9', borderBottom: '1px solid #e5e5e5' }}>
-                {['상품명', '원가(가중평균)', '배송비(배분)', '재고', '재고가치', '실현손익', '입고', '판매', '내역', ''].map((h) => (
+                {['상품명', '원가(가중평균)', '배송비(배분)', 'RG배송비', '재고', '재고가치', '실현손익', '입고', '판매', '내역', ''].map((h) => (
                   <th key={h} style={{ padding: '10px 12px', textAlign: h === '상품명' ? 'left' : 'right', fontWeight: 600, color: '#555', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
@@ -435,6 +436,9 @@ export default function CostManagementTab() {
                   </td>
                   <td style={{ padding: '10px 12px', textAlign: 'right', color: p.entry_count === 0 ? '#ccc' : '#f97316' }}>
                     {p.entry_count === 0 ? '—' : fmt(p.weighted_avg_shipping)}
+                  </td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', color: p.weighted_avg_rg_shipping > 0 ? '#0369a1' : '#ccc' }}>
+                    {p.weighted_avg_rg_shipping > 0 ? fmt(p.weighted_avg_rg_shipping) : '—'}
                   </td>
                   <td style={{ padding: '10px 12px', textAlign: 'right', color: '#18181b' }}>
                     {fmt(p.current_stock)}개
@@ -474,7 +478,7 @@ export default function CostManagementTab() {
       </div>
 
       <div style={{ marginTop: '10px', fontSize: '11px', color: '#999' }}>
-        실현손익 = FIFO 원가 기준 (판매가 − 입고원가 − 배송비 − 수수료)
+        실현손익 = FIFO 원가 기준 (판매가 − 입고원가 − 배송비 − RG배송비 − 수수료)
       </div>
 
       {drawerProductId && (() => {

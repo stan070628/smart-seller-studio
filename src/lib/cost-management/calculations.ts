@@ -13,30 +13,32 @@ export interface CostEntryRow {
 export interface ProductMetrics {
   weighted_avg_cost: number;
   weighted_avg_shipping: number;
+  weighted_avg_rg_shipping: number;
   total_quantity: number;
   total_purchase_amount: number;
 }
 
 export function calculateWeightedAvg(
-  entries: Pick<CostEntryRow, 'quantity' | 'unit_cost' | 'unit_shipping_fee'>[],
-  field: 'unit_cost' | 'unit_shipping_fee',
+  entries: Pick<CostEntryRow, 'quantity' | 'unit_cost' | 'unit_shipping_fee' | 'unit_rg_shipping_fee'>[],
+  field: 'unit_cost' | 'unit_shipping_fee' | 'unit_rg_shipping_fee',
 ): number {
   const totalQty = entries.reduce((s, e) => s + e.quantity, 0);
   if (totalQty === 0) return 0;
-  return Math.round(entries.reduce((s, e) => s + e[field] * e.quantity, 0) / totalQty);
+  return Math.round(entries.reduce((s, e) => s + (e[field] ?? 0) * e.quantity, 0) / totalQty);
 }
 
 export function calculateProductMetrics(entries: CostEntryRow[]): ProductMetrics {
   if (entries.length === 0) {
-    return { weighted_avg_cost: 0, weighted_avg_shipping: 0, total_quantity: 0, total_purchase_amount: 0 };
+    return { weighted_avg_cost: 0, weighted_avg_shipping: 0, weighted_avg_rg_shipping: 0, total_quantity: 0, total_purchase_amount: 0 };
   }
 
   const weighted_avg_cost = calculateWeightedAvg(entries, 'unit_cost');
   const weighted_avg_shipping = calculateWeightedAvg(entries, 'unit_shipping_fee');
+  const weighted_avg_rg_shipping = calculateWeightedAvg(entries, 'unit_rg_shipping_fee');
   const total_quantity = entries.reduce((s, e) => s + e.quantity, 0);
   const total_purchase_amount = entries.reduce((s, e) => s + e.unit_cost * e.quantity, 0);
 
-  return { weighted_avg_cost, weighted_avg_shipping, total_quantity, total_purchase_amount };
+  return { weighted_avg_cost, weighted_avg_shipping, weighted_avg_rg_shipping, total_quantity, total_purchase_amount };
 }
 
 export function distributeShippingFee(

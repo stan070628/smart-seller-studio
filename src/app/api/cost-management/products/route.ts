@@ -124,6 +124,7 @@ export async function GET(request: NextRequest) {
         sale_count: pFilteredSales.length,
         weighted_avg_cost: metrics.weighted_avg_cost,
         weighted_avg_shipping: metrics.weighted_avg_shipping,
+        weighted_avg_rg_shipping: metrics.weighted_avg_rg_shipping,
         total_purchase_amount: metrics.total_purchase_amount,
         current_stock: fifoResult.current_stock,
         stock_value: fifoResult.stock_value,
