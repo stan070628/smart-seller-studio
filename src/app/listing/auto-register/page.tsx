@@ -25,6 +25,18 @@ type OptionVariant = {
   stock: number;
 };
 
+type SavedImageItem = {
+  id: string;
+  url: string;
+  fileName: string | null;
+  usageContext: 'editor' | 'listing_thumbnail' | 'listing_detail' | null;
+  createdAt: string;
+};
+
+type SavedImageTarget =
+  | { type: 'thumbnail'; slotIdx?: number }
+  | { type: 'detail' };
+
 // ─── 카테시안 곱 헬퍼 ─────────────────────────────────────────
 function cartesian<T>(arrays: T[][]): T[][] {
   return arrays.reduce<T[][]>(
@@ -178,6 +190,10 @@ export default function AutoRegisterPage() {
   // AI 프롬프트 제안
   const [suggestedPrompts, setSuggestedPrompts] = useState<string[]>([]);
   const [isGeneratingPrompts, setIsGeneratingPrompts] = useState(false);
+  const [savedImagePicker, setSavedImagePicker] = useState<SavedImageTarget | null>(null);
+  const [savedImages, setSavedImages] = useState<SavedImageItem[]>([]);
+  const [isSavedImagesLoading, setIsSavedImagesLoading] = useState(false);
+  const [savedImagesError, setSavedImagesError] = useState('');
 
   // 파일 업로드 hidden input ref (슬롯 인덱스를 ref로 추적) — 썸네일용
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -219,6 +235,43 @@ export default function AutoRegisterPage() {
   function handleDetailPreviewInput() {
     if (!detailPreviewRef.current) return;
     pendingInlineDetailHtmlRef.current = cleanEditedDetailHtml(detailPreviewRef.current);
+  }
+
+  async function openSavedImagePicker(target: SavedImageTarget) {
+    setSavedImagePicker(target);
+    setSavedImagesError('');
+    if (savedImages.length > 0) return;
+
+    setIsSavedImagesLoading(true);
+    try {
+      const res = await fetch('/api/listing/images?limit=80');
+      const json = (await res.json()) as { success: boolean; items?: SavedImageItem[]; error?: string };
+      if (!res.ok || !json.success) {
+        throw new Error(json.error ?? '저장된 이미지를 불러오지 못했습니다.');
+      }
+      setSavedImages(json.items ?? []);
+    } catch (err) {
+      setSavedImagesError(err instanceof Error ? err.message : '저장된 이미지를 불러오지 못했습니다.');
+    } finally {
+      setIsSavedImagesLoading(false);
+    }
+  }
+
+  function selectSavedImage(url: string) {
+    if (!savedImagePicker) return;
+
+    if (savedImagePicker.type === 'thumbnail') {
+      setEditImages((prev) => {
+        const next = [...prev];
+        const slotIdx = savedImagePicker.slotIdx ?? (next.length < 2 ? next.length : 0);
+        next[slotIdx] = url;
+        return next.slice(0, 2);
+      });
+    } else {
+      setDetailImages((prev) => (prev.includes(url) ? prev : [...prev, url].slice(0, 5)));
+    }
+
+    setSavedImagePicker(null);
   }
 
   // 배송
@@ -1710,7 +1763,16 @@ export default function AutoRegisterPage() {
 
             {/* 섹션 3: 이미지 */}
             <div className={SECTION}>
-              <h3 className="font-semibold text-gray-900">이미지</h3>
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-gray-900">이미지</h3>
+                <button
+                  type="button"
+                  onClick={() => openSavedImagePicker({ type: 'thumbnail' })}
+                  className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs hover:bg-gray-200"
+                >
+                  저장 이미지 불러오기
+                </button>
+              </div>
 
               {/* hidden file input — 슬롯 인덱스는 uploadSlotRef로 추적 */}
               <input
@@ -1746,6 +1808,12 @@ export default function AutoRegisterPage() {
                                 변경
                               </button>
                               <button
+                                onClick={() => openSavedImagePicker({ type: 'thumbnail', slotIdx })}
+                                className="px-2 py-1 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700"
+                              >
+                                불러오기
+                              </button>
+                              <button
                                 onClick={() => removeEditImage(slotIdx)}
                                 className="px-2 py-1 bg-red-500 text-white rounded text-xs font-medium hover:bg-red-600"
                               >
@@ -1766,6 +1834,15 @@ export default function AutoRegisterPage() {
                           </button>
                         )}
                       </div>
+                      {!imgSrc && (
+                        <button
+                          type="button"
+                          onClick={() => openSavedImagePicker({ type: 'thumbnail', slotIdx })}
+                          className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs hover:bg-gray-200"
+                        >
+                          저장 이미지
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -1961,12 +2038,21 @@ export default function AutoRegisterPage() {
               {/* 사진 첨부 영역 */}
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-gray-700">상세 이미지 첨부</span>
-                <button
-                  onClick={() => triggerDetailFileUpload(detailImages.length)}
-                  className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs hover:bg-gray-200"
-                >
-                  + 추가
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openSavedImagePicker({ type: 'detail' })}
+                    className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs hover:bg-gray-200"
+                  >
+                    저장 이미지 불러오기
+                  </button>
+                  <button
+                    onClick={() => triggerDetailFileUpload(detailImages.length)}
+                    className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs hover:bg-gray-200"
+                  >
+                    + 추가
+                  </button>
+                </div>
               </div>
 
               {detailImages.length > 0 ? (
@@ -2256,6 +2342,72 @@ export default function AutoRegisterPage() {
           </div>
         )}
       </div>
+
+      {savedImagePicker && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-3xl max-h-[82vh] overflow-hidden rounded-xl bg-white shadow-xl border border-gray-200">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+              <div>
+                <h3 className="font-semibold text-gray-900">저장된 이미지 불러오기</h3>
+                <p className="text-xs text-gray-500 mt-1">
+                  {savedImagePicker.type === 'thumbnail' ? '선택한 이미지를 상품 이미지 슬롯에 넣습니다' : '선택한 이미지를 상세 이미지에 추가합니다'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSavedImagePicker(null)}
+                className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-800"
+              >
+                닫기
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto max-h-[68vh]">
+              {isSavedImagesLoading ? (
+                <div className="grid grid-cols-4 sm:grid-cols-6 gap-3">
+                  {Array.from({ length: 12 }).map((_, index) => (
+                    <div key={index} className="aspect-square rounded-lg bg-gray-100 animate-pulse" />
+                  ))}
+                </div>
+              ) : savedImagesError ? (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+                  {savedImagesError}
+                </div>
+              ) : savedImages.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-gray-200 px-4 py-10 text-center text-sm text-gray-500">
+                  저장된 이미지가 없습니다.
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 gap-3">
+                  {savedImages.map((image) => (
+                    <button
+                      key={image.id}
+                      type="button"
+                      onClick={() => selectSavedImage(image.url)}
+                      className="group relative aspect-square overflow-hidden rounded-lg border border-gray-200 bg-gray-50 hover:ring-2 hover:ring-blue-500"
+                      title={image.fileName ?? image.createdAt}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={image.url}
+                        alt={image.fileName ?? '저장 이미지'}
+                        className="w-full h-full object-cover"
+                      />
+                      <span className="absolute inset-x-0 bottom-0 bg-black/55 px-1.5 py-1 text-[10px] text-white opacity-0 group-hover:opacity-100 truncate">
+                        {image.usageContext === 'listing_detail'
+                          ? '상세'
+                          : image.usageContext === 'listing_thumbnail'
+                            ? '대표'
+                            : '저장'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

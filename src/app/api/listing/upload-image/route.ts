@@ -341,6 +341,7 @@ export async function POST(
           file_name: storedFileName,
           mime_type: "image/jpeg",
           file_size: processedSize,
+          usage_context: usageContext,
         })
         .select("id")
         .single()
