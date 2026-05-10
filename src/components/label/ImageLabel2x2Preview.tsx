@@ -32,22 +32,20 @@ const CELL_STYLE: React.CSSProperties = {
   border: '1.5px solid #333',
   borderRadius: '2mm',
   background: '#fafafa',
-  position: 'relative',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
 };
 
-function ImageCell({ imageUrl, imagePosition }: Props) {
-  const pos = imagePosition ?? { x: 50, y: 50 };
+function ImageCell({ imageUrl }: Props) {
   return imageUrl ? (
     <img
       src={imageUrl}
       alt="제품 이미지"
       style={{
-        position: 'absolute',
-        inset: 0,
-        width: '100%',
-        height: '100%',
-        objectFit: 'cover',
-        objectPosition: `${pos.x}% ${pos.y}%`,
+        maxWidth: '100%',
+        maxHeight: '100%',
+        objectFit: 'contain',
         display: 'block',
       }}
     />
