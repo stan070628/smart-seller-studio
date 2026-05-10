@@ -5,7 +5,7 @@
  * Step 3 — 좌측: AI 생성 + 미리보기 + AI 수정 / 우측: 등록 폼 (AI 자동완성)
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   Copy, CheckCheck, Download, AlertCircle, Plus, Loader2,
   RefreshCw, ExternalLink, AlertTriangle, Sparkles, BookmarkCheck,
@@ -22,20 +22,11 @@ const AI_STEPS = [
   { label: 'HTML 생성', activeOn: 'generating' as const },
 ];
 
-const AI_EDIT_CHIPS = [
-  '감성적인 톤으로',
-  '특징 간결하게',
-  '가성비 강조',
-  '20대 여성 타겟',
-  '선물용 문구 추가',
-];
-
 export default function Step3ReviewRegister() {
   const {
     sharedDraft,
     updateSharedDraft,
     resetWorkflow,
-    editDetailPage,
     generateDetailPageFromPicked,
     setDetailPageSections,
     setDetailPageTheme,
@@ -50,8 +41,6 @@ export default function Step3ReviewRegister() {
     name,
     detailPageStatus,
     detailPageError,
-    detailPageEditStatus,
-    detailPageEditError,
     pickedDetailImages,
     thumbnailImages,
     detailImages,
@@ -69,13 +58,9 @@ export default function Step3ReviewRegister() {
   const [registered, setRegistered] = useState(false);
   const [showRegisterForm, setShowRegisterForm] = useState(true);
 
-  // AI 수정
-  const [editInstruction, setEditInstruction] = useState('');
-  const prevHtmlRef = useRef<string | null>(null);
-  const prevSnippetRef = useRef<string | null>(null);
-
   // 렌더링 갱신 상태
   const [isRendering, setIsRendering] = useState(false);
+  const [renderError, setRenderError] = useState<string | null>(null);
 
   // 레거시 모드: 섹션 데이터 없이 HTML만 있는 경우 iframe 표시
   const isLegacyMode = detailPageSections.length === 0 && !!detailPageFullHtml;
@@ -161,6 +146,7 @@ export default function Step3ReviewRegister() {
   const refreshRenderedHtml = async () => {
     if (detailPageSections.length === 0) return;
     setIsRendering(true);
+    setRenderError(null);
     try {
       const res = await fetch('/api/detail-page/render', {
         method: 'POST',
@@ -170,7 +156,11 @@ export default function Step3ReviewRegister() {
       const json = await res.json();
       if (res.ok) {
         updateSharedDraft({ detailPageFullHtml: json.html, detailPageSnippet: json.snippet });
+      } else {
+        setRenderError(json.error ?? '미리보기 갱신에 실패했습니다.');
       }
+    } catch {
+      setRenderError('미리보기 갱신 중 오류가 발생했습니다.');
     } finally {
       setIsRendering(false);
     }
@@ -193,31 +183,6 @@ export default function Step3ReviewRegister() {
     if (!res.ok) throw new Error(json.error ?? '섹션 편집 실패');
     updateDetailPageSection(section.id, json.section);
     await refreshRenderedHtml();
-  };
-
-  // AI 수정 (레거시 전체 HTML 수정)
-  const handleAiEdit = async () => {
-    if (!editInstruction.trim() || detailPageEditStatus === 'editing') return;
-    prevHtmlRef.current = detailPageFullHtml;
-    prevSnippetRef.current = detailPageSnippet;
-    await editDetailPage(editInstruction.trim());
-  };
-
-  const handleUndo = () => {
-    if (prevHtmlRef.current === null) return;
-    useListingStore.setState((s) => ({
-      sharedDraft: {
-        ...s.sharedDraft,
-        detailPageFullHtml: prevHtmlRef.current,
-        detailPageSnippet: prevSnippetRef.current,
-        description: prevSnippetRef.current ?? s.sharedDraft.description,
-        detailPageEditStatus: 'idle',
-        detailPageEditError: null,
-      },
-    }));
-    prevHtmlRef.current = null;
-    prevSnippetRef.current = null;
-    setEditInstruction('');
   };
 
   // 임시저장 (sharedDraft 전체 저장)
@@ -495,6 +460,13 @@ export default function Step3ReviewRegister() {
               generatedHtml={detailPageFullHtml ?? undefined}
             />
           ) : null}
+
+          {/* 미리보기 갱신 에러 */}
+          {renderError && (
+            <div style={{ padding: '8px 12px', fontSize: '12px', color: '#b91c1c', backgroundColor: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '6px', marginTop: '8px' }}>
+              {renderError}
+            </div>
+          )}
 
           {/* 원본 description만 있을 때 */}
           {!hasHtml && hasDescription && (

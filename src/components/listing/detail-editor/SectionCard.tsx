@@ -20,7 +20,7 @@ import SectionInstructionPanel from './SectionInstructionPanel';
 interface SectionCardProps {
   section: DetailSection;
   isActive?: boolean;
-  onAiEdit: (section: DetailSection, instruction: string) => void;
+  onAiEdit: (section: DetailSection, instruction: string) => Promise<void>;
   onDelete: (id: string) => void;
   onClick: (id: string) => void;
 }
