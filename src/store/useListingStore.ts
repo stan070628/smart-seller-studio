@@ -216,6 +216,9 @@ interface AssetsDraft {
   // 상세 HTML AI 수정 상태
   detailEditStatus: 'idle' | 'editing' | 'done' | 'error';
   detailEditError: string | null;
+  // 상세페이지 섹션 편집 (DetailPageEditor용)
+  detailPageSections: DetailSection[];
+  detailPageTheme: DetailPageTheme;
 }
 
 const ASSETS_DRAFT_INITIAL: AssetsDraft = {
@@ -230,6 +233,8 @@ const ASSETS_DRAFT_INITIAL: AssetsDraft = {
   lastError: null,
   detailEditStatus: 'idle',
   detailEditError: null,
+  detailPageSections: [],
+  detailPageTheme: DEFAULT_THEME,
 };
 
 interface ListingStore {

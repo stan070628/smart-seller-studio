@@ -1,32 +1,26 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
-import { Sparkles, CheckCheck, AlertCircle, Loader2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Sparkles } from 'lucide-react';
 import { useListingStore } from '@/store/useListingStore';
 import { C } from '@/lib/design-tokens';
 import AiEditModal from '@/components/listing/AiEditModal';
-
-const AI_EDIT_CHIPS = [
-  '감성적인 톤으로',
-  '특징 간결하게',
-  '가성비 강조',
-  '20대 여성 타겟',
-  '선물용 문구 추가',
-];
+import DetailPageEditor from '@/components/listing/detail-editor/DetailPageEditor';
+import type { DetailSection, DetailPageTheme } from '@/types/detail-page';
 
 export default function AssetsResultPanel() {
-  const { assetsDraft, updateAssetsDraft, editAssetsDetail } = useListingStore();
+  const { assetsDraft, updateAssetsDraft } = useListingStore();
   const {
     generatedThumbnails,
     generatedDetailHtml,
-    detailEditStatus,
-    detailEditError,
+    detailPageSections,
+    detailPageTheme,
   } = assetsDraft;
   const hasResult = generatedThumbnails.length > 0 || generatedDetailHtml.length > 0;
 
-  // 상세 HTML AI 수정 입력 + 되돌리기용 이전 HTML
-  const [editInstruction, setEditInstruction] = useState('');
-  const prevHtmlRef = useRef<string | null>(null);
+  // 상세페이지 렌더 상태
+  const [isRendering, setIsRendering] = useState(false);
+  const [renderError, setRenderError] = useState<string | null>(null);
 
   // 썸네일 이미지 AI 편집 모달
   const [imageEditTarget, setImageEditTarget] = useState<{ url: string; index: number } | null>(null);
@@ -159,22 +153,53 @@ export default function AssetsResultPanel() {
     }
   };
 
-  // 상세 HTML AI 수정
-  const handleAiEdit = async () => {
-    if (!editInstruction.trim() || detailEditStatus === 'editing') return;
-    prevHtmlRef.current = generatedDetailHtml;
-    await editAssetsDetail(editInstruction.trim());
+  // 렌더링된 HTML 갱신
+  const refreshRenderedHtml = async (
+    sections: DetailSection[] = detailPageSections,
+    theme: DetailPageTheme = detailPageTheme,
+  ) => {
+    if (sections.length === 0) return;
+    setIsRendering(true);
+    setRenderError(null);
+    try {
+      const res = await fetch('/api/detail-page/render', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sections, theme }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        updateAssetsDraft({ generatedDetailHtml: json.html });
+      } else {
+        setRenderError(json.error ?? '미리보기 갱신에 실패했습니다.');
+      }
+    } catch {
+      setRenderError('미리보기 갱신 중 오류가 발생했습니다.');
+    } finally {
+      setIsRendering(false);
+    }
   };
 
-  const handleUndoEdit = () => {
-    if (prevHtmlRef.current === null) return;
-    updateAssetsDraft({
-      generatedDetailHtml: prevHtmlRef.current,
-      detailEditStatus: 'idle',
-      detailEditError: null,
+  // 섹션 AI 편집
+  const handleSectionAiEdit = async (section: DetailSection, instruction: string): Promise<void> => {
+    const res = await fetch('/api/detail-page/edit-section', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        section,
+        instruction,
+        theme: detailPageTheme,
+        existingSections: detailPageSections.map(s => ({ type: s.type, content: s.content })),
+      }),
     });
-    prevHtmlRef.current = null;
-    setEditInstruction('');
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error ?? '섹션 편집 실패');
+    // 편집된 섹션으로 업데이트
+    const updated = detailPageSections.map(s =>
+      s.id === section.id ? { ...s, ...json.section } : s
+    );
+    updateAssetsDraft({ detailPageSections: updated });
+    await refreshRenderedHtml(updated, detailPageTheme);
   };
 
   // 썸네일 AI 편집 결과 적용
@@ -292,98 +317,58 @@ export default function AssetsResultPanel() {
         </div>
       </div>
 
-      {/* 상세 HTML iframe 미리보기 */}
-      {generatedDetailHtml && (
-        <div style={{
-          backgroundColor: C.card,
-          border: `1px solid ${C.border}`,
-          borderRadius: '12px',
-          padding: '16px',
-        }}>
-          <div style={{ fontSize: '13px', fontWeight: 700, color: C.text, marginBottom: '12px' }}>
-            상세 HTML
-          </div>
-          <iframe
-            srcDoc={generatedDetailHtml}
-            title="상세 HTML 미리보기"
-            style={{
-              width: '100%',
-              height: '400px',
-              border: `1px solid ${C.border}`,
-              borderRadius: '8px',
-            }}
-            sandbox="allow-same-origin"
-          />
-        </div>
-      )}
-
-      {/* 상세 HTML AI 수정 패널 */}
-      {generatedDetailHtml && (
+      {/* 상세페이지 (DetailPageEditor 또는 레거시 iframe) */}
+      {generatedDetailHtml.length > 0 && (
         <div style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: '12px', overflow: 'hidden' }}>
-          <div style={{ padding: '11px 14px', borderBottom: `1px solid ${C.border}`, backgroundColor: '#faf5ff' }}>
-            <span style={{ fontSize: '12px', fontWeight: 700, color: '#7c3aed' }}>✦ AI로 상세페이지 수정</span>
-            <p style={{ fontSize: '11px', color: '#a78bfa', margin: '2px 0 0' }}>수정 요청을 입력하면 AI가 반영합니다</p>
+          <div style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}`, backgroundColor: C.tableHeader }}>
+            <span style={{ fontSize: '13px', fontWeight: 700, color: C.text }}>상세페이지</span>
           </div>
-          <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-              {AI_EDIT_CHIPS.map((chip) => (
-                <button
-                  key={chip}
-                  type="button"
-                  onClick={() => setEditInstruction(chip)}
-                  style={{
-                    padding: '3px 10px', fontSize: '11px', fontWeight: 500,
-                    backgroundColor: editInstruction === chip ? '#ede9fe' : '#f5f3ff',
-                    color: '#7c3aed',
-                    border: `1px solid ${editInstruction === chip ? '#8b5cf6' : '#ddd6fe'}`,
-                    borderRadius: '100px', cursor: 'pointer',
-                  }}
-                >
-                  {chip}
-                </button>
-              ))}
+          {renderError && (
+            <div style={{ padding: '8px 12px', fontSize: '12px', color: '#b91c1c', backgroundColor: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '6px', margin: '8px' }}>
+              {renderError}
             </div>
-            <textarea
-              rows={2}
-              value={editInstruction}
-              onChange={(e) => setEditInstruction(e.target.value)}
-              placeholder="수정 요청을 자유롭게 입력하세요"
-              style={{ width: '100%', padding: '8px 12px', fontSize: '12px', border: '1px solid #ddd6fe', borderRadius: '7px', outline: 'none', color: C.text, backgroundColor: '#fff', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }}
-            />
-            <button
-              type="button"
-              onClick={handleAiEdit}
-              disabled={!editInstruction.trim() || detailEditStatus === 'editing'}
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px',
-                padding: '8px 16px', fontSize: '12px', fontWeight: 600,
-                backgroundColor: !editInstruction.trim() || detailEditStatus === 'editing' ? '#ede9fe' : '#7c3aed',
-                color: !editInstruction.trim() || detailEditStatus === 'editing' ? '#a78bfa' : '#fff',
-                border: 'none', borderRadius: '7px',
-                cursor: !editInstruction.trim() || detailEditStatus === 'editing' ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {detailEditStatus === 'editing'
-                ? <><Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />AI 수정 중...</>
-                : '✦ AI 수정 적용'}
-            </button>
-            {detailEditStatus === 'done' && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: '#dcfce7', border: '1px solid #86efac', borderRadius: '7px', fontSize: '12px' }}>
-                <span style={{ color: '#15803d', fontWeight: 600 }}>
-                  <CheckCheck size={13} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'middle' }} />수정 완료!
-                </span>
-                {prevHtmlRef.current !== null && (
-                  <button type="button" onClick={handleUndoEdit} style={{ fontSize: '11px', color: '#15803d', background: 'none', border: '1px solid #86efac', borderRadius: '5px', padding: '2px 8px', cursor: 'pointer' }}>되돌리기</button>
-                )}
-              </div>
-            )}
-            {detailEditStatus === 'error' && (
-              <div style={{ padding: '8px 12px', backgroundColor: '#fee2e2', border: '1px solid #fca5a5', borderRadius: '7px', fontSize: '11px', color: '#b91c1c', display: 'flex', alignItems: 'flex-start', gap: '5px' }}>
-                <AlertCircle size={12} style={{ flexShrink: 0, marginTop: '1px' }} />
-                {detailEditError ?? '수정 중 오류가 발생했습니다.'}
-              </div>
-            )}
-          </div>
+          )}
+          {detailPageSections.length > 0 ? (
+            <div style={{ padding: '8px' }}>
+              <DetailPageEditor
+                sections={detailPageSections}
+                theme={detailPageTheme}
+                isGenerating={isRendering}
+                onSectionsChange={(sections) => {
+                  updateAssetsDraft({ detailPageSections: sections });
+                }}
+                onThemeChange={(theme) => {
+                  updateAssetsDraft({ detailPageTheme: theme });
+                  refreshRenderedHtml(detailPageSections, theme);
+                }}
+                onSectionAiEdit={handleSectionAiEdit}
+                onHtmlCopy={async () => {
+                  await navigator.clipboard.writeText(generatedDetailHtml).catch(() => {});
+                }}
+                onDownload={() => {
+                  const blob = new Blob([generatedDetailHtml], { type: 'text/html;charset=utf-8' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = 'detail-page.html';
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+                }}
+                generatedHtml={generatedDetailHtml}
+              />
+            </div>
+          ) : (
+            /* 레거시 모드: 섹션 없음, HTML만 있음 */
+            <div style={{ padding: '8px' }}>
+              <iframe
+                srcDoc={generatedDetailHtml}
+                style={{ width: '100%', height: '500px', border: 'none', borderRadius: '4px' }}
+                title="상세페이지 미리보기"
+              />
+            </div>
+          )}
         </div>
       )}
 
