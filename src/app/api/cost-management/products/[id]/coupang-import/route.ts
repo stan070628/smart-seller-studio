@@ -86,6 +86,7 @@ export async function POST(
 
     if (clampedTo >= from) {
       let rgToken = '';
+      let pageNum = 0;
       do {
         const result = await client.getRevenueHistory({
           recognitionDateFrom: from,
@@ -93,6 +94,20 @@ export async function POST(
           maxPerPage: 50,
           token: rgToken,
         });
+        pageNum++;
+        // ── [DEBUG] revenue-history 응답 진단 ──
+        console.log(`[rg-import] page=${pageNum} items=${result.items.length} nextToken=${result.nextToken ?? 'none'}`);
+        if (result.items.length > 0) {
+          const sample = result.items[0];
+          console.log(`[rg-import] sample order → orderId=${sample.orderId} saleType="${sample.saleType}" itemCount=${sample.items.length}`);
+          if (sample.items.length > 0) {
+            const si = sample.items[0];
+            console.log(`[rg-import] sample item → sellerProductId=${si.sellerProductId} vendorItemId=${si.vendorItemId} qty=${si.quantity}`);
+          }
+          // 실제 saleType 목록 (중복 제거)
+          const saleTypes = [...new Set(result.items.map((o) => o.saleType))];
+          console.log(`[rg-import] saleTypes on this page:`, saleTypes);
+        }
         for (const order of result.items) {
           if (order.saleType !== 'ROCKET_GROWTH') continue;
           for (const item of order.items) {
@@ -109,6 +124,7 @@ export async function POST(
         }
         rgToken = result.nextToken ?? '';
       } while (rgToken);
+      console.log(`[rg-import] total RG items collected: ${rgItems.length} (sellerProductId=${sellerProductId})`);
     }
 
     // ── 합산 후 DB 저장 ──────────────────────────────────────────────────────
