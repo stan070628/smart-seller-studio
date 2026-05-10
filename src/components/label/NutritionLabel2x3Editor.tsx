@@ -47,7 +47,7 @@ const DEFAULT_ROWS: NutritionRow[] = [
   { id: '8', name: '단백질',     amount: '6',   unit: 'g',  percent: '11',  isSubItem: false, isHighlight: true  },
 ];
 
-const DEFAULT_FOOTER = '%영양성분 기준치는 2,000kcal 기준이므로 개인의 필요 열량에 따라 다를 수 있습니다.';
+const DEFAULT_FOOTER = '1일 영양성분 기준치에 대한 비율(%)은 2,000kcal 기준이므로 개인의 필요 열량에 따라 다를 수 있습니다.';
 
 let nextId = 100;
 

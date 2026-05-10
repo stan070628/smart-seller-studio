@@ -25,6 +25,11 @@ interface Props {
 
 const CELL_WIDTH_MM = 99.1;
 const CELL_HEIGHT_MM = 92;
+/* 한글 표시사항 2/3, 영양정보 1/3 — 합산이 CELL_HEIGHT_MM이 되도록 고정 */
+const KOREAN_HEIGHT_MM = 59;
+const NUTRITION_HEIGHT_MM = CELL_HEIGHT_MM - KOREAN_HEIGHT_MM; // 33mm
+
+const DEFAULT_FOOTER = '1일 영양성분 기준치에 대한 비율(%)은 2,000kcal 기준이므로 개인의 필요 열량에 따라 다를 수 있습니다.';
 
 const GRID_STYLE: React.CSSProperties = {
   display: 'grid',
@@ -48,27 +53,36 @@ const CELL_STYLE: React.CSSProperties = {
 };
 
 const TH: React.CSSProperties = {
-  padding: '0.55mm 1mm',
+  padding: '0.5mm 1mm',
   border: '0.4px solid #bbb',
   fontWeight: 700,
   background: '#efefef',
   color: '#222',
   verticalAlign: 'middle',
   whiteSpace: 'nowrap' as const,
-  fontSize: '5.2px',
+  fontSize: '8.5px',
   textAlign: 'left' as const,
-  width: '30%',
+  width: '28%',
 };
 const TD: React.CSSProperties = {
-  padding: '0.55mm 1mm',
+  padding: '0.5mm 1mm',
   border: '0.4px solid #bbb',
   color: '#111',
   verticalAlign: 'middle',
-  fontSize: '5.2px',
-  lineHeight: 1.3,
+  fontSize: '8.5px',
+  lineHeight: 1.25,
   wordBreak: 'break-all' as const,
   whiteSpace: 'pre-wrap' as const,
 };
+
+/* 영양소를 3개씩 묶어 한 행에 배치 */
+function chunkRows(rows: NutritionRow[]): NutritionRow[][] {
+  const result: NutritionRow[][] = [];
+  for (let i = 0; i < rows.length; i += 3) {
+    result.push(rows.slice(i, i + 3));
+  }
+  return result;
+}
 
 function renderHighlighted(text: string, keywords: string[]): React.ReactNode {
   if (!text) return '-';
@@ -78,19 +92,16 @@ function renderHighlighted(text: string, keywords: string[]): React.ReactNode {
   const parts = text.split(pattern);
   return (
     <>
-      {parts.map((part, i) => {
-        const isMatch = keywords.some(k => k.toLowerCase() === part.toLowerCase());
-        return isMatch ? (
-          <span key={i} style={{ background: '#ffeb3b', fontWeight: 700, fontSize: '5.8px', padding: '0 0.2mm' }}>
-            {part}
-          </span>
-        ) : part;
-      })}
+      {parts.map((part, i) =>
+        keywords.some(k => k.toLowerCase() === part.toLowerCase()) ? (
+          <span key={i} style={{ background: '#ffeb3b', fontWeight: 700, padding: '0 0.2mm' }}>{part}</span>
+        ) : part
+      )}
     </>
   );
 }
 
-/* 셀 내용이 고정 높이를 초과하면 자동으로 축소 */
+/* 셀 전체 높이 초과 시 CSS scale로 자동 축소 (안전망) */
 function AutoScaleCell({ children, style }: { children: React.ReactNode; style: React.CSSProperties }) {
   const outerRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
@@ -100,15 +111,12 @@ function AutoScaleCell({ children, style }: { children: React.ReactNode; style: 
     const outer = outerRef.current;
     const inner = innerRef.current;
     if (!outer || !inner) return;
-
     const compute = () => {
       const outerH = outer.clientHeight;
       const innerH = inner.scrollHeight;
-      setScale(innerH > outerH && outerH > 0 ? Math.max(0.55, outerH / innerH) : 1);
+      setScale(innerH > outerH && outerH > 0 ? Math.max(0.65, outerH / innerH) : 1);
     };
-
     const timer = setTimeout(compute, 10);
-    // childList/characterData only — attribute 관찰 시 scale 변경 자체가 재귀 유발
     const mo = new MutationObserver(compute);
     mo.observe(inner, { childList: true, subtree: true, characterData: true });
     return () => { clearTimeout(timer); mo.disconnect(); };
@@ -131,7 +139,7 @@ function AutoScaleCell({ children, style }: { children: React.ReactNode; style: 
 }
 
 function NutritionCell({
-  productName, itemInfo, foodType, importer, manufacturer,
+  productName, foodType, importer, manufacturer,
   originCountry, contentAmount, expiryDate, storageMethod, ingredients,
   returnAddress, caution,
   servingSize, calories, rows, highlights, footerText,
@@ -139,141 +147,116 @@ function NutritionCell({
   const highlightWords = highlights
     ? highlights.split(',').map(s => s.trim()).filter(Boolean)
     : [];
-
-  const footnote = footerText !== undefined && footerText !== ''
-    ? footerText
-    : '%영양성분 기준치는 2,000kcal 기준이므로 개인의 필요 열량에 따라 다를 수 있습니다.';
+  const footnote = footerText || DEFAULT_FOOTER;
+  const chunked = chunkRows(rows);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
-      {/* ── 한글 표시사항 ── */}
-      <div style={{ flexShrink: 0, borderBottom: '1px solid #111' }}>
+    <>
+      {/* ── 한글 표시사항: 고정 59mm, 초과 시 clipping ── */}
+      <div style={{
+        height: `${KOREAN_HEIGHT_MM}mm`,
+        overflow: 'hidden',
+        borderBottom: '1px solid #111',
+        flexShrink: 0,
+      }}>
         <div style={{
           background: '#ddd', textAlign: 'center',
-          fontSize: '5.5px', fontWeight: 700, color: '#111',
-          padding: '0.5mm', letterSpacing: '0.06em',
+          fontSize: '8.5px', fontWeight: 700, color: '#111',
+          padding: '0.6mm', letterSpacing: '0.06em',
         }}>
           한 글 표 시 사 항
         </div>
         <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' as const }}>
           <tbody>
-            <tr>
-              <td style={TH}>제품명</td>
-              <td style={TD}>{productName || '-'}</td>
-            </tr>
-            <tr>
-              <td style={TH}>식품유형</td>
-              <td style={TD}>{foodType || '-'}</td>
-            </tr>
-            <tr>
-              <td style={TH}>수입/판매업소</td>
-              <td style={TD}>{importer || '-'}</td>
-            </tr>
-            <tr>
-              <td style={TH}>제조업소</td>
-              <td style={TD}>{manufacturer || '-'}</td>
-            </tr>
-            <tr>
-              <td style={TH}>원산지</td>
-              <td style={TD}>{originCountry || '-'}</td>
-            </tr>
-            <tr>
-              <td style={TH}>내용량</td>
-              <td style={TD}>{contentAmount || '-'}</td>
-            </tr>
-            <tr>
-              <td style={TH}>소비기한</td>
-              <td style={TD}>{expiryDate || '-'}</td>
-            </tr>
-            <tr>
-              <td style={TH}>보관방법</td>
-              <td style={TD}>{storageMethod || '-'}</td>
-            </tr>
-            <tr>
-              <td style={TH}>원재료명</td>
-              <td style={TD}>
-                {renderHighlighted(ingredients, highlightWords)}
-              </td>
-            </tr>
-            <tr>
-              <td style={TH}>반품·교환장소</td>
-              <td style={TD}>{returnAddress || '-'}</td>
-            </tr>
-            <tr>
-              <td style={TH}>기타 주의사항</td>
-              <td style={TD}>{caution || '-'}</td>
-            </tr>
+            <tr><td style={TH}>제품명</td><td style={TD}>{productName || '-'}</td></tr>
+            <tr><td style={TH}>식품유형</td><td style={TD}>{foodType || '-'}</td></tr>
+            <tr><td style={TH}>수입/판매업소</td><td style={{ ...TD, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{importer || '-'}</td></tr>
+            <tr><td style={TH}>제조업소</td><td style={{ ...TD, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{manufacturer || '-'}</td></tr>
+            <tr><td style={TH}>원산지</td><td style={TD}>{originCountry || '-'}</td></tr>
+            <tr><td style={TH}>내용량</td><td style={TD}>{contentAmount || '-'}</td></tr>
+            <tr><td style={TH}>소비기한</td><td style={TD}>{expiryDate || '-'}</td></tr>
+            <tr><td style={TH}>보관방법</td><td style={TD}>{storageMethod || '-'}</td></tr>
+            <tr><td style={TH}>원재료명</td><td style={TD}>{renderHighlighted(ingredients, highlightWords)}</td></tr>
+            <tr><td style={TH}>반품·교환장소</td><td style={TD}>{returnAddress || '-'}</td></tr>
+            <tr><td style={TH}>기타 주의사항</td><td style={TD}>{caution || '-'}</td></tr>
           </tbody>
         </table>
       </div>
 
-      {/* ── 영양정보 ── */}
-      <div style={{ flexShrink: 0 }}>
+      {/* ── 영양정보: 고정 33mm ── */}
+      <div style={{
+        height: `${NUTRITION_HEIGHT_MM}mm`,
+        overflow: 'hidden',
+        flexShrink: 0,
+      }}>
+        {/* 제목 */}
         <div style={{
           background: '#111', color: '#fff',
-          textAlign: 'center', padding: '0.6mm 1mm',
-          fontSize: '5.5px', fontWeight: 900,
-          letterSpacing: '0.12em',
+          textAlign: 'center', padding: '0.5mm 1mm',
+          fontSize: '8px', fontWeight: 900, letterSpacing: '0.15em',
         }}>
           영 양 정 보
         </div>
 
+        {/* 1회 제공량 */}
         <div style={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
-          padding: '0.5mm 1.5mm',
-          borderBottom: '1.2px solid #111',
-          fontSize: '5px', color: '#222',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          padding: '0.45mm 2mm', borderBottom: '1.2px solid #111',
+          fontSize: '6.5px', color: '#111', fontWeight: 600,
         }}>
           <span>{servingSize || '1회 제공량'}당</span>
           <span>
-            <span style={{ fontSize: '9px', fontWeight: 900, color: '#111' }}>{calories || '0'}</span>
-            <span style={{ fontSize: '4.5px', fontWeight: 600 }}> kcal</span>
+            <span style={{ fontSize: '11px', fontWeight: 900 }}>{calories || '0'}</span>
+            <span style={{ fontSize: '5.5px', fontWeight: 600, marginLeft: '0.4mm' }}>kcal</span>
           </span>
         </div>
 
+        {/* 영양소 3열 그리드 — 헤더 없음 */}
         <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' as const }}>
-          <thead>
-            <tr style={{ background: '#111', color: '#fff' }}>
-              <th style={{ padding: '0.5mm 1mm', fontSize: '4.5px', fontWeight: 700, textAlign: 'left', border: '0.4px solid #555', width: '42%' }}>영양성분</th>
-              <th style={{ padding: '0.5mm 1mm', fontSize: '4.5px', fontWeight: 700, textAlign: 'right', border: '0.4px solid #555' }}>1회제공량당</th>
-              <th style={{ padding: '0.5mm 1mm', fontSize: '4.5px', fontWeight: 700, textAlign: 'right', border: '0.4px solid #555', whiteSpace: 'nowrap' }}>%기준치</th>
-            </tr>
-          </thead>
           <tbody>
-            {rows.map((row, idx) => (
-              <tr key={row.id} style={{ background: row.isHighlight ? '#fff3cd' : (idx % 2 === 0 ? '#f5f5f5' : '#fff') }}>
-                <td style={{
-                  padding: '0.45mm 1mm',
-                  paddingLeft: row.isSubItem ? '2.5mm' : '1mm',
-                  border: '0.4px solid #ccc',
-                  color: row.isSubItem ? '#555' : '#111',
-                  fontWeight: row.isSubItem ? 400 : 700,
-                  fontSize: row.isSubItem ? '4.5px' : '5px',
-                }}>
-                  {row.name}
-                </td>
-                <td style={{ padding: '0.45mm 1mm', border: '0.4px solid #ccc', textAlign: 'right', fontWeight: 700, fontSize: '5px', whiteSpace: 'nowrap' }}>
-                  {row.amount}{row.unit}
-                </td>
-                <td style={{ padding: '0.45mm 1mm', border: '0.4px solid #ccc', textAlign: 'right', color: '#444', fontSize: '5px', whiteSpace: 'nowrap' }}>
-                  {row.percent !== '' ? `${row.percent}%` : '—'}
-                </td>
+            {chunked.map((group, idx) => (
+              <tr key={idx} style={{ background: idx % 2 === 0 ? '#f7f7f7' : '#fff' }}>
+                {group.map((row) => (
+                  <td key={row.id} style={{
+                    border: '0.4px solid #ccc',
+                    padding: '0.5mm 0.9mm',
+                    verticalAlign: 'middle',
+                    width: '33.33%',
+                    background: row.isSubItem
+                      ? (idx % 2 === 0 ? '#e8e8e8' : '#f0f0f0')
+                      : (row.isHighlight ? '#fff3cd' : undefined),
+                  }}>
+                    <div style={{ fontSize: '8px', fontWeight: 700, color: '#111', marginBottom: '0.2mm' }}>
+                      {row.name}
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '7px', color: '#444' }}>
+                      <span>{row.amount}{row.unit}</span>
+                      <span style={{ fontWeight: 600, color: '#333' }}>
+                        {row.percent !== '' ? `${row.percent}%` : '—'}
+                      </span>
+                    </div>
+                  </td>
+                ))}
+                {/* 빈 셀로 3열 맞춤 */}
+                {Array.from({ length: 3 - group.length }, (_, i) => (
+                  <td key={`empty-${i}`} style={{ border: '0.4px solid #ccc', width: '33.33%' }} />
+                ))}
               </tr>
             ))}
           </tbody>
         </table>
 
+        {/* 각주 */}
         <div style={{
-          padding: '0.6mm 1mm',
-          fontSize: '4.8px', color: '#555',
+          padding: '0.5mm 1mm',
+          fontSize: '5.5px', color: '#444',
           borderTop: '0.4px solid #ccc',
-          lineHeight: 1.4,
-          whiteSpace: 'pre-wrap' as const,
+          lineHeight: 1.35,
         }}>
           {footnote}
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -281,7 +264,10 @@ const NutritionLabel2x3Preview = forwardRef<HTMLDivElement, Props>((props, ref) 
   return (
     <div id="nutrition-label-2x3-preview" ref={ref} style={GRID_STYLE}>
       {Array.from({ length: 6 }, (_, i) => (
-        <AutoScaleCell key={i} style={CELL_STYLE}>
+        <AutoScaleCell
+          key={i}
+          style={i % 2 === 1 ? { ...CELL_STYLE, transform: 'translateX(2mm)' } : CELL_STYLE}
+        >
           <NutritionCell {...props} />
         </AutoScaleCell>
       ))}
