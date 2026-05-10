@@ -201,6 +201,7 @@ export default function DetailPageEditor({
   useEffect(() => {
     if (hidePreview) return;
     const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
       const data = event.data as {
         source?: string;
         type?: string;
