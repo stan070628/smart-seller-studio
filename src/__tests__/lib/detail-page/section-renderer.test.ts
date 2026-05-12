@@ -513,6 +513,106 @@ describe('renderAllSections', () => {
 });
 
 // ---------------------------------------------------------------------------
+// fontStyle — 헤딩 font-family 적용 검증
+// ---------------------------------------------------------------------------
+
+describe('fontStyle — 헤딩 Batang 폰트 적용', () => {
+  const SERIF_THEME: DetailPageTheme = { ...WARM_CREAM_THEME, fontStyle: 'serif' };
+  const SANS_THEME: DetailPageTheme = { ...WARM_CREAM_THEME, fontStyle: 'sans' };
+  const MIXED_THEME: DetailPageTheme = { ...WARM_CREAM_THEME, fontStyle: 'mixed' };
+
+  it('hero — fontStyle=serif → h2에 Batang 폰트 적용', () => {
+    const section = baseSection({
+      type: 'hero',
+      content: { type: 'hero', headline: '제목', subheadline: '부제목' },
+    });
+    const html = renderSection(section, SERIF_THEME);
+    expect(html).toContain("font-family:'Batang'");
+  });
+
+  it('hero — fontStyle=mixed → h2에 Batang 폰트 적용', () => {
+    const section = baseSection({
+      type: 'hero',
+      content: { type: 'hero', headline: '제목', subheadline: '부제목' },
+    });
+    const html = renderSection(section, MIXED_THEME);
+    expect(html).toContain("font-family:'Batang'");
+  });
+
+  it('hero — fontStyle=sans → h2에 Batang 폰트 없음 (고딕 계열 유지)', () => {
+    const section = baseSection({
+      type: 'hero',
+      content: { type: 'hero', headline: '제목', subheadline: '부제목' },
+    });
+    const html = renderSection(section, SANS_THEME);
+    expect(html).not.toContain("font-family:'Batang'");
+  });
+
+  it('selling_points — fontStyle=serif → 카드 제목에 Batang 폰트 적용', () => {
+    const section = baseSection({
+      type: 'selling_points',
+      content: {
+        type: 'selling_points',
+        points: [{ icon: '🌟', title: '포인트', description: '설명' }],
+      },
+    });
+    const html = renderSection(section, SERIF_THEME);
+    expect(html).toContain("font-family:'Batang'");
+  });
+
+  it('selling_points — fontStyle=sans → Batang 폰트 없음', () => {
+    const section = baseSection({
+      type: 'selling_points',
+      content: {
+        type: 'selling_points',
+        points: [{ icon: '🌟', title: '포인트', description: '설명' }],
+      },
+    });
+    const html = renderSection(section, SANS_THEME);
+    expect(html).not.toContain("font-family:'Batang'");
+  });
+
+  it('features — fontStyle=serif → 아이템 제목에 Batang 폰트 적용', () => {
+    const section = baseSection({
+      type: 'features',
+      content: {
+        type: 'features',
+        items: [{ title: '특징', description: '설명' }],
+      },
+    });
+    const html = renderSection(section, SERIF_THEME);
+    expect(html).toContain("font-family:'Batang'");
+  });
+
+  it('stats — fontStyle=serif → 숫자 값에 Batang 폰트 적용', () => {
+    const section = baseSection({
+      type: 'stats',
+      content: { type: 'stats', stats: [{ value: '99%', label: '만족도' }] },
+    });
+    const html = renderSection(section, SERIF_THEME);
+    expect(html).toContain("font-family:'Batang'");
+  });
+
+  it('usage_steps — fontStyle=serif → 단계 번호 뱃지에 Batang 폰트 적용', () => {
+    const section = baseSection({
+      type: 'usage_steps',
+      content: { type: 'usage_steps', steps: ['단계 1'] },
+    });
+    const html = renderSection(section, SERIF_THEME);
+    expect(html).toContain("font-family:'Batang'");
+  });
+
+  it('cta — fontStyle=serif → 텍스트에 Batang 폰트 적용', () => {
+    const section = baseSection({
+      type: 'cta',
+      content: { type: 'cta', text: '지금 구매하기' },
+    });
+    const html = renderSection(section, SERIF_THEME);
+    expect(html).toContain("font-family:'Batang'");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 팔레트 색상 반영 검증
 // ---------------------------------------------------------------------------
 
@@ -547,6 +647,46 @@ describe('팔레트 색상 반영', () => {
 });
 
 // ---------------------------------------------------------------------------
+// imageLayout — 단일 이미지 레이아웃별 스타일
+// ---------------------------------------------------------------------------
+
+describe('imageLayout — 단일 이미지 스타일', () => {
+  function singleImageSection(imageLayout: 'fullbleed' | 'composed' | 'split') {
+    return {
+      section: baseSection({
+        type: 'hero' as const,
+        content: { type: 'hero', headline: '제목', subheadline: '부제목' },
+        attachedImages: [{ url: 'https://example.com/img.jpg', order: 0, processingMode: 'original' as const }],
+      }),
+      theme: { ...WARM_CREAM_THEME, imageLayout },
+    };
+  }
+
+  it('fullbleed — width:100% 적용, border-radius 없음', () => {
+    const { section, theme } = singleImageSection('fullbleed');
+    const html = renderSection(section, theme);
+    expect(html).toContain('width:100%');
+    expect(html).not.toContain('border-radius:10px');
+    expect(html).not.toContain('border-radius:6px');
+  });
+
+  it('composed — width:88%, max-width:560px, border-radius:10px 적용', () => {
+    const { section, theme } = singleImageSection('composed');
+    const html = renderSection(section, theme);
+    expect(html).toContain('width:88%');
+    expect(html).toContain('max-width:560px');
+    expect(html).toContain('border-radius:10px');
+  });
+
+  it('split — width:100%, border-radius:6px 적용', () => {
+    const { section, theme } = singleImageSection('split');
+    const html = renderSection(section, theme);
+    expect(html).toContain('width:100%');
+    expect(html).toContain('border-radius:6px');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // renderSection — attachedImages 2장 나란히 렌더링
 // ---------------------------------------------------------------------------
 describe('renderSection — attachedImages 2장', () => {
@@ -569,6 +709,27 @@ describe('renderSection — attachedImages 2장', () => {
     const html = renderSection(twoImageSection, WARM_CREAM_THEME);
     expect(html).toContain('display:flex;gap:8px;width:100%;box-sizing:border-box;');
     expect(html).toContain('width:50%');
+  });
+
+  it('imageLayout=composed 2장 — gap:16px, border-radius:8px 적용', () => {
+    const composedSection = baseSection({
+      type: 'hero',
+      content: { type: 'hero', headline: '제목', subheadline: '부제목' },
+      attachedImages: [
+        { url: 'https://example.com/img1.jpg', order: 0, processingMode: 'original' },
+        { url: 'https://example.com/img2.jpg', order: 1, processingMode: 'original' },
+      ],
+    });
+    const composedTheme = { ...WARM_CREAM_THEME, imageLayout: 'composed' as const };
+    const html = renderSection(composedSection, composedTheme);
+    expect(html).toContain('gap:16px');
+    expect(html).toContain('border-radius:8px');
+  });
+
+  it('imageLayout=fullbleed 2장 — gap:8px, border-radius 없음', () => {
+    const html = renderSection(twoImageSection, WARM_CREAM_THEME); // fullbleed
+    expect(html).toContain('gap:8px');
+    expect(html).not.toContain('border-radius:8px');
   });
 
   it('한 장이 악성 URL이면 placeholder div가 삽입되고 flex 컨테이너는 유지된다', () => {

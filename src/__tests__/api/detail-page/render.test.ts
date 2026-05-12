@@ -266,4 +266,62 @@ describe('POST /api/detail-page/render', () => {
     expect(response.status).toBe(200);
     expect(data.html).toContain('#1A1A1A');
   });
+
+  it('fontStyle=sans → snippet wrapper에 Apple SD Gothic Neo 폰트 적용', async () => {
+    const request = makeRequest({
+      sections: [VALID_HERO_SECTION],
+      theme: { ...VALID_THEME, fontStyle: 'sans' },
+    });
+    const response = await POST(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.snippet).toContain('Apple SD Gothic Neo');
+    expect(data.snippet).not.toContain('Batang');
+  });
+
+  it('fontStyle=serif → snippet wrapper에 Batang 폰트 적용', async () => {
+    const request = makeRequest({
+      sections: [VALID_HERO_SECTION],
+      theme: { ...VALID_THEME, fontStyle: 'serif' },
+    });
+    const response = await POST(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.snippet).toContain('Batang');
+  });
+
+  it('fontStyle=mixed → snippet wrapper에 Apple SD Gothic Neo 폰트 적용', async () => {
+    const request = makeRequest({
+      sections: [VALID_HERO_SECTION],
+      theme: { ...VALID_THEME, fontStyle: 'mixed' },
+    });
+    const response = await POST(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.snippet).toContain('Apple SD Gothic Neo');
+  });
+
+  it('attachedImages가 3장이면 400을 반환한다 (max 2장 제한)', async () => {
+    const request = makeRequest({
+      sections: [
+        {
+          ...VALID_HERO_SECTION,
+          attachedImages: [
+            { url: 'https://example.com/img1.jpg', order: 0, processingMode: 'original' },
+            { url: 'https://example.com/img2.jpg', order: 1, processingMode: 'original' },
+            { url: 'https://example.com/img3.jpg', order: 2, processingMode: 'original' },
+          ],
+        },
+      ],
+      theme: VALID_THEME,
+    });
+    const response = await POST(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data).toHaveProperty('error');
+  });
 });

@@ -11,7 +11,14 @@ import { z } from 'zod';
 import { requireAuth } from '@/lib/supabase/auth';
 import { renderAllSections } from '@/lib/detail-page/section-renderer';
 import { appendPrivacyFooter } from '@/lib/detail-page-privacy';
-import type { DetailSection, DetailPageTheme } from '@/types/detail-page';
+import type { DetailSection, DetailPageTheme, FontStyle } from '@/types/detail-page';
+
+// fontStyle → CSS font-family 매핑 (모듈 레벨 상수)
+const FONT_FAMILY_MAP: Record<FontStyle, string> = {
+  sans:  "'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif",
+  serif: "'Batang','HY신명조','Noto Serif KR',Georgia,serif",
+  mixed: "'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif",
+};
 
 // ─────────────────────────────────────────
 // 요청 검증 스키마 (Zod)
@@ -33,6 +40,7 @@ const RequestSchema = z.object({
               processingMode: z.enum(['original', 'bg_removed', 'bg_composed'] as const),
             }),
           )
+          .max(2)
           .default([]),
         aiInstruction: z.string().optional(),
       }),
@@ -117,7 +125,7 @@ export async function POST(
   }
 
   // max-width:780px 컨테이너로 래핑 — snippet은 개인정보 고지 미포함 본문
-  const snippet = `<div style="max-width:780px;margin:0 auto;font-family:sans-serif;">\n${renderedSections}\n</div>`;
+  const snippet = `<div style="max-width:780px;margin:0 auto;font-family:${FONT_FAMILY_MAP[theme.fontStyle]};">\n${renderedSections}\n</div>`;
 
   // html = snippet + 개인정보 고지 3종
   const html = appendPrivacyFooter(snippet);
