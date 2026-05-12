@@ -95,7 +95,7 @@ describe('renderSection — hero', () => {
 // ---------------------------------------------------------------------------
 
 describe('renderSection — selling_points', () => {
-  it('icon, title, description이 각 포인트마다 출력된다', () => {
+  it('title, description이 각 포인트마다 출력된다 (이모지 아이콘 미포함)', () => {
     const section = baseSection({
       type: 'selling_points',
       content: {
@@ -107,12 +107,26 @@ describe('renderSection — selling_points', () => {
       },
     });
     const html = renderSection(section, WARM_CREAM_THEME);
-    expect(html).toContain('🔥');
+    // 이모지는 Coupang에서 렌더링 안 되므로 출력에 포함하지 않음
+    expect(html).not.toContain('🔥');
+    expect(html).not.toContain('💧');
     expect(html).toContain('내열성');
     expect(html).toContain('200도까지 견딤');
-    expect(html).toContain('💧');
     expect(html).toContain('방수');
     expect(html).toContain('완전 방수 처리');
+  });
+
+  it('카드 상단에 accent 컬러 border-top이 적용된다', () => {
+    const section = baseSection({
+      type: 'selling_points',
+      content: {
+        type: 'selling_points',
+        points: [{ icon: '✅', title: '포인트', description: '설명' }],
+      },
+    });
+    const html = renderSection(section, WARM_CREAM_THEME);
+    expect(html).toContain('border-top:4px solid');
+    expect(html).toContain(PALETTES['warm_cream'].accent);
   });
 
   it('data-section-id 속성이 포함된다', () => {
@@ -284,13 +298,14 @@ describe('renderSection — warning', () => {
     expect(html).toContain('영하 20도 이하 보관 금지');
   });
 
-  it('⚠️ 접두사가 각 경고 항목 앞에 붙는다', () => {
+  it('삼각형(&#9650;) 접두사가 각 경고 항목 앞에 붙는다', () => {
     const section = baseSection({
       type: 'warning',
       content: { type: 'warning', warnings: ['주의사항 하나'] },
     });
     const html = renderSection(section, WARM_CREAM_THEME);
-    expect(html).toContain('⚠️');
+    expect(html).toContain('&#9650;');
+    expect(html).not.toContain('⚠');
   });
 
   it('고정 경고 배경색(#FFF3CD)이 사용된다 (팔레트 무관)', () => {
@@ -553,7 +568,7 @@ describe('fontStyle — 헤딩 Batang 폰트 적용', () => {
       type: 'selling_points',
       content: {
         type: 'selling_points',
-        points: [{ icon: '🌟', title: '포인트', description: '설명' }],
+        points: [{ icon: '', title: '포인트', description: '설명' }],
       },
     });
     const html = renderSection(section, SERIF_THEME);
@@ -565,7 +580,7 @@ describe('fontStyle — 헤딩 Batang 폰트 적용', () => {
       type: 'selling_points',
       content: {
         type: 'selling_points',
-        points: [{ icon: '🌟', title: '포인트', description: '설명' }],
+        points: [{ icon: '', title: '포인트', description: '설명' }],
       },
     });
     const html = renderSection(section, SANS_THEME);

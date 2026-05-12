@@ -124,8 +124,7 @@ function renderSellingPoints(content: SellingPointsContent, section: DetailSecti
 
   const pointsHtml = content.points
     .map(
-      (point, index) => `<div style="flex:1;min-width:calc(50% - 12px);background-color:${colors.cardBg};border:1px solid ${colors.border};border-radius:8px;padding:24px;box-sizing:border-box;">
-      <div style="font-size:28px;margin-bottom:12px;line-height:1;">${editableText(`content.points.${index}.icon`, point.icon)}</div>
+      (point, index) => `<div style="flex:1;min-width:calc(50% - 12px);background-color:${colors.cardBg};border:1px solid ${colors.border};border-top:4px solid ${colors.accent};border-radius:8px;padding:24px;box-sizing:border-box;">
       <div style="font-size:16px;font-weight:700;color:${colors.text};margin-bottom:8px${headingFont};">${editableText(`content.points.${index}.title`, point.title)}</div>
       <div style="font-size:14px;color:${colors.textSub};line-height:1.6;">${editableText(`content.points.${index}.description`, point.description)}</div>
     </div>`
@@ -230,7 +229,7 @@ function renderWarning(content: WarningContent, section: DetailSection, theme: D
   const imageHtml = renderAttachedImage(section, theme.imageLayout);
   const itemsHtml = content.warnings
     .map(
-      (warning, index) => `<div style="margin-bottom:12px;font-size:15px;color:#6B4F00;line-height:1.6;">⚠️ ${editableText(`content.warnings.${index}`, warning)}</div>`
+      (warning, index) => `<div style="margin-bottom:12px;font-size:15px;color:#6B4F00;line-height:1.6;"><span style="font-weight:700;margin-right:6px;">&#9650;</span>${editableText(`content.warnings.${index}`, warning)}</div>`
     )
     .join('\n');
 
