@@ -1,6 +1,6 @@
 // src/lib/label/label-templates.ts
 
-export type LabelType = 'quality' | 'quality2x3' | 'event' | 'image2x2' | 'nutrition2x3';
+export type LabelType = 'quality' | 'quality2x3' | 'event' | 'image2x2' | 'nutrition2x3' | 'cosmetic2x3';
 
 export interface QualityFields {
   productName: string;
@@ -11,6 +11,20 @@ export interface QualityFields {
   address: string;
   phone: string;
   extra: string;
+}
+
+export interface CosmeticFields {
+  collection: 'floral' | 'creamy';
+  soap1En: string; soap1Ko: string; soap1Ingredients: string;
+  soap2En: string; soap2Ko: string; soap2Ingredients: string;
+  soap3En: string; soap3Ko: string; soap3Ingredients: string;
+  soap4En: string; soap4Ko: string; soap4Ingredients: string;
+  weight: string;
+  lotNumber: string;
+  expiryDate: string;
+  importer: string;
+  importerAddress: string;
+  phone: string;
 }
 
 export interface LabelTemplate {

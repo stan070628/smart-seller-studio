@@ -6,10 +6,11 @@ import EventCardEditor from './EventCardEditor';
 import ImageLabel2x2Editor from './ImageLabel2x2Editor';
 import NutritionLabel2x3Editor from './NutritionLabel2x3Editor';
 import QualityLabel2x3Editor from './QualityLabel2x3Editor';
+import CosmeticLabel2x3Editor from './CosmeticLabel2x3Editor';
 
 const C = { border: '#e5e7eb', bg: '#f9fafb' };
 
-type LabelTab = 'quality' | 'event' | 'image2x2' | 'nutrition2x3' | 'quality2x3';
+type LabelTab = 'quality' | 'event' | 'image2x2' | 'nutrition2x3' | 'quality2x3' | 'cosmetic2x3';
 
 export default function LabelPageWrapper() {
   const [activeTab, setActiveTab] = useState<LabelTab>('quality');
@@ -33,6 +34,7 @@ export default function LabelPageWrapper() {
           { id: 'event' as const, label: '🎁 이벤트 카드' },
           { id: 'image2x2' as const, label: '🖼 이미지 2×2' },
           { id: 'nutrition2x3' as const, label: '📊 영양정보 2×3' },
+          { id: 'cosmetic2x3' as const, label: '🧴 화장품 라벨 2×3' },
         ] as { id: LabelTab; label: string }[]).map((tab) => {
           const active = activeTab === tab.id;
           return (
@@ -71,8 +73,10 @@ export default function LabelPageWrapper() {
           <EventCardEditor />
         ) : activeTab === 'image2x2' ? (
           <ImageLabel2x2Editor />
-        ) : (
+        ) : activeTab === 'nutrition2x3' ? (
           <NutritionLabel2x3Editor />
+        ) : (
+          <CosmeticLabel2x3Editor />
         )}
       </div>
     </div>
