@@ -49,6 +49,10 @@ describe('isWinner', () => {
   it('경계값: 정확히 기준값이면 충족', () => {
     expect(isWinner(100, 1.5, 250, 5)).toBe('winner');
   });
+  it('2개 충족하면 normal', () => {
+    // clicks❌(50<100), conversionRate❌(1.0<1.5), roas✅(300≥250), salesCount✅(10≥5) → 2개 충족
+    expect(isWinner(50, 1.0, 300, 10)).toBe('normal');
+  });
 });
 
 describe('calcStockTurnover', () => {
