@@ -32,7 +32,7 @@ describe('calcAdjustedRoas', () => {
     expect(calcAdjustedRoas(500000, 50000, 100000)).toBe(450);
   });
   it('광고비 0이면 Infinity', () => {
-    expect(calcAdjustedRoas(500000, 0, 0)).toBe(Infinity);
+    expect(calcAdjustedRoas(500000, 50000, 0)).toBe(Infinity);
   });
 });
 
@@ -77,7 +77,7 @@ describe('calcStockTurnover', () => {
 
 describe('calcRequiredRevenue', () => {
   it('500만원 / 0.3 = 16,666,667', () => {
-    expect(calcRequiredRevenue(5000000, 0.3)).toBeCloseTo(16666667, -2);
+    expect(Math.round(calcRequiredRevenue(5000000, 0.3))).toBe(16666667);
   });
   it('마진율 0이면 Infinity', () => {
     expect(calcRequiredRevenue(5000000, 0)).toBe(Infinity);

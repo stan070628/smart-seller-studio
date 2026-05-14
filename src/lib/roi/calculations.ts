@@ -75,7 +75,7 @@ export function isWinner(
  * 재고 소진일수 및 상태 계산
  * @param stockQty 현재 재고 수량
  * @param avgDailySales 일평균 판매 수량
- * @returns { days: 소진 예상일수, status: 'danger'(<7일) | 'warning'(7~14일) | 'ok'(15일+) }
+ * @returns { days: 소진 예상일수, status: 'danger'(days < 7) | 'warning'(days >= 7 && days < 15) | 'ok'(days >= 15) }
  */
 export function calcStockTurnover(
   stockQty: number,
