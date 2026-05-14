@@ -29,20 +29,23 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = getSupabaseServerClient();
 
-    const { data: sourcingItems } = await supabase
+    const { data: sourcingItems, error: dbError } = await supabase
       .from('sourcing_items')
       .select('id, product_name, price_dome, deli_fee, coupang_category_path')
       .eq('user_id', userId)
       .not('price_dome', 'is', null);
 
+    if (dbError) {
+      console.error('[roi] DB error:', dbError);
+      return Response.json({ success: false, error: '데이터 조회 실패' }, { status: 500 });
+    }
+
     if (!sourcingItems || sourcingItems.length === 0) {
       return Response.json({ success: true, data: [] });
     }
 
-    const [wingData, adsData] = await Promise.all([
-      fetchWingProductStats(userId),
-      fetchAdsProductStats(userId),
-    ]).catch(() => [[], []] as [WingProductStat[], AdsProductStat[]]);
+    const wingData = await fetchWingProductStats(userId).catch(() => [] as WingProductStat[]);
+    const adsData = await fetchAdsProductStats(userId).catch(() => [] as AdsProductStat[]);
 
     const wingMap = new Map(wingData.map((d) => [d.productId, d]));
     const adsMap = new Map(adsData.map((d) => [d.productId, d]));
