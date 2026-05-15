@@ -22,10 +22,23 @@ interface ProductRow {
   stock_value: number;
   total_realized_profit: number;
   total_sales_amount: number;
+  ad_spend: number;
+  ad_roas: number;
+  margin_rate: number;
+  breakeven_roas: number;
+  winner_status: 'winner' | 'watch' | 'normal';
 }
 
 function fmt(n: number): string {
   return n.toLocaleString('ko-KR');
+}
+
+function WinnerBadge({ status }: { status: 'winner' | 'watch' | 'normal' }) {
+  if (status === 'winner')
+    return <span style={{ fontSize: '11px', background: '#15803d', color: '#dcfce7', padding: '2px 8px', borderRadius: '20px', fontWeight: 600 }}>위너</span>;
+  if (status === 'watch')
+    return <span style={{ fontSize: '11px', background: '#854d0e', color: '#fef9c3', padding: '2px 8px', borderRadius: '20px', fontWeight: 600 }}>관찰</span>;
+  return null;
 }
 
 // ─── 타입 ──────────────────────────────────────────────────────────────────
@@ -422,7 +435,7 @@ export default function CostManagementTab() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
             <thead>
               <tr style={{ background: '#f9f9f9', borderBottom: '1px solid #e5e5e5' }}>
-                {['상품명', '원가(가중평균)', '배송비(배분)', 'RG배송비', '재고', '재고가치', '실현손익', '입고', '판매', '내역', ''].map((h) => (
+                {['상품명', '원가(가중평균)', '배송비(배분)', 'RG배송비', '재고', '재고가치', '실현손익', '마진율', '광고비', 'ROAS', '위너', '입고', '판매', '내역', ''].map((h) => (
                   <th key={h} style={{ padding: '10px 12px', textAlign: h === '상품명' ? 'left' : 'right', fontWeight: 600, color: '#555', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
@@ -448,6 +461,19 @@ export default function CostManagementTab() {
                   </td>
                   <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, color: p.total_realized_profit >= 0 ? '#16a34a' : '#ef4444' }}>
                     {p.sale_count === 0 ? <span style={{ color: '#ccc' }}>—</span> : `${fmt(p.total_realized_profit)}원`}
+                  </td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', color: p.margin_rate > 0 ? '#2563eb' : '#ccc' }}>
+                    {p.margin_rate > 0 ? `${(p.margin_rate * 100).toFixed(1)}%` : '—'}
+                  </td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', color: p.ad_spend > 0 ? '#7c3aed' : '#ccc' }}>
+                    {p.ad_spend > 0 ? `${fmt(p.ad_spend)}원` : '—'}
+                  </td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: p.ad_roas > 0 ? 600 : 400,
+                    color: p.ad_roas === 0 ? '#ccc' : p.ad_roas >= 250 ? '#16a34a' : '#ef4444' }}>
+                    {p.ad_roas > 0 ? `${Math.round(p.ad_roas)}%` : '—'}
+                  </td>
+                  <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                    <WinnerBadge status={p.winner_status} />
                   </td>
                   <td style={{ padding: '10px 12px', textAlign: 'right', color: '#52525b' }}>{p.entry_count}건</td>
                   <td style={{ padding: '10px 12px', textAlign: 'right', color: '#52525b' }}>{p.sale_count}건</td>
