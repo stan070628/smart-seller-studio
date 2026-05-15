@@ -12,7 +12,6 @@ const NAV_ITEMS = [
   { href: '/label', label: '라벨 인쇄' },
   { href: '/orders', label: '주문/매출' },
   { href: '/plan', label: '플랜' },
-  { href: '/roi', label: 'ROI 관리' },
 ];
 
 export default function AppNav() {
