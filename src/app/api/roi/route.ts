@@ -234,12 +234,14 @@ async function fetchCostMap(
 
   const { rows } = await pool.query<{
     product_name: string;
+    seller_product_id: number | null;
     platform_fee_rate: number;
     weighted_avg_cost: number;
     weighted_avg_shipping: number;
   }>(
     `SELECT
        pc.product_name,
+       pc.seller_product_id,
        pc.platform_fee_rate,
        COALESCE(
          SUM(ce.unit_cost * ce.quantity) FILTER (WHERE ce.id IS NOT NULL)
@@ -255,7 +257,7 @@ async function fetchCostMap(
      LEFT JOIN cost_entries ce
        ON ce.product_cost_id = pc.id AND ce.user_id = $1
      WHERE pc.user_id = $1
-     GROUP BY pc.product_name, pc.platform_fee_rate`,
+     GROUP BY pc.product_name, pc.seller_product_id, pc.platform_fee_rate`,
     [userId],
   );
 
@@ -263,6 +265,7 @@ async function fetchCostMap(
   for (const p of products) {
     const namePrefix = p.vendorItemName.slice(0, 10);
     const matched =
+      rows.find((r) => r.seller_product_id != null && Number(r.seller_product_id) === p.vendorItemId) ??
       rows.find((r) => r.product_name === p.vendorItemName) ??
       rows.find(
         (r) =>
