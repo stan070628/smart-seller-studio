@@ -5,6 +5,9 @@ import { calculateProductMetrics } from '@/lib/cost-management/calculations';
 import type { CostEntryRow } from '@/lib/cost-management/calculations';
 import { calculateFifo } from '@/lib/cost-management/fifo';
 import type { PurchaseBatch, SaleRow, FifoSummary } from '@/lib/cost-management/fifo';
+import { getSupabaseServerClient } from '@/lib/supabase/server';
+import type { CollectedData, RawProduct } from '@/lib/ad-strategy/types';
+import { calcBreakevenRoas, isWinner } from '@/lib/roi/calculations';
 
 // ─────────────────────────────────────────
 // GET /api/cost-management/products
@@ -83,6 +86,18 @@ export async function GET(request: NextRequest) {
       salesByProduct.set(s.product_cost_id, list);
     }
 
+    // ad_strategy_cache에서 최신 광고 데이터 조회 (24시간 이내)
+    const supabase = getSupabaseServerClient();
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const adCacheResult = await supabase
+      .from('ad_strategy_cache')
+      .select('collected_data')
+      .gte('collected_at', cutoff)
+      .order('collected_at', { ascending: false })
+      .limit(1)
+      .single();
+    const adProducts: RawProduct[] = (adCacheResult.data?.collected_data as CollectedData)?.products ?? [];
+
     const data = products.map((p) => {
       const pEntries = entriesByProduct.get(p.id) ?? [];
       const pSales = salesByProduct.get(p.id) ?? [];
@@ -114,6 +129,28 @@ export async function GET(request: NextRequest) {
         .reduce((sum, d) => sum + d.realized_profit_per_unit * (pSales.find((s) => s.id === d.saleId)?.quantity ?? 0), 0);
       const periodSalesAmount = pFilteredSales.reduce((s, sale) => s + sale.selling_price * sale.quantity, 0);
 
+      // 광고 데이터 매칭 (이름 기준)
+      const namePrefix = p.product_name.slice(0, 10);
+      const adMatch =
+        adProducts.find((ap) => ap.name === p.product_name) ??
+        adProducts.find(
+          (ap) =>
+            ap.name.includes(namePrefix) ||
+            p.product_name.includes(ap.name.slice(0, 10)),
+        );
+      const adSpend = adMatch?.adSpend ?? 0;
+      const adRoas = adMatch?.adRoas ?? 0;
+      const adOrders = adMatch?.adOrders ?? 0;
+
+      // ROI 계산
+      const totalQtySold = pFilteredSales.reduce((s, x) => s + x.quantity, 0);
+      const marginRate = periodSalesAmount > 0 ? periodRealizedProfit / periodSalesAmount : 0;
+      const avgSellingPrice = totalQtySold > 0 ? periodSalesAmount / totalQtySold : 0;
+      const avgMarginPerUnit = totalQtySold > 0 ? periodRealizedProfit / totalQtySold : 0;
+      const breakevenRoas = calcBreakevenRoas(avgSellingPrice, avgMarginPerUnit);
+      const conversionRate = adOrders > 0 ? (totalQtySold / adOrders) * 100 : 0;
+      const winnerStatus = isWinner(adOrders, conversionRate, adRoas, totalQtySold);
+
       return {
         id: p.id,
         product_name: p.product_name,
@@ -130,6 +167,12 @@ export async function GET(request: NextRequest) {
         stock_value: fifoResult.stock_value,
         total_realized_profit: periodRealizedProfit,
         total_sales_amount: periodSalesAmount,
+        // ROI 필드
+        ad_spend: adSpend,
+        ad_roas: adRoas,
+        margin_rate: marginRate,
+        breakeven_roas: breakevenRoas,
+        winner_status: winnerStatus,
       };
     });
 
