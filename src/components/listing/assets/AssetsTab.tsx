@@ -132,6 +132,7 @@ export default function AssetsTab() {
       const detailSources = [...assetsDraft.detailFiles];
 
       const editedDetail: string[] = [];
+      let editFailCount = 0;
       for (let i = 0; i < detailSources.length; i++) {
         updateAssetsDraft({
           generatingMessage: `상세 이미지 AI 편집 중 (${i + 1}/${detailSources.length})...`,
@@ -140,9 +141,9 @@ export default function AssetsTab() {
           const editedUrl = await editOneImage(detailSources[i], DETAIL_AUTO_EDIT_PROMPT);
           editedDetail.push(editedUrl);
         } catch (err) {
-          // 일부 실패해도 나머지는 계속 진행. 실패 항목은 원본 URL로 fallback.
           console.warn('[assets] 상세 이미지 AI 편집 실패, 원본 사용:', err);
           editedDetail.push(detailSources[i]);
+          editFailCount++;
         }
       }
 
@@ -173,6 +174,9 @@ export default function AssetsTab() {
         generatedThumbnails: thumbnails,
         generatedDetailHtml: detailHtml,
         detailPageSections,
+        ...(editFailCount > 0
+          ? { lastError: `⚠️ 상세 이미지 ${editFailCount}개 AI 편집 실패 — 원본 이미지로 대체되었습니다. 결과 패널에서 이미지를 개별 편집할 수 있습니다.` }
+          : {}),
       });
     } catch (e) {
       updateAssetsDraft({

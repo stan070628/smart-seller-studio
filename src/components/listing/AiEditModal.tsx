@@ -73,7 +73,7 @@ interface AiEditModalProps {
 export default function AiEditModal({ imageUrl, imageFile, imageUrl2, onClose, onSave, initialPrompt }: AiEditModalProps) {
   const isMergeMode = Boolean(imageUrl2);
   const quickPrompts = isMergeMode ? MERGE_QUICK_PROMPTS : QUICK_PROMPTS;
-  const [prompt, setPrompt] = useState(initialPrompt ?? '');
+  const [prompt, setPrompt] = useState(initialPrompt ?? quickPrompts[0].prompt);
   const [uploading, setUploading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [publicUrl, setPublicUrl] = useState<string | null>(null);

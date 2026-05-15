@@ -11,11 +11,11 @@ interface Props {
   onSkuClick: (sku: SkuRoiData) => void;
 }
 
-const FILTERS: { key: Filter; label: string }[] = [
+const FILTERS: { key: Filter; label: string; disabled?: boolean }[] = [
   { key: 'all', label: '전체' },
   { key: 'winner', label: '위너만' },
   { key: 'purchase-signal', label: '사입권고' },
-  { key: 'stock-warning', label: '재고경고' },
+  { key: 'stock-warning', label: '재고경고', disabled: true },
 ];
 
 function WinnerBadge({ status }: { status: SkuRoiData['winnerStatus'] }) {
@@ -40,7 +40,7 @@ function stockColor(status: 'danger' | 'warning' | 'ok'): string {
 export function SkuTable({ skus, filter, onFilterChange, onSkuClick }: Props) {
   const filtered = skus.filter((s) => {
     if (filter === 'winner') return s.winnerStatus === 'winner';
-    if (filter === 'purchase-signal') return s.winnerStatus === 'winner';
+    if (filter === 'purchase-signal') return s.winnerStatus === 'winner' && s.netProfit > 0;
     if (filter === 'stock-warning') return s.stockTurnover.status !== 'ok';
     return true;
   });
@@ -51,9 +51,13 @@ export function SkuTable({ skus, filter, onFilterChange, onSkuClick }: Props) {
         {FILTERS.map((f) => (
           <button
             key={f.key}
-            onClick={() => onFilterChange(f.key)}
+            onClick={() => !f.disabled && onFilterChange(f.key)}
+            disabled={f.disabled}
+            title={f.disabled ? '재고 데이터 미연동 — 추후 지원 예정' : undefined}
             className={`px-3 py-1 rounded-full text-sm transition-colors ${
-              filter === f.key
+              f.disabled
+                ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed'
+                : filter === f.key
                 ? 'bg-red-600 text-white'
                 : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
             }`}
@@ -111,10 +115,8 @@ export function SkuTable({ skus, filter, onFilterChange, onSkuClick }: Props) {
                 <td className="px-4 py-3 text-center">
                   <WinnerBadge status={sku.winnerStatus} />
                 </td>
-                <td className={`px-4 py-3 text-center font-medium ${stockColor(sku.stockTurnover.status)}`}>
-                  {sku.stockTurnover.days === Infinity
-                    ? '∞'
-                    : `${Math.round(sku.stockTurnover.days)}일`}
+                <td className="px-4 py-3 text-center text-zinc-600">
+                  —
                 </td>
               </tr>
             ))}
