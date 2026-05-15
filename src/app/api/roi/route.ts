@@ -1,8 +1,8 @@
 import { type NextRequest } from 'next/server';
 import { requireAuth } from '@/lib/supabase/auth';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
+import { getSourcingPool } from '@/lib/sourcing/db';
 import { getCoupangClient } from '@/lib/listing/coupang-client';
-import { resolveCoupangFee } from '@/lib/calculator/coupang-fees';
 import type { CollectedData } from '@/lib/ad-strategy/types';
 import {
   calcMargin,
@@ -18,6 +18,31 @@ export const dynamic = 'force-dynamic';
 const CACHE_TTL_MS = 60_000;
 const cache = new Map<string, { data: SkuRoiData[]; expiresAt: number }>();
 
+interface WingProduct {
+  vendorItemId: number;
+  vendorItemName: string;
+  sellingPrice: number;
+  salesCount: number;
+  cancelledSales: number;
+  avgDailySales: number;
+}
+
+interface CostStat {
+  costPrice: number;
+  deliveryFee: number;
+  feeRate: number;
+}
+
+interface AdsStat {
+  adSpend: number;
+  attributedSales: number;
+  clicks: number;
+}
+
+function defaultAds(): AdsStat {
+  return { adSpend: 0, attributedSales: 0, clicks: 0 };
+}
+
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof Response) return authResult;
@@ -29,92 +54,59 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const supabase = getSupabaseServerClient();
+    // ── Step 1: Wing API로 30일 실판매 상품 수집 ─────────────────────────────
+    const wingProducts = await fetchWingProducts().catch((e) => {
+      console.error('[roi/wing] 수집 실패:', e instanceof Error ? e.message : e);
+      return [] as WingProduct[];
+    });
 
-    const { data: sourcingItems, error: dbError } = await supabase
-      .from('sourcing_items')
-      .select('id, product_name, price_dome, deli_fee, coupang_category_path')
-      .eq('user_id', userId)
-      .not('price_dome', 'is', null);
-
-    if (dbError) {
-      console.error('[roi] DB error:', dbError);
-      return Response.json({ success: false, error: '데이터 조회 실패' }, { status: 500 });
-    }
-
-    if (!sourcingItems || sourcingItems.length === 0) {
+    if (wingProducts.length === 0) {
       return Response.json({ success: true, data: [] });
     }
 
-    // sourcing_items.product_name → id(UUID) 역방향 매핑 맵 구성
-    const sourcingNames = new Map<string, string>(
-      (sourcingItems as { id: string; product_name: string | null }[])
-        .filter((it) => !!it.product_name)
-        .map((it) => [it.id, it.product_name as string]),
-    );
+    // ── Step 2: product_costs+cost_entries에서 원가·배송비 조회 ───────────────
+    const costMap = await fetchCostMap(wingProducts, userId).catch(() => new Map<number, CostStat>());
 
-    const wingData = await fetchWingProductStats(userId, sourcingNames).catch(() => [] as WingProductStat[]);
-    const adsData = await fetchAdsProductStats(userId, sourcingNames).catch(() => [] as AdsProductStat[]);
+    // ── Step 3: ad_strategy_cache에서 광고 데이터 조회 (name 매칭) ─────────────
+    const supabase = getSupabaseServerClient();
+    const adsMap = await fetchAdsMap(wingProducts, supabase).catch(() => new Map<number, AdsStat>());
 
-    const wingMap = new Map(wingData.map((d) => [d.productId, d]));
-    const adsMap = new Map(adsData.map((d) => [d.productId, d]));
+    // ── Step 4: SKU별 수익성 계산 ────────────────────────────────────────────
+    const DEFAULT_FEE_RATE = 0.108;
 
-    interface SourcingItem {
-      id: string;
-      product_name: string | null;
-      price_dome: number | null;
-      deli_fee: number | null;
-      coupang_category_path: string | null;
-    }
+    const skus: SkuRoiData[] = wingProducts.map((p) => {
+      const cost = costMap.get(p.vendorItemId) ?? { costPrice: 0, deliveryFee: 0, feeRate: DEFAULT_FEE_RATE };
+      const ads = adsMap.get(p.vendorItemId) ?? defaultAds();
 
-    const skus: SkuRoiData[] = (sourcingItems as SourcingItem[]).map((item) => {
-      const wing = wingMap.get(item.id) ?? defaultWingStat();
-      const ads = adsMap.get(item.id) ?? defaultAdsStat();
+      const marginAmount = calcMargin(p.sellingPrice, cost.costPrice, cost.feeRate, cost.deliveryFee);
+      const marginRate = p.sellingPrice > 0 ? marginAmount / p.sellingPrice : 0;
+      const conversionRate = ads.clicks > 0 ? (p.salesCount / ads.clicks) * 100 : 0;
 
-      const feeResult = resolveCoupangFee(item.coupang_category_path);
-      const feeRate = feeResult.rate;
-      const costPrice = item.price_dome ?? 0;
-      const deliveryFee = item.deli_fee ?? 0;
-      const sellingPrice = wing.sellingPrice ?? 0;
-
-      const marginAmount = calcMargin(sellingPrice, costPrice, feeRate, deliveryFee);
-      const marginRate = sellingPrice > 0 ? marginAmount / sellingPrice : 0;
-      const conversionRate =
-        ads.clicks > 0 ? (wing.salesCount / ads.clicks) * 100 : 0;
-
-      const breakEvenRoas = calcBreakevenRoas(sellingPrice, marginAmount);
-      const adjustedRoas = calcAdjustedRoas(
-        ads.attributedSales,
-        wing.cancelledSales,
-        ads.adSpend
-      );
-      const winnerStatus = isWinner(
-        ads.clicks,
-        conversionRate,
-        adjustedRoas,
-        wing.salesCount
-      );
-      const stockTurnover = calcStockTurnover(wing.stockQty, wing.avgDailySales);
-      const netProfit = marginAmount * wing.salesCount - ads.adSpend;
+      const breakEvenRoas = calcBreakevenRoas(p.sellingPrice, marginAmount);
+      const adjustedRoas = calcAdjustedRoas(ads.attributedSales, p.cancelledSales, ads.adSpend);
+      const winnerStatus = isWinner(ads.clicks, conversionRate, adjustedRoas, p.salesCount);
+      // stockQty는 Wing API 미제공 → 재고회전 계산 비활성화
+      const stockTurnover: { days: number; status: 'danger' | 'warning' | 'ok' } = { days: Infinity, status: 'ok' };
+      const netProfit = marginAmount * p.salesCount - ads.adSpend;
 
       return {
-        productId: item.id,
-        productName: item.product_name ?? '',
-        sellingPrice,
-        costPrice,
-        feeRate,
-        deliveryFee,
+        productId: String(p.vendorItemId),
+        productName: p.vendorItemName,
+        sellingPrice: p.sellingPrice,
+        costPrice: cost.costPrice,
+        feeRate: cost.feeRate,
+        deliveryFee: cost.deliveryFee,
         marginAmount,
         marginRate,
         adSpend: ads.adSpend,
         attributedSales: ads.attributedSales,
-        cancelledSales: wing.cancelledSales,
-        couponDiscount: wing.couponDiscount,
+        cancelledSales: p.cancelledSales,
+        couponDiscount: 0,
         clicks: ads.clicks,
         conversionRate,
-        salesCount: wing.salesCount,
-        stockQty: wing.stockQty,
-        avgDailySales: wing.avgDailySales,
+        salesCount: p.salesCount,
+        stockQty: 0,
+        avgDailySales: p.avgDailySales,
         breakEvenRoas,
         adjustedRoas,
         winnerStatus,
@@ -126,261 +118,208 @@ export async function GET(request: NextRequest) {
     cache.set(userId, { data: skus, expiresAt: Date.now() + CACHE_TTL_MS });
     return Response.json({ success: true, data: skus });
   } catch (err) {
-    console.error('[roi] API error:', err);
+    console.error('[roi] API 오류:', err instanceof Error ? err.message : err);
     return Response.json({ success: false, error: '데이터 조회 실패' }, { status: 500 });
   }
 }
 
-interface WingProductStat {
-  productId: string;
-  sellingPrice: number;
-  salesCount: number;
-  cancelledSales: number;
-  couponDiscount: number;
-  stockQty: number;
-  avgDailySales: number;
-}
-
-interface AdsProductStat {
-  productId: string;
-  adSpend: number;
-  attributedSales: number;
-  clicks: number;
-}
-
-function defaultWingStat(): WingProductStat {
-  return {
-    productId: '',
-    sellingPrice: 0,
-    salesCount: 0,
-    cancelledSales: 0,
-    couponDiscount: 0,
-    stockQty: 0,
-    avgDailySales: 0,
-  };
-}
-
-function defaultAdsStat(): AdsProductStat {
-  return { productId: '', adSpend: 0, attributedSales: 0, clicks: 0 };
-}
-
 /**
- * Wing API (getRevenueHistory + getOrders)로 30일 판매 데이터를 수집하여
- * sourcing_items의 product_name 기반으로 productId(UUID)에 매핑한다.
- *
- * @param userId Supabase 사용자 ID — sourcing_items.user_id 필터 용도
- * @param sourcingNames productId(UUID) → product_name 매핑 맵
+ * Wing API getRevenueHistory로 최근 30일간 실제 판매된 상품을 수집한다.
+ * sellerProductId 기준으로 중복 제거 후 판매 집계.
  */
-async function fetchWingProductStats(
-  _userId: string,
-  sourcingNames: Map<string, string>,
-): Promise<WingProductStat[]> {
-  try {
-    const client = getCoupangClient();
+async function fetchWingProducts(): Promise<WingProduct[]> {
+  const client = getCoupangClient();
 
-    // revenue-history API 제약: recognitionDateTo는 어제까지만 허용
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const thirtyDaysAgo = new Date(today);
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const thirtyDaysAgo = new Date(today);
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const dateFrom = thirtyDaysAgo.toISOString().slice(0, 10);
-    const dateTo = yesterday.toISOString().slice(0, 10);
+  const dateFrom = thirtyDaysAgo.toISOString().slice(0, 10);
+  const dateTo = yesterday.toISOString().slice(0, 10);
+  if (dateTo < dateFrom) return [];
 
-    if (dateTo < dateFrom) return [];
+  // 판매 내역 수집 (페이지네이션)
+  interface RevItem {
+    vendorItemId: number;
+    vendorItemName: string;
+    quantity: number;
+    salePrice: number;
+  }
+  const allItems: RevItem[] = [];
+  let token = '';
 
-    // ── Step 1: 30일 매출 내역 수집 (페이지네이션) ──────────────────────────
-    interface RevenueItem {
-      sellerProductId: number;
-      vendorItemName: string;
-      quantity: number;
-      salePrice: number;
-      saleAmount: number;
-    }
-    const allRevItems: RevenueItem[] = [];
-
-    let token = '';
-    const MAX_PAGES = 50;
-    for (let page = 0; page < MAX_PAGES; page++) {
-      const result = await client.getRevenueHistory({
-        recognitionDateFrom: dateFrom,
-        recognitionDateTo: dateTo,
-        maxPerPage: 50,
-        token,
-      });
-
-      for (const order of result.items) {
-        for (const item of order.items) {
-          allRevItems.push({
-            sellerProductId: item.sellerProductId,
+  for (let page = 0; page < 50; page++) {
+    const result = await client.getRevenueHistory({
+      recognitionDateFrom: dateFrom,
+      recognitionDateTo: dateTo,
+      maxPerPage: 50,
+      token,
+    });
+    for (const order of result.items) {
+      for (const item of order.items) {
+        // vendorItemId가 0이면 데이터 없음 — sellerProductId는 Wing API에서 미제공
+        if (item.vendorItemId > 0) {
+          allItems.push({
+            vendorItemId: item.vendorItemId,
             vendorItemName: item.vendorItemName,
             quantity: item.quantity,
             salePrice: item.salePrice,
-            saleAmount: item.saleAmount,
           });
         }
       }
-
-      if (!result.nextToken) break;
-      token = result.nextToken;
     }
-
-    // ── Step 2: 취소 주문 수집 ───────────────────────────────────────────────
-    const cancelledMap = new Map<number, number>(); // sellerProductId → 취소 판매금액 합계
-    try {
-      const cancelResult = await client.getOrders({
-        createdAtFrom: dateFrom,
-        createdAtTo: today.toISOString().slice(0, 10),
-        status: 'CANCEL_DONE',
-        maxPerPage: 100,
-      });
-      for (const order of cancelResult.items ?? []) {
-        for (const item of order.orderItems ?? []) {
-          const spId = Number(item.sellerProductId);
-          cancelledMap.set(spId, (cancelledMap.get(spId) ?? 0) + (item.orderPrice ?? 0));
-        }
-      }
-    } catch (cancelErr) {
-      // 취소 주문 조회 실패는 무시 — cancelledSales 를 0으로 처리
-      console.warn('[roi/wing] 취소 주문 조회 실패 (무시):', cancelErr instanceof Error ? cancelErr.message : cancelErr);
-    }
-
-    // ── Step 3: sellerProductId별 집계 ──────────────────────────────────────
-    interface SellerStat {
-      latestSalePrice: number;
-      salesCount: number;
-      saleAmountSum: number;
-    }
-    const sellerStatMap = new Map<number, SellerStat>();
-
-    for (const item of allRevItems) {
-      const spId = item.sellerProductId;
-      if (spId <= 0) continue;
-      const existing = sellerStatMap.get(spId);
-      if (existing) {
-        existing.salesCount += item.quantity;
-        existing.saleAmountSum += item.saleAmount;
-        // 최신 판매가 유지 (마지막 레코드 기준)
-        if (item.salePrice > 0) existing.latestSalePrice = item.salePrice;
-      } else {
-        sellerStatMap.set(spId, {
-          latestSalePrice: item.salePrice,
-          salesCount: item.quantity,
-          saleAmountSum: item.saleAmount,
-        });
-      }
-    }
-
-    // ── Step 4: sourcing_items의 product_name으로 productId(UUID)에 매핑 ────
-    // vendorItemName 앞 10자 prefix 매칭 방식 (ad-strategy collect 동일 패턴)
-    const result: WingProductStat[] = [];
-
-    for (const [productId, productName] of sourcingNames.entries()) {
-      const namePrefix = productName.slice(0, 10);
-
-      // sellerProductId별로 상품명 매핑 탐색
-      let matchedSpId: number | null = null;
-      for (const [spId] of sellerStatMap.entries()) {
-        // allRevItems에서 해당 spId의 vendorItemName으로 매칭 시도
-        const revItem = allRevItems.find((it) => it.sellerProductId === spId);
-        if (!revItem) continue;
-
-        const itemName = revItem.vendorItemName;
-        if (
-          itemName === productName ||
-          itemName.includes(namePrefix) ||
-          productName.includes(itemName.slice(0, 10))
-        ) {
-          matchedSpId = spId;
-          break;
-        }
-      }
-
-      if (matchedSpId === null) continue;
-
-      const stat = sellerStatMap.get(matchedSpId)!;
-      result.push({
-        productId,
-        sellingPrice: stat.latestSalePrice,
-        salesCount: stat.salesCount,
-        cancelledSales: cancelledMap.get(matchedSpId) ?? 0,
-        couponDiscount: 0, // 쿠폰 할인 데이터 미제공 — 0으로 fallback
-        stockQty: 0,       // 재고 데이터 미제공 — 0으로 fallback
-        avgDailySales: stat.salesCount / 30,
-      });
-    }
-
-    return result;
-  } catch (err) {
-    console.error('[roi/wing] fetchWingProductStats 오류:', err instanceof Error ? err.message : err);
-    return [];
+    if (!result.nextToken) break;
+    token = result.nextToken;
   }
+
+  // vendorItemId별 집계
+  const statMap = new Map<number, { name: string; salesCount: number; latestSalePrice: number }>();
+  for (const item of allItems) {
+    const existing = statMap.get(item.vendorItemId);
+    if (existing) {
+      existing.salesCount += item.quantity;
+      if (item.salePrice > 0) existing.latestSalePrice = item.salePrice;
+    } else {
+      statMap.set(item.vendorItemId, {
+        name: item.vendorItemName,
+        salesCount: item.quantity,
+        latestSalePrice: item.salePrice,
+      });
+    }
+  }
+
+  // 취소 주문 수집 (maxPerPage 50 제한)
+  // vendorItemId 매칭은 어려우므로 취소 금액은 0으로 처리
+  const cancelledMap = new Map<number, number>();
+  try {
+    const cancelResult = await client.getOrders({
+      createdAtFrom: dateFrom,
+      createdAtTo: today.toISOString().slice(0, 10),
+      status: 'CANCEL_DONE',
+      maxPerPage: 50,
+    });
+    for (const order of cancelResult.items ?? []) {
+      for (const item of order.orderItems ?? []) {
+        const vid = Number(item.vendorItemId ?? 0);
+        if (vid > 0 && statMap.has(vid)) {
+          cancelledMap.set(vid, (cancelledMap.get(vid) ?? 0) + (item.orderPrice ?? 0));
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[roi/wing] 취소 주문 조회 실패 (무시):', e instanceof Error ? e.message : e);
+  }
+
+  return Array.from(statMap.entries()).map(([vid, stat]) => ({
+    vendorItemId: vid,
+    vendorItemName: stat.name,
+    sellingPrice: stat.latestSalePrice,
+    salesCount: stat.salesCount,
+    cancelledSales: cancelledMap.get(vid) ?? 0,
+    avgDailySales: stat.salesCount / 30,
+  }));
 }
 
 /**
- * ad_strategy_cache 테이블에서 가장 최근 수집 데이터를 읽어
- * sourcing_items의 product_name 기반으로 productId(UUID)에 매핑한다.
- *
- * collected_data.products[].adSpend, adRoas, adOrders 필드를 사용.
- * attributedSales = adSpend * (adRoas / 100) 으로 역산.
- * clicks 는 adOrders 로 근사 (직접 클릭수 미제공).
- *
- * @param _userId 현재 미사용 (ad_strategy_cache 는 단일 계정 테이블)
- * @param sourcingNames productId(UUID) → product_name 매핑 맵
+ * product_costs + cost_entries(Render PostgreSQL)에서 사용자가 입력한 가중평균 원가·배송비를 조회한다.
+ * vendorItemName ↔ product_name 앞 10자 prefix 매칭.
  */
-async function fetchAdsProductStats(
-  _userId: string,
-  sourcingNames: Map<string, string>,
-): Promise<AdsProductStat[]> {
-  try {
-    const supabase = getSupabaseServerClient();
+async function fetchCostMap(
+  products: WingProduct[],
+  userId: string,
+): Promise<Map<number, CostStat>> {
+  const pool = getSourcingPool();
 
-    // 24시간 이내 가장 최근 캐시 조회
-    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const { data: cached, error } = await supabase
-      .from('ad_strategy_cache')
-      .select('collected_data, collected_at')
-      .gte('collected_at', cutoff)
-      .order('collected_at', { ascending: false })
-      .limit(1)
-      .single();
+  const { rows } = await pool.query<{
+    product_name: string;
+    platform_fee_rate: number;
+    weighted_avg_cost: number;
+    weighted_avg_shipping: number;
+  }>(
+    `SELECT
+       pc.product_name,
+       pc.platform_fee_rate,
+       COALESCE(
+         SUM(ce.unit_cost * ce.quantity) FILTER (WHERE ce.id IS NOT NULL)
+         / NULLIF(SUM(ce.quantity) FILTER (WHERE ce.id IS NOT NULL), 0),
+         0
+       ) AS weighted_avg_cost,
+       COALESCE(
+         SUM(ce.unit_shipping_fee * ce.quantity) FILTER (WHERE ce.id IS NOT NULL)
+         / NULLIF(SUM(ce.quantity) FILTER (WHERE ce.id IS NOT NULL), 0),
+         0
+       ) AS weighted_avg_shipping
+     FROM product_costs pc
+     LEFT JOIN cost_entries ce
+       ON ce.product_cost_id = pc.id AND ce.user_id = $1
+     WHERE pc.user_id = $1
+     GROUP BY pc.product_name, pc.platform_fee_rate`,
+    [userId],
+  );
 
-    if (error || !cached?.collected_data) return [];
-
-    const data = cached.collected_data as CollectedData;
-    const products = data.products ?? [];
-
-    const result: AdsProductStat[] = [];
-
-    for (const [productId, productName] of sourcingNames.entries()) {
-      const namePrefix = productName.slice(0, 10);
-
-      // 상품명 완전 일치 → 앞 10자 prefix 매칭 순으로 폴백
-      const matched =
-        products.find((p) => p.name === productName) ??
-        products.find(
-          (p) =>
-            p.name.includes(namePrefix) ||
-            productName.includes(p.name.slice(0, 10)),
-        );
-
-      if (!matched) continue;
-      if (!matched.adSpend && !matched.adRoas) continue;
-
-      const adSpend = matched.adSpend ?? 0;
-      const adRoas = matched.adRoas ?? 0;
-      // attributedSales = adSpend × (ROAS / 100)
-      const attributedSales = adSpend > 0 && adRoas > 0 ? adSpend * (adRoas / 100) : 0;
-      // clicks 는 adOrders 로 근사 (광고 전환 주문수)
-      const clicks = matched.adOrders ?? 0;
-
-      result.push({ productId, adSpend, attributedSales, clicks });
+  const result = new Map<number, CostStat>();
+  for (const p of products) {
+    const namePrefix = p.vendorItemName.slice(0, 10);
+    const matched =
+      rows.find((r) => r.product_name === p.vendorItemName) ??
+      rows.find(
+        (r) =>
+          r.product_name.includes(namePrefix) ||
+          p.vendorItemName.includes(r.product_name.slice(0, 10)),
+      );
+    if (matched && matched.weighted_avg_cost > 0) {
+      result.set(p.vendorItemId, {
+        costPrice: Number(matched.weighted_avg_cost),
+        deliveryFee: Number(matched.weighted_avg_shipping),
+        feeRate: Number(matched.platform_fee_rate),
+      });
     }
-
-    return result;
-  } catch (err) {
-    console.error('[roi/ads] fetchAdsProductStats 오류:', err instanceof Error ? err.message : err);
-    return [];
   }
+  return result;
+}
+
+/**
+ * ad_strategy_cache(Supabase)에서 광고 데이터를 조회한다.
+ * vendorItemName ↔ product.name 앞 10자 prefix 매칭.
+ */
+async function fetchAdsMap(
+  products: WingProduct[],
+  supabase: ReturnType<typeof getSupabaseServerClient>,
+): Promise<Map<number, AdsStat>> {
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data: cached, error } = await supabase
+    .from('ad_strategy_cache')
+    .select('collected_data')
+    .gte('collected_at', cutoff)
+    .order('collected_at', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (error || !cached?.collected_data) return new Map();
+
+  const adProducts = (cached.collected_data as CollectedData).products ?? [];
+  const result = new Map<number, AdsStat>();
+
+  for (const p of products) {
+    const namePrefix = p.vendorItemName.slice(0, 10);
+    const matched =
+      adProducts.find((ap) => ap.name === p.vendorItemName) ??
+      adProducts.find(
+        (ap) =>
+          ap.name.includes(namePrefix) ||
+          p.vendorItemName.includes(ap.name.slice(0, 10)),
+      );
+    if (!matched || (!matched.adSpend && !matched.adRoas)) continue;
+
+    const adSpend = matched.adSpend ?? 0;
+    const adRoas = matched.adRoas ?? 0;
+    result.set(p.vendorItemId, {
+      adSpend,
+      attributedSales: adSpend > 0 && adRoas > 0 ? adSpend * (adRoas / 100) : 0,
+      clicks: matched.adOrders ?? 0,
+    });
+  }
+  return result;
 }
