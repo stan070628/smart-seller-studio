@@ -192,21 +192,40 @@ export class CoupangClient {
   // ─── 공통 요청 ─────────────────────────────────────────────
 
   private async request<T>(method: string, urlWithQuery: string, body?: unknown): Promise<CoupangApiResponse<T>> {
-    const auth = this.generateAuth(method, urlWithQuery);
+    // 429 발생 시 지수 백오프로 최대 3회 재시도 (Retry-After 헤더 우선)
+    const RETRY_DELAYS_SEC = [2, 5, 10];
+    const pathOnly = urlWithQuery.split('?')[0];
 
-    const res = await proxyFetch(API_HOST + urlWithQuery, {
-      method,
-      headers: {
-        Authorization: auth,
-        'X-Requested-By': this.accessKey,
-        'Content-Type': 'application/json;charset=UTF-8',
-      },
-      body: body ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(30_000),
-    });
+    let res: Response | null = null;
+    let text = '';
+    for (let attempt = 0; attempt <= RETRY_DELAYS_SEC.length; attempt++) {
+      const auth = this.generateAuth(method, urlWithQuery);
+      res = await proxyFetch(API_HOST + urlWithQuery, {
+        method,
+        headers: {
+          Authorization: auth,
+          'X-Requested-By': this.accessKey,
+          'X-MARKET': 'KR',  // rg_open_api 필수. 일반 openapi에서도 무시되므로 안전
+          'Content-Type': 'application/json;charset=UTF-8',
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(30_000),
+      });
 
-    const text = await res.text();
-    console.log(`[coupang] ${method} ${urlWithQuery.split('?')[0]} → HTTP ${res.status} | ${text.slice(0, 500)}`);
+      text = await res.text();
+      console.log(`[coupang] ${method} ${pathOnly} → HTTP ${res.status} | ${text.slice(0, 500)}`);
+
+      if (res.status !== 429 || attempt >= RETRY_DELAYS_SEC.length) break;
+
+      const retryAfterHeader = Number(res.headers.get('Retry-After'));
+      const waitSec = Number.isFinite(retryAfterHeader) && retryAfterHeader > 0
+        ? retryAfterHeader
+        : RETRY_DELAYS_SEC[attempt];
+      console.warn(`[coupang-retry] 429 attempt ${attempt + 1}/${RETRY_DELAYS_SEC.length}, sleeping ${waitSec}s → ${pathOnly}`);
+      await sleep(waitSec * 1000);
+    }
+
+    if (!res) throw new Error('쿠팡 API 응답 없음');
 
     if (!res.ok) {
       let errorMsg: string;
@@ -603,6 +622,64 @@ export class CoupangClient {
       nextToken: res.nextToken ?? null,
     };
   }
+
+  /**
+   * 로켓그로스 주문 목록 조회 (rg_open_api)
+   *
+   * - Endpoint: GET /v2/providers/rg_open_api/apis/api/v1/vendors/{vendorId}/rg/orders
+   * - Rate limit: 분당 50회
+   * - 최대 30일 조회
+   * - paidDateFrom/To 형식: yyyymmdd (예: 20240709)
+   * - 출고일 이후 주문 지원
+   */
+  async getRocketGrowthOrders(params: {
+    paidDateFrom: string;  // YYYY-MM-DD (내부에서 yyyymmdd로 변환)
+    paidDateTo: string;    // YYYY-MM-DD
+    nextToken?: string;
+  }): Promise<{
+    items: Array<{
+      orderId: string;
+      paidAt: string;  // timestamp(ms) 문자열
+      orderItems: Array<{
+        vendorItemId: number;
+        productName: string;
+        salesQuantity: number;
+        unitSalesPrice: number;
+        currency: string;
+      }>;
+    }>;
+    nextToken: string | null;
+  }> {
+    const toCompact = (d: string) => d.replace(/-/g, '');
+    const parts: string[] = [
+      `paidDateFrom=${toCompact(params.paidDateFrom)}`,
+      `paidDateTo=${toCompact(params.paidDateTo)}`,
+    ];
+    if (params.nextToken) parts.push(`nextToken=${encodeURIComponent(params.nextToken)}`);
+
+    const url = `/v2/providers/rg_open_api/apis/api/v1/vendors/${this.vendorId}/rg/orders?${parts.join('&')}`;
+    await sleep(API_DELAY);
+    const res = await this.request<Array<Record<string, unknown>>>('GET', url);
+    const rawItems = res.data ?? [];
+    return {
+      items: rawItems.map((r) => {
+        const orderItems = Array.isArray(r.orderItems) ? (r.orderItems as Array<Record<string, unknown>>) : [];
+        return {
+          orderId: String(r.orderId ?? ''),
+          paidAt: String(r.paidAt ?? ''),
+          orderItems: orderItems.map((it) => ({
+            vendorItemId: Number(it.vendorItemId ?? 0),
+            productName: String(it.productName ?? ''),
+            salesQuantity: Number(it.salesQuantity ?? 0),
+            // 응답 스펙: salesPrice 표기, 샘플: unitSalesPrice. 둘 다 처리.
+            unitSalesPrice: Number(it.unitSalesPrice ?? it.salesPrice ?? 0),
+            currency: String(it.currency ?? 'KRW'),
+          })),
+        };
+      }),
+      nextToken: res.nextToken ?? null,
+    };
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -674,11 +751,6 @@ function flattenCategories(nodes: CoupangCategory[], parentPath: string): FlatCa
 // 싱글톤
 // ─────────────────────────────────────────────────────────────
 
-let _client: CoupangClient | null = null;
-
 export function getCoupangClient(): CoupangClient {
-  if (!_client) {
-    _client = new CoupangClient();
-  }
-  return _client;
+  return new CoupangClient();
 }

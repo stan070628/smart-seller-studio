@@ -61,14 +61,18 @@ export async function GET(request: NextRequest) {
 
   const memHit = memCache.get(userId);
   if (memHit && memHit.expiresAt > Date.now()) {
-    return Response.json({ success: true, data: memHit.data });
+    return Response.json({ success: true, data: memHit.data }, {
+      headers: { 'Cache-Control': 'no-store' },
+    });
   }
 
   // 1순위: DB 캐시 (cron이 일 1회 채움)
   const fromDb = await readDbCache(userId);
   if (fromDb) {
     memCache.set(userId, { data: fromDb, expiresAt: Date.now() + MEMORY_TTL_MS });
-    return Response.json({ success: true, data: fromDb });
+    return Response.json({ success: true, data: fromDb }, {
+      headers: { 'Cache-Control': 'no-store' },
+    });
   }
 
   // 2순위: 외부 API 직접 조회 (느림 — 콜드 스타트 또는 cron 미실행 시에만)
@@ -84,7 +88,9 @@ export async function GET(request: NextRequest) {
       refreshedAt: new Date().toISOString(),
     };
     memCache.set(userId, { data, expiresAt: Date.now() + MEMORY_TTL_MS });
-    return Response.json({ success: true, data });
+    return Response.json({ success: true, data }, {
+      headers: { 'Cache-Control': 'no-store' },
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : '알 수 없는 오류';
     console.error('[GET /api/dashboard/product-count]', err);

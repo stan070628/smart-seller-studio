@@ -15,8 +15,8 @@ import { requireAuth } from '@/lib/supabase/auth';
 // GET — 판매자 상품 목록
 // ─────────────────────────────────────────────────────────────
 
-// 쿠팡 판매자 상품 status 목록
-const ALL_PRODUCT_STATUSES = ['APPROVED', 'SUSPENSION', 'UNDER_REVIEW', 'REJECTED'];
+// 쿠팡 판매자 상품 status 목록 (API 유효 값: SAVED SAVING APPROVING APPROVED PARTIAL_APPROVED DENIED TMP_DENIED DELETED DROPPED IN_REVIEW)
+const ALL_PRODUCT_STATUSES = ['APPROVED', 'PARTIAL_APPROVED', 'IN_REVIEW', 'APPROVING', 'DENIED'];
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
