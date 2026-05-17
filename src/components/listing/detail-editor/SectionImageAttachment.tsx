@@ -7,6 +7,7 @@
  */
 
 import React, { useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Upload, X, Loader2, FolderOpen } from 'lucide-react';
 import type { AttachedImage, ImageProcessingMode, PaletteName } from '@/types/detail-page';
 import { useListingStore } from '@/store/useListingStore';
@@ -494,8 +495,8 @@ export default function SectionImageAttachment({
         )}
       </div>
 
-      {/* 소스 이미지 픽커 모달 */}
-      {showPicker && (
+      {/* 소스 이미지 픽커 모달 — sticky 스태킹 컨텍스트 탈출을 위해 portal 사용 */}
+      {showPicker && createPortal(
         <div
           style={{
             position: 'fixed',
@@ -584,7 +585,8 @@ export default function SectionImageAttachment({
               ))}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* 에러 메시지 */}
