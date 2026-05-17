@@ -100,7 +100,7 @@ export const DETAIL_PAGE_SYSTEM_PROMPT = `당신은 한국 이커머스 상세 �
   "subheadline": "string (40자 이내, headline을 보완하는 감성적·실용적 설명)",
   "sellingPoints": [
     {
-      "icon": "string (이모지 1개, 소구점 내용과 직접 연관된 것)",
+      "icon": "string (BMP 범위 이모지 1개 — ☀⭐✨❤✅✔⚡♻★❄✈✉♥♦➡❗⭕☁☂☃♠♣✦✪ 중 소구점과 어울리는 것. 금지: 🎀🪡💡🔥🏆🎯🌟 등 U+10000 이상 4바이트 이모지)",
       "title": "string (15자 이내, 핵심 소구점 제목)",
       "description": "string (40자 이내, 소구점 설명)"
     }
@@ -158,7 +158,7 @@ export const STUDIO_DETAIL_PAGE_SYSTEM_PROMPT = `당신은 프리미엄 스튜�
   "subheadline": "string (40자 이내, 스튜디오 촬영처럼 제품의 본질을 설명)",
   "sellingPoints": [
     {
-      "icon": "string (이모지 1개)",
+      "icon": "string (BMP 범위 이모지 1개 — ☀⭐✨❤✅✔⚡♻★❄✈♥♦➡❗⭕✦✪ 중 선택. 금지: U+10000 이상 4바이트 이모지)",
       "title": "string (15자 이내)",
       "description": "string (40자 이내)"
     }
@@ -255,12 +255,28 @@ export function buildCategorySystemPrompt(
 export function buildDetailPageUserPrompt(
   imageAnalysis: ProductImageAnalysis,
   productName?: string,
-  productSpecs?: Array<{ label: string; value: string }>
+  productSpecs?: Array<{ label: string; value: string }>,
+  /**
+   * 대화식 상세페이지 생성 모드에서 수집한 마케팅 브리프 답변.
+   * 있으면 상품명 직후·이미지 분석 직전에 마케팅 브리프 블록으로 prepend.
+   * 디자인 문서 §5.3 참고.
+   */
+  conversationContext?: import('@/lib/conversational-detail/types').ConversationContext,
 ): string {
   const lines: string[] = [];
 
   if (productName) {
     lines.push(`상품명: ${productName}`);
+  }
+
+  if (conversationContext && conversationContext.answers.length > 0) {
+    lines.push('\n[마케팅 브리프 — 절대 우선 반영]');
+    lines.push('아래 사용자 답변을 톤·구성·강조점의 핵심 가이드로 사용하세요. 이미지 분석보다 우선합니다.');
+    for (const answer of conversationContext.answers) {
+      if (answer.resolvedValue && answer.resolvedValue.trim()) {
+        lines.push(`- ${answer.questionId}: ${answer.resolvedValue.trim()}`);
+      }
+    }
   }
 
   lines.push(`\n[이미지 분석 결과]`);
@@ -291,6 +307,13 @@ export function buildDetailPageUserPrompt(
 // ─────────────────────────────────────────
 // JSON 파싱 헬퍼
 // ─────────────────────────────────────────
+
+// 쿠팡은 U+10000 이상의 4바이트 UTF-8 문자(비-BMP 이모지)를 서버에서 제거한다.
+// icon 필드에 비-BMP 이모지가 섞이면 쿠팡 상세페이지에서 해당 이모지만 사라지는 현상이 발생한다.
+function sanitizeIconToBmp(icon: string): string {
+  const filtered = [...icon].filter(c => (c.codePointAt(0) ?? 0) <= 0xFFFF).join('');
+  return filtered || '★';
+}
 
 export function parseDetailPageResponse(rawText: string): DetailPageContent {
   const jsonMatch = rawText.match(/\{[\s\S]*\}/);
@@ -331,6 +354,11 @@ export function parseDetailPageResponse(rawText: string): DetailPageContent {
   if (typeof data.ctaText !== "string" || data.ctaText.trim().length === 0) {
     data.ctaText = "지금 구매하기";
   }
+
+  // 비-BMP 이모지 sanitize (쿠팡 등록 시 U+10000+ 문자가 서버에서 제거되는 문제 방지)
+  (data.sellingPoints as Array<{ icon: string; title: string; description: string }>).forEach(sp => {
+    sp.icon = sanitizeIconToBmp(sp.icon);
+  });
 
   return data as unknown as DetailPageContent;
 }
