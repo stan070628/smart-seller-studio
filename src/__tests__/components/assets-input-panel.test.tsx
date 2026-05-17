@@ -15,6 +15,6 @@ describe('AssetsInputPanel', () => {
   it('URL 모드에서 빈 입력은 생성 버튼이 비활성화된다', () => {
     useListingStore.getState().updateAssetsDraft({ mode: 'url', url: '' });
     render(<AssetsInputPanel onGenerate={() => {}} />);
-    expect(screen.getByRole('button', { name: /자산 생성/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /빠른 생성/ })).toBeDisabled();
   });
 });

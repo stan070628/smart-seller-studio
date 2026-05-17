@@ -195,6 +195,81 @@ describe('buildDetailPageUserPrompt', () => {
     const result = buildDetailPageUserPrompt(validImageAnalysis);
     expect(result).toContain('JSON');
   });
+
+  describe('conversationContext (대화식 모드 마케팅 브리프)', () => {
+    const conversationContext = {
+      productName: '프리미엄 텀블러',
+      category: 'living' as const,
+      imageUrls: ['https://example.com/img1.jpg'],
+      answers: [
+        { questionId: 'target', resolvedValue: '30대 워킹맘' },
+        { questionId: 'tone', resolvedValue: '신뢰감' },
+        { questionId: 'usp', resolvedValue: '한 손으로 열리는 원터치 버튼' },
+      ],
+    };
+
+    it('conversationContext가 있으면 마케팅 브리프 블록이 포함된다', () => {
+      const result = buildDetailPageUserPrompt(
+        validImageAnalysis,
+        '프리미엄 텀블러',
+        undefined,
+        conversationContext,
+      );
+      expect(result).toContain('[마케팅 브리프');
+      expect(result).toContain('30대 워킹맘');
+      expect(result).toContain('신뢰감');
+      expect(result).toContain('한 손으로 열리는 원터치 버튼');
+    });
+
+    it('브리프 블록은 이미지 분석 결과 이전에 배치된다', () => {
+      const result = buildDetailPageUserPrompt(
+        validImageAnalysis,
+        '프리미엄 텀블러',
+        undefined,
+        conversationContext,
+      );
+      const briefIdx = result.indexOf('[마케팅 브리프');
+      const imageIdx = result.indexOf('[이미지 분석 결과]');
+      expect(briefIdx).toBeGreaterThan(-1);
+      expect(imageIdx).toBeGreaterThan(-1);
+      expect(briefIdx).toBeLessThan(imageIdx);
+    });
+
+    it('conversationContext가 없으면 마케팅 브리프 블록이 없다 (기존 동작 보존)', () => {
+      const result = buildDetailPageUserPrompt(validImageAnalysis, '상품명');
+      expect(result).not.toContain('[마케팅 브리프');
+    });
+
+    it('빈 answers 배열이면 마케팅 브리프 블록이 없다', () => {
+      const result = buildDetailPageUserPrompt(
+        validImageAnalysis,
+        '상품명',
+        undefined,
+        { ...conversationContext, answers: [] },
+      );
+      expect(result).not.toContain('[마케팅 브리프');
+    });
+
+    it('resolvedValue가 빈 답변은 브리프에 포함되지 않는다', () => {
+      const result = buildDetailPageUserPrompt(
+        validImageAnalysis,
+        '상품명',
+        undefined,
+        {
+          ...conversationContext,
+          answers: [
+            { questionId: 'target', resolvedValue: '30대 워킹맘' },
+            { questionId: 'tone', resolvedValue: '' },
+            { questionId: 'usp', resolvedValue: '   ' },
+          ],
+        },
+      );
+      expect(result).toContain('30대 워킹맘');
+      // tone과 usp 줄은 없어야 함 (빈/공백)
+      expect(result).not.toMatch(/- tone:\s*$/m);
+      expect(result).not.toMatch(/- usp:\s*$/m);
+    });
+  });
 });
 
 // ─── checkProhibitedPhrases ─────────────────────────────────────────────────

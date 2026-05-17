@@ -415,9 +415,9 @@ export class NaverCommerceClient {
     fromDate: string;  // "2024-01-01" (YYYY-MM-DD)
     toDate: string;    // "2024-01-07"
   }): Promise<{ contents: NaverOrder[] }> {
-    // 실제 유효한 lastChangedType (EXCHANGED/CANCELED/RETURNED 는 400 반환으로 제외)
-    // DELIVERING/DELIVERED 추가 — 배송중·배송완료 주문이 누락되던 버그 수정
-    const VALID_STATUSES = ['PAYED', 'DISPATCHED', 'DELIVERING', 'DELIVERED', 'PURCHASE_DECIDED'];
+    // 네이버 API가 허용하는 lastChangedType (상태 변경 이벤트 타입).
+    // DELIVERING/DELIVERED는 400 반환 — 배송중·배송완료 주문은 DISPATCHED 이벤트로 잡힘.
+    const VALID_STATUSES = ['PAYED', 'DISPATCHED', 'PURCHASE_DECIDED'];
 
     const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
