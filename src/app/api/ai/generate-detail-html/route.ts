@@ -85,6 +85,26 @@ const RequestSchema = z.object({
   category: z.enum(['basic', 'fashion', 'living', 'food'] as const).optional(),
   /** 소스 URL에서 추출한 실측 스펙 (이미지 분석보다 우선 반영) */
   productSpecs: z.array(z.object({ label: z.string(), value: z.string() })).max(20).optional(),
+  /**
+   * 대화식 상세페이지 생성 모드에서 수집한 마케팅 브리프.
+   * 디자인 문서: docs/superpowers/specs/2026-05-16-conversational-detail-page-design.md §5.3
+   */
+  conversationContext: z
+    .object({
+      productName: z.string().min(1).max(200),
+      category: z.enum(['basic', 'fashion', 'living', 'food'] as const),
+      imageUrls: z.array(z.string().url()).max(5),
+      answers: z.array(
+        z.object({
+          questionId: z.string().min(1).max(80),
+          selectedChip: z.string().max(200).optional(),
+          freeText: z.string().max(500).optional(),
+          delegatedToAi: z.boolean().optional(),
+          resolvedValue: z.string().max(500),
+        }),
+      ).max(20),
+    })
+    .optional(),
 }).refine(
   (d) => (d.images && d.images.length > 0) || (d.imageUrls && d.imageUrls.length > 0),
   { message: 'images 또는 imageUrls 중 하나는 필수입니다.' },
@@ -305,7 +325,7 @@ export async function POST(
     );
   }
 
-  const { images: rawImages, imageUrls, productName, existingHtml, studioMode, productSpecs, category } = parseResult.data;
+  const { images: rawImages, imageUrls, productName, existingHtml, studioMode, productSpecs, category, conversationContext } = parseResult.data;
 
   // imageUrls가 있으면 서버에서 fetch → base64 변환 후 rawImages와 합산
   let images: Array<{ imageBase64: string; mimeType: AllowedMimeType }>;
@@ -449,7 +469,7 @@ export async function POST(
 
   // DetailPageContent 생성
   const client = getAnthropicClient();
-  const userMessage = buildDetailPageUserPrompt(imageAnalysis, productName, productSpecs);
+  const userMessage = buildDetailPageUserPrompt(imageAnalysis, productName, productSpecs, conversationContext);
 
   let rawCopyText: string;
   try {

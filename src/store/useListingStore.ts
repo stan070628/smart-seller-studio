@@ -13,6 +13,7 @@ import type { DetailSection, DetailPageTheme } from '@/types/detail-page';
 import { DEFAULT_THEME } from '@/lib/detail-page/palette-config';
 import { contentToSections } from '@/lib/detail-page/section-parser';
 import type { DetailPageContent } from '@/lib/ai/prompts/detail-page';
+import type { CategoryKey, QuestionAnswer } from '@/lib/conversational-detail/types';
 
 // ─── SharedDraft 타입 ────────────────────────────────────────────────────────
 // 탭 이동 시에도 입력값이 유지되도록 공통 필드를 스토어에서 관리
@@ -219,6 +220,12 @@ interface AssetsDraft {
   // 상세페이지 섹션 편집 (DetailPageEditor용)
   detailPageSections: DetailSection[];
   detailPageTheme: DetailPageTheme;
+  // ─── 대화식 상세페이지 생성 ────────────────────────────────────────────────
+  // 자산 탭의 "대화로 만들기" 진입점에서 사용. 폼 모드에서는 무관.
+  /** 사용자가 선택한 카테고리. 대화 모달 진입 조건 + 카테고리별 보충 질문 결정에 사용. */
+  category: CategoryKey | null;
+  /** 마지막 대화에서 수집한 답변. 결과 디버깅·재현용으로 보관. */
+  conversationAnswers: QuestionAnswer[];
 }
 
 const ASSETS_DRAFT_INITIAL: AssetsDraft = {
@@ -233,6 +240,8 @@ const ASSETS_DRAFT_INITIAL: AssetsDraft = {
   lastError: null,
   detailPageSections: [],
   detailPageTheme: DEFAULT_THEME,
+  category: null,
+  conversationAnswers: [],
 };
 
 interface ListingStore {

@@ -2,10 +2,21 @@
 
 import React, { useRef, useState } from 'react';
 import AiEditModal from '@/components/listing/AiEditModal';
+import ConversationalDetailModal from './ConversationalDetailModal';
 import { useListingStore } from '@/store/useListingStore';
 import { C } from '@/lib/design-tokens';
 import { prepareUpload } from '@/lib/image/prepare-upload';
 import AssetsSaveLoad from './AssetsSaveLoad';
+import type { CategoryKey } from '@/lib/conversational-detail/types';
+import { contentToSections } from '@/lib/detail-page/section-parser';
+import type { DetailPageContent } from '@/lib/ai/prompts/detail-page';
+
+const CATEGORY_OPTIONS: Array<{ key: CategoryKey; label: string }> = [
+  { key: 'basic', label: '기본' },
+  { key: 'fashion', label: '패션' },
+  { key: 'living', label: '리빙' },
+  { key: 'food', label: '식품' },
+];
 
 interface Props {
   onGenerate: () => void;
@@ -14,8 +25,8 @@ interface Props {
 type UploadSlot = 'thumbnail' | 'detail';
 
 export default function AssetsInputPanel({ onGenerate }: Props) {
-  const { assetsDraft, updateAssetsDraft } = useListingStore();
-  const { mode, url, thumbnailFiles, detailFiles, isGenerating } = assetsDraft;
+  const { assetsDraft, updateAssetsDraft, sharedDraft, updateSharedDraft } = useListingStore();
+  const { mode, url, thumbnailFiles, detailFiles, isGenerating, category } = assetsDraft;
   const {
     isGenerating: _ig,
     generatingMessage: _gm,
@@ -29,12 +40,49 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
     index: number;
     url: string;
   } | null>(null);
+  const [conversationModalOpen, setConversationModalOpen] = useState(false);
 
   // 생성 가능 조건: URL 모드면 URL이 있거나, 업로드 모드면 두 슬롯 중 하나라도 채워져야 함
   const canGenerate = !isGenerating && (
     (mode === 'url' && url.trim().length > 0) ||
     (mode === 'upload' && (thumbnailFiles.length > 0 || detailFiles.length > 0))
   );
+
+  // 대화로 만들기 활성화 조건: 업로드 모드 + 이미지 1장 이상 + 상품명 + 카테고리
+  const allImageUrls = [...thumbnailFiles, ...detailFiles];
+  const canStartConversation =
+    !isGenerating &&
+    mode === 'upload' &&
+    allImageUrls.length > 0 &&
+    sharedDraft.name.trim().length > 0 &&
+    category !== null;
+
+  const handleConversationComplete = ({
+    html,
+    content,
+    conversationContext,
+  }: {
+    html: string;
+    content?: DetailPageContent;
+    conversationContext: import('@/lib/conversational-detail/types').ConversationContext;
+  }) => {
+    let detailPageSections = assetsDraft.detailPageSections;
+    if (content) {
+      try {
+        detailPageSections = contentToSections(content);
+      } catch {
+        // 파싱 실패 시 silent fallback
+      }
+    }
+    updateAssetsDraft({
+      generatedThumbnails: thumbnailFiles,
+      generatedDetailHtml: html,
+      detailPageSections,
+      conversationAnswers: conversationContext.answers,
+      lastError: null,
+    });
+    setConversationModalOpen(false);
+  };
 
   // 파일 선택 시 Supabase Storage에 업로드하고 반환된 URL만 스토어에 저장.
   // base64 data URL을 JSON으로 보내면 Vercel 4.5MB body 한계를 초과해 413으로 떨어진다.
@@ -331,39 +379,135 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
           {renderSlot(
             'detail',
             '상세페이지용 이미지',
-            '자산 생성 시 자동으로 흰 배경·85% 가이드라인에 맞게 AI 편집되어 상세페이지에 사용됩니다.',
+            '업로드한 이미지가 그대로 상세페이지 HTML 생성에 사용됩니다.',
             detailFiles,
             detailInputRef,
           )}
         </div>
       )}
 
-      {/* 자산 생성 버튼 */}
-      <button
-        type="button"
-        onClick={onGenerate}
-        disabled={!canGenerate}
-        style={{
-          padding: '10px 20px',
-          fontSize: '13px',
-          fontWeight: 700,
-          backgroundColor: canGenerate ? C.accent : C.border,
-          color: canGenerate ? '#fff' : C.textSub,
-          border: 'none',
-          borderRadius: '8px',
-          cursor: canGenerate ? 'pointer' : 'not-allowed',
-          alignSelf: 'flex-start',
-        }}
-      >
-        {isGenerating ? '생성 중...' : '자산 생성'}
-      </button>
-      {/* 업로드 이미지 AI 편집 모달 */}
+      {/* 상품명 입력 — 대화 모드 활성화에 필요. sharedDraft.name에 양방향 바인딩 */}
+      {mode === 'upload' && (
+        <div>
+          <p style={{ margin: '0 0 6px', fontSize: '12px', fontWeight: 600, color: C.textSub }}>
+            상품명 (대화로 만들기 시 필수)
+          </p>
+          <input
+            type="text"
+            value={sharedDraft.name}
+            onChange={(e) => updateSharedDraft({ name: e.target.value })}
+            placeholder="예: 프리미엄 스테인리스 텀블러 500ml"
+            maxLength={100}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              fontSize: '13px',
+              border: `1px solid ${C.border}`,
+              borderRadius: '8px',
+              outline: 'none',
+              boxSizing: 'border-box',
+              color: C.text,
+            }}
+          />
+        </div>
+      )}
+
+      {/* 카테고리 칩 — 대화 모드 보충 질문 결정에 사용 */}
+      {mode === 'upload' && (
+        <div>
+          <p style={{ margin: '0 0 6px', fontSize: '12px', fontWeight: 600, color: C.textSub }}>
+            카테고리 (대화로 만들기 시 필수)
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+            {CATEGORY_OPTIONS.map((opt) => {
+              const selected = category === opt.key;
+              return (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => updateAssetsDraft({ category: opt.key })}
+                  style={{
+                    padding: '6px 12px',
+                    fontSize: '12px',
+                    borderRadius: '999px',
+                    border: `1px solid ${selected ? C.accent : C.border}`,
+                    backgroundColor: selected ? C.accent : '#fff',
+                    color: selected ? '#fff' : C.text,
+                    cursor: 'pointer',
+                    fontWeight: selected ? 700 : 500,
+                  }}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 자산 생성 / 대화로 만들기 버튼 */}
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          onClick={onGenerate}
+          disabled={!canGenerate}
+          style={{
+            padding: '10px 20px',
+            fontSize: '13px',
+            fontWeight: 700,
+            backgroundColor: canGenerate ? C.accent : C.border,
+            color: canGenerate ? '#fff' : C.textSub,
+            border: 'none',
+            borderRadius: '8px',
+            cursor: canGenerate ? 'pointer' : 'not-allowed',
+          }}
+        >
+          {isGenerating ? '생성 중...' : '빠른 생성 (폼)'}
+        </button>
+        {mode === 'upload' && (
+          <button
+            type="button"
+            onClick={() => setConversationModalOpen(true)}
+            disabled={!canStartConversation}
+            title={
+              canStartConversation
+                ? 'AI 마케터와 대화하면서 상세페이지를 만듭니다'
+                : '이미지·상품명·카테고리를 모두 입력하면 활성화됩니다'
+            }
+            style={{
+              padding: '10px 20px',
+              fontSize: '13px',
+              fontWeight: 700,
+              backgroundColor: canStartConversation ? '#7c3aed' : C.border,
+              color: canStartConversation ? '#fff' : C.textSub,
+              border: 'none',
+              borderRadius: '8px',
+              cursor: canStartConversation ? 'pointer' : 'not-allowed',
+            }}
+          >
+            💬 대화로 만들기
+          </button>
+        )}
+      </div>
+      {/* 업로드 이미지 AI 편집 모달 — 상세 슬롯이면 detail 컨텍스트로 자유롭게 편집 */}
       {inputImageEditTarget && (
         <AiEditModal
           imageUrl={inputImageEditTarget.url}
           imageFile={null}
           onClose={() => setInputImageEditTarget(null)}
           onSave={handleInputImageAiEditSaved}
+          context={inputImageEditTarget.slot === 'detail' ? 'detail' : 'thumbnail'}
+        />
+      )}
+
+      {/* 대화식 상세페이지 생성 모달 */}
+      {conversationModalOpen && category !== null && (
+        <ConversationalDetailModal
+          productName={sharedDraft.name}
+          category={category}
+          imageUrls={allImageUrls}
+          onClose={() => setConversationModalOpen(false)}
+          onComplete={handleConversationComplete}
         />
       )}
     </div>

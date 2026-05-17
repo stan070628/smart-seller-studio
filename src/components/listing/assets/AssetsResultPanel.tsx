@@ -429,13 +429,14 @@ export default function AssetsResultPanel() {
         />
       )}
 
-      {/* 섹션 이미지 AI 편집 모달 */}
+      {/* 섹션 이미지 AI 편집 모달 — 상세페이지 컨텍스트 (쿠팡 가이드 강제 없음) */}
       {sectionImageEditTarget && (
         <AiEditModal
           imageUrl={sectionImageEditTarget.imageUrl}
           imageFile={null}
           onClose={() => setSectionImageEditTarget(null)}
           onSave={handleSectionImageAiEditSaved}
+          context="detail"
         />
       )}
 
