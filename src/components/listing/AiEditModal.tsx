@@ -13,8 +13,8 @@ import { C } from '@/lib/design-tokens';
 import { X, Wand2, Loader2, AlertTriangle } from 'lucide-react';
 import { detectCoupangPolicyViolations } from '@/lib/ai/prompts/coupang-image-guide';
 
-// 단일 이미지 편집 — 빠른 프롬프트 (쿠팡 가이드라인 강제)
-const QUICK_PROMPTS = [
+// 썸네일용 빠른 프롬프트 (쿠팡 가이드라인 강제)
+const THUMBNAIL_QUICK_PROMPTS = [
   {
     label: '흰 배경',
     prompt:
@@ -37,8 +37,8 @@ const QUICK_PROMPTS = [
   },
 ];
 
-// 두 이미지 합치기 — 빠른 프롬프트 (쿠팡 가이드라인 강제)
-const MERGE_QUICK_PROMPTS = [
+// 썸네일용 두 이미지 합치기 (쿠팡 가이드라인 강제)
+const THUMBNAIL_MERGE_QUICK_PROMPTS = [
   {
     label: '나란히 배치',
     prompt:
@@ -61,6 +61,77 @@ const MERGE_QUICK_PROMPTS = [
   },
 ];
 
+// 상세페이지용 빠른 프롬프트 — 시각 분위기 (Gemini로 이미지 자체 편집)
+const DETAIL_QUICK_PROMPTS_VISUAL = [
+  {
+    label: '스튜디오 컷',
+    prompt:
+      'Reshoot in a clean studio with soft lighting and subtle gradient backdrop. Keep the product (and any model/person if present) and their pose intact — only improve lighting, sharpness, and atmosphere.',
+  },
+  {
+    label: '라이프스타일',
+    prompt:
+      'Place the scene in a natural lifestyle setting that fits the product (cozy living room for home goods, sunlit café for fashion, etc). Keep the product and any model/person present. Add ambient props and warm light.',
+  },
+  {
+    label: '감성 무드',
+    prompt:
+      'Add a moody, editorial feel — soft shadows, film-like color grading, gentle depth of field. Keep the product and any model intact. Do not remove people.',
+  },
+  {
+    label: '디테일 강조',
+    prompt:
+      'Move the camera closer and emphasize the product surface, texture, and stitching. Keep the product identity and any model present intact.',
+  },
+];
+
+// 상세페이지용 빠른 프롬프트 — 텍스트·표 (Claude OCR + Pretendard 합성, 신규 라우트)
+// 한국어가 깨지지 않도록 별도 파이프라인을 사용한다.
+const DETAIL_QUICK_PROMPTS_TEXT = [
+  {
+    label: '강조/가독성',
+    prompt:
+      '텍스트 가독성을 높여주세요. 핵심 키워드와 숫자를 굵게/대비를 강하게 다듬고, 글자 크기·자간을 정돈해주세요.',
+  },
+  {
+    label: '자동 다듬기',
+    prompt:
+      '이미지의 한국어 텍스트를 자연스럽게 다듬어주세요. 오타와 어색한 표현을 자연스러운 한국어로 교정. 의미·위치는 그대로 유지.',
+  },
+  {
+    label: '표 데이터 수정',
+    prompt:
+      "표의 OOO 셀을 'XXX'로 바꿔주세요. ← 원하는 셀과 새 값을 자유롭게 적어주세요. (예: 표의 '가격' 셀을 '29,900원'으로)",
+  },
+];
+
+// 디폴트 (기존 코드 호환용 — quickPrompts 첫 번째 element 선정에만 사용)
+const DETAIL_QUICK_PROMPTS = DETAIL_QUICK_PROMPTS_VISUAL;
+
+// 상세페이지용 두 이미지 합치기 — 모델·배경 자유롭게
+const DETAIL_MERGE_QUICK_PROMPTS = [
+  {
+    label: '한 장면으로 합치기',
+    prompt:
+      'Compose both products into one cohesive scene as if photographed together. Keep each product recognizable and preserve any model/person from the originals.',
+  },
+  {
+    label: '메인 + 부속',
+    prompt:
+      'Main product in the foreground, the second product as a smaller accessory or companion. Use a natural setting. Keep both products recognizable and any model intact.',
+  },
+  {
+    label: '라이프스타일 장면',
+    prompt:
+      'Merge both products into a single lifestyle scene that shows them being used together in a believable environment. Keep models if present.',
+  },
+  {
+    label: '에디토리얼 컷',
+    prompt:
+      'Create an editorial-style composition with both products — bold lighting, considered framing, subtle props. Preserve each product identity and any people in the originals.',
+  },
+];
+
 interface AiEditModalProps {
   imageUrl: string;           // blob URL 또는 공개 URL (필수, 첫 번째 이미지)
   imageFile: File | null;     // 업로드할 File (blob URL인 경우)
@@ -68,20 +139,34 @@ interface AiEditModalProps {
   onClose: () => void;
   onSave: (resultUrl: string) => void;
   initialPrompt?: string;     // 인라인 입력창에서 미리 입력된 프롬프트
+  /**
+   * 편집 컨텍스트.
+   * - 'thumbnail' (기본값): 쿠팡 이미지 가이드(흰 배경·85%·텍스트 금지 등) 강제
+   * - 'detail': 상세페이지 이미지 — 쿠팡 가이드 강제 없이 자유롭게 편집
+   */
+  context?: 'thumbnail' | 'detail';
 }
 
-export default function AiEditModal({ imageUrl, imageFile, imageUrl2, onClose, onSave, initialPrompt }: AiEditModalProps) {
+export default function AiEditModal({ imageUrl, imageFile, imageUrl2, onClose, onSave, initialPrompt, context = 'thumbnail' }: AiEditModalProps) {
   const isMergeMode = Boolean(imageUrl2);
-  const quickPrompts = isMergeMode ? MERGE_QUICK_PROMPTS : QUICK_PROMPTS;
+  const isDetailContext = context === 'detail';
+  const quickPrompts = isMergeMode
+    ? (isDetailContext ? DETAIL_MERGE_QUICK_PROMPTS : THUMBNAIL_MERGE_QUICK_PROMPTS)
+    : (isDetailContext ? DETAIL_QUICK_PROMPTS : THUMBNAIL_QUICK_PROMPTS);
   const [prompt, setPrompt] = useState(initialPrompt ?? quickPrompts[0].prompt);
   const [uploading, setUploading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [publicUrl, setPublicUrl] = useState<string | null>(null);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 텍스트·표 그룹 칩이 선택됐는지 — 선택되면 신규 합성 라우트(/api/ai/edit-image-text)로 분기
+  const [useTextEditRoute, setUseTextEditRoute] = useState(false);
 
-  // 사용자 프롬프트가 쿠팡 가이드라인 위반 의도를 포함하는지 실시간 감지
-  const violations = useMemo(() => detectCoupangPolicyViolations(prompt), [prompt]);
+  // 사용자 프롬프트가 쿠팡 가이드라인 위반 의도를 포함하는지 실시간 감지 (썸네일 컨텍스트에서만)
+  const violations = useMemo(
+    () => (isDetailContext ? [] : detectCoupangPolicyViolations(prompt)),
+    [prompt, isDetailContext]
+  );
 
   // 모달 열릴 때 File이면 먼저 업로드해서 공개 URL 확보
   useEffect(() => {
@@ -115,14 +200,22 @@ export default function AiEditModal({ imageUrl, imageFile, imageUrl2, onClose, o
     setEditing(true);
     setError(null);
     try {
-      const res = await fetch('/api/ai/edit-thumbnail', {
+      // detail 컨텍스트 + 텍스트·표 그룹 칩 선택 → 신규 합성 라우트 사용
+      const useTextRoute = isDetailContext && useTextEditRoute && !isMergeMode;
+      const endpoint = useTextRoute ? '/api/ai/edit-image-text' : '/api/ai/edit-thumbnail';
+      const body = useTextRoute
+        ? { imageUrl: publicUrl, instruction: prompt }
+        : {
+            imageUrl: publicUrl,
+            ...(imageUrl2 ? { imageUrl2 } : {}),
+            prompt,
+            applyCoupangPolicy: !isDetailContext,
+          };
+
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          imageUrl: publicUrl,
-          ...(imageUrl2 ? { imageUrl2 } : {}),
-          prompt,
-        }),
+        body: JSON.stringify(body),
       });
       const json = await res.json();
       if (!res.ok || !json.data?.editedUrl) throw new Error(json.error ?? 'AI 편집 실패');
@@ -270,26 +363,91 @@ export default function AiEditModal({ imageUrl, imageFile, imageUrl2, onClose, o
               </div>
             )}
 
-            <p style={{ margin: '10px 0 6px', fontSize: '12px', fontWeight: 600, color: C.textSub }}>빠른 선택</p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-              {quickPrompts.map(q => (
-                <button
-                  key={q.label}
-                  onClick={() => setPrompt(q.prompt)}
-                  style={{
-                    padding: '5px 10px',
-                    fontSize: '12px',
-                    borderRadius: '6px',
-                    border: `1px solid ${C.border}`,
-                    backgroundColor: prompt === q.prompt ? C.accent : '#fff',
-                    color: prompt === q.prompt ? '#fff' : C.text,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {q.label}
-                </button>
-              ))}
-            </div>
+            {/* 빠른 선택 — detail 컨텍스트(단일 모드)에서는 시각 분위기 + 텍스트·표로 분리 */}
+            {isDetailContext && !isMergeMode ? (
+              <>
+                <p style={{ margin: '10px 0 4px', fontSize: '12px', fontWeight: 600, color: C.textSub }}>
+                  시각 분위기
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {DETAIL_QUICK_PROMPTS_VISUAL.map(q => {
+                    const selected = prompt === q.prompt && !useTextEditRoute;
+                    return (
+                      <button
+                        key={q.label}
+                        onClick={() => {
+                          setPrompt(q.prompt);
+                          setUseTextEditRoute(false);
+                        }}
+                        style={{
+                          padding: '5px 10px',
+                          fontSize: '12px',
+                          borderRadius: '6px',
+                          border: `1px solid ${C.border}`,
+                          backgroundColor: selected ? C.accent : '#fff',
+                          color: selected ? '#fff' : C.text,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {q.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <p style={{ margin: '10px 0 4px', fontSize: '12px', fontWeight: 600, color: C.textSub }}>
+                  텍스트·표 <span style={{ fontWeight: 400, color: '#9ca3af' }}>(한글 정확 합성)</span>
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {DETAIL_QUICK_PROMPTS_TEXT.map(q => {
+                    const selected = prompt === q.prompt && useTextEditRoute;
+                    return (
+                      <button
+                        key={q.label}
+                        onClick={() => {
+                          setPrompt(q.prompt);
+                          setUseTextEditRoute(true);
+                        }}
+                        style={{
+                          padding: '5px 10px',
+                          fontSize: '12px',
+                          borderRadius: '6px',
+                          border: `1px solid ${selected ? '#7c3aed' : C.border}`,
+                          backgroundColor: selected ? '#7c3aed' : '#fff',
+                          color: selected ? '#fff' : C.text,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {q.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              <>
+                <p style={{ margin: '10px 0 6px', fontSize: '12px', fontWeight: 600, color: C.textSub }}>빠른 선택</p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {quickPrompts.map(q => (
+                    <button
+                      key={q.label}
+                      onClick={() => setPrompt(q.prompt)}
+                      style={{
+                        padding: '5px 10px',
+                        fontSize: '12px',
+                        borderRadius: '6px',
+                        border: `1px solid ${C.border}`,
+                        backgroundColor: prompt === q.prompt ? C.accent : '#fff',
+                        color: prompt === q.prompt ? '#fff' : C.text,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {q.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
 
           {/* 오른쪽: 편집 결과 미리보기 */}

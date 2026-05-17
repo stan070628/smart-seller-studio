@@ -109,13 +109,24 @@ async function enforceCoupangPolicy(
   }
 }
 
-/** Gemini 시스템 프롬프트 — Coupang Ads 가이드라인을 항상 강제 */
-const SYSTEM_PROMPT = [
+/** 썸네일용 시스템 프롬프트 — Coupang Ads 가이드라인을 강제 */
+const SYSTEM_PROMPT_COUPANG = [
   "You are a professional product photographer assistant for the Coupang marketplace.",
   "Edit (or merge) the provided product image(s) according to the user's instructions while keeping the product's appearance and identity intact.",
   "Output a single, clean, e-commerce product photo that strictly follows the Coupang Ads image policy below.",
   "",
   COUPANG_IMAGE_GUIDE_EN,
+].join("\n")
+
+/** 상세페이지·자유 편집용 시스템 프롬프트 — 쿠팡 가이드 강제 없음, 창의성 강조 */
+const SYSTEM_PROMPT_FREEFORM = [
+  "You are a creative product photographer and visual designer for e-commerce detail pages.",
+  "Edit the provided image(s) freely according to the user's creative direction.",
+  "Lifestyle scenes, models, props, colored or textured backgrounds, dramatic lighting, studio compositions, ambient settings — all are encouraged when they match the user's prompt.",
+  "Preserve the main product's recognizable identity (shape, colors, key features, printed text/logos on the product).",
+  "If the original image contains a person/model, KEEP them by default. You may restyle, repose, or restage them based on the user's instructions, but do NOT remove the model unless the user explicitly asks.",
+  "If the original has props, environment, or atmosphere that contributes to the product story, preserve or enhance them — do not strip the image down to a sterile catalog cut unless the user specifically requests it.",
+  "Follow the user's instructions precisely and output a single high-quality image.",
 ].join("\n")
 
 // ─────────────────────────────────────────
@@ -128,6 +139,8 @@ const requestSchema = z.object({
   // 두 번째 이미지 (선택 — 2장 합치기 모드에서 사용)
   imageUrl2: z.string().min(1).optional(),
   prompt: z.string().min(1, "prompt는 비어 있을 수 없습니다."),
+  // 쿠팡 이미지 가이드(흰 배경·85%·텍스트 금지 등) 강제 여부. 썸네일은 true, 상세페이지 이미지는 false.
+  applyCoupangPolicy: z.boolean().optional().default(true),
 })
 
 // ─────────────────────────────────────────
@@ -348,7 +361,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     )
   }
 
-  const { imageUrl, imageUrl2, prompt } = parsed.data
+  const { imageUrl, imageUrl2, prompt, applyCoupangPolicy } = parsed.data
 
   // 3. 원본 이미지(1장, 필수) 해석 — URL 또는 data://
   let img1Base64: string
@@ -419,13 +432,29 @@ export async function POST(request: NextRequest): Promise<Response> {
     "- Output one single unified image (no collage, no split, no side-by-side panels).",
   ].join("\n")
 
-  const editInstruction = imageUrl2
-    ? `Merge the two product photos into a SINGLE unified product image that complies with the Coupang image policy in the system instruction. ` +
-      `If the user's instruction below would violate the policy (e.g. add text, add a price tag, build a collage, add a person in a non-fashion category, use a colored background where it is forbidden), silently produce a policy-compliant image instead. ` +
-      `You MUST output the edited image. User instruction: ${prompt}\n\n${REQUIRED_OUTPUT_TRAITS}`
-    : `Edit this product photo according to the user's instruction while complying with the Coupang image policy in the system instruction. ` +
-      `If the user's instruction would violate the policy, silently produce a policy-compliant image instead of refusing. ` +
-      `You MUST output the edited image. User instruction: ${prompt}\n\n${REQUIRED_OUTPUT_TRAITS}`
+  const systemPrompt = applyCoupangPolicy ? SYSTEM_PROMPT_COUPANG : SYSTEM_PROMPT_FREEFORM
+
+  let editInstruction: string
+  if (applyCoupangPolicy) {
+    editInstruction = imageUrl2
+      ? `Merge the two product photos into a SINGLE unified product image that complies with the Coupang image policy in the system instruction. ` +
+        `If the user's instruction below would violate the policy (e.g. add text, add a price tag, build a collage, add a person in a non-fashion category, use a colored background where it is forbidden), silently produce a policy-compliant image instead. ` +
+        `You MUST output the edited image. User instruction: ${prompt}\n\n${REQUIRED_OUTPUT_TRAITS}`
+      : `Edit this product photo according to the user's instruction while complying with the Coupang image policy in the system instruction. ` +
+        `If the user's instruction would violate the policy, silently produce a policy-compliant image instead of refusing. ` +
+        `You MUST output the edited image. User instruction: ${prompt}\n\n${REQUIRED_OUTPUT_TRAITS}`
+  } else {
+    const FREEFORM_PRESERVE = [
+      "IMPORTANT preservation rules (always enforced):",
+      "- Keep the main product's identity (shape, colors, printed text/logos) recognizable.",
+      "- If the original contains a model/person, KEEP them unless the user explicitly asks to remove. You may restyle or repose them.",
+      "- Do NOT default to white background + product-only catalog cut unless the user specifically asks for it.",
+      "- Embrace lifestyle / studio / scene compositions when the user's prompt suggests them.",
+    ].join("\n")
+    editInstruction = imageUrl2
+      ? `Combine these two photos into a single creative composition following the user's vision. You MUST output the edited image. User instruction: ${prompt}\n\n${FREEFORM_PRESERVE}`
+      : `Reimagine this photo according to the user's creative direction. You MUST output the edited image. User instruction: ${prompt}\n\n${FREEFORM_PRESERVE}`
+  }
 
   let lastErr: unknown
   let succeeded = false
@@ -435,7 +464,7 @@ export async function POST(request: NextRequest): Promise<Response> {
         model: MODEL,
         config: {
           responseModalities: ["IMAGE", "TEXT"],
-          systemInstruction: SYSTEM_PROMPT,
+          systemInstruction: systemPrompt,
         },
         contents: [
           {
@@ -520,8 +549,9 @@ export async function POST(request: NextRequest): Promise<Response> {
   try {
     const supabase = createSupabaseServiceClient()
     const rawBuffer = Buffer.from(editedImageBase64, "base64")
-    const { buffer: editedBuffer, mimeType: finalMimeType } =
-      await enforceCoupangPolicy(rawBuffer)
+    const { buffer: editedBuffer, mimeType: finalMimeType } = applyCoupangPolicy
+      ? await enforceCoupangPolicy(rawBuffer)
+      : { buffer: rawBuffer, mimeType: editedMimeType || "image/jpeg" }
 
     const { error: uploadError } = await supabase.storage
       .from(LISTING_IMAGES_BUCKET)
