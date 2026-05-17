@@ -7,6 +7,7 @@ import { calculateFifo } from '@/lib/cost-management/fifo';
 import type { PurchaseBatch, SaleRow, FifoSummary } from '@/lib/cost-management/fifo';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 import type { CollectedData, RawProduct } from '@/lib/ad-strategy/types';
+import { matchAdProduct } from '@/lib/ad-strategy/match';
 import { calcBreakevenRoas, isWinner } from '@/lib/roi/calculations';
 
 // ─────────────────────────────────────────
@@ -92,6 +93,7 @@ export async function GET(request: NextRequest) {
     const adCacheResult = await supabase
       .from('ad_strategy_cache')
       .select('collected_data')
+      .eq('user_id', user.userId)
       .gte('collected_at', cutoff)
       .order('collected_at', { ascending: false })
       .limit(1)
@@ -124,20 +126,14 @@ export async function GET(request: NextRequest) {
       // 기간 필터된 판매만 집계
       const pFilteredSales = pSales.filter((s) => filteredSaleIds.has(s.id));
       const periodSaleIds = new Set(pFilteredSales.map((s) => s.id));
+      const pSalesById = new Map(pSales.map((s) => [s.id, s]));
       const periodRealizedProfit = fifoResult.sale_details
         .filter((d) => periodSaleIds.has(d.saleId))
-        .reduce((sum, d) => sum + d.realized_profit_per_unit * (pSales.find((s) => s.id === d.saleId)?.quantity ?? 0), 0);
+        .reduce((sum, d) => sum + d.realized_profit_per_unit * (pSalesById.get(d.saleId)?.quantity ?? 0), 0);
       const periodSalesAmount = pFilteredSales.reduce((s, sale) => s + sale.selling_price * sale.quantity, 0);
 
-      // 광고 데이터 매칭 (이름 기준)
-      const namePrefix = p.product_name.slice(0, 10);
-      const adMatch =
-        adProducts.find((ap) => ap.name === p.product_name) ??
-        adProducts.find(
-          (ap) =>
-            ap.name.includes(namePrefix) ||
-            p.product_name.includes(ap.name.slice(0, 10)),
-        );
+      // 광고 데이터 매칭
+      const adMatch = matchAdProduct(adProducts, p.product_name);
       const adSpend = adMatch?.adSpend ?? 0;
       const adRoas = adMatch?.adRoas ?? 0;
       const adOrders = adMatch?.adOrders ?? 0;

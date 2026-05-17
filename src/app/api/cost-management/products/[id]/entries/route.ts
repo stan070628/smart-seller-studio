@@ -50,7 +50,7 @@ export async function POST(
 
   if (
     !received_at ||
-    quantity == null || !Number.isInteger(quantity) || quantity <= 0 ||
+    quantity == null || typeof quantity !== 'number' || quantity <= 0 ||
     unit_cost == null || !Number.isInteger(unit_cost) || unit_cost < 0
   ) {
     return NextResponse.json(

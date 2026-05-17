@@ -33,10 +33,16 @@ export async function GET(request: NextRequest) {
       return Response.json({ success: true, data: result });
     }
 
-    // status 미지정 → 전체 status 병렬 조회 후 합산
-    const results = await Promise.allSettled(
-      ALL_STATUSES.map((s) => client.getOrders({ createdAtFrom: from, createdAtTo: to, status: s, maxPerPage: 50 }))
-    );
+    // status 미지정 → 2개씩 chunk로 조회 (429 방지)
+    const CHUNK_SIZE = 2;
+    const results: PromiseSettledResult<Awaited<ReturnType<typeof client.getOrders>>>[] = [];
+    for (let i = 0; i < ALL_STATUSES.length; i += CHUNK_SIZE) {
+      const chunk = ALL_STATUSES.slice(i, i + CHUNK_SIZE);
+      const chunkResults = await Promise.allSettled(
+        chunk.map((s) => client.getOrders({ createdAtFrom: from, createdAtTo: to, status: s, maxPerPage: 50 }))
+      );
+      results.push(...chunkResults);
+    }
 
     const failedStatuses: string[] = [];
     const items = results.flatMap((r, i) => {

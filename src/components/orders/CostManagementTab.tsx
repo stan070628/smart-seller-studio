@@ -6,6 +6,7 @@ import CostEntryDrawer from './CostEntryDrawer';
 import ShippingGroupModal from './ShippingGroupModal';
 import AddProductModal from './AddProductModal';
 import RocketGrowthShipmentModal from './RocketGrowthShipmentModal';
+import { WinnerBadge } from '@/components/ui';
 
 interface ProductRow {
   id: string;
@@ -33,14 +34,6 @@ function fmt(n: number): string {
   return n.toLocaleString('ko-KR');
 }
 
-function WinnerBadge({ status }: { status: 'winner' | 'watch' | 'normal' }) {
-  if (status === 'winner')
-    return <span style={{ fontSize: '11px', background: '#15803d', color: '#dcfce7', padding: '2px 8px', borderRadius: '20px', fontWeight: 600 }}>위너</span>;
-  if (status === 'watch')
-    return <span style={{ fontSize: '11px', background: '#854d0e', color: '#fef9c3', padding: '2px 8px', borderRadius: '20px', fontWeight: 600 }}>관찰</span>;
-  return null;
-}
-
 // ─── 타입 ──────────────────────────────────────────────────────────────────
 
 interface OrderItem {
@@ -62,6 +55,8 @@ interface ApiRevenue {
   naverRevenue: number;
   coupangOrders: number;
   naverOrders: number;
+  rgRevenue: number;
+  rgOrders: number;
   prevTotalRevenue: number;
   prevTotalOrders: number;
 }
@@ -110,6 +105,16 @@ const CANCELLED = new Set([
   'CANCELED', 'RETURNED',
 ]);
 
+async function fetchRgRevenue(from: string, to: string): Promise<{ revenue: number; orders: number }> {
+  const params = new URLSearchParams({ from, to });
+  const res = await fetch(`/api/orders/coupang-rg?${params}`);
+  const json = await res.json();
+  if (!res.ok || !json.success) throw new Error(json.error ?? '로켓그로스 조회 실패');
+  const items = (json.data?.items ?? []) as Array<{ items: Array<{ saleAmount: number }> }>;
+  const revenue = items.reduce((s, o) => s + o.items.reduce((is, i) => is + i.saleAmount, 0), 0);
+  return { revenue, orders: items.length };
+}
+
 async function fetchOrdersForPeriod(from: string, to: string): Promise<{ orders: UnifiedOrder[]; coupangError: string | null; naverError: string | null }> {
   const params = new URLSearchParams({ from, to });
   const [coupangResult, naverResult] = await Promise.allSettled([
@@ -156,6 +161,8 @@ function computeApiRevenue(curr: UnifiedOrder[], prev: UnifiedOrder[]): ApiReven
     naverOrders: naverActive.length,
     prevTotalRevenue: sum(prev),
     prevTotalOrders: active(prev).length,
+    rgRevenue: 0,
+    rgOrders: 0,
   };
 }
 
@@ -218,16 +225,35 @@ export default function CostManagementTab() {
       const prevTo = new Date(fromDate.getTime() - 86_400_000);
       const prevFrom = new Date(prevTo.getTime() - daysDiff * 86_400_000);
 
-      const [currResult, prevResult] = await Promise.all([
+      const rgFallback = { revenue: 0, orders: 0 };
+      // 주문 API(orders)와 RG API(revenue-history)를 동시 호출하되,
+      // RG 이전 기간 조회는 현재 기간 완료 후 순차 실행 — 동시 429 방지
+      const [currResult, prevResult, rgResult] = await Promise.all([
         fetchOrdersForPeriod(from, to),
         fetchOrdersForPeriod(toDateStr(prevFrom), toDateStr(prevTo)),
+        fetchRgRevenue(from, to).catch((e: unknown) => ({
+          ...rgFallback,
+          error: e instanceof Error ? e.message : '조회 실패',
+        })),
       ]);
+      const rgPrevResult = await fetchRgRevenue(toDateStr(prevFrom), toDateStr(prevTo)).catch(() => rgFallback);
 
       const warnings: string[] = [];
       if (currResult.coupangError) warnings.push(`쿠팡: ${currResult.coupangError}`);
       if (currResult.naverError) warnings.push(`네이버: ${currResult.naverError}`);
+      if ('error' in rgResult) warnings.push(`로켓그로스: ${rgResult.error}`);
       setApiWarnings(warnings);
-      setApiRevenue(computeApiRevenue(currResult.orders, prevResult.orders));
+
+      const base = computeApiRevenue(currResult.orders, prevResult.orders);
+      setApiRevenue({
+        ...base,
+        totalRevenue: base.totalRevenue + rgResult.revenue,
+        totalOrders: base.totalOrders + rgResult.orders,
+        prevTotalRevenue: base.prevTotalRevenue + rgPrevResult.revenue,
+        prevTotalOrders: base.prevTotalOrders + rgPrevResult.orders,
+        rgRevenue: rgResult.revenue,
+        rgOrders: rgResult.orders,
+      });
     } catch {
       setApiWarnings(['API 매출 조회 중 오류가 발생했습니다.']);
       setApiRevenue(null);
@@ -314,9 +340,9 @@ export default function CostManagementTab() {
           {apiRevenue && (
             <>
               <div style={{ fontSize: '11px', fontWeight: 600, color: '#71717a', marginBottom: '6px' }}>
-                실제 매출 <span style={{ fontWeight: 400 }}>(쿠팡 + 네이버 API · 취소/반품 제외)</span>
+                실제 매출 <span style={{ fontWeight: 400 }}>(쿠팡 + 네이버 + 로켓그로스 API · 취소/반품 제외)</span>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '10px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '10px', marginBottom: '10px' }}>
                 <div style={{ background: '#fff', borderRadius: '10px', padding: '14px', border: '1px solid #e5e5e5' }}>
                   <div style={{ fontSize: '11px', color: '#71717a', marginBottom: '4px' }}>실제 총 매출</div>
                   <div style={{ fontSize: '18px', fontWeight: 700, color: '#18181b' }}>{fmtRevenue(apiRevenue.totalRevenue)}원</div>
@@ -354,6 +380,11 @@ export default function CostManagementTab() {
                   <div style={{ fontSize: '11px', color: '#71717a', marginBottom: '4px' }}>네이버</div>
                   <div style={{ fontSize: '18px', fontWeight: 700, color: '#03c75a' }}>{fmtRevenue(apiRevenue.naverRevenue)}원</div>
                   <div style={{ fontSize: '11px', color: '#a1a1aa', marginTop: '4px' }}>{apiRevenue.naverOrders}건</div>
+                </div>
+                <div style={{ background: '#f0f9ff', borderRadius: '10px', padding: '14px', border: '1px solid #bae6fd' }}>
+                  <div style={{ fontSize: '11px', color: '#0369a1', marginBottom: '4px', fontWeight: 600 }}>로켓그로스</div>
+                  <div style={{ fontSize: '18px', fontWeight: 700, color: '#0284c7' }}>{fmtRevenue(apiRevenue.rgRevenue)}원</div>
+                  <div style={{ fontSize: '11px', color: '#a1a1aa', marginTop: '4px' }}>{apiRevenue.rgOrders}건</div>
                 </div>
               </div>
               {apiRevenue.cancelCount > 0 && (

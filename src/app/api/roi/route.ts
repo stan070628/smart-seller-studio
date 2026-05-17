@@ -4,12 +4,12 @@ import { getSupabaseServerClient } from '@/lib/supabase/server';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { getCoupangClient } from '@/lib/listing/coupang-client';
 import type { CollectedData } from '@/lib/ad-strategy/types';
+import { matchAdProduct } from '@/lib/ad-strategy/match';
 import {
   calcMargin,
   calcBreakevenRoas,
   calcAdjustedRoas,
   isWinner,
-  calcStockTurnover,
 } from '@/lib/roi/calculations';
 import type { SkuRoiData } from '@/lib/roi/types';
 
@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
 
     // ── Step 3: ad_strategy_cache에서 광고 데이터 조회 (name 매칭) ─────────────
     const supabase = getSupabaseServerClient();
-    const adsMap = await fetchAdsMap(wingProducts, supabase).catch(() => new Map<number, AdsStat>());
+    const adsMap = await fetchAdsMap(wingProducts, supabase, userId).catch(() => new Map<number, AdsStat>());
 
     // ── Step 4: SKU별 수익성 계산 ────────────────────────────────────────────
     const DEFAULT_FEE_RATE = 0.108;
@@ -261,12 +261,17 @@ async function fetchCostMap(
     [userId],
   );
 
+  const rowsBySellerProductId = new Map(
+    rows.filter((r) => r.seller_product_id != null).map((r) => [Number(r.seller_product_id), r]),
+  );
+  const rowsByName = new Map(rows.map((r) => [r.product_name, r]));
+
   const result = new Map<number, CostStat>();
   for (const p of products) {
     const namePrefix = p.vendorItemName.slice(0, 10);
     const matched =
-      rows.find((r) => r.seller_product_id != null && Number(r.seller_product_id) === p.vendorItemId) ??
-      rows.find((r) => r.product_name === p.vendorItemName) ??
+      rowsBySellerProductId.get(p.vendorItemId) ??
+      rowsByName.get(p.vendorItemName) ??
       rows.find(
         (r) =>
           r.product_name.includes(namePrefix) ||
@@ -290,11 +295,13 @@ async function fetchCostMap(
 async function fetchAdsMap(
   products: WingProduct[],
   supabase: ReturnType<typeof getSupabaseServerClient>,
+  userId: string,
 ): Promise<Map<number, AdsStat>> {
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const { data: cached, error } = await supabase
     .from('ad_strategy_cache')
     .select('collected_data')
+    .eq('user_id', userId)
     .gte('collected_at', cutoff)
     .order('collected_at', { ascending: false })
     .limit(1)
@@ -306,14 +313,7 @@ async function fetchAdsMap(
   const result = new Map<number, AdsStat>();
 
   for (const p of products) {
-    const namePrefix = p.vendorItemName.slice(0, 10);
-    const matched =
-      adProducts.find((ap) => ap.name === p.vendorItemName) ??
-      adProducts.find(
-        (ap) =>
-          ap.name.includes(namePrefix) ||
-          p.vendorItemName.includes(ap.name.slice(0, 10)),
-      );
+    const matched = matchAdProduct(adProducts, p.vendorItemName);
     if (!matched || (!matched.adSpend && !matched.adRoas)) continue;
 
     const adSpend = matched.adSpend ?? 0;

@@ -1,6 +1,7 @@
 'use client';
 
 import type { SkuRoiData } from '@/lib/roi/types';
+import { WinnerBadge } from '@/components/ui';
 
 type Filter = 'all' | 'winner' | 'purchase-signal' | 'stock-warning';
 
@@ -18,13 +19,6 @@ const FILTERS: { key: Filter; label: string; disabled?: boolean }[] = [
   { key: 'stock-warning', label: '재고경고', disabled: true },
 ];
 
-function WinnerBadge({ status }: { status: SkuRoiData['winnerStatus'] }) {
-  if (status === 'winner')
-    return <span className="text-xs bg-green-700 text-green-100 px-2 py-0.5 rounded-full">위너</span>;
-  if (status === 'watch')
-    return <span className="text-xs bg-yellow-700 text-yellow-100 px-2 py-0.5 rounded-full">관찰</span>;
-  return null;
-}
 
 function roasColor(adjusted: number, breakeven: number): string {
   if (breakeven === Infinity || adjusted === Infinity) return 'text-zinc-400';

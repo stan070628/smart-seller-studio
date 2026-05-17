@@ -1,18 +1,16 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ShoppingCart, BarChart3, Settings, ClipboardList, TrendingUp } from 'lucide-react';
+import { ShoppingCart, BarChart3, Settings, ClipboardList } from 'lucide-react';
 import OrdersTab from './OrdersTab';
 import ChannelsTab from './ChannelsTab';
 import CostManagementTab from './CostManagementTab';
-import { RoiPageClient } from '@/components/roi/RoiPageClient';
 
-type SubTab = 'orders' | 'channels' | 'cost' | 'roi';
+type SubTab = 'orders' | 'channels' | 'cost';
 
 const SUB_TABS: { id: SubTab; label: string; icon: React.ReactNode }[] = [
   { id: 'orders', label: '주문·배송', icon: <ClipboardList size={14} /> },
   { id: 'cost', label: '수익·원가', icon: <BarChart3 size={14} /> },
-  { id: 'roi', label: 'ROI', icon: <TrendingUp size={14} /> },
   { id: 'channels', label: '채널설정', icon: <Settings size={14} /> },
 ];
 
@@ -53,11 +51,6 @@ export default function OrdersClient() {
 
         {activeSubTab === 'orders' && <OrdersTab />}
         {activeSubTab === 'cost' && <CostManagementTab />}
-        {activeSubTab === 'roi' && (
-          <div style={{ background: '#18181b', borderRadius: '12px', padding: '4px' }}>
-            <RoiPageClient initialData={[]} />
-          </div>
-        )}
         {activeSubTab === 'channels' && <ChannelsTab />}
       </main>
     </div>
