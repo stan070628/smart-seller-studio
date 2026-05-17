@@ -142,8 +142,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
     // 상세 이미지가 대표이미지/추가이미지 슬롯에 잘못 등록되는 문제 방지
     console.log('[submit] 이미지 규격 검사 시작...');
     const pickedDetailSet = new Set(pickedDetailImages);
-    const thumbsOnly = thumbnailImages.filter((url) => !pickedDetailSet.has(url));
-    const safeThumbUrls = await ensureCoupangImages(thumbsOnly);
+    let thumbsOnly = thumbnailImages.filter((url) => !pickedDetailSet.has(url));
+    // 필터링으로 모든 이미지가 제거된 경우 원본 thumbnailImages 사용 (빈 이미지 방지)
+    if (thumbsOnly.length === 0 && thumbnailImages.length > 0) {
+      thumbsOnly = thumbnailImages;
+      console.warn('[submit] thumbsOnly 필터링으로 이미지 전부 제거 → thumbnailImages 원본 사용');
+    }
+    const imagesToProcess = thumbsOnly.length > 0 ? thumbsOnly : d.thumbnail ? [d.thumbnail] : [];
+    const safeThumbUrls = await ensureCoupangImages(imagesToProcess);
 
     // ── 대표이미지 + 추가이미지 (itemImages) ─────────────────────────────────
     // thumbnailImages(상세 이미지 제외)만 사용: [0] = REPRESENTATION, [1..9] = DETAIL (추가이미지)
@@ -153,6 +159,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
       imageType: i === 0 ? 'REPRESENTATION' as const : 'DETAIL' as const,
       vendorPath: url,
     }));
+
+    if (itemImages.length === 0) {
+      return Response.json(
+        { success: false, error: '등록할 이미지가 없습니다. 상품 이미지를 1장 이상 추가하고 임시저장 후 다시 시도하세요.' },
+        { status: 400 },
+      );
+    }
 
     // ── 상세설명 contents: HTML 우선, 없으면 pickedDetailImages 이미지 배열 ─────
     // 쿠팡 상세설명은 HTML(TEXT)로 등록하는 것이 정식 방법
@@ -213,13 +226,33 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
       // null 제거 + 빈 content 제거 + 중복 detailName 제거 (같은 키가 2개 이상이면 400 오류)
       const seenNoticeKeys = new Set<string>();
-      return mapped.filter((n): n is { noticeCategoryName: string; noticeCategoryDetailName: string; content: string } => {
+      const corrected = mapped.filter((n): n is { noticeCategoryName: string; noticeCategoryDetailName: string; content: string } => {
         if (!n || !n.noticeCategoryDetailName) return false;
         if (!n.content?.trim()) return false;
         if (seenNoticeKeys.has(n.noticeCategoryDetailName)) return false;
         seenNoticeKeys.add(n.noticeCategoryDetailName);
         return true;
       });
+
+      // 교정 후 전부 필터링된 경우: 원본 notices를 폴백으로 사용 (빈 notices 방지)
+      // 카테고리 변경 등으로 매핑 실패해도 원본값으로 시도
+      if (corrected.length === 0) {
+        console.warn('[submit] 교정 후 notices 전부 필터링 → 원본 notices 폴백 사용');
+        const seenFallback = new Set<string>();
+        return d.notices
+          .filter((n) => n.detailName && n.content?.trim())
+          .filter((n) => {
+            if (seenFallback.has(n.detailName)) return false;
+            seenFallback.add(n.detailName);
+            return true;
+          })
+          .map((n) => ({
+            noticeCategoryName: n.categoryName,
+            noticeCategoryDetailName: n.detailName,
+            content: n.content,
+          }));
+      }
+      return corrected;
     })();
 
     // draft_data에서 읽은 상품 속성 값 (없으면 기본값)
@@ -328,8 +361,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
       result = await client.registerProduct(payload);
     } catch (firstErr) {
       const firstMsg = firstErr instanceof Error ? firstErr.message : String(firstErr);
-      // notices 카테고리 오류 감지 → notices를 제거하고 재시도
-      const isNoticeError = /고시정보.*카테고리명|고시정보.*카테고리상세명|입력할 수 없습니다/i.test(firstMsg);
+      // notices 관련 오류 감지 → notices를 제거하고 재시도
+      const isNoticeError = /고시정보.*카테고리명|고시정보.*카테고리상세명|입력할 수 없습니다|고시정보.*다시 확인|고시정보.*입력해야/i.test(firstMsg);
       if (isNoticeError && itemNotices.length > 0) {
         console.warn('[submit] notices 오류 감지, notices 제거 후 재시도:', firstMsg);
         const fallbackPayload = {
