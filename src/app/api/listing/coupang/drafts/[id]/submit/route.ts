@@ -322,7 +322,26 @@ export async function POST(request: NextRequest, context: RouteContext) {
     // Coupang API 실제 호출
     console.log('[submit] notices 전송:', JSON.stringify(itemNotices));
     console.log('[submit] payload 요약:', JSON.stringify({ displayCategoryCode, sellerProductName, salePrice, itemCount: items.length, noticeCount: itemNotices.length }));
-    const result = await client.registerProduct(payload);
+    let result: { sellerProductId: number };
+    let noticesFallback = false;
+    try {
+      result = await client.registerProduct(payload);
+    } catch (firstErr) {
+      const firstMsg = firstErr instanceof Error ? firstErr.message : String(firstErr);
+      // notices 카테고리 오류 감지 → notices를 제거하고 재시도
+      const isNoticeError = /고시정보.*카테고리명|고시정보.*카테고리상세명|입력할 수 없습니다/i.test(firstMsg);
+      if (isNoticeError && itemNotices.length > 0) {
+        console.warn('[submit] notices 오류 감지, notices 제거 후 재시도:', firstMsg);
+        const fallbackPayload = {
+          ...payload,
+          items: payload.items.map((item) => ({ ...item, notices: [] })),
+        };
+        result = await client.registerProduct(fallbackPayload);
+        noticesFallback = true;
+      } else {
+        throw firstErr;
+      }
+    }
     const sellerProductId = result.sellerProductId;
     const wingsUrl = 'https://wing.coupang.com';
 
@@ -351,7 +370,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
       console.warn('[POST /api/listing/coupang/drafts/[id]/submit] 이력 저장 실패 (무시됨):', saveErr);
     }
 
-    return Response.json({ success: true, sellerProductId, wingsUrl });
+    return Response.json({
+      success: true,
+      sellerProductId,
+      wingsUrl,
+      ...(noticesFallback && { warning: '고시정보 카테고리 오류로 고시정보 없이 등록되었습니다. Wing에서 직접 입력해 주세요.' }),
+    });
   } catch (err) {
     console.error('[POST /api/listing/coupang/drafts/[id]/submit]', err);
     const message = err instanceof Error ? err.message : '알 수 없는 오류';

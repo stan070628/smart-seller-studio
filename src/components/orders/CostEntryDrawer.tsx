@@ -85,7 +85,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
   }
 
   async function save() {
-    const qty = Math.round(Number(form.quantity));
+    const qty = Math.round(Number(form.quantity) * 10) / 10;
     const cost = Math.round(Number(form.unit_cost));
     if (!form.received_at || qty <= 0) { alert('입고일과 수량을 입력해 주세요.'); return; }
     setSaving(true);
@@ -176,6 +176,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
                           <td key={field} style={{ padding: '4px 6px' }}>
                             <input
                               type={field === 'received_at' ? 'date' : 'number'}
+                              step={field === 'quantity' ? '0.1' : '1'}
                               value={form[field]}
                               onChange={(ev) => setForm((f) => ({ ...f, [field]: ev.target.value }))}
                               style={{ width: '100%', padding: '3px 5px', borderRadius: '4px', border: '1px solid #86efac', fontSize: '11px', color: '#18181b', boxSizing: 'border-box' }}
@@ -194,7 +195,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
                     ) : (
                       <tr key={e.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
                         <td style={{ padding: '6px 8px', color: '#27272a' }}>{e.received_at.slice(0, 10)}</td>
-                        <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, color: '#18181b' }}>{fmt(e.quantity)}개</td>
+                        <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, color: '#18181b' }}>{e.quantity.toLocaleString('ko-KR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}개</td>
                         <td style={{ padding: '6px 8px', textAlign: 'right', color: '#ef4444' }}>{fmt(e.unit_cost)}</td>
                         <td style={{ padding: '6px 8px', textAlign: 'right', color: '#f97316' }}>
                           {fmt(e.unit_shipping_fee)}
@@ -218,6 +219,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
                         <td key={field} style={{ padding: '4px 6px' }}>
                           <input
                             type={field === 'received_at' ? 'date' : 'number'}
+                            step={field === 'quantity' ? '0.1' : '1'}
                             value={form[field]}
                             onChange={(ev) => setForm((f) => ({ ...f, [field]: ev.target.value }))}
                             style={{ width: '100%', padding: '3px 5px', borderRadius: '4px', border: '1px solid #86efac', fontSize: '11px', color: '#18181b', boxSizing: 'border-box' }}

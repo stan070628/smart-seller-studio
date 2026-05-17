@@ -447,7 +447,7 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
         method: 'POST',
       });
       const rawText = await res.text();
-      let data: { success?: boolean; sellerProductId?: number; wingsUrl?: string; error?: string } = {};
+      let data: { success?: boolean; sellerProductId?: number; wingsUrl?: string; error?: string; warning?: string } = {};
       try {
         data = JSON.parse(rawText);
       } catch {
@@ -460,6 +460,9 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
           wingsUrl: data.wingsUrl ?? 'https://wing.coupang.com',
         });
         setSubmitSuccess(true);
+        if (data.warning) {
+          setTimeout(() => alert(`⚠️ ${data.warning}`), 500);
+        }
         setTimeout(() => onSuccess(), 1500);
       } else {
         setSubmitError(data.error || `제출 실패 (HTTP ${res.status})`);
