@@ -94,13 +94,23 @@ function SourcingPopover({ platform, productId, current, onClose }: SourcingPopo
     if (!inputValue.trim()) return;
     setSaving(true);
     const ok = await saveSourcing(platform, productId, tab, inputValue.trim());
+    if (!ok) {
+      alert('저장에 실패했습니다. 다시 시도해주세요.');
+      setSaving(false);
+      return;
+    }
     setSaving(false);
-    if (ok) onClose();
+    onClose();
   };
 
   const handleDelete = async () => {
     setSaving(true);
-    await deleteSourcing(platform, productId);
+    const ok = await deleteSourcing(platform, productId);
+    if (!ok) {
+      alert('삭제에 실패했습니다. 다시 시도해주세요.');
+      setSaving(false);
+      return;
+    }
     setSaving(false);
     onClose();
   };

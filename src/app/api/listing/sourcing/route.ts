@@ -75,6 +75,11 @@ export async function PUT(request: NextRequest) {
     return Response.json({ success: false, error: '필수 필드가 누락되었습니다.' }, { status: 400 });
   }
 
+  // type 값이 허용된 범위인지 검증
+  if (type !== 'online' && type !== 'offline') {
+    return Response.json({ success: false, error: '유효하지 않은 소싱 유형입니다.' }, { status: 400 });
+  }
+
   // value가 비어 있으면 400 반환
   if (!value?.trim()) {
     return Response.json({ success: false, error: '값이 비어 있습니다.' }, { status: 400 });

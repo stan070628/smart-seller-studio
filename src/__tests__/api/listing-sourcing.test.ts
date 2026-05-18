@@ -98,6 +98,16 @@ describe('PUT /api/listing/sourcing', () => {
     expect(res.status).toBe(400);
   });
 
+  it('type이 online/offline이 아니면 400을 반환한다', async () => {
+    const req = new Request('http://localhost/api/listing/sourcing', {
+      method: 'PUT',
+      body: JSON.stringify({ platform: 'coupang', productId: '123', type: 'invalid', value: 'test' }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const res = await PUT(req as unknown as NextRequest);
+    expect(res.status).toBe(400);
+  });
+
   it('DB 오류 시 500 반환', async () => {
     mockQuery.mockRejectedValueOnce(new Error('connection refused'));
     const req = new NextRequest('http://localhost/api/listing/sourcing', {

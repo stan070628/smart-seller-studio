@@ -690,6 +690,9 @@ export const useListingStore = create<ListingStore>()(
           return true;
         } catch {
           set((s) => {
+            // 낙관적 업데이트 이후 다른 쓰기가 이미 반영됐으면 롤백하지 않음
+            const optimistic = s.sourcingMap[key];
+            if (optimistic?.type !== type || optimistic?.value !== value) return {};
             const next = { ...s.sourcingMap };
             if (hadKey) { next[key] = prevVal; } else { delete next[key]; }
             return { sourcingMap: next };
@@ -714,6 +717,8 @@ export const useListingStore = create<ListingStore>()(
           return true;
         } catch {
           set((s) => {
+            // 낙관적 삭제(null) 이후 다른 쓰기가 이미 반영됐으면 롤백하지 않음
+            if (s.sourcingMap[key] !== null) return {};
             const next = { ...s.sourcingMap };
             if (hadKey) { next[key] = prevVal; } else { delete next[key]; }
             return { sourcingMap: next };
