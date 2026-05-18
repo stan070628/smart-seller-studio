@@ -54,6 +54,13 @@ describe('GET /api/listing/sourcing', () => {
       '222': { type: 'offline', value: '코스트코' },
     });
   });
+
+  it('DB 오류 시 500 반환', async () => {
+    mockQuery.mockRejectedValueOnce(new Error('connection refused'));
+    const req = new NextRequest('http://localhost/api/listing/sourcing?platform=coupang&ids=111');
+    const res = await GET(req);
+    expect(res.status).toBe(500);
+  });
 });
 
 describe('PUT /api/listing/sourcing', () => {
@@ -81,6 +88,25 @@ describe('PUT /api/listing/sourcing', () => {
       ['coupang', '111', 'online', 'https://1688.com/x'],
     );
   });
+
+  it('필수 필드 누락 시 400', async () => {
+    const req = new NextRequest('http://localhost/api/listing/sourcing', {
+      method: 'PUT',
+      body: JSON.stringify({ platform: 'coupang', value: 'https://1688.com/x' }),
+    });
+    const res = await PUT(req);
+    expect(res.status).toBe(400);
+  });
+
+  it('DB 오류 시 500 반환', async () => {
+    mockQuery.mockRejectedValueOnce(new Error('connection refused'));
+    const req = new NextRequest('http://localhost/api/listing/sourcing', {
+      method: 'PUT',
+      body: JSON.stringify({ platform: 'coupang', productId: '111', type: 'online', value: 'https://1688.com/x' }),
+    });
+    const res = await PUT(req);
+    expect(res.status).toBe(500);
+  });
 });
 
 describe('DELETE /api/listing/sourcing', () => {
@@ -98,5 +124,24 @@ describe('DELETE /api/listing/sourcing', () => {
       expect.stringContaining('DELETE FROM product_sourcing'),
       ['coupang', '111'],
     );
+  });
+
+  it('필수 필드 누락 시 400', async () => {
+    const req = new NextRequest('http://localhost/api/listing/sourcing', {
+      method: 'DELETE',
+      body: JSON.stringify({ platform: 'coupang' }),
+    });
+    const res = await DELETE(req);
+    expect(res.status).toBe(400);
+  });
+
+  it('DB 오류 시 500 반환', async () => {
+    mockQuery.mockRejectedValueOnce(new Error('connection refused'));
+    const req = new NextRequest('http://localhost/api/listing/sourcing', {
+      method: 'DELETE',
+      body: JSON.stringify({ platform: 'coupang', productId: '111' }),
+    });
+    const res = await DELETE(req);
+    expect(res.status).toBe(500);
   });
 });

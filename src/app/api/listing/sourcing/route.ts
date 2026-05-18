@@ -22,6 +22,11 @@ export async function GET(request: NextRequest) {
   const idsRaw = sp.get('ids') ?? '';
   const ids = idsRaw.split(',').map((s) => s.trim()).filter(Boolean);
 
+  // platform이 없으면 빈 맵 즉시 반환
+  if (!platform) {
+    return Response.json({ sourcing: {} });
+  }
+
   // ids가 없으면 빈 맵 즉시 반환 (DB 조회 불필요)
   if (ids.length === 0) {
     return Response.json({ sourcing: {} });
@@ -65,6 +70,11 @@ export async function PUT(request: NextRequest) {
     value: string;
   };
 
+  // 필수 필드가 없으면 400 반환
+  if (!platform || !productId || !type) {
+    return Response.json({ success: false, error: '필수 필드가 누락되었습니다.' }, { status: 400 });
+  }
+
   // value가 비어 있으면 400 반환
   if (!value?.trim()) {
     return Response.json({ success: false, error: '값이 비어 있습니다.' }, { status: 400 });
@@ -97,6 +107,11 @@ export async function DELETE(request: NextRequest) {
 
   const body = await request.json();
   const { platform, productId } = body as { platform: string; productId: string };
+
+  // 필수 필드가 없으면 400 반환
+  if (!platform || !productId) {
+    return Response.json({ success: false, error: '필수 필드가 누락되었습니다.' }, { status: 400 });
+  }
 
   try {
     const pool = getSourcingPool();
