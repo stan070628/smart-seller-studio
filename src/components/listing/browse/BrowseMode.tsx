@@ -6,7 +6,7 @@
  * 상태 필터, 키워드 검색, 인라인 수정 폼 포함
  */
 
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useListingStore } from '@/store/useListingStore';
 
 // ─── 색상 상수 (ListingDashboard.tsx와 동일) ────────────────────────────────
@@ -39,6 +39,238 @@ const NAVER_STATUSES = [
   { value: 'WAIT', label: '승인대기' },
   { value: 'PROHIBITION', label: '금지' },
 ];
+
+// ─── 소싱 출처 유틸 ───────────────────────────────────────────────────────────
+function getOnlineLabel(url: string): string {
+  try {
+    const host = new URL(url).hostname;
+    if (host.includes('1688.com')) return '1688';
+    if (host.includes('domeggook.com')) return '도매꾹';
+    if (host.includes('costco.co.kr')) return '코스트코 온라인';
+    return host.replace(/^www\./, '').split('.')[0];
+  } catch {
+    return 'URL';
+  }
+}
+
+const ONLINE_CHIPS: { label: string; prefix: string }[] = [
+  { label: '1688', prefix: 'https://detail.1688.com/offer/' },
+  { label: '도매꾹', prefix: 'https://domeggook.com/' },
+  { label: '코스트코 온라인', prefix: 'https://www.costco.co.kr/' },
+];
+
+const OFFLINE_CHIPS = ['코스트코'];
+
+// ─── 소싱 출처 팝오버 ─────────────────────────────────────────────────────────
+interface SourcingPopoverProps {
+  platform: 'coupang' | 'naver';
+  productId: string;
+  current: { type: 'online' | 'offline'; value: string } | null;
+  onClose: () => void;
+}
+
+function SourcingPopover({ platform, productId, current, onClose }: SourcingPopoverProps) {
+  const { saveSourcing, deleteSourcing } = useListingStore();
+  const [tab, setTab] = React.useState<'online' | 'offline'>(current?.type ?? 'online');
+  const [inputValue, setInputValue] = React.useState(current?.type === tab ? current.value : '');
+  const [saving, setSaving] = React.useState(false);
+
+  const handleTabChange = (t: 'online' | 'offline') => {
+    setTab(t);
+    setInputValue(current?.type === t ? current.value : '');
+  };
+
+  const handleSave = async () => {
+    if (!inputValue.trim()) return;
+    setSaving(true);
+    const ok = await saveSourcing(platform, productId, tab, inputValue.trim());
+    setSaving(false);
+    if (ok) onClose();
+  };
+
+  const handleDelete = async () => {
+    setSaving(true);
+    await deleteSourcing(platform, productId);
+    setSaving(false);
+    onClose();
+  };
+
+  return (
+    <>
+      <div style={{ position: 'fixed', inset: 0, zIndex: 999 }} onClick={onClose} />
+      <div
+        style={{
+          position: 'absolute',
+          top: '100%',
+          left: 0,
+          zIndex: 1000,
+          marginTop: '6px',
+          width: '300px',
+          backgroundColor: '#fff',
+          border: `1px solid ${C.border}`,
+          borderRadius: '10px',
+          padding: '16px',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ fontSize: '13px', fontWeight: 700, color: C.text, marginBottom: '12px' }}>
+          📦 소싱 출처
+        </div>
+        <div style={{ display: 'flex', border: `1px solid ${C.border}`, borderRadius: '8px', overflow: 'hidden', marginBottom: '14px' }}>
+          {(['online', 'offline'] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => handleTabChange(t)}
+              style={{
+                flex: 1,
+                padding: '7px 0',
+                fontSize: '12px',
+                fontWeight: tab === t ? 700 : 500,
+                background: tab === t ? C.accent : '#f9f9f9',
+                color: tab === t ? '#fff' : C.textSub,
+                border: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              {t === 'online' ? '🌐 온라인 URL' : '🏪 오프라인 매장'}
+            </button>
+          ))}
+        </div>
+        <label style={{ fontSize: '11px', fontWeight: 600, color: C.textSub, display: 'block', marginBottom: '5px' }}>
+          {tab === 'online' ? '소싱 URL' : '매장명'}
+        </label>
+        <input
+          type="text"
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          placeholder={tab === 'online' ? 'https://detail.1688.com/...' : '예: 코스트코'}
+          style={{
+            width: '100%',
+            boxSizing: 'border-box',
+            padding: '7px 10px',
+            border: `1px solid ${C.accent}`,
+            borderRadius: '6px',
+            fontSize: '12px',
+            outline: 'none',
+          }}
+          onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); }}
+          autoFocus
+        />
+        <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginTop: '8px' }}>
+          {tab === 'online'
+            ? ONLINE_CHIPS.map((chip) => (
+                <span
+                  key={chip.label}
+                  onClick={() => setInputValue(chip.prefix)}
+                  style={{ padding: '3px 9px', border: `1px solid ${C.border}`, borderRadius: '100px', fontSize: '11px', color: C.textSub, cursor: 'pointer', backgroundColor: '#f9f9f9' }}
+                >
+                  {chip.label}
+                </span>
+              ))
+            : OFFLINE_CHIPS.map((chip) => (
+                <span
+                  key={chip}
+                  onClick={() => setInputValue(chip)}
+                  style={{ padding: '3px 9px', border: `1px solid ${C.border}`, borderRadius: '100px', fontSize: '11px', color: C.textSub, cursor: 'pointer', backgroundColor: '#f9f9f9' }}
+                >
+                  {chip}
+                </span>
+              ))
+          }
+        </div>
+        <div style={{ display: 'flex', gap: '8px', marginTop: '14px', justifyContent: 'flex-end', alignItems: 'center' }}>
+          {current && (
+            <button
+              onClick={handleDelete}
+              disabled={saving}
+              style={{ marginRight: 'auto', padding: '5px 12px', fontSize: '12px', background: 'none', color: '#ef4444', border: '1px solid #fca5a5', borderRadius: '6px', cursor: 'pointer' }}
+            >
+              삭제
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            style={{ padding: '6px 14px', fontSize: '12px', background: C.btnSecondaryBg, color: C.btnSecondaryText, border: `1px solid ${C.border}`, borderRadius: '6px', cursor: 'pointer' }}
+          >
+            취소
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving || !inputValue.trim()}
+            style={{
+              padding: '6px 16px',
+              fontSize: '12px',
+              background: saving || !inputValue.trim() ? 'rgba(190,0,20,0.4)' : C.accent,
+              color: '#fff',
+              border: 'none',
+              borderRadius: '6px',
+              fontWeight: 700,
+              cursor: saving || !inputValue.trim() ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {saving ? '저장 중...' : '저장'}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─── 소싱 배지 ────────────────────────────────────────────────────────────────
+interface SourcingBadgeProps {
+  platform: 'coupang' | 'naver';
+  productId: string;
+}
+
+function SourcingBadge({ platform, productId }: SourcingBadgeProps) {
+  const { sourcingMap } = useListingStore();
+  const [open, setOpen] = React.useState(false);
+  const key = `${platform}:${productId}`;
+  const sourcing = sourcingMap[key] ?? null;
+
+  const badgeStyle: React.CSSProperties = sourcing
+    ? sourcing.type === 'online'
+      ? { background: '#e0f2fe', color: '#0369a1' }
+      : { background: '#f0fdf4', color: '#15803d' }
+    : { background: '#f9f9f9', color: '#aaa', border: '1px dashed #ddd' };
+
+  const badgeLabel = sourcing
+    ? sourcing.type === 'online'
+      ? `🌐 ${getOnlineLabel(sourcing.value)}`
+      : `🏪 ${sourcing.value}`
+    : '＋ 소싱 출처';
+
+  return (
+    <div style={{ position: 'relative', display: 'inline-block' }}>
+      <span
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '4px',
+          padding: '3px 9px',
+          borderRadius: '100px',
+          fontSize: '11px',
+          fontWeight: sourcing ? 700 : 400,
+          cursor: 'pointer',
+          whiteSpace: 'nowrap',
+          ...badgeStyle,
+        }}
+      >
+        {badgeLabel}
+      </span>
+      {open && (
+        <SourcingPopover
+          platform={platform}
+          productId={productId}
+          current={sourcing}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
 
 // ─── 상태 배지 버튼 ───────────────────────────────────────────────────────────
 function StatusBadge({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
@@ -393,7 +625,7 @@ function CoupangBrowser() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ backgroundColor: C.tableHeader }}>
-                {['상품ID', '상품명', '브랜드', '상태', '카테고리', '등록일', ''].map((col) => (
+                {['상품ID', '상품명', '브랜드', '상태', '카테고리', '등록일', '소싱 출처', ''].map((col) => (
                   <th
                     key={col}
                     style={{
@@ -483,6 +715,9 @@ function CoupangBrowser() {
                       }}
                     >
                       {pr.createdAt ? formatDate(pr.createdAt) : '-'}
+                    </td>
+                    <td style={{ padding: '11px 12px' }}>
+                      <SourcingBadge platform="coupang" productId={String(pr.sellerProductId)} />
                     </td>
                     <td style={{ padding: '11px 12px' }}>
                       <button
@@ -609,7 +844,7 @@ function NaverBrowser() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ backgroundColor: C.tableHeader }}>
-                {['이미지', '상품명', '상태', '판매가', '재고', '카테고리', '등록일', ''].map((col) => (
+                {['이미지', '상품명', '상태', '판매가', '재고', '카테고리', '등록일', '소싱 출처', ''].map((col) => (
                   <th
                     key={col}
                     style={{
@@ -726,6 +961,9 @@ function NaverBrowser() {
                       }}
                     >
                       {formatDate(p.regDate)}
+                    </td>
+                    <td style={{ padding: '11px 12px' }}>
+                      <SourcingBadge platform="naver" productId={String(p.originProductNo)} />
                     </td>
                     <td style={{ padding: '11px 12px' }}>
                       <a
