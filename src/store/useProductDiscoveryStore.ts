@@ -11,6 +11,7 @@ type Step = 1 | 2 | 3;
 
 interface ProductDiscoveryStore {
   currentStep: Step;
+  resetKey: number;                   // StepProductInput remount key — increment on reset
   productInfo: ProductInfo | null;
   aiSuggestedKeywords: string[];
   selectedKeywords: string[];        // 사용자 확정 키워드 셋 (Step 1 끝에 결정)
@@ -32,6 +33,7 @@ interface ProductDiscoveryStore {
   startValidation: () => Promise<void>;
   setReviewCount: (kw: string, count: number) => void;
   goToResult: () => void;          // Step 2 → 3 이동 (DB 저장은 Step 3 버튼에서)
+  goBackToStep1: () => void;       // Step 2/3 → 1 이동 (validated 초기화)
   toggleResultSelect: (kw: string) => void;
 
   confirmAndGetDraftId: () => Promise<string | null>;
@@ -40,6 +42,7 @@ interface ProductDiscoveryStore {
 
 const initialState = {
   currentStep: 1 as Step,
+  resetKey: 0,
   productInfo: null,
   aiSuggestedKeywords: [],
   selectedKeywords: [],
@@ -195,6 +198,8 @@ export const useProductDiscoveryStore = create<ProductDiscoveryStore>()(
 
       goToResult: () => set({ currentStep: 3 }),
 
+      goBackToStep1: () => set({ currentStep: 1, validated: [], error: null }),
+
       toggleResultSelect: (kw) => set((s) => ({
         validated: s.validated.map((v) =>
           v.keyword === kw && !v.isBlocked ? { ...v, isSelected: !v.isSelected } : v,
@@ -231,7 +236,7 @@ export const useProductDiscoveryStore = create<ProductDiscoveryStore>()(
         }
       },
 
-      reset: () => set(initialState),
+      reset: () => set((s) => ({ ...initialState, resetKey: s.resetKey + 1 })),
     }),
     { name: 'ProductDiscovery' },
   ),

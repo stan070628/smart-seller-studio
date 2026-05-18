@@ -21,7 +21,7 @@ const STEPS = [
 ] as const;
 
 export default function ProductDiscoveryTab() {
-  const { currentStep, error, reset } = useProductDiscoveryStore();
+  const { currentStep, error, reset, resetKey, goBackToStep1 } = useProductDiscoveryStore();
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: C.bg }}>
@@ -54,19 +54,30 @@ export default function ProductDiscoveryTab() {
             const isDone = currentStep > s.num;
             const isActive = currentStep === s.num;
             const isLocked = currentStep < s.num;
+            const canGoBack = isDone && s.num === 1;
             return (
-              <div key={s.num} style={{
-                borderRadius: 6, padding: '8px 10px',
-                background: isDone ? '#f0fdf4' : isActive ? '#fffbeb' : '#f8fafc',
-                border: `${isActive ? 2 : 1}px solid ${isDone ? '#bbf7d0' : isActive ? '#f59e0b' : C.border}`,
-                opacity: isLocked ? 0.45 : 1,
-              }}>
+              <div
+                key={s.num}
+                onClick={canGoBack ? goBackToStep1 : undefined}
+                style={{
+                  borderRadius: 6, padding: '8px 10px',
+                  background: isDone ? '#f0fdf4' : isActive ? '#fffbeb' : '#f8fafc',
+                  border: `${isActive ? 2 : 1}px solid ${isDone ? '#bbf7d0' : isActive ? '#f59e0b' : C.border}`,
+                  opacity: isLocked ? 0.45 : 1,
+                  cursor: canGoBack ? 'pointer' : 'default',
+                }}
+              >
                 <div style={{ fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span>{isDone ? '✅' : isActive ? '▶' : '🔒'}</span>
                   <span style={{ color: isDone ? '#16a34a' : isActive ? '#92400e' : C.textSub }}>
                     Step {s.num} — {s.label}
                   </span>
                 </div>
+                {canGoBack && (
+                  <div style={{ fontSize: 9, color: '#16a34a', marginTop: 2, opacity: 0.7 }}>
+                    클릭하여 다시 편집
+                  </div>
+                )}
               </div>
             );
           })}
@@ -74,7 +85,7 @@ export default function ProductDiscoveryTab() {
 
         {/* 우측: 현재 Step */}
         <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-          {currentStep === 1 && <StepProductInput />}
+          {currentStep === 1 && <StepProductInput key={resetKey} />}
           {currentStep === 2 && <StepValidation />}
           {currentStep === 3 && <StepResult />}
         </div>

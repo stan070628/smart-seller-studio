@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useProductDiscoveryStore } from '@/store/useProductDiscoveryStore';
 import { C as BASE_C } from '@/lib/design-tokens';
 
@@ -19,15 +19,6 @@ export default function StepProductInput() {
   const [titleDraft, setTitleDraft] = useState('');
   const [urlDraft, setUrlDraft] = useState('');
   const [keywordDraft, setKeywordDraft] = useState('');
-
-  // store reset (= productInfo가 null) 감지 시 로컬 입력 필드도 초기화
-  useEffect(() => {
-    if (!productInfo && aiSuggestedKeywords.length === 0 && selectedKeywords.length === 0) {
-      setTitleDraft('');
-      setUrlDraft('');
-      setKeywordDraft('');
-    }
-  }, [productInfo, aiSuggestedKeywords.length, selectedKeywords.length]);
 
   const handleTextSubmit = () => {
     const t = titleDraft.trim();
