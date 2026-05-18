@@ -5,11 +5,11 @@ import { getAllCategories } from '@/lib/sourcing-agent/db';
 export async function GET() {
   try {
     const pool = getSourcingPool();
-    const categories = await getAllCategories(pool);
+    const data = await getAllCategories(pool);
 
-    return NextResponse.json({ categories });
+    return NextResponse.json({ success: true, data });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

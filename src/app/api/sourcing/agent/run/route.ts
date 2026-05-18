@@ -5,10 +5,14 @@ import { runSourcingAgentPipeline } from '@/lib/sourcing-agent/pipeline';
 export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
-  // CRON_SECRET 헤더로 인증 (개발 환경에서는 생략)
-  const secret = req.headers.get('authorization')?.replace('Bearer ', '');
-  if (secret !== process.env.CRON_SECRET && process.env.NODE_ENV !== 'development') {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  // Authorization 헤더가 있으면 CRON_SECRET 검증 (Vercel cron 자동 호출용)
+  // 헤더가 없으면 UI에서의 수동 실행으로 허용
+  const authHeader = req.headers.get('authorization');
+  if (authHeader) {
+    const secret = authHeader.replace('Bearer ', '');
+    if (secret !== process.env.CRON_SECRET) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
   }
 
   try {
@@ -17,9 +21,9 @@ export async function POST(req: NextRequest) {
 
     const result = await runSourcingAgentPipeline({ categoryId });
 
-    return NextResponse.json({ ok: true, ...result });
+    return NextResponse.json({ success: true, ...result });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

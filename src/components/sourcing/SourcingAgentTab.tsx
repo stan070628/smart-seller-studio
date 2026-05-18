@@ -246,7 +246,7 @@ export default function SourcingAgentTab() {
       });
       const json = await res.json();
       if (json.success) {
-        setRunLog(`✅ 완료 — 카테고리: ${json.category}, 저장: ${json.saved}개`);
+        setRunLog(`✅ 완료 — 카테고리: ${json.categoryName}, 저장: ${json.savedCount}개`);
         fetchResults(0, categoryFilter);
       } else {
         setRunLog(`❌ ${json.error ?? '실행 실패'}`);
