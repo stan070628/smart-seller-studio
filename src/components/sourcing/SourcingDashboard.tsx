@@ -29,6 +29,9 @@ import ProductDiscoveryTab from '@/components/sourcing/ProductDiscoveryTab';
 // 키워드 탭
 import KeywordTrackerTab from '@/components/sourcing/KeywordTrackerTab';
 
+// 소싱 에이전트 탭
+import SourcingAgentTab from '@/components/sourcing/SourcingAgentTab';
+
 // 코스트코 발굴 메모 탭
 import CostcoMemoTab from '@/components/sourcing/CostcoMemoTab';
 
@@ -48,7 +51,7 @@ import CompareMode from '@/components/calculator/CompareMode';
 // 메인 컴포넌트
 // ─────────────────────────────────────────────────────────────────────────────
 export default function SourcingDashboard() {
-  const [sourcingSubTab, setSourcingSubTab] = useState<'tracking' | 'calculator' | 'niche' | 'costco' | 'costco-memo' | 'keywords' | 'seed'>('niche');
+  const [sourcingSubTab, setSourcingSubTab] = useState<'tracking' | 'calculator' | 'niche' | 'costco' | 'costco-memo' | 'keywords' | 'seed' | 'agent'>('niche');
 
   // 니치소싱 읽지 않은 알림 수
   const unreadAlertCount = useNicheStore((s) => s.unreadAlertCount);
@@ -76,6 +79,7 @@ export default function SourcingDashboard() {
           { id: 'costco-memo' as const, label: '발굴 메모', icon: <span style={{ fontSize: '13px' }}>📝</span> },
           { id: 'calculator' as const, label: '마진계산기', icon: <Calculator size={13} /> },
           { id: 'keywords' as const, label: '키워드 목록', icon: <Search size={13} /> },
+          { id: 'agent' as const, label: '🤖 소싱 에이전트', icon: null },
         ]).map((tab) => (
           <button
             key={tab.id}
@@ -123,6 +127,9 @@ export default function SourcingDashboard() {
 
       {/* 키워드 목록 서브탭 콘텐츠 */}
       {sourcingSubTab === 'keywords' && <KeywordTrackerTab />}
+
+      {/* 소싱 에이전트 서브탭 */}
+      {sourcingSubTab === 'agent' && <SourcingAgentTab />}
 
       {/* 마진계산기 모달 (레거시 — DomeggookTab 내부로 이전됨)                  */}
       {/* ─────────────────────────────────────────���────────────────────────── */}
