@@ -255,7 +255,8 @@ function SourcingBadge({ platform, productId }: SourcingBadgeProps) {
 
   return (
     <div style={{ position: 'relative', display: 'inline-block' }}>
-      <span
+      <button
+        type="button"
         onClick={() => setOpen((v) => !v)}
         style={{
           display: 'inline-flex',
@@ -267,11 +268,12 @@ function SourcingBadge({ platform, productId }: SourcingBadgeProps) {
           fontWeight: sourcing ? 700 : 400,
           cursor: 'pointer',
           whiteSpace: 'nowrap',
+          border: 'none',
           ...badgeStyle,
         }}
       >
         {badgeLabel}
-      </span>
+      </button>
       {open && (
         <SourcingPopover
           platform={platform}
