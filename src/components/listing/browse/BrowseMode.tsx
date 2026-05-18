@@ -72,13 +72,23 @@ interface SourcingPopoverProps {
 function SourcingPopover({ platform, productId, current, onClose }: SourcingPopoverProps) {
   const { saveSourcing, deleteSourcing } = useListingStore();
   const [tab, setTab] = React.useState<'online' | 'offline'>(current?.type ?? 'online');
-  const [inputValue, setInputValue] = React.useState(current?.type === tab ? current.value : '');
+  // 탭별 독립 입력 상태 — 탭 전환 시 각자의 draft 유지
+  const [onlineInput, setOnlineInput] = React.useState(
+    current?.type === 'online' ? current.value : ''
+  );
+  const [offlineInput, setOfflineInput] = React.useState(
+    current?.type === 'offline' ? current.value : ''
+  );
+  const inputValue = tab === 'online' ? onlineInput : offlineInput;
+  const setInputValue = tab === 'online' ? setOnlineInput : setOfflineInput;
   const [saving, setSaving] = React.useState(false);
 
-  const handleTabChange = (t: 'online' | 'offline') => {
-    setTab(t);
-    setInputValue(current?.type === t ? current.value : '');
-  };
+  // Escape 키로 팝오버 닫기 (키보드 접근성)
+  React.useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
 
   const handleSave = async () => {
     if (!inputValue.trim()) return;
@@ -121,7 +131,7 @@ function SourcingPopover({ platform, productId, current, onClose }: SourcingPopo
           {(['online', 'offline'] as const).map((t) => (
             <button
               key={t}
-              onClick={() => handleTabChange(t)}
+              onClick={() => setTab(t)}
               style={{
                 flex: 1,
                 padding: '7px 0',
@@ -154,28 +164,30 @@ function SourcingPopover({ platform, productId, current, onClose }: SourcingPopo
             fontSize: '12px',
             outline: 'none',
           }}
-          onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); }}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !saving) handleSave(); }}
           autoFocus
         />
         <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginTop: '8px' }}>
           {tab === 'online'
             ? ONLINE_CHIPS.map((chip) => (
-                <span
+                <button
                   key={chip.label}
+                  type="button"
                   onClick={() => setInputValue(chip.prefix)}
-                  style={{ padding: '3px 9px', border: `1px solid ${C.border}`, borderRadius: '100px', fontSize: '11px', color: C.textSub, cursor: 'pointer', backgroundColor: '#f9f9f9' }}
+                  style={{ padding: '3px 9px', border: '1px solid #eee', background: '#f9f9f9', borderRadius: 100, fontSize: 11, cursor: 'pointer' }}
                 >
                   {chip.label}
-                </span>
+                </button>
               ))
             : OFFLINE_CHIPS.map((chip) => (
-                <span
+                <button
                   key={chip}
+                  type="button"
                   onClick={() => setInputValue(chip)}
-                  style={{ padding: '3px 9px', border: `1px solid ${C.border}`, borderRadius: '100px', fontSize: '11px', color: C.textSub, cursor: 'pointer', backgroundColor: '#f9f9f9' }}
+                  style={{ padding: '3px 9px', border: '1px solid #eee', background: '#f9f9f9', borderRadius: 100, fontSize: 11, cursor: 'pointer' }}
                 >
                   {chip}
-                </span>
+                </button>
               ))
           }
         </div>
