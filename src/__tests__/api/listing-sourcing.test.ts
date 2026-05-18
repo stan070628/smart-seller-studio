@@ -17,6 +17,18 @@ beforeEach(() => {
   mockQuery.mockReset();
 });
 
+describe('인증 실패', () => {
+  it('requireAuth가 Response를 반환하면 그대로 전달', async () => {
+    const { requireAuth } = await import('@/lib/supabase/auth');
+    vi.mocked(requireAuth).mockResolvedValueOnce(
+      Response.json({ error: 'Unauthorized' }, { status: 401 }) as never,
+    );
+    const req = new NextRequest('http://localhost/api/listing/sourcing?platform=coupang&ids=111');
+    const res = await GET(req);
+    expect(res.status).toBe(401);
+  });
+});
+
 describe('GET /api/listing/sourcing', () => {
   it('ids가 없으면 빈 sourcing 반환', async () => {
     const req = new NextRequest('http://localhost/api/listing/sourcing?platform=coupang&ids=');
