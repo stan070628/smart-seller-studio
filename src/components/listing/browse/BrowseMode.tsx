@@ -148,7 +148,7 @@ function SourcingPopover({ platform, productId, current, onClose }: SourcingPopo
                 fontSize: '12px',
                 fontWeight: tab === t ? 700 : 500,
                 background: tab === t ? C.accent : '#f9f9f9',
-                color: tab === t ? '#fff' : C.textSub,
+                color: tab === t ? '#fff' : '#555',
                 border: 'none',
                 cursor: 'pointer',
               }}
@@ -184,7 +184,7 @@ function SourcingPopover({ platform, productId, current, onClose }: SourcingPopo
                   key={chip.label}
                   type="button"
                   onClick={() => setInputValue(chip.prefix)}
-                  style={{ padding: '3px 9px', border: '1px solid #eee', background: '#f9f9f9', borderRadius: 100, fontSize: 11, cursor: 'pointer' }}
+                  style={{ padding: '3px 9px', border: '1px solid #ddd', background: '#f3f3f3', borderRadius: 100, fontSize: 11, cursor: 'pointer', color: '#444' }}
                 >
                   {chip.label}
                 </button>
@@ -194,7 +194,7 @@ function SourcingPopover({ platform, productId, current, onClose }: SourcingPopo
                   key={chip}
                   type="button"
                   onClick={() => setInputValue(chip)}
-                  style={{ padding: '3px 9px', border: '1px solid #eee', background: '#f9f9f9', borderRadius: 100, fontSize: 11, cursor: 'pointer' }}
+                  style={{ padding: '3px 9px', border: '1px solid #ddd', background: '#f3f3f3', borderRadius: 100, fontSize: 11, cursor: 'pointer', color: '#444' }}
                 >
                   {chip}
                 </button>
