@@ -310,6 +310,12 @@ interface ListingStore {
   setEditingNaverProduct: (product: NaverProductDetail | null) => void;
   clearError: () => void;
 
+  // ─── 소싱 출처 ──────────────────────────────────────────────────────────────
+  sourcingMap: Record<string, { type: 'online' | 'offline'; value: string } | null>;
+  fetchSourcing: (platform: 'coupang' | 'naver', ids: string[]) => Promise<void>;
+  saveSourcing: (platform: 'coupang' | 'naver', productId: string, type: 'online' | 'offline', value: string) => Promise<boolean>;
+  deleteSourcing: (platform: 'coupang' | 'naver', productId: string) => Promise<boolean>;
+
   // ─── SharedDraft 액션 ───────────────────────────────────────────────────────
   sharedDraft: SharedDraft;
   updateSharedDraft: (patch: Partial<SharedDraft>) => void;
@@ -392,6 +398,7 @@ export const useListingStore = create<ListingStore>()(
       listingMode: 'register',
       browsePlatform: 'coupang',
       browseFilters: { coupangStatus: '', naverStatus: '', keyword: '' },
+      sourcingMap: {},
       pendingBulkItems: [],
 
       // ─── AssetsDraft 초기값 및 액션 ────────────────────────────────────────
@@ -514,6 +521,9 @@ export const useListingStore = create<ListingStore>()(
             coupangNextToken: json.data?.nextToken ?? null,
             isLoading: false,
           }, false, 'listing/fetchCoupang/success');
+          // 소싱 출처 배치 조회
+          const newIds = items.map((p: CoupangProduct) => String(p.sellerProductId));
+          if (newIds.length > 0) get().fetchSourcing('coupang', newIds);
         } catch (err) {
           set({
             error: err instanceof Error ? err.message : '쿠팡 상품 로드 실패',
@@ -564,6 +574,9 @@ export const useListingStore = create<ListingStore>()(
             naverPage: page,
             isLoading: false,
           }, false, 'listing/fetchNaver/success');
+          // 소싱 출처 배치 조회
+          const newIds = (json.data?.items ?? []).map((p: NaverProduct) => String(p.originProductNo));
+          if (newIds.length > 0) get().fetchSourcing('naver', newIds);
         } catch (err) {
           set({ error: err instanceof Error ? err.message : '네이버 상품 로드 실패', isLoading: false }, false, 'listing/fetchNaver/error');
         }
@@ -629,6 +642,63 @@ export const useListingStore = create<ListingStore>()(
 
       // ─── 에러 초기화 ───────────────────────────────────────────────────────
       clearError: () => set({ error: null }, false, 'listing/clearError'),
+
+      // ─── 소싱 출처 액션 ─────────────────────────────────────────────────────
+      fetchSourcing: async (platform, ids) => {
+        if (ids.length === 0) return;
+        try {
+          const res = await fetch(
+            `/api/listing/sourcing?platform=${platform}&ids=${ids.join(',')}`,
+          );
+          const json = await res.json();
+          if (!res.ok) return;
+          set((s) => ({
+            sourcingMap: { ...s.sourcingMap, ...Object.fromEntries(
+              Object.entries(json.sourcing as Record<string, { type: 'online' | 'offline'; value: string }>).map(
+                ([id, val]) => [`${platform}:${id}`, val],
+              ),
+            )},
+          }), false, 'listing/fetchSourcing');
+        } catch {
+          // 소싱 조회 실패는 조용히 무시
+        }
+      },
+
+      saveSourcing: async (platform, productId, type, value) => {
+        const key = `${platform}:${productId}`;
+        const prev = get().sourcingMap[key] ?? null;
+        set((s) => ({ sourcingMap: { ...s.sourcingMap, [key]: { type, value } } }), false, 'listing/saveSourcing/optimistic');
+        try {
+          const res = await fetch('/api/listing/sourcing', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ platform, productId, type, value }),
+          });
+          if (!res.ok) throw new Error('저장 실패');
+          return true;
+        } catch {
+          set((s) => ({ sourcingMap: { ...s.sourcingMap, [key]: prev } }), false, 'listing/saveSourcing/rollback');
+          return false;
+        }
+      },
+
+      deleteSourcing: async (platform, productId) => {
+        const key = `${platform}:${productId}`;
+        const prev = get().sourcingMap[key] ?? null;
+        set((s) => ({ sourcingMap: { ...s.sourcingMap, [key]: null } }), false, 'listing/deleteSourcing/optimistic');
+        try {
+          const res = await fetch('/api/listing/sourcing', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ platform, productId }),
+          });
+          if (!res.ok) throw new Error('삭제 실패');
+          return true;
+        } catch {
+          set((s) => ({ sourcingMap: { ...s.sourcingMap, [key]: prev } }), false, 'listing/deleteSourcing/rollback');
+          return false;
+        }
+      },
 
       // ─── SharedDraft 초기값 및 액션 ────────────────────────────────────────
       sharedDraft: SHARED_DRAFT_INITIAL,
