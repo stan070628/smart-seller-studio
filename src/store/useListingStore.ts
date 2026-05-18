@@ -516,11 +516,16 @@ export const useListingStore = create<ListingStore>()(
           }
 
           const items = json.data?.items ?? [];
-          set({
+          set((s) => ({
             coupangProducts: reset ? items : [...state.coupangProducts, ...items],
             coupangNextToken: json.data?.nextToken ?? null,
             isLoading: false,
-          }, false, 'listing/fetchCoupang/success');
+            ...(reset ? {
+              sourcingMap: Object.fromEntries(
+                Object.entries(s.sourcingMap).filter(([k]) => !k.startsWith('coupang:'))
+              ),
+            } : {}),
+          }), false, 'listing/fetchCoupang/success');
           // 소싱 출처 배치 조회
           const newIds = items.map((p: CoupangProduct) => String(p.sellerProductId));
           if (newIds.length > 0) get().fetchSourcing('coupang', newIds);
@@ -568,12 +573,17 @@ export const useListingStore = create<ListingStore>()(
           const res = await fetch(`/api/listing/naver?page=${page}&size=20`);
           const json = await res.json();
           if (!res.ok || !json.success) throw new Error(json.error ?? `조회 실패 (${res.status})`);
-          set({
+          set((state) => ({
             naverProducts: json.data?.items ?? [],
             naverTotal: json.data?.total ?? 0,
             naverPage: page,
             isLoading: false,
-          }, false, 'listing/fetchNaver/success');
+            ...(page === 1 ? {
+              sourcingMap: Object.fromEntries(
+                Object.entries(state.sourcingMap).filter(([k]) => !k.startsWith('naver:'))
+              ),
+            } : {}),
+          }), false, 'listing/fetchNaver/success');
           // 소싱 출처 배치 조회
           const newIds = (json.data?.items ?? []).map((p: NaverProduct) => String(p.originProductNo));
           if (newIds.length > 0) get().fetchSourcing('naver', newIds);
@@ -666,7 +676,9 @@ export const useListingStore = create<ListingStore>()(
 
       saveSourcing: async (platform, productId, type, value) => {
         const key = `${platform}:${productId}`;
-        const prev = get().sourcingMap[key] ?? null;
+        const prevMap = get().sourcingMap;
+        const hadKey = key in prevMap;
+        const prevVal = prevMap[key] ?? null;
         set((s) => ({ sourcingMap: { ...s.sourcingMap, [key]: { type, value } } }), false, 'listing/saveSourcing/optimistic');
         try {
           const res = await fetch('/api/listing/sourcing', {
@@ -677,14 +689,20 @@ export const useListingStore = create<ListingStore>()(
           if (!res.ok) throw new Error('저장 실패');
           return true;
         } catch {
-          set((s) => ({ sourcingMap: { ...s.sourcingMap, [key]: prev } }), false, 'listing/saveSourcing/rollback');
+          set((s) => {
+            const next = { ...s.sourcingMap };
+            if (hadKey) { next[key] = prevVal; } else { delete next[key]; }
+            return { sourcingMap: next };
+          }, false, 'listing/saveSourcing/rollback');
           return false;
         }
       },
 
       deleteSourcing: async (platform, productId) => {
         const key = `${platform}:${productId}`;
-        const prev = get().sourcingMap[key] ?? null;
+        const prevMap = get().sourcingMap;
+        const hadKey = key in prevMap;
+        const prevVal = prevMap[key] ?? null;
         set((s) => ({ sourcingMap: { ...s.sourcingMap, [key]: null } }), false, 'listing/deleteSourcing/optimistic');
         try {
           const res = await fetch('/api/listing/sourcing', {
@@ -695,7 +713,11 @@ export const useListingStore = create<ListingStore>()(
           if (!res.ok) throw new Error('삭제 실패');
           return true;
         } catch {
-          set((s) => ({ sourcingMap: { ...s.sourcingMap, [key]: prev } }), false, 'listing/deleteSourcing/rollback');
+          set((s) => {
+            const next = { ...s.sourcingMap };
+            if (hadKey) { next[key] = prevVal; } else { delete next[key]; }
+            return { sourcingMap: next };
+          }, false, 'listing/deleteSourcing/rollback');
           return false;
         }
       },
