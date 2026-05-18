@@ -204,7 +204,7 @@ export class CoupangClient {
         method,
         headers: {
           Authorization: auth,
-          'X-Requested-By': this.accessKey,
+          'X-Requested-By': this.vendorId,
           'X-MARKET': 'KR',  // rg_open_api 필수. 일반 openapi에서도 무시되므로 안전
           'Content-Type': 'application/json;charset=UTF-8',
         },
