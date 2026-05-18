@@ -654,7 +654,7 @@ export const useListingStore = create<ListingStore>()(
           if (!res.ok) return;
           set((s) => ({
             sourcingMap: { ...s.sourcingMap, ...Object.fromEntries(
-              Object.entries(json.sourcing as Record<string, { type: 'online' | 'offline'; value: string }>).map(
+              Object.entries((json.sourcing ?? {}) as Record<string, { type: 'online' | 'offline'; value: string }>).map(
                 ([id, val]) => [`${platform}:${id}`, val],
               ),
             )},
