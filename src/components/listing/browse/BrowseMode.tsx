@@ -173,6 +173,7 @@ function SourcingPopover({ platform, productId, current, onClose }: SourcingPopo
             borderRadius: '6px',
             fontSize: '12px',
             outline: 'none',
+            color: '#1a1c1c',
           }}
           onKeyDown={(e) => { if (e.key === 'Enter' && !saving) handleSave(); }}
           autoFocus
