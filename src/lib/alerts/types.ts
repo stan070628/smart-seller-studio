@@ -1,7 +1,8 @@
 export type AlertType =
   | 'roas_low' | 'stock_low' | 'negative_review'
   | 'winner_lost' | 'sourcing_recommendation' | 'review_milestone'
-  | 'inbound_return_warning' | 'channel_distribution';
+  | 'inbound_return_warning' | 'channel_distribution'
+  | 'sourcing_url_dead';
 
 export type AlertSeverity = 'low' | 'medium' | 'high' | 'critical';
 

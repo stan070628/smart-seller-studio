@@ -14,6 +14,7 @@ const TYPE_LABELS: Record<string, string> = {
   review_milestone: '🎉 리뷰 도달',
   inbound_return_warning: '📤 회송 경고',
   channel_distribution: '📊 채널 분배',
+  sourcing_url_dead: '🔗 소싱 URL 접근 불가',
 };
 
 const SEVERITY_COLORS: Record<string, string> = {
