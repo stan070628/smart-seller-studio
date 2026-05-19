@@ -63,11 +63,12 @@ export async function PUT(request: NextRequest) {
   if (authResult instanceof Response) return authResult;
 
   const body = await request.json();
-  const { platform, productId, type, value } = body as {
+  const { platform, productId, type, value, productName } = body as {
     platform: string;
     productId: string;
     type: string;
     value: string;
+    productName?: string;
   };
 
   // 필수 필드가 없으면 400 반환
@@ -88,11 +89,11 @@ export async function PUT(request: NextRequest) {
   try {
     const pool = getSourcingPool();
     await pool.query(
-      `INSERT INTO product_sourcing (platform, product_id, sourcing_type, sourcing_value, updated_at)
-       VALUES ($1, $2, $3, $4, NOW())
+      `INSERT INTO product_sourcing (platform, product_id, sourcing_type, sourcing_value, product_name, updated_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())
        ON CONFLICT (platform, product_id)
-       DO UPDATE SET sourcing_type = $3, sourcing_value = $4, updated_at = NOW()`,
-      [platform, productId, type, value],
+       DO UPDATE SET sourcing_type = $3, sourcing_value = $4, product_name = $5, updated_at = NOW()`,
+      [platform, productId, type, value, productName ?? null],
     );
 
     return Response.json({ success: true });

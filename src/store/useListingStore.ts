@@ -313,7 +313,13 @@ interface ListingStore {
   // ─── 소싱 출처 ──────────────────────────────────────────────────────────────
   sourcingMap: Record<string, { type: 'online' | 'offline'; value: string } | null>;
   fetchSourcing: (platform: 'coupang' | 'naver', ids: string[]) => Promise<void>;
-  saveSourcing: (platform: 'coupang' | 'naver', productId: string, type: 'online' | 'offline', value: string) => Promise<boolean>;
+  saveSourcing: (
+    platform: 'coupang' | 'naver',
+    productId: string,
+    type: 'online' | 'offline',
+    value: string,
+    productName?: string,
+  ) => Promise<boolean>;
   deleteSourcing: (platform: 'coupang' | 'naver', productId: string) => Promise<boolean>;
 
   // ─── SharedDraft 액션 ───────────────────────────────────────────────────────
@@ -674,7 +680,7 @@ export const useListingStore = create<ListingStore>()(
         }
       },
 
-      saveSourcing: async (platform, productId, type, value) => {
+      saveSourcing: async (platform, productId, type, value, productName) => {
         const key = `${platform}:${productId}`;
         const prevMap = get().sourcingMap;
         const hadKey = key in prevMap;
@@ -684,7 +690,7 @@ export const useListingStore = create<ListingStore>()(
           const res = await fetch('/api/listing/sourcing', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ platform, productId, type, value }),
+            body: JSON.stringify({ platform, productId, type, value, productName }),
           });
           if (!res.ok) throw new Error('저장 실패');
           return true;

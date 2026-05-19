@@ -85,7 +85,7 @@ describe('PUT /api/listing/sourcing', () => {
     expect(json.success).toBe(true);
     expect(mockQuery).toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO product_sourcing'),
-      ['coupang', '111', 'online', 'https://1688.com/x'],
+      ['coupang', '111', 'online', 'https://1688.com/x', null],
     );
   });
 
@@ -116,6 +116,43 @@ describe('PUT /api/listing/sourcing', () => {
     });
     const res = await PUT(req);
     expect(res.status).toBe(500);
+  });
+
+  it('productName을 포함하면 DB에 product_name도 저장한다', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    const req = new NextRequest('http://localhost/api/listing/sourcing', {
+      method: 'PUT',
+      body: JSON.stringify({
+        platform: 'coupang',
+        productId: '111',
+        type: 'online',
+        value: 'https://1688.com/x',
+        productName: '캠핑 접이식 의자',
+      }),
+    });
+    const res = await PUT(req);
+    const json = await res.json();
+    expect(res.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining('product_name'),
+      ['coupang', '111', 'online', 'https://1688.com/x', '캠핑 접이식 의자'],
+    );
+  });
+
+  it('productName 없어도 정상 저장된다', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    const req = new NextRequest('http://localhost/api/listing/sourcing', {
+      method: 'PUT',
+      body: JSON.stringify({
+        platform: 'coupang',
+        productId: '222',
+        type: 'online',
+        value: 'https://domeggook.com/x',
+      }),
+    });
+    const res = await PUT(req);
+    expect(res.status).toBe(200);
   });
 });
 
