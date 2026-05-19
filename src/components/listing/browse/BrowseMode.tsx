@@ -65,11 +65,12 @@ const OFFLINE_CHIPS = ['코스트코'];
 interface SourcingPopoverProps {
   platform: 'coupang' | 'naver';
   productId: string;
+  productName?: string;
   current: { type: 'online' | 'offline'; value: string } | null;
   onClose: () => void;
 }
 
-function SourcingPopover({ platform, productId, current, onClose }: SourcingPopoverProps) {
+function SourcingPopover({ platform, productId, productName, current, onClose }: SourcingPopoverProps) {
   const { saveSourcing, deleteSourcing } = useListingStore();
   const [tab, setTab] = React.useState<'online' | 'offline'>(current?.type ?? 'online');
   // 탭별 독립 입력 상태 — 탭 전환 시 각자의 draft 유지
@@ -93,7 +94,7 @@ function SourcingPopover({ platform, productId, current, onClose }: SourcingPopo
   const handleSave = async () => {
     if (!inputValue.trim()) return;
     setSaving(true);
-    const ok = await saveSourcing(platform, productId, tab, inputValue.trim());
+    const ok = await saveSourcing(platform, productId, tab, inputValue.trim(), productName);
     if (!ok) {
       alert('저장에 실패했습니다. 다시 시도해주세요.');
       setSaving(false);
@@ -244,9 +245,10 @@ function SourcingPopover({ platform, productId, current, onClose }: SourcingPopo
 interface SourcingBadgeProps {
   platform: 'coupang' | 'naver';
   productId: string;
+  productName?: string;
 }
 
-function SourcingBadge({ platform, productId }: SourcingBadgeProps) {
+function SourcingBadge({ platform, productId, productName }: SourcingBadgeProps) {
   const { sourcingMap } = useListingStore();
   const [open, setOpen] = React.useState(false);
   const key = `${platform}:${productId}`;
@@ -289,6 +291,7 @@ function SourcingBadge({ platform, productId }: SourcingBadgeProps) {
         <SourcingPopover
           platform={platform}
           productId={productId}
+          productName={productName}
           current={sourcing}
           onClose={() => setOpen(false)}
         />
@@ -742,7 +745,11 @@ function CoupangBrowser() {
                       {pr.createdAt ? formatDate(pr.createdAt) : '-'}
                     </td>
                     <td style={{ padding: '11px 12px' }}>
-                      <SourcingBadge platform="coupang" productId={String(pr.sellerProductId)} />
+                      <SourcingBadge
+                        platform="coupang"
+                        productId={String(pr.sellerProductId)}
+                        productName={pr.sellerProductName}
+                      />
                     </td>
                     <td style={{ padding: '11px 12px' }}>
                       <button
@@ -988,7 +995,11 @@ function NaverBrowser() {
                       {formatDate(p.regDate)}
                     </td>
                     <td style={{ padding: '11px 12px' }}>
-                      <SourcingBadge platform="naver" productId={String(p.originProductNo)} />
+                      <SourcingBadge
+                        platform="naver"
+                        productId={String(p.originProductNo)}
+                        productName={p.name}
+                      />
                     </td>
                     <td style={{ padding: '11px 12px' }}>
                       <a
