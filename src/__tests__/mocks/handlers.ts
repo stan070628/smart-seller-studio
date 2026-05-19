@@ -193,6 +193,14 @@ const labelUploadHandler = http.post('/api/label/upload-image', () => {
 });
 
 // ---------------------------------------------------------------------------
+// POST https://api.resend.com/emails 핸들러 — 이메일 발송 mock
+// ---------------------------------------------------------------------------
+
+const resendEmailHandler = http.post('https://api.resend.com/emails', () => {
+  return HttpResponse.json({ id: 'mock-email-id' }, { status: 200 });
+});
+
+// ---------------------------------------------------------------------------
 // 핸들러 배열 export
 // ---------------------------------------------------------------------------
 
@@ -206,4 +214,5 @@ export const handlers = [
   getProjectHandler,
   saveCanvasHandler,
   labelUploadHandler,
+  resendEmailHandler,
 ];
