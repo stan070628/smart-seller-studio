@@ -26,6 +26,9 @@ export async function checkUrl(url: string): Promise<UrlCheckResult> {
     // redirect: 'follow'로 설정했으므로 리다이렉트는 자동으로 따라가짐
     return { status: 'alive' };
   } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      return { status: 'skip', reason: 'timeout' };
+    }
     return { status: 'skip', reason: `network: ${String(err)}` };
   }
 }
