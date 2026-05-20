@@ -505,7 +505,7 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
         <ConversationalDetailModal
           productName={sharedDraft.name}
           category={category}
-          imageUrls={allImageUrls}
+          imageUrls={detailFiles}
           onClose={() => setConversationModalOpen(false)}
           onComplete={handleConversationComplete}
         />
