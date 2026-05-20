@@ -121,7 +121,7 @@ export default function ConversationalDetailModal({
           body: JSON.stringify({
             productName,
             category,
-            imageUrls: imageUrls.slice(0, 5),
+            imageUrls: imageUrls.slice(0, 6),
             questionIds: questions.map((q) => q.id),
           }),
         });
@@ -249,7 +249,7 @@ export default function ConversationalDetailModal({
     const conversationContext: ConversationContext = {
       productName,
       category,
-      imageUrls: imageUrls.slice(0, 5),
+      imageUrls: imageUrls.slice(0, 6),
       answers: state.answers,
     };
     try {
@@ -257,7 +257,7 @@ export default function ConversationalDetailModal({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          imageUrls: imageUrls.slice(0, 5),
+          imageUrls: imageUrls.slice(0, 6),
           productName,
           category,
           studioMode: true,

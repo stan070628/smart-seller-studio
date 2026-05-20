@@ -225,6 +225,34 @@ describe('ConversationalDetailModal', () => {
     expect(arg.conversationContext.productName).toBe('프리미엄 텀블러');
   });
 
+  it('imageUrls가 6장이면 suggest-answers 호출 시 6장 모두 전달된다', async () => {
+    const sixUrls = Array.from({ length: 6 }, (_, i) => `https://example.com/img${i}.jpg`);
+    let capturedBody: unknown;
+    server.use(
+      http.post('/api/ai/detail-page-suggest-answers', async ({ request }) => {
+        capturedBody = await request.json();
+        return HttpResponse.json({ success: true, data: { suggestions: [] } });
+      }),
+    );
+    server.use(
+      http.post('/api/ai/generate-detail-html', () =>
+        HttpResponse.json({ html: '<div>ok</div>' }),
+      ),
+    );
+
+    render(
+      <ConversationalDetailModal
+        {...defaultProps}
+        imageUrls={sixUrls}
+        onClose={() => {}}
+        onComplete={() => {}}
+      />,
+    );
+
+    await waitFor(() => expect(capturedBody).toBeDefined());
+    expect((capturedBody as { imageUrls: string[] }).imageUrls).toHaveLength(6);
+  });
+
   it('X 버튼 클릭 시 onClose 호출', async () => {
     mockSuggestSuccess();
     const onClose = vi.fn();
