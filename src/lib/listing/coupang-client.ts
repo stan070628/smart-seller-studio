@@ -660,7 +660,10 @@ export class CoupangClient {
     const url = `/v2/providers/rg_open_api/apis/api/v1/vendors/${this.vendorId}/rg/orders?${parts.join('&')}`;
     await sleep(API_DELAY);
     const res = await this.request<Array<Record<string, unknown>>>('GET', url);
-    const rawItems = res.data ?? [];
+    if (res.code !== 'SUCCESS' && String(res.code) !== '200') {
+      throw new Error(`로켓그로스 주문 조회 실패 (code: ${res.code}): ${res.message}`);
+    }
+    const rawItems = Array.isArray(res.data) ? res.data : [];
     return {
       items: rawItems.map((r) => {
         const orderItems = Array.isArray(r.orderItems) ? (r.orderItems as Array<Record<string, unknown>>) : [];
