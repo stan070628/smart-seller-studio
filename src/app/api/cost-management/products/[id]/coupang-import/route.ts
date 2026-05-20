@@ -40,13 +40,14 @@ export async function POST(
 
   // RLS 대체: user_id 조건으로 타 유저 데이터 접근 차단
   const { rows: products } = await pool.query(
-    `SELECT id, seller_product_id, vendor_item_id FROM product_costs WHERE id = $1 AND user_id = $2`,
+    `SELECT id, seller_product_id, vendor_item_id, product_name FROM product_costs WHERE id = $1 AND user_id = $2`,
     [id, user.userId],
   );
   if (products.length === 0) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
 
   const sellerProductId = products[0].seller_product_id;
   const storedVendorItemId = products[0].vendor_item_id ? Number(products[0].vendor_item_id) : null;
+  const storedProductName = String(products[0].product_name ?? '');
 
   if (!sellerProductId && !storedVendorItemId) {
     return NextResponse.json(
@@ -133,7 +134,12 @@ export async function POST(
           // paidAt은 ms 타임스탬프 문자열
           const paidDate = new Date(Number(order.paidAt)).toISOString().slice(0, 10);
           for (const item of order.orderItems) {
-            if (!vendorItemIds.has(item.vendorItemId)) continue;
+            // seller_api가 Wing 상품의 vendorItemId를 반환하지 않을 때,
+            // RG 주문의 productName이 product_name으로 시작하는지로 fallback 매칭
+            const matchByVendorItemId = vendorItemIds.size > 0 && vendorItemIds.has(item.vendorItemId);
+            const matchByProductName = vendorItemIds.size === 0 && storedProductName.length > 0
+              && item.productName.startsWith(storedProductName);
+            if (!matchByVendorItemId && !matchByProductName) continue;
             if (item.salesQuantity <= 0) continue;
             rgItems.push({
               sold_at: paidDate,
