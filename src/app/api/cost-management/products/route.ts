@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
     const pool = getSourcingPool();
 
     const { rows: products } = await pool.query(
-      `SELECT id, product_name, seller_product_id, platform, platform_fee_rate, created_at
+      `SELECT id, product_name, seller_product_id, vendor_item_id, platform, platform_fee_rate, created_at
        FROM product_costs
        WHERE user_id = $1
        ORDER BY created_at DESC`,
@@ -198,7 +198,7 @@ export async function POST(request: NextRequest) {
 
     // JSON 파싱 실패 시 null을 반환하여 아래 검증 단계에서 처리
     const body = await request.json().catch(() => null);
-    const { product_name, seller_product_id, platform_fee_rate } = body ?? {};
+    const { product_name, seller_product_id, vendor_item_id, platform_fee_rate } = body ?? {};
 
     // product_name 필수 검증
     if (!product_name || typeof product_name !== 'string' || product_name.trim() === '') {
@@ -225,15 +225,26 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // vendor_item_id 유효성 검사: 양의 정수여야 함
+    if (vendor_item_id !== undefined && vendor_item_id !== null) {
+      if (!Number.isInteger(vendor_item_id) || vendor_item_id <= 0) {
+        return NextResponse.json(
+          { success: false, error: 'vendor_item_id must be a positive integer' },
+          { status: 400 },
+        );
+      }
+    }
+
     const pool = getSourcingPool();
     const { rows } = await pool.query(
-      `INSERT INTO product_costs (user_id, product_name, seller_product_id, platform_fee_rate)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, product_name, seller_product_id, platform, platform_fee_rate, current_stock, created_at`,
+      `INSERT INTO product_costs (user_id, product_name, seller_product_id, vendor_item_id, platform_fee_rate)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, product_name, seller_product_id, vendor_item_id, platform, platform_fee_rate, current_stock, created_at`,
       [
         user.userId,
         product_name.trim(),
         seller_product_id ?? null,
+        vendor_item_id ?? null,
         // platform_fee_rate 미전달 시 쿠팡 기본 수수료율 10.8% 적용
         platform_fee_rate ?? 0.108,
       ],

@@ -40,15 +40,17 @@ export async function POST(
 
   // RLS 대체: user_id 조건으로 타 유저 데이터 접근 차단
   const { rows: products } = await pool.query(
-    `SELECT id, seller_product_id FROM product_costs WHERE id = $1 AND user_id = $2`,
+    `SELECT id, seller_product_id, vendor_item_id FROM product_costs WHERE id = $1 AND user_id = $2`,
     [id, user.userId],
   );
   if (products.length === 0) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
 
   const sellerProductId = products[0].seller_product_id;
-  if (!sellerProductId) {
+  const storedVendorItemId = products[0].vendor_item_id ? Number(products[0].vendor_item_id) : null;
+
+  if (!sellerProductId && !storedVendorItemId) {
     return NextResponse.json(
-      { success: false, error: '이 상품에 쿠팡 seller_product_id가 연결되지 않았습니다.' },
+      { success: false, error: '이 상품에 쿠팡 상품 ID가 연결되지 않았습니다.' },
       { status: 400 },
     );
   }
@@ -57,44 +59,57 @@ export async function POST(
     const client = getCoupangClient();
 
     // ── Phase 1: 일반 쿠팡 주문 (ordersheets, FINAL_DELIVERY) ──────────────
-    const allOrders = [];
-    let nextToken: string | null = null;
-    do {
-      const result = await client.getOrders({
-        createdAtFrom: from,
-        createdAtTo: to,
-        status: 'FINAL_DELIVERY',
-        maxPerPage: 50,
-        ...(nextToken ? { nextToken } : {}),
-      });
-      allOrders.push(...result.items);
-      nextToken = result.nextToken;
-    } while (nextToken);
+    // RG 전용 상품(vendor_item_id만 있는 경우)은 일반 주문 조회 생략
+    const generalItems: Array<{
+      sold_at: string; quantity: number; selling_price: number;
+      coupang_order_item_id: string; channel: string;
+    }> = [];
 
-    const generalItems = allOrders.flatMap((order) =>
-      order.orderItems
-        .filter((item) => Number(item.sellerProductId) === Number(sellerProductId) && !item.canceled)
-        .map((item) => ({
-          sold_at: order.paidAt?.slice(0, 10) ?? order.orderedAt.slice(0, 10),
-          quantity: item.shippingCount,
-          selling_price: item.shippingCount > 0
-            ? Math.round(item.orderPrice / item.shippingCount)
-            : item.salesPrice,
-          coupang_order_item_id: `${order.orderId}-${item.vendorItemId}`,
-          channel: 'coupang',
-        })),
-    );
+    if (sellerProductId) {
+      const allOrders = [];
+      let nextToken: string | null = null;
+      do {
+        const result = await client.getOrders({
+          createdAtFrom: from,
+          createdAtTo: to,
+          status: 'FINAL_DELIVERY',
+          maxPerPage: 50,
+          ...(nextToken ? { nextToken } : {}),
+        });
+        allOrders.push(...result.items);
+        nextToken = result.nextToken;
+      } while (nextToken);
+
+      generalItems.push(...allOrders.flatMap((order) =>
+        order.orderItems
+          .filter((item) => Number(item.sellerProductId) === Number(sellerProductId) && !item.canceled)
+          .map((item) => ({
+            sold_at: order.paidAt?.slice(0, 10) ?? order.orderedAt.slice(0, 10),
+            quantity: item.shippingCount,
+            selling_price: item.shippingCount > 0
+              ? Math.round(item.orderPrice / item.shippingCount)
+              : item.salesPrice,
+            coupang_order_item_id: `${order.orderId}-${item.vendorItemId}`,
+            channel: 'coupang',
+          })),
+      ));
+    }
 
     // ── Phase 2: 로켓그로스 주문 (rg_open_api) ─────────────────────────────
-    // revenue-history는 RG 주문을 반환하지 않으므로 rg_open_api 사용.
-    // 응답에 sellerProductId가 없으므로 getProductDetail로 vendorItemId 목록을 먼저 조회.
+    // vendorItemId 목록 결정:
+    //   - seller_product_id 있음 → getProductDetail로 vendorItemId 추출
+    //   - vendor_item_id만 있음 → 저장된 값 직접 사용 (RG 전용 상품)
 
-    const detail = await client.getProductDetail(Number(sellerProductId)) as Record<string, unknown>;
-    const productItems = Array.isArray(detail.items) ? detail.items as Record<string, unknown>[] : [];
-    const vendorItemIds = new Set(
-      productItems.map((i) => Number(i.vendorItemId ?? 0)).filter((v) => v > 0),
-    );
-    console.log(`[rg-import] vendorItemIds for sellerProductId=${sellerProductId}:`, [...vendorItemIds]);
+    let vendorItemIds: Set<number>;
+    if (sellerProductId) {
+      const detail = await client.getProductDetail(Number(sellerProductId)) as Record<string, unknown>;
+      const productItems = Array.isArray(detail.items) ? detail.items as Record<string, unknown>[] : [];
+      vendorItemIds = new Set(productItems.map((i) => Number(i.vendorItemId ?? 0)).filter((v) => v > 0));
+      console.log(`[rg-import] vendorItemIds for sellerProductId=${sellerProductId}:`, [...vendorItemIds]);
+    } else {
+      vendorItemIds = new Set([storedVendorItemId!]);
+      console.log(`[rg-import] vendorItemId from stored (RG-only product):`, storedVendorItemId);
+    }
 
     const rgItems: Array<{
       sold_at: string;
