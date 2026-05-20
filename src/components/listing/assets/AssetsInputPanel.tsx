@@ -48,12 +48,11 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
     (mode === 'upload' && (thumbnailFiles.length > 0 || detailFiles.length > 0))
   );
 
-  // 대화로 만들기 활성화 조건: 업로드 모드 + 이미지 1장 이상 + 상품명 + 카테고리
-  const allImageUrls = [...thumbnailFiles, ...detailFiles];
+  // 대화로 만들기 활성화 조건: 업로드 모드 + 상세 이미지 1장 이상 + 상품명 + 카테고리
   const canStartConversation =
     !isGenerating &&
     mode === 'upload' &&
-    allImageUrls.length > 0 &&
+    detailFiles.length > 0 &&
     sharedDraft.name.trim().length > 0 &&
     category !== null;
 
