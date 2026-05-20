@@ -43,6 +43,10 @@
     {
       "path": "/api/sourcing/agent/run",
       "schedule": "0 21 * * *"
+    },
+    {
+      "path": "/api/listing/sourcing/check-dead-urls",
+      "schedule": "0 9 * * *"
     }
   ]
 }
