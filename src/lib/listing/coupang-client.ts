@@ -663,6 +663,9 @@ export class CoupangClient {
     if (res.code !== 'SUCCESS' && String(res.code) !== '200') {
       throw new Error(`로켓그로스 주문 조회 실패 (code: ${res.code}): ${res.message}`);
     }
+    if (res.data === null || res.data === undefined) {
+      throw new Error(`로켓그로스 주문 API 응답에 데이터 없음 (data: null). 쿠팡 파트너센터에서 RG Open API 주문 조회 권한을 신청하세요.`);
+    }
     const rawItems = Array.isArray(res.data) ? res.data : [];
     return {
       items: rawItems.map((r) => {
