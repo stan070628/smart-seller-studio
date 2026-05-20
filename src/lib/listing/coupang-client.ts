@@ -683,6 +683,32 @@ export class CoupangClient {
       nextToken: res.nextToken ?? null,
     };
   }
+
+  async getRocketGrowthInventories(params?: { nextToken?: string }): Promise<{
+    items: Array<{ vendorItemId: number; totalOrderableQuantity: number }>;
+    nextToken: string | null;
+  }> {
+    const parts: string[] = [];
+    if (params?.nextToken) parts.push(`nextToken=${encodeURIComponent(params.nextToken)}`);
+    const qs = parts.length ? `?${parts.join('&')}` : '';
+    const url = `/v2/providers/rg_open_api/apis/api/v1/vendors/${this.vendorId}/rg/inventory/summaries${qs}`;
+    await sleep(API_DELAY);
+    const res = await this.request<Array<Record<string, unknown>>>('GET', url);
+    if (res.code !== 'SUCCESS' && String(res.code) !== '200') {
+      throw new Error(`RG 재고 조회 실패 (code: ${res.code}): ${res.message}`);
+    }
+    const rawItems = Array.isArray(res.data) ? res.data : [];
+    return {
+      items: rawItems.map((r) => {
+        const inv = (r.inventoryDetails as Record<string, unknown>) ?? {};
+        return {
+          vendorItemId: Number(r.vendorItemId ?? 0),
+          totalOrderableQuantity: Number(inv.totalOrderableQuantity ?? 0),
+        };
+      }),
+      nextToken: res.nextToken ?? null,
+    };
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
