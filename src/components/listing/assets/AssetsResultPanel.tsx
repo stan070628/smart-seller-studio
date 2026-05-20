@@ -155,11 +155,28 @@ export default function AssetsResultPanel() {
     return 'jpg';
   };
 
+  // 쿠팡 요건(min 1000px)에 맞게 리사이즈된 URL을 반환. 실패 시 원본 URL 그대로 반환.
+  const toCoupangUrl = async (url: string): Promise<string> => {
+    try {
+      const res = await fetch('/api/image/coupang-resize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl: url }),
+      });
+      if (!res.ok) return url;
+      const json = await res.json() as { url?: string };
+      return json.url ?? url;
+    } catch {
+      return url;
+    }
+  };
+
   // 개별 썸네일 다운로드. fetch가 CORS로 막히면 새 탭에서 열어 사용자가 저장하도록 fallback.
   const handleDownloadOne = async (url: string, idx: number) => {
     try {
-      const blob = await urlToBlob(url);
-      const ext = inferExt(blob, url);
+      const resizedUrl = await toCoupangUrl(url);
+      const blob = await urlToBlob(resizedUrl);
+      const ext = inferExt(blob, resizedUrl);
       const objUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = objUrl;
@@ -183,8 +200,9 @@ export default function AssetsResultPanel() {
       for (let i = 0; i < generatedThumbnails.length; i++) {
         const url = generatedThumbnails[i];
         try {
-          const blob = await urlToBlob(url);
-          const ext = inferExt(blob, url);
+          const resizedUrl = await toCoupangUrl(url);
+          const blob = await urlToBlob(resizedUrl);
+          const ext = inferExt(blob, resizedUrl);
           zip.file(`thumbnail-${i + 1}.${ext}`, blob);
           okCount++;
         } catch (err) {

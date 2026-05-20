@@ -103,7 +103,10 @@ export default function AssetsTab() {
       // 썸네일은 그대로, 상세 이미지도 원본 그대로 상세페이지 HTML 생성에 전달한다.
       // (개별 이미지를 다듬고 싶으면 결과 패널의 AI 편집 모달을 사용한다.)
       const thumbnails = [...assetsDraft.thumbnailFiles];
-      const detailSources = [...assetsDraft.detailFiles];
+      // 상세 이미지가 없으면 썸네일 이미지를 폴백으로 사용
+      const detailSources = assetsDraft.detailFiles.length > 0
+        ? [...assetsDraft.detailFiles]
+        : [...assetsDraft.thumbnailFiles];
 
       let detailHtml = '';
       let detailContent: DetailPageContent | undefined;

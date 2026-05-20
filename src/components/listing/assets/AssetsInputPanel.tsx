@@ -41,6 +41,11 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
     url: string;
   } | null>(null);
   const [conversationModalOpen, setConversationModalOpen] = useState(false);
+  const [thumbUrlInput, setThumbUrlInput] = useState('');
+  const [thumbUrlLoading, setThumbUrlLoading] = useState(false);
+  const [detailUrlInput, setDetailUrlInput] = useState('');
+  const [detailUrlLoading, setDetailUrlLoading] = useState(false);
+  const [copiedIndex, setCopiedIndex] = useState<string | null>(null);
 
   // 생성 가능 조건: URL 모드면 URL이 있거나, 업로드 모드면 두 슬롯 중 하나라도 채워져야 함
   const canGenerate = !isGenerating && (
@@ -48,13 +53,16 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
     (mode === 'upload' && (thumbnailFiles.length > 0 || detailFiles.length > 0))
   );
 
-  // 대화로 만들기 활성화 조건: 업로드 모드 + 상세 이미지 1장 이상 + 상품명 + 카테고리
+  // 대화로 만들기 활성화 조건: 업로드 모드 + 이미지 1장 이상(썸네일 또는 상세) + 상품명 + 카테고리
   const canStartConversation =
     !isGenerating &&
     mode === 'upload' &&
-    detailFiles.length > 0 &&
+    (thumbnailFiles.length > 0 || detailFiles.length > 0) &&
     sharedDraft.name.trim().length > 0 &&
     category !== null;
+
+  // 상세 이미지가 없으면 썸네일 이미지를 폴백으로 사용
+  const conversationImageUrls = detailFiles.length > 0 ? detailFiles : thumbnailFiles;
 
   const handleConversationComplete = ({
     html,
@@ -153,6 +161,33 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
     setInputImageEditTarget(null);
   };
 
+  const handleAddByUrl = async (slot: UploadSlot) => {
+    const rawUrl = slot === 'thumbnail' ? thumbUrlInput : detailUrlInput;
+    const setLoading = slot === 'thumbnail' ? setThumbUrlLoading : setDetailUrlLoading;
+    const setInput = slot === 'thumbnail' ? setThumbUrlInput : setDetailUrlInput;
+    if (!rawUrl.trim()) return;
+    setLoading(true);
+    try {
+      const res = await fetch('/api/image/coupang-resize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl: rawUrl.trim() }),
+      });
+      const json = await res.json() as { url?: string; error?: string };
+      if (!res.ok || !json.url) throw new Error(json.error ?? 'URL 추가 실패');
+      if (slot === 'thumbnail') {
+        updateAssetsDraft({ thumbnailFiles: [...thumbnailFiles, json.url] });
+      } else {
+        updateAssetsDraft({ detailFiles: [...detailFiles, json.url] });
+      }
+      setInput('');
+    } catch (e) {
+      updateAssetsDraft({ lastError: e instanceof Error ? e.message : 'URL 추가 중 오류' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const renderSlot = (
     slot: UploadSlot,
     label: string,
@@ -226,6 +261,47 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
         <span style={{ fontSize: '12px', color: C.text }}>
           {files.length === 0 ? '선택된 파일 없음' : `${files.length}개 선택됨`}
         </span>
+      </div>
+      {/* URL 직접 추가 */}
+      <div style={{ display: 'flex', gap: '4px' }}>
+        <input
+          type="url"
+          placeholder="이미지 URL 붙여넣기..."
+          value={slot === 'thumbnail' ? thumbUrlInput : detailUrlInput}
+          onChange={e => slot === 'thumbnail' ? setThumbUrlInput(e.target.value) : setDetailUrlInput(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') void handleAddByUrl(slot); }}
+          disabled={(slot === 'thumbnail' ? thumbUrlLoading : detailUrlLoading) || isGenerating}
+          style={{
+            flex: 1,
+            fontSize: '11px',
+            padding: '4px 8px',
+            border: `1px solid ${C.border}`,
+            borderRadius: '6px',
+            outline: 'none',
+            color: C.text,
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => void handleAddByUrl(slot)}
+          disabled={
+            !(slot === 'thumbnail' ? thumbUrlInput : detailUrlInput).trim() ||
+            (slot === 'thumbnail' ? thumbUrlLoading : detailUrlLoading) ||
+            isGenerating
+          }
+          style={{
+            flexShrink: 0,
+            fontSize: '11px',
+            padding: '4px 10px',
+            borderRadius: '6px',
+            backgroundColor: '#7c3aed',
+            color: '#fff',
+            border: 'none',
+            cursor: 'pointer',
+          }}
+        >
+          {(slot === 'thumbnail' ? thumbUrlLoading : detailUrlLoading) ? '...' : '추가'}
+        </button>
       </div>
       {files.length > 0 && (
         <div
@@ -302,6 +378,36 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
                   🪄
                 </button>
               )}
+              <button
+                type="button"
+                title="URL 복사"
+                aria-label="URL 복사"
+                onClick={() => {
+                  void navigator.clipboard.writeText(u);
+                  setCopiedIndex(`${slot}-${i}`);
+                  setTimeout(() => setCopiedIndex(null), 800);
+                }}
+                style={{
+                  position: 'absolute',
+                  bottom: 2,
+                  right: 2,
+                  width: 18,
+                  height: 18,
+                  padding: 0,
+                  border: 'none',
+                  borderRadius: 3,
+                  backgroundColor: copiedIndex === `${slot}-${i}` ? '#22c55e' : 'rgba(0,0,0,0.55)',
+                  color: '#fff',
+                  fontSize: 9,
+                  lineHeight: 1,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                {copiedIndex === `${slot}-${i}` ? '✓' : '🔗'}
+              </button>
             </div>
           ))}
         </div>
@@ -504,7 +610,7 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
         <ConversationalDetailModal
           productName={sharedDraft.name}
           category={category}
-          imageUrls={detailFiles}
+          imageUrls={conversationImageUrls}
           onClose={() => setConversationModalOpen(false)}
           onComplete={handleConversationComplete}
         />
