@@ -32,10 +32,11 @@ interface ImportForm {
 interface Props {
   productId: string;
   sellerProductId: number | null;
+  vendorItemId?: number | null;
   onChanged: () => void;
 }
 
-export default function SaleEntryPanel({ productId, sellerProductId, onChanged }: Props) {
+export default function SaleEntryPanel({ productId, sellerProductId, vendorItemId, onChanged }: Props) {
   const [sales, setSales] = useState<SaleRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -141,7 +142,7 @@ export default function SaleEntryPanel({ productId, sellerProductId, onChanged }
       {/* 헤더: 타이틀 + 쿠팡 가져오기 버튼 */}
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px', gap: '6px' }}>
         <span style={{ fontSize: '12px', fontWeight: 700, color: '#18181b' }}>💰 판매 내역</span>
-        {sellerProductId && (
+        {(sellerProductId || vendorItemId) && (
           <button
             onClick={() => setShowImportForm((v) => !v)}
             style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 10px', borderRadius: '6px', background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1d4ed8', fontSize: '11px', cursor: 'pointer' }}

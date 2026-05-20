@@ -38,11 +38,12 @@ interface Props {
   productId: string;
   productName: string;
   sellerProductId: number | null;
+  vendorItemId?: number | null;
   onClose: () => void;
   onChanged: () => void;
 }
 
-export default function CostEntryDrawer({ productId, productName, sellerProductId, onClose, onChanged }: Props) {
+export default function CostEntryDrawer({ productId, productName, sellerProductId, vendorItemId, onClose, onChanged }: Props) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -252,6 +253,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
             <SaleEntryPanel
               productId={productId}
               sellerProductId={sellerProductId}
+              vendorItemId={vendorItemId}
               onChanged={() => { setFifoVersion((v) => v + 1); onChanged(); }}
             />
           </div>
