@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Sparkles } from 'lucide-react';
 import { useListingStore } from '@/store/useListingStore';
 import { C } from '@/lib/design-tokens';
@@ -35,6 +35,43 @@ export default function AssetsResultPanel() {
     imageUrl: string;
     imageIndex: number;
   } | null>(null);
+
+  // 렌더링된 HTML 갱신 (data-edit-path 포함 HTML 반환)
+  const refreshRenderedHtml = async (
+    sections: DetailSection[] = detailPageSections,
+    theme: DetailPageTheme = detailPageTheme,
+  ) => {
+    if (sections.length === 0) return;
+    setIsRendering(true);
+    setRenderError(null);
+    try {
+      const res = await fetch('/api/detail-page/render', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sections, theme }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        updateAssetsDraft({ generatedDetailHtml: json.html });
+      } else {
+        setRenderError(json.error ?? '미리보기 갱신에 실패했습니다.');
+      }
+    } catch {
+      setRenderError('미리보기 갱신 중 오류가 발생했습니다.');
+    } finally {
+      setIsRendering(false);
+    }
+  };
+
+  // 대화 완료 후 sections가 처음 채워질 때 한 번만 render 호출 → data-edit-path 포함 HTML 확보
+  const prevSectionsLengthRef = useRef(detailPageSections.length);
+  useEffect(() => {
+    if (prevSectionsLengthRef.current === 0 && detailPageSections.length > 0) {
+      void refreshRenderedHtml(detailPageSections, detailPageTheme);
+    }
+    prevSectionsLengthRef.current = detailPageSections.length;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detailPageSections]);
 
   const toggleSelect = (idx: number) => {
     setSelectedIndices((prev) => {
@@ -172,33 +209,6 @@ export default function AssetsResultPanel() {
       URL.revokeObjectURL(objUrl);
     } catch (err) {
       alert(`다운로드 중 오류가 발생했습니다: ${err instanceof Error ? err.message : '알 수 없는 오류'}`);
-    }
-  };
-
-  // 렌더링된 HTML 갱신
-  const refreshRenderedHtml = async (
-    sections: DetailSection[] = detailPageSections,
-    theme: DetailPageTheme = detailPageTheme,
-  ) => {
-    if (sections.length === 0) return;
-    setIsRendering(true);
-    setRenderError(null);
-    try {
-      const res = await fetch('/api/detail-page/render', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sections, theme }),
-      });
-      const json = await res.json();
-      if (res.ok) {
-        updateAssetsDraft({ generatedDetailHtml: json.html });
-      } else {
-        setRenderError(json.error ?? '미리보기 갱신에 실패했습니다.');
-      }
-    } catch {
-      setRenderError('미리보기 갱신 중 오류가 발생했습니다.');
-    } finally {
-      setIsRendering(false);
     }
   };
 
