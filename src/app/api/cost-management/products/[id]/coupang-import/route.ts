@@ -3,6 +3,22 @@ import { getSourcingPool } from '@/lib/sourcing/db';
 import { getCurrentUser } from '@/lib/auth';
 import { getCoupangClient } from '@/lib/listing/coupang-client';
 
+/** [from, to] 기간을 최대 30일짜리 chunk 배열로 분할 (RG API 제한) */
+function splitInto30DayChunks(from: string, to: string): Array<{ from: string; to: string }> {
+  const chunks: Array<{ from: string; to: string }> = [];
+  const toDate = new Date(to);
+  let cursor = new Date(from);
+  while (cursor <= toDate) {
+    const end = new Date(cursor);
+    end.setDate(end.getDate() + 29);
+    if (end > toDate) end.setTime(toDate.getTime());
+    chunks.push({ from: cursor.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) });
+    cursor = new Date(end);
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return chunks;
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -69,12 +85,16 @@ export async function POST(
         })),
     );
 
-    // ── Phase 2: 로켓그로스 주문 (revenue-history, ROCKET_GROWTH) ──────────
-    // revenue-history는 recognitionDateTo가 어제까지만 허용
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().slice(0, 10);
-    const clampedTo = to > yesterdayStr ? yesterdayStr : to;
+    // ── Phase 2: 로켓그로스 주문 (rg_open_api) ─────────────────────────────
+    // revenue-history는 RG 주문을 반환하지 않으므로 rg_open_api 사용.
+    // 응답에 sellerProductId가 없으므로 getProductDetail로 vendorItemId 목록을 먼저 조회.
+
+    const detail = await client.getProductDetail(Number(sellerProductId)) as Record<string, unknown>;
+    const productItems = Array.isArray(detail.items) ? detail.items as Record<string, unknown>[] : [];
+    const vendorItemIds = new Set(
+      productItems.map((i) => Number(i.vendorItemId ?? 0)).filter((v) => v > 0),
+    );
+    console.log(`[rg-import] vendorItemIds for sellerProductId=${sellerProductId}:`, [...vendorItemIds]);
 
     const rgItems: Array<{
       sold_at: string;
@@ -84,48 +104,36 @@ export async function POST(
       channel: string;
     }> = [];
 
-    if (clampedTo >= from) {
-      let rgToken = '';
-      let pageNum = 0;
+    const chunks = splitInto30DayChunks(from, to);
+    for (const chunk of chunks) {
+      let rgToken: string | undefined;
       do {
-        const result = await client.getRevenueHistory({
-          recognitionDateFrom: from,
-          recognitionDateTo: clampedTo,
-          maxPerPage: 50,
-          token: rgToken,
+        const result = await client.getRocketGrowthOrders({
+          paidDateFrom: chunk.from,
+          paidDateTo: chunk.to,
+          nextToken: rgToken,
         });
-        pageNum++;
-        // ── [DEBUG] revenue-history 응답 진단 ──
-        console.log(`[rg-import] page=${pageNum} items=${result.items.length} nextToken=${result.nextToken ?? 'none'}`);
-        if (result.items.length > 0) {
-          const sample = result.items[0];
-          console.log(`[rg-import] sample order → orderId=${sample.orderId} saleType="${sample.saleType}" itemCount=${sample.items.length}`);
-          if (sample.items.length > 0) {
-            const si = sample.items[0];
-            console.log(`[rg-import] sample item → sellerProductId=${si.sellerProductId} vendorItemId=${si.vendorItemId} qty=${si.quantity}`);
-          }
-          // 실제 saleType 목록 (중복 제거)
-          const saleTypes = [...new Set(result.items.map((o) => o.saleType))];
-          console.log(`[rg-import] saleTypes on this page:`, saleTypes);
-        }
+        console.log(`[rg-import] RG chunk=${chunk.from}~${chunk.to} orders=${result.items.length} nextToken=${result.nextToken ? 'yes' : 'none'}`);
         for (const order of result.items) {
-          if (order.saleType !== 'ROCKET_GROWTH') continue;
-          for (const item of order.items) {
-            if (Number(item.sellerProductId) !== Number(sellerProductId)) continue;
-            if (item.quantity <= 0) continue;
+          // paidAt은 ms 타임스탬프 문자열
+          const paidDate = new Date(Number(order.paidAt)).toISOString().slice(0, 10);
+          for (const item of order.orderItems) {
+            if (!vendorItemIds.has(item.vendorItemId)) continue;
+            if (item.salesQuantity <= 0) continue;
             rgItems.push({
-              sold_at: order.saleDate?.slice(0, 10) || order.recognitionDate.slice(0, 10),
-              quantity: item.quantity,
-              selling_price: item.salePrice,
+              sold_at: paidDate,
+              quantity: item.salesQuantity,
+              selling_price: item.unitSalesPrice,
               coupang_order_item_id: `rg-${order.orderId}-${item.vendorItemId}`,
               channel: 'rocket_growth',
             });
           }
         }
-        rgToken = result.nextToken ?? '';
+        rgToken = result.nextToken ?? undefined;
       } while (rgToken);
-      console.log(`[rg-import] total RG items collected: ${rgItems.length} (sellerProductId=${sellerProductId})`);
     }
+    console.log(`[rg-import] total RG items collected: ${rgItems.length} (sellerProductId=${sellerProductId})`);
+
 
     // ── 합산 후 DB 저장 ──────────────────────────────────────────────────────
     const allItems = [...generalItems, ...rgItems];

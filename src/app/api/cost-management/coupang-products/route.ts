@@ -28,14 +28,22 @@ export async function GET() {
       // product_costs 테이블 미생성 시 필터 없이 전체 반환
     }
 
-    // 2) 쿠팡 윙 API에서 전체 상태 상품 목록 조회 (병렬)
+    // 2) 쿠팡 윙 API에서 전체 상태 상품 목록 조회 (병렬, 페이지네이션 포함)
     const client = getCoupangClient();
-    const results = await Promise.allSettled(
-      ALL_STATUSES.map((status) => client.getSellerProducts(status, 100, '')),
-    );
+    const fetchAll = async (status: string) => {
+      const items = [];
+      let token = '';
+      do {
+        const res = await client.getSellerProducts(status, 100, token);
+        items.push(...res.items);
+        token = res.nextToken ?? '';
+      } while (token);
+      return items;
+    };
+    const results = await Promise.allSettled(ALL_STATUSES.map(fetchAll));
 
     const allProducts = results.flatMap((r) =>
-      r.status === 'fulfilled' ? r.value.items : [],
+      r.status === 'fulfilled' ? r.value : [],
     );
 
     // sellerProductId 중복 제거
