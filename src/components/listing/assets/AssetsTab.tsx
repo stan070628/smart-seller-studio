@@ -21,7 +21,7 @@ export default function AssetsTab() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        imageUrls: imageUrls.slice(0, 5),
+        imageUrls: imageUrls.slice(0, 6),
         studioMode: true,
         ...(productSpecs ? { productSpecs } : {}),
       }),

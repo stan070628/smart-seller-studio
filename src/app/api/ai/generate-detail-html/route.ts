@@ -1,7 +1,7 @@
 /**
  * POST /api/ai/generate-detail-html
  *
- * 상품 이미지(1~5장) + 상품명/가격을 받아
+ * 상품 이미지(1~6장) + 상품명/가격을 받아
  * Claude Vision으로 이미지를 분석하고, 상세 페이지 HTML을 생성하여 반환합니다.
  */
 
