@@ -7,8 +7,8 @@ const ImageItemSchema = z.object({
   mimeType: z.enum(ALLOWED_MIME_TYPES),
 });
 const RequestSchema = z.object({
-  images: z.array(ImageItemSchema).min(1).max(5).optional(),
-  imageUrls: z.array(z.string().url()).max(5).optional(),
+  images: z.array(ImageItemSchema).min(1).max(6).optional(),
+  imageUrls: z.array(z.string().url()).max(6).optional(),
   productName: z.string().max(100).optional(),
   price: z.number().int().positive().optional(),
   existingHtml: z.string().optional(),
@@ -38,8 +38,8 @@ describe('generate-detail-html RequestSchema (imageUrls 추가)', () => {
     expect(result.success).toBe(false);
   });
 
-  it('imageUrls는 최대 5개', () => {
-    const urls = Array(6).fill('https://example.com/img.jpg');
+  it('imageUrls는 최대 6개', () => {
+    const urls = Array(7).fill('https://example.com/img.jpg');
     const result = RequestSchema.safeParse({ imageUrls: urls });
     expect(result.success).toBe(false);
   });

@@ -52,7 +52,7 @@ const SYSTEM_PROMPT = `당신은 한국 이커머스 마케팅 카피라이터�
 export const RequestSchema = z.object({
   productName: z.string().min(1).max(200),
   category: z.enum(['basic', 'fashion', 'living', 'food'] as const),
-  imageUrls: z.array(z.string().url()).min(1).max(5),
+  imageUrls: z.array(z.string().url()).min(1).max(6),
   questionIds: z
     .array(z.string())
     .min(1)

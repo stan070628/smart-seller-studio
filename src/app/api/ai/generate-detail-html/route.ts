@@ -69,11 +69,11 @@ const RequestSchema = z.object({
   images: z
     .array(ImageItemSchema)
     .min(1, '이미지는 최소 1장 이상이어야 합니다.')
-    .max(5, '이미지는 최대 5장까지 허용됩니다.')
+    .max(6, '이미지는 최대 6장까지 허용됩니다.')
     .optional(),
   imageUrls: z
     .array(z.string().url('유효한 이미지 URL이 아닙니다.'))
-    .max(5, '이미지 URL은 최대 5개까지 허용됩니다.')
+    .max(6, '이미지 URL은 최대 6개까지 허용됩니다.')
     .optional(),
   productName: z.string().max(100).optional(),
   price: z.number().int().positive().optional(),
@@ -93,7 +93,7 @@ const RequestSchema = z.object({
     .object({
       productName: z.string().min(1).max(200),
       category: z.enum(['basic', 'fashion', 'living', 'food'] as const),
-      imageUrls: z.array(z.string().url()).max(5),
+      imageUrls: z.array(z.string().url()).max(6),
       answers: z.array(
         z.object({
           questionId: z.string().min(1).max(80),
@@ -332,7 +332,7 @@ export async function POST(
   if (imageUrls && imageUrls.length > 0) {
     try {
       const fetched = await fetchImagesFromUrls(imageUrls);
-      images = [...(rawImages ?? []), ...fetched].slice(0, 5) as Array<{ imageBase64: string; mimeType: AllowedMimeType }>;
+      images = [...(rawImages ?? []), ...fetched].slice(0, 6) as Array<{ imageBase64: string; mimeType: AllowedMimeType }>;
     } catch (error) {
       console.error('[/api/ai/generate-detail-html] URL 이미지 다운로드 실패:', error);
       return NextResponse.json(

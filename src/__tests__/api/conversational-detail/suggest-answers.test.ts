@@ -37,10 +37,10 @@ describe('detail-page-suggest-answers RequestSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('imageUrls는 1~5개', () => {
+  it('imageUrls는 1~6개', () => {
     const tooMany = RequestSchema.safeParse({
       ...validBody,
-      imageUrls: Array(6).fill('https://example.com/img.jpg'),
+      imageUrls: Array(7).fill('https://example.com/img.jpg'),
     });
     expect(tooMany.success).toBe(false);
     const empty = RequestSchema.safeParse({ ...validBody, imageUrls: [] });
