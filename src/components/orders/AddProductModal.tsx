@@ -40,6 +40,7 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
   const [loadingRg, setLoadingRg] = useState(false);
   const [rgError, setRgError] = useState<string | null>(null);
   const [selectedRg, setSelectedRg] = useState<RgProduct | null>(null);
+  const [rgCustomName, setRgCustomName] = useState('');
 
   // 직접 입력
   const [manualName, setManualName] = useState('');
@@ -57,6 +58,10 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
       .catch(() => setCoupangError('네트워크 오류가 발생했습니다.'))
       .finally(() => setLoadingCoupang(false));
   }, []);
+
+  useEffect(() => {
+    setRgCustomName(selectedRg?.product_name ?? '');
+  }, [selectedRg]);
 
   function handleModeChange(m: Mode) {
     setMode(m);
@@ -89,7 +94,7 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
         };
       } else if (mode === 'rg') {
         body = {
-          product_name: selectedRg!.product_name,
+          product_name: rgCustomName.trim() || selectedRg!.product_name,
           vendor_item_id: selectedRg!.vendor_item_id,
           platform_fee_rate: Number(feeRate) / 100,
         };
@@ -111,7 +116,7 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
 
   const canSave =
     (mode === 'coupang' && !!selectedCoupang) ||
-    (mode === 'rg' && !!selectedRg) ||
+    (mode === 'rg' && !!selectedRg && rgCustomName.trim().length > 0) ||
     (mode === 'manual' && manualName.trim().length > 0);
 
   return (
@@ -176,7 +181,7 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
             <div>
               <div style={{ fontSize: '11px', fontWeight: 600, color: '#27272a', marginBottom: '8px' }}>
                 로켓그로스 상품 선택
-                <span style={{ fontWeight: 400, color: '#71717a', marginLeft: '6px' }}>최근 90일 판매 기준</span>
+                <span style={{ fontWeight: 400, color: '#71717a', marginLeft: '6px' }}>재고 등록 기준</span>
               </div>
               <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid #d4d4d8', borderRadius: '8px' }}>
                 {loadingRg ? (
@@ -199,6 +204,17 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
                   </div>
                 ))}
               </div>
+              {selectedRg && (
+                <div style={{ marginTop: '10px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: 600, color: '#27272a', marginBottom: '4px' }}>상품명</div>
+                  <input
+                    value={rgCustomName}
+                    onChange={(e) => setRgCustomName(e.target.value)}
+                    placeholder="상품명을 입력하세요"
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #d4d4d8', fontSize: '12px', boxSizing: 'border-box', color: '#18181b' }}
+                  />
+                </div>
+              )}
             </div>
           )}
 

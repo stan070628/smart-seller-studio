@@ -106,6 +106,10 @@ export async function POST(
       const detail = await client.getProductDetail(Number(sellerProductId)) as Record<string, unknown>;
       const productItems = Array.isArray(detail.items) ? detail.items as Record<string, unknown>[] : [];
       vendorItemIds = new Set(productItems.map((i) => Number(i.vendorItemId ?? 0)).filter((v) => v > 0));
+      // getProductDetail이 vendorItemId를 반환하지 않는 Wing 상품의 경우, 저장된 vendor_item_id로 보완
+      if (vendorItemIds.size === 0 && storedVendorItemId) {
+        vendorItemIds = new Set([storedVendorItemId]);
+      }
       console.log(`[rg-import] vendorItemIds for sellerProductId=${sellerProductId}:`, [...vendorItemIds]);
     } else {
       vendorItemIds = new Set([storedVendorItemId!]);
