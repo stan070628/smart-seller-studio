@@ -434,6 +434,7 @@ export class CoupangClient {
 
   async getProductDetail(sellerProductId: number): Promise<unknown> {
     const url = `/v2/providers/seller_api/apis/api/v1/marketplace/seller-products/${sellerProductId}`;
+    await sleep(API_DELAY);
     const res = await this.request<unknown>('GET', url);
     if (res.code !== 'SUCCESS' || !res.data) {
       throw new Error(`[쿠팡] 상품 조회 실패: ${res.message}`);
@@ -700,6 +701,9 @@ export class CoupangClient {
     if (res.code !== 'SUCCESS' && String(res.code) !== '200') {
       throw new Error(`RG 재고 조회 실패 (code: ${res.code}): ${res.message}`);
     }
+    if (res.data === null || res.data === undefined) {
+      throw new Error(`RG 재고 API 응답에 데이터 없음 (data: null). 쿠팡 파트너센터에서 RG Open API 재고 조회 권한을 신청하세요.`);
+    }
     const rawItems = Array.isArray(res.data) ? res.data : [];
     return {
       items: rawItems.map((r) => {
@@ -712,6 +716,31 @@ export class CoupangClient {
       }),
       nextToken: res.nextToken ?? null,
     };
+  }
+
+  async getRocketGrowthProductNames(): Promise<Map<number, string>> {
+    const map = new Map<number, string>();
+    let nextToken = '';
+    do {
+      const url =
+        `/v2/providers/seller_api/apis/api/v1/marketplace/seller-products` +
+        `?vendorId=${this.vendorId}&nextToken=${nextToken}&maxPerPage=50&status=APPROVED&businessTypes=rocketGrowth`;
+      await sleep(API_DELAY);
+      const res = await this.request<Array<Record<string, unknown>>>('GET', url);
+      const products = Array.isArray(res.data) ? res.data : [];
+      for (const product of products) {
+        const productName = typeof product.sellerProductName === 'string' ? product.sellerProductName : null;
+        if (!productName) continue;
+        const items = Array.isArray(product.items) ? product.items as Array<Record<string, unknown>> : [];
+        for (const item of items) {
+          const rgData = item.rocketGrowthItemData as Record<string, unknown> | undefined;
+          const vendorItemId = rgData ? Number(rgData.vendorItemId ?? 0) : 0;
+          if (vendorItemId > 0) map.set(vendorItemId, productName);
+        }
+      }
+      nextToken = typeof res.nextToken === 'string' ? res.nextToken : '';
+    } while (nextToken);
+    return map;
   }
 }
 

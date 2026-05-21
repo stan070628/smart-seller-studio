@@ -94,7 +94,7 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
         };
       } else if (mode === 'rg') {
         body = {
-          product_name: rgCustomName.trim() || selectedRg!.product_name,
+          product_name: rgCustomName.trim(),
           vendor_item_id: selectedRg!.vendor_item_id,
           platform_fee_rate: Number(feeRate) / 100,
         };

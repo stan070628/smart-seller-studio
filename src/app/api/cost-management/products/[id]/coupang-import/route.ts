@@ -143,7 +143,9 @@ export async function POST(
             const matchByVendorItemId = vendorItemIds.size > 0 && vendorItemIds.has(item.vendorItemId);
             const nStored = storedProductName.toLowerCase().trim();
             const nItem = item.productName.toLowerCase().trim();
-            const matchByProductName = vendorItemIds.size === 0 && nStored.length >= 4 && nItem.length >= 4
+            const MIN_NAME_MATCH_LENGTH = 8;
+            const matchByProductName = vendorItemIds.size === 0
+              && nStored.length >= MIN_NAME_MATCH_LENGTH && nItem.length >= MIN_NAME_MATCH_LENGTH
               && (nItem.startsWith(nStored) || nStored.startsWith(nItem));
             if (!matchByVendorItemId && !matchByProductName) continue;
             if (item.salesQuantity <= 0) continue;
