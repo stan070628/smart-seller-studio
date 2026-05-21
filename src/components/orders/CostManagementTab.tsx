@@ -467,14 +467,25 @@ export default function CostManagementTab() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
             <thead>
               <tr style={{ background: '#f9f9f9', borderBottom: '1px solid #e5e5e5' }}>
-                {['상품명', '원가(가중평균)', '배송비(배분)', 'RG배송비', '재고', '재고가치', '실현손익', '마진율', '광고비', 'ROAS', '위너', '입고', '판매', '내역', ''].map((h) => (
-                  <th key={h} style={{ padding: '10px 12px', textAlign: h === '상품명' ? 'left' : 'right', fontWeight: 600, color: '#555', whiteSpace: 'nowrap' }}>{h}</th>
+                {['채널', '상품명', '원가(가중평균)', '배송비(배분)', 'RG배송비', '재고', '재고가치', '실현손익', '마진율', '광고비', 'ROAS', '위너', '입고', '판매', '내역', ''].map((h) => (
+                  <th key={h} style={{ padding: '10px 12px', textAlign: h === '상품명' ? 'left' : h === '채널' ? 'center' : 'right', fontWeight: 600, color: '#555', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {filtered.map((p) => (
                 <tr key={p.id} style={{ borderBottom: '1px solid #f0f0f0', background: '#fff' }}>
+                  <td style={{ padding: '10px 12px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                    {p.seller_product_id && (
+                      <span style={{ background: '#fef2f2', color: '#be0014', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', display: 'inline-block' }}>윙판매</span>
+                    )}
+                    {p.vendor_item_id && (
+                      <span style={{ background: '#dcfce7', color: '#15803d', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', display: 'inline-block', marginLeft: p.seller_product_id ? '3px' : '0' }}>RG</span>
+                    )}
+                    {!p.seller_product_id && !p.vendor_item_id && (
+                      <span style={{ color: '#ccc', fontSize: '10px' }}>—</span>
+                    )}
+                  </td>
                   <td style={{ padding: '10px 12px', fontWeight: 500, color: p.entry_count === 0 ? '#999' : '#18181b' }}>{p.product_name}</td>
                   <td style={{ padding: '10px 12px', textAlign: 'right', color: p.entry_count === 0 ? '#ccc' : '#ef4444' }}>
                     {p.entry_count === 0 ? '—' : fmt(p.weighted_avg_cost)}
