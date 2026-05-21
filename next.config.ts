@@ -11,7 +11,7 @@ const nextConfig: NextConfig = {
    * 네이티브 바이너리(@resvg/resvg-js, sharp)는 번들러 외부로 처리.
    * Turbopack/Webpack이 platform-specific .node 모듈을 번들에 포함하지 않도록 한다.
    */
-  serverExternalPackages: ['@resvg/resvg-js', 'sharp', 'playwright-core', '@sparticuz/chromium-min', 'pg'],
+  serverExternalPackages: ['@resvg/resvg-js', 'sharp', 'puppeteer-core', '@sparticuz/chromium-min', 'pg'],
   /**
    * Turbopack resolve alias 설정
    * - canvas: Fabric.js 선택적 서버 의존성 무력화
