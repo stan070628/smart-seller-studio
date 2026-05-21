@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Truck, Package, Search, Trash2, TrendingUp, TrendingDown, AlertCircle, CloudDownload } from 'lucide-react';
+import { Plus, Truck, Package, Search, Trash2, TrendingUp, TrendingDown, AlertCircle, CloudDownload, Pencil } from 'lucide-react';
 import CostEntryDrawer from './CostEntryDrawer';
 import ShippingGroupModal from './ShippingGroupModal';
 import AddProductModal from './AddProductModal';
@@ -187,6 +187,9 @@ export default function CostManagementTab() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showRgModal, setShowRgModal] = useState(false);
   const [importingRg, setImportingRg] = useState(false);
+  const [editChannelId, setEditChannelId] = useState<string | null>(null);
+  const [editSellerProductId, setEditSellerProductId] = useState('');
+  const [editVendorItemId, setEditVendorItemId] = useState('');
   const [preset, setPreset] = useState<Preset>('this_month');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
@@ -229,6 +232,29 @@ export default function CostManagementTab() {
     } finally {
       setImportingRg(false);
     }
+  }
+
+  function openEditChannel(p: ProductRow) {
+    setEditChannelId(p.id);
+    setEditSellerProductId(p.seller_product_id ? String(p.seller_product_id) : '');
+    setEditVendorItemId(p.vendor_item_id ? String(p.vendor_item_id) : '');
+  }
+
+  async function saveEditChannel(id: string) {
+    const body: Record<string, unknown> = {};
+    const sid = parseInt(editSellerProductId, 10);
+    const vid = parseInt(editVendorItemId, 10);
+    if (editSellerProductId && sid > 0) body.seller_product_id = sid;
+    if (editVendorItemId && vid > 0) body.vendor_item_id = vid;
+    if (Object.keys(body).length === 0) { setEditChannelId(null); return; }
+    const res = await fetch(`/api/cost-management/products/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json();
+    if (json.success) { setEditChannelId(null); load(); }
+    else alert(json.error ?? '저장 실패');
   }
 
   const fetchApiRevenue = useCallback(async () => {
@@ -504,14 +530,44 @@ export default function CostManagementTab() {
               {filtered.map((p) => (
                 <tr key={p.id} style={{ borderBottom: '1px solid #f0f0f0', background: '#fff' }}>
                   <td style={{ padding: '10px 12px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                    {p.seller_product_id && (
-                      <span style={{ background: '#fef2f2', color: '#be0014', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', display: 'inline-block' }}>윙판매</span>
-                    )}
-                    {p.vendor_item_id && (
-                      <span style={{ background: '#dcfce7', color: '#15803d', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', display: 'inline-block', marginLeft: p.seller_product_id ? '3px' : '0' }}>RG</span>
-                    )}
-                    {!p.seller_product_id && !p.vendor_item_id && (
-                      <span style={{ color: '#ccc', fontSize: '10px' }}>—</span>
+                    {editChannelId === p.id ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start', minWidth: '160px' }}>
+                        <input
+                          placeholder="윙 상품 ID"
+                          value={editSellerProductId}
+                          onChange={(e) => setEditSellerProductId(e.target.value)}
+                          style={{ width: '100%', padding: '2px 6px', fontSize: '11px', border: '1px solid #fca5a5', borderRadius: '4px', outline: 'none' }}
+                        />
+                        <input
+                          placeholder="RG vendorItemId"
+                          value={editVendorItemId}
+                          onChange={(e) => setEditVendorItemId(e.target.value)}
+                          style={{ width: '100%', padding: '2px 6px', fontSize: '11px', border: '1px solid #86efac', borderRadius: '4px', outline: 'none' }}
+                        />
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <button onClick={() => saveEditChannel(p.id)} style={{ padding: '2px 8px', fontSize: '10px', background: '#18181b', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>저장</button>
+                          <button onClick={() => setEditChannelId(null)} style={{ padding: '2px 8px', fontSize: '10px', background: '#f4f4f5', color: '#71717a', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>취소</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
+                        {p.seller_product_id && (
+                          <span style={{ background: '#fef2f2', color: '#be0014', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>윙판매</span>
+                        )}
+                        {p.vendor_item_id && (
+                          <span style={{ background: '#dcfce7', color: '#15803d', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>RG</span>
+                        )}
+                        {!p.seller_product_id && !p.vendor_item_id && (
+                          <span style={{ color: '#ccc', fontSize: '10px' }}>—</span>
+                        )}
+                        <button
+                          onClick={() => openEditChannel(p)}
+                          title="채널 ID 편집"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '1px 2px', color: '#d4d4d4', lineHeight: 1, display: 'flex', alignItems: 'center' }}
+                        >
+                          <Pencil size={10} />
+                        </button>
+                      </div>
                     )}
                   </td>
                   <td style={{ padding: '10px 12px', fontWeight: 500, color: p.entry_count === 0 ? '#999' : '#18181b' }}>{p.product_name}</td>
