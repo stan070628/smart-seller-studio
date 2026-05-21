@@ -735,7 +735,9 @@ export class CoupangClient {
         for (const item of items) {
           const rgData = item.rocketGrowthItemData as Record<string, unknown> | undefined;
           const vendorItemId = rgData ? Number(rgData.vendorItemId ?? 0) : 0;
-          if (vendorItemId > 0) map.set(vendorItemId, productName);
+          if (vendorItemId <= 0) continue;
+          const itemName = typeof item.itemName === 'string' && item.itemName.trim() ? item.itemName.trim() : null;
+          map.set(vendorItemId, itemName ? `${productName} (${itemName})` : productName);
         }
       }
       nextToken = typeof res.nextToken === 'string' ? res.nextToken : '';
