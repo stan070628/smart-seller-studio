@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Truck, Package, Search, Trash2, TrendingUp, TrendingDown, AlertCircle } from 'lucide-react';
+import { Plus, Truck, Package, Search, Trash2, TrendingUp, TrendingDown, AlertCircle, CloudDownload } from 'lucide-react';
 import CostEntryDrawer from './CostEntryDrawer';
 import ShippingGroupModal from './ShippingGroupModal';
 import AddProductModal from './AddProductModal';
@@ -186,6 +186,7 @@ export default function CostManagementTab() {
   const [showShippingModal, setShowShippingModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showRgModal, setShowRgModal] = useState(false);
+  const [importingRg, setImportingRg] = useState(false);
   const [preset, setPreset] = useState<Preset>('this_month');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
@@ -209,6 +210,28 @@ export default function CostManagementTab() {
       setLoading(false);
     }
   }, [preset, customFrom, customTo]);
+
+  async function runRgBulkImport() {
+    setImportingRg(true);
+    try {
+      const to = new Date().toISOString().slice(0, 10);
+      const from = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const res = await fetch('/api/cost-management/rg-bulk-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from, to }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        alert(`RG 판매 ${json.data.imported}건 가져오기 완료 (중복 ${json.data.skipped}건 스킵)`);
+        load();
+      } else {
+        alert(json.error ?? 'RG 가져오기 실패');
+      }
+    } finally {
+      setImportingRg(false);
+    }
+  }
 
   const fetchApiRevenue = useCallback(async () => {
     const range = getDateRange(preset, customFrom, customTo);
@@ -443,6 +466,13 @@ export default function CostManagementTab() {
           style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', background: '#fff', color: '#0369a1', border: '1px solid #bae6fd', fontSize: '12px', cursor: 'pointer' }}
         >
           <Package size={13} /> 로켓그로스 입고 등록
+        </button>
+        <button
+          onClick={runRgBulkImport}
+          disabled={importingRg}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', background: '#fff', color: '#15803d', border: '1px solid #bbf7d0', fontSize: '12px', cursor: importingRg ? 'not-allowed' : 'pointer', opacity: importingRg ? 0.6 : 1 }}
+        >
+          <CloudDownload size={13} /> {importingRg ? 'RG 가져오는 중...' : 'RG 판매 가져오기'}
         </button>
         <div style={{ marginLeft: 'auto', position: 'relative' }}>
           <Search size={13} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#999' }} />
