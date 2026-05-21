@@ -22,11 +22,11 @@ export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
+  // 날짜 계산: KST 기준 (UTC+9). paidDateTo exclusive → 내일로 설정해야 오늘 포함
+  const KST = 9 * 60 * 60 * 1000;
   const body = await request.json().catch(() => null);
-  const { from, to } = body ?? {};
-  if (!from || !to) {
-    return NextResponse.json({ success: false, error: 'from, to (YYYY-MM-DD) required' }, { status: 400 });
-  }
+  const from = body?.from ?? new Date(Date.now() + KST - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const to = new Date(Date.now() + KST + 24 * 60 * 60 * 1000).toISOString().slice(0, 10); // 내일(KST)
 
   const pool = getSourcingPool();
 
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
           nextToken,
         });
         for (const order of result.items) {
-          const soldAt = new Date(Number(order.paidAt)).toISOString().slice(0, 10);
+          const soldAt = new Date(Number(order.paidAt) + KST).toISOString().slice(0, 10);
           for (const item of order.orderItems) {
             const productCostId = vendorItemMap.get(item.vendorItemId);
             if (!productCostId) continue;

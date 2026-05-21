@@ -124,7 +124,9 @@ export async function POST(
       channel: string;
     }> = [];
 
-    const chunks = splitInto30DayChunks(from, to);
+    // RG API: paidDateTo exclusive → 하루 추가해야 to 날짜 포함
+    const rgTo = new Date(new Date(to).getTime() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const chunks = splitInto30DayChunks(from, rgTo);
     for (const chunk of chunks) {
       let rgToken: string | undefined;
       do {
@@ -135,8 +137,8 @@ export async function POST(
         });
         console.log(`[rg-import] RG chunk=${chunk.from}~${chunk.to} orders=${result.items.length} nextToken=${result.nextToken ? 'yes' : 'none'}`);
         for (const order of result.items) {
-          // paidAt은 ms 타임스탬프 문자열
-          const paidDate = new Date(Number(order.paidAt)).toISOString().slice(0, 10);
+          // paidAt ms → KST 날짜 (UTC+9)
+          const paidDate = new Date(Number(order.paidAt) + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
           for (const item of order.orderItems) {
             // seller_api가 Wing 상품의 vendorItemId를 반환하지 않을 때,
             // RG 주문의 productName ↔ storedProductName 대소문자 무시 + 양방향 prefix 매칭

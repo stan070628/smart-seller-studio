@@ -214,12 +214,10 @@ export default function CostManagementTab() {
   async function runRgBulkImport() {
     setImportingRg(true);
     try {
-      const to = new Date().toISOString().slice(0, 10);
-      const from = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
       const res = await fetch('/api/cost-management/rg-bulk-import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from, to }),
+        body: JSON.stringify({}),
       });
       const json = await res.json();
       if (json.success) {
