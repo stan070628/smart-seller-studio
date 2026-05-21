@@ -59,6 +59,17 @@ export async function GET(request: NextRequest) {
       for (const s of allSales) filteredSaleIds.add(s.id);
     }
 
+    // 기간 필터된 입고 ID 집합 — 매입비 집계에 사용 (received_at 기준)
+    const filteredEntryIds: Set<string> = new Set();
+    if (from && to) {
+      for (const e of allEntries) {
+        const receivedAt = e.received_at instanceof Date ? e.received_at.toISOString().slice(0, 10) : String(e.received_at).slice(0, 10);
+        if (receivedAt >= from && receivedAt <= to) filteredEntryIds.add(e.id);
+      }
+    } else {
+      for (const e of allEntries) filteredEntryIds.add(e.id);
+    }
+
     const entriesByProduct = new Map<string, CostEntryRow[]>();
     for (const e of allEntries) {
       const list = entriesByProduct.get(e.product_cost_id) ?? [];
@@ -123,6 +134,10 @@ export async function GET(request: NextRequest) {
         console.warn(`FIFO 계산 실패 product=${p.id}:`, e instanceof Error ? e.message : e);
       }
 
+      // 기간 필터된 입고 매입비 집계 (received_at 기준)
+      const pFilteredEntries = pEntries.filter((e) => filteredEntryIds.has(e.id));
+      const periodPurchaseAmount = pFilteredEntries.reduce((s, e) => s + e.unit_cost * e.quantity, 0);
+
       // 기간 필터된 판매만 집계
       const pFilteredSales = pSales.filter((s) => filteredSaleIds.has(s.id));
       const periodSaleIds = new Set(pFilteredSales.map((s) => s.id));
@@ -159,7 +174,7 @@ export async function GET(request: NextRequest) {
         weighted_avg_cost: metrics.weighted_avg_cost,
         weighted_avg_shipping: metrics.weighted_avg_shipping,
         weighted_avg_rg_shipping: metrics.weighted_avg_rg_shipping,
-        total_purchase_amount: metrics.total_purchase_amount,
+        total_purchase_amount: periodPurchaseAmount,
         current_stock: fifoResult.current_stock,
         stock_value: fifoResult.stock_value,
         total_realized_profit: periodRealizedProfit,
