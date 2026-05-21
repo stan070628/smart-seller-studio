@@ -151,6 +151,7 @@ export async function GET(request: NextRequest) {
         id: p.id,
         product_name: p.product_name,
         seller_product_id: p.seller_product_id,
+        vendor_item_id: p.vendor_item_id,
         platform: p.platform,
         platform_fee_rate: feeRate,
         entry_count: pEntries.length,
