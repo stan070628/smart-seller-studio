@@ -688,7 +688,7 @@ export class CoupangClient {
   }
 
   async getRocketGrowthInventories(params?: { nextToken?: string }): Promise<{
-    items: Array<{ vendorItemId: number; totalOrderableQuantity: number }>;
+    items: Array<{ vendorItemId: number; totalOrderableQuantity: number; externalSkuId: number }>;
     nextToken: string | null;
   }> {
     const parts: string[] = [];
@@ -707,6 +707,7 @@ export class CoupangClient {
         return {
           vendorItemId: Number(r.vendorItemId ?? 0),
           totalOrderableQuantity: Number(inv.totalOrderableQuantity ?? 0),
+          externalSkuId: Number(r.externalSkuId ?? 0),
         };
       }),
       nextToken: res.nextToken ?? null,

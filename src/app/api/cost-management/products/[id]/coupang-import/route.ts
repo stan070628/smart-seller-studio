@@ -139,10 +139,12 @@ export async function POST(
           const paidDate = new Date(Number(order.paidAt)).toISOString().slice(0, 10);
           for (const item of order.orderItems) {
             // seller_api가 Wing 상품의 vendorItemId를 반환하지 않을 때,
-            // RG 주문의 productName이 product_name으로 시작하는지로 fallback 매칭
+            // RG 주문의 productName ↔ storedProductName 대소문자 무시 + 양방향 prefix 매칭
             const matchByVendorItemId = vendorItemIds.size > 0 && vendorItemIds.has(item.vendorItemId);
-            const matchByProductName = vendorItemIds.size === 0 && storedProductName.length > 0
-              && item.productName.startsWith(storedProductName);
+            const nStored = storedProductName.toLowerCase().trim();
+            const nItem = item.productName.toLowerCase().trim();
+            const matchByProductName = vendorItemIds.size === 0 && nStored.length >= 4 && nItem.length >= 4
+              && (nItem.startsWith(nStored) || nStored.startsWith(nItem));
             if (!matchByVendorItemId && !matchByProductName) continue;
             if (item.salesQuantity <= 0) continue;
             rgItems.push({

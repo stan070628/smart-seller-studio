@@ -45,13 +45,13 @@ export async function GET() {
 
     const client = getCoupangClient();
 
-    // ── Phase 1: inventory API로 전체 등록 vendorItemId 수집 ──────────────────
-    const inventoryIds = new Set<number>();
+    // ── Phase 1: inventory API로 전체 등록 vendorItemId + externalSkuId 수집 ──
+    const inventoryMap = new Map<number, number>(); // vendorItemId → externalSkuId
     let invToken: string | undefined;
     do {
       const result = await client.getRocketGrowthInventories(invToken ? { nextToken: invToken } : undefined);
       for (const item of result.items) {
-        if (item.vendorItemId > 0) inventoryIds.add(item.vendorItemId);
+        if (item.vendorItemId > 0) inventoryMap.set(item.vendorItemId, item.externalSkuId);
       }
       invToken = result.nextToken ?? undefined;
     } while (invToken);
@@ -81,8 +81,20 @@ export async function GET() {
       } while (nextToken);
     }
 
-    // ── Phase 3: 병합 후 미등록 상품만 필터링하여 반환 ───────────────────────
-    const data = [...inventoryIds]
+    // ── Phase 3: 이름 없는 상품은 externalSkuId로 Wing 상품명 보완 ───────────
+    for (const [vendorItemId, externalSkuId] of inventoryMap) {
+      if (nameMap.has(vendorItemId) || externalSkuId <= 0) continue;
+      try {
+        const detail = await client.getProductDetail(externalSkuId) as Record<string, unknown>;
+        const sellerProductName = typeof detail.sellerProductName === 'string' ? detail.sellerProductName : null;
+        if (sellerProductName) nameMap.set(vendorItemId, sellerProductName);
+      } catch {
+        // 조회 실패 시 무시 — 폴백("RG상품 #xxx") 사용
+      }
+    }
+
+    // ── Phase 4: 병합 후 미등록 상품만 필터링하여 반환 ───────────────────────
+    const data = [...inventoryMap.keys()]
       .filter((vendorItemId) => !registeredVendorIds.has(vendorItemId))
       .map((vendor_item_id) => ({
         vendor_item_id,
