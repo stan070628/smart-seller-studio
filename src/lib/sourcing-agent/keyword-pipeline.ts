@@ -11,6 +11,7 @@ import {
   type KeywordResultInsert,
 } from './keyword-db';
 import { sendTelegramMessage } from '@/lib/telegram/client';
+import { matchOn1688 } from './china-matcher';
 import type { DomeggookListItem } from '@/types/sourcing';
 
 const MIN_MARGIN_RATE = 30;
@@ -109,6 +110,15 @@ export async function runKeywordPipeline(keyword: string, chatId: string): Promi
       const marginRate = calcMarginRate(item.price, naverPrice, null);
       if (marginRate < MIN_MARGIN_RATE) continue;
 
+      let chinaMatch = null;
+      try {
+        if (item.thumb) {
+          chinaMatch = await matchOn1688(item.title, item.thumb, naverPrice);
+        }
+      } catch (err) {
+        console.warn('[keyword-pipeline] 1688 매칭 실패:', item.title, err instanceof Error ? err.message : err);
+      }
+
       resultRows.push({
         rank: 0,
         naver_price: naverPrice,
@@ -118,10 +128,10 @@ export async function runKeywordPipeline(keyword: string, chatId: string): Promi
         domeggook_url: item.url,
         domeggook_image_url: item.thumb || null,
         domeggook_margin_rate: marginRate,
-        china_product_name: null,
-        china_price_krw: null,
-        china_url: null,
-        china_margin_rate: null,
+        china_product_name: chinaMatch?.productName ?? null,
+        china_price_krw: chinaMatch?.priceKrw ?? null,
+        china_url: chinaMatch?.url ?? null,
+        china_margin_rate: chinaMatch ? chinaMatch.marginRate * 100 : null,
         _margin: marginRate,
       });
     }
