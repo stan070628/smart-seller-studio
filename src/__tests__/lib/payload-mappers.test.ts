@@ -271,28 +271,25 @@ describe('buildNaverPayload', () => {
     expect(claimInfo.exchangeDeliveryFee).toBe(8000);
   });
 
-  it('태그 있을 때 → detailAttribute.sellerTags 가 { text } 형식 배열로 생성된다', () => {
+  it('태그 있을 때 → originProduct.sellerTags 가 { text } 형식 배열로 생성된다', () => {
     const payload = buildNaverPayload(makeCommon(), makeNaverSpecific({ tags: ['여름', '가벼운'] }));
     const origin = payload.originProduct as Record<string, unknown>;
-    const detailAttr = origin.detailAttribute as Record<string, unknown>;
 
-    expect(detailAttr.sellerTags).toEqual([{ text: '여름' }, { text: '가벼운' }]);
+    expect(origin.sellerTags).toEqual([{ text: '여름' }, { text: '가벼운' }]);
   });
 
-  it('태그 없을 때(빈 배열) → detailAttribute.sellerTags 가 설정되지 않는다', () => {
+  it('태그 없을 때(빈 배열) → originProduct.sellerTags 가 설정되지 않는다', () => {
     const payload = buildNaverPayload(makeCommon(), makeNaverSpecific({ tags: [] }));
     const origin = payload.originProduct as Record<string, unknown>;
-    const detailAttr = origin.detailAttribute as Record<string, unknown>;
 
-    expect(detailAttr.sellerTags).toBeUndefined();
+    expect(origin.sellerTags).toBeUndefined();
   });
 
-  it('태그 undefined 일 때 → detailAttribute.sellerTags 가 설정되지 않는다', () => {
+  it('태그 undefined 일 때 → originProduct.sellerTags 가 설정되지 않는다', () => {
     const payload = buildNaverPayload(makeCommon(), makeNaverSpecific({ tags: undefined }));
     const origin = payload.originProduct as Record<string, unknown>;
-    const detailAttr = origin.detailAttribute as Record<string, unknown>;
 
-    expect(detailAttr.sellerTags).toBeUndefined();
+    expect(origin.sellerTags).toBeUndefined();
   });
 
   it('상세설명이 <div>...</div> 로 래핑된다', () => {

@@ -15,6 +15,7 @@ vi.mock('@/store/useListingStore', () => ({
       detailImages: ['https://img.domeggook.com/detail.jpg'],
       pickedDetailImages: [],
       description: '<p>상세설명</p>',
+      detailPageSnippet: '<p>상세설명</p>',
       tags: ['가전', 'USB'],
       coupangCategoryCode: '',
       coupangCategoryPath: '',
@@ -62,6 +63,7 @@ describe('CoupangAutoRegisterPanel 컴포넌트', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('마운트 시 AI 매핑과 배송 기본값을 로드한다', async () => {
@@ -180,6 +182,7 @@ describe('buildDraftData', () => {
 
 describe('임시저장 → 제출 플로우', () => {
   beforeEach(() => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
     global.fetch = vi.fn();
     (global.fetch as ReturnType<typeof vi.fn>).mockImplementation((url: string, options?: RequestInit) => {
       if (url.includes('ai-map')) {
@@ -201,14 +204,12 @@ describe('임시저장 → 제출 플로우', () => {
         });
       }
       if (url.includes('drafts/draft-abc-123/submit') && options?.method === 'POST') {
+        const submitBody = JSON.stringify({ success: true, sellerProductId: 99887766, wingsUrl: 'https://wing.coupang.com' });
         return Promise.resolve({
           ok: true,
-          json: () =>
-            Promise.resolve({
-              success: true,
-              sellerProductId: 99887766,
-              wingsUrl: 'https://wing.coupang.com',
-            }),
+          status: 200,
+          text: () => Promise.resolve(submitBody),
+          json: () => Promise.resolve(JSON.parse(submitBody)),
         });
       }
       if (url.includes('validate-category')) {
@@ -226,7 +227,7 @@ describe('임시저장 → 제출 플로우', () => {
     render(<CoupangAutoRegisterPanel onSuccess={() => {}} />);
 
     // 카테고리 코드 입력 (유효성 검증 트리거)
-    const catInput = screen.getByPlaceholderText('숫자 코드 입력 (예: 78780)');
+    const catInput = screen.getByPlaceholderText(/숫자 코드 입력/);
     await user.type(catInput, '78780');
 
     // 임시저장 버튼 클릭
@@ -246,7 +247,7 @@ describe('임시저장 → 제출 플로우', () => {
     const onSuccess = vi.fn();
     render(<CoupangAutoRegisterPanel onSuccess={onSuccess} />);
 
-    const catInput = screen.getByPlaceholderText('숫자 코드 입력 (예: 78780)');
+    const catInput = screen.getByPlaceholderText(/숫자 코드 입력/);
     await user.type(catInput, '78780');
 
     // 임시저장

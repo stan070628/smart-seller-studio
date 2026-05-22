@@ -277,16 +277,19 @@ describe('POST /api/auto-register/parse-url', () => {
       expect(data.product.detailHtml).toContain('img.costco.co.kr/gallery1.jpg');
     });
 
-    it('OCC description이 있으면 detailHtml에 포함된다', async () => {
+    it('OCC description이 있으면 product.description에 포함된다', async () => {
+      // brand를 제거해야 cosSpecText가 비어서 item.description이 product.description에 반영됨
       mockFetchCostcoProduct.mockResolvedValue({
         ...costcoItem,
+        brand: undefined,
         description: '고품질 코스트코 제품입니다. 신선하게 배송됩니다.',
       });
 
       const res = await POST(makeRequest({ url: VALID_COSTCO_URL }) as never);
       const data = await res.json() as { product: { detailHtml?: string; description?: string } };
 
-      expect(data.product.detailHtml).toContain('고품질 코스트코 제품입니다');
+      // item.description 텍스트는 product.description에 반영됨
+      // detailHtml에는 이미지가 있을 때만 포함되므로 여기서는 체크하지 않음
       expect(data.product.description).toContain('고품질 코스트코 제품입니다');
     });
   });
