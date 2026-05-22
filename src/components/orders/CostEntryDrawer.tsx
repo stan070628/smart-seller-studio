@@ -65,8 +65,9 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
   // 소분 모드 전용 상태
   const [subForm, setSubForm] = useState({
     received_at: new Date().toISOString().slice(0, 10),
-    totalPurchaseCost: '',
-    purchaseQuantity: '',
+    boxPrice: '',       // 포장당 가격(원)
+    itemsPerBox: '',    // 포장당 개수(개)
+    boxQuantity: '1',   // 포장 수량(개)
     subUnit: subdivisionUnit ? String(subdivisionUnit) : '',
     unit_shipping_fee: '0',
     unit_rg_shipping_fee: '0',
@@ -123,13 +124,14 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
 
   // 소분 미리보기 계산 (실시간)
   const subPreview = (() => {
-    const pq = Number(subForm.purchaseQuantity);
-    const tc = Number(subForm.totalPurchaseCost);
+    const bp = Number(subForm.boxPrice);
+    const ipb = Number(subForm.itemsPerBox);
+    const bq = Number(subForm.boxQuantity) || 1;
     const su = Number(subForm.subUnit);
-    if (pq > 0 && tc > 0 && su >= 2) {
+    if (bp > 0 && ipb > 0 && bq > 0 && su >= 2) {
       return calculateSubdivision({
-        purchaseQuantity: pq,
-        totalPurchaseCost: tc,
+        purchaseQuantity: ipb * bq,
+        totalPurchaseCost: bp * bq,
         subdivisionUnit: su,
         carryoverQuantity: carryoverMeta.quantity,
         carryoverUnitCost: carryoverMeta.unitCost,
@@ -169,17 +171,21 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
   }
 
   async function saveSubdivision() {
+    const bp = Number(subForm.boxPrice);
+    const ipb = Number(subForm.itemsPerBox);
+    const bq = Number(subForm.boxQuantity) || 1;
+    const su = Number(subForm.subUnit);
     if (!subForm.received_at || !subPreview || subPreview.sellablePacks === 0) {
-      alert('입고일, 사입 총량, 소분 갯수를 올바르게 입력해 주세요.');
+      alert('입고일, 포장당 가격/개수, 소분 갯수를 올바르게 입력해 주세요.');
       return;
     }
     setSaving(true);
     try {
       const payload = {
         received_at: subForm.received_at,
-        unit_cost: Math.round(Number(subForm.totalPurchaseCost)),
-        purchase_quantity: Math.round(Number(subForm.purchaseQuantity)),
-        subdivision_unit: Math.round(Number(subForm.subUnit)),
+        unit_cost: Math.round(bp * bq),
+        purchase_quantity: Math.round(ipb * bq),
+        subdivision_unit: Math.round(su),
         unit_shipping_fee: Math.round(Number(subForm.unit_shipping_fee)),
         unit_rg_shipping_fee: Math.round(Number(subForm.unit_rg_shipping_fee)),
         channel: entryChannel,
@@ -196,8 +202,9 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
         setEntryType('normal');
         setSubForm({
           received_at: new Date().toISOString().slice(0, 10),
-          totalPurchaseCost: '',
-          purchaseQuantity: '',
+          boxPrice: '',
+          itemsPerBox: '',
+          boxQuantity: '1',
           subUnit: subdivisionUnit ? String(subdivisionUnit) : '',
           unit_shipping_fee: '0',
           unit_rg_shipping_fee: '0',
@@ -357,18 +364,22 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
                   {addingNew && !editingId && entryType === 'subdivision' && (
                     <tr style={{ background: '#fff7ed', borderBottom: '1px solid #fed7aa' }}>
                       <td colSpan={6} style={{ padding: '8px 10px' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '6px', marginBottom: '6px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: '6px', marginBottom: '6px' }}>
                           <div>
                             <div style={{ fontSize: '9px', color: '#92400e', marginBottom: '2px' }}>입고일</div>
                             <input type="date" value={subForm.received_at} onChange={(e) => setSubForm((f) => ({ ...f, received_at: e.target.value }))} style={{ width: '100%', padding: '3px 5px', borderRadius: '4px', border: '1px solid #fed7aa', fontSize: '11px', color: '#18181b', boxSizing: 'border-box' }} />
                           </div>
                           <div>
-                            <div style={{ fontSize: '9px', color: '#92400e', marginBottom: '2px' }}>묶음 총 구매가(원)</div>
-                            <input type="number" value={subForm.totalPurchaseCost} onChange={(e) => setSubForm((f) => ({ ...f, totalPurchaseCost: e.target.value }))} placeholder="예: 21490" style={{ width: '100%', padding: '3px 5px', borderRadius: '4px', border: '1px solid #fed7aa', fontSize: '11px', color: '#18181b', boxSizing: 'border-box' }} />
+                            <div style={{ fontSize: '9px', color: '#92400e', marginBottom: '2px' }}>포장당 가격(원)</div>
+                            <input type="number" value={subForm.boxPrice} onChange={(e) => setSubForm((f) => ({ ...f, boxPrice: e.target.value }))} placeholder="예: 21490" style={{ width: '100%', padding: '3px 5px', borderRadius: '4px', border: '1px solid #fed7aa', fontSize: '11px', color: '#18181b', boxSizing: 'border-box' }} />
                           </div>
                           <div>
-                            <div style={{ fontSize: '9px', color: '#92400e', marginBottom: '2px' }}>사입 총량(개)</div>
-                            <input type="number" value={subForm.purchaseQuantity} onChange={(e) => setSubForm((f) => ({ ...f, purchaseQuantity: e.target.value }))} placeholder="예: 36" style={{ width: '100%', padding: '3px 5px', borderRadius: '4px', border: '1px solid #fed7aa', fontSize: '11px', color: '#18181b', boxSizing: 'border-box' }} />
+                            <div style={{ fontSize: '9px', color: '#92400e', marginBottom: '2px' }}>포장당 개수(개)</div>
+                            <input type="number" value={subForm.itemsPerBox} onChange={(e) => setSubForm((f) => ({ ...f, itemsPerBox: e.target.value }))} placeholder="예: 36" style={{ width: '100%', padding: '3px 5px', borderRadius: '4px', border: '1px solid #fed7aa', fontSize: '11px', color: '#18181b', boxSizing: 'border-box' }} />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '9px', color: '#92400e', marginBottom: '2px' }}>포장 수량(개)</div>
+                            <input type="number" value={subForm.boxQuantity} onChange={(e) => setSubForm((f) => ({ ...f, boxQuantity: e.target.value }))} placeholder="1" style={{ width: '100%', padding: '3px 5px', borderRadius: '4px', border: '1px solid #fed7aa', fontSize: '11px', color: '#18181b', boxSizing: 'border-box' }} />
                           </div>
                           <div>
                             <div style={{ fontSize: '9px', color: '#92400e', marginBottom: '2px' }}>소분 갯수(개)</div>
@@ -385,6 +396,11 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
                             <input type="number" value={subForm.unit_rg_shipping_fee} onChange={(e) => setSubForm((f) => ({ ...f, unit_rg_shipping_fee: e.target.value }))} style={{ width: '100%', padding: '3px 5px', borderRadius: '4px', border: '1px solid #fed7aa', fontSize: '11px', color: '#18181b', boxSizing: 'border-box' }} />
                           </div>
                         </div>
+                        {Number(subForm.boxPrice) > 0 && Number(subForm.itemsPerBox) > 0 && (
+                          <div style={{ fontSize: '9px', color: '#92400e', marginBottom: '4px' }}>
+                            총 구매가 {fmt(Number(subForm.boxPrice) * (Number(subForm.boxQuantity) || 1))}원 / 총 {Number(subForm.itemsPerBox) * (Number(subForm.boxQuantity) || 1)}개
+                          </div>
+                        )}
                         {subPreview && (
                           <div style={{ background: '#fff', borderRadius: '6px', padding: '6px 8px', fontSize: '10px', color: '#27272a', border: '1px solid #fed7aa', marginBottom: '6px' }}>
                             {carryoverMeta.quantity > 0 && (
