@@ -187,6 +187,7 @@ export default function CostManagementTab() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showRgModal, setShowRgModal] = useState(false);
   const [importingRg, setImportingRg] = useState(false);
+  const [importingWing, setImportingWing] = useState(false);
   const [editChannelId, setEditChannelId] = useState<string | null>(null);
   const [editSellerProductId, setEditSellerProductId] = useState('');
   const [editVendorItemId, setEditVendorItemId] = useState('');
@@ -544,7 +545,7 @@ export default function CostManagementTab() {
         {(channelFilter === 'wing' || channelFilter === 'all') && (
           <button
             onClick={async () => {
-              setImportingRg(true);
+              setImportingWing(true);
               try {
                 const range = getDateRange(preset, customFrom, customTo);
                 const res = await fetch('/api/cost-management/wing-bulk-import', {
@@ -560,13 +561,13 @@ export default function CostManagementTab() {
                   alert(json.error ?? '윙 가져오기 실패');
                 }
               } finally {
-                setImportingRg(false);
+                setImportingWing(false);
               }
             }}
-            disabled={importingRg}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', background: '#fff', color: '#be0014', border: '1px solid #fecaca', fontSize: '12px', cursor: importingRg ? 'not-allowed' : 'pointer', opacity: importingRg ? 0.6 : 1 }}
+            disabled={importingWing}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', background: '#fff', color: '#be0014', border: '1px solid #fecaca', fontSize: '12px', cursor: importingWing ? 'not-allowed' : 'pointer', opacity: importingWing ? 0.6 : 1 }}
           >
-            <CloudDownload size={13} /> {importingRg ? '가져오는 중...' : '윙 판매 가져오기'}
+            <CloudDownload size={13} /> {importingWing ? '가져오는 중...' : '윙 판매 가져오기'}
           </button>
         )}
         <div style={{ marginLeft: 'auto', position: 'relative' }}>
@@ -662,23 +663,6 @@ export default function CostManagementTab() {
                   <td style={{ padding: '10px 12px', textAlign: 'right', color: '#52525b' }}>
                     {p.current_stock > 0 ? `${fmt(p.stock_value)}원` : '—'}
                   </td>
-                  {channelFilter === 'rg' && (
-                    <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: 13 }}>
-                      {rgInventoryLoading ? '…' : (() => {
-                        const actual = rgInventory.get(p.id);
-                        if (actual === undefined || actual === null) return '—';
-                        const diff = actual - p.current_stock;
-                        return (
-                          <span>
-                            {actual.toLocaleString()}개
-                            {diff !== 0 && (
-                              <span title={`원가재고 ${p.current_stock}개 / 실재고 ${actual}개`} style={{ marginLeft: 4, cursor: 'help' }}>⚠️</span>
-                            )}
-                          </span>
-                        );
-                      })()}
-                    </td>
-                  )}
                   <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, color: p.total_realized_profit >= 0 ? '#16a34a' : '#ef4444' }}>
                     {p.sale_count === 0 ? <span style={{ color: '#ccc' }}>—</span> : `${fmt(p.total_realized_profit)}원`}
                   </td>
@@ -705,6 +689,23 @@ export default function CostManagementTab() {
                       📋 보기
                     </button>
                   </td>
+                  {channelFilter === 'rg' && (
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: 13 }}>
+                      {rgInventoryLoading ? '…' : (() => {
+                        const actual = rgInventory.get(p.id);
+                        if (actual === undefined || actual === null) return '—';
+                        const diff = actual - p.current_stock;
+                        return (
+                          <span>
+                            {actual.toLocaleString()}개
+                            {diff !== 0 && (
+                              <span title={`원가재고 ${p.current_stock}개 / 실재고 ${actual}개`} style={{ marginLeft: 4, cursor: 'help' }}>⚠️</span>
+                            )}
+                          </span>
+                        );
+                      })()}
+                    </td>
+                  )}
                   <td style={{ padding: '10px 8px', textAlign: 'right' }}>
                     <button
                       onClick={() => deleteProduct(p.id, p.product_name)}
