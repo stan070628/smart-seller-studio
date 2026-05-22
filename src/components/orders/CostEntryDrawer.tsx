@@ -52,6 +52,8 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
   const [saving, setSaving] = useState(false);
   const [fifo, setFifo] = useState<FifoSummary>({ current_stock: 0, stock_value: 0, total_realized_profit: 0 });
   const [fifoVersion, setFifoVersion] = useState(0);
+  // 입고 채널 선택 (윙+RG 동시 연결 상품에서만 사용)
+  const [entryChannel, setEntryChannel] = useState<'rg' | 'wing'>('wing');
 
   const loadEntries = useCallback(async () => {
     setLoading(true);
@@ -79,6 +81,12 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
   useEffect(() => { loadEntries(); }, [loadEntries]);
   useEffect(() => { loadFifo(); }, [loadFifo]);
 
+  // 상품 채널 연결 상태에 따라 기본 입고 채널 결정
+  useEffect(() => {
+    if (vendorItemId && !sellerProductId) setEntryChannel('rg');
+    else setEntryChannel('wing');
+  }, [productId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   function refreshAll() {
     loadEntries();
     setFifoVersion((v) => v + 1);
@@ -91,7 +99,9 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
     if (!form.received_at || qty <= 0) { alert('입고일과 수량을 입력해 주세요.'); return; }
     setSaving(true);
     try {
-      const payload = { received_at: form.received_at, quantity: qty, unit_cost: cost, unit_shipping_fee: Math.round(Number(form.unit_shipping_fee)) };
+      const basePayload = { received_at: form.received_at, quantity: qty, unit_cost: cost, unit_shipping_fee: Math.round(Number(form.unit_shipping_fee)) };
+      // 신규 입고 등록 시 채널 정보 포함
+      const payload = editingId ? basePayload : { ...basePayload, channel: entryChannel };
       const url = editingId
         ? `/api/cost-management/entries/${editingId}`
         : `/api/cost-management/products/${productId}/entries`;
@@ -245,6 +255,26 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
                 style={{ width: '100%', marginTop: '8px', padding: '6px', borderRadius: '6px', border: '1px dashed #e5e5e5', background: '#fafafa', fontSize: '11px', color: '#27272a', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
                 <Plus size={11} /> 새 입고 건 추가
               </button>
+            )}
+            {/* 윙+RG 동시 연결 상품에서 새 입고 추가 시 입고 채널 선택 */}
+            {addingNew && !editingId && sellerProductId && vendorItemId && (
+              <div style={{ marginTop: 8, marginBottom: 4 }}>
+                <label style={{ display: 'block', fontSize: 12, color: '#6b7280', marginBottom: 4 }}>입고 채널</label>
+                <div style={{ display: 'flex', gap: 16 }}>
+                  {(['wing', 'rg'] as const).map((ch) => (
+                    <label key={ch} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
+                      <input
+                        type="radio"
+                        name="entryChannel"
+                        value={ch}
+                        checked={entryChannel === ch}
+                        onChange={() => setEntryChannel(ch)}
+                      />
+                      {ch === 'wing' ? '윙 보관 입고' : 'RG 창고 입고'}
+                    </label>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
 

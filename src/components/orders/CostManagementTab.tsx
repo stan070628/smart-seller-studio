@@ -197,12 +197,18 @@ export default function CostManagementTab() {
   const [apiRevenue, setApiRevenue] = useState<ApiRevenue | null>(null);
   const [apiLoading, setApiLoading] = useState(false);
   const [apiWarnings, setApiWarnings] = useState<string[]>([]);
+  const [channelFilter, setChannelFilter] = useState<'all' | 'rg' | 'wing'>('all');
+  const [rgInventory, setRgInventory] = useState<Map<string, number | null>>(new Map());
+  const [rgInventoryLoading, setRgInventoryLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const range = getDateRange(preset, customFrom, customTo);
-      const qs = range ? `?from=${range.from}&to=${range.to}` : '';
+      const params = new URLSearchParams();
+      if (range) { params.set('from', range.from); params.set('to', range.to); }
+      if (channelFilter !== 'all') params.set('channel', channelFilter);
+      const qs = params.toString() ? `?${params.toString()}` : '';
       const res = await fetch(`/api/cost-management/products${qs}`);
       const json = await res.json();
       if (json.success) {
@@ -212,7 +218,7 @@ export default function CostManagementTab() {
     } finally {
       setLoading(false);
     }
-  }, [preset, customFrom, customTo]);
+  }, [preset, customFrom, customTo, channelFilter]);
 
   async function runRgBulkImport() {
     setImportingRg(true);
@@ -312,6 +318,24 @@ export default function CostManagementTab() {
 
   useEffect(() => { load(); fetchApiRevenue(); }, [load, fetchApiRevenue]);
 
+  // channelFilter가 'rg'일 때 RG 실재고 조회
+  useEffect(() => {
+    if (channelFilter !== 'rg') { setRgInventory(new Map()); return; }
+    setRgInventoryLoading(true);
+    fetch('/api/cost-management/rg-inventory')
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success) {
+          const map = new Map<string, number | null>();
+          for (const item of json.data as Array<{ productCostId: string; actualStock: number | null }>) {
+            map.set(item.productCostId, item.actualStock);
+          }
+          setRgInventory(map);
+        }
+      })
+      .finally(() => setRgInventoryLoading(false));
+  }, [channelFilter]);
+
   async function deleteProduct(id: string, name: string) {
     if (!confirm(`"${name}" 상품을 삭제할까요?\n입고 내역도 모두 함께 삭제됩니다.`)) return;
     const res = await fetch(`/api/cost-management/products/${id}`, { method: 'DELETE' });
@@ -359,6 +383,25 @@ export default function CostManagementTab() {
               style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #d4d4d8', fontSize: '12px', color: '#18181b' }} />
           </div>
         )}
+      </div>
+
+      {/* 채널 필터 */}
+      <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '12px' }}>
+        <span style={{ fontSize: '12px', color: '#52525b', fontWeight: 600, marginRight: '4px' }}>채널</span>
+        {(['all', 'wing', 'rg'] as const).map((ch) => (
+          <button
+            key={ch}
+            onClick={() => setChannelFilter(ch)}
+            style={{
+              padding: '5px 12px', borderRadius: '20px', border: `1px solid ${channelFilter === ch ? '#be0014' : '#e5e5e5'}`,
+              background: channelFilter === ch ? '#be0014' : '#fff',
+              color: channelFilter === ch ? '#fff' : '#52525b',
+              fontSize: '12px', fontWeight: channelFilter === ch ? 600 : 400, cursor: 'pointer',
+            }}
+          >
+            {ch === 'all' ? '전체' : ch === 'wing' ? '윙판매' : 'RG'}
+          </button>
+        ))}
       </div>
 
       {/* 섹션 A — 실제 매출 (API 기반) */}
@@ -498,6 +541,34 @@ export default function CostManagementTab() {
         >
           <CloudDownload size={13} /> {importingRg ? 'RG 가져오는 중...' : 'RG 판매 가져오기'}
         </button>
+        {(channelFilter === 'wing' || channelFilter === 'all') && (
+          <button
+            onClick={async () => {
+              setImportingRg(true);
+              try {
+                const range = getDateRange(preset, customFrom, customTo);
+                const res = await fetch('/api/cost-management/wing-bulk-import', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(range ?? {}),
+                });
+                const json = await res.json();
+                if (json.success) {
+                  alert(`윙 판매 ${json.data.imported}건 가져오기 완료 (중복 ${json.data.skipped}건 스킵)`);
+                  load();
+                } else {
+                  alert(json.error ?? '윙 가져오기 실패');
+                }
+              } finally {
+                setImportingRg(false);
+              }
+            }}
+            disabled={importingRg}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', background: '#fff', color: '#be0014', border: '1px solid #fecaca', fontSize: '12px', cursor: importingRg ? 'not-allowed' : 'pointer', opacity: importingRg ? 0.6 : 1 }}
+          >
+            <CloudDownload size={13} /> {importingRg ? '가져오는 중...' : '윙 판매 가져오기'}
+          </button>
+        )}
         <div style={{ marginLeft: 'auto', position: 'relative' }}>
           <Search size={13} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#999' }} />
           <input
@@ -524,6 +595,11 @@ export default function CostManagementTab() {
                 {['채널', '상품명', '원가(가중평균)', '배송비(배분)', 'RG배송비', '재고', '재고가치', '실현손익', '마진율', '광고비', 'ROAS', '위너', '입고', '판매', '내역', ''].map((h) => (
                   <th key={h} style={{ padding: '10px 12px', textAlign: h === '상품명' ? 'left' : h === '채널' ? 'center' : 'right', fontWeight: 600, color: '#555', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
+                {channelFilter === 'rg' && (
+                  <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>
+                    RG 실재고
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -586,6 +662,23 @@ export default function CostManagementTab() {
                   <td style={{ padding: '10px 12px', textAlign: 'right', color: '#52525b' }}>
                     {p.current_stock > 0 ? `${fmt(p.stock_value)}원` : '—'}
                   </td>
+                  {channelFilter === 'rg' && (
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: 13 }}>
+                      {rgInventoryLoading ? '…' : (() => {
+                        const actual = rgInventory.get(p.id);
+                        if (actual === undefined || actual === null) return '—';
+                        const diff = actual - p.current_stock;
+                        return (
+                          <span>
+                            {actual.toLocaleString()}개
+                            {diff !== 0 && (
+                              <span title={`원가재고 ${p.current_stock}개 / 실재고 ${actual}개`} style={{ marginLeft: 4, cursor: 'help' }}>⚠️</span>
+                            )}
+                          </span>
+                        );
+                      })()}
+                    </td>
+                  )}
                   <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, color: p.total_realized_profit >= 0 ? '#16a34a' : '#ef4444' }}>
                     {p.sale_count === 0 ? <span style={{ color: '#ccc' }}>—</span> : `${fmt(p.total_realized_profit)}원`}
                   </td>
