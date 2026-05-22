@@ -52,6 +52,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [addingNew, setAddingNew] = useState(false);
+  const [entryType, setEntryType] = useState<'normal' | 'subdivision'>('normal');
   const [form, setForm] = useState<EntryForm>(emptyForm());
   const [saving, setSaving] = useState(false);
   const [fifo, setFifo] = useState<FifoSummary>({ current_stock: 0, stock_value: 0, total_realized_profit: 0 });
@@ -157,6 +158,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
         refreshAll();
         setEditingId(null);
         setAddingNew(false);
+        setEntryType('normal');
         setForm(emptyForm());
       } else {
         alert(json.error ?? '저장에 실패했습니다.');
@@ -191,6 +193,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
       if (json.success) {
         refreshAll();
         setAddingNew(false);
+        setEntryType('normal');
         setSubForm({
           received_at: new Date().toISOString().slice(0, 10),
           totalPurchaseCost: '',
@@ -297,7 +300,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
                             <button onClick={save} disabled={saving || !canSave} style={{ padding: '3px 7px', borderRadius: '4px', background: canSave ? '#16a34a' : '#d4d4d4', color: canSave ? '#fff' : '#71717a', border: 'none', fontSize: '10px', cursor: canSave ? 'pointer' : 'not-allowed' }}>
                               {saving ? '...' : '저장'}
                             </button>
-                            <button onClick={() => { setEditingId(null); setAddingNew(false); setForm(emptyForm()); }} style={{ padding: '3px 5px', borderRadius: '4px', background: '#f3f4f6', border: 'none', fontSize: '10px', cursor: 'pointer', color: '#27272a' }}>취소</button>
+                            <button onClick={() => { setEditingId(null); setAddingNew(false); setEntryType('normal'); setForm(emptyForm()); }} style={{ padding: '3px 5px', borderRadius: '4px', background: '#f3f4f6', border: 'none', fontSize: '10px', cursor: 'pointer', color: '#27272a' }}>취소</button>
                           </div>
                         </td>
                       </tr>
@@ -325,7 +328,33 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
                       </tr>
                     )
                   ))}
-                  {addingNew && !editingId && isSubdivisionProduct && (
+                  {addingNew && !editingId && (
+                    <tr>
+                      <td colSpan={6} style={{ padding: '6px 10px 2px' }}>
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          {(['normal', 'subdivision'] as const).map((t) => (
+                            <button
+                              key={t}
+                              onClick={() => setEntryType(t)}
+                              style={{
+                                padding: '3px 10px',
+                                borderRadius: '4px',
+                                border: `1px solid ${entryType === t ? (t === 'subdivision' ? '#fb923c' : '#86efac') : '#e5e5e5'}`,
+                                background: entryType === t ? (t === 'subdivision' ? '#fff7ed' : '#f0fdf4') : '#fff',
+                                color: entryType === t ? (t === 'subdivision' ? '#c2410c' : '#16a34a') : '#71717a',
+                                fontSize: '10px',
+                                fontWeight: entryType === t ? 700 : 400,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              {t === 'normal' ? '일반 입고' : '소분 입고'}
+                            </button>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  {addingNew && !editingId && entryType === 'subdivision' && (
                     <tr style={{ background: '#fff7ed', borderBottom: '1px solid #fed7aa' }}>
                       <td colSpan={6} style={{ padding: '8px 10px' }}>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '6px', marginBottom: '6px' }}>
@@ -374,12 +403,12 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
                           <button onClick={saveSubdivision} disabled={saving || !subPreview || subPreview.sellablePacks === 0} style={{ padding: '3px 10px', borderRadius: '4px', background: subPreview && subPreview.sellablePacks > 0 ? '#16a34a' : '#d4d4d4', color: subPreview && subPreview.sellablePacks > 0 ? '#fff' : '#71717a', border: 'none', fontSize: '10px', cursor: 'pointer' }}>
                             {saving ? '...' : '저장'}
                           </button>
-                          <button onClick={() => { setAddingNew(false); }} style={{ padding: '3px 5px', borderRadius: '4px', background: '#f3f4f6', border: 'none', fontSize: '10px', cursor: 'pointer', color: '#27272a' }}>취소</button>
+                          <button onClick={() => { setAddingNew(false); setEntryType('normal'); }} style={{ padding: '3px 5px', borderRadius: '4px', background: '#f3f4f6', border: 'none', fontSize: '10px', cursor: 'pointer', color: '#27272a' }}>취소</button>
                         </div>
                       </td>
                     </tr>
                   )}
-                  {addingNew && !editingId && !isSubdivisionProduct && (
+                  {addingNew && !editingId && entryType === 'normal' && (
                     <tr style={{ background: '#f0fdf4', borderBottom: '1px solid #bbf7d0' }}>
                       {(['received_at', 'quantity', 'unit_cost', 'unit_shipping_fee'] as (keyof EntryForm)[]).map((field) => (
                         <td key={field} style={{ padding: '4px 6px' }}>
@@ -406,7 +435,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
               </table>
             </div>
             {!addingNew && !editingId && (
-              <button onClick={() => { setAddingNew(true); setForm(emptyForm()); }}
+              <button onClick={() => { setAddingNew(true); setForm(emptyForm()); setEntryType(isSubdivisionProduct ? 'subdivision' : 'normal'); }}
                 style={{ width: '100%', marginTop: '8px', padding: '6px', borderRadius: '6px', border: '1px dashed #e5e5e5', background: '#fafafa', fontSize: '11px', color: '#27272a', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
                 <Plus size={11} /> 새 입고 건 추가
               </button>
