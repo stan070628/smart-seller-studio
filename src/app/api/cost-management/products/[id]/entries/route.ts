@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { getCurrentUser } from '@/lib/auth';
+import { ENTRY_CHANNEL } from '@/lib/cost-management/fifo';
 
 export async function GET(
   _req: NextRequest,
@@ -73,7 +74,7 @@ export async function POST(
          (user_id, product_cost_id, received_at, quantity, unit_cost, unit_shipping_fee, unit_rg_shipping_fee, channel)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [user.userId, id, received_at, quantity, unit_cost, unit_shipping_fee ?? 0, unit_rg_shipping_fee ?? 0, channel ?? 'wing'],
+      [user.userId, id, received_at, quantity, unit_cost, unit_shipping_fee ?? 0, unit_rg_shipping_fee ?? 0, channel ?? ENTRY_CHANNEL.WING],
     );
 
     return NextResponse.json({ success: true, data: rows[0] }, { status: 201 });

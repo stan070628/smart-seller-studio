@@ -3,7 +3,7 @@ import { getSourcingPool } from '@/lib/sourcing/db';
 import { getCurrentUser } from '@/lib/auth';
 import { calculateProductMetrics } from '@/lib/cost-management/calculations';
 import type { CostEntryRow } from '@/lib/cost-management/calculations';
-import { calculateFifo } from '@/lib/cost-management/fifo';
+import { calculateFifo, ENTRY_CHANNEL, SALE_CHANNEL } from '@/lib/cost-management/fifo';
 import type { PurchaseBatch, SaleRow, FifoSummary } from '@/lib/cost-management/fifo';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 import type { CollectedData, RawProduct } from '@/lib/ad-strategy/types';
@@ -83,7 +83,7 @@ export async function GET(request: NextRequest) {
         unit_shipping_fee: Number(e.unit_shipping_fee),
         unit_rg_shipping_fee: Number(e.unit_rg_shipping_fee ?? 0),
         shipping_group_id: e.shipping_group_id,
-        channel: e.channel ?? 'wing',
+        channel: e.channel ?? ENTRY_CHANNEL.WING,
       });
       entriesByProduct.set(e.product_cost_id, list);
     }
@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
         sold_at: s.sold_at instanceof Date ? s.sold_at.toISOString().slice(0, 10) : String(s.sold_at).slice(0, 10),
         quantity: Number(s.quantity),
         selling_price: Number(s.selling_price),
-        channel: s.channel ?? 'manual',
+        channel: s.channel ?? SALE_CHANNEL.MANUAL,
       });
       salesByProduct.set(s.product_cost_id, list);
     }
@@ -129,15 +129,15 @@ export async function GET(request: NextRequest) {
 
       // 채널별 FIFO 분리: 채널 필터에 맞는 입고/판매만 사용
       const batchesToUse = channelFilter === 'rg'
-        ? pEntries.filter((e) => e.channel === 'rg')
+        ? pEntries.filter((e) => e.channel === ENTRY_CHANNEL.RG)
         : channelFilter === 'wing'
-          ? pEntries.filter((e) => e.channel === 'wing')
+          ? pEntries.filter((e) => e.channel === ENTRY_CHANNEL.WING)
           : pEntries;
 
       const salesToUse = channelFilter === 'rg'
-        ? pSales.filter((s) => s.channel === 'rocket_growth')
+        ? pSales.filter((s) => s.channel === SALE_CHANNEL.ROCKET_GROWTH)
         : channelFilter === 'wing'
-          ? pSales.filter((s) => s.channel !== 'rocket_growth')
+          ? pSales.filter((s) => s.channel !== SALE_CHANNEL.ROCKET_GROWTH)
           : pSales;
 
       const metrics = calculateProductMetrics(batchesToUse);

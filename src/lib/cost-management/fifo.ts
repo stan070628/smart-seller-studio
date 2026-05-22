@@ -6,6 +6,17 @@
  * 단위 원가 및 실현손익을 계산한다.
  */
 
+export const ENTRY_CHANNEL = {
+  RG: 'rg',
+  WING: 'wing',
+} as const;
+
+export const SALE_CHANNEL = {
+  ROCKET_GROWTH: 'rocket_growth',
+  MANUAL: 'manual',
+  COUPANG: 'coupang',
+} as const;
+
 /** 입고 배치 */
 export interface PurchaseBatch {
   id: string;
