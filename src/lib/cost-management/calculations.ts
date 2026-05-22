@@ -8,6 +8,7 @@ export interface CostEntryRow {
   unit_shipping_fee: number;
   unit_rg_shipping_fee?: number;
   shipping_group_id: string | null;
+  channel?: string;  // 'rg' | 'wing'
 }
 
 export interface ProductMetrics {

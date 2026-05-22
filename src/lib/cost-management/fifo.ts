@@ -30,6 +30,8 @@ export interface SaleRow {
   quantity: number;
   /** 판매 단가 (원) */
   selling_price: number;
+  /** 채널 ('rocket_growth' | 'coupang' | 'manual' 등) — 채널별 FIFO 분리 시 필터링에 사용 */
+  channel?: string;
 }
 
 /** 판매 건별 FIFO 상세 결과 */

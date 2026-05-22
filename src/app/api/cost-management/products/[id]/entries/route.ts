@@ -46,7 +46,7 @@ export async function POST(
 
   const { id } = await params;
   const body = await request.json().catch(() => null);
-  const { received_at, quantity, unit_cost, unit_shipping_fee } = body ?? {};
+  const { received_at, quantity, unit_cost, unit_shipping_fee, unit_rg_shipping_fee, shipping_group_id, channel } = body ?? {};
 
   if (
     !received_at ||
@@ -69,10 +69,11 @@ export async function POST(
     if (check.length === 0) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
 
     const { rows } = await pool.query(
-      `INSERT INTO cost_entries (user_id, product_cost_id, received_at, quantity, unit_cost, unit_shipping_fee)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO cost_entries
+         (user_id, product_cost_id, received_at, quantity, unit_cost, unit_shipping_fee, unit_rg_shipping_fee, channel)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [user.userId, id, received_at, quantity, unit_cost, unit_shipping_fee ?? 0],
+      [user.userId, id, received_at, quantity, unit_cost, unit_shipping_fee ?? 0, unit_rg_shipping_fee ?? 0, channel ?? 'wing'],
     );
 
     return NextResponse.json({ success: true, data: rows[0] }, { status: 201 });
