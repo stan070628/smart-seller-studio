@@ -30,14 +30,17 @@ export async function PATCH(
 
   const pool = getSourcingPool();
   try {
-    // 해당 입고 건이 현재 유저 소유인지 확인 (RLS 대체)
+    // 해당 입고 건이 현재 유저 소유인지 확인 (RLS 대체), 소분 여부 판별용 purchase_quantity 포함
     const { rows: check } = await pool.query(
-      `SELECT id FROM cost_entries WHERE id = $1 AND user_id = $2`,
+      `SELECT id, purchase_quantity FROM cost_entries WHERE id = $1 AND user_id = $2`,
       [id, user.userId],
     );
     if (check.length === 0) {
       return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
     }
+
+    // 소분 모드로 생성된 입고 건 여부 확인
+    const isSubdivisionEntry = check[0].purchase_quantity != null;
 
     // COALESCE를 사용하여 null 전달 시 기존 값을 유지
     const { rows } = await pool.query(
@@ -52,7 +55,12 @@ export async function PATCH(
       [received_at ?? null, quantity ?? null, unit_cost ?? null, unit_shipping_fee ?? null, unit_rg_shipping_fee ?? null, id],
     );
 
-    return NextResponse.json({ success: true, data: rows[0] });
+    // 소분 건을 수정한 경우 carryover 재계산이 필요함을 클라이언트에 알림
+    return NextResponse.json({
+      success: true,
+      data: rows[0],
+      ...(isSubdivisionEntry && { warning: 'subdivision_carryover_stale' }),
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : '서버 오류';
     return NextResponse.json({ success: false, error: msg }, { status: 500 });
