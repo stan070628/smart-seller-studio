@@ -46,6 +46,7 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
   const [manualName, setManualName] = useState('');
 
   const [feeRate, setFeeRate] = useState('10.8');
+  const [subdivisionUnit, setSubdivisionUnit] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -91,15 +92,21 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
           product_name: selectedCoupang!.seller_product_name,
           seller_product_id: selectedCoupang!.seller_product_id,
           platform_fee_rate: Number(feeRate) / 100,
+          ...(subdivisionUnit.trim() !== '' && { subdivision_unit: Number(subdivisionUnit) }),
         };
       } else if (mode === 'rg') {
         body = {
           product_name: rgCustomName.trim(),
           vendor_item_id: selectedRg!.vendor_item_id,
           platform_fee_rate: Number(feeRate) / 100,
+          ...(subdivisionUnit.trim() !== '' && { subdivision_unit: Number(subdivisionUnit) }),
         };
       } else {
-        body = { product_name: manualName.trim(), platform_fee_rate: Number(feeRate) / 100 };
+        body = {
+          product_name: manualName.trim(),
+          platform_fee_rate: Number(feeRate) / 100,
+          ...(subdivisionUnit.trim() !== '' && { subdivision_unit: Number(subdivisionUnit) }),
+        };
       }
 
       const res = await fetch('/api/cost-management/products', {
@@ -230,6 +237,20 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
             <div style={{ fontSize: '11px', fontWeight: 600, color: '#27272a', marginBottom: '6px' }}>플랫폼 수수료율 (%)</div>
             <input type="number" value={feeRate} onChange={(e) => setFeeRate(e.target.value)} step="0.1" min="0" max="50" style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #d4d4d8', fontSize: '12px', boxSizing: 'border-box', color: '#18181b' }} />
             <div style={{ fontSize: '10px', color: '#52525b', marginTop: '4px' }}>로켓그로스 기본 10.8% — 필요 시 수정하세요</div>
+          </div>
+
+          <div style={{ marginTop: '12px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 600, color: '#27272a', marginBottom: '6px' }}>소분 갯수 (선택)</div>
+            <input
+              type="number"
+              value={subdivisionUnit}
+              onChange={(e) => setSubdivisionUnit(e.target.value)}
+              step="1"
+              min="2"
+              placeholder="비워두면 소분 없음"
+              style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #d4d4d8', fontSize: '12px', boxSizing: 'border-box', color: '#18181b' }}
+            />
+            <div style={{ fontSize: '10px', color: '#52525b', marginTop: '4px' }}>입력하면 입고 시 개당 원가를 자동 계산합니다</div>
           </div>
 
           <button
