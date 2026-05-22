@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, Plus, Pencil, Trash2 } from 'lucide-react';
 import SaleEntryPanel from './SaleEntryPanel';
+import { calculateSubdivision } from '@/lib/cost-management/subdivision';
 
 interface Entry {
   id: string;
@@ -13,6 +14,8 @@ interface Entry {
   unit_rg_shipping_fee: number;
   shipping_group_id: string | null;
   shipping_group_name: string | null;
+  purchase_quantity: number | null;   // 소분: 사입 총량
+  subdivision_unit: number | null;    // 소분: 소분 단위
 }
 
 interface EntryForm {
@@ -39,11 +42,12 @@ interface Props {
   productName: string;
   sellerProductId: number | null;
   vendorItemId?: number | null;
+  subdivisionUnit?: number | null;   // 소분 단위 (>0 이면 소분 상품)
   onClose: () => void;
   onChanged: () => void;
 }
 
-export default function CostEntryDrawer({ productId, productName, sellerProductId, vendorItemId, onClose, onChanged }: Props) {
+export default function CostEntryDrawer({ productId, productName, sellerProductId, vendorItemId, subdivisionUnit, onClose, onChanged }: Props) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -55,12 +59,32 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
   // 입고 채널 선택 (윙+RG 동시 연결 상품에서만 사용)
   const [entryChannel, setEntryChannel] = useState<'rg' | 'wing'>('wing');
 
+  // 소분 모드 전용 상태
+  const [subForm, setSubForm] = useState({
+    received_at: new Date().toISOString().slice(0, 10),
+    totalPurchaseCost: '',
+    purchaseQuantity: '',
+    subUnit: subdivisionUnit ? String(subdivisionUnit) : '',
+    unit_shipping_fee: '0',
+  });
+  const [carryoverMeta, setCarryoverMeta] = useState({ quantity: 0, unitCost: 0 });
+
+  const isSubdivisionProduct = (subdivisionUnit ?? 0) > 0;
+
   const loadEntries = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(`/api/cost-management/products/${productId}/entries`);
       const json = await res.json();
-      if (json.success) setEntries(json.data);
+      if (json.success) {
+        setEntries(json.data);
+        if (json.meta) {
+          setCarryoverMeta({
+            quantity: json.meta.subdivision_carryover ?? 0,
+            unitCost: json.meta.subdivision_carryover_unit_cost ?? 0,
+          });
+        }
+      }
     } catch (e) {
       console.error('입고 내역 로드 실패:', e);
     } finally {
@@ -93,6 +117,23 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
     onChanged();
   }
 
+  // 소분 미리보기 계산 (실시간)
+  const subPreview = (() => {
+    const pq = Number(subForm.purchaseQuantity);
+    const tc = Number(subForm.totalPurchaseCost);
+    const su = Number(subForm.subUnit);
+    if (pq > 0 && tc > 0 && su >= 2) {
+      return calculateSubdivision({
+        purchaseQuantity: pq,
+        totalPurchaseCost: tc,
+        subdivisionUnit: su,
+        carryoverQuantity: carryoverMeta.quantity,
+        carryoverUnitCost: carryoverMeta.unitCost,
+      });
+    }
+    return null;
+  })();
+
   async function save() {
     const qty = Math.round(Number(form.quantity) * 10) / 10;
     const cost = Math.round(Number(form.unit_cost));
@@ -113,6 +154,45 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
         setEditingId(null);
         setAddingNew(false);
         setForm(emptyForm());
+      } else {
+        alert(json.error ?? '저장에 실패했습니다.');
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveSubdivision() {
+    if (!subForm.received_at || !subPreview || subPreview.sellablePacks === 0) {
+      alert('입고일, 사입 총량, 소분 갯수를 올바르게 입력해 주세요.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload = {
+        received_at: subForm.received_at,
+        unit_cost: Math.round(Number(subForm.totalPurchaseCost)),
+        purchase_quantity: Math.round(Number(subForm.purchaseQuantity)),
+        subdivision_unit: Math.round(Number(subForm.subUnit)),
+        unit_shipping_fee: Math.round(Number(subForm.unit_shipping_fee)),
+        channel: entryChannel,
+      };
+      const res = await fetch(`/api/cost-management/products/${productId}/entries`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (json.success) {
+        refreshAll();
+        setAddingNew(false);
+        setSubForm({
+          received_at: new Date().toISOString().slice(0, 10),
+          totalPurchaseCost: '',
+          purchaseQuantity: '',
+          subUnit: subdivisionUnit ? String(subdivisionUnit) : '',
+          unit_shipping_fee: '0',
+        });
       } else {
         alert(json.error ?? '저장에 실패했습니다.');
       }
@@ -206,7 +286,10 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
                     ) : (
                       <tr key={e.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
                         <td style={{ padding: '6px 8px', color: '#27272a' }}>{e.received_at.slice(0, 10)}</td>
-                        <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, color: '#18181b' }}>{e.quantity.toLocaleString('ko-KR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}개</td>
+                        <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, color: '#18181b' }}>
+                          {e.quantity.toLocaleString('ko-KR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}{e.purchase_quantity ? '팩' : '개'}
+                          {e.purchase_quantity && <div style={{ fontSize: '9px', color: '#92400e', fontWeight: 400 }}>사입{e.purchase_quantity}/소분{e.subdivision_unit}</div>}
+                        </td>
                         <td style={{ padding: '6px 8px', textAlign: 'right', color: '#ef4444' }}>{fmt(e.unit_cost)}</td>
                         <td style={{ padding: '6px 8px', textAlign: 'right', color: '#f97316' }}>
                           {fmt(e.unit_shipping_fee)}
@@ -224,7 +307,51 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
                       </tr>
                     )
                   ))}
-                  {addingNew && !editingId && (
+                  {addingNew && !editingId && isSubdivisionProduct && (
+                    <tr style={{ background: '#fff7ed', borderBottom: '1px solid #fed7aa' }}>
+                      <td colSpan={6} style={{ padding: '8px 10px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '6px', marginBottom: '6px' }}>
+                          <div>
+                            <div style={{ fontSize: '9px', color: '#92400e', marginBottom: '2px' }}>입고일</div>
+                            <input type="date" value={subForm.received_at} onChange={(e) => setSubForm((f) => ({ ...f, received_at: e.target.value }))} style={{ width: '100%', padding: '3px 5px', borderRadius: '4px', border: '1px solid #fed7aa', fontSize: '11px', color: '#18181b', boxSizing: 'border-box' }} />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '9px', color: '#92400e', marginBottom: '2px' }}>묶음 총 구매가(원)</div>
+                            <input type="number" value={subForm.totalPurchaseCost} onChange={(e) => setSubForm((f) => ({ ...f, totalPurchaseCost: e.target.value }))} placeholder="예: 21490" style={{ width: '100%', padding: '3px 5px', borderRadius: '4px', border: '1px solid #fed7aa', fontSize: '11px', color: '#18181b', boxSizing: 'border-box' }} />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '9px', color: '#92400e', marginBottom: '2px' }}>사입 총량(개)</div>
+                            <input type="number" value={subForm.purchaseQuantity} onChange={(e) => setSubForm((f) => ({ ...f, purchaseQuantity: e.target.value }))} placeholder="예: 36" style={{ width: '100%', padding: '3px 5px', borderRadius: '4px', border: '1px solid #fed7aa', fontSize: '11px', color: '#18181b', boxSizing: 'border-box' }} />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '9px', color: '#92400e', marginBottom: '2px' }}>소분 갯수(개)</div>
+                            <input type="number" value={subForm.subUnit} onChange={(e) => setSubForm((f) => ({ ...f, subUnit: e.target.value }))} placeholder="예: 10" style={{ width: '100%', padding: '3px 5px', borderRadius: '4px', border: '1px solid #fed7aa', fontSize: '11px', color: '#18181b', boxSizing: 'border-box' }} />
+                          </div>
+                        </div>
+                        {subPreview && (
+                          <div style={{ background: '#fff', borderRadius: '6px', padding: '6px 8px', fontSize: '10px', color: '#27272a', border: '1px solid #fed7aa', marginBottom: '6px' }}>
+                            {carryoverMeta.quantity > 0 && (
+                              <span style={{ color: '#92400e', marginRight: '10px' }}>이월 {carryoverMeta.quantity}개 포함 →</span>
+                            )}
+                            <span>총 {subPreview.totalAvailable}개</span>
+                            <span style={{ margin: '0 6px', color: '#d1d5db' }}>|</span>
+                            <span style={{ fontWeight: 700, color: '#16a34a' }}>판매 {subPreview.sellablePacks}팩</span>
+                            <span style={{ margin: '0 6px', color: '#d1d5db' }}>|</span>
+                            <span>팩당 {fmt(subPreview.packUnitCost)}원</span>
+                            <span style={{ margin: '0 6px', color: '#d1d5db' }}>|</span>
+                            <span style={{ color: '#f97316' }}>새 이월 {subPreview.newCarryoverQuantity}개</span>
+                          </div>
+                        )}
+                        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                          <button onClick={saveSubdivision} disabled={saving || !subPreview || subPreview.sellablePacks === 0} style={{ padding: '3px 10px', borderRadius: '4px', background: subPreview && subPreview.sellablePacks > 0 ? '#16a34a' : '#d4d4d4', color: subPreview && subPreview.sellablePacks > 0 ? '#fff' : '#71717a', border: 'none', fontSize: '10px', cursor: 'pointer' }}>
+                            {saving ? '...' : '저장'}
+                          </button>
+                          <button onClick={() => { setAddingNew(false); }} style={{ padding: '3px 5px', borderRadius: '4px', background: '#f3f4f6', border: 'none', fontSize: '10px', cursor: 'pointer', color: '#27272a' }}>취소</button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  {addingNew && !editingId && !isSubdivisionProduct && (
                     <tr style={{ background: '#f0fdf4', borderBottom: '1px solid #bbf7d0' }}>
                       {(['received_at', 'quantity', 'unit_cost', 'unit_shipping_fee'] as (keyof EntryForm)[]).map((field) => (
                         <td key={field} style={{ padding: '4px 6px' }}>

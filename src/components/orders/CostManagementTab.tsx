@@ -13,6 +13,7 @@ interface ProductRow {
   product_name: string;
   seller_product_id: number | null;
   vendor_item_id: number | null;
+  subdivision_unit: number | null;
   platform_fee_rate: number;
   entry_count: number;
   sale_count: number;
@@ -736,6 +737,7 @@ export default function CostManagementTab() {
             productName={dp?.product_name ?? ''}
             sellerProductId={dp?.seller_product_id ?? null}
             vendorItemId={dp?.vendor_item_id ?? null}
+            subdivisionUnit={dp?.subdivision_unit ?? null}
             onClose={() => setDrawerProductId(null)}
             onChanged={load}
           />
