@@ -594,7 +594,7 @@ export default function CostManagementTab() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
             <thead>
               <tr style={{ background: '#f9f9f9', borderBottom: '1px solid #e5e5e5' }}>
-                {['채널', '상품명', '원가(가중평균)', '배송비(배분)', 'RG배송비', '재고', '재고가치', '실현손익', '마진율', '광고비', 'ROAS', '위너', '입고', '판매', '내역', ''].map((h) => (
+                {['채널', '상품명', '원가(가중평균)', '배송비(배분)', 'RG배송비', '재고', '재고가치', '실현손익', '마진율', '광고비', 'ROAS', '위너', '입고', '판매', '내역'].map((h) => (
                   <th key={h} style={{ padding: '10px 12px', textAlign: h === '상품명' ? 'left' : h === '채널' ? 'center' : 'right', fontWeight: 600, color: '#555', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
                 {channelFilter === 'rg' && (
@@ -602,6 +602,7 @@ export default function CostManagementTab() {
                     RG 실재고
                   </th>
                 )}
+                <th style={{ padding: '10px 12px' }}></th>
               </tr>
             </thead>
             <tbody>
