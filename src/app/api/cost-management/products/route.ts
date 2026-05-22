@@ -3,7 +3,7 @@ import { getSourcingPool } from '@/lib/sourcing/db';
 import { getCurrentUser } from '@/lib/auth';
 import { calculateProductMetrics } from '@/lib/cost-management/calculations';
 import type { CostEntryRow } from '@/lib/cost-management/calculations';
-import { calculateFifo } from '@/lib/cost-management/fifo';
+import { calculateFifo, ENTRY_CHANNEL, SALE_CHANNEL } from '@/lib/cost-management/fifo';
 import type { PurchaseBatch, SaleRow, FifoSummary } from '@/lib/cost-management/fifo';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 import type { CollectedData, RawProduct } from '@/lib/ad-strategy/types';
@@ -24,11 +24,13 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const from = searchParams.get('from');
     const to = searchParams.get('to');
+    const channelFilter = (searchParams.get('channel') ?? 'all') as 'all' | 'rg' | 'wing';
 
     const pool = getSourcingPool();
 
     const { rows: products } = await pool.query(
-      `SELECT id, product_name, seller_product_id, vendor_item_id, platform, platform_fee_rate, created_at
+      `SELECT id, product_name, seller_product_id, vendor_item_id, platform, platform_fee_rate,
+              subdivision_unit, subdivision_carryover, subdivision_carryover_unit_cost, created_at
        FROM product_costs
        WHERE user_id = $1
        ORDER BY created_at DESC`,
@@ -37,14 +39,14 @@ export async function GET(request: NextRequest) {
 
     // 입고 전체 조회 (기간 필터 없음 — 재고는 전체 입고 기준)
     const { rows: allEntries } = await pool.query(
-      `SELECT id, product_cost_id, received_at, quantity, unit_cost, unit_shipping_fee, unit_rg_shipping_fee, shipping_group_id
+      `SELECT id, product_cost_id, received_at, quantity, unit_cost, unit_shipping_fee, unit_rg_shipping_fee, shipping_group_id, channel
        FROM cost_entries WHERE user_id = $1`,
       [user.userId],
     );
 
     // 판매는 전체 조회 (재고/FIFO 계산 기준)
     const { rows: allSales } = await pool.query(
-      `SELECT id, product_cost_id, sold_at, quantity, selling_price FROM sale_records WHERE user_id = $1`,
+      `SELECT id, product_cost_id, sold_at, quantity, selling_price, channel FROM sale_records WHERE user_id = $1`,
       [user.userId],
     );
 
@@ -82,6 +84,7 @@ export async function GET(request: NextRequest) {
         unit_shipping_fee: Number(e.unit_shipping_fee),
         unit_rg_shipping_fee: Number(e.unit_rg_shipping_fee ?? 0),
         shipping_group_id: e.shipping_group_id,
+        channel: e.channel ?? ENTRY_CHANNEL.WING,
       });
       entriesByProduct.set(e.product_cost_id, list);
     }
@@ -94,6 +97,7 @@ export async function GET(request: NextRequest) {
         sold_at: s.sold_at instanceof Date ? s.sold_at.toISOString().slice(0, 10) : String(s.sold_at).slice(0, 10),
         quantity: Number(s.quantity),
         selling_price: Number(s.selling_price),
+        channel: s.channel ?? SALE_CHANNEL.MANUAL,
       });
       salesByProduct.set(s.product_cost_id, list);
     }
@@ -111,17 +115,38 @@ export async function GET(request: NextRequest) {
       .single();
     const adProducts: RawProduct[] = (adCacheResult.data?.collected_data as CollectedData)?.products ?? [];
 
-    const data = products.map((p) => {
+    // 채널 필터에 따라 상품 목록 필터링
+    // rg: vendor_item_id가 있는 상품만, wing: seller_product_id가 있는 상품만
+    const filteredProducts = channelFilter === 'rg'
+      ? products.filter((p: { vendor_item_id: string | null }) => p.vendor_item_id != null)
+      : channelFilter === 'wing'
+        ? products.filter((p: { seller_product_id: string | null }) => p.seller_product_id != null)
+        : products;
+
+    const data = filteredProducts.map((p) => {
       const pEntries = entriesByProduct.get(p.id) ?? [];
       const pSales = salesByProduct.get(p.id) ?? [];
       const feeRate = Number(p.platform_fee_rate);
 
-      const metrics = calculateProductMetrics(pEntries);
+      // 채널별 FIFO 분리: 채널 필터에 맞는 입고/판매만 사용
+      const batchesToUse = channelFilter === 'rg'
+        ? pEntries.filter((e) => e.channel === ENTRY_CHANNEL.RG)
+        : channelFilter === 'wing'
+          ? pEntries.filter((e) => e.channel === ENTRY_CHANNEL.WING)
+          : pEntries;
 
-      // 전체 판매로 FIFO 실행 → current_stock, stock_value 정확히 계산
+      const salesToUse = channelFilter === 'rg'
+        ? pSales.filter((s) => s.channel === SALE_CHANNEL.ROCKET_GROWTH)
+        : channelFilter === 'wing'
+          ? pSales.filter((s) => s.channel !== SALE_CHANNEL.ROCKET_GROWTH)
+          : pSales;
+
+      const metrics = calculateProductMetrics(batchesToUse);
+
+      // 채널 필터된 입고/판매로 FIFO 실행 → current_stock, stock_value 정확히 계산
       let fifoResult: FifoSummary = { current_stock: 0, stock_value: 0, total_realized_profit: 0, sale_details: [] };
       try {
-        const batches: PurchaseBatch[] = pEntries.map((e) => ({
+        const batches: PurchaseBatch[] = batchesToUse.map((e) => ({
           id: e.id,
           received_at: e.received_at,
           quantity: e.quantity,
@@ -129,17 +154,17 @@ export async function GET(request: NextRequest) {
           unit_shipping_fee: e.unit_shipping_fee,
           unit_rg_shipping_fee: e.unit_rg_shipping_fee ?? 0,
         }));
-        fifoResult = calculateFifo(batches, pSales, feeRate);
+        fifoResult = calculateFifo(batches, salesToUse, feeRate);
       } catch (e) {
         console.warn(`FIFO 계산 실패 product=${p.id}:`, e instanceof Error ? e.message : e);
       }
 
       // 기간 필터된 입고 매입비 집계 (received_at 기준)
-      const pFilteredEntries = pEntries.filter((e) => filteredEntryIds.has(e.id));
+      const pFilteredEntries = batchesToUse.filter((e) => filteredEntryIds.has(e.id));
       const periodPurchaseAmount = pFilteredEntries.reduce((s, e) => s + e.unit_cost * e.quantity, 0);
 
       // 기간 필터된 판매만 집계
-      const pFilteredSales = pSales.filter((s) => filteredSaleIds.has(s.id));
+      const pFilteredSales = salesToUse.filter((s) => filteredSaleIds.has(s.id));
       const periodSaleIds = new Set(pFilteredSales.map((s) => s.id));
       const pSalesById = new Map(pSales.map((s) => [s.id, s]));
       const periodRealizedProfit = fifoResult.sale_details
@@ -185,6 +210,10 @@ export async function GET(request: NextRequest) {
         margin_rate: marginRate,
         breakeven_roas: breakevenRoas,
         winner_status: winnerStatus,
+        // 소분 판매 필드
+        subdivision_unit: p.subdivision_unit ? Number(p.subdivision_unit) : null,
+        subdivision_carryover: Number(p.subdivision_carryover ?? 0),
+        subdivision_carryover_unit_cost: Number(p.subdivision_carryover_unit_cost ?? 0),
       };
     });
 
@@ -214,7 +243,7 @@ export async function POST(request: NextRequest) {
 
     // JSON 파싱 실패 시 null을 반환하여 아래 검증 단계에서 처리
     const body = await request.json().catch(() => null);
-    const { product_name, seller_product_id, vendor_item_id, platform_fee_rate } = body ?? {};
+    const { product_name, seller_product_id, vendor_item_id, platform_fee_rate, subdivision_unit } = body ?? {};
 
     // product_name 필수 검증
     if (!product_name || typeof product_name !== 'string' || product_name.trim() === '') {
@@ -251,11 +280,22 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // subdivision_unit 유효성 검사: 2 이상의 정수여야 함
+    if (subdivision_unit !== undefined && subdivision_unit !== null) {
+      if (!Number.isInteger(subdivision_unit) || subdivision_unit < 2) {
+        return NextResponse.json(
+          { success: false, error: 'subdivision_unit must be an integer >= 2' },
+          { status: 400 },
+        );
+      }
+    }
+
     const pool = getSourcingPool();
     const { rows } = await pool.query(
-      `INSERT INTO product_costs (user_id, product_name, seller_product_id, vendor_item_id, platform_fee_rate)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, product_name, seller_product_id, vendor_item_id, platform, platform_fee_rate, current_stock, created_at`,
+      `INSERT INTO product_costs (user_id, product_name, seller_product_id, vendor_item_id, platform_fee_rate, subdivision_unit)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, product_name, seller_product_id, vendor_item_id, platform, platform_fee_rate,
+                 subdivision_unit, subdivision_carryover, subdivision_carryover_unit_cost, current_stock, created_at`,
       [
         user.userId,
         product_name.trim(),
@@ -263,6 +303,7 @@ export async function POST(request: NextRequest) {
         vendor_item_id ?? null,
         // platform_fee_rate 미전달 시 쿠팡 기본 수수료율 10.8% 적용
         platform_fee_rate ?? 0.108,
+        subdivision_unit ?? null,
       ],
     );
 

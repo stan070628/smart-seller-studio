@@ -6,6 +6,17 @@
  * 단위 원가 및 실현손익을 계산한다.
  */
 
+export const ENTRY_CHANNEL = {
+  RG: 'rg',
+  WING: 'wing',
+} as const;
+
+export const SALE_CHANNEL = {
+  ROCKET_GROWTH: 'rocket_growth',
+  MANUAL: 'manual',
+  COUPANG: 'coupang',
+} as const;
+
 /** 입고 배치 */
 export interface PurchaseBatch {
   id: string;
@@ -30,6 +41,8 @@ export interface SaleRow {
   quantity: number;
   /** 판매 단가 (원) */
   selling_price: number;
+  /** 채널 ('rocket_growth' | 'coupang' | 'manual' 등) — 채널별 FIFO 분리 시 필터링에 사용 */
+  channel?: string;
 }
 
 /** 판매 건별 FIFO 상세 결과 */
