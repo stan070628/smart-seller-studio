@@ -81,9 +81,11 @@ export async function POST(request: NextRequest) {
             const productCostId = sellerProductMap.get(item.sellerProductId);
             if (!productCostId) continue;
             if (item.quantity <= 0) continue;
+            const soldAt = order.saleDate?.slice(0, 10);
+            if (!soldAt) continue;  // saleDate 없으면 스킵
             records.push({
               product_cost_id: productCostId,
-              sold_at: order.saleDate.slice(0, 10),
+              sold_at: soldAt,
               quantity: item.quantity,
               selling_price: item.salePrice,
               coupang_order_item_id: `wing-${order.orderId}-${item.vendorItemId}`,
@@ -94,22 +96,32 @@ export async function POST(request: NextRequest) {
       } while (token);
     }
 
-    // sale_records에 일괄 insert — 중복은 coupang_order_item_id unique constraint로 skip
+    // sale_records에 일괄 bulk INSERT — 중복은 coupang_order_item_id unique constraint로 skip
     let imported = 0;
-    let skipped = 0;
-    for (const rec of records) {
-      const result = await pool.query(
-        `INSERT INTO sale_records
-           (user_id, product_cost_id, sold_at, quantity, selling_price, channel, coupang_order_item_id)
-         VALUES ($1, $2, $3, $4, $5, 'coupang', $6)
-         ON CONFLICT (coupang_order_item_id) DO NOTHING`,
-        [user.userId, rec.product_cost_id, rec.sold_at, rec.quantity, rec.selling_price, rec.coupang_order_item_id],
-      );
-      if ((result.rowCount ?? 0) > 0) imported++;
-      else skipped++;
+    if (records.length > 0) {
+      // bulk INSERT: VALUES ($1,$2,...), ($7,$8,...) 형태로 구성
+      const CHUNK = 200; // 파라미터 수 한계 고려 (6 params × 200 = 1200)
+      for (let i = 0; i < records.length; i += CHUNK) {
+        const chunk = records.slice(i, i + CHUNK);
+        const values: unknown[] = [];
+        const placeholders = chunk.map((rec, idx) => {
+          const base = idx * 6;
+          values.push(user.userId, rec.product_cost_id, rec.sold_at, rec.quantity, rec.selling_price, rec.coupang_order_item_id);
+          return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},'coupang',$${base + 6})`;
+        });
+        const result = await pool.query(
+          `INSERT INTO sale_records
+             (user_id, product_cost_id, sold_at, quantity, selling_price, channel, coupang_order_item_id)
+           VALUES ${placeholders.join(',')}
+           ON CONFLICT (coupang_order_item_id) DO NOTHING`,
+          values,
+        );
+        imported += result.rowCount ?? 0;
+      }
     }
+    const skippedCount = records.length - imported;
 
-    return NextResponse.json({ success: true, data: { imported, skipped, total: records.length } });
+    return NextResponse.json({ success: true, data: { imported, skipped: skippedCount, total: records.length } });
   } catch (err) {
     const msg = err instanceof Error ? err.message : '서버 오류';
     return NextResponse.json({ success: false, error: msg }, { status: 500 });
