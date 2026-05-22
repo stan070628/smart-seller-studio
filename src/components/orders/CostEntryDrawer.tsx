@@ -59,6 +59,8 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
   // 입고 채널 선택 (윙+RG 동시 연결 상품에서만 사용)
   const [entryChannel, setEntryChannel] = useState<'rg' | 'wing'>('wing');
 
+  const [carryoverWarning, setCarryoverWarning] = useState(false);
+
   // 소분 모드 전용 상태
   const [subForm, setSubForm] = useState({
     received_at: new Date().toISOString().slice(0, 10),
@@ -66,6 +68,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
     purchaseQuantity: '',
     subUnit: subdivisionUnit ? String(subdivisionUnit) : '',
     unit_shipping_fee: '0',
+    unit_rg_shipping_fee: '0',
   });
   const [carryoverMeta, setCarryoverMeta] = useState({ quantity: 0, unitCost: 0 });
 
@@ -150,6 +153,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const json = await res.json();
       if (json.success) {
+        if (json.warning === 'subdivision_carryover_stale') setCarryoverWarning(true);
         refreshAll();
         setEditingId(null);
         setAddingNew(false);
@@ -175,6 +179,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
         purchase_quantity: Math.round(Number(subForm.purchaseQuantity)),
         subdivision_unit: Math.round(Number(subForm.subUnit)),
         unit_shipping_fee: Math.round(Number(subForm.unit_shipping_fee)),
+        unit_rg_shipping_fee: Math.round(Number(subForm.unit_rg_shipping_fee)),
         channel: entryChannel,
       };
       const res = await fetch(`/api/cost-management/products/${productId}/entries`, {
@@ -192,6 +197,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
           purchaseQuantity: '',
           subUnit: subdivisionUnit ? String(subdivisionUnit) : '',
           unit_shipping_fee: '0',
+          unit_rg_shipping_fee: '0',
         });
       } else {
         alert(json.error ?? '저장에 실패했습니다.');
@@ -205,8 +211,12 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
     if (!confirm('이 입고 건을 삭제할까요?')) return;
     const res = await fetch(`/api/cost-management/entries/${id}`, { method: 'DELETE' });
     const json = await res.json();
-    if (json.success) refreshAll();
-    else alert(json.error ?? '삭제에 실패했습니다.');
+    if (json.success) {
+      if (json.warning === 'subdivision_carryover_stale') setCarryoverWarning(true);
+      refreshAll();
+    } else {
+      alert(json.error ?? '삭제에 실패했습니다.');
+    }
   }
 
   function startEdit(e: Entry) {
@@ -228,6 +238,14 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
             <X size={18} color="#52525b" />
           </button>
         </div>
+
+        {/* 소분 이월 경고 배너 */}
+        {carryoverWarning && (
+          <div style={{ padding: '8px 24px', background: '#fef3c7', borderBottom: '1px solid #fde68a', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+            <span style={{ fontSize: '12px', color: '#92400e' }}>소분 입고 건을 수정/삭제하면 이월 잔여가 부정확해질 수 있습니다. 이월값을 확인하세요.</span>
+            <button onClick={() => setCarryoverWarning(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '12px', color: '#92400e', padding: '0 4px' }}>✕</button>
+          </div>
+        )}
 
         {/* FIFO 요약 카드 */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '10px', padding: '14px 24px', flexShrink: 0 }}>
@@ -326,6 +344,16 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
                           <div>
                             <div style={{ fontSize: '9px', color: '#92400e', marginBottom: '2px' }}>소분 갯수(개)</div>
                             <input type="number" value={subForm.subUnit} onChange={(e) => setSubForm((f) => ({ ...f, subUnit: e.target.value }))} placeholder="예: 10" style={{ width: '100%', padding: '3px 5px', borderRadius: '4px', border: '1px solid #fed7aa', fontSize: '11px', color: '#18181b', boxSizing: 'border-box' }} />
+                          </div>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginBottom: '6px' }}>
+                          <div>
+                            <div style={{ fontSize: '9px', color: '#92400e', marginBottom: '2px' }}>배송비(원)</div>
+                            <input type="number" value={subForm.unit_shipping_fee} onChange={(e) => setSubForm((f) => ({ ...f, unit_shipping_fee: e.target.value }))} style={{ width: '100%', padding: '3px 5px', borderRadius: '4px', border: '1px solid #fed7aa', fontSize: '11px', color: '#18181b', boxSizing: 'border-box' }} />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '9px', color: '#92400e', marginBottom: '2px' }}>RG 배송비(원)</div>
+                            <input type="number" value={subForm.unit_rg_shipping_fee} onChange={(e) => setSubForm((f) => ({ ...f, unit_rg_shipping_fee: e.target.value }))} style={{ width: '100%', padding: '3px 5px', borderRadius: '4px', border: '1px solid #fed7aa', fontSize: '11px', color: '#18181b', boxSizing: 'border-box' }} />
                           </div>
                         </div>
                         {subPreview && (

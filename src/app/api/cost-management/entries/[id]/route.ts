@@ -81,16 +81,22 @@ export async function DELETE(
   const { id } = await params;
   const pool = getSourcingPool();
   try {
-    const { rowCount } = await pool.query(
-      `DELETE FROM cost_entries WHERE id = $1 AND user_id = $2`,
+    const { rows: check } = await pool.query(
+      `SELECT purchase_quantity FROM cost_entries WHERE id = $1 AND user_id = $2`,
       [id, user.userId],
     );
-
-    if (rowCount === 0) {
+    if (check.length === 0) {
       return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ success: true });
+    const isSubdivisionEntry = check[0].purchase_quantity != null;
+
+    await pool.query(`DELETE FROM cost_entries WHERE id = $1`, [id]);
+
+    return NextResponse.json({
+      success: true,
+      ...(isSubdivisionEntry && { warning: 'subdivision_carryover_stale' }),
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : '서버 오류';
     return NextResponse.json({ success: false, error: msg }, { status: 500 });

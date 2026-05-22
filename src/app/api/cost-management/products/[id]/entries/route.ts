@@ -162,31 +162,44 @@ export async function POST(
       finalUnitCost = unit_cost;
     }
 
-    const { rows } = await pool.query(
-      `INSERT INTO cost_entries
-         (user_id, product_cost_id, received_at, quantity, unit_cost, unit_shipping_fee, unit_rg_shipping_fee, channel, purchase_quantity, subdivision_unit)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-       RETURNING *`,
-      [
-        user.userId,
-        id,
-        received_at,
-        finalQuantity,
-        finalUnitCost,
-        unit_shipping_fee ?? 0,
-        unit_rg_shipping_fee ?? 0,
-        (channel === ENTRY_CHANNEL.RG || channel === ENTRY_CHANNEL.WING) ? channel : ENTRY_CHANNEL.WING,
-        finalPurchaseQuantity,
-        finalSubdivisionUnit,
-      ],
-    );
+    const client = await pool.connect();
+    let rows: Record<string, unknown>[];
+    try {
+      await client.query('BEGIN');
 
-    // 소분 모드인 경우 product_costs의 이월 수량/단가 갱신
-    if (isSubdivisionMode && carryoverOut !== null) {
-      await pool.query(
-        `UPDATE product_costs SET subdivision_carryover = $1, subdivision_carryover_unit_cost = $2 WHERE id = $3`,
-        [carryoverOut, newCarryoverUnitCost, id],
-      );
+      ({ rows } = await client.query(
+        `INSERT INTO cost_entries
+           (user_id, product_cost_id, received_at, quantity, unit_cost, unit_shipping_fee, unit_rg_shipping_fee, channel, purchase_quantity, subdivision_unit)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         RETURNING *`,
+        [
+          user.userId,
+          id,
+          received_at,
+          finalQuantity,
+          finalUnitCost,
+          unit_shipping_fee ?? 0,
+          unit_rg_shipping_fee ?? 0,
+          (channel === ENTRY_CHANNEL.RG || channel === ENTRY_CHANNEL.WING) ? channel : ENTRY_CHANNEL.WING,
+          finalPurchaseQuantity,
+          finalSubdivisionUnit,
+        ],
+      ));
+
+      // 소분 모드인 경우 product_costs의 이월 수량/단가 갱신 (같은 트랜잭션)
+      if (isSubdivisionMode && carryoverOut !== null) {
+        await client.query(
+          `UPDATE product_costs SET subdivision_carryover = $1, subdivision_carryover_unit_cost = $2 WHERE id = $3`,
+          [carryoverOut, newCarryoverUnitCost, id],
+        );
+      }
+
+      await client.query('COMMIT');
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      throw txErr;
+    } finally {
+      client.release();
     }
 
     return NextResponse.json(
