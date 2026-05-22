@@ -29,7 +29,8 @@ export async function GET(request: NextRequest) {
     const pool = getSourcingPool();
 
     const { rows: products } = await pool.query(
-      `SELECT id, product_name, seller_product_id, vendor_item_id, platform, platform_fee_rate, created_at
+      `SELECT id, product_name, seller_product_id, vendor_item_id, platform, platform_fee_rate,
+              subdivision_unit, subdivision_carryover, subdivision_carryover_unit_cost, created_at
        FROM product_costs
        WHERE user_id = $1
        ORDER BY created_at DESC`,
@@ -209,6 +210,10 @@ export async function GET(request: NextRequest) {
         margin_rate: marginRate,
         breakeven_roas: breakevenRoas,
         winner_status: winnerStatus,
+        // 소분 판매 필드
+        subdivision_unit: p.subdivision_unit ? Number(p.subdivision_unit) : null,
+        subdivision_carryover: Number(p.subdivision_carryover ?? 0),
+        subdivision_carryover_unit_cost: Number(p.subdivision_carryover_unit_cost ?? 0),
       };
     });
 
@@ -238,7 +243,7 @@ export async function POST(request: NextRequest) {
 
     // JSON 파싱 실패 시 null을 반환하여 아래 검증 단계에서 처리
     const body = await request.json().catch(() => null);
-    const { product_name, seller_product_id, vendor_item_id, platform_fee_rate } = body ?? {};
+    const { product_name, seller_product_id, vendor_item_id, platform_fee_rate, subdivision_unit } = body ?? {};
 
     // product_name 필수 검증
     if (!product_name || typeof product_name !== 'string' || product_name.trim() === '') {
@@ -275,11 +280,22 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // subdivision_unit 유효성 검사: 2 이상의 정수여야 함
+    if (subdivision_unit !== undefined && subdivision_unit !== null) {
+      if (!Number.isInteger(subdivision_unit) || subdivision_unit < 2) {
+        return NextResponse.json(
+          { success: false, error: 'subdivision_unit must be an integer >= 2' },
+          { status: 400 },
+        );
+      }
+    }
+
     const pool = getSourcingPool();
     const { rows } = await pool.query(
-      `INSERT INTO product_costs (user_id, product_name, seller_product_id, vendor_item_id, platform_fee_rate)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, product_name, seller_product_id, vendor_item_id, platform, platform_fee_rate, current_stock, created_at`,
+      `INSERT INTO product_costs (user_id, product_name, seller_product_id, vendor_item_id, platform_fee_rate, subdivision_unit)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, product_name, seller_product_id, vendor_item_id, platform, platform_fee_rate,
+                 subdivision_unit, subdivision_carryover, subdivision_carryover_unit_cost, current_stock, created_at`,
       [
         user.userId,
         product_name.trim(),
@@ -287,6 +303,7 @@ export async function POST(request: NextRequest) {
         vendor_item_id ?? null,
         // platform_fee_rate 미전달 시 쿠팡 기본 수수료율 10.8% 적용
         platform_fee_rate ?? 0.108,
+        subdivision_unit ?? null,
       ],
     );
 
