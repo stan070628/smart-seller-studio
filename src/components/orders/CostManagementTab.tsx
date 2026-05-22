@@ -346,9 +346,9 @@ export default function CostManagementTab() {
     else alert(json.error ?? '삭제에 실패했습니다.');
   }
 
-  const filtered = products.filter((p) =>
-    p.product_name.toLowerCase().includes(search.toLowerCase()),
-  );
+  const filtered = products
+    .filter((p) => p.product_name.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => b.sale_count - a.sale_count);
 
   return (
     <div>
