@@ -52,3 +52,9 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #52525b; /* zinc-600 */
 }
+
+/* 인풋 placeholder 가시성 향상 */
+input::placeholder {
+  color: #71717a; /* zinc-500 */
+  opacity: 1;
+}
