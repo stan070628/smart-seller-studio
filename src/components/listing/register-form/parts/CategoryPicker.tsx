@@ -45,6 +45,7 @@ interface CategoryResult {
   code: string;
   name: string;
   path: string;
+  aiRecommended?: boolean;
 }
 
 export interface CategoryPickerProps {
@@ -97,10 +98,11 @@ export default function CategoryPicker({
         const raw = json.success ? (json.data ?? []).slice(0, 8) : [];
         // 쿠팡은 code가 number, 네이버는 string — string으로 통일
         setResults(
-          raw.map((item: { code: number | string; name: string; path: string }) => ({
+          raw.map((item: { code: number | string; name: string; path: string; aiRecommended?: boolean }) => ({
             code: String(item.code),
             name: item.name,
             path: item.path,
+            aiRecommended: item.aiRecommended,
           })),
         );
       } catch {
@@ -280,11 +282,20 @@ export default function CategoryPicker({
                       fontSize: '12px',
                       cursor: 'pointer',
                       borderBottom: `1px solid ${C.border}`,
-                      backgroundColor: isSelected ? ps.bg : '#fff',
+                      backgroundColor: isSelected ? ps.bg : item.aiRecommended ? '#faf5ff' : '#fff',
                       color: isSelected ? ps.color : C.text,
                     }}
                   >
-                    <div style={{ fontWeight: isSelected ? 600 : 400 }}>{item.name}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontWeight: isSelected ? 600 : 400 }}>
+                      {item.aiRecommended && (
+                        <span style={{
+                          fontSize: '9px', fontWeight: 700, color: '#7c3aed',
+                          background: '#ede9fe', borderRadius: '3px', padding: '1px 5px',
+                          flexShrink: 0,
+                        }}>AI 추천</span>
+                      )}
+                      {item.name}
+                    </div>
                     <div style={{ fontSize: '10px', color: C.textSub, marginTop: '2px' }}>
                       {item.path}
                     </div>

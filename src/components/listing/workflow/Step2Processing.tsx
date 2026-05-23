@@ -163,7 +163,7 @@ export default function Step2Processing() {
 // 서브 컴포넌트: 카테고리 키워드 검색 (쿠팡 + 네이버 동시)
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface CoupangCat { code: number; name: string; path: string; }
+interface CoupangCat { code: number; name: string; path: string; aiRecommended?: boolean; }
 interface NaverCat { id: string; name: string; path: string; }
 
 function CategorySearch() {
@@ -276,7 +276,16 @@ function CategorySearch() {
                     onClick={() => updateSharedDraft({ coupangCategoryCode: String(item.code), coupangCategoryPath: item.path })}
                     style={rowStyle(String(item.code) === sharedDraft.coupangCategoryCode)}
                   >
-                    <div style={{ fontWeight: 600 }}>{item.name}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      {item.aiRecommended && (
+                        <span style={{
+                          fontSize: '9px', fontWeight: 700, color: '#7c3aed',
+                          background: '#ede9fe', borderRadius: '3px', padding: '1px 5px',
+                          flexShrink: 0,
+                        }}>AI 추천</span>
+                      )}
+                      <span style={{ fontWeight: 600 }}>{item.name}</span>
+                    </div>
                     <div style={{ fontSize: '10px', color: C.textSub, marginTop: '1px' }}>{item.path}</div>
                   </button>
                 ))

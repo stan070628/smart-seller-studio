@@ -396,6 +396,40 @@ export class CoupangClient {
     }));
   }
 
+  // ─── 카테고리 AI 추천 ─────────────────────────────────────
+
+  /**
+   * 쿠팡 카테고리 추천 API (GET_PRODUCT_AUTO_CATEGORY)
+   * 상품명을 기반으로 최적 카테고리를 ML로 예측합니다.
+   * 실패 시 null 반환 (트리 검색으로 폴백).
+   */
+  async predictCategory(productName: string, productDescription?: string): Promise<{
+    categoryId: number;
+    categoryPath: string;
+  } | null> {
+    try {
+      const url = `/v2/providers/openapi/apis/api/v1/categorization/predict`;
+      const body: Record<string, string> = { productName };
+      if (productDescription) body.productDescription = productDescription;
+      const res = await this.request<{
+        autoCategorizationPredictionResultType: string;
+        predictedCategoryId: number;
+        predictedCategoryName: string;
+      }>('POST', url, body);
+
+      if (res.code !== 'SUCCESS' || !res.data) return null;
+      if (res.data.autoCategorizationPredictionResultType !== 'SUCCESS') return null;
+
+      return {
+        categoryId: res.data.predictedCategoryId,
+        // API는 "식품>건강식품>비타민" 형태로 반환 → " > " 로 정규화
+        categoryPath: res.data.predictedCategoryName.replace(/>/g, ' > '),
+      };
+    } catch {
+      return null;
+    }
+  }
+
   // ─── 상품 등록 ─────────────────────────────────────────────
 
   async registerProduct(
