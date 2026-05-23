@@ -41,6 +41,16 @@ export default function RocketGrowthShipmentModal({ products, onClose, onCreated
 
   async function submit() {
     if (!canSubmit) return;
+
+    const skipped = products.filter((p) => (parseInt(quantities[p.id] ?? '0') || 0) === 0);
+    if (skipped.length > 0) {
+      const names = skipped.map((p) => p.product_name).join('\n- ');
+      const ok = window.confirm(
+        `다음 ${skipped.length}개 상품은 수량이 입력되지 않아 이번 입고에 포함되지 않습니다:\n\n- ${names}\n\n계속 진행할까요?`,
+      );
+      if (!ok) return;
+    }
+
     setSaving(true);
     try {
       const items = activeItems.map((item) => ({
@@ -124,7 +134,7 @@ export default function RocketGrowthShipmentModal({ products, onClose, onCreated
                 const unitFee = qty > 0 ? (unitFees.get(p.id) ?? 0) : null;
                 const overStock = qty > p.current_stock;
                 return (
-                  <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '1fr 60px 80px 70px', gap: '8px', padding: '8px 12px', alignItems: 'center', borderBottom: '1px solid #f0f0f0', background: '#fff' }}>
+                  <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '1fr 60px 80px 70px', gap: '8px', padding: '8px 12px', alignItems: 'center', borderBottom: '1px solid #f0f0f0', background: qty === 0 ? '#f5f5f7' : '#fff' }}>
                     <span style={{ fontSize: '11px', color: '#18181b', fontWeight: 500 }}>{p.product_name}</span>
                     <span style={{ fontSize: '11px', textAlign: 'right', color: '#71717a' }}>{fmt(p.current_stock)}개</span>
                     <div style={{ textAlign: 'right' }}>

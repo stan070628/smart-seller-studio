@@ -118,8 +118,10 @@ export default function DashboardClient() {
   };
 
   const chartActual = useMemo(() => {
+    const apiActual = orders?.revenue12w?.actual;
+    if (apiActual?.some((v) => v !== null)) return apiActual;
     return planData?.cumulativeActual ?? new Array(12).fill(null);
-  }, [planData]);
+  }, [orders, planData]);
 
   return (
     <div style={{ backgroundColor: '#f5f5f7', minHeight: '100%' }}>

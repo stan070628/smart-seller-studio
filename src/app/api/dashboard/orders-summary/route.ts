@@ -6,7 +6,8 @@
 import { NextRequest } from 'next/server';
 import { requireAuth } from '@/lib/supabase/auth';
 import { isPeriod, type Period, type OrdersSummaryData, type ChannelPipeline } from '@/lib/dashboard/types';
-import { WEEKLY_TARGETS } from '@/lib/plan/constants';
+import { PLAN_START, WEEKLY_TARGETS } from '@/lib/plan/constants';
+import { getCurrentWeek, getWeekForDate } from '@/lib/plan/week';
 import { getCoupangClient } from '@/lib/listing/coupang-client';
 import { getNaverCommerceClient } from '@/lib/listing/naver-commerce-client';
 import {
@@ -16,6 +17,7 @@ import {
   type NaverOrderRow,
 } from '@/lib/dashboard/pipeline-aggregator';
 import { fetchCoupangSettlement, fetchNaverSettlement } from '@/lib/dashboard/settlement-clients';
+import { getSourcingPool } from '@/lib/sourcing/db';
 
 export const dynamic = 'force-dynamic';
 
@@ -82,6 +84,77 @@ async function fetchCoupangOrdersForStatus(
   return items;
 }
 
+async function fetchCoupangWeeklyActualFromApi(): Promise<(number | null)[]> {
+  const client = getCoupangClient();
+  const planStartStr = toDateStr(PLAN_START);
+  const yesterday = toDateStr(new Date(Date.now() - 86_400_000));
+  if (yesterday < planStartStr) return new Array(12).fill(null);
+
+  const weekAmounts: number[] = new Array(12).fill(0);
+  let token = '';
+  for (let page = 0; page < 50; page++) {
+    const result = await client.getRevenueHistory({
+      recognitionDateFrom: planStartStr,
+      recognitionDateTo: yesterday,
+      maxPerPage: 50,
+      token,
+    });
+    for (const item of result.items) {
+      const w = getWeekForDate(item.recognitionDate);
+      if (w >= 1 && w <= 12) weekAmounts[w - 1] += item.saleAmount / 10_000;
+    }
+    if (!result.nextToken) break;
+    token = result.nextToken;
+  }
+
+  const currentWeek = getCurrentWeek();
+  const cumulative: (number | null)[] = new Array(12).fill(null);
+  let acc = 0;
+  for (let w = 1; w <= 12; w++) {
+    acc += weekAmounts[w - 1];
+    cumulative[w - 1] = w <= currentWeek ? acc : null;
+  }
+  return cumulative;
+}
+
+async function fetchCoupangWeeklyActual(): Promise<(number | null)[]> {
+  // 캐시 키: 전날 날짜 기준 (매출 데이터는 전일까지만 확정)
+  const yesterday = toDateStr(new Date(Date.now() - 86_400_000));
+  const cacheKey = `coupang:12w:${yesterday}`;
+
+  try {
+    const pool = getSourcingPool();
+
+    // 캐시 히트 확인
+    const { rows } = await pool.query<{ actual: (number | null)[] }>(
+      'SELECT actual FROM dashboard_revenue_cache WHERE cache_key = $1',
+      [cacheKey],
+    );
+    if (rows.length > 0) return rows[0].actual;
+
+    // 캐시 미스 — 쿠팡 API 호출
+    const actual = await fetchCoupangWeeklyActualFromApi();
+
+    // 저장 (같은 날 다른 요청이 동시에 쓰더라도 덮어써도 무방)
+    await pool.query(
+      `INSERT INTO dashboard_revenue_cache (cache_key, actual)
+       VALUES ($1, $2)
+       ON CONFLICT (cache_key) DO UPDATE SET actual = EXCLUDED.actual, cached_at = now()`,
+      [cacheKey, JSON.stringify(actual)],
+    );
+
+    // 오래된 캐시 정리 (14일 초과)
+    pool.query(
+      `DELETE FROM dashboard_revenue_cache WHERE cached_at < now() - INTERVAL '14 days'`,
+    ).catch(() => {});
+
+    return actual;
+  } catch (err) {
+    console.warn('[dashboard] 12주 실제 매출 조회 실패:', err instanceof Error ? err.message : err);
+    return new Array(12).fill(null);
+  }
+}
+
 async function fetchCoupangOrders(from: string, to: string): Promise<CoupangOrderRow[]> {
   try {
     const client = getCoupangClient();
@@ -132,11 +205,12 @@ async function fetchNaverOrders(from: string, to: string): Promise<NaverOrderRow
 async function buildOrdersSummary(period: Period): Promise<OrdersSummaryData> {
   const { from, to } = periodRange(period);
 
-  const [coupangOrders, naverOrders, coupangSettle, naverSettle] = await Promise.all([
+  const [coupangOrders, naverOrders, coupangSettle, naverSettle, weeklyActual] = await Promise.all([
     fetchCoupangOrders(from, to),
     fetchNaverOrders(from, to),
     fetchCoupangSettlement({ period }).catch(() => ({ count: 0, amount: 0, available: false })),
     fetchNaverSettlement({ period }).catch(() => ({ count: 0, amount: 0, available: false })),
+    fetchCoupangWeeklyActual(),
   ]);
 
   const coupangPipeline: ChannelPipeline = aggregateCoupangPipeline(coupangOrders);
@@ -150,7 +224,7 @@ async function buildOrdersSummary(period: Period): Promise<OrdersSummaryData> {
     revenue12w: {
       weeks: Array.from({ length: 12 }, (_, i) => i + 1),
       target: [...WEEKLY_TARGETS],
-      actual: new Array(12).fill(null),
+      actual: weeklyActual,
     },
   };
 }
