@@ -13,10 +13,13 @@ import { getNaverCommerceClient } from '@/lib/listing/naver-commerce-client';
 import {
   aggregateCoupangPipeline,
   aggregateNaverPipeline,
+  aggregateRgPipeline,
   type CoupangOrderRow,
   type NaverOrderRow,
+  type RgOrderRow,
 } from '@/lib/dashboard/pipeline-aggregator';
 import { fetchCoupangSettlement, fetchNaverSettlement } from '@/lib/dashboard/settlement-clients';
+import { getOrdersCache, setOrdersCache } from '@/lib/dashboard/orders-cache';
 import { getSourcingPool } from '@/lib/sourcing/db';
 
 export const dynamic = 'force-dynamic';
@@ -186,6 +189,157 @@ function clampNaverFrom(from: string, to: string): string {
   return from < minStr ? minStr : from;
 }
 
+function splitInto30DayChunks(from: string, to: string): Array<{ from: string; to: string }> {
+  const chunks: Array<{ from: string; to: string }> = [];
+  const toDate = new Date(to);
+  let cursor = new Date(from);
+  while (cursor <= toDate) {
+    const end = new Date(cursor);
+    end.setDate(end.getDate() + 29);
+    if (end > toDate) end.setTime(toDate.getTime());
+    chunks.push({ from: toDateStr(cursor), to: toDateStr(end) });
+    cursor = new Date(end);
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return chunks;
+}
+
+async function fetchRgOrdersForChunk(
+  client: ReturnType<typeof getCoupangClient>,
+  chunk: { from: string; to: string },
+): Promise<RgOrderRow[]> {
+  const rows: RgOrderRow[] = [];
+  let nextToken = '';
+  for (let page = 0; page < 50; page++) {
+    const result = await client.getRocketGrowthOrders({
+      paidDateFrom: chunk.from,
+      paidDateTo: chunk.to,
+      nextToken: nextToken || undefined,
+    });
+    for (const order of result.items) {
+      rows.push({
+        orderId: order.orderId,
+        totalAmount: order.orderItems.reduce(
+          (s: number, i: { salesQuantity: number; unitSalesPrice: number }) =>
+            s + i.salesQuantity * i.unitSalesPrice,
+          0,
+        ),
+      });
+    }
+    if (!result.nextToken) break;
+    nextToken = result.nextToken;
+  }
+  return rows;
+}
+
+async function fetchRgOrders(from: string, to: string): Promise<RgOrderRow[]> {
+  // 키를 dashboard: 접두사로 분리 — /api/orders/coupang-rg 라우트와 포맷이 달라 충돌 방지
+  const cacheKey = `dashboard:coupang-rg:${from}:${to}`;
+  try {
+    const cached = await getOrdersCache<RgOrderRow[]>(cacheKey);
+    if (cached) return cached;
+
+    const client = getCoupangClient();
+    const chunks = splitInto30DayChunks(from, to);
+    const results = await Promise.allSettled(
+      chunks.map((chunk) => fetchRgOrdersForChunk(client, chunk)),
+    );
+    const rows: RgOrderRow[] = [];
+    for (const r of results) {
+      if (r.status === 'fulfilled') rows.push(...r.value);
+      else console.warn('[dashboard] RG 청크 조회 실패:', r.reason);
+    }
+
+    setOrdersCache(cacheKey, rows).catch(() => {});
+    return rows;
+  } catch (err) {
+    console.warn('[dashboard] RG 주문 조회 실패:', err instanceof Error ? err.message : err);
+    return [];
+  }
+}
+
+async function fetchRgWeeklyForChunk(
+  client: ReturnType<typeof getCoupangClient>,
+  chunk: { from: string; to: string },
+): Promise<number[]> {
+  const amounts: number[] = new Array(12).fill(0);
+  let nextToken = '';
+  for (let page = 0; page < 50; page++) {
+    const result = await client.getRocketGrowthOrders({
+      paidDateFrom: chunk.from,
+      paidDateTo: chunk.to,
+      nextToken: nextToken || undefined,
+    });
+    for (const order of result.items) {
+      const paidAtMs = Number(order.paidAt);
+      if (!Number.isFinite(paidAtMs) || paidAtMs <= 0) continue;
+      // KST(+9h) 기준 날짜로 변환 — getWeekForDate가 YYYY-MM-DD를 KST로 해석
+      const dateStr = new Date(paidAtMs + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const w = getWeekForDate(dateStr);
+      if (w >= 1 && w <= 12) {
+        const total = order.orderItems.reduce(
+          (s: number, i: { salesQuantity: number; unitSalesPrice: number }) =>
+            s + i.salesQuantity * i.unitSalesPrice,
+          0,
+        );
+        amounts[w - 1] += total / 10_000;
+      }
+    }
+    if (!result.nextToken) break;
+    nextToken = result.nextToken;
+  }
+  return amounts;
+}
+
+async function fetchRgWeeklyActualFromApi(): Promise<number[]> {
+  const planStartStr = toDateStr(PLAN_START);
+  const yesterday = toDateStr(new Date(Date.now() - 86_400_000));
+  if (yesterday < planStartStr) return new Array(12).fill(0);
+
+  const client = getCoupangClient();
+  const chunks = splitInto30DayChunks(planStartStr, yesterday);
+  const results = await Promise.allSettled(
+    chunks.map((chunk) => fetchRgWeeklyForChunk(client, chunk)),
+  );
+
+  const weekAmounts: number[] = new Array(12).fill(0);
+  for (const r of results) {
+    if (r.status === 'fulfilled') {
+      for (let i = 0; i < 12; i++) weekAmounts[i] += r.value[i];
+    } else {
+      console.warn('[dashboard] RG 주차 청크 조회 실패:', r.reason);
+    }
+  }
+  return weekAmounts;
+}
+
+async function fetchRgWeeklyActual(): Promise<number[]> {
+  const yesterday = toDateStr(new Date(Date.now() - 86_400_000));
+  const cacheKey = `coupang-rg:12w:${yesterday}`;
+  try {
+    const pool = getSourcingPool();
+    const { rows } = await pool.query<{ actual: number[] }>(
+      'SELECT actual FROM dashboard_revenue_cache WHERE cache_key = $1',
+      [cacheKey],
+    );
+    if (rows.length > 0) return rows[0].actual;
+    const actual = await fetchRgWeeklyActualFromApi();
+    await pool.query(
+      `INSERT INTO dashboard_revenue_cache (cache_key, actual)
+       VALUES ($1, $2)
+       ON CONFLICT (cache_key) DO UPDATE SET actual = EXCLUDED.actual, cached_at = now()`,
+      [cacheKey, JSON.stringify(actual)],
+    );
+    pool.query(
+      `DELETE FROM dashboard_revenue_cache WHERE cached_at < now() - INTERVAL '14 days'`,
+    ).catch(() => {});
+    return actual;
+  } catch (err) {
+    console.warn('[dashboard] RG 12주 매출 조회 실패:', err instanceof Error ? err.message : err);
+    return new Array(12).fill(0);
+  }
+}
+
 async function fetchNaverOrders(from: string, to: string): Promise<NaverOrderRow[]> {
   const clampedFrom = clampNaverFrom(from, to);
   try {
@@ -205,12 +359,14 @@ async function fetchNaverOrders(from: string, to: string): Promise<NaverOrderRow
 async function buildOrdersSummary(period: Period): Promise<OrdersSummaryData> {
   const { from, to } = periodRange(period);
 
-  const [coupangOrders, naverOrders, coupangSettle, naverSettle, weeklyActual] = await Promise.all([
+  const [coupangOrders, naverOrders, rgOrders, coupangSettle, naverSettle, wingWeekly, rgWeeklyRaw] = await Promise.all([
     fetchCoupangOrders(from, to),
     fetchNaverOrders(from, to),
+    fetchRgOrders(from, to),
     fetchCoupangSettlement({ period }).catch(() => ({ count: 0, amount: 0, available: false })),
     fetchNaverSettlement({ period }).catch(() => ({ count: 0, amount: 0, available: false })),
     fetchCoupangWeeklyActual(),
+    fetchRgWeeklyActual(),
   ]);
 
   const coupangPipeline: ChannelPipeline = aggregateCoupangPipeline(coupangOrders);
@@ -219,12 +375,21 @@ async function buildOrdersSummary(period: Period): Promise<OrdersSummaryData> {
   const naverPipeline: ChannelPipeline = aggregateNaverPipeline(naverOrders);
   naverPipeline.정산완료 = naverSettle;
 
+  const rgPipeline: ChannelPipeline = aggregateRgPipeline(rgOrders);
+
+  // Wing 누적 + RG 누적 합산. Wing이 null(미래 주차)이면 그대로 null 유지.
+  let rgAcc = 0;
+  const mergedActual = wingWeekly.map((wingVal, i) => {
+    rgAcc += rgWeeklyRaw[i] ?? 0;
+    return wingVal !== null ? wingVal + rgAcc : null;
+  });
+
   return {
-    pipeline: { coupang: coupangPipeline, naver: naverPipeline },
+    pipeline: { coupang: coupangPipeline, naver: naverPipeline, rg: rgPipeline },
     revenue12w: {
       weeks: Array.from({ length: 12 }, (_, i) => i + 1),
       target: [...WEEKLY_TARGETS],
-      actual: weeklyActual,
+      actual: mergedActual,
     },
   };
 }

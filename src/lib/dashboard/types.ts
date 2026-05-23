@@ -56,6 +56,7 @@ export interface OrdersSummaryData {
   pipeline: {
     coupang: ChannelPipeline;
     naver: ChannelPipeline;
+    rg?: ChannelPipeline;
   };
   revenue12w: {
     weeks: number[];

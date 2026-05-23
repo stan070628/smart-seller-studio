@@ -21,6 +21,7 @@ const STAGE_COLORS: Record<string, string> = {
 interface OrderPipelineProps {
   coupang: ChannelPipeline;
   naver: ChannelPipeline;
+  rg?: ChannelPipeline;
   period: Period;
   onPeriodChange: (p: Period) => void;
   /** true이면 해당 채널 행을 opacity 0.5로 흐리게 표시 (예: 등록 상품 0개) */
@@ -29,7 +30,7 @@ interface OrderPipelineProps {
 }
 
 export default function OrderPipeline({
-  coupang, naver, period, onPeriodChange, coupangDimmed = false, naverDimmed = false,
+  coupang, naver, rg, period, onPeriodChange, coupangDimmed = false, naverDimmed = false,
 }: OrderPipelineProps) {
   return (
     <section
@@ -58,6 +59,12 @@ export default function OrderPipeline({
       <ChannelRow label="쿠팡" color={C.accent} pipeline={coupang} dimmed={coupangDimmed} />
       <div style={{ height: 12 }} />
       <ChannelRow label="네이버" color="#16a34a" pipeline={naver} dimmed={naverDimmed} />
+      {rg && (
+        <>
+          <div style={{ height: 12 }} />
+          <ChannelRow label="로켓그로스" color="#f97316" pipeline={rg} dimmed={false} />
+        </>
+      )}
     </section>
   );
 }

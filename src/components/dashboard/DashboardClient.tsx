@@ -201,6 +201,7 @@ export default function DashboardClient() {
               <OrderPipeline
                 coupang={orders.pipeline.coupang}
                 naver={orders.pipeline.naver}
+                rg={orders.pipeline.rg}
                 period={period}
                 onPeriodChange={setPeriod}
                 coupangDimmed={(productCount?.coupang ?? 0) === 0}

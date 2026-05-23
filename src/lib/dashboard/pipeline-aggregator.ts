@@ -52,6 +52,21 @@ export function aggregateCoupangPipeline(orders: CoupangOrderRow[]): ChannelPipe
   };
 }
 
+export interface RgOrderRow {
+  orderId: string;
+  totalAmount: number;
+}
+
+export function aggregateRgPipeline(orders: RgOrderRow[]): ChannelPipeline {
+  const 주문 = emptyStage();
+  for (const o of orders) add(주문, o.totalAmount);
+  return {
+    주문, 배송중: emptyStage(), 배송완료: emptyStage(), 구매확정: emptyStage(),
+    정산완료: { count: 0, amount: 0, available: false },
+    lastUpdated: new Date().toISOString(),
+  };
+}
+
 export function aggregateNaverPipeline(orders: NaverOrderRow[]): ChannelPipeline {
   const 주문 = emptyStage();
   const 배송중 = emptyStage();
