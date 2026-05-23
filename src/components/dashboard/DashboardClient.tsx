@@ -124,7 +124,7 @@ export default function DashboardClient() {
   return (
     <div style={{ backgroundColor: '#f5f5f7', minHeight: '100%' }}>
       {/* ── 메인 ─────────────────── */}
-      <main style={{ maxWidth: 1200, width: '100%', margin: '0 auto', padding: '28px 24px' }}>
+      <main style={{ width: '100%', padding: '28px 24px' }}>
         {/* 타이틀 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
           <div

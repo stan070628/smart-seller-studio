@@ -2247,9 +2247,7 @@ export default function ListingDashboard() {
         style={{
           flex: 1,
           padding: '24px',
-          maxWidth: '1100px',
           width: '100%',
-          margin: '0 auto',
         }}
       >
         {/* 퀵 액션 버튼 */}

@@ -1712,8 +1712,6 @@ export default function PlanClient() {
       <div
         style={{
           padding: '28px 32px 0',
-          maxWidth: 1100,
-          margin: '0 auto',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
@@ -1779,7 +1777,7 @@ export default function PlanClient() {
       </div>
 
       {/* 탭 콘텐츠 */}
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 32px 48px' }}>
+      <div style={{ padding: '24px 32px 48px' }}>
         {activeTab === 'today' && <TodayTab />}
         {activeTab === 'daily' && <DailyTab />}
         {activeTab === 'progress' && <ProgressTab />}
