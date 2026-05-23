@@ -5,6 +5,7 @@
 
 import { NextRequest } from 'next/server';
 import { getNaverCommerceClient } from '@/lib/listing/naver-commerce-client';
+import { getOrdersCache, setOrdersCache } from '@/lib/dashboard/orders-cache';
 
 function toDateStr(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -21,6 +22,13 @@ export async function GET(request: NextRequest) {
   const to   = sp.get('to')   ?? toDateStr(today);
 
   try {
+    // 캐시 확인
+    const cacheKey = `orders:naver:${from}:${to}`;
+    const cached = await getOrdersCache<unknown[]>(cacheKey);
+    if (cached) {
+      return Response.json({ success: true, data: { items: cached } });
+    }
+
     const client = getNaverCommerceClient();
 
     const result = await client.getOrders({ fromDate: from, toDate: to });
@@ -49,6 +57,10 @@ export async function GET(request: NextRequest) {
 
     // 주문일시 내림차순 정렬
     items.sort((a, b) => new Date(b.orderedAt).getTime() - new Date(a.orderedAt).getTime());
+
+    if (items.length > 0) {
+      setOrdersCache(cacheKey, items).catch(() => {});
+    }
 
     console.info(`[GET /api/orders/naver] 조회 완료: ${items.length}건 (${from} ~ ${to})`);
     return Response.json({ success: true, data: { items } });

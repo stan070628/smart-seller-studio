@@ -5,6 +5,7 @@
 
 import { NextRequest } from 'next/server';
 import { getCoupangClient } from '@/lib/listing/coupang-client';
+import { getOrdersCache, setOrdersCache } from '@/lib/dashboard/orders-cache';
 
 function toDateStr(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -28,12 +29,19 @@ export async function GET(request: NextRequest) {
     const client = getCoupangClient();
 
     if (status) {
-      // 특정 status 단일 조회
+      // 특정 status 단일 조회 — 캐시 미적용 (호출 빈도 낮음)
       const result = await client.getOrders({ createdAtFrom: from, createdAtTo: to, status, nextToken, maxPerPage: 50 });
       return Response.json({ success: true, data: result });
     }
 
-    // status 미지정 → 2개씩 chunk로 조회 (429 방지)
+    // 캐시 확인
+    const cacheKey = `orders:coupang:${from}:${to}`;
+    const cached = await getOrdersCache<unknown[]>(cacheKey);
+    if (cached) {
+      return Response.json({ success: true, data: { items: cached, nextToken: null } });
+    }
+
+    // 캐시 미스 → 2개씩 chunk로 조회 (429 방지)
     const CHUNK_SIZE = 2;
     const results: PromiseSettledResult<Awaited<ReturnType<typeof client.getOrders>>>[] = [];
     for (let i = 0; i < ALL_STATUSES.length; i += CHUNK_SIZE) {
@@ -65,6 +73,10 @@ export async function GET(request: NextRequest) {
 
     // 주문일시 내림차순 정렬
     items.sort((a, b) => new Date(b.orderedAt).getTime() - new Date(a.orderedAt).getTime());
+
+    if (items.length > 0) {
+      setOrdersCache(cacheKey, items).catch(() => {});
+    }
 
     return Response.json({ success: true, data: { items, nextToken: null } });
   } catch (err) {

@@ -10,10 +10,9 @@
 
 import { NextRequest } from 'next/server';
 import { getCoupangClient } from '@/lib/listing/coupang-client';
+import { getOrdersCache, setOrdersCache } from '@/lib/dashboard/orders-cache';
 
 export const dynamic = 'force-dynamic';
-
-const CACHE_TTL_MS = 5 * 60 * 1000;
 
 type RgOrder = {
   orderId: string;
@@ -28,8 +27,6 @@ type RgOrder = {
     saleAmount: number;
   }>;
 };
-
-const cache = new Map<string, { data: RgOrder[]; expiresAt: number }>();
 
 function toDateStr(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -73,10 +70,10 @@ export async function GET(request: NextRequest) {
     return Response.json({ success: true, data: { items: [] } });
   }
 
-  const cacheKey = `${from}:${to}`;
-  const cached = cache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) {
-    return Response.json({ success: true, data: { items: cached.data } });
+  const cacheKey = `orders:coupang-rg:${from}:${to}`;
+  const cached = await getOrdersCache<RgOrder[]>(cacheKey);
+  if (cached) {
+    return Response.json({ success: true, data: { items: cached } });
   }
 
   try {
@@ -123,9 +120,8 @@ export async function GET(request: NextRequest) {
     // 판매일 내림차순 정렬
     allOrders.sort((a, b) => b.saleDate.localeCompare(a.saleDate));
 
-    // 빈 결과는 캐시하지 않음
     if (allOrders.length > 0) {
-      cache.set(cacheKey, { data: allOrders, expiresAt: Date.now() + CACHE_TTL_MS });
+      setOrdersCache(cacheKey, allOrders).catch(() => {});
     }
 
     return Response.json({ success: true, data: { items: allOrders } });
