@@ -1,10 +1,5 @@
-import AppNav from '@/components/AppNav';
+import AppShell from '@/components/AppShell';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      <AppNav />
-      <div style={{ flex: 1, overflow: 'auto' }}>{children}</div>
-    </div>
-  );
+  return <AppShell>{children}</AppShell>;
 }

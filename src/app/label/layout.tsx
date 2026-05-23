@@ -1,10 +1,5 @@
-import AppNav from '@/components/AppNav';
+import AppShell from '@/components/AppShell';
 
 export default function LabelLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      <AppNav />
-      <div style={{ flex: 1, overflow: 'hidden' }}>{children}</div>
-    </div>
-  );
+  return <AppShell mainOverflow="hidden">{children}</AppShell>;
 }
