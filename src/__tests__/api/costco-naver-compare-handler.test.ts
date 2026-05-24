@@ -18,7 +18,7 @@ vi.mock('@/lib/sourcing/db', () => ({
 }));
 
 vi.mock('@/lib/sourcing/naver-shopping', () => ({
-  normalizeForUnitSearch: vi.fn((s: string) => s),
+  normalizeProductQuery: vi.fn((s: string) => s),
 }));
 
 vi.mock('@/lib/supabase/auth', () => ({
