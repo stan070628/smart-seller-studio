@@ -26,11 +26,13 @@ import type {
   QuestionDefinition,
 } from '@/lib/conversational-detail/types';
 import type { DetailPageContent } from '@/lib/ai/prompts/detail-page';
+import { saveQASession, clearQASession } from '@/lib/listing/qa-session-draft';
 
 interface Props {
   productName: string;
   category: CategoryKey;
   imageUrls: string[];
+  initialAnswers?: QuestionAnswer[];  // 추가
   onClose: () => void;
   onComplete: (result: {
     html: string;
@@ -91,17 +93,23 @@ export default function ConversationalDetailModal({
   productName,
   category,
   imageUrls,
+  initialAnswers,
   onClose,
   onComplete,
 }: Props) {
   const questions = useMemo(() => getQuestionsForCategory(category), [category]);
 
+  // initialAnswers가 있으면 pre-populate, currentIndex는 answers 수만큼 건너뜀
+  const initialIndex = initialAnswers && initialAnswers.length >= questions.length
+    ? questions.length  // 모든 답변 완료 → 리뷰 화면으로 바로 이동
+    : (initialAnswers?.length ?? 0);
+
   const [state, dispatch] = useReducer(reducer, {
     phase: 'loading_suggestions' as Phase,
     questions,
     suggestions: [],
-    answers: [],
-    currentIndex: 0,
+    answers: initialAnswers ?? [],
+    currentIndex: initialIndex,
     error: null,
   });
 
@@ -109,6 +117,17 @@ export default function ConversationalDetailModal({
   const [freeText, setFreeText] = useState('');
   // AI 위임 호출 중 표시
   const [delegating, setDelegating] = useState(false);
+
+  // 답변 저장 헬퍼: dispatch 후 localStorage 자동 저장
+  const dispatchAnswer = (answer: QuestionAnswer) => {
+    dispatch({ type: 'set_answer', answer });
+    // 현재 state.answers 기준으로 병합 후 저장
+    const merged = [
+      ...state.answers.filter(a => a.questionId !== answer.questionId),
+      answer,
+    ];
+    saveQASession(productName, merged);
+  };
 
   // 마운트 시 1회 사전 채움 호출
   useEffect(() => {
@@ -178,13 +197,10 @@ export default function ConversationalDetailModal({
 
   const handleChipSelect = (chip: string) => {
     if (!currentQuestion) return;
-    dispatch({
-      type: 'set_answer',
-      answer: {
-        questionId: currentQuestion.id,
-        selectedChip: chip,
-        resolvedValue: chip,
-      },
+    dispatchAnswer({
+      questionId: currentQuestion.id,
+      selectedChip: chip,
+      resolvedValue: chip,
     });
   };
 
@@ -192,13 +208,10 @@ export default function ConversationalDetailModal({
     if (!currentQuestion) return;
     const value = freeText.trim();
     if (!value) return;
-    dispatch({
-      type: 'set_answer',
-      answer: {
-        questionId: currentQuestion.id,
-        freeText: value,
-        resolvedValue: value,
-      },
+    dispatchAnswer({
+      questionId: currentQuestion.id,
+      freeText: value,
+      resolvedValue: value,
     });
   };
 
@@ -226,13 +239,10 @@ export default function ConversationalDetailModal({
       if (!res.ok || !json.success) {
         throw new Error(!json.success ? json.error : `위임 실패 (HTTP ${res.status})`);
       }
-      dispatch({
-        type: 'set_answer',
-        answer: {
-          questionId: currentQuestion.id,
-          delegatedToAi: true,
-          resolvedValue: json.data.value,
-        },
+      dispatchAnswer({
+        questionId: currentQuestion.id,
+        delegatedToAi: true,
+        resolvedValue: json.data.value,
       });
     } catch (err) {
       dispatch({
@@ -272,6 +282,7 @@ export default function ConversationalDetailModal({
           'error' in json && json.error ? json.error : `상세페이지 생성 실패 (HTTP ${res.status})`,
         );
       }
+      clearQASession(productName);
       onComplete({ html: json.html, content: json.content, conversationContext });
     } catch (err) {
       dispatch({
