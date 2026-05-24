@@ -81,6 +81,7 @@ export default function MobileCodeSearchCard({ code, onClose }: Props) {
 
   // code 또는 lookupKey 변경 시 상태 초기화 후 상품 조회
   useEffect(() => {
+    const controller = new AbortController();
     setIsLoadingProduct(true);
     setLookupError(null);
     setLookupErrorType(null);
@@ -89,23 +90,31 @@ export default function MobileCodeSearchCard({ code, onClose }: Props) {
     setOfflinePrice('');
     setNaverResult(null);
 
-    fetch(`/api/sourcing/costco/lookup?code=${encodeURIComponent(code)}`)
+    fetch(`/api/sourcing/costco/lookup?code=${encodeURIComponent(code)}`, {
+      signal: controller.signal,
+    })
       .then(async (res) => {
         if (res.status === 404) {
-          // Issue 2: 404 오류 타입 설정
+          setLookupError('해당 상품코드를 찾을 수 없습니다');
           setLookupErrorType('not_found');
-          throw new Error('해당 상품코드를 찾을 수 없습니다');
+          return;
         }
         if (!res.ok) {
-          // Issue 3: 500 오류 타입 설정
+          setLookupError('조회 중 오류가 발생했습니다. 다시 시도해주세요');
           setLookupErrorType('error');
-          throw new Error('조회 중 오류가 발생했습니다. 다시 시도해주세요');
+          return;
         }
-        return res.json() as Promise<LookupResult>;
+        const data: LookupResult = await res.json();
+        setProduct(data);
       })
-      .then((data) => setProduct(data))
-      .catch((e: Error) => setLookupError(e.message))
+      .catch((err) => {
+        if (err.name === 'AbortError') return;
+        setLookupError('조회 중 오류가 발생했습니다. 다시 시도해주세요');
+        setLookupErrorType('error');
+      })
       .finally(() => setIsLoadingProduct(false));
+
+    return () => controller.abort();
   }, [code, lookupKey]);
 
   // 네이버 비교 요청 — step 3으로 전환하면서 비동기 조회
@@ -122,9 +131,12 @@ export default function MobileCodeSearchCard({ code, onClose }: Props) {
         const data = await res.json() as NaverCompareResponse;
         setNaverResult(data);
       } else {
-        // Issue 4: 네이버 API 비정상 응답 시 실패 플래그 설정
+        // 네이버 API 비정상 응답 시 실패 플래그 설정
         setNaverFailed(true);
       }
+    } catch {
+      // 네트워크 수준 오류 시 실패 플래그 설정
+      setNaverFailed(true);
     } finally {
       setIsLoadingNaver(false);
     }
@@ -151,18 +163,19 @@ export default function MobileCodeSearchCard({ code, onClose }: Props) {
       <div style={{ margin: '10px 12px', background: '#fff', borderRadius: 12, padding: 16, border: `1px solid ${C.border}` }}>
         <div style={{ fontSize: 13, color: C.red, marginBottom: 12 }}>{lookupError}</div>
         <div style={{ display: 'flex', gap: 8 }}>
-          {/* Issue 2 & 3: 모든 오류 상태에 retry 버튼 추가 */}
-          <button
-            onClick={() => { setLookupError(null); setLookupKey(k => k + 1); }}
-            style={{
-              fontSize: 12, color: '#fff', background: C.blue,
-              border: 'none', borderRadius: 6, cursor: 'pointer',
-              padding: '6px 12px', fontWeight: 600,
-            }}
-          >
-            다시 시도
-          </button>
-          {/* Issue 2: 404일 때도 닫기 버튼 표시, Issue 3: 500일 때도 닫기 버튼 표시 */}
+          {/* 404(not_found)는 재시도해도 의미 없으므로 retry 버튼을 숨김 */}
+          {lookupErrorType === 'error' && (
+            <button
+              onClick={() => { setLookupError(null); setLookupKey(k => k + 1); }}
+              style={{
+                fontSize: 12, color: '#fff', background: C.blue,
+                border: 'none', borderRadius: 6, cursor: 'pointer',
+                padding: '6px 12px', fontWeight: 600,
+              }}
+            >
+              다시 시도
+            </button>
+          )}
           <button
             onClick={onClose}
             style={{ fontSize: 12, color: C.sub, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
