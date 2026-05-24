@@ -78,4 +78,24 @@ describe('AssetsInputPanel', () => {
     expect(modal.dataset.imageCount).toBe('1');
     expect(modal.dataset.firstUrl).toBe('https://example.com/thumb1.jpg');
   });
+
+  it('URL 모드에서 카테고리 선택 전에는 "AI와 함께 만들기" 버튼이 비활성화된다', () => {
+    const store = useListingStore.getState();
+    store.resetAssetsDraft();
+    store.updateAssetsDraft({ mode: 'url', url: 'https://example.com/product', category: null });
+    store.updateSharedDraft({ name: '테스트 상품' });
+
+    render(<AssetsInputPanel onGenerate={() => {}} />);
+    expect(screen.getByRole('button', { name: /AI와 함께 만들기/ })).toBeDisabled();
+  });
+
+  it('URL 모드에서 URL + 카테고리 입력 시 "AI와 함께 만들기" 버튼이 활성화된다', () => {
+    const store = useListingStore.getState();
+    store.resetAssetsDraft();
+    store.updateAssetsDraft({ mode: 'url', url: 'https://example.com/product', category: 'basic' });
+    store.updateSharedDraft({ name: '테스트 상품' });
+
+    render(<AssetsInputPanel onGenerate={() => {}} />);
+    expect(screen.getByRole('button', { name: /AI와 함께 만들기/ })).not.toBeDisabled();
+  });
 });

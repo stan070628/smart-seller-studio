@@ -34,7 +34,7 @@ describe('AssetsTab', () => {
 
     useListingStore.getState().updateAssetsDraft({ mode: 'url', url: 'https://x.com' });
     render(<AssetsTab />);
-    fireEvent.click(screen.getByRole('button', { name: /빠른 생성/ }));
+    fireEvent.click(screen.getByRole('button', { name: /자동 생성/ }));
 
     await waitFor(() => {
       expect(useListingStore.getState().assetsDraft.generatedThumbnails).toEqual(['t1.png']);
