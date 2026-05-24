@@ -160,7 +160,7 @@ export default function MobileCostcoList({ initialSearch }: MobileCostcoListProp
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="상품명 또는 브랜드명 검색..."
+              placeholder="상품명, 브랜드 또는 상품코드 7자리..."
               style={{
                 width: '100%',
                 boxSizing: 'border-box',

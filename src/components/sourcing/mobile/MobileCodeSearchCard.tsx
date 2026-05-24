@@ -89,6 +89,7 @@ export default function MobileCodeSearchCard({ code, onClose }: Props) {
     setStep(1);
     setOfflinePrice('');
     setNaverResult(null);
+    setNaverFailed(false);
 
     fetch(`/api/sourcing/costco/lookup?code=${encodeURIComponent(code)}`, {
       signal: controller.signal,
@@ -119,7 +120,7 @@ export default function MobileCodeSearchCard({ code, onClose }: Props) {
 
   // 네이버 비교 요청 — step 3으로 전환하면서 비동기 조회
   const handleCompare = useCallback(async () => {
-    if (!product || !offlinePrice) return;
+    if (!product || !offlinePrice || isLoadingNaver) return;
     setStep(3);
     setIsLoadingNaver(true);
     // Issue 4: 재조회 시 이전 실패 상태 초기화
@@ -143,7 +144,7 @@ export default function MobileCodeSearchCard({ code, onClose }: Props) {
   }, [product, offlinePrice, code]);
 
   // 입력된 오프라인 가격을 정수로 파싱
-  const offlinePriceNum = parseInt(offlinePrice.replace(/,/g, ''), 10);
+  const offlinePriceNum = Number(offlinePrice);
   const isValidPrice = !isNaN(offlinePriceNum) && offlinePriceNum > 0;
 
   // ── 로딩 상태 ────────────────────────────────────────────────────────────
@@ -191,7 +192,7 @@ export default function MobileCodeSearchCard({ code, onClose }: Props) {
 
   // 오프라인 단위가 계산 (온라인 단위가 기준 환산)
   const offlineUnitPrice =
-    isValidPrice && product.unitPrice && product.onlinePrice
+    isValidPrice && product.unitPrice > 0 && product.onlinePrice > 0
       ? calcOfflineUnitPrice(offlinePriceNum, product.onlinePrice, product.unitPrice)
       : null;
 
@@ -409,9 +410,9 @@ export default function MobileCodeSearchCard({ code, onClose }: Props) {
               <div style={{ fontSize: 10, color: C.sub, marginBottom: 6 }}>
                 비교 기준 네이버 상품 <span style={{ color: '#9ca3af' }}>(탭해서 이동)</span>
               </div>
-              {naverResult.items.map((item, i) => (
+              {naverResult.items.map((item) => (
                 <a
-                  key={i}
+                  key={item.link}
                   href={item.link}
                   target="_blank"
                   rel="noopener noreferrer"

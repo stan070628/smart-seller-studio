@@ -20,7 +20,7 @@ export const maxDuration = 20;
 // ─────────────────────────────────────────────────────────────────────────────
 
 const querySchema = z.object({
-  title: z.string().min(1),
+  title: z.string().min(1).max(100),
   code: z.string().optional(),
 });
 
@@ -141,7 +141,7 @@ export async function GET(req: NextRequest) {
     try {
       const pool = getSourcingPool();
       const res = await pool.query<{ unit_price_label: string | null }>(
-        `SELECT unit_price_label FROM public.costco_products WHERE product_code = $1 LIMIT 1`,
+        `SELECT unit_price_label FROM public.costco_products WHERE product_code = $1 AND is_active = true LIMIT 1`,
         [code],
       );
       unitPriceLabel = res.rows[0]?.unit_price_label ?? null;
