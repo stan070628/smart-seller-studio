@@ -23,6 +23,7 @@ import MobileBottomSheet from './MobileBottomSheet';
 import MobileFilterSheet from './MobileFilterSheet';
 import MobileSortSheet from './MobileSortSheet';
 import MobileCostcoDetail from './MobileCostcoDetail';
+import MobileCodeSearchCard from './MobileCodeSearchCard';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Props
@@ -64,6 +65,9 @@ export default function MobileCostcoList({ initialSearch }: MobileCostcoListProp
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
+  // 7자리 숫자 입력 시 상품코드 모드로 전환
+  const isProductCode = /^\d{7}$/.test(search);
+
   // ── UI 상태 ───────────────────────────────────────────────────────────────
   const [selectedProduct, setSelectedProduct] = useState<CostcoProductRow | null>(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -88,7 +92,8 @@ export default function MobileCostcoList({ initialSearch }: MobileCostcoListProp
     loadMore,
     refresh,
     updateProduct,
-  } = useCostcoProducts({ filters, sort, search: debouncedSearch });
+  // 상품코드 모드일 때는 텍스트 필터 비활성화
+  } = useCostcoProducts({ filters, sort, search: isProductCode ? '' : debouncedSearch });
 
   // ── 무한스크롤 sentinel ───────────────────────────────────────────────────
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -149,24 +154,65 @@ export default function MobileCostcoList({ initialSearch }: MobileCostcoListProp
             zIndex: 10,
           }}
         >
-          {/* 검색 입력 */}
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="상품명 또는 브랜드명 검색..."
-            style={{
-              flex: 1,
-              height: '36px',
-              padding: '0 10px',
-              fontSize: '13px',
-              border: '1px solid #e5e7eb',
-              borderRadius: '8px',
-              outline: 'none',
-              color: '#1a1c1c',
-              backgroundColor: '#f9fafb',
-            }}
-          />
+          {/* 검색 입력 — 상품코드 모드 시 파란 테두리 + 뱃지 표시 */}
+          <div style={{ flex: 1, position: 'relative' }}>
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="상품명 또는 브랜드명 검색..."
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                height: '36px',
+                padding: isProductCode ? '0 88px 0 10px' : '0 10px',
+                fontSize: '13px',
+                border: `1px solid ${isProductCode ? '#2563eb' : '#e5e7eb'}`,
+                borderRadius: '8px',
+                outline: 'none',
+                color: '#1a1c1c',
+                backgroundColor: isProductCode ? '#eff6ff' : '#f9fafb',
+              }}
+            />
+            {/* 상품코드 모드 뱃지 */}
+            {isProductCode && (
+              <span style={{
+                position: 'absolute',
+                right: 36,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: '#2563eb',
+                color: '#fff',
+                borderRadius: 4,
+                padding: '2px 8px',
+                fontSize: 10,
+                fontWeight: 700,
+                pointerEvents: 'none',
+              }}>상품코드</span>
+            )}
+            {/* 검색어 초기화 버튼 */}
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                style={{
+                  position: 'absolute',
+                  right: 8,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: '#9ca3af',
+                  fontSize: 16,
+                  lineHeight: 1,
+                  padding: 2,
+                }}
+                aria-label="검색어 지우기"
+              >
+                ✕
+              </button>
+            )}
+          </div>
 
           {/* 정렬 버튼 */}
           <button
@@ -263,6 +309,14 @@ export default function MobileCostcoList({ initialSearch }: MobileCostcoListProp
               setFilters(DEFAULT_FILTER_STATE);
               setSearch('');
             }}
+          />
+        )}
+
+        {/* 상품코드 모드: MobileCodeSearchCard 표시 */}
+        {isProductCode && (
+          <MobileCodeSearchCard
+            code={search}
+            onClose={() => setSearch('')}
           />
         )}
 
