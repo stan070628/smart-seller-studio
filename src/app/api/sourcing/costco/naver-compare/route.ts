@@ -10,7 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getSourcingPool } from '@/lib/sourcing/db';
-import { normalizeForUnitSearch } from '@/lib/sourcing/naver-shopping';
+import { normalizeProductQuery } from '@/lib/sourcing/naver-shopping';
 import { requireAuth } from '@/lib/supabase/auth';
 
 export const runtime = 'nodejs';
@@ -82,9 +82,9 @@ async function fetchNaverItems(query: string): Promise<NaverRawItem[]> {
   }
 
   const url = new URL('https://openapi.naver.com/v1/search/shop.json');
-  url.searchParams.set('query', normalizeForUnitSearch(query));
-  url.searchParams.set('display', '5');
-  url.searchParams.set('sort', 'asc'); // 가격 오름차순
+  url.searchParams.set('query', normalizeProductQuery(query));
+  url.searchParams.set('display', '10');
+  url.searchParams.set('sort', 'sim'); // 관련도 정렬
 
   const controller = new AbortController();
   const tid = setTimeout(() => controller.abort(), 8_000);
