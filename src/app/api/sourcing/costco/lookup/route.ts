@@ -15,6 +15,7 @@ import { z } from 'zod';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { fetchCostcoProduct } from '@/lib/sourcing/costco-client';
 import type { CostcoProductRow } from '@/types/costco';
+import { requireAuth } from '@/lib/supabase/auth';
 
 export const runtime = 'nodejs';
 export const maxDuration = 20;
@@ -81,6 +82,9 @@ function rowToResult(row: CostcoProductRow): LookupResult {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
+  const authResult = await requireAuth(req);
+  if (authResult instanceof Response) return authResult;
+
   // 입력 검증
   const { searchParams } = req.nextUrl;
   const parsed = querySchema.safeParse({ code: searchParams.get('code') });

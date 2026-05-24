@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { normalizeForUnitSearch } from '@/lib/sourcing/naver-shopping';
+import { requireAuth } from '@/lib/supabase/auth';
 
 export const runtime = 'nodejs';
 export const maxDuration = 20;
@@ -122,6 +123,9 @@ async function fetchNaverItems(query: string): Promise<NaverRawItem[]> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
+  const authResult = await requireAuth(req);
+  if (authResult instanceof Response) return authResult;
+
   // 입력 검증
   const { searchParams } = req.nextUrl;
   const parsed = querySchema.safeParse({
@@ -159,12 +163,20 @@ export async function GET(req: NextRequest) {
     .map((item): NaverCompareItem | null => {
       const totalPrice = parseLprice(item.lprice);
       if (totalPrice === null) return null;
+      let safeLink: string;
+      try {
+        const u = new URL(item.link);
+        safeLink = u.protocol === 'https:' ? item.link : '';
+      } catch {
+        safeLink = '';
+      }
+      if (!safeLink) return null;
       return {
         title: stripHtml(item.title),
         totalPrice,
         unitPrice: null,       // 단가 계산은 클라이언트 또는 별도 엔드포인트에서 수행
         unitPriceLabel,
-        link: item.link,
+        link: safeLink,
       };
     })
     .filter((x): x is NaverCompareItem => x !== null)
