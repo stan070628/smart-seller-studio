@@ -8,7 +8,6 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import chromiumMin from '@sparticuz/chromium-min';
 import puppeteer from 'puppeteer-core';
 import { compareImages } from './image-similarity';
 import {
@@ -46,6 +45,7 @@ async function getBrowser() {
       headless: true,
     });
   }
+  const chromiumMin = (await import('@sparticuz/chromium-min')).default;
   return puppeteer.launch({
     args: [...chromiumMin.args, '--lang=zh-CN'],
     executablePath: await chromiumMin.executablePath(

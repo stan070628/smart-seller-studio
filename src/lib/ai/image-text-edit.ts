@@ -8,8 +8,7 @@
  * 디자인 문서·plan: ~/.claude/plans/quiet-baking-fox.md
  */
 
-import sharp from 'sharp';
-import { Resvg } from '@resvg/resvg-js';
+import type { OverlayOptions } from 'sharp';
 import path from 'path';
 import fs from 'fs/promises';
 import { z } from 'zod';
@@ -227,6 +226,9 @@ export async function composeTextOnImage(
   imageBuffer: Buffer,
   operations: EditOperation[],
 ): Promise<Buffer> {
+  const sharp = (await import('sharp')).default;
+  const { Resvg } = await import('@resvg/resvg-js');
+
   if (operations.length === 0) {
     // 변경 없으면 원본 그대로 (JPEG 재인코딩)
     return sharp(imageBuffer).jpeg({ quality: 92 }).toBuffer();
@@ -240,7 +242,7 @@ export async function composeTextOnImage(
   if (!imgW || !imgH) throw new Error('합성 실패: 원본 이미지 크기를 알 수 없습니다.');
 
   // 2) 각 operation에 대해 마스킹 사각형 + 새 텍스트 SVG composite 준비
-  const composites: sharp.OverlayOptions[] = [];
+  const composites: OverlayOptions[] = [];
 
   for (const op of operations) {
     const { region, newText } = op;

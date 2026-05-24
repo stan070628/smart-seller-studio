@@ -7,7 +7,6 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import sharp from "sharp";
 import { uploadToStorage } from "@/lib/supabase/server";
 import { checkRateLimit, getRateLimitKey, RATE_LIMITS } from "@/lib/rate-limit";
 
@@ -169,6 +168,7 @@ export async function POST(
     // Sharp로 이미지 처리
     // - 가로 outputWidth px 고정, 세로 비율 유지
     // - JPEG quality outputQuality
+    const sharp = (await import('sharp')).default;
     let outputBuffer: Buffer;
     try {
       outputBuffer = await sharp(inputBuffer)
