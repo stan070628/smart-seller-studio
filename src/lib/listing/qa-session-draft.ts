@@ -27,7 +27,17 @@ export function loadQASession(productName: string): QuestionAnswer[] | null {
   try {
     const raw = localStorage.getItem(makeKey(productName));
     if (!raw) return null;
-    const record = JSON.parse(raw) as QASessionRecord;
+    const parsed = JSON.parse(raw);
+    if (
+      typeof parsed !== 'object' ||
+      parsed === null ||
+      typeof parsed.savedAt !== 'number' ||
+      !Array.isArray(parsed.answers)
+    ) {
+      localStorage.removeItem(makeKey(productName));
+      return null;
+    }
+    const record = parsed as QASessionRecord;
     if (Date.now() - record.savedAt > TTL_MS) {
       localStorage.removeItem(makeKey(productName));
       return null;
