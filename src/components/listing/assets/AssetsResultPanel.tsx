@@ -7,9 +7,19 @@ import { C } from '@/lib/design-tokens';
 import AiEditModal from '@/components/listing/AiEditModal';
 import DetailPageEditor from '@/components/listing/detail-editor/DetailPageEditor';
 import type { DetailSection, DetailPageTheme } from '@/types/detail-page';
+import ConversationalDetailModal from './ConversationalDetailModal';
+import { contentToSections } from '@/lib/detail-page/section-parser';
+import type { CategoryKey } from '@/lib/conversational-detail/types';
+
+const CATEGORY_OPTIONS: Array<{ key: CategoryKey; label: string }> = [
+  { key: 'basic', label: '기본' },
+  { key: 'fashion', label: '패션' },
+  { key: 'living', label: '리빙' },
+  { key: 'food', label: '식품' },
+];
 
 export default function AssetsResultPanel() {
-  const { assetsDraft, updateAssetsDraft } = useListingStore();
+  const { assetsDraft, updateAssetsDraft, sharedDraft } = useListingStore();
   const {
     generatedThumbnails,
     generatedDetailHtml,
@@ -21,6 +31,11 @@ export default function AssetsResultPanel() {
   // 상세페이지 렌더 상태
   const [isRendering, setIsRendering] = useState(false);
   const [renderError, setRenderError] = useState<string | null>(null);
+
+  // Q&A 개선 모달 상태
+  const [improveModalOpen, setImproveModalOpen] = useState(false);
+  const [improveCategory, setImproveCategory] = useState<CategoryKey>('basic');
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
 
   // 썸네일 이미지 AI 편집 모달
   const [imageEditTarget, setImageEditTarget] = useState<{ url: string; index: number } | null>(null);
@@ -230,6 +245,45 @@ export default function AssetsResultPanel() {
     }
   };
 
+  // Q&A 개선 완료 후 스토어 업데이트
+  const handleImproveComplete = ({
+    html,
+    content,
+    conversationContext,
+  }: {
+    html: string;
+    content?: import('@/lib/ai/prompts/detail-page').DetailPageContent;
+    conversationContext: import('@/lib/conversational-detail/types').ConversationContext;
+  }) => {
+    let detailPageSections = assetsDraft.detailPageSections;
+    if (content) {
+      try {
+        detailPageSections = contentToSections(content);
+      } catch {
+        // 파싱 실패 시 silent fallback
+      }
+    }
+    updateAssetsDraft({
+      generatedDetailHtml: html,
+      detailPageSections,
+      conversationAnswers: conversationContext.answers,
+      lastError: null,
+    });
+    setImproveModalOpen(false);
+    setShowCategoryPicker(false);
+  };
+
+  // Q&A 개선 버튼 클릭 — 카테고리 설정 여부에 따라 분기
+  const handleImproveButtonClick = () => {
+    const cat = assetsDraft.category;
+    if (cat) {
+      setImproveCategory(cat);
+      setImproveModalOpen(true);
+    } else {
+      setShowCategoryPicker(true);
+    }
+  };
+
   // 섹션 AI 편집
   const handleSectionAiEdit = async (section: DetailSection, instruction: string): Promise<void> => {
     const res = await fetch('/api/detail-page/edit-section', {
@@ -376,9 +430,68 @@ export default function AssetsResultPanel() {
       {/* 상세페이지 (DetailPageEditor 또는 레거시 iframe) */}
       {generatedDetailHtml.length > 0 && (
         <div style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: '12px', overflow: 'hidden' }}>
-          <div style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}`, backgroundColor: C.tableHeader }}>
+          <div style={{
+            padding: '12px 16px',
+            borderBottom: `1px solid ${C.border}`,
+            backgroundColor: C.tableHeader,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}>
             <span style={{ fontSize: '13px', fontWeight: 700, color: C.text }}>상세페이지</span>
+            <button
+              type="button"
+              onClick={handleImproveButtonClick}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '4px',
+                padding: '5px 12px', fontSize: '12px', fontWeight: 600,
+                backgroundColor: '#fff', color: '#7c3aed',
+                border: '1px solid #ddd6fe', borderRadius: '8px',
+                cursor: 'pointer',
+              }}
+            >
+              💬 Q&A로 개선하기
+            </button>
           </div>
+
+          {/* 카테고리 선택 필요 시 인라인 피커 */}
+          {showCategoryPicker && (
+            <div style={{ padding: '10px 16px', borderBottom: `1px solid ${C.border}`, backgroundColor: '#f5f3ff' }}>
+              <p style={{ margin: '0 0 6px', fontSize: '12px', color: '#5b21b6' }}>카테고리를 선택하세요</p>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {CATEGORY_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => {
+                      setImproveCategory(opt.key);
+                      updateAssetsDraft({ category: opt.key });
+                      setShowCategoryPicker(false);
+                      setImproveModalOpen(true);
+                    }}
+                    style={{
+                      padding: '5px 12px', fontSize: '12px', borderRadius: '999px',
+                      border: '1px solid #ddd6fe', backgroundColor: '#fff',
+                      color: '#5b21b6', cursor: 'pointer',
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setShowCategoryPicker(false)}
+                  style={{
+                    padding: '5px 12px', fontSize: '12px', borderRadius: '999px',
+                    border: '1px solid #e5e7eb', backgroundColor: '#fff',
+                    color: '#6b7280', cursor: 'pointer',
+                  }}
+                >
+                  취소
+                </button>
+              </div>
+            </div>
+          )}
           {renderError && (
             <div style={{ padding: '8px 12px', fontSize: '12px', color: '#b91c1c', backgroundColor: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '6px', margin: '8px' }}>
               {renderError}
@@ -476,6 +589,22 @@ export default function AssetsResultPanel() {
           imageFile={null}
           onClose={() => setMergeTarget(null)}
           onSave={handleMergeSaved}
+        />
+      )}
+
+      {/* Q&A 개선 모달 */}
+      {improveModalOpen && (
+        <ConversationalDetailModal
+          productName={sharedDraft.name}
+          category={improveCategory}
+          imageUrls={assetsDraft.generatedThumbnails}
+          initialAnswers={
+            assetsDraft.conversationAnswers.length > 0
+              ? assetsDraft.conversationAnswers
+              : undefined
+          }
+          onClose={() => { setImproveModalOpen(false); setShowCategoryPicker(false); }}
+          onComplete={handleImproveComplete}
         />
       )}
     </div>
