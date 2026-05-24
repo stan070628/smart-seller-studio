@@ -61,8 +61,20 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
     sharedDraft.name.trim().length > 0 &&
     category !== null;
 
-  // 상세 이미지가 없으면 썸네일 이미지를 폴백으로 사용
-  const conversationImageUrls = detailFiles.length > 0 ? detailFiles : thumbnailFiles;
+  // URL 모드 Q&A: URL + 카테고리 있으면 활성화
+  const canStartUrlQA =
+    !isGenerating &&
+    mode === 'url' &&
+    url.trim().length > 0 &&
+    category !== null;
+
+  // URL 모드면 이미 추출된 generatedThumbnails, 업로드 모드면 기존 로직
+  const conversationImageUrls =
+    mode === 'url'
+      ? assetsDraft.generatedThumbnails
+      : detailFiles.length > 0
+        ? detailFiles
+        : thumbnailFiles;
 
   const handleConversationComplete = ({
     html,
@@ -89,6 +101,44 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
       lastError: null,
     });
     setConversationModalOpen(false);
+  };
+
+  const handleStartUrlQA = async () => {
+    updateAssetsDraft({ isGenerating: true, generatingMessage: '이미지 가져오는 중...', lastError: null });
+    try {
+      const res = await fetch('/api/listing/assets/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'url', url: url.trim() }),
+      });
+      const ct = res.headers.get('content-type') ?? '';
+      if (!ct.includes('application/json')) {
+        const text = await res.text();
+        throw new Error(`이미지 추출 실패 (HTTP ${res.status}): ${text.slice(0, 160)}`);
+      }
+      const json = (await res.json()) as {
+        success: boolean;
+        data?: { thumbnails: string[]; detailHtml: string };
+        error?: string;
+      };
+      if (!res.ok || !json.success || !json.data) {
+        throw new Error(json.error ?? '이미지 추출 실패');
+      }
+      const thumbnails = json.data.thumbnails ?? [];
+      // 썸네일만 저장 (HTML 생성 없이 Q&A로 넘긴다)
+      updateAssetsDraft({
+        isGenerating: false,
+        generatingMessage: null,
+        generatedThumbnails: thumbnails,
+      });
+      setConversationModalOpen(true);
+    } catch (e) {
+      updateAssetsDraft({
+        isGenerating: false,
+        generatingMessage: null,
+        lastError: e instanceof Error ? e.message : '이미지 추출 중 오류',
+      });
+    }
   };
 
   // 파일 선택 시 Supabase Storage에 업로드하고 반환된 URL만 스토어에 저장.
@@ -455,23 +505,55 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
 
       {/* 모드별 입력 영역 */}
       {mode === 'url' ? (
-        <input
-          type="url"
-          value={url}
-          onChange={(e) => updateAssetsDraft({ url: e.target.value })}
-          placeholder="https://"
-          style={{
-            width: '100%',
-            padding: '10px 14px',
-            fontSize: '13px',
-            border: `1px solid ${C.border}`,
-            borderRadius: '8px',
-            outline: 'none',
-            color: C.text,
-            backgroundColor: '#fff',
-            boxSizing: 'border-box',
-          }}
-        />
+        <>
+          <input
+            type="url"
+            value={url}
+            onChange={(e) => updateAssetsDraft({ url: e.target.value })}
+            placeholder="https://"
+            style={{
+              width: '100%',
+              padding: '10px 14px',
+              fontSize: '13px',
+              border: `1px solid ${C.border}`,
+              borderRadius: '8px',
+              outline: 'none',
+              color: C.text,
+              backgroundColor: '#fff',
+              boxSizing: 'border-box',
+            }}
+          />
+          {/* URL 모드 카테고리 선택 (AI와 함께 만들기 활성화용) */}
+          <div>
+            <p style={{ margin: '0 0 6px', fontSize: '12px', fontWeight: 600, color: C.textSub }}>
+              카테고리 (AI와 함께 만들기 시 필수)
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {CATEGORY_OPTIONS.map((opt) => {
+                const selected = category === opt.key;
+                return (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => updateAssetsDraft({ category: opt.key })}
+                    style={{
+                      padding: '6px 12px',
+                      fontSize: '12px',
+                      borderRadius: '999px',
+                      border: `1px solid ${selected ? C.accent : C.border}`,
+                      backgroundColor: selected ? C.accent : '#fff',
+                      color: selected ? '#fff' : C.text,
+                      cursor: 'pointer',
+                      fontWeight: selected ? 700 : 500,
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {renderSlot(
@@ -552,6 +634,7 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
 
       {/* 자산 생성 / 대화로 만들기 버튼 */}
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        {/* 자동 생성 버튼 */}
         <button
           type="button"
           onClick={onGenerate}
@@ -567,8 +650,10 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
             cursor: canGenerate ? 'pointer' : 'not-allowed',
           }}
         >
-          {isGenerating ? '생성 중...' : '빠른 생성 (폼)'}
+          {isGenerating ? '생성 중...' : '⚡ 자동 생성'}
         </button>
+
+        {/* 업로드 모드 Q&A */}
         {mode === 'upload' && (
           <button
             type="button"
@@ -576,7 +661,7 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
             disabled={!canStartConversation}
             title={
               canStartConversation
-                ? 'AI 마케터와 대화하면서 상세페이지를 만듭니다'
+                ? 'AI 마케터와 대화하며 상세페이지 작성'
                 : '이미지·상품명·카테고리를 모두 입력하면 활성화됩니다'
             }
             style={{
@@ -590,7 +675,33 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
               cursor: canStartConversation ? 'pointer' : 'not-allowed',
             }}
           >
-            💬 대화로 만들기
+            💬 AI와 함께 만들기
+          </button>
+        )}
+
+        {/* URL 모드 Q&A: 이미지 추출 후 Q&A 모달 오픈 */}
+        {mode === 'url' && (
+          <button
+            type="button"
+            onClick={() => void handleStartUrlQA()}
+            disabled={!canStartUrlQA}
+            title={
+              canStartUrlQA
+                ? 'URL에서 이미지를 가져와 AI와 대화하며 상세페이지 작성'
+                : 'URL과 카테고리를 입력하면 활성화됩니다'
+            }
+            style={{
+              padding: '10px 20px',
+              fontSize: '13px',
+              fontWeight: 700,
+              backgroundColor: canStartUrlQA ? '#7c3aed' : C.border,
+              color: canStartUrlQA ? '#fff' : C.textSub,
+              border: 'none',
+              borderRadius: '8px',
+              cursor: canStartUrlQA ? 'pointer' : 'not-allowed',
+            }}
+          >
+            💬 AI와 함께 만들기
           </button>
         )}
       </div>
@@ -611,6 +722,11 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
           productName={sharedDraft.name}
           category={category}
           imageUrls={conversationImageUrls}
+          initialAnswers={
+            assetsDraft.conversationAnswers.length > 0
+              ? assetsDraft.conversationAnswers
+              : undefined
+          }
           onClose={() => setConversationModalOpen(false)}
           onComplete={handleConversationComplete}
         />

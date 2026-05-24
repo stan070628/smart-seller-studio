@@ -23,7 +23,7 @@ describe('AssetsInputPanel', () => {
   it('URL 모드에서 빈 입력은 생성 버튼이 비활성화된다', () => {
     useListingStore.getState().updateAssetsDraft({ mode: 'url', url: '' });
     render(<AssetsInputPanel onGenerate={() => {}} />);
-    expect(screen.getByRole('button', { name: /빠른 생성/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /자동 생성/ })).toBeDisabled();
   });
 
   it('ConversationalDetailModal에 detailFiles만 전달된다 (thumbnailFiles 제외)', async () => {
@@ -38,14 +38,14 @@ describe('AssetsInputPanel', () => {
     store.updateSharedDraft({ name: '테스트 상품' });
 
     render(<AssetsInputPanel onGenerate={() => {}} />);
-    fireEvent.click(screen.getByRole('button', { name: /대화로 만들기/ }));
+    fireEvent.click(screen.getByRole('button', { name: /AI와 함께 만들기/ }));
 
     const modal = await waitFor(() => screen.getByTestId('modal'));
     expect(modal.dataset.imageCount).toBe('2');
     expect(modal.dataset.firstUrl).toBe('https://example.com/detail1.jpg');
   });
 
-  it('detailFiles가 없고 thumbnailFiles만 있어도 대화로 만들기 버튼이 활성화된다', () => {
+  it('detailFiles가 없고 thumbnailFiles만 있어도 AI와 함께 만들기 버튼이 활성화된다', () => {
     const store = useListingStore.getState();
     store.resetAssetsDraft();
     store.updateAssetsDraft({
@@ -57,7 +57,7 @@ describe('AssetsInputPanel', () => {
     store.updateSharedDraft({ name: '테스트 상품' });
 
     render(<AssetsInputPanel onGenerate={() => {}} />);
-    expect(screen.getByRole('button', { name: /대화로 만들기/ })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: /AI와 함께 만들기/ })).not.toBeDisabled();
   });
 
   it('detailFiles가 없으면 ConversationalDetailModal에 thumbnailFiles가 폴백으로 전달된다', async () => {
@@ -72,7 +72,7 @@ describe('AssetsInputPanel', () => {
     store.updateSharedDraft({ name: '테스트 상품' });
 
     render(<AssetsInputPanel onGenerate={() => {}} />);
-    fireEvent.click(screen.getByRole('button', { name: /대화로 만들기/ }));
+    fireEvent.click(screen.getByRole('button', { name: /AI와 함께 만들기/ }));
 
     const modal = await waitFor(() => screen.getByTestId('modal'));
     expect(modal.dataset.imageCount).toBe('1');
