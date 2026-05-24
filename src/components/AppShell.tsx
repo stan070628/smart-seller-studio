@@ -6,7 +6,10 @@ import { useEffect, useRef, useState } from 'react';
 import { C } from '@/lib/design-tokens';
 import AlertList from '@/components/alerts/AlertList';
 
-const NAV_ITEMS = [
+type NavChild = { href: string; label: string; icon: React.ReactNode };
+type NavItem = { href: string; label: string; icon: React.ReactNode; children?: NavChild[] };
+
+const NAV_ITEMS: NavItem[] = [
   {
     href: '/dashboard',
     label: '대시보드',
@@ -30,16 +33,6 @@ const NAV_ITEMS = [
     ),
   },
   {
-    href: '/editor',
-    label: '에디터',
-    icon: (
-      <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5" strokeWidth="1.5" strokeLinecap="round" />
-        <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    ),
-  },
-  {
     href: '/listing',
     label: '상품등록',
     icon: (
@@ -48,6 +41,18 @@ const NAV_ITEMS = [
         <path d="M16 3l-4 4-4-4" strokeWidth="1.5" strokeLinecap="round" />
       </svg>
     ),
+    children: [
+      {
+        href: '/editor',
+        label: '에디터',
+        icon: (
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5" strokeWidth="1.5" strokeLinecap="round" />
+            <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ),
+      },
+    ],
   },
   {
     href: '/label',
@@ -195,41 +200,83 @@ export default function AppShell({
         <nav style={{ padding: '8px 0', flex: 1 }}>
           {NAV_ITEMS.map((item) => {
             const active = isActive(item.href);
+            const childActive = item.children?.some((c) => isActive(c.href)) ?? false;
+            const parentActive = active || childActive;
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  padding: '8px 16px',
-                  fontSize: 13,
-                  fontWeight: active ? 600 : 400,
-                  color: active ? C.sidebarTextActive : C.sidebarText,
-                  textDecoration: 'none',
-                  backgroundColor: active ? C.sidebarActiveAccent : 'transparent',
-                  position: 'relative',
-                }}
-              >
-                {active && (
-                  <span
-                    style={{
-                      position: 'absolute',
-                      left: 0,
-                      top: 5,
-                      bottom: 5,
-                      width: 3,
-                      background: C.accent,
-                      borderRadius: '0 2px 2px 0',
-                    }}
-                  />
-                )}
-                <span style={{ opacity: active ? 1 : 0.6, flexShrink: 0, display: 'flex' }}>
-                  {item.icon}
-                </span>
-                {item.label}
-              </Link>
+              <div key={item.href}>
+                <Link
+                  href={item.href}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '8px 16px',
+                    fontSize: 13,
+                    fontWeight: parentActive ? 600 : 400,
+                    color: parentActive ? C.sidebarTextActive : C.sidebarText,
+                    textDecoration: 'none',
+                    backgroundColor: parentActive ? C.sidebarActiveAccent : 'transparent',
+                    position: 'relative',
+                  }}
+                >
+                  {parentActive && (
+                    <span
+                      style={{
+                        position: 'absolute',
+                        left: 0,
+                        top: 5,
+                        bottom: 5,
+                        width: 3,
+                        background: C.accent,
+                        borderRadius: '0 2px 2px 0',
+                      }}
+                    />
+                  )}
+                  <span style={{ opacity: parentActive ? 1 : 0.6, flexShrink: 0, display: 'flex' }}>
+                    {item.icon}
+                  </span>
+                  {item.label}
+                </Link>
+                {item.children?.map((child) => {
+                  const cActive = isActive(child.href);
+                  return (
+                    <Link
+                      key={child.href}
+                      href={child.href}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        padding: '6px 16px 6px 36px',
+                        fontSize: 12,
+                        fontWeight: cActive ? 600 : 400,
+                        color: cActive ? C.sidebarTextActive : C.sidebarText,
+                        textDecoration: 'none',
+                        backgroundColor: cActive ? C.sidebarActiveAccent : 'transparent',
+                        position: 'relative',
+                      }}
+                    >
+                      {cActive && (
+                        <span
+                          style={{
+                            position: 'absolute',
+                            left: 0,
+                            top: 4,
+                            bottom: 4,
+                            width: 3,
+                            background: C.accent,
+                            borderRadius: '0 2px 2px 0',
+                          }}
+                        />
+                      )}
+                      <span style={{ opacity: cActive ? 1 : 0.6, flexShrink: 0, display: 'flex' }}>
+                        {child.icon}
+                      </span>
+                      {child.label}
+                    </Link>
+                  );
+                })}
+              </div>
             );
           })}
         </nav>
