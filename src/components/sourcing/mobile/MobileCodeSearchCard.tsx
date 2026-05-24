@@ -69,14 +69,21 @@ export default function MobileCodeSearchCard({ code, onClose }: Props) {
   const [product, setProduct] = useState<LookupResult | null>(null);
   const [isLoadingProduct, setIsLoadingProduct] = useState(true);
   const [lookupError, setLookupError] = useState<string | null>(null);
+  // Issue 2 & 3: 오류 유형을 별도로 추적하여 retry 버튼 렌더링에 활용
+  const [lookupErrorType, setLookupErrorType] = useState<'not_found' | 'error' | null>(null);
+  // Issue 2 & 3: lookupKey 증가 시 useEffect 재실행으로 재조회(retry) 구현
+  const [lookupKey, setLookupKey] = useState(0);
   const [offlinePrice, setOfflinePrice] = useState('');
   const [naverResult, setNaverResult] = useState<NaverCompareResponse | null>(null);
   const [isLoadingNaver, setIsLoadingNaver] = useState(false);
+  // Issue 4 & 5: 네이버 API 실패 여부 추적
+  const [naverFailed, setNaverFailed] = useState(false);
 
-  // code 변경 시 상태 초기화 후 상품 조회
+  // code 또는 lookupKey 변경 시 상태 초기화 후 상품 조회
   useEffect(() => {
     setIsLoadingProduct(true);
     setLookupError(null);
+    setLookupErrorType(null);
     setProduct(null);
     setStep(1);
     setOfflinePrice('');
@@ -84,26 +91,39 @@ export default function MobileCodeSearchCard({ code, onClose }: Props) {
 
     fetch(`/api/sourcing/costco/lookup?code=${encodeURIComponent(code)}`)
       .then(async (res) => {
-        if (res.status === 404) throw new Error('해당 상품코드를 찾을 수 없습니다');
-        if (!res.ok) throw new Error('조회 중 오류가 발생했습니다. 다시 시도해주세요');
+        if (res.status === 404) {
+          // Issue 2: 404 오류 타입 설정
+          setLookupErrorType('not_found');
+          throw new Error('해당 상품코드를 찾을 수 없습니다');
+        }
+        if (!res.ok) {
+          // Issue 3: 500 오류 타입 설정
+          setLookupErrorType('error');
+          throw new Error('조회 중 오류가 발생했습니다. 다시 시도해주세요');
+        }
         return res.json() as Promise<LookupResult>;
       })
       .then((data) => setProduct(data))
       .catch((e: Error) => setLookupError(e.message))
       .finally(() => setIsLoadingProduct(false));
-  }, [code]);
+  }, [code, lookupKey]);
 
   // 네이버 비교 요청 — step 3으로 전환하면서 비동기 조회
   const handleCompare = useCallback(async () => {
     if (!product || !offlinePrice) return;
     setStep(3);
     setIsLoadingNaver(true);
+    // Issue 4: 재조회 시 이전 실패 상태 초기화
+    setNaverFailed(false);
     try {
       const params = new URLSearchParams({ title: product.title, code });
       const res = await fetch(`/api/sourcing/costco/naver-compare?${params}`);
       if (res.ok) {
         const data = await res.json() as NaverCompareResponse;
         setNaverResult(data);
+      } else {
+        // Issue 4: 네이버 API 비정상 응답 시 실패 플래그 설정
+        setNaverFailed(true);
       }
     } finally {
       setIsLoadingNaver(false);
@@ -130,12 +150,26 @@ export default function MobileCodeSearchCard({ code, onClose }: Props) {
     return (
       <div style={{ margin: '10px 12px', background: '#fff', borderRadius: 12, padding: 16, border: `1px solid ${C.border}` }}>
         <div style={{ fontSize: 13, color: C.red, marginBottom: 12 }}>{lookupError}</div>
-        <button
-          onClick={onClose}
-          style={{ fontSize: 12, color: C.sub, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-        >
-          ← 목록으로 돌아가기
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {/* Issue 2 & 3: 모든 오류 상태에 retry 버튼 추가 */}
+          <button
+            onClick={() => { setLookupError(null); setLookupKey(k => k + 1); }}
+            style={{
+              fontSize: 12, color: '#fff', background: C.blue,
+              border: 'none', borderRadius: 6, cursor: 'pointer',
+              padding: '6px 12px', fontWeight: 600,
+            }}
+          >
+            다시 시도
+          </button>
+          {/* Issue 2: 404일 때도 닫기 버튼 표시, Issue 3: 500일 때도 닫기 버튼 표시 */}
+          <button
+            onClick={onClose}
+            style={{ fontSize: 12, color: C.sub, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+          >
+            ← 목록으로 돌아가기
+          </button>
+        </div>
       </div>
     );
   }
@@ -178,7 +212,7 @@ export default function MobileCodeSearchCard({ code, onClose }: Props) {
                   ? <img src={product.imageUrl} alt={product.title} width={56} height={56} style={{ objectFit: 'cover', width: '100%', height: '100%' }} />
                   : <span style={{ fontSize: 24 }}>📦</span>}
               </div>
-              {/* 상품명 & 카테고리 & 온라인가 */}
+              {/* 상품명 & 카테고리 & 별점 & 온라인가 */}
               <div style={{ flex: 1 }}>
                 <p style={{
                   margin: 0, fontSize: 13, fontWeight: 600, color: C.text, lineHeight: 1.4,
@@ -188,6 +222,12 @@ export default function MobileCodeSearchCard({ code, onClose }: Props) {
                 </p>
                 {product.categoryName && (
                   <p style={{ margin: '2px 0 0', fontSize: 11, color: C.sub }}>{product.categoryName}</p>
+                )}
+                {/* Issue 1: 별점(rating) 표시 — averageRating이 null이 아닐 때만 노출 */}
+                {product.averageRating !== null && (
+                  <p style={{ margin: '2px 0 0', fontSize: 11, color: C.sub }}>
+                    ★ {product.averageRating.toFixed(1)} ({product.reviewCount})
+                  </p>
                 )}
                 <div style={{ marginTop: 4, display: 'flex', gap: 8, alignItems: 'center' }}>
                   <span style={{ fontSize: 12, color: C.sub }}>온라인가</span>
@@ -283,53 +323,65 @@ export default function MobileCodeSearchCard({ code, onClose }: Props) {
             STEP 3 · 네이버 비교
           </div>
 
-          {/* 단위가 비교 박스 — marketLowestPrice가 있을 때만 표시 */}
-          {product.marketLowestPrice && (
-            <div style={{ background: '#f9fafb', borderRadius: 8, padding: 10, marginBottom: 8 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                {/* 코스트코 오프라인 단위가 */}
-                <div>
-                  <div style={{ fontSize: 10, color: C.sub }}>
-                    코스트코{product.unitPriceLabel ? ` (${product.unitPriceLabel})` : ''}
-                  </div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>
-                    {offlineUnitPrice ? fmt(Math.round(offlineUnitPrice)) : fmt(offlinePriceNum)}
-                    <span style={{ fontSize: 10, fontWeight: 400, color: C.sub }}>
-                      원{product.unitPriceLabel ? `/${product.unitPriceLabel}` : ''}
-                    </span>
-                  </div>
-                </div>
-                <div style={{ fontSize: 18, color: '#d1d5db' }}>vs</div>
-                {/* 네이버 최저 단위가 */}
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 10, color: C.sub }}>
-                    네이버 최저가{product.unitPriceLabel ? ` (${product.unitPriceLabel})` : ''}
-                  </div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: C.green }}>
-                    {product.marketUnitPrice ? fmt(Math.round(product.marketUnitPrice)) : fmt(product.marketLowestPrice)}
-                    <span style={{ fontSize: 10, fontWeight: 400, color: C.sub }}>
-                      원{product.unitPriceLabel ? `/${product.unitPriceLabel}` : ''}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* 절감율 뱃지 — 양쪽 단위가가 모두 있을 때만 계산 */}
-              {offlineUnitPrice && product.marketUnitPrice && (() => {
-                const rate = calcSavingRate(product.marketUnitPrice, offlineUnitPrice);
-                return (
-                  <div style={{
-                    background: rate >= 0 ? '#dcfce7' : '#fee2e2',
-                    borderRadius: 6, padding: '6px 10px',
-                    textAlign: 'center', fontSize: 12, fontWeight: 700,
-                    color: rate >= 0 ? C.green : C.red,
-                  }}>
-                    {rate >= 0 ? `▼ ${fmtRate(rate)} 더 저렴` : `▲ ${fmtRate(rate)} 더 비쌈`}
-                  </div>
-                );
-              })()}
+          {/* Issue 5: 네이버 API 실패 시 DB 캐시 기준 안내 메시지 */}
+          {naverResult === null && naverFailed && !isLoadingNaver && (
+            <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 8 }}>
+              실시간 조회 실패 — DB 캐시 기준으로 표시합니다
             </div>
           )}
+
+          {/* Issue 6: vs/vs 블록을 항상 표시 — marketLowestPrice가 null이면 정보 없음 표시 */}
+          <div style={{ background: '#f9fafb', borderRadius: 8, padding: 10, marginBottom: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+              {/* 코스트코 오프라인 단위가 */}
+              <div>
+                <div style={{ fontSize: 10, color: C.sub }}>
+                  코스트코{product.unitPriceLabel ? ` (${product.unitPriceLabel})` : ''}
+                </div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>
+                  {offlineUnitPrice ? fmt(Math.round(offlineUnitPrice)) : fmt(offlinePriceNum)}
+                  <span style={{ fontSize: 10, fontWeight: 400, color: C.sub }}>
+                    원{product.unitPriceLabel ? `/${product.unitPriceLabel}` : ''}
+                  </span>
+                </div>
+              </div>
+              <div style={{ fontSize: 18, color: '#d1d5db' }}>vs</div>
+              {/* 네이버 최저 단위가 — marketLowestPrice가 없으면 정보 없음 표시 */}
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 10, color: C.sub }}>
+                  네이버 최저가{product.unitPriceLabel ? ` (${product.unitPriceLabel})` : ''}
+                </div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: C.green }}>
+                  {product.marketLowestPrice
+                    ? (product.marketUnitPrice
+                        ? fmt(Math.round(product.marketUnitPrice))
+                        : fmt(product.marketLowestPrice))
+                    : <span style={{ fontSize: 13, fontWeight: 400, color: C.sub }}>정보 없음</span>
+                  }
+                  {product.marketLowestPrice && (
+                    <span style={{ fontSize: 10, fontWeight: 400, color: C.sub }}>
+                      원{product.unitPriceLabel ? `/${product.unitPriceLabel}` : ''}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* 절감율 뱃지 — 양쪽 단위가가 모두 있을 때만 계산 */}
+            {offlineUnitPrice && product.marketUnitPrice && (() => {
+              const rate = calcSavingRate(product.marketUnitPrice, offlineUnitPrice);
+              return (
+                <div style={{
+                  background: rate >= 0 ? '#dcfce7' : '#fee2e2',
+                  borderRadius: 6, padding: '6px 10px',
+                  textAlign: 'center', fontSize: 12, fontWeight: 700,
+                  color: rate >= 0 ? C.green : C.red,
+                }}>
+                  {rate >= 0 ? `▼ ${fmtRate(rate)} 더 저렴` : `▲ ${fmtRate(rate)} 더 비쌈`}
+                </div>
+              );
+            })()}
+          </div>
 
           {/* 네이버 실시간 조회 로딩 */}
           {isLoadingNaver && (
