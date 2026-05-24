@@ -94,7 +94,8 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
       }
     }
     updateAssetsDraft({
-      generatedThumbnails: thumbnailFiles,
+      // URL 모드면 이미 추출된 썸네일 유지, 업로드 모드면 업로드 파일 사용
+      generatedThumbnails: mode === 'url' ? assetsDraft.generatedThumbnails : thumbnailFiles,
       generatedDetailHtml: html,
       detailPageSections,
       conversationAnswers: conversationContext.answers,
@@ -125,6 +126,15 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
         throw new Error(json.error ?? '이미지 추출 실패');
       }
       const thumbnails = json.data.thumbnails ?? [];
+      // 이미지가 없으면 Q&A 모달을 열지 않고 에러 표시
+      if (thumbnails.length === 0) {
+        updateAssetsDraft({
+          isGenerating: false,
+          generatingMessage: null,
+          lastError: 'URL에서 이미지를 찾을 수 없습니다. 직접 업로드 모드를 사용해 주세요.',
+        });
+        return;
+      }
       // 썸네일만 저장 (HTML 생성 없이 Q&A로 넘긴다)
       updateAssetsDraft({
         isGenerating: false,
