@@ -192,7 +192,7 @@ export default function MobileCodeSearchCard({ code, onClose }: Props) {
 
   // 오프라인 단위가 계산 (온라인 단위가 기준 환산)
   const offlineUnitPrice =
-    isValidPrice && product.unitPrice > 0 && product.onlinePrice > 0
+    isValidPrice && product.unitPrice !== null && product.unitPrice > 0 && product.onlinePrice > 0
       ? calcOfflineUnitPrice(offlinePriceNum, product.onlinePrice, product.unitPrice)
       : null;
 
