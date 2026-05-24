@@ -60,9 +60,10 @@ function stripHtml(s: string): string {
   return s.replace(/<[^>]*>/g, '');
 }
 
-/** 최저가 문자열을 정수로 파싱 — 0이거나 NaN이면 null 반환 */
+/** 최저가 문자열을 정수로 파싱 — 빈 값·0·NaN이면 null 반환, HTML 태그 제거 후 파싱 */
 function parseLprice(s: string): number | null {
-  const n = parseInt(s, 10);
+  if (!s || s.trim() === '' || s === '0') return null;
+  const n = parseInt(s.replace(/<[^>]*>/g, ''), 10);
   return isNaN(n) || n <= 0 ? null : n;
 }
 
