@@ -9,7 +9,8 @@ import DetailPageEditor from '@/components/listing/detail-editor/DetailPageEdito
 import type { DetailSection, DetailPageTheme } from '@/types/detail-page';
 import ConversationalDetailModal from './ConversationalDetailModal';
 import { contentToSections } from '@/lib/detail-page/section-parser';
-import type { CategoryKey } from '@/lib/conversational-detail/types';
+import type { CategoryKey, ConversationContext } from '@/lib/conversational-detail/types';
+import type { DetailPageContent } from '@/lib/ai/prompts/detail-page';
 
 const CATEGORY_OPTIONS: Array<{ key: CategoryKey; label: string }> = [
   { key: 'basic', label: '기본' },
@@ -252,20 +253,20 @@ export default function AssetsResultPanel() {
     conversationContext,
   }: {
     html: string;
-    content?: import('@/lib/ai/prompts/detail-page').DetailPageContent;
-    conversationContext: import('@/lib/conversational-detail/types').ConversationContext;
+    content?: DetailPageContent;
+    conversationContext: ConversationContext;
   }) => {
-    let detailPageSections = assetsDraft.detailPageSections;
+    let newSections = assetsDraft.detailPageSections;
     if (content) {
       try {
-        detailPageSections = contentToSections(content);
+        newSections = contentToSections(content);
       } catch {
         // 파싱 실패 시 silent fallback
       }
     }
     updateAssetsDraft({
       generatedDetailHtml: html,
-      detailPageSections,
+      detailPageSections: newSections,
       conversationAnswers: conversationContext.answers,
       lastError: null,
     });
