@@ -65,8 +65,8 @@ export default function MobileCostcoList({ initialSearch }: MobileCostcoListProp
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
-  // 7자리 숫자 입력 시 상품코드 모드로 전환
-  const isProductCode = /^\d{7}$/.test(search);
+  // 6~7자리 숫자 입력 시 상품코드 모드로 전환 (코스트코 코드는 6자리도 존재)
+  const isProductCode = /^\d{6,7}$/.test(search);
 
   // ── UI 상태 ───────────────────────────────────────────────────────────────
   const [selectedProduct, setSelectedProduct] = useState<CostcoProductRow | null>(null);
