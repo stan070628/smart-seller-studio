@@ -118,15 +118,9 @@ export default function ConversationalDetailModal({
   // AI 위임 호출 중 표시
   const [delegating, setDelegating] = useState(false);
 
-  // 답변 저장 헬퍼: dispatch 후 localStorage 자동 저장
+  // 답변 저장 헬퍼: dispatch만 수행. 실제 저장은 아래 useEffect가 담당
   const dispatchAnswer = (answer: QuestionAnswer) => {
     dispatch({ type: 'set_answer', answer });
-    // 현재 state.answers 기준으로 병합 후 저장
-    const merged = [
-      ...state.answers.filter(a => a.questionId !== answer.questionId),
-      answer,
-    ];
-    saveQASession(productName, merged);
   };
 
   // 마운트 시 1회 사전 채움 호출
@@ -171,6 +165,13 @@ export default function ConversationalDetailModal({
   useEffect(() => {
     setFreeText('');
   }, [state.currentIndex]);
+
+  // 답변이 바뀔 때마다 localStorage에 저장 (stale state 방지)
+  useEffect(() => {
+    if (state.answers.length > 0) {
+      saveQASession(productName, state.answers);
+    }
+  }, [state.answers, productName]);
 
   const currentQuestion = state.questions[state.currentIndex];
   const isLastQuestion = state.currentIndex === state.questions.length;
