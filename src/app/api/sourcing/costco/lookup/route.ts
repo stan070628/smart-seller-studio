@@ -105,7 +105,13 @@ export async function GET(req: NextRequest) {
   }
 
   // 2. OCC API fallback — DB에 상품이 없을 때 실시간 조회
-  const product = await fetchCostcoProduct(code);
+  let product;
+  try {
+    product = await fetchCostcoProduct(code);
+  } catch (err) {
+    console.error('[costco/lookup] OCC API 조회 실패:', err);
+    return NextResponse.json({ error: 'API 조회 실패' }, { status: 500 });
+  }
   if (!product) {
     return NextResponse.json({ error: '상품을 찾을 수 없습니다' }, { status: 404 });
   }
