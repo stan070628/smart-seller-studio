@@ -89,6 +89,22 @@ export default function AssetsTab() {
           }
         }
 
+        // 첫 번째 섹션에 소스 이미지 URL을 attachedImages로 자동 연결한다
+        if (detailPageSections.length > 0 && thumbnails.length > 0) {
+          detailPageSections = detailPageSections.map((s, idx) =>
+            idx === 0
+              ? {
+                  ...s,
+                  attachedImages: thumbnails.map((url, order) => ({
+                    url,
+                    order,
+                    processingMode: 'original' as const,
+                  })),
+                }
+              : s,
+          );
+        }
+
         updateAssetsDraft({
           isGenerating: false,
           generatingMessage: null,
@@ -124,6 +140,22 @@ export default function AssetsTab() {
         } catch {
           // 파싱 실패 시 silent fallback
         }
+      }
+
+      // 첫 번째 섹션에 소스 이미지 URL을 attachedImages로 자동 연결한다
+      if (detailPageSections.length > 0 && detailSources.length > 0) {
+        detailPageSections = detailPageSections.map((s, idx) =>
+          idx === 0
+            ? {
+                ...s,
+                attachedImages: detailSources.map((url, order) => ({
+                  url,
+                  order,
+                  processingMode: 'original' as const,
+                })),
+              }
+            : s,
+        );
       }
 
       updateAssetsDraft({
