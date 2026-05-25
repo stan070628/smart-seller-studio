@@ -5,6 +5,39 @@ import { useListingStore } from '@/store/useListingStore';
 import { resolveCoupangFee } from '@/lib/calculator/coupang-fees';
 import { calcCoupangWing } from '@/lib/calculator/calculate';
 import type { MappedCoupangFields } from '@/lib/auto-register/types';
+import type { ProductOptions } from '@/types/product-option';
+
+// ─── buildVariantsFromOptions: ProductOptions → DraftVariant[] 변환 ──────────
+
+export interface DraftVariant {
+  itemName: string;
+  attributes: { attributeTypeName: string; attributeValueName: string }[];
+  salePrice: number;
+  originalPrice: number;
+  stock: number;
+}
+
+/**
+ * ProductOptions의 enabled variants를 쿠팡 draft에 저장 가능한 DraftVariant[] 포맷으로 변환.
+ * enabled variant가 없거나 options가 없으면 undefined 반환 → 단일 item으로 등록됨.
+ */
+export function buildVariantsFromOptions(
+  options: ProductOptions | null | undefined,
+): DraftVariant[] | undefined {
+  if (!options) return undefined;
+  const enabled = options.variants.filter((v) => v.enabled);
+  if (enabled.length === 0) return undefined;
+  return enabled.map((v) => ({
+    itemName: v.optionValues.join('/'),
+    attributes: options.groups.map((g, i) => ({
+      attributeTypeName: g.groupName,
+      attributeValueName: v.optionValues[i] ?? '',
+    })),
+    salePrice: v.salePrices.coupang,
+    originalPrice: Math.ceil((v.salePrices.coupang * 1.25) / 1000) * 1000,
+    stock: v.stock,
+  }));
+}
 
 // ─── buildDraftData: 로컬 state → /api/listing/coupang/drafts 페이로드 변환 ───
 
