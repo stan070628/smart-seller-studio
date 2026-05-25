@@ -20,6 +20,25 @@ interface NaverProduct {
 
 type Mode = 'coupang' | 'rg' | 'naver' | 'manual';
 
+function loadTabProducts<T>(
+  url: string,
+  extract: (json: Record<string, unknown>) => T[],
+  setItems: (items: T[]) => void,
+  setLoading: (v: boolean) => void,
+  setError: (v: string | null) => void,
+  fallbackError: string,
+): void {
+  setLoading(true);
+  fetch(url)
+    .then((r) => r.json())
+    .then((j: Record<string, unknown>) => {
+      if (j.success) setItems(extract(j));
+      else setError((j.error as string | undefined) ?? fallbackError);
+    })
+    .catch(() => setError('네트워크 오류가 발생했습니다.'))
+    .finally(() => setLoading(false));
+}
+
 interface Props {
   onClose: () => void;
   onAdded: () => void;
@@ -89,26 +108,24 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
     setMode(m);
     if (m === 'naver' || m === 'manual') setFeeRate('');
     if (m === 'rg' && rgProducts.length === 0 && !loadingRg && !rgError) {
-      setLoadingRg(true);
-      fetch('/api/cost-management/rg-products')
-        .then((r) => r.json())
-        .then((j) => {
-          if (j.success) setRgProducts(j.data);
-          else setRgError(j.error ?? 'RG 상품 목록을 불러오지 못했습니다.');
-        })
-        .catch(() => setRgError('네트워크 오류가 발생했습니다.'))
-        .finally(() => setLoadingRg(false));
+      loadTabProducts(
+        '/api/cost-management/rg-products',
+        (j) => (j.data as RgProduct[]) ?? [],
+        setRgProducts,
+        setLoadingRg,
+        setRgError,
+        'RG 상품 목록을 불러오지 못했습니다.',
+      );
     }
     if (m === 'naver' && naverProducts.length === 0 && !loadingNaver && !naverError) {
-      setLoadingNaver(true);
-      fetch('/api/listing/naver')
-        .then((r) => r.json())
-        .then((j) => {
-          if (j.success) setNaverProducts(j.data?.items ?? []);
-          else setNaverError(j.error ?? '네이버 상품 목록을 불러오지 못했습니다.');
-        })
-        .catch(() => setNaverError('네트워크 오류가 발생했습니다.'))
-        .finally(() => setLoadingNaver(false));
+      loadTabProducts(
+        '/api/listing/naver',
+        (j) => ((j.data as { items?: NaverProduct[] } | null)?.items ?? []),
+        setNaverProducts,
+        setLoadingNaver,
+        setNaverError,
+        '네이버 상품 목록을 불러오지 못했습니다.',
+      );
     }
   }
 
