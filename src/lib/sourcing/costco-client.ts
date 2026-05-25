@@ -176,6 +176,48 @@ export async function fetchCostcoProduct(code: string): Promise<CostcoApiProduct
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 검색 API 기반 단일 상품 조회 (product detail API 실패 시 폴백)
+// OCC search endpoint에서 code 정확 매칭으로 탐색
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function fetchCostcoProductBySearch(
+  code: string,
+): Promise<CostcoApiProduct | null> {
+  const params = new URLSearchParams({
+    query: code,
+    fields: COSTCO_API_DEFAULTS.fields,
+    lang: COSTCO_API_DEFAULTS.lang,
+    curr: COSTCO_API_DEFAULTS.curr,
+    pageSize: '10',
+    currentPage: '0',
+  });
+
+  const url = `${COSTCO_API_BASE}/products/search?${params.toString()}`;
+
+  const res = await fetch(url, {
+    headers: {
+      Accept: 'application/json',
+      'Accept-Language': 'ko-KR,ko;q=0.9',
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    },
+    signal: AbortSignal.timeout(15_000),
+  });
+
+  if (!res.ok) return null;
+
+  const data = (await res.json()) as OccSearchResponse;
+  const match = (data.products ?? []).find((p) => p.code === code) ?? null;
+  if (!match) return null;
+
+  const categoryCode =
+    (match as unknown as { categories?: { code?: string }[] })?.categories?.[0]?.code ?? '';
+  const categoryName = OCC_CODE_TO_CATEGORY[categoryCode] ?? '기타';
+
+  return occProductToApi(match, categoryName, categoryCode);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 전체 카테고리 수집
 // 카테고리 그룹 → 서브카테고리 코드 배열을 순회하며 수집
 // ─────────────────────────────────────────────────────────────────────────────
