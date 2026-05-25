@@ -209,8 +209,13 @@ describe('GET /api/sourcing/costco/lookup', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.source).toBe('api');
+    expect(body.productCode).toBe('1234567');
     expect(body.title).toBe('Search Found Product');
     expect(mockUpsertCostcoProduct).toHaveBeenCalledOnce();
+    expect(mockUpsertCostcoProduct).toHaveBeenCalledWith(
+      expect.objectContaining({ query: expect.any(Function) }),
+      expect.objectContaining({ productCode: '1234567', title: 'Search Found Product' }),
+    );
   });
 
   it('DB·OCC detail 모두 실패하고 search도 null이면 404를 반환한다', async () => {
