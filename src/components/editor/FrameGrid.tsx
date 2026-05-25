@@ -18,6 +18,36 @@ import FrameCardPreview from './FrameCardPreview';
 import { useTemplateRefs } from './inspector/TemplateRefContext';
 import type { GeneratedFrame } from '@/types/frames';
 
+// notice/return/privacy는 가로 배치로 묶어 표시
+const NOTICE_FRAME_TYPES = new Set(['custom_notice', 'custom_return_notice', 'custom_privacy']);
+
+type RenderSegment =
+  | { type: 'single'; frame: GeneratedFrame; idx: number }
+  | { type: 'notice-row'; frames: { frame: GeneratedFrame; idx: number }[] };
+
+function buildSegments(frames: GeneratedFrame[]): RenderSegment[] {
+  const segments: RenderSegment[] = [];
+  let noticeBuffer: { frame: GeneratedFrame; idx: number }[] = [];
+
+  frames.forEach((frame, idx) => {
+    if (NOTICE_FRAME_TYPES.has(frame.frameType)) {
+      noticeBuffer.push({ frame, idx });
+    } else {
+      if (noticeBuffer.length > 0) {
+        segments.push({ type: 'notice-row', frames: noticeBuffer });
+        noticeBuffer = [];
+      }
+      segments.push({ type: 'single', frame, idx });
+    }
+  });
+
+  if (noticeBuffer.length > 0) {
+    segments.push({ type: 'notice-row', frames: noticeBuffer });
+  }
+
+  return segments;
+}
+
 // ---------------------------------------------------------------------------
 // DownloadAllButton에서 ref로 각 FrameCard의 template DOM에 접근할 수 있도록
 // ---------------------------------------------------------------------------
@@ -113,8 +143,10 @@ const FrameGrid = forwardRef<FrameGridHandle>((_, ref) => {
   }
 
   // -----------------------------------------------------------------------
-  // 세로 단일 컬럼 렌더
+  // 세그먼트 빌드: notice 계열은 가로 행, 나머지는 세로 단일 컬럼
   // -----------------------------------------------------------------------
+  const segments = buildSegments(activeFrames);
+
   return (
     <div
       style={{
@@ -125,15 +157,43 @@ const FrameGrid = forwardRef<FrameGridHandle>((_, ref) => {
         alignItems: 'stretch',
       }}
     >
-      {activeFrames.map((frame, idx) => (
-        <FrameCardPreview
-          key={frame.id ?? frame.frameType}
-          frame={frame}
-          defaultImageUrl={defaultImageUrl}
-          uploadedImages={uploadedImages}
-          frameIndex={idx + 1}
-        />
-      ))}
+      {segments.map((seg, segIdx) => {
+        if (seg.type === 'single') {
+          return (
+            <FrameCardPreview
+              key={seg.frame.id ?? seg.frame.frameType}
+              frame={seg.frame}
+              defaultImageUrl={defaultImageUrl}
+              uploadedImages={uploadedImages}
+              frameIndex={seg.idx + 1}
+            />
+          );
+        }
+
+        // notice-row: 가로 배치
+        return (
+          <div
+            key={`notice-row-${segIdx}`}
+            style={{
+              display: 'flex',
+              flexDirection: 'row',
+              gap: '16px',
+              alignItems: 'flex-start',
+            }}
+          >
+            {seg.frames.map(({ frame, idx }) => (
+              <div key={frame.id ?? frame.frameType} style={{ flex: 1, minWidth: 0 }}>
+                <FrameCardPreview
+                  frame={frame}
+                  defaultImageUrl={defaultImageUrl}
+                  uploadedImages={uploadedImages}
+                  frameIndex={idx + 1}
+                />
+              </div>
+            ))}
+          </div>
+        );
+      })}
     </div>
   );
 });

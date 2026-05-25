@@ -11,7 +11,7 @@
  */
 
 import React, { useState } from 'react';
-import { Wand2, Loader2, X, RefreshCw } from 'lucide-react';
+import { Wand2, Loader2, X, RefreshCw, Download } from 'lucide-react';
 import type { FrameType } from '@/types/frames';
 import useEditorStore from '@/store/useEditorStore';
 
@@ -131,6 +131,15 @@ const ThumbnailGenerateSection: React.FC<Props> = ({ frameType, frameId }) => {
   const handleReset = () => {
     setFrameImage(frameId, 'main', null);
     setError(null);
+  };
+
+  const handleSaveImage = () => {
+    const url = slotMap['main'];
+    if (!url) return;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `thumbnail-${Date.now()}.jpg`;
+    a.click();
   };
 
   return (
@@ -265,6 +274,28 @@ const ThumbnailGenerateSection: React.FC<Props> = ({ frameType, frameId }) => {
           </>
         )}
       </button>
+
+      {/* 이미지 저장 버튼 — 생성 결과가 있을 때만 표시 */}
+      {hasMain && !isLoading && (
+        <button
+          onClick={handleSaveImage}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+            padding: '9px',
+            borderRadius: '8px',
+            border: '1px solid #d1d5db',
+            cursor: 'pointer',
+            backgroundColor: '#ffffff',
+            color: '#374151',
+            fontWeight: 600,
+            fontSize: '13px',
+            transition: 'all 0.2s',
+          }}
+        >
+          <Download size={14} />
+          이미지 저장하기
+        </button>
+      )}
 
       <style>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
