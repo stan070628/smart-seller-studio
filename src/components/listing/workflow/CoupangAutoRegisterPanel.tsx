@@ -352,6 +352,7 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
     const detailImages = sharedDraft.pickedDetailImages.length > 0
       ? sharedDraft.pickedDetailImages
       : sharedDraft.detailImages;
+    const variants = buildVariantsFromOptions(sharedDraft.options);
     return {
       ...buildDraftData({
         name,
@@ -391,6 +392,7 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
       salePrice: String(salePrice),
       originalPrice: String(originalPrice),
       sourceUrl: sharedDraft.sourceUrl,
+      ...(variants ? { variants } : {}),
     };
   }
 
