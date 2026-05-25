@@ -200,12 +200,14 @@ export default function CostManagementTab() {
   const [apiRevenue, setApiRevenue] = useState<ApiRevenue | null>(null);
   const [apiLoading, setApiLoading] = useState(false);
   const [apiWarnings, setApiWarnings] = useState<string[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [channelFilter, setChannelFilter] = useState<'all' | 'rg' | 'wing' | 'naver'>('all');
   const [rgInventory, setRgInventory] = useState<Map<string, number | null>>(new Map());
   const [rgInventoryLoading, setRgInventoryLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const range = getDateRange(preset, customFrom, customTo);
       const params = new URLSearchParams();
@@ -217,7 +219,14 @@ export default function CostManagementTab() {
       if (json.success) {
         setProducts(json.data);
         setSummary(json.summary ?? { total_purchase_amount: 0, total_sales_amount: 0, total_realized_profit: 0 });
+      } else {
+        setLoadError(json.error ?? '상품 목록 조회에 실패했습니다.');
+        console.error('[products API error]', json.error);
       }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '네트워크 오류';
+      setLoadError(msg);
+      console.error('[products load error]', e);
     } finally {
       setLoading(false);
     }
@@ -590,6 +599,11 @@ export default function CostManagementTab() {
       </div>
 
       {/* 테이블 */}
+      {loadError && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', padding: '10px 14px', marginBottom: '10px', fontSize: '12px', color: '#be0014', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <AlertCircle size={14} /> 상품 목록 오류: {loadError}
+        </div>
+      )}
       <div style={{ background: '#fff', borderRadius: '10px', border: '1px solid #e5e5e5', overflow: 'hidden' }}>
         {loading ? (
           <div style={{ padding: '40px', textAlign: 'center', color: '#71717a', fontSize: '13px' }}>불러오는 중...</div>
