@@ -38,27 +38,33 @@ export async function POST(request: NextRequest) {
 
   const pool = getSourcingPool();
 
-  // junction table 기준 조회 (1:N 지원) + 미등록 상품은 product_costs fallback
+  // revenue-history는 vendorItemId를 포함 → vendor_item_id 기준 1차 매칭
+  // sellerProductId 기준 2차 매칭 (wing-only 상품 대응)
+  const { rows: productRows } = await pool.query(
+    `SELECT id, seller_product_id, vendor_item_id FROM product_costs
+     WHERE user_id = $1 AND (seller_product_id IS NOT NULL OR vendor_item_id IS NOT NULL)`,
+    [user.userId],
+  );
   const { rows: junctionRows } = await pool.query(
-    `SELECT product_cost_id AS id, seller_product_id
-     FROM product_wing_seller_ids
-     WHERE user_id = $1
-     UNION
-     SELECT id, seller_product_id
-     FROM product_costs
-     WHERE user_id = $1 AND seller_product_id IS NOT NULL
-       AND id NOT IN (SELECT product_cost_id FROM product_wing_seller_ids WHERE user_id = $1)`,
+    `SELECT product_cost_id AS id, seller_product_id FROM product_wing_seller_ids WHERE user_id = $1`,
     [user.userId],
   );
 
-  const wingProducts = junctionRows;
-
-  if (wingProducts.length === 0) {
+  if (productRows.length === 0 && junctionRows.length === 0) {
     return NextResponse.json({ success: true, data: { imported: 0, skipped: 0, total: 0 } });
   }
 
-  const sellerProductMap = new Map<number, string>(); // sellerProductId → product_cost_id
-  for (const row of wingProducts) {
+  // vendorItemId → product_cost_id (우선)
+  const vendorItemMap = new Map<number, string>();
+  for (const row of productRows) {
+    if (row.vendor_item_id) vendorItemMap.set(Number(row.vendor_item_id), row.id);
+  }
+  // sellerProductId → product_cost_id (junction table 포함, fallback)
+  const sellerProductMap = new Map<number, string>();
+  for (const row of productRows) {
+    if (row.seller_product_id) sellerProductMap.set(Number(row.seller_product_id), row.id);
+  }
+  for (const row of junctionRows) {
     sellerProductMap.set(Number(row.seller_product_id), row.id);
   }
 
@@ -86,7 +92,8 @@ export async function POST(request: NextRequest) {
         for (const order of result.items) {
           if (order.saleType !== 'SALE') continue;
           for (const item of order.items) {
-            const productCostId = sellerProductMap.get(item.sellerProductId);
+            // vendorItemId 우선 매칭 (Wing+RG 공통 키), fallback: sellerProductId
+            const productCostId = vendorItemMap.get(item.vendorItemId) ?? sellerProductMap.get(item.sellerProductId);
             if (!productCostId) continue;
             if (item.quantity <= 0) continue;
             const soldAt = order.saleDate?.slice(0, 10);
