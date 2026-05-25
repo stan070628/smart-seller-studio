@@ -13,8 +13,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getSourcingPool } from '@/lib/sourcing/db';
-import { fetchCostcoProduct } from '@/lib/sourcing/costco-client';
-import type { CostcoProductRow } from '@/types/costco';
+import { fetchCostcoProduct, fetchCostcoProductBySearch } from '@/lib/sourcing/costco-client';
+import { upsertCostcoProduct } from '@/lib/sourcing/costco-upsert';
+import type { CostcoApiProduct, CostcoProductRow } from '@/types/costco';
 import { requireAuth } from '@/lib/supabase/auth';
 
 export const runtime = 'nodejs';
@@ -78,6 +79,31 @@ function rowToResult(row: CostcoProductRow): LookupResult {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// OCC API 응답 → LookupResult 변환
+// ─────────────────────────────────────────────────────────────────────────────
+
+function apiProductToLookupResult(product: CostcoApiProduct): LookupResult {
+  return {
+    source: 'api',
+    productCode: product.productCode,
+    title: product.title,
+    imageUrl: product.imageUrl ?? null,
+    categoryName: product.categoryName,
+    onlinePrice: product.price,
+    averageRating: product.averageRating ?? null,
+    reviewCount: product.reviewCount,
+    unitPriceLabel: null,
+    unitPrice: null,
+    marketLowestPrice: null,
+    marketUnitPrice: null,
+    productUrl: product.productUrl,
+    unitType: null,
+    totalQuantity: null,
+    baseUnit: null,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 핸들러
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -117,26 +143,30 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'API 조회 실패' }, { status: 500 });
   }
   if (!product) {
-    return NextResponse.json({ error: '상품을 찾을 수 없습니다' }, { status: 404 });
+    // 3. OCC search API fallback — product detail에서도 찾지 못할 때
+    let searchProduct: CostcoApiProduct | null;
+    try {
+      searchProduct = await fetchCostcoProductBySearch(code);
+    } catch (err) {
+      console.error('[costco/lookup] OCC search 조회 실패:', err);
+      return NextResponse.json({ error: '상품을 찾을 수 없습니다' }, { status: 404 });
+    }
+    if (!searchProduct) {
+      return NextResponse.json({ error: '상품을 찾을 수 없습니다' }, { status: 404 });
+    }
+
+    // DB 저장 — 다음 조회부터 step 1에서 즉시 반환됨
+    // upsert 실패해도 이번 조회 결과는 정상 반환 (fire-and-forget)
+    try {
+      const pool = getSourcingPool();
+      await upsertCostcoProduct(pool, searchProduct);
+    } catch (err) {
+      console.error('[costco/lookup] search 결과 upsert 실패:', err);
+    }
+
+    return NextResponse.json(apiProductToLookupResult(searchProduct));
   }
 
-  const result: LookupResult = {
-    source: 'api',
-    productCode: product.productCode,
-    title: product.title,
-    imageUrl: product.imageUrl ?? null,
-    categoryName: product.categoryName,
-    onlinePrice: product.price,
-    averageRating: product.averageRating ?? null,
-    reviewCount: product.reviewCount,
-    unitPriceLabel: null,
-    unitPrice: null,
-    marketLowestPrice: null,
-    marketUnitPrice: null,
-    productUrl: product.productUrl,
-    unitType: null,
-    totalQuantity: null,
-    baseUnit: null,
-  };
-  return NextResponse.json(result);
+  // OCC product detail 성공
+  return NextResponse.json(apiProductToLookupResult(product));
 }
