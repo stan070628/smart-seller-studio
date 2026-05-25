@@ -8,6 +8,12 @@ interface CoupangProduct {
   seller_product_name: string;
 }
 
+interface CoupangOption {
+  vendorItemId: number;
+  itemName: string;
+  salePrice: number;
+}
+
 interface RgProduct {
   vendor_item_id: number;
   product_name: string;
@@ -68,6 +74,9 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
   const [loadingCoupang, setLoadingCoupang] = useState(true);
   const [coupangError, setCoupangError] = useState<string | null>(null);
   const [selectedCoupang, setSelectedCoupang] = useState<CoupangProduct | null>(null);
+  const [coupangOptions, setCoupangOptions] = useState<CoupangOption[]>([]);
+  const [loadingOptions, setLoadingOptions] = useState(false);
+  const [selectedOption, setSelectedOption] = useState<CoupangOption | null>(null);
 
   // RG 상품
   const [rgProducts, setRgProducts] = useState<RgProduct[]>([]);
@@ -99,6 +108,18 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
       .catch(() => setCoupangError('네트워크 오류가 발생했습니다.'))
       .finally(() => setLoadingCoupang(false));
   }, []);
+
+  function handleSelectCoupang(p: CoupangProduct) {
+    setSelectedCoupang(p);
+    setSelectedOption(null);
+    setCoupangOptions([]);
+    setLoadingOptions(true);
+    fetch(`/api/cost-management/coupang-product-options?sellerProductId=${p.seller_product_id}`)
+      .then((r) => r.json())
+      .then((j) => { if (j.success) setCoupangOptions(j.data); })
+      .catch(() => {})
+      .finally(() => setLoadingOptions(false));
+  }
 
   useEffect(() => {
     setRgCustomName(selectedRg?.product_name ?? '');
@@ -140,8 +161,11 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
       let body: Record<string, unknown>;
       if (mode === 'coupang') {
         body = {
-          product_name: selectedCoupang!.seller_product_name,
+          product_name: selectedOption
+            ? `${selectedCoupang!.seller_product_name} - ${selectedOption.itemName}`
+            : selectedCoupang!.seller_product_name,
           seller_product_id: selectedCoupang!.seller_product_id,
+          ...(selectedOption && { vendor_item_id: selectedOption.vendorItemId }),
           platform_fee_rate: Number(feeRate) / 100,
           ...(subdivisionUnit.trim() !== '' && { subdivision_unit: Number(subdivisionUnit) }),
         };
@@ -230,7 +254,7 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
                 ) : coupangProducts.map((p) => (
                   <div
                     key={p.seller_product_id}
-                    onClick={() => setSelectedCoupang(p)}
+                    onClick={() => handleSelectCoupang(p)}
                     style={{ padding: '10px 14px', cursor: 'pointer', fontSize: '12px', borderBottom: '1px solid #f0f0f0', background: selectedCoupang?.seller_product_id === p.seller_product_id ? '#fef2f2' : '#fff', color: selectedCoupang?.seller_product_id === p.seller_product_id ? '#be0014' : '#18181b', fontWeight: selectedCoupang?.seller_product_id === p.seller_product_id ? 600 : 400 }}
                   >
                     {p.seller_product_name}
@@ -238,6 +262,42 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
                   </div>
                 ))}
               </div>
+              {/* 옵션 선택 */}
+              {selectedCoupang && (
+                <div style={{ marginTop: '10px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: 600, color: '#27272a', marginBottom: '6px' }}>
+                    옵션 선택
+                    <span style={{ fontWeight: 400, color: '#71717a', marginLeft: '6px' }}>옵션이 없으면 상품 전체로 추가됩니다</span>
+                  </div>
+                  {loadingOptions ? (
+                    <div style={{ fontSize: '11px', color: '#71717a', padding: '8px 0' }}>옵션 조회 중...</div>
+                  ) : coupangOptions.length === 0 ? (
+                    <div style={{ fontSize: '11px', color: '#a1a1aa', padding: '4px 0' }}>옵션 없음 (단일 상품)</div>
+                  ) : (
+                    <div style={{ border: '1px solid #e5e5e5', borderRadius: '8px', overflow: 'hidden' }}>
+                      <div
+                        onClick={() => setSelectedOption(null)}
+                        style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '11px', borderBottom: '1px solid #f0f0f0', background: selectedOption === null ? '#f5f5f7' : '#fff', color: '#52525b', fontWeight: selectedOption === null ? 600 : 400 }}
+                      >
+                        전체 (옵션 미선택)
+                      </div>
+                      {coupangOptions.map((opt) => (
+                        <div
+                          key={opt.vendorItemId}
+                          onClick={() => setSelectedOption(opt)}
+                          style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '11px', borderBottom: '1px solid #f0f0f0', background: selectedOption?.vendorItemId === opt.vendorItemId ? '#fef2f2' : '#fff', color: selectedOption?.vendorItemId === opt.vendorItemId ? '#be0014' : '#18181b', fontWeight: selectedOption?.vendorItemId === opt.vendorItemId ? 600 : 400 }}
+                        >
+                          {opt.itemName || '(옵션명 없음)'}
+                          <span style={{ fontSize: '10px', color: '#71717a', marginLeft: '8px' }}>VID#{opt.vendorItemId}</span>
+                          {opt.salePrice > 0 && (
+                            <span style={{ fontSize: '10px', color: '#2563eb', marginLeft: '6px' }}>{opt.salePrice.toLocaleString()}원</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
