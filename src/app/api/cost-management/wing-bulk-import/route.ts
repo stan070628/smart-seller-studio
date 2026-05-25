@@ -38,12 +38,20 @@ export async function POST(request: NextRequest) {
 
   const pool = getSourcingPool();
 
-  // 사용자의 윙 상품 전체 조회 → sellerProductId → product_cost_id 맵 구성
-  const { rows: wingProducts } = await pool.query(
-    `SELECT id, seller_product_id FROM product_costs
-     WHERE user_id = $1 AND seller_product_id IS NOT NULL`,
+  // junction table 기준 조회 (1:N 지원) + 미등록 상품은 product_costs fallback
+  const { rows: junctionRows } = await pool.query(
+    `SELECT product_cost_id AS id, seller_product_id
+     FROM product_wing_seller_ids
+     WHERE user_id = $1
+     UNION
+     SELECT id, seller_product_id
+     FROM product_costs
+     WHERE user_id = $1 AND seller_product_id IS NOT NULL
+       AND id NOT IN (SELECT product_cost_id FROM product_wing_seller_ids WHERE user_id = $1)`,
     [user.userId],
   );
+
+  const wingProducts = junctionRows;
 
   if (wingProducts.length === 0) {
     return NextResponse.json({ success: true, data: { imported: 0, skipped: 0, total: 0 } });

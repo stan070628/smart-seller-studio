@@ -194,12 +194,12 @@ export default function CostManagementTab() {
   const [editVendorItemId, setEditVendorItemId] = useState('');
   const [showWingMatchModal, setShowWingMatchModal] = useState(false);
   const [wingMatchLoading, setWingMatchLoading] = useState(false);
-  const [wingMatchItems, setWingMatchItems] = useState<Array<{
-    wingId: number;
+  // 같은 Wing 상품명을 그룹으로 묶어 1:N 매핑 지원
+  const [wingMatchGroups, setWingMatchGroups] = useState<Array<{
     wingName: string;
+    wingIds: Array<{ id: number; checked: boolean }>;
     matchedProductId: string | null;
     matchedProductName: string | null;
-    confirmed: boolean;
   }>>([]);
   const [savingWingMatch, setSavingWingMatch] = useState(false);
   const [preset, setPreset] = useState<Preset>('this_month');
@@ -279,6 +279,22 @@ export default function CostManagementTab() {
     return name.replace(/[^\w가-힣]/g, '').toLowerCase();
   }
 
+  function bestMatch(wingName: string): { id: string; name: string } | null {
+    const wNorm = normalize(wingName);
+    let best: { id: string; name: string } | null = null;
+    let bestScore = 0;
+    for (const p of products) {
+      const pNorm = normalize(p.product_name);
+      const longer = Math.max(wNorm.length, pNorm.length);
+      if (longer === 0) continue;
+      let common = 0;
+      for (const ch of wNorm) { if (pNorm.includes(ch)) common++; }
+      const score = common / longer;
+      if (score > bestScore) { bestScore = score; best = { id: p.id, name: p.product_name }; }
+    }
+    return bestScore >= 0.5 ? best : null;
+  }
+
   async function openWingMatchModal() {
     setShowWingMatchModal(true);
     setWingMatchLoading(true);
@@ -289,30 +305,25 @@ export default function CostManagementTab() {
 
       const wingList: Array<{ sellerProductId: number; sellerProductName: string }> = json.data;
 
-      const matched = wingList.map((w) => {
-        const wNorm = normalize(w.sellerProductName);
-        let best: { id: string; name: string } | null = null;
-        let bestScore = 0;
-        for (const p of products) {
-          const pNorm = normalize(p.product_name);
-          // 긴 쪽을 기준으로 공통 문자 비율
-          const longer = Math.max(wNorm.length, pNorm.length);
-          if (longer === 0) continue;
-          let common = 0;
-          for (const ch of wNorm) { if (pNorm.includes(ch)) common++; }
-          const score = common / longer;
-          if (score > bestScore) { bestScore = score; best = { id: p.id, name: p.product_name }; }
-        }
+      // 같은 상품명으로 그룹핑
+      const groupMap = new Map<string, number[]>();
+      for (const w of wingList) {
+        const existing = groupMap.get(w.sellerProductName) ?? [];
+        existing.push(w.sellerProductId);
+        groupMap.set(w.sellerProductName, existing);
+      }
+
+      const groups = Array.from(groupMap.entries()).map(([wingName, ids]) => {
+        const match = bestMatch(wingName);
         return {
-          wingId: w.sellerProductId,
-          wingName: w.sellerProductName,
-          matchedProductId: bestScore >= 0.5 ? best?.id ?? null : null,
-          matchedProductName: bestScore >= 0.5 ? best?.name ?? null : null,
-          confirmed: bestScore >= 0.5,
+          wingName,
+          wingIds: ids.map((id) => ({ id, checked: match !== null })),
+          matchedProductId: match?.id ?? null,
+          matchedProductName: match?.name ?? null,
         };
       });
 
-      setWingMatchItems(matched);
+      setWingMatchGroups(groups);
     } finally {
       setWingMatchLoading(false);
     }
@@ -321,17 +332,27 @@ export default function CostManagementTab() {
   async function saveWingMatches() {
     setSavingWingMatch(true);
     try {
-      const toSave = wingMatchItems.filter((m) => m.confirmed && m.matchedProductId);
-      for (const m of toSave) {
-        await fetch(`/api/cost-management/products/${m.matchedProductId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ seller_product_id: m.wingId }),
-        });
+      const mappings: Array<{ product_cost_id: string; seller_product_id: number }> = [];
+      for (const g of wingMatchGroups) {
+        if (!g.matchedProductId) continue;
+        for (const w of g.wingIds) {
+          if (w.checked) mappings.push({ product_cost_id: g.matchedProductId, seller_product_id: w.id });
+        }
       }
-      alert(`${toSave.length}개 상품에 Wing ID 저장 완료`);
-      setShowWingMatchModal(false);
-      load();
+      if (mappings.length === 0) return;
+      const res = await fetch('/api/cost-management/wing-products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mappings }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        alert(`${json.data.saved}개 Wing ID 저장 완료`);
+        setShowWingMatchModal(false);
+        load();
+      } else {
+        alert(json.error ?? '저장 실패');
+      }
     } finally {
       setSavingWingMatch(false);
     }
@@ -851,11 +872,11 @@ export default function CostManagementTab() {
       )}
       {showWingMatchModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#fff', borderRadius: '12px', width: '860px', maxWidth: '95vw', maxHeight: '80vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
+          <div style={{ background: '#fff', borderRadius: '12px', width: '920px', maxWidth: '95vw', maxHeight: '82vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
             <div style={{ padding: '18px 24px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
                 <div style={{ fontWeight: 700, fontSize: '15px' }}>Wing ID 자동 매칭</div>
-                <div style={{ fontSize: '11px', color: '#71717a', marginTop: '2px' }}>Wing API에서 불러온 상품과 DB 상품을 이름 기반으로 매칭합니다. 확인 체크 후 저장하세요.</div>
+                <div style={{ fontSize: '11px', color: '#71717a', marginTop: '2px' }}>같은 상품명의 Wing ID를 그룹으로 묶어 DB 상품 1개에 N개 ID 매핑합니다. DB 상품을 선택하고 저장하세요.</div>
               </div>
               <button onClick={() => setShowWingMatchModal(false)} style={{ background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', color: '#71717a' }}>✕</button>
             </div>
@@ -865,74 +886,73 @@ export default function CostManagementTab() {
               ) : (
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
                   <thead>
-                    <tr style={{ background: '#f9fafb', borderBottom: '1px solid #f0f0f0' }}>
-                      <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: '#7c3aed', width: '36px' }}>확인</th>
+                    <tr style={{ background: '#f9fafb', borderBottom: '1px solid #f0f0f0', position: 'sticky', top: 0 }}>
                       <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: '#7c3aed' }}>Wing 상품명</th>
-                      <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: '#7c3aed', width: '110px' }}>판매자상품ID</th>
-                      <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: '#52525b' }}>매칭된 DB 상품</th>
+                      <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: '#7c3aed', width: '200px' }}>판매자상품ID (옵션별)</th>
+                      <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: '#52525b' }}>매칭할 DB 상품</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {wingMatchItems.map((m, i) => (
-                      <tr key={m.wingId} style={{ borderBottom: '1px solid #f0f0f0', background: m.confirmed ? '#faf5ff' : '#fff' }}>
-                        <td style={{ padding: '8px 16px', textAlign: 'center' }}>
-                          <input
-                            type="checkbox"
-                            checked={m.confirmed}
-                            disabled={!m.matchedProductId}
-                            onChange={(e) => setWingMatchItems((prev) => prev.map((x, j) => j === i ? { ...x, confirmed: e.target.checked } : x))}
-                          />
-                        </td>
-                        <td style={{ padding: '8px 16px', color: '#18181b' }}>{m.wingName}</td>
-                        <td style={{ padding: '8px 16px', color: '#7c3aed', fontFamily: 'monospace' }}>{m.wingId}</td>
-                        <td style={{ padding: '8px 16px' }}>
-                          {m.matchedProductName ? (
+                    {wingMatchGroups.map((g, gi) => {
+                      const checkedCount = g.wingIds.filter((w) => w.checked).length;
+                      return (
+                        <tr key={g.wingName} style={{ borderBottom: '1px solid #f0f0f0', background: g.matchedProductId ? '#faf5ff' : '#fff', verticalAlign: 'top' }}>
+                          <td style={{ padding: '10px 16px', color: '#18181b', maxWidth: '280px' }}>{g.wingName}</td>
+                          <td style={{ padding: '8px 16px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                              {g.wingIds.map((w, wi) => (
+                                <label key={w.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={w.checked}
+                                    onChange={(e) => setWingMatchGroups((prev) => prev.map((x, j) => j !== gi ? x : {
+                                      ...x,
+                                      wingIds: x.wingIds.map((y, k) => k !== wi ? y : { ...y, checked: e.target.checked }),
+                                    }))}
+                                  />
+                                  <span style={{ fontFamily: 'monospace', color: '#7c3aed', fontSize: '11px' }}>{w.id}</span>
+                                </label>
+                              ))}
+                            </div>
+                            {g.wingIds.length > 1 && (
+                              <div style={{ fontSize: '10px', color: '#a1a1aa', marginTop: '4px' }}>{checkedCount}/{g.wingIds.length} 선택</div>
+                            )}
+                          </td>
+                          <td style={{ padding: '8px 16px' }}>
                             <select
-                              value={m.matchedProductId ?? ''}
+                              value={g.matchedProductId ?? ''}
                               onChange={(e) => {
                                 const pid = e.target.value;
                                 const pname = products.find((p) => p.id === pid)?.product_name ?? null;
-                                setWingMatchItems((prev) => prev.map((x, j) => j === i ? { ...x, matchedProductId: pid || null, matchedProductName: pname, confirmed: !!pid } : x));
+                                setWingMatchGroups((prev) => prev.map((x, j) => j !== gi ? x : { ...x, matchedProductId: pid || null, matchedProductName: pname }));
                               }}
-                              style={{ width: '100%', padding: '3px 6px', fontSize: '11px', border: '1px solid #e5e5e5', borderRadius: '4px' }}
+                              style={{ width: '100%', padding: '4px 6px', fontSize: '11px', border: `1px solid ${g.matchedProductId ? '#c4b5fd' : '#e5e5e5'}`, borderRadius: '4px' }}
                             >
                               <option value="">— 매칭 없음</option>
                               {products.map((p) => (
                                 <option key={p.id} value={p.id}>{p.product_name}</option>
                               ))}
                             </select>
-                          ) : (
-                            <select
-                              value=""
-                              onChange={(e) => {
-                                const pid = e.target.value;
-                                const pname = products.find((p) => p.id === pid)?.product_name ?? null;
-                                setWingMatchItems((prev) => prev.map((x, j) => j === i ? { ...x, matchedProductId: pid || null, matchedProductName: pname, confirmed: !!pid } : x));
-                              }}
-                              style={{ width: '100%', padding: '3px 6px', fontSize: '11px', border: '1px solid #e5e5e5', borderRadius: '4px', color: '#aaa' }}
-                            >
-                              <option value="">— 직접 선택</option>
-                              {products.map((p) => (
-                                <option key={p.id} value={p.id}>{p.product_name}</option>
-                              ))}
-                            </select>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               )}
             </div>
             <div style={{ padding: '14px 24px', borderTop: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ fontSize: '11px', color: '#71717a' }}>
-                체크된 {wingMatchItems.filter((m) => m.confirmed && m.matchedProductId).length}개 상품에 Wing ID 저장
+                {(() => {
+                  const total = wingMatchGroups.reduce((s, g) => s + (g.matchedProductId ? g.wingIds.filter((w) => w.checked).length : 0), 0);
+                  return `${wingMatchGroups.filter((g) => g.matchedProductId).length}개 그룹 / Wing ID ${total}개 저장 예정`;
+                })()}
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button onClick={() => setShowWingMatchModal(false)} style={{ padding: '7px 16px', borderRadius: '8px', background: '#f4f4f5', color: '#71717a', border: 'none', fontSize: '12px', cursor: 'pointer' }}>닫기</button>
                 <button
                   onClick={saveWingMatches}
-                  disabled={savingWingMatch || wingMatchItems.filter((m) => m.confirmed && m.matchedProductId).length === 0}
+                  disabled={savingWingMatch || wingMatchGroups.every((g) => !g.matchedProductId || g.wingIds.every((w) => !w.checked))}
                   style={{ padding: '7px 16px', borderRadius: '8px', background: '#7c3aed', color: '#fff', border: 'none', fontSize: '12px', cursor: 'pointer', opacity: savingWingMatch ? 0.6 : 1 }}
                 >
                   {savingWingMatch ? '저장 중...' : '선택 저장'}
