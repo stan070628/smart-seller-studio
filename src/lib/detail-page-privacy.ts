@@ -11,10 +11,13 @@ const FIXED_IMAGES = [
   'https://mvergrjqfjuwndveztts.supabase.co/storage/v1/object/public/smart-seller-studio/fixed/frame-02-custom_privacy.jpg',
 ] as const;
 
-export const PRIVACY_FOOTER_HTML = FIXED_IMAGES.map(
-  (src) =>
-    `<div style="max-width:780px;margin:0 auto;line-height:0;"><img src="${src}" alt="" style="width:100%;display:block;" /></div>`,
-).join('\n');
+export const PRIVACY_FOOTER_HTML =
+  `<div style="max-width:780px;margin:0 auto;display:flex;gap:0;line-height:0;">` +
+  FIXED_IMAGES.map(
+    (src) =>
+      `<div style="flex:1;min-width:0;"><img src="${src}" alt="" style="width:100%;display:block;" /></div>`,
+  ).join('') +
+  `</div>`;
 
 /**
  * 기존 HTML 끝에 고정 이미지 3종을 붙인다.
