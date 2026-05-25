@@ -147,7 +147,8 @@ export async function GET(request: NextRequest) {
           if (seen.has(cat.code)) return false;
           seen.add(cat.code);
           return true;
-        });
+        })
+        .slice(0, 30);
 
       const predicted = await client.predictCategory(kw).catch(() => null);
 

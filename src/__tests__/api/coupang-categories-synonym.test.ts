@@ -9,6 +9,13 @@ import { describe, it, expect, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
 // vi.mock은 hoisting되므로 import 전에 선언
+vi.mock('@/lib/listing/category-synonyms', () => ({
+  expandKeyword: (kw: string) => {
+    if (kw === '등산가방') return ['등산가방', '배낭', '트레킹백'];
+    return [kw];
+  },
+}));
+
 vi.mock('@/lib/listing/coupang-client', () => {
   // 아웃도어 카테고리 아래 "등산가방"·"배낭"·"트레킹백" 세 말단 노드를 가진 최소 트리
   const fakeTree = {
