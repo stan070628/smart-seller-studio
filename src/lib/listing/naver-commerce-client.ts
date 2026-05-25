@@ -101,6 +101,7 @@ export interface NaverOrder {
   productOrderStatus: string;
   claimStatus: string | null;
   productName: string;
+  channelProductNo: number | null;
   quantity: number;
   totalPaymentAmount: number;
   deliveryFeeAmount: number;
@@ -125,6 +126,7 @@ function normalizeNaverOrder(raw: NaverOrderRawItem): NaverOrder {
     productOrderStatus: productOrder.productOrderStatus,
     claimStatus: claim?.claimStatus ?? null,
     productName: productOrder.productName,
+    channelProductNo: productOrder.productId ? Number(productOrder.productId) || null : null,
     quantity: productOrder.quantity,
     totalPaymentAmount: productOrder.totalPaymentAmount,
     deliveryFeeAmount: productOrder.deliveryFeeAmount ?? 0,

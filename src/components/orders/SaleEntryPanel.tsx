@@ -33,10 +33,11 @@ interface Props {
   productId: string;
   sellerProductId: number | null;
   vendorItemId?: number | null;
+  naverChannelProductNo?: number | null;
   onChanged: () => void;
 }
 
-export default function SaleEntryPanel({ productId, sellerProductId, vendorItemId, onChanged }: Props) {
+export default function SaleEntryPanel({ productId, sellerProductId, vendorItemId, naverChannelProductNo, onChanged }: Props) {
   const [sales, setSales] = useState<SaleRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -142,12 +143,12 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
       {/* 헤더: 타이틀 + 쿠팡 가져오기 버튼 */}
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px', gap: '6px' }}>
         <span style={{ fontSize: '12px', fontWeight: 700, color: '#18181b' }}>💰 판매 내역</span>
-        {(sellerProductId || vendorItemId) && (
+        {(sellerProductId || vendorItemId || naverChannelProductNo) && (
           <button
             onClick={() => setShowImportForm((v) => !v)}
             style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 10px', borderRadius: '6px', background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1d4ed8', fontSize: '11px', cursor: 'pointer' }}
           >
-            <CloudDownload size={12} /> 쿠팡 가져오기
+            <CloudDownload size={12} /> 판매 가져오기
           </button>
         )}
       </div>
@@ -221,7 +222,9 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
                     {s.channel === 'coupang'
                       ? <span style={{ background: '#dbeafe', color: '#1d4ed8', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>쿠팡</span>
                       : s.channel === 'rocket_growth'
-                      ? <span style={{ background: '#dcfce7', color: '#15803d', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>로켓그로스</span>
+                      ? <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>로켓그로스</span>
+                      : s.channel === 'naver'
+                      ? <span style={{ background: '#f0fff8', color: '#03c75a', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>네이버</span>
                       : <span style={{ background: '#f3f4f6', color: '#6b7280', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>직접</span>}
                   </td>
                   <td style={{ padding: '6px 8px', textAlign: 'right' }}>

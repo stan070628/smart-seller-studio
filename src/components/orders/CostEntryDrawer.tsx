@@ -42,12 +42,13 @@ interface Props {
   productName: string;
   sellerProductId: number | null;
   vendorItemId?: number | null;
+  naverChannelProductNo?: number | null;
   subdivisionUnit?: number | null;   // 소분 단위 (>0 이면 소분 상품)
   onClose: () => void;
   onChanged: () => void;
 }
 
-export default function CostEntryDrawer({ productId, productName, sellerProductId, vendorItemId, subdivisionUnit, onClose, onChanged }: Props) {
+export default function CostEntryDrawer({ productId, productName, sellerProductId, vendorItemId, naverChannelProductNo, subdivisionUnit, onClose, onChanged }: Props) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -484,6 +485,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
               productId={productId}
               sellerProductId={sellerProductId}
               vendorItemId={vendorItemId}
+              naverChannelProductNo={naverChannelProductNo}
               onChanged={() => { setFifoVersion((v) => v + 1); onChanged(); }}
             />
           </div>

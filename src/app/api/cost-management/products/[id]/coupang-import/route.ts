@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { getCurrentUser } from '@/lib/auth';
 import { getCoupangClient } from '@/lib/listing/coupang-client';
+import { getNaverCommerceClient } from '@/lib/listing/naver-commerce-client';
 
 /** [from, to] 기간을 최대 30일짜리 chunk 배열로 분할 (RG API 제한) */
 function splitInto30DayChunks(from: string, to: string): Array<{ from: string; to: string }> {
@@ -40,7 +41,7 @@ export async function POST(
 
   // RLS 대체: user_id 조건으로 타 유저 데이터 접근 차단
   const { rows: products } = await pool.query(
-    `SELECT id, seller_product_id, vendor_item_id, product_name FROM product_costs WHERE id = $1 AND user_id = $2`,
+    `SELECT id, seller_product_id, vendor_item_id, product_name, naver_channel_product_no FROM product_costs WHERE id = $1 AND user_id = $2`,
     [id, user.userId],
   );
   if (products.length === 0) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
@@ -48,10 +49,11 @@ export async function POST(
   const sellerProductId = products[0].seller_product_id;
   const storedVendorItemId = products[0].vendor_item_id ? Number(products[0].vendor_item_id) : null;
   const storedProductName = String(products[0].product_name ?? '');
+  const naverChannelProductNo = products[0].naver_channel_product_no ? Number(products[0].naver_channel_product_no) : null;
 
-  if (!sellerProductId && !storedVendorItemId) {
+  if (!sellerProductId && !storedVendorItemId && !naverChannelProductNo) {
     return NextResponse.json(
-      { success: false, error: '이 상품에 쿠팡 상품 ID가 연결되지 않았습니다.' },
+      { success: false, error: '이 상품에 연결된 채널 ID가 없습니다.' },
       { status: 400 },
     );
   }
@@ -171,8 +173,45 @@ export async function POST(
     console.log(`[rg-import] total RG items collected: ${rgItems.length} (sellerProductId=${sellerProductId})`);
 
 
+    // ── Phase 3: 네이버 주문 (naver-commerce-client) ───────────────────────
+    const NAVER_CANCELLED = new Set([
+      'CANCEL_REQUEST', 'CANCEL_DONE', 'RETURN_REQUEST', 'RETURN_DONE',
+      'CANCELED', 'RETURNED', 'EXCHANGED',
+    ]);
+    const naverItems: Array<{
+      sold_at: string; quantity: number; selling_price: number;
+      coupang_order_item_id: string; channel: string;
+    }> = [];
+
+    if (naverChannelProductNo) {
+      try {
+        const naverClient = getNaverCommerceClient();
+        const naverResult = await naverClient.getOrders({ fromDate: from, toDate: to });
+        for (const order of naverResult.contents) {
+          if (NAVER_CANCELLED.has(order.productOrderStatus)) continue;
+          if (order.claimStatus && NAVER_CANCELLED.has(order.claimStatus)) continue;
+          if (order.channelProductNo !== naverChannelProductNo) continue;
+          if (order.quantity <= 0) continue;
+          const soldAt = order.orderDate?.slice(0, 10);
+          if (!soldAt) continue;
+          naverItems.push({
+            sold_at: soldAt,
+            quantity: order.quantity,
+            selling_price: order.quantity > 0
+              ? Math.round(order.totalPaymentAmount / order.quantity)
+              : order.totalPaymentAmount,
+            coupang_order_item_id: `naver-${order.productOrderId}`,
+            channel: 'naver',
+          });
+        }
+        console.log(`[import] 네이버 items: ${naverItems.length} (channelProductNo=${naverChannelProductNo})`);
+      } catch (e) {
+        console.warn('[import] 네이버 조회 실패 (스킵):', e instanceof Error ? e.message : e);
+      }
+    }
+
     // ── 합산 후 DB 저장 ──────────────────────────────────────────────────────
-    const allItems = [...generalItems, ...rgItems];
+    const allItems = [...generalItems, ...rgItems, ...naverItems];
 
     // 중복 방지: ON CONFLICT DO NOTHING으로 재임포트 시 스킵
     let imported = 0;

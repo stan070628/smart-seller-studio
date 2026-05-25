@@ -13,6 +13,7 @@ interface ProductRow {
   product_name: string;
   seller_product_id: number | null;
   vendor_item_id: number | null;
+  naver_channel_product_no: number | null;
   subdivision_unit: number | null;
   platform_fee_rate: number;
   entry_count: number;
@@ -189,9 +190,11 @@ export default function CostManagementTab() {
   const [showRgModal, setShowRgModal] = useState(false);
   const [importingRg, setImportingRg] = useState(false);
   const [importingWing, setImportingWing] = useState(false);
+  const [importingNaver, setImportingNaver] = useState(false);
   const [editChannelId, setEditChannelId] = useState<string | null>(null);
   const [editSellerProductId, setEditSellerProductId] = useState('');
   const [editVendorItemId, setEditVendorItemId] = useState('');
+  const [editNaverChannelProductNo, setEditNaverChannelProductNo] = useState('');
   const [showWingMatchModal, setShowWingMatchModal] = useState(false);
   const [wingMatchLoading, setWingMatchLoading] = useState(false);
   // 같은 Wing 상품명을 그룹으로 묶어 1:N 매핑 지원
@@ -209,7 +212,7 @@ export default function CostManagementTab() {
   const [apiRevenue, setApiRevenue] = useState<ApiRevenue | null>(null);
   const [apiLoading, setApiLoading] = useState(false);
   const [apiWarnings, setApiWarnings] = useState<string[]>([]);
-  const [channelFilter, setChannelFilter] = useState<'all' | 'rg' | 'wing'>('all');
+  const [channelFilter, setChannelFilter] = useState<'all' | 'rg' | 'wing' | 'naver'>('all');
   const [rgInventory, setRgInventory] = useState<Map<string, number | null>>(new Map());
   const [rgInventoryLoading, setRgInventoryLoading] = useState(false);
 
@@ -256,14 +259,17 @@ export default function CostManagementTab() {
     setEditChannelId(p.id);
     setEditSellerProductId(p.seller_product_id ? String(p.seller_product_id) : '');
     setEditVendorItemId(p.vendor_item_id ? String(p.vendor_item_id) : '');
+    setEditNaverChannelProductNo(p.naver_channel_product_no ? String(p.naver_channel_product_no) : '');
   }
 
   async function saveEditChannel(id: string) {
     const body: Record<string, unknown> = {};
     const sid = parseInt(editSellerProductId, 10);
     const vid = parseInt(editVendorItemId, 10);
+    const nid = parseInt(editNaverChannelProductNo, 10);
     if (editSellerProductId && sid > 0) body.seller_product_id = sid;
     if (editVendorItemId && vid > 0) body.vendor_item_id = vid;
+    if (editNaverChannelProductNo && nid > 0) body.naver_channel_product_no = nid;
     if (Object.keys(body).length === 0) { setEditChannelId(null); return; }
     const res = await fetch(`/api/cost-management/products/${id}`, {
       method: 'PATCH',
@@ -483,18 +489,24 @@ export default function CostManagementTab() {
       {/* 채널 필터 */}
       <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '12px' }}>
         <span style={{ fontSize: '12px', color: '#52525b', fontWeight: 600, marginRight: '4px' }}>채널</span>
-        {(['all', 'wing', 'rg'] as const).map((ch) => (
+        {([
+          { id: 'all', label: '전체' },
+          { id: 'wing', label: '윙판매' },
+          { id: 'rg', label: 'RG' },
+          { id: 'naver', label: '네이버' },
+        ] as { id: 'all' | 'wing' | 'rg' | 'naver'; label: string }[]).map((ch) => (
           <button
-            key={ch}
-            onClick={() => setChannelFilter(ch)}
+            key={ch.id}
+            onClick={() => setChannelFilter(ch.id)}
             style={{
-              padding: '5px 12px', borderRadius: '20px', border: `1px solid ${channelFilter === ch ? '#be0014' : '#e5e5e5'}`,
-              background: channelFilter === ch ? '#be0014' : '#fff',
-              color: channelFilter === ch ? '#fff' : '#52525b',
-              fontSize: '12px', fontWeight: channelFilter === ch ? 600 : 400, cursor: 'pointer',
+              padding: '5px 12px', borderRadius: '20px',
+              border: `1px solid ${channelFilter === ch.id ? (ch.id === 'naver' ? '#03c75a' : '#be0014') : '#e5e5e5'}`,
+              background: channelFilter === ch.id ? (ch.id === 'naver' ? '#03c75a' : '#be0014') : '#fff',
+              color: channelFilter === ch.id ? '#fff' : '#52525b',
+              fontSize: '12px', fontWeight: channelFilter === ch.id ? 600 : 400, cursor: 'pointer',
             }}
           >
-            {ch === 'all' ? '전체' : ch === 'wing' ? '윙판매' : 'RG'}
+            {ch.label}
           </button>
         ))}
       </div>
@@ -672,6 +684,34 @@ export default function CostManagementTab() {
             <CloudDownload size={13} /> {importingWing ? '가져오는 중...' : '윙 판매 가져오기'}
           </button>
         )}
+        {(channelFilter === 'naver' || channelFilter === 'all') && (
+          <button
+            onClick={async () => {
+              setImportingNaver(true);
+              try {
+                const range = getDateRange(preset, customFrom, customTo);
+                const res = await fetch('/api/cost-management/naver-bulk-import', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(range ?? {}),
+                });
+                const json = await res.json();
+                if (json.success) {
+                  alert(`네이버 판매 ${json.data.imported}건 가져오기 완료 (중복 ${json.data.skipped}건 스킵)`);
+                  load();
+                } else {
+                  alert(json.error ?? '네이버 가져오기 실패');
+                }
+              } finally {
+                setImportingNaver(false);
+              }
+            }}
+            disabled={importingNaver}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', background: '#fff', color: '#03c75a', border: '1px solid #86efac', fontSize: '12px', cursor: importingNaver ? 'not-allowed' : 'pointer', opacity: importingNaver ? 0.6 : 1 }}
+          >
+            <CloudDownload size={13} /> {importingNaver ? '가져오는 중...' : '네이버 판매 가져오기'}
+          </button>
+        )}
         <div style={{ marginLeft: 'auto', position: 'relative' }}>
           <Search size={13} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#999' }} />
           <input
@@ -714,7 +754,7 @@ export default function CostManagementTab() {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start', minWidth: '180px' }}>
                         <div style={{ width: '100%' }}>
                           <div style={{ fontSize: '9px', color: '#be0014', marginBottom: '2px', fontWeight: 500 }}>윙 판매자상품ID</div>
-                          <div style={{ fontSize: '9px', color: '#a1a1aa', marginBottom: '3px' }}>Wing 셀러센터 → 상품관리 → 판매자상품ID</div>
+                          <div style={{ fontSize: '9px', color: '#52525b', marginBottom: '3px' }}>Wing 셀러센터 → 상품관리 → 판매자상품ID</div>
                           <input
                             placeholder="예: 12345678"
                             value={editSellerProductId}
@@ -723,8 +763,8 @@ export default function CostManagementTab() {
                           />
                         </div>
                         <div style={{ width: '100%' }}>
-                          <div style={{ fontSize: '9px', color: '#15803d', marginBottom: '2px', fontWeight: 500 }}>RG vendorItemId</div>
-                          <div style={{ fontSize: '9px', color: '#a1a1aa', marginBottom: '3px' }}>쿠팡 URL의 vendorItemId= 값 (URL 붙여넣기 가능)</div>
+                          <div style={{ fontSize: '9px', color: '#0369a1', marginBottom: '2px', fontWeight: 500 }}>RG vendorItemId</div>
+                          <div style={{ fontSize: '9px', color: '#52525b', marginBottom: '3px' }}>쿠팡 URL의 vendorItemId= 값 (URL 붙여넣기 가능)</div>
                           <input
                             placeholder="예: 95346957211"
                             value={editVendorItemId}
@@ -732,6 +772,20 @@ export default function CostManagementTab() {
                               const v = e.target.value;
                               const match = v.match(/[?&]vendorItemId=(\d+)/);
                               setEditVendorItemId(match ? match[1] : v);
+                            }}
+                            style={{ width: '100%', padding: '2px 6px', fontSize: '11px', border: '1px solid #7dd3fc', borderRadius: '4px', outline: 'none', boxSizing: 'border-box' }}
+                          />
+                        </div>
+                        <div style={{ width: '100%' }}>
+                          <div style={{ fontSize: '9px', color: '#03c75a', marginBottom: '2px', fontWeight: 500 }}>네이버 채널상품번호</div>
+                          <div style={{ fontSize: '9px', color: '#52525b', marginBottom: '3px' }}>스마트스토어 URL의 /products/숫자 (URL 붙여넣기 가능)</div>
+                          <input
+                            placeholder="예: 5012345678"
+                            value={editNaverChannelProductNo}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              const match = v.match(/\/products\/(\d+)/);
+                              setEditNaverChannelProductNo(match ? match[1] : v);
                             }}
                             style={{ width: '100%', padding: '2px 6px', fontSize: '11px', border: '1px solid #86efac', borderRadius: '4px', outline: 'none', boxSizing: 'border-box' }}
                           />
@@ -742,14 +796,18 @@ export default function CostManagementTab() {
                         </div>
                       </div>
                     ) : (
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
-                        {p.seller_product_id && (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px', flexWrap: 'wrap' }}>
+                        {p.seller_product_id && p.vendor_item_id ? (
+                          <span style={{ background: '#f5f3ff', color: '#7c3aed', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>윙+RG</span>
+                        ) : p.seller_product_id ? (
                           <span style={{ background: '#fef2f2', color: '#be0014', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>윙판매</span>
+                        ) : p.vendor_item_id ? (
+                          <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>RG</span>
+                        ) : null}
+                        {p.naver_channel_product_no && (
+                          <span style={{ background: '#f0fff8', color: '#03c75a', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>네이버</span>
                         )}
-                        {p.vendor_item_id && (
-                          <span style={{ background: '#dcfce7', color: '#15803d', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>RG</span>
-                        )}
-                        {!p.seller_product_id && !p.vendor_item_id && (
+                        {!p.seller_product_id && !p.vendor_item_id && !p.naver_channel_product_no && (
                           <span style={{ color: '#ccc', fontSize: '10px' }}>—</span>
                         )}
                         <button
@@ -851,6 +909,7 @@ export default function CostManagementTab() {
             productName={dp?.product_name ?? ''}
             sellerProductId={dp?.seller_product_id ?? null}
             vendorItemId={dp?.vendor_item_id ?? null}
+            naverChannelProductNo={dp?.naver_channel_product_no ?? null}
             subdivisionUnit={dp?.subdivision_unit ?? null}
             onClose={() => setDrawerProductId(null)}
             onChanged={load}

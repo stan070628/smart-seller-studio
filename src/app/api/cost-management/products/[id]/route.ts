@@ -13,7 +13,7 @@ export async function PATCH(
 
   const { id } = await params;
   const body = await request.json().catch(() => null);
-  const { seller_product_id, vendor_item_id } = body ?? {};
+  const { seller_product_id, vendor_item_id, naver_channel_product_no } = body ?? {};
 
   if (seller_product_id !== undefined && seller_product_id !== null) {
     if (!Number.isInteger(seller_product_id) || seller_product_id <= 0) {
@@ -25,16 +25,22 @@ export async function PATCH(
       return NextResponse.json({ success: false, error: 'vendor_item_id must be a positive integer' }, { status: 400 });
     }
   }
+  if (naver_channel_product_no !== undefined && naver_channel_product_no !== null) {
+    if (!Number.isInteger(naver_channel_product_no) || naver_channel_product_no <= 0) {
+      return NextResponse.json({ success: false, error: 'naver_channel_product_no must be a positive integer' }, { status: 400 });
+    }
+  }
 
   const pool = getSourcingPool();
   try {
     const { rows } = await pool.query(
       `UPDATE product_costs
-       SET seller_product_id = COALESCE($3, seller_product_id),
-           vendor_item_id    = COALESCE($4, vendor_item_id)
+       SET seller_product_id          = COALESCE($3, seller_product_id),
+           vendor_item_id             = COALESCE($4, vendor_item_id),
+           naver_channel_product_no   = COALESCE($5, naver_channel_product_no)
        WHERE id = $1 AND user_id = $2
-       RETURNING id, seller_product_id, vendor_item_id`,
-      [id, user.userId, seller_product_id ?? null, vendor_item_id ?? null],
+       RETURNING id, seller_product_id, vendor_item_id, naver_channel_product_no`,
+      [id, user.userId, seller_product_id ?? null, vendor_item_id ?? null, naver_channel_product_no ?? null],
     );
     if (rows.length === 0) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
     return NextResponse.json({ success: true, data: rows[0] });

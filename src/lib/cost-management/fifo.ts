@@ -15,6 +15,7 @@ export const SALE_CHANNEL = {
   ROCKET_GROWTH: 'rocket_growth',
   MANUAL: 'manual',
   COUPANG: 'coupang',
+  NAVER: 'naver',
 } as const;
 
 /** 입고 배치 */

@@ -24,12 +24,12 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const from = searchParams.get('from');
     const to = searchParams.get('to');
-    const channelFilter = (searchParams.get('channel') ?? 'all') as 'all' | 'rg' | 'wing';
+    const channelFilter = (searchParams.get('channel') ?? 'all') as 'all' | 'rg' | 'wing' | 'naver';
 
     const pool = getSourcingPool();
 
     const { rows: products } = await pool.query(
-      `SELECT id, product_name, seller_product_id, vendor_item_id, platform, platform_fee_rate,
+      `SELECT id, product_name, seller_product_id, vendor_item_id, naver_channel_product_no, platform, platform_fee_rate,
               subdivision_unit, subdivision_carryover, subdivision_carryover_unit_cost, created_at
        FROM product_costs
        WHERE user_id = $1
@@ -116,12 +116,13 @@ export async function GET(request: NextRequest) {
     const adProducts: RawProduct[] = (adCacheResult.data?.collected_data as CollectedData)?.products ?? [];
 
     // 채널 필터에 따라 상품 목록 필터링
-    // rg: vendor_item_id가 있는 상품만, wing: seller_product_id가 있는 상품만
     const filteredProducts = channelFilter === 'rg'
       ? products.filter((p: { vendor_item_id: string | null }) => p.vendor_item_id != null)
       : channelFilter === 'wing'
         ? products.filter((p: { seller_product_id: string | null }) => p.seller_product_id != null)
-        : products;
+        : channelFilter === 'naver'
+          ? products.filter((p: { naver_channel_product_no: string | null }) => p.naver_channel_product_no != null)
+          : products;
 
     const data = filteredProducts.map((p) => {
       const pEntries = entriesByProduct.get(p.id) ?? [];
@@ -139,7 +140,9 @@ export async function GET(request: NextRequest) {
         ? pSales.filter((s) => s.channel === SALE_CHANNEL.ROCKET_GROWTH)
         : channelFilter === 'wing'
           ? pSales.filter((s) => s.channel !== SALE_CHANNEL.ROCKET_GROWTH)
-          : pSales;
+          : channelFilter === 'naver'
+            ? pSales.filter((s) => s.channel === SALE_CHANNEL.NAVER)
+            : pSales;
 
       const metrics = calculateProductMetrics(batchesToUse);
 
@@ -192,6 +195,7 @@ export async function GET(request: NextRequest) {
         product_name: p.product_name,
         seller_product_id: p.seller_product_id,
         vendor_item_id: p.vendor_item_id,
+        naver_channel_product_no: p.naver_channel_product_no,
         platform: p.platform,
         platform_fee_rate: feeRate,
         entry_count: pEntries.length,
