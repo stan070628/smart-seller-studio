@@ -98,4 +98,45 @@ describe('AssetsInputPanel', () => {
     render(<AssetsInputPanel onGenerate={() => {}} />);
     expect(screen.getByRole('button', { name: /AI와 함께 만들기/ })).not.toBeDisabled();
   });
+
+  it('이미지가 업로드된 슬롯에 다운로드 버튼(↓)이 렌더링된다', () => {
+    const store = useListingStore.getState();
+    store.resetAssetsDraft();
+    store.updateAssetsDraft({
+      mode: 'upload',
+      thumbnailFiles: ['https://example.com/thumb1.jpg'],
+      detailFiles: [],
+    });
+
+    render(<AssetsInputPanel onGenerate={() => {}} />);
+    // 업로드된 이미지가 있을 때 다운로드 버튼이 렌더링되어야 한다
+    expect(screen.getAllByRole('button', { name: /이미지 다운로드/ })).toHaveLength(1);
+  });
+
+  it('이미지가 여러 장 업로드된 경우 각 슬롯마다 다운로드 버튼이 렌더링된다', () => {
+    const store = useListingStore.getState();
+    store.resetAssetsDraft();
+    store.updateAssetsDraft({
+      mode: 'upload',
+      thumbnailFiles: ['https://example.com/thumb1.jpg', 'https://example.com/thumb2.jpg'],
+      detailFiles: ['https://example.com/detail1.jpg'],
+    });
+
+    render(<AssetsInputPanel onGenerate={() => {}} />);
+    // 썸네일 2장 + 상세 1장 = 다운로드 버튼 총 3개
+    expect(screen.getAllByRole('button', { name: /이미지 다운로드/ })).toHaveLength(3);
+  });
+
+  it('빈 슬롯(이미지 없음)에는 다운로드 버튼이 없다', () => {
+    const store = useListingStore.getState();
+    store.resetAssetsDraft();
+    store.updateAssetsDraft({
+      mode: 'upload',
+      thumbnailFiles: [],
+      detailFiles: [],
+    });
+
+    render(<AssetsInputPanel onGenerate={() => {}} />);
+    expect(screen.queryAllByRole('button', { name: /이미지 다운로드/ })).toHaveLength(0);
+  });
 });

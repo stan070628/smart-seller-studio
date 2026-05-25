@@ -248,6 +248,25 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
     }
   };
 
+  // 슬롯 이미지 개별 다운로드 핸들러
+  const handleDownloadSlotImage = async (url: string, index: number) => {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const ext = blob.type.includes('png') ? 'png' : blob.type.includes('webp') ? 'webp' : 'jpg';
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objUrl;
+      a.download = `image-${index + 1}.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(objUrl);
+    } catch {
+      window.open(url, '_blank');
+    }
+  };
+
   const renderSlot = (
     slot: UploadSlot,
     label: string,
@@ -438,6 +457,33 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
                   🪄
                 </button>
               )}
+              {/* 다운로드 버튼 — URL 복사 버튼 왼쪽에 위치 */}
+              <button
+                type="button"
+                title="이미지 다운로드"
+                aria-label="이미지 다운로드"
+                onClick={() => void handleDownloadSlotImage(u, i)}
+                style={{
+                  position: 'absolute',
+                  bottom: 2,
+                  right: 22,
+                  width: 18,
+                  height: 18,
+                  padding: 0,
+                  border: 'none',
+                  borderRadius: 3,
+                  backgroundColor: 'rgba(0,0,0,0.55)',
+                  color: '#fff',
+                  fontSize: 9,
+                  lineHeight: 1,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                ↓
+              </button>
               <button
                 type="button"
                 title="URL 복사"
