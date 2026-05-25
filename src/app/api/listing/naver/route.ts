@@ -10,6 +10,7 @@ import { getNaverCommerceClient } from '@/lib/listing/naver-commerce-client';
 import { buildNaverPayload } from '@/lib/listing/payload-mappers';
 import type { CommonProductInput, NaverSpecificInput } from '@/lib/listing/payload-mappers';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
+import { requireAuth } from '@/lib/supabase/auth';
 
 const PERMISSION_ERROR_KEYWORDS = ['등록권한', '권한이 있어야', '판매가 가능합니다', 'SALE_PROHIBITION'];
 
@@ -31,6 +32,9 @@ async function saveNaverDraft(productName: string, payload: Record<string, unkno
 // ─── GET — 상품 목록 ─────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof Response) return authResult;
+
   const sp = request.nextUrl.searchParams;
   const page = parseInt(sp.get('page') ?? '1', 10);
   const size = parseInt(sp.get('size') ?? '20', 10);
@@ -89,6 +93,9 @@ const RegisterSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof Response) return authResult;
+
   let rawBody: unknown;
   try {
     rawBody = await request.json();

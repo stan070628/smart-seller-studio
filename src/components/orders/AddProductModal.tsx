@@ -13,7 +13,12 @@ interface RgProduct {
   product_name: string;
 }
 
-type Mode = 'coupang' | 'rg' | 'manual';
+interface NaverProduct {
+  originProductNo: number;
+  name: string;
+}
+
+type Mode = 'coupang' | 'rg' | 'naver' | 'manual';
 
 interface Props {
   onClose: () => void;
@@ -23,7 +28,17 @@ interface Props {
 const TAB_LABELS: Record<Mode, string> = {
   coupang: '쿠팡 등록 상품',
   rg: 'RG 상품',
+  naver: '네이버 상품',
   manual: '직접 입력',
+};
+
+const COUPANG_RG_FEE_HINT = '로켓그로스 기본 10.8% — 필요 시 수정하세요';
+
+const FEE_HINT: Record<Mode, string> = {
+  coupang: COUPANG_RG_FEE_HINT,
+  rg: COUPANG_RG_FEE_HINT,
+  naver: '네이버 스마트스토어 수수료는 카테고리마다 다릅니다 — 직접 입력하세요',
+  manual: '플랫폼 수수료율을 입력하세요',
 };
 
 export default function AddProductModal({ onClose, onAdded }: Props) {
@@ -41,6 +56,12 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
   const [rgError, setRgError] = useState<string | null>(null);
   const [selectedRg, setSelectedRg] = useState<RgProduct | null>(null);
   const [rgCustomName, setRgCustomName] = useState('');
+
+  // 네이버 상품
+  const [naverProducts, setNaverProducts] = useState<NaverProduct[]>([]);
+  const [loadingNaver, setLoadingNaver] = useState(false);
+  const [naverError, setNaverError] = useState<string | null>(null);
+  const [selectedNaver, setSelectedNaver] = useState<NaverProduct | null>(null);
 
   // 직접 입력
   const [manualName, setManualName] = useState('');
@@ -66,6 +87,7 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
 
   function handleModeChange(m: Mode) {
     setMode(m);
+    if (m === 'naver' || m === 'manual') setFeeRate('');
     if (m === 'rg' && rgProducts.length === 0 && !loadingRg && !rgError) {
       setLoadingRg(true);
       fetch('/api/cost-management/rg-products')
@@ -77,11 +99,23 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
         .catch(() => setRgError('네트워크 오류가 발생했습니다.'))
         .finally(() => setLoadingRg(false));
     }
+    if (m === 'naver' && naverProducts.length === 0 && !loadingNaver && !naverError) {
+      setLoadingNaver(true);
+      fetch('/api/listing/naver')
+        .then((r) => r.json())
+        .then((j) => {
+          if (j.success) setNaverProducts(j.data?.items ?? []);
+          else setNaverError(j.error ?? '네이버 상품 목록을 불러오지 못했습니다.');
+        })
+        .catch(() => setNaverError('네트워크 오류가 발생했습니다.'))
+        .finally(() => setLoadingNaver(false));
+    }
   }
 
   async function add() {
     if (mode === 'coupang' && !selectedCoupang) return;
     if (mode === 'rg' && !selectedRg) return;
+    if (mode === 'naver' && !selectedNaver) return;
     if (mode === 'manual' && !manualName.trim()) return;
 
     setSaving(true);
@@ -98,6 +132,12 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
         body = {
           product_name: rgCustomName.trim(),
           vendor_item_id: selectedRg!.vendor_item_id,
+          platform_fee_rate: Number(feeRate) / 100,
+          ...(subdivisionUnit.trim() !== '' && { subdivision_unit: Number(subdivisionUnit) }),
+        };
+      } else if (mode === 'naver') {
+        body = {
+          product_name: selectedNaver!.name,
           platform_fee_rate: Number(feeRate) / 100,
           ...(subdivisionUnit.trim() !== '' && { subdivision_unit: Number(subdivisionUnit) }),
         };
@@ -124,6 +164,7 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
   const canSave =
     (mode === 'coupang' && !!selectedCoupang) ||
     (mode === 'rg' && !!selectedRg && rgCustomName.trim().length > 0) ||
+    (mode === 'naver' && !!selectedNaver) ||
     (mode === 'manual' && manualName.trim().length > 0);
 
   return (
@@ -144,7 +185,7 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
         <div style={{ padding: '16px 24px 20px' }}>
           {/* 탭 */}
           <div style={{ display: 'flex', gap: '4px', padding: '4px', borderRadius: '10px', background: '#f5f5f7', marginBottom: '16px' }}>
-            {(['coupang', 'rg', 'manual'] as Mode[]).map((m) => (
+            {(['coupang', 'rg', 'naver', 'manual'] as Mode[]).map((m) => (
               <button
                 key={m}
                 onClick={() => handleModeChange(m)}
@@ -225,6 +266,34 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
             </div>
           )}
 
+          {/* 네이버 상품 */}
+          {mode === 'naver' && (
+            <div>
+              <div style={{ fontSize: '11px', fontWeight: 600, color: '#27272a', marginBottom: '8px' }}>네이버 등록 상품 선택</div>
+              <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid #d4d4d8', borderRadius: '8px' }}>
+                {loadingNaver ? (
+                  <div style={{ padding: '20px', textAlign: 'center', color: '#52525b', fontSize: '12px' }}>네이버 상품 조회중...</div>
+                ) : naverError ? (
+                  <div style={{ padding: '20px', textAlign: 'center', fontSize: '12px' }}>
+                    <div style={{ color: '#ef4444', marginBottom: '6px' }}>네이버 상품 조회 실패</div>
+                    <div style={{ color: '#52525b', fontSize: '11px' }}>{naverError}</div>
+                  </div>
+                ) : naverProducts.length === 0 ? (
+                  <div style={{ padding: '20px', textAlign: 'center', color: '#52525b', fontSize: '12px' }}>등록된 네이버 상품이 없습니다</div>
+                ) : naverProducts.map((p) => (
+                  <div
+                    key={p.originProductNo}
+                    onClick={() => setSelectedNaver(p)}
+                    style={{ padding: '10px 14px', cursor: 'pointer', fontSize: '12px', borderBottom: '1px solid #f0f0f0', background: selectedNaver?.originProductNo === p.originProductNo ? '#fef2f2' : '#fff', color: selectedNaver?.originProductNo === p.originProductNo ? '#be0014' : '#18181b', fontWeight: selectedNaver?.originProductNo === p.originProductNo ? 600 : 400 }}
+                  >
+                    {p.name}
+                    <span style={{ fontSize: '10px', color: '#71717a', marginLeft: '8px' }}>#{p.originProductNo}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* 직접 입력 */}
           {mode === 'manual' && (
             <div>
@@ -236,7 +305,7 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
           <div style={{ marginTop: '16px' }}>
             <div style={{ fontSize: '11px', fontWeight: 600, color: '#27272a', marginBottom: '6px' }}>플랫폼 수수료율 (%)</div>
             <input type="number" value={feeRate} onChange={(e) => setFeeRate(e.target.value)} step="0.1" min="0" max="50" style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #d4d4d8', fontSize: '12px', boxSizing: 'border-box', color: '#18181b' }} />
-            <div style={{ fontSize: '10px', color: '#52525b', marginTop: '4px' }}>로켓그로스 기본 10.8% — 필요 시 수정하세요</div>
+            <div style={{ fontSize: '10px', color: '#52525b', marginTop: '4px' }}>{FEE_HINT[mode]}</div>
           </div>
 
           <div style={{ marginTop: '12px' }}>

@@ -170,7 +170,7 @@ export async function GET(request: NextRequest) {
         merged.push(item);
       }
 
-      return Response.json({ success: true, data: merged });
+      return Response.json({ success: true, data: merged.slice(0, 30) });
     }
 
     // 하위 카테고리 조회

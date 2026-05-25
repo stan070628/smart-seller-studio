@@ -797,6 +797,46 @@ export default function CoupangAutoRegisterPanel({ onSuccess }: CoupangAutoRegis
 
       {/* 배송·반품: 모두 계정 고정값(무료배송/출하지/반품센터) → UI 불필요 */}
 
+      {/* ── 섹션 4: 등록될 옵션 (sharedDraft.options가 있을 때만 표시) ────────── */}
+      {(() => {
+        const variantList = buildVariantsFromOptions(sharedDraft.options);
+        if (!variantList) return null;
+        return (
+          <div style={section}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <p style={sectionTitle}>등록될 옵션 ({variantList.length}가지)</p>
+              <span style={{ fontSize: '11px', color: '#15803d', fontWeight: 600 }}>
+                ✓ 사이즈별 item 생성됨
+              </span>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {variantList.map((v) => (
+                <span
+                  key={v.itemName}
+                  style={{
+                    padding: '4px 10px',
+                    backgroundColor: '#f0fdf4',
+                    border: '1px solid #86efac',
+                    borderRadius: '100px',
+                    fontSize: '12px',
+                    color: '#15803d',
+                    fontWeight: 600,
+                  }}
+                >
+                  {v.itemName}
+                  <span style={{ marginLeft: '5px', fontWeight: 400, color: '#6b7280' }}>
+                    {v.salePrice.toLocaleString()}원
+                  </span>
+                </span>
+              ))}
+            </div>
+            <p style={{ fontSize: '11px', color: C.textSub, margin: 0 }}>
+              OptionEditor에서 비활성화한 옵션은 등록되지 않습니다.
+            </p>
+          </div>
+        );
+      })()}
+
       {/* ── 섹션 5: 고시정보 ─────────────────────────────────────────────────── */}
       <div style={section}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
