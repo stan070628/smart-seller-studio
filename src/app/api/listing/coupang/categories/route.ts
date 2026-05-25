@@ -8,6 +8,7 @@
 
 import { NextRequest } from 'next/server';
 import { getCoupangClient } from '@/lib/listing/coupang-client';
+import { expandKeyword } from '@/lib/listing/category-synonyms';
 
 interface CategoryNode {
   displayItemCategoryCode: number;
@@ -133,14 +134,22 @@ export async function GET(request: NextRequest) {
       return Response.json({ success: true, data: [] });
     }
 
-    // 키워드 검색: 트리 검색 + AI 예측 병렬 실행
+    // 키워드 검색: 동의어 확장 후 트리 검색 + AI 예측 병렬 실행
     if (keyword && keyword.trim().length > 0) {
       const kw = keyword.trim();
+      const keywords = expandKeyword(kw);
 
-      const [treeResults, predicted] = await Promise.all([
-        Promise.resolve(searchCategories(root.child, kw)),
-        client.predictCategory(kw).catch(() => null),
-      ]);
+      // searchCategories는 동기 함수 — 동의어별로 실행 후 code 기준 중복 제거
+      const seen = new Set<number>();
+      const treeResults = keywords
+        .flatMap((k) => searchCategories(root.child, k))
+        .filter((cat) => {
+          if (seen.has(cat.code)) return false;
+          seen.add(cat.code);
+          return true;
+        });
+
+      const predicted = await client.predictCategory(kw).catch(() => null);
 
       // AI 예측 결과를 최상단에 삽입 (중복 제거)
       const merged: { code: number; name: string; path: string; aiRecommended?: boolean }[] = [];
@@ -156,7 +165,6 @@ export async function GET(request: NextRequest) {
       }
 
       for (const item of treeResults) {
-        // predict 결과와 중복 코드는 제외
         if (predicted && item.code === predicted.categoryId) continue;
         merged.push(item);
       }
