@@ -36,12 +36,23 @@ export async function GET(request: NextRequest) {
       return Response.json({ success: true, data: { items: result.items, nextToken: result.nextToken } });
     }
 
-    // 전체 상태 병렬 조회 후 합산
+    // 전체 상태 병렬 조회 후 합산 — 각 상태의 모든 페이지를 순회
+    async function fetchAllPages(s: string) {
+      const all: import('@/lib/listing/coupang-client').CoupangSellerProduct[] = [];
+      let token = '';
+      do {
+        const result = await client.getSellerProducts(s, 100, token);
+        all.push(...result.items);
+        token = result.nextToken ?? '';
+      } while (token);
+      return all;
+    }
+
     const results = await Promise.allSettled(
-      ALL_PRODUCT_STATUSES.map((s) => client.getSellerProducts(s, maxPerPage, ''))
+      ALL_PRODUCT_STATUSES.map((s) => fetchAllPages(s))
     );
 
-    const items = results.flatMap((r) => r.status === 'fulfilled' ? r.value.items : []);
+    const items = results.flatMap((r) => r.status === 'fulfilled' ? r.value : []);
     // 최신 등록순 정렬
     items.sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
 
