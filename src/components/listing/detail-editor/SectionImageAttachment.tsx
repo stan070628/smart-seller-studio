@@ -76,11 +76,14 @@ export default function SectionImageAttachment({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { sharedDraft } = useListingStore();
+  const { sharedDraft, assetsDraft } = useListingStore();
   const sourceImages = [
     ...sharedDraft.thumbnailImages,
     ...sharedDraft.detailImages,
     ...sharedDraft.pickedDetailImages,
+    ...assetsDraft.thumbnailFiles,
+    ...assetsDraft.detailFiles,
+    ...assetsDraft.generatedThumbnails,
   ].filter((url, idx, arr) => url && arr.indexOf(url) === idx);
 
   const canAddMore = images.length < MAX_IMAGES;
