@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Truck, Package, Search, Trash2, TrendingUp, TrendingDown, AlertCircle, CloudDownload, Pencil } from 'lucide-react';
+import { Plus, Truck, Package, Search, Trash2, TrendingUp, TrendingDown, AlertCircle, CloudDownload, Pencil, Link2 } from 'lucide-react';
 import CostEntryDrawer from './CostEntryDrawer';
 import ShippingGroupModal from './ShippingGroupModal';
 import AddProductModal from './AddProductModal';
@@ -192,6 +192,16 @@ export default function CostManagementTab() {
   const [editChannelId, setEditChannelId] = useState<string | null>(null);
   const [editSellerProductId, setEditSellerProductId] = useState('');
   const [editVendorItemId, setEditVendorItemId] = useState('');
+  const [showWingMatchModal, setShowWingMatchModal] = useState(false);
+  const [wingMatchLoading, setWingMatchLoading] = useState(false);
+  const [wingMatchItems, setWingMatchItems] = useState<Array<{
+    wingId: number;
+    wingName: string;
+    matchedProductId: string | null;
+    matchedProductName: string | null;
+    confirmed: boolean;
+  }>>([]);
+  const [savingWingMatch, setSavingWingMatch] = useState(false);
   const [preset, setPreset] = useState<Preset>('this_month');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
@@ -263,6 +273,68 @@ export default function CostManagementTab() {
     const json = await res.json();
     if (json.success) { setEditChannelId(null); load(); }
     else alert(json.error ?? '저장 실패');
+  }
+
+  function normalize(name: string): string {
+    return name.replace(/[^\w가-힣]/g, '').toLowerCase();
+  }
+
+  async function openWingMatchModal() {
+    setShowWingMatchModal(true);
+    setWingMatchLoading(true);
+    try {
+      const res = await fetch('/api/cost-management/wing-products');
+      const json = await res.json();
+      if (!json.success) { alert(json.error ?? 'Wing 상품 조회 실패'); return; }
+
+      const wingList: Array<{ sellerProductId: number; sellerProductName: string }> = json.data;
+
+      const matched = wingList.map((w) => {
+        const wNorm = normalize(w.sellerProductName);
+        let best: { id: string; name: string } | null = null;
+        let bestScore = 0;
+        for (const p of products) {
+          const pNorm = normalize(p.product_name);
+          // 긴 쪽을 기준으로 공통 문자 비율
+          const longer = Math.max(wNorm.length, pNorm.length);
+          if (longer === 0) continue;
+          let common = 0;
+          for (const ch of wNorm) { if (pNorm.includes(ch)) common++; }
+          const score = common / longer;
+          if (score > bestScore) { bestScore = score; best = { id: p.id, name: p.product_name }; }
+        }
+        return {
+          wingId: w.sellerProductId,
+          wingName: w.sellerProductName,
+          matchedProductId: bestScore >= 0.5 ? best?.id ?? null : null,
+          matchedProductName: bestScore >= 0.5 ? best?.name ?? null : null,
+          confirmed: bestScore >= 0.5,
+        };
+      });
+
+      setWingMatchItems(matched);
+    } finally {
+      setWingMatchLoading(false);
+    }
+  }
+
+  async function saveWingMatches() {
+    setSavingWingMatch(true);
+    try {
+      const toSave = wingMatchItems.filter((m) => m.confirmed && m.matchedProductId);
+      for (const m of toSave) {
+        await fetch(`/api/cost-management/products/${m.matchedProductId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ seller_product_id: m.wingId }),
+        });
+      }
+      alert(`${toSave.length}개 상품에 Wing ID 저장 완료`);
+      setShowWingMatchModal(false);
+      load();
+    } finally {
+      setSavingWingMatch(false);
+    }
   }
 
   const fetchApiRevenue = useCallback(async () => {
@@ -545,6 +617,14 @@ export default function CostManagementTab() {
         </button>
         {(channelFilter === 'wing' || channelFilter === 'all') && (
           <button
+            onClick={openWingMatchModal}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', background: '#fff', color: '#7c3aed', border: '1px solid #ddd6fe', fontSize: '12px', cursor: 'pointer' }}
+          >
+            <Link2 size={13} /> Wing ID 매칭
+          </button>
+        )}
+        {(channelFilter === 'wing' || channelFilter === 'all') && (
+          <button
             onClick={async () => {
               setImportingWing(true);
               try {
@@ -610,19 +690,31 @@ export default function CostManagementTab() {
                 <tr key={p.id} style={{ borderBottom: '1px solid #f0f0f0', background: '#fff' }}>
                   <td style={{ padding: '10px 12px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                     {editChannelId === p.id ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start', minWidth: '160px' }}>
-                        <input
-                          placeholder="윙 상품 ID"
-                          value={editSellerProductId}
-                          onChange={(e) => setEditSellerProductId(e.target.value)}
-                          style={{ width: '100%', padding: '2px 6px', fontSize: '11px', border: '1px solid #fca5a5', borderRadius: '4px', outline: 'none' }}
-                        />
-                        <input
-                          placeholder="RG vendorItemId"
-                          value={editVendorItemId}
-                          onChange={(e) => setEditVendorItemId(e.target.value)}
-                          style={{ width: '100%', padding: '2px 6px', fontSize: '11px', border: '1px solid #86efac', borderRadius: '4px', outline: 'none' }}
-                        />
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start', minWidth: '180px' }}>
+                        <div style={{ width: '100%' }}>
+                          <div style={{ fontSize: '9px', color: '#be0014', marginBottom: '2px', fontWeight: 500 }}>윙 판매자상품ID</div>
+                          <div style={{ fontSize: '9px', color: '#a1a1aa', marginBottom: '3px' }}>Wing 셀러센터 → 상품관리 → 판매자상품ID</div>
+                          <input
+                            placeholder="예: 12345678"
+                            value={editSellerProductId}
+                            onChange={(e) => setEditSellerProductId(e.target.value)}
+                            style={{ width: '100%', padding: '2px 6px', fontSize: '11px', border: '1px solid #fca5a5', borderRadius: '4px', outline: 'none', boxSizing: 'border-box' }}
+                          />
+                        </div>
+                        <div style={{ width: '100%' }}>
+                          <div style={{ fontSize: '9px', color: '#15803d', marginBottom: '2px', fontWeight: 500 }}>RG vendorItemId</div>
+                          <div style={{ fontSize: '9px', color: '#a1a1aa', marginBottom: '3px' }}>쿠팡 URL의 vendorItemId= 값 (URL 붙여넣기 가능)</div>
+                          <input
+                            placeholder="예: 95346957211"
+                            value={editVendorItemId}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              const match = v.match(/[?&]vendorItemId=(\d+)/);
+                              setEditVendorItemId(match ? match[1] : v);
+                            }}
+                            style={{ width: '100%', padding: '2px 6px', fontSize: '11px', border: '1px solid #86efac', borderRadius: '4px', outline: 'none', boxSizing: 'border-box' }}
+                          />
+                        </div>
                         <div style={{ display: 'flex', gap: '4px' }}>
                           <button onClick={() => saveEditChannel(p.id)} style={{ padding: '2px 8px', fontSize: '10px', background: '#18181b', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>저장</button>
                           <button onClick={() => setEditChannelId(null)} style={{ padding: '2px 8px', fontSize: '10px', background: '#f4f4f5', color: '#71717a', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>취소</button>
@@ -756,6 +848,99 @@ export default function CostManagementTab() {
           onClose={() => setShowAddModal(false)}
           onAdded={load}
         />
+      )}
+      {showWingMatchModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', borderRadius: '12px', width: '860px', maxWidth: '95vw', maxHeight: '80vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
+            <div style={{ padding: '18px 24px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '15px' }}>Wing ID 자동 매칭</div>
+                <div style={{ fontSize: '11px', color: '#71717a', marginTop: '2px' }}>Wing API에서 불러온 상품과 DB 상품을 이름 기반으로 매칭합니다. 확인 체크 후 저장하세요.</div>
+              </div>
+              <button onClick={() => setShowWingMatchModal(false)} style={{ background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', color: '#71717a' }}>✕</button>
+            </div>
+            <div style={{ overflowY: 'auto', flex: 1 }}>
+              {wingMatchLoading ? (
+                <div style={{ padding: '48px', textAlign: 'center', color: '#71717a', fontSize: '13px' }}>Wing 상품 불러오는 중...</div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                  <thead>
+                    <tr style={{ background: '#f9fafb', borderBottom: '1px solid #f0f0f0' }}>
+                      <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: '#7c3aed', width: '36px' }}>확인</th>
+                      <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: '#7c3aed' }}>Wing 상품명</th>
+                      <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: '#7c3aed', width: '110px' }}>판매자상품ID</th>
+                      <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: '#52525b' }}>매칭된 DB 상품</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {wingMatchItems.map((m, i) => (
+                      <tr key={m.wingId} style={{ borderBottom: '1px solid #f0f0f0', background: m.confirmed ? '#faf5ff' : '#fff' }}>
+                        <td style={{ padding: '8px 16px', textAlign: 'center' }}>
+                          <input
+                            type="checkbox"
+                            checked={m.confirmed}
+                            disabled={!m.matchedProductId}
+                            onChange={(e) => setWingMatchItems((prev) => prev.map((x, j) => j === i ? { ...x, confirmed: e.target.checked } : x))}
+                          />
+                        </td>
+                        <td style={{ padding: '8px 16px', color: '#18181b' }}>{m.wingName}</td>
+                        <td style={{ padding: '8px 16px', color: '#7c3aed', fontFamily: 'monospace' }}>{m.wingId}</td>
+                        <td style={{ padding: '8px 16px' }}>
+                          {m.matchedProductName ? (
+                            <select
+                              value={m.matchedProductId ?? ''}
+                              onChange={(e) => {
+                                const pid = e.target.value;
+                                const pname = products.find((p) => p.id === pid)?.product_name ?? null;
+                                setWingMatchItems((prev) => prev.map((x, j) => j === i ? { ...x, matchedProductId: pid || null, matchedProductName: pname, confirmed: !!pid } : x));
+                              }}
+                              style={{ width: '100%', padding: '3px 6px', fontSize: '11px', border: '1px solid #e5e5e5', borderRadius: '4px' }}
+                            >
+                              <option value="">— 매칭 없음</option>
+                              {products.map((p) => (
+                                <option key={p.id} value={p.id}>{p.product_name}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <select
+                              value=""
+                              onChange={(e) => {
+                                const pid = e.target.value;
+                                const pname = products.find((p) => p.id === pid)?.product_name ?? null;
+                                setWingMatchItems((prev) => prev.map((x, j) => j === i ? { ...x, matchedProductId: pid || null, matchedProductName: pname, confirmed: !!pid } : x));
+                              }}
+                              style={{ width: '100%', padding: '3px 6px', fontSize: '11px', border: '1px solid #e5e5e5', borderRadius: '4px', color: '#aaa' }}
+                            >
+                              <option value="">— 직접 선택</option>
+                              {products.map((p) => (
+                                <option key={p.id} value={p.id}>{p.product_name}</option>
+                              ))}
+                            </select>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div style={{ padding: '14px 24px', borderTop: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: '11px', color: '#71717a' }}>
+                체크된 {wingMatchItems.filter((m) => m.confirmed && m.matchedProductId).length}개 상품에 Wing ID 저장
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={() => setShowWingMatchModal(false)} style={{ padding: '7px 16px', borderRadius: '8px', background: '#f4f4f5', color: '#71717a', border: 'none', fontSize: '12px', cursor: 'pointer' }}>닫기</button>
+                <button
+                  onClick={saveWingMatches}
+                  disabled={savingWingMatch || wingMatchItems.filter((m) => m.confirmed && m.matchedProductId).length === 0}
+                  style={{ padding: '7px 16px', borderRadius: '8px', background: '#7c3aed', color: '#fff', border: 'none', fontSize: '12px', cursor: 'pointer', opacity: savingWingMatch ? 0.6 : 1 }}
+                >
+                  {savingWingMatch ? '저장 중...' : '선택 저장'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
       {showRgModal && (
         <RocketGrowthShipmentModal
