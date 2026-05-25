@@ -19,18 +19,26 @@ vi.mock('@/lib/sourcing/db', () => ({
 
 vi.mock('@/lib/sourcing/costco-client', () => ({
   fetchCostcoProduct: vi.fn(),
+  fetchCostcoProductBySearch: vi.fn(),
 }));
 
 vi.mock('@/lib/supabase/auth', () => ({
   requireAuth: vi.fn(),
 }));
 
+vi.mock('@/lib/sourcing/costco-upsert', () => ({
+  upsertCostcoProduct: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { getSourcingPool } from '@/lib/sourcing/db';
-import { fetchCostcoProduct } from '@/lib/sourcing/costco-client';
+import { fetchCostcoProduct, fetchCostcoProductBySearch } from '@/lib/sourcing/costco-client';
+import { upsertCostcoProduct } from '@/lib/sourcing/costco-upsert';
 import { requireAuth } from '@/lib/supabase/auth';
 
 const mockGetSourcingPool = getSourcingPool as ReturnType<typeof vi.fn>;
 const mockFetchCostcoProduct = fetchCostcoProduct as ReturnType<typeof vi.fn>;
+const mockFetchCostcoProductBySearch = fetchCostcoProductBySearch as ReturnType<typeof vi.fn>;
+const mockUpsertCostcoProduct = upsertCostcoProduct as ReturnType<typeof vi.fn>;
 const mockRequireAuth = requireAuth as ReturnType<typeof vi.fn>;
 
 // 핸들러는 mock 설정 후 동적으로 import
@@ -136,6 +144,7 @@ describe('GET /api/sourcing/costco/lookup', () => {
     const mockQuery = vi.fn().mockResolvedValue({ rows: [] });
     mockGetSourcingPool.mockReturnValue({ query: mockQuery });
     mockFetchCostcoProduct.mockResolvedValue(null);
+    mockFetchCostcoProductBySearch.mockResolvedValue(null);  // search 폴백도 null
 
     const res = await GET(makeRequest('1234567'));
 
@@ -181,5 +190,57 @@ describe('GET /api/sourcing/costco/lookup', () => {
     expect(body.error).toBeDefined();
     // DB가 실패했으므로 OCC API를 호출해서는 안 된다
     expect(mockFetchCostcoProduct).not.toHaveBeenCalled();
+  });
+
+  it('DB·OCC detail 모두 실패하고 search가 상품을 반환하면 source:"api"로 200을 반환한다', async () => {
+    const mockQuery = vi.fn().mockResolvedValue({ rows: [] });
+    mockGetSourcingPool.mockReturnValue({ query: mockQuery });
+    mockFetchCostcoProduct.mockResolvedValue(null);
+    mockFetchCostcoProductBySearch.mockResolvedValue({
+      ...OCC_PRODUCT,
+      title: 'Search Found Product',
+      categoryName: '식품',
+      categoryCode: 'cos_10',
+      stockStatus: 'inStock',
+    });
+
+    const res = await GET(makeRequest('1234567'));
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.source).toBe('api');
+    expect(body.title).toBe('Search Found Product');
+    expect(mockUpsertCostcoProduct).toHaveBeenCalledOnce();
+  });
+
+  it('DB·OCC detail 모두 실패하고 search도 null이면 404를 반환한다', async () => {
+    const mockQuery = vi.fn().mockResolvedValue({ rows: [] });
+    mockGetSourcingPool.mockReturnValue({ query: mockQuery });
+    mockFetchCostcoProduct.mockResolvedValue(null);
+    mockFetchCostcoProductBySearch.mockResolvedValue(null);
+
+    const res = await GET(makeRequest('1234567'));
+
+    expect(res.status).toBe(404);
+    expect(mockUpsertCostcoProduct).not.toHaveBeenCalled();
+  });
+
+  it('search가 상품을 찾았지만 upsert가 실패해도 200 응답은 정상 반환된다', async () => {
+    const mockQuery = vi.fn().mockResolvedValue({ rows: [] });
+    mockGetSourcingPool.mockReturnValue({ query: mockQuery });
+    mockFetchCostcoProduct.mockResolvedValue(null);
+    mockFetchCostcoProductBySearch.mockResolvedValue({
+      ...OCC_PRODUCT,
+      categoryName: '식품',
+      categoryCode: 'cos_10',
+      stockStatus: 'inStock',
+    });
+    mockUpsertCostcoProduct.mockRejectedValue(new Error('DB upsert 실패'));
+
+    const res = await GET(makeRequest('1234567'));
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.source).toBe('api');
   });
 });
