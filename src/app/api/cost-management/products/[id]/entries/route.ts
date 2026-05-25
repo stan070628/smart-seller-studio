@@ -126,7 +126,7 @@ export async function POST(
         bodySubdivisionUnit ??
         (product.subdivision_unit ? Number(product.subdivision_unit) : null);
 
-      if (!subdivisionUnit || subdivisionUnit < 2) {
+      if (!subdivisionUnit || subdivisionUnit < 1) {
         return NextResponse.json(
           { success: false, error: 'subdivision_unit required (product default or body)' },
           { status: 400 },

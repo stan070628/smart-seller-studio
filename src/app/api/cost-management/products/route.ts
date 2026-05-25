@@ -280,11 +280,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // subdivision_unit 유효성 검사: 2 이상의 정수여야 함
+    // subdivision_unit 유효성 검사: 1 이상의 정수여야 함
     if (subdivision_unit !== undefined && subdivision_unit !== null) {
-      if (!Number.isInteger(subdivision_unit) || subdivision_unit < 2) {
+      if (!Number.isInteger(subdivision_unit) || subdivision_unit < 1) {
         return NextResponse.json(
-          { success: false, error: 'subdivision_unit must be an integer >= 2' },
+          { success: false, error: 'subdivision_unit must be a positive integer' },
           { status: 400 },
         );
       }

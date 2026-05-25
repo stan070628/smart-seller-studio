@@ -128,7 +128,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
     const ipb = Number(subForm.itemsPerBox);
     const bq = Number(subForm.boxQuantity) || 1;
     const su = Number(subForm.subUnit);
-    if (bp > 0 && ipb > 0 && bq > 0 && su >= 2) {
+    if (bp > 0 && ipb > 0 && bq > 0 && su >= 1) {
       return calculateSubdivision({
         purchaseQuantity: ipb * bq,
         totalPurchaseCost: bp * bq,
