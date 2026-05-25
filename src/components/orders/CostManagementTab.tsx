@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Truck, Package, Search, Trash2, TrendingUp, TrendingDown, AlertCircle, CloudDownload, Pencil, Link2 } from 'lucide-react';
+import { Plus, Truck, Package, Search, Trash2, TrendingUp, TrendingDown, AlertCircle, CloudDownload, Pencil } from 'lucide-react';
 import CostEntryDrawer from './CostEntryDrawer';
 import ShippingGroupModal from './ShippingGroupModal';
 import AddProductModal from './AddProductModal';
@@ -188,23 +188,11 @@ export default function CostManagementTab() {
   const [showShippingModal, setShowShippingModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showRgModal, setShowRgModal] = useState(false);
-  const [importingRg, setImportingRg] = useState(false);
-  const [importingWing, setImportingWing] = useState(false);
-  const [importingNaver, setImportingNaver] = useState(false);
+  const [importingAll, setImportingAll] = useState(false);
   const [editChannelId, setEditChannelId] = useState<string | null>(null);
   const [editSellerProductId, setEditSellerProductId] = useState('');
   const [editVendorItemId, setEditVendorItemId] = useState('');
   const [editNaverChannelProductNo, setEditNaverChannelProductNo] = useState('');
-  const [showWingMatchModal, setShowWingMatchModal] = useState(false);
-  const [wingMatchLoading, setWingMatchLoading] = useState(false);
-  // 같은 Wing 상품명을 그룹으로 묶어 1:N 매핑 지원
-  const [wingMatchGroups, setWingMatchGroups] = useState<Array<{
-    wingName: string;
-    wingIds: Array<{ id: number; checked: boolean }>;
-    matchedProductId: string | null;
-    matchedProductName: string | null;
-  }>>([]);
-  const [savingWingMatch, setSavingWingMatch] = useState(false);
   const [preset, setPreset] = useState<Preset>('this_month');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
@@ -235,23 +223,46 @@ export default function CostManagementTab() {
     }
   }, [preset, customFrom, customTo, channelFilter]);
 
-  async function runRgBulkImport() {
-    setImportingRg(true);
+  async function runAllBulkImport() {
+    setImportingAll(true);
     try {
-      const res = await fetch('/api/cost-management/rg-bulk-import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
-      const json = await res.json();
-      if (json.success) {
-        alert(`RG 판매 ${json.data.imported}건 가져오기 완료 (중복 ${json.data.skipped}건 스킵)`);
-        load();
-      } else {
-        alert(json.error ?? 'RG 가져오기 실패');
-      }
+      const range = getDateRange(preset, customFrom, customTo);
+      const [rgRes, wingRes, naverRes] = await Promise.all([
+        fetch('/api/cost-management/rg-bulk-import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        }),
+        fetch('/api/cost-management/wing-bulk-import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(range ?? {}),
+        }),
+        fetch('/api/cost-management/naver-bulk-import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(range ?? {}),
+        }),
+      ]);
+      const [rgJson, wingJson, naverJson] = await Promise.all([
+        rgRes.json(), wingRes.json(), naverRes.json(),
+      ]);
+
+      const parts: string[] = [];
+      if (rgJson.success) parts.push(`RG ${rgJson.data.imported}건`);
+      if (wingJson.success) parts.push(`윙 ${wingJson.data.imported}건`);
+      if (naverJson.success) parts.push(`네이버 ${naverJson.data.imported}건`);
+
+      const errors: string[] = [];
+      if (!rgJson.success) errors.push(`RG: ${rgJson.error ?? '실패'}`);
+      if (!wingJson.success) errors.push(`윙: ${wingJson.error ?? '실패'}`);
+      if (!naverJson.success) errors.push(`네이버: ${naverJson.error ?? '실패'}`);
+
+      if (parts.length > 0) alert(`판매 가져오기 완료 — ${parts.join(', ')}`);
+      if (errors.length > 0) alert(`일부 실패:\n${errors.join('\n')}`);
+      load();
     } finally {
-      setImportingRg(false);
+      setImportingAll(false);
     }
   }
 
@@ -281,88 +292,7 @@ export default function CostManagementTab() {
     else alert(json.error ?? '저장 실패');
   }
 
-  function normalize(name: string): string {
-    return name.replace(/[^\w가-힣]/g, '').toLowerCase();
-  }
 
-  function bestMatch(wingName: string): { id: string; name: string } | null {
-    const wNorm = normalize(wingName);
-    let best: { id: string; name: string } | null = null;
-    let bestScore = 0;
-    for (const p of products) {
-      const pNorm = normalize(p.product_name);
-      const longer = Math.max(wNorm.length, pNorm.length);
-      if (longer === 0) continue;
-      let common = 0;
-      for (const ch of wNorm) { if (pNorm.includes(ch)) common++; }
-      const score = common / longer;
-      if (score > bestScore) { bestScore = score; best = { id: p.id, name: p.product_name }; }
-    }
-    return bestScore >= 0.5 ? best : null;
-  }
-
-  async function openWingMatchModal() {
-    setShowWingMatchModal(true);
-    setWingMatchLoading(true);
-    try {
-      const res = await fetch('/api/cost-management/wing-products');
-      const json = await res.json();
-      if (!json.success) { alert(json.error ?? 'Wing 상품 조회 실패'); return; }
-
-      const wingList: Array<{ sellerProductId: number; sellerProductName: string }> = json.data;
-
-      // 같은 상품명으로 그룹핑
-      const groupMap = new Map<string, number[]>();
-      for (const w of wingList) {
-        const existing = groupMap.get(w.sellerProductName) ?? [];
-        existing.push(w.sellerProductId);
-        groupMap.set(w.sellerProductName, existing);
-      }
-
-      const groups = Array.from(groupMap.entries()).map(([wingName, ids]) => {
-        const match = bestMatch(wingName);
-        return {
-          wingName,
-          wingIds: ids.map((id) => ({ id, checked: match !== null })),
-          matchedProductId: match?.id ?? null,
-          matchedProductName: match?.name ?? null,
-        };
-      });
-
-      setWingMatchGroups(groups);
-    } finally {
-      setWingMatchLoading(false);
-    }
-  }
-
-  async function saveWingMatches() {
-    setSavingWingMatch(true);
-    try {
-      const mappings: Array<{ product_cost_id: string; seller_product_id: number }> = [];
-      for (const g of wingMatchGroups) {
-        if (!g.matchedProductId) continue;
-        for (const w of g.wingIds) {
-          if (w.checked) mappings.push({ product_cost_id: g.matchedProductId, seller_product_id: w.id });
-        }
-      }
-      if (mappings.length === 0) return;
-      const res = await fetch('/api/cost-management/wing-products', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mappings }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        alert(`${json.data.saved}개 Wing ID 저장 완료`);
-        setShowWingMatchModal(false);
-        load();
-      } else {
-        alert(json.error ?? '저장 실패');
-      }
-    } finally {
-      setSavingWingMatch(false);
-    }
-  }
 
   const fetchApiRevenue = useCallback(async () => {
     const range = getDateRange(preset, customFrom, customTo);
@@ -642,76 +572,12 @@ export default function CostManagementTab() {
           <Package size={13} /> 로켓그로스 입고 등록
         </button>
         <button
-          onClick={runRgBulkImport}
-          disabled={importingRg}
-          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', background: '#fff', color: '#15803d', border: '1px solid #bbf7d0', fontSize: '12px', cursor: importingRg ? 'not-allowed' : 'pointer', opacity: importingRg ? 0.6 : 1 }}
+          onClick={runAllBulkImport}
+          disabled={importingAll}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', background: '#fff', color: '#15803d', border: '1px solid #bbf7d0', fontSize: '12px', cursor: importingAll ? 'not-allowed' : 'pointer', opacity: importingAll ? 0.6 : 1 }}
         >
-          <CloudDownload size={13} /> {importingRg ? 'RG 가져오는 중...' : 'RG 판매 가져오기'}
+          <CloudDownload size={13} /> {importingAll ? '가져오는 중...' : '판매 가져오기'}
         </button>
-        {(channelFilter === 'wing' || channelFilter === 'all') && (
-          <button
-            onClick={openWingMatchModal}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', background: '#fff', color: '#7c3aed', border: '1px solid #ddd6fe', fontSize: '12px', cursor: 'pointer' }}
-          >
-            <Link2 size={13} /> Wing ID 매칭
-          </button>
-        )}
-        {(channelFilter === 'wing' || channelFilter === 'all') && (
-          <button
-            onClick={async () => {
-              setImportingWing(true);
-              try {
-                const range = getDateRange(preset, customFrom, customTo);
-                const res = await fetch('/api/cost-management/wing-bulk-import', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(range ?? {}),
-                });
-                const json = await res.json();
-                if (json.success) {
-                  alert(`윙 판매 ${json.data.imported}건 가져오기 완료 (중복 ${json.data.skipped}건 스킵)`);
-                  load();
-                } else {
-                  alert(json.error ?? '윙 가져오기 실패');
-                }
-              } finally {
-                setImportingWing(false);
-              }
-            }}
-            disabled={importingWing}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', background: '#fff', color: '#be0014', border: '1px solid #fecaca', fontSize: '12px', cursor: importingWing ? 'not-allowed' : 'pointer', opacity: importingWing ? 0.6 : 1 }}
-          >
-            <CloudDownload size={13} /> {importingWing ? '가져오는 중...' : '윙 판매 가져오기'}
-          </button>
-        )}
-        {(channelFilter === 'naver' || channelFilter === 'all') && (
-          <button
-            onClick={async () => {
-              setImportingNaver(true);
-              try {
-                const range = getDateRange(preset, customFrom, customTo);
-                const res = await fetch('/api/cost-management/naver-bulk-import', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(range ?? {}),
-                });
-                const json = await res.json();
-                if (json.success) {
-                  alert(`네이버 판매 ${json.data.imported}건 가져오기 완료 (중복 ${json.data.skipped}건 스킵)`);
-                  load();
-                } else {
-                  alert(json.error ?? '네이버 가져오기 실패');
-                }
-              } finally {
-                setImportingNaver(false);
-              }
-            }}
-            disabled={importingNaver}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', background: '#fff', color: '#03c75a', border: '1px solid #86efac', fontSize: '12px', cursor: importingNaver ? 'not-allowed' : 'pointer', opacity: importingNaver ? 0.6 : 1 }}
-          >
-            <CloudDownload size={13} /> {importingNaver ? '가져오는 중...' : '네이버 판매 가져오기'}
-          </button>
-        )}
         <div style={{ marginLeft: 'auto', position: 'relative' }}>
           <Search size={13} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#999' }} />
           <input
@@ -928,98 +794,6 @@ export default function CostManagementTab() {
           onClose={() => setShowAddModal(false)}
           onAdded={load}
         />
-      )}
-      {showWingMatchModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#fff', borderRadius: '12px', width: '920px', maxWidth: '95vw', maxHeight: '82vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
-            <div style={{ padding: '18px 24px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: '15px' }}>Wing ID 자동 매칭</div>
-                <div style={{ fontSize: '11px', color: '#71717a', marginTop: '2px' }}>같은 상품명의 Wing ID를 그룹으로 묶어 DB 상품 1개에 N개 ID 매핑합니다. DB 상품을 선택하고 저장하세요.</div>
-              </div>
-              <button onClick={() => setShowWingMatchModal(false)} style={{ background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', color: '#71717a' }}>✕</button>
-            </div>
-            <div style={{ overflowY: 'auto', flex: 1 }}>
-              {wingMatchLoading ? (
-                <div style={{ padding: '48px', textAlign: 'center', color: '#71717a', fontSize: '13px' }}>Wing 상품 불러오는 중...</div>
-              ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                  <thead>
-                    <tr style={{ background: '#f9fafb', borderBottom: '1px solid #f0f0f0', position: 'sticky', top: 0 }}>
-                      <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: '#7c3aed' }}>Wing 상품명</th>
-                      <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: '#7c3aed', width: '200px' }}>판매자상품ID (옵션별)</th>
-                      <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: '#52525b' }}>매칭할 DB 상품</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {wingMatchGroups.map((g, gi) => {
-                      const checkedCount = g.wingIds.filter((w) => w.checked).length;
-                      return (
-                        <tr key={g.wingName} style={{ borderBottom: '1px solid #f0f0f0', background: g.matchedProductId ? '#faf5ff' : '#fff', verticalAlign: 'top' }}>
-                          <td style={{ padding: '10px 16px', color: '#18181b', maxWidth: '280px' }}>{g.wingName}</td>
-                          <td style={{ padding: '8px 16px' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                              {g.wingIds.map((w, wi) => (
-                                <label key={w.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                                  <input
-                                    type="checkbox"
-                                    checked={w.checked}
-                                    onChange={(e) => setWingMatchGroups((prev) => prev.map((x, j) => j !== gi ? x : {
-                                      ...x,
-                                      wingIds: x.wingIds.map((y, k) => k !== wi ? y : { ...y, checked: e.target.checked }),
-                                    }))}
-                                  />
-                                  <span style={{ fontFamily: 'monospace', color: '#7c3aed', fontSize: '11px' }}>{w.id}</span>
-                                </label>
-                              ))}
-                            </div>
-                            {g.wingIds.length > 1 && (
-                              <div style={{ fontSize: '10px', color: '#a1a1aa', marginTop: '4px' }}>{checkedCount}/{g.wingIds.length} 선택</div>
-                            )}
-                          </td>
-                          <td style={{ padding: '8px 16px' }}>
-                            <select
-                              value={g.matchedProductId ?? ''}
-                              onChange={(e) => {
-                                const pid = e.target.value;
-                                const pname = products.find((p) => p.id === pid)?.product_name ?? null;
-                                setWingMatchGroups((prev) => prev.map((x, j) => j !== gi ? x : { ...x, matchedProductId: pid || null, matchedProductName: pname }));
-                              }}
-                              style={{ width: '100%', padding: '4px 6px', fontSize: '11px', border: `1px solid ${g.matchedProductId ? '#c4b5fd' : '#e5e5e5'}`, borderRadius: '4px' }}
-                            >
-                              <option value="">— 매칭 없음</option>
-                              {products.map((p) => (
-                                <option key={p.id} value={p.id}>{p.product_name}</option>
-                              ))}
-                            </select>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </div>
-            <div style={{ padding: '14px 24px', borderTop: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ fontSize: '11px', color: '#71717a' }}>
-                {(() => {
-                  const total = wingMatchGroups.reduce((s, g) => s + (g.matchedProductId ? g.wingIds.filter((w) => w.checked).length : 0), 0);
-                  return `${wingMatchGroups.filter((g) => g.matchedProductId).length}개 그룹 / Wing ID ${total}개 저장 예정`;
-                })()}
-              </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={() => setShowWingMatchModal(false)} style={{ padding: '7px 16px', borderRadius: '8px', background: '#f4f4f5', color: '#71717a', border: 'none', fontSize: '12px', cursor: 'pointer' }}>닫기</button>
-                <button
-                  onClick={saveWingMatches}
-                  disabled={savingWingMatch || wingMatchGroups.every((g) => !g.matchedProductId || g.wingIds.every((w) => !w.checked))}
-                  style={{ padding: '7px 16px', borderRadius: '8px', background: '#7c3aed', color: '#fff', border: 'none', fontSize: '12px', cursor: 'pointer', opacity: savingWingMatch ? 0.6 : 1 }}
-                >
-                  {savingWingMatch ? '저장 중...' : '선택 저장'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
       )}
       {showRgModal && (
         <RocketGrowthShipmentModal
