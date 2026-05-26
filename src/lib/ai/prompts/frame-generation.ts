@@ -159,6 +159,7 @@ export interface FrameUserPromptParams {
     colors?: string[];
     keyComponents?: string[];
     visualPrompt?: string;
+    ocrText?: string[];
   };
   productExtract?: {
     productName?: string | null;
@@ -204,6 +205,11 @@ export function buildFrameUserPrompt(params: FrameUserPromptParams): string {
     if (imageAnalysis.keyComponents?.length) analysisLines.push(`핵심 부품: ${imageAnalysis.keyComponents.join(', ')}`);
     if (imageAnalysis.visualPrompt) analysisLines.push(`비주얼: ${imageAnalysis.visualPrompt}`);
     sections.push(analysisLines.join('\n'));
+  }
+
+  // 이미지 텍스트 (CLOVA OCR) 섹션
+  if (imageAnalysis?.ocrText && imageAnalysis.ocrText.length > 0) {
+    sections.push(`[이미지 내 텍스트 (OCR)]\n${imageAnalysis.ocrText.join(', ')}`);
   }
 
   // 판매자 제공 제품 정보 섹션 (이미지 분석 결과 다음, 리뷰 앞에 삽입)
