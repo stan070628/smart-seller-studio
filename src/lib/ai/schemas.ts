@@ -179,6 +179,12 @@ export const ImageAnalysisSchema = z.object({
       message: "비주얼 프롬프트에 '--ar 9:16' 종횡비 지시어가 포함되어야 합니다",
     })
     .describe("쇼츠용 AI 비디오/이미지 생성 영어 프롬프트 (1문장)"),
+
+  /** CLOVA OCR로 추출한 텍스트 목록 — 예: ["500ml", "BPA-FREE"] */
+  ocrText: z
+    .array(z.string())
+    .default([])
+    .describe("CLOVA OCR 인식 텍스트 목록"),
 });
 
 /** ImageAnalysisSchema에서 추론한 TypeScript 타입 */

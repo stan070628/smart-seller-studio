@@ -36,6 +36,7 @@ export interface ImageAnalysisResult {
   colors: string[];
   keyComponents: string[];
   visualPrompt: string;
+  ocrText: string[];
 }
 
 // ---------------------------------------------------------------------------

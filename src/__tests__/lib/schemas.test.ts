@@ -49,6 +49,7 @@ const VALID_IMAGE_OBJECT = {
   keyComponents: ['이중벽 진공 단열 구조', '실리콘 그립 밴드', '원터치 잠금 뚜껑'],
   visualPrompt:
     'A cinematic slow-motion shot of a matte black stainless steel tumbler --ar 9:16',
+  ocrText: ['500ml', 'BPA-FREE'],
 };
 
 // ---------------------------------------------------------------------------
