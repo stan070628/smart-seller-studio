@@ -31,6 +31,7 @@ import type { UploadedImage } from '@/types/editor';
 import { THEMES } from '@/lib/themes';
 import type { Theme } from '@/lib/themes';
 import type { ThemeKey } from '@/lib/themes';
+import { VoiceInputButton } from '@/components/editor/VoiceInputButton';
 
 // ---------------------------------------------------------------------------
 // 유틸 함수
@@ -819,10 +820,17 @@ const Sidebar: React.FC = () => {
           className="w-full resize-none rounded-lg border border-gray-300 bg-gray-50 p-3 text-sm leading-relaxed text-gray-800 placeholder-gray-400 outline-none transition-colors focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50"
         />
 
-        {/* 글자 수 표시 */}
-        <p className="mt-1 text-right text-xs text-gray-400">
-          {reviewText.length.toLocaleString()}자
-        </p>
+        {/* 글자 수 + 음성입력 */}
+        <div className="mt-1 flex items-center justify-between">
+          <VoiceInputButton
+            onTranscript={(text) =>
+              setReviewText(reviewText ? `${reviewText}\n${text}` : text)
+            }
+          />
+          <p className="text-right text-xs text-gray-400">
+            {reviewText.length.toLocaleString()}자
+          </p>
+        </div>
       </section>
 
       {/* ------------------------------------------------------------------ */}
