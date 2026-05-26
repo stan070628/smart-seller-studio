@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAnthropicClient } from "@/lib/ai/claude";
 import { IMAGE_ANALYSIS_PROMPT } from "@/lib/ai/prompts/image-analysis";
 import { parseImageResponse } from "@/lib/ai/schemas";
+import { extractTextFromImage } from "@/lib/ai/clova-ocr";
 import type { ImageAnalysisSchemaType } from "@/lib/ai/schemas";
 
 /** 다중 이미지 입력 타입 */
@@ -192,40 +193,46 @@ export async function POST(
       );
     }
 
-    // Claude Vision API 호출 (모든 이미지를 content 배열에 포함)
+    // Claude Vision + CLOVA OCR 병렬 호출
     const client = getAnthropicClient();
-    const response = await client.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1024,
-      messages: [
-        {
-          role: "user",
-          content: [
-            ...input.images.map((img) => ({
-              type: "image" as const,
-              source: {
-                type: "base64" as const,
-                media_type: img.mimeType as "image/jpeg" | "image/png" | "image/webp",
-                data: img.imageBase64,
-              },
-            })),
-            {
-              type: "text" as const,
-              text: input.productDescription
-                ? `${IMAGE_ANALYSIS_PROMPT}\n\n[판매자 제품 설명]\n${input.productDescription}`
-                : IMAGE_ANALYSIS_PROMPT,
-            },
-          ],
-        },
-      ],
-    });
+    const firstImage = input.images[0];
 
-    const rawText = response.content
+    const [visionResponse, ocrText] = await Promise.all([
+      client.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 1024,
+        messages: [
+          {
+            role: "user",
+            content: [
+              ...input.images.map((img) => ({
+                type: "image" as const,
+                source: {
+                  type: "base64" as const,
+                  media_type: img.mimeType as "image/jpeg" | "image/png" | "image/webp",
+                  data: img.imageBase64,
+                },
+              })),
+              {
+                type: "text" as const,
+                text: input.productDescription
+                  ? `${IMAGE_ANALYSIS_PROMPT}\n\n[판매자 제품 설명]\n${input.productDescription}`
+                  : IMAGE_ANALYSIS_PROMPT,
+              },
+            ],
+          },
+        ],
+      }),
+      // OCR은 첫 번째 이미지만 사용. 실패해도 빈 배열로 graceful degradation.
+      extractTextFromImage(firstImage.imageBase64, firstImage.mimeType as "image/jpeg" | "image/png" | "image/webp").catch(() => []),
+    ]);
+
+    const rawText = visionResponse.content
       .filter((b) => b.type === "text")
       .map((b) => (b as { type: "text"; text: string }).text)
       .join("");
 
-    const result = parseImageResponse(rawText);
+    const result = { ...parseImageResponse(rawText), ocrText };
 
     return NextResponse.json(
       { success: true, data: result },
