@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useCallback, useState } from 'react';
+import React, { useRef, useCallback, useState, useEffect } from 'react';
 import { Mic, Square, Loader2 } from 'lucide-react';
 import useEditorStore from '@/store/useEditorStore';
 
@@ -23,6 +23,15 @@ export const VoiceInputButton: React.FC<VoiceInputButtonProps> = ({ onTranscript
     setToastMessage({ text, isError });
     setTimeout(() => setToastMessage(null), 3000);
   };
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+    };
+  }, []);
 
   const stopAndTranscribe = useCallback(() => {
     const recorder = mediaRecorderRef.current;
@@ -71,6 +80,12 @@ export const VoiceInputButton: React.FC<VoiceInputButtonProps> = ({ onTranscript
         } finally {
           setIsLoading(false);
         }
+      };
+
+      recorder.onerror = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        setIsRecording(false);
+        showToast('녹음 중 오류가 발생했습니다.', true);
       };
 
       mediaRecorderRef.current = recorder;

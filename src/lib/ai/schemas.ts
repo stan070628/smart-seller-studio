@@ -136,6 +136,10 @@ export interface ImageAnalysisResponse {
   /** 틱톡/유튜브 쇼츠용 AI 영상 생성 영어 프롬프트 (1문장, 200자 이내)
    * 예: "A cinematic slow-motion shot of a matte black carabiner umbrella resisting heavy rain..." */
   visualPrompt: string;
+
+  /** 이미지에서 추출된 OCR 텍스트 목록 (상품명, 브랜드, 용량 등)
+   * 예: ["THERMOS", "500ml", "보온 보냉"] */
+  ocrText: string[];
 }
 
 /**
