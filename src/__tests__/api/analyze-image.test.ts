@@ -7,6 +7,16 @@ import { NextRequest } from "next/server";
 
 const mockMessagesCreate = vi.fn();
 
+vi.mock("@/lib/supabase/auth", () => ({
+  requireAuth: vi.fn().mockResolvedValue({ id: "user-1" }),
+}));
+
+vi.mock("@/lib/rate-limit", () => ({
+  checkRateLimit: vi.fn().mockReturnValue({ allowed: true }),
+  getRateLimitKey: vi.fn().mockReturnValue("key"),
+  RATE_LIMITS: { AI_API: {} },
+}));
+
 vi.mock("@/lib/ai/claude", () => ({
   getAnthropicClient: vi.fn(() => ({
     messages: { create: mockMessagesCreate },

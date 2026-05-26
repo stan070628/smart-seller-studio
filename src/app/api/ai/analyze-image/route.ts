@@ -12,6 +12,8 @@ import { IMAGE_ANALYSIS_PROMPT } from "@/lib/ai/prompts/image-analysis";
 import { parseImageResponse } from "@/lib/ai/schemas";
 import { extractTextFromImage } from "@/lib/ai/clova-ocr";
 import type { ImageAnalysisSchemaType } from "@/lib/ai/schemas";
+import { requireAuth } from "@/lib/supabase/auth";
+import { checkRateLimit, getRateLimitKey, RATE_LIMITS } from "@/lib/rate-limit";
 
 /** 다중 이미지 입력 타입 */
 type AnalyzeImageInput = {
@@ -164,6 +166,20 @@ function validateRequestBody(body: unknown): AnalyzeImageInput {
 export async function POST(
   request: NextRequest
 ): Promise<NextResponse<ApiSuccessResponse | ApiErrorResponse>> {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof Response) {
+    return authResult as unknown as NextResponse<ApiErrorResponse>;
+  }
+
+  const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "unknown";
+  const rateLimitResult = checkRateLimit(getRateLimitKey(ip, "analyze-image"), RATE_LIMITS.AI_API);
+  if (!rateLimitResult.allowed) {
+    return NextResponse.json(
+      { success: false, error: "요청이 너무 많습니다. 잠시 후 다시 시도해주세요." },
+      { status: 429 }
+    );
+  }
+
   try {
     // 요청 바디 파싱
     let body: unknown;
@@ -250,13 +266,7 @@ export async function POST(
     }
 
     return NextResponse.json(
-      {
-        success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "이미지 분석 중 알 수 없는 오류가 발생했습니다.",
-      },
+      { success: false, error: "이미지 분석 중 오류가 발생했습니다." },
       { status: 500 }
     );
   }

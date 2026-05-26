@@ -9,96 +9,161 @@ interface VoiceInputButtonProps {
 }
 
 const MAX_RECORDING_MS = 60_000;
+const TARGET_SAMPLE_RATE = 16000;
+
+function downsampleBuffer(buffer: Float32Array, inputRate: number, outputRate: number): Float32Array {
+  if (inputRate === outputRate) return buffer;
+  const ratio = inputRate / outputRate;
+  const length = Math.floor(buffer.length / ratio);
+  const result = new Float32Array(length);
+  for (let i = 0; i < length; i++) {
+    result[i] = buffer[Math.floor(i * ratio)];
+  }
+  return result;
+}
+
+function float32ToInt16(buffer: Float32Array): Int16Array {
+  const result = new Int16Array(buffer.length);
+  for (let i = 0; i < buffer.length; i++) {
+    const clamped = Math.max(-1, Math.min(1, buffer[i]));
+    result[i] = clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
+  }
+  return result;
+}
 
 export const VoiceInputButton: React.FC<VoiceInputButtonProps> = ({ onTranscript }) => {
   const isRecording = useEditorStore((s) => s.isRecording);
   const setIsRecording = useEditorStore((s) => s.setIsRecording);
   const [isLoading, setIsLoading] = useState(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; isError: boolean } | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const showToast = (text: string, isError: boolean) => {
-    setToastMessage({ text, isError });
-    setTimeout(() => setToastMessage(null), 3000);
-  };
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const gainRef = useRef<GainNode | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const samplesRef = useRef<Float32Array[]>([]);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
     return () => {
+      mountedRef.current = false;
       if (timerRef.current) clearTimeout(timerRef.current);
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        mediaRecorderRef.current.stop();
-      }
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      processorRef.current?.disconnect();
+      gainRef.current?.disconnect();
+      void audioCtxRef.current?.close();
+      streamRef.current?.getTracks().forEach((t) => t.stop());
     };
   }, []);
 
-  const stopAndTranscribe = useCallback(() => {
-    const recorder = mediaRecorderRef.current;
-    if (!recorder || recorder.state === 'inactive') return;
-    if (timerRef.current) clearTimeout(timerRef.current);
-    recorder.stop();
+  const showToast = useCallback((text: string, isError: boolean) => {
+    if (!mountedRef.current) return;
+    setToastMessage({ text, isError });
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => {
+      if (mountedRef.current) setToastMessage(null);
+    }, 3000);
+  }, []);
+
+  const stopAndTranscribe = useCallback(async () => {
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+
+    const samples = samplesRef.current.splice(0);
+    const ctx = audioCtxRef.current;
+    const inputSampleRate = ctx?.sampleRate ?? TARGET_SAMPLE_RATE;
+
+    processorRef.current?.disconnect();
+    processorRef.current = null;
+    gainRef.current?.disconnect();
+    gainRef.current = null;
+    void ctx?.close();
+    audioCtxRef.current = null;
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+
     setIsRecording(false);
-  }, [setIsRecording]);
+
+    if (samples.length === 0) return;
+    setIsLoading(true);
+
+    try {
+      const totalLength = samples.reduce((s, b) => s + b.length, 0);
+      const merged = new Float32Array(totalLength);
+      let offset = 0;
+      for (const chunk of samples) { merged.set(chunk, offset); offset += chunk.length; }
+
+      const downsampled = downsampleBuffer(merged, inputSampleRate, TARGET_SAMPLE_RATE);
+      const pcm16 = float32ToInt16(downsampled);
+
+      const response = await fetch('/api/ai/speech-to-text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: pcm16.buffer,
+      });
+      const data = (await response.json()) as { success: boolean; text?: string; error?: string };
+      if (data.success && data.text) {
+        onTranscript(data.text);
+      } else {
+        showToast(data.error ?? '음성 인식에 실패했습니다. 다시 시도해주세요.', true);
+      }
+    } catch {
+      showToast('음성 인식에 실패했습니다. 다시 시도해주세요.', true);
+    } finally {
+      if (mountedRef.current) setIsLoading(false);
+    }
+  }, [onTranscript, setIsRecording, showToast]);
 
   const handleClick = useCallback(async () => {
     if (isLoading) return;
 
     if (isRecording) {
-      stopAndTranscribe();
+      void stopAndTranscribe();
       return;
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      chunksRef.current = [];
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+      });
+      streamRef.current = stream;
+      samplesRef.current = [];
 
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
+      const ctx = new AudioContext();
+      audioCtxRef.current = ctx;
+
+      const source = ctx.createMediaStreamSource(stream);
+      // ScriptProcessorNode must be connected to destination to fire in all browsers.
+      // A gain=0 node prevents audio echo from the microphone feed.
+      const processor = ctx.createScriptProcessor(4096, 1, 1);
+      const gain = ctx.createGain();
+      gain.gain.value = 0;
+
+      processor.onaudioprocess = (e) => {
+        samplesRef.current.push(new Float32Array(e.inputBuffer.getChannelData(0)));
       };
 
-      recorder.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+      source.connect(processor);
+      processor.connect(gain);
+      gain.connect(ctx.destination);
+      processorRef.current = processor;
+      gainRef.current = gain;
 
-        setIsLoading(true);
-        try {
-          const response = await fetch('/api/ai/speech-to-text', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/octet-stream' },
-            body: blob,
-          });
-          const data = (await response.json()) as { success: boolean; text?: string; error?: string };
-          if (data.success && data.text) {
-            onTranscript(data.text);
-          } else {
-            showToast(data.error ?? '음성 인식에 실패했습니다. 다시 시도해주세요.', true);
-          }
-        } catch {
-          showToast('음성 인식에 실패했습니다. 다시 시도해주세요.', true);
-        } finally {
-          setIsLoading(false);
-        }
-      };
-
-      recorder.onerror = () => {
-        stream.getTracks().forEach((t) => t.stop());
-        setIsRecording(false);
-        showToast('녹음 중 오류가 발생했습니다.', true);
-      };
-
-      mediaRecorderRef.current = recorder;
-      recorder.start();
       setIsRecording(true);
-
-      timerRef.current = setTimeout(stopAndTranscribe, MAX_RECORDING_MS);
+      timerRef.current = setTimeout(() => { void stopAndTranscribe(); }, MAX_RECORDING_MS);
     } catch (err) {
-      if (err instanceof Error && err.name === 'NotAllowedError') {
-        showToast('마이크 접근 권한이 필요합니다.', true);
+      if (err instanceof Error) {
+        if (err.name === 'NotAllowedError') {
+          showToast('마이크 접근 권한이 필요합니다.', true);
+        } else if (err.name === 'NotFoundError') {
+          showToast('마이크를 찾을 수 없습니다.', true);
+        } else {
+          showToast('마이크를 시작할 수 없습니다.', true);
+        }
       }
     }
-  }, [isRecording, isLoading, onTranscript, stopAndTranscribe, setIsRecording]);
+  }, [isRecording, isLoading, stopAndTranscribe, showToast, setIsRecording]);
 
   return (
     <div className="relative">

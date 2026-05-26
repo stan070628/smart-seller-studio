@@ -4,6 +4,16 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { POST } from "@/app/api/ai/speech-to-text/route";
 import { NextRequest } from "next/server";
 
+vi.mock("@/lib/supabase/auth", () => ({
+  requireAuth: vi.fn().mockResolvedValue({ id: "user-1" }),
+}));
+
+vi.mock("@/lib/rate-limit", () => ({
+  checkRateLimit: vi.fn().mockReturnValue({ allowed: true }),
+  getRateLimitKey: vi.fn().mockReturnValue("key"),
+  RATE_LIMITS: { AI_API: {} },
+}));
+
 vi.mock("@/lib/ai/clova-speech", () => ({
   transcribeAudio: vi.fn(),
 }));

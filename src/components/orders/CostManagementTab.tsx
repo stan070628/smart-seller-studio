@@ -540,16 +540,17 @@ export default function CostManagementTab() {
       </div>
 
       {/* 요약 카드 — 기간 집계 */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '16px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '10px', marginBottom: '16px' }}>
         {[
           { label: '관리 상품 수', value: `${products.length}개`, color: '#18181b', sub: undefined },
           { label: '기간 총 매입비', value: `${fmt(summary.total_purchase_amount)}원`, color: '#ef4444', sub: '입고 단가 × 수량 합계' },
-          { label: '기간 총 매출', value: `${fmt(summary.total_sales_amount)}원`, color: '#2563eb', sub: '판매가 × 수량 합계' },
           {
             label: '기간 실현손익',
             value: `${fmt(summary.total_realized_profit)}원`,
             color: summary.total_realized_profit >= 0 ? '#16a34a' : '#ef4444',
-            sub: `마진율 ${summary.total_sales_amount > 0 ? ((summary.total_realized_profit / summary.total_sales_amount) * 100).toFixed(1) : '0.0'}%`,
+            sub: apiRevenue && apiRevenue.totalRevenue > 0
+              ? `마진율 ${((summary.total_realized_profit / apiRevenue.totalRevenue) * 100).toFixed(1)}%`
+              : undefined,
           },
         ].map((c) => (
           <div key={c.label} style={{ background: '#fff', borderRadius: '10px', padding: '14px', border: '1px solid #e5e5e5' }}>
