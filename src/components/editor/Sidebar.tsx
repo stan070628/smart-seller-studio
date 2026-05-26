@@ -598,11 +598,28 @@ const Sidebar: React.FC = () => {
             {uploadedImages.map((img) => (
               <ImageCard key={img.id} image={img} onRemove={removeImage} />
             ))}
-            {/* 분석 완료 뱃지 — imageAnalysis가 있을 때만 표시 */}
+            {/* 분석 완료 뱃지 + OCR 텍스트 chip — imageAnalysis가 있을 때만 표시 */}
             {imageAnalysis && (
-              <p style={{ fontSize: 11, color: '#059669' }} className="mt-1">
-                분석 완료 ✓
-              </p>
+              <div className="mt-1">
+                <p style={{ fontSize: 11, color: '#059669' }}>분석 완료 ✓</p>
+                {imageAnalysis.ocrText.length > 0 && (
+                  <div className="mt-1.5">
+                    <p style={{ fontSize: 10, color: '#6b7280' }} className="mb-1">
+                      텍스트 인식
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {imageAnalysis.ocrText.map((text, i) => (
+                        <span
+                          key={i}
+                          className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600"
+                        >
+                          {text}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}
