@@ -3,11 +3,36 @@
 import { forwardRef } from 'react';
 
 interface Props {
+  brand: 'starbucks' | 'megacoffee';
   companyName: string;
   phone: string;
   prizeText: string;
   thanksMsg: string;
 }
+
+const STARBUCKS = {
+  headerGradient: 'linear-gradient(135deg, #00704A 0%, #1E3932 100%)',
+  headerText: '#fff',
+  badgeBg: 'rgba(255,255,255,0.22)',
+  badgeText: '#fff',
+  stepCircleBg: '#00704A',
+  stepCircleText: '#fff',
+  sectionLabelColor: '#00704A',
+  sectionBorderColor: '#e5e5e5',
+  footerBg: '#1E3932',
+};
+
+const MEGACOFFEE = {
+  headerGradient: '#FFD400',
+  headerText: '#1A1A1A',
+  badgeBg: 'rgba(0,0,0,0.15)',
+  badgeText: '#1A1A1A',
+  stepCircleBg: '#FFD400',
+  stepCircleText: '#1A1A1A',
+  sectionLabelColor: '#CC9200',
+  sectionBorderColor: '#FFD400',
+  footerBg: '#1A1A1A',
+};
 
 const CELL_WIDTH_MM = 99.1;
 const CELL_HEIGHT_MM = 92;
@@ -38,11 +63,17 @@ const H_STEPS   = CELL_HEIGHT_MM - H_HEADER - H_THANKS - H_FOOTER; // 31mm
  * - <table> 의 height 만으로는 td 가 늘어나지 않으므로 <tr> 에 직접 height 지정 필수
  * - 이게 html2canvas/PDF 렌더러가 vertical centering 을 100% 보장하는 유일한 방법
  */
-function EventCard({ companyName, phone, prizeText, thanksMsg }: Props) {
+function EventCard({ brand, companyName, phone, prizeText, thanksMsg }: Props) {
+  const theme = brand === 'starbucks' ? STARBUCKS : MEGACOFFEE;
+
+  const giftStep = prizeText.endsWith('증정')
+    ? prizeText.replace(/증정$/, '수령 🎁')
+    : `${prizeText} 🎁`;
+
   const steps = [
     '구매하신 쇼핑몰에 사진 리뷰 남기기 📸',
     `${companyName}으로 구매 인증 문자 보내기`,
-    '스타벅스 아메리카노 기프트콘 수령 🎁',
+    giftStep,
   ];
 
   return (
@@ -59,8 +90,8 @@ function EventCard({ companyName, phone, prizeText, thanksMsg }: Props) {
         <tr style={{ height: `${H_HEADER}mm` }}>
           <td style={{
             height: `${H_HEADER}mm`,
-            background: 'linear-gradient(135deg, #00704A 0%, #1E3932 100%)',
-            color: '#fff',
+            background: theme.headerGradient,
+            color: theme.headerText,
             textAlign: 'center',
             verticalAlign: 'middle',
             padding: '0 3mm',
@@ -74,8 +105,9 @@ function EventCard({ companyName, phone, prizeText, thanksMsg }: Props) {
             </div>
             <div style={{
               marginTop: 4, fontSize: 10, fontWeight: 600,
-              background: 'rgba(255,255,255,0.22)',
+              background: theme.badgeBg,
               borderRadius: 20, padding: '3px 10px', display: 'inline-block',
+              color: theme.badgeText,
             }}>
               {prizeText}
             </div>
@@ -111,14 +143,14 @@ function EventCard({ companyName, phone, prizeText, thanksMsg }: Props) {
             padding: '0 4mm',
             overflow: 'hidden',
           }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: '#00704A', letterSpacing: 0.5, borderBottom: '1px solid #e5e5e5', paddingBottom: '1.5mm', marginBottom: '2mm' }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: theme.sectionLabelColor, letterSpacing: 0.5, borderBottom: `1px solid ${theme.sectionBorderColor}`, paddingBottom: '1.5mm', marginBottom: '2mm' }}>
               ✦ 참여 방법
             </div>
             {steps.map((text, idx) => (
               <div key={idx} style={{ display: 'flex', alignItems: 'center', fontSize: 11, color: '#2d2d2d', lineHeight: 1.35, marginBottom: idx < 2 ? '2mm' : 0 }}>
                 <div style={{
                   width: 18, height: 18, flexShrink: 0, marginRight: 6,
-                  background: '#00704A', color: '#fff',
+                  background: theme.stepCircleBg, color: theme.stepCircleText,
                   borderRadius: '50%',
                   textAlign: 'center', lineHeight: '18px',
                   fontSize: 10, fontWeight: 700,
@@ -135,7 +167,7 @@ function EventCard({ companyName, phone, prizeText, thanksMsg }: Props) {
         <tr style={{ height: `${H_FOOTER}mm` }}>
           <td style={{
             height: `${H_FOOTER}mm`,
-            background: '#1E3932',
+            background: theme.footerBg,
             color: 'rgba(255,255,255,0.8)',
             textAlign: 'center',
             verticalAlign: 'middle',

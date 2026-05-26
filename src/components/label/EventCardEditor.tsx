@@ -5,6 +5,18 @@ import EventCardPreview from './EventCardPreview';
 import { generatePdf, printLabel } from '@/lib/label/label-pdf';
 import LabelSaveLoad from './LabelSaveLoad';
 
+type Brand = 'starbucks' | 'megacoffee';
+
+const DEFAULT_PRIZE: Record<Brand, string> = {
+  starbucks: '100% 전원 스타벅스 아메리카노 기프트콘 증정',
+  megacoffee: '100% 전원 메가커피 아메리카노 기프트콘 증정',
+};
+
+const BRAND_OPTIONS: { value: Brand; label: string; color: string; active: string }[] = [
+  { value: 'starbucks',  label: '☕ 스타벅스',  color: '#e8f5ee', active: '#00704A' },
+  { value: 'megacoffee', label: '☕ 메가커피',  color: '#fffbe6', active: '#FFD400' },
+];
+
 const C = { border: '#e5e7eb', bg: '#f9fafb' };
 
 const SECTION_TITLE: React.CSSProperties = {
@@ -25,11 +37,17 @@ const BTN_PRIMARY: React.CSSProperties = {
 };
 
 export default function EventCardEditor() {
+  const [brand, setBrand] = useState<Brand>('megacoffee');
   const [companyName, setCompanyName] = useState('청연코퍼레이션');
   const [phone, setPhone] = useState('');
-  const [prizeText, setPrizeText] = useState('100% 전원 스타벅스 아메리카노 기프트콘 증정');
+  const [prizeText, setPrizeText] = useState(DEFAULT_PRIZE.megacoffee);
   const [thanksMsg, setThanksMsg] = useState('구매해 주셔서 진심으로 감사드립니다!');
   const previewRef = useRef<HTMLDivElement>(null);
+
+  const handleBrandChange = (b: Brand) => {
+    setBrand(b);
+    setPrizeText(DEFAULT_PRIZE[b]);
+  };
 
   const handlePdf = async () => {
     if (!previewRef.current) return;
@@ -67,14 +85,40 @@ export default function EventCardEditor() {
           borderRight: `1px solid ${C.border}`,
           padding: 16, overflowY: 'auto',
         }}>
+          {/* 브랜드 선택 */}
+          <div style={SECTION}>
+            <div style={SECTION_TITLE}>브랜드 템플릿</div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {BRAND_OPTIONS.map((opt) => {
+                const isActive = brand === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    onClick={() => handleBrandChange(opt.value)}
+                    style={{
+                      flex: 1, padding: '7px 0', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                      cursor: 'pointer', transition: 'all 0.15s',
+                      border: isActive ? `2px solid ${opt.active}` : '2px solid #e5e7eb',
+                      background: isActive ? opt.color : '#f9fafb',
+                      color: isActive ? '#111' : '#6b7280',
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* 저장 / 불러오기 */}
           <div style={SECTION}>
             <div style={SECTION_TITLE}>저장 / 불러오기</div>
             <LabelSaveLoad
               labelType="event"
-              currentData={{ companyName, phone, prizeText, thanksMsg }}
+              currentData={{ brand, companyName, phone, prizeText, thanksMsg }}
               onLoad={(data) => {
-                const d = data as { companyName?: string; phone?: string; prizeText?: string; thanksMsg?: string };
+                const d = data as { brand?: Brand; companyName?: string; phone?: string; prizeText?: string; thanksMsg?: string };
+                if (d.brand === 'starbucks' || d.brand === 'megacoffee') handleBrandChange(d.brand);
                 if (d.companyName !== undefined) setCompanyName(d.companyName);
                 if (d.phone !== undefined) setPhone(d.phone);
                 if (d.prizeText !== undefined) setPrizeText(d.prizeText);
@@ -100,10 +144,10 @@ export default function EventCardEditor() {
           </div>
 
           <div style={{ fontSize: 11, color: '#6b7280', background: '#f3f4f6', borderRadius: 8, padding: '10px 12px', lineHeight: 1.6 }}>
-            <b style={{ color: '#374151' }}>참여 방법</b>은 고정 텍스트입니다.<br />
+            <b style={{ color: '#374151' }}>참여 방법</b>은 자동 생성됩니다.<br />
             ① 사진 리뷰 남기기<br />
             ② 회사명으로 문자 보내기<br />
-            ③ 기프트콘 수령
+            ③ 경품 문구 기반 수령 안내
           </div>
         </div>
 
@@ -126,6 +170,7 @@ export default function EventCardEditor() {
           }}>
             <EventCardPreview
               ref={previewRef}
+              brand={brand}
               companyName={companyName}
               phone={phone}
               prizeText={prizeText}
