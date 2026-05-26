@@ -60,4 +60,17 @@ describe('extractTextFromImage', () => {
       'CLOVA OCR API 오류: 500'
     );
   });
+
+  it('inferResult가 ERROR면 Error throw', async () => {
+    vi.stubEnv('NAVER_CLOVA_OCR_API_KEY_ID', 'test-id');
+    vi.stubEnv('NAVER_CLOVA_OCR_API_KEY', 'test-key');
+    vi.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ images: [{ inferResult: 'ERROR' }] }),
+    } as Response);
+
+    await expect(extractTextFromImage('base64data', 'image/jpeg')).rejects.toThrow(
+      'CLOVA OCR 이미지 분석 실패'
+    );
+  });
 });

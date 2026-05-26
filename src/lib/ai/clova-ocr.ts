@@ -3,6 +3,11 @@
  * 네이버 클로바 OCR을 사용해 이미지에서 텍스트를 추출한다.
  */
 
+import { AllowedMimeType } from './claude-vision';
+
+/** CLOVA OCR이 지원하는 MIME 타입 (AllowedMimeType의 부분집합) */
+type SupportedMimeType = Extract<AllowedMimeType, 'image/jpeg' | 'image/png' | 'image/webp'>;
+
 interface ClovaOcrField {
   inferText: string;
   inferConfidence: number;
@@ -30,7 +35,7 @@ const MIN_CONFIDENCE = 0.7;
  */
 export async function extractTextFromImage(
   imageBase64: string,
-  mimeType: string
+  mimeType: SupportedMimeType
 ): Promise<string[]> {
   const keyId = process.env.NAVER_CLOVA_OCR_API_KEY_ID;
   const apiKey = process.env.NAVER_CLOVA_OCR_API_KEY;
@@ -49,7 +54,7 @@ export async function extractTextFromImage(
     },
     body: JSON.stringify({
       version: 'V2',
-      requestId: `ocr-${Date.now()}`,
+      requestId: `ocr-${crypto.randomUUID()}`,
       timestamp: Date.now(),
       lang: 'ko',
       images: [{ format, name: 'product', data: imageBase64 }],
@@ -63,6 +68,11 @@ export async function extractTextFromImage(
 
   const data = (await response.json()) as ClovaOcrResponse;
   const image = data.images[0];
+
+  // API가 이미지 분석 자체를 실패로 처리한 경우 예외 발생
+  if (image?.inferResult === 'ERROR') {
+    throw new Error('CLOVA OCR 이미지 분석 실패: inferResult=ERROR');
+  }
 
   // 결과가 없거나 SUCCESS가 아니면 빈 배열 반환
   if (!image || image.inferResult !== 'SUCCESS' || !image.fields) return [];
