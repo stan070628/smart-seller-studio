@@ -42,6 +42,8 @@ interface EditorStore {
   productExtract: ProductExtractResult | null;
   /** 상품 정보 추출 중 여부 */
   isExtracting: boolean;
+  /** 음성 녹음 중 여부 */
+  isRecording: boolean;
 
   addImage: (image: UploadedImage) => void;
   removeImage: (id: string) => void;
@@ -78,6 +80,8 @@ interface EditorStore {
   setProductExtract: (result: ProductExtractResult | null) => void;
   /** 상품 정보 추출 로딩 상태 */
   setIsExtracting: (value: boolean) => void;
+  /** 음성 녹음 상태 설정 */
+  setIsRecording: (value: boolean) => void;
 }
 
 const useEditorStore = create<EditorStore>()(
@@ -100,6 +104,7 @@ const useEditorStore = create<EditorStore>()(
       promptOutdatedFrames: new Set<FrameType>(),
       productExtract: null,
       isExtracting: false,
+      isRecording: false,
 
       addImage: (image: UploadedImage) =>
         set((state) => ({ uploadedImages: [...state.uploadedImages, image] }), false, 'addImage'),
@@ -365,6 +370,7 @@ const useEditorStore = create<EditorStore>()(
 
       setProductExtract: (result) => set({ productExtract: result }, false, 'setProductExtract'),
       setIsExtracting: (value) => set({ isExtracting: value }, false, 'setIsExtracting'),
+      setIsRecording: (value) => set({ isRecording: value }, false, 'setIsRecording'),
 
       addCustomFrame: (frameType) =>
         set(
