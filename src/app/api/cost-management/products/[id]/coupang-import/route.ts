@@ -41,7 +41,7 @@ export async function POST(
 
   // RLS 대체: user_id 조건으로 타 유저 데이터 접근 차단
   const { rows: products } = await pool.query(
-    `SELECT id, seller_product_id, vendor_item_id, product_name, naver_channel_product_no FROM product_costs WHERE id = $1 AND user_id = $2`,
+    `SELECT id, seller_product_id, vendor_item_id, product_name, naver_channel_product_no, variants FROM product_costs WHERE id = $1 AND user_id = $2`,
     [id, user.userId],
   );
   if (products.length === 0) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
@@ -58,6 +58,39 @@ export async function POST(
     );
   }
 
+  // variants 캐시 로드 (없으면 getProductDetail로 갱신)
+  let variantsCache: Record<string, string> = {};
+  const storedVariants = products[0].variants as Record<string, string> | null;
+  if (storedVariants && Object.keys(storedVariants).length > 0) {
+    variantsCache = storedVariants;
+  } else if (sellerProductId) {
+    try {
+      const client0 = getCoupangClient();
+      const detail0 = await client0.getProductDetail(Number(sellerProductId)) as Record<string, unknown>;
+      const items0 = Array.isArray(detail0.items) ? detail0.items as Record<string, unknown>[] : [];
+      for (const item of items0) {
+        const vid = String(item.vendorItemId ?? '');
+        if (!vid) continue;
+        const attrs = Array.isArray(item.attributes) ? item.attributes as Record<string, unknown>[] : [];
+        const sizeAttr = attrs.find((a) => {
+          const key = String(a.attributeTypeName ?? '').toLowerCase();
+          return key.includes('사이즈') || key.includes('size') || key.includes('색상') || key.includes('color');
+        });
+        const variantName = sizeAttr ? String(sizeAttr.attributeValueName ?? '') : String(item.itemName ?? '');
+        if (variantName) variantsCache[vid] = variantName;
+      }
+      if (Object.keys(variantsCache).length > 0) {
+        await pool.query(
+          `UPDATE product_costs SET variants = $1 WHERE id = $2`,
+          [JSON.stringify(variantsCache), id],
+        );
+        console.log(`[import] variants 캐시 갱신: ${Object.keys(variantsCache).length}개`);
+      }
+    } catch (e) {
+      console.warn('[import] variants 캐시 갱신 실패 (스킵):', e instanceof Error ? e.message : e);
+    }
+  }
+
   try {
     const client = getCoupangClient();
 
@@ -65,7 +98,7 @@ export async function POST(
     // RG 전용 상품(vendor_item_id만 있는 경우)은 일반 주문 조회 생략
     const generalItems: Array<{
       sold_at: string; quantity: number; selling_price: number;
-      coupang_order_item_id: string; channel: string;
+      coupang_order_item_id: string; channel: string; variant_name: string | null;
     }> = [];
 
     if (sellerProductId) {
@@ -94,6 +127,7 @@ export async function POST(
               : item.salesPrice,
             coupang_order_item_id: `${order.orderId}-${item.vendorItemId}`,
             channel: 'coupang',
+            variant_name: variantsCache[String(item.vendorItemId)] ?? null,
           })),
       ));
     }
@@ -129,6 +163,7 @@ export async function POST(
       selling_price: number;
       coupang_order_item_id: string;
       channel: string;
+      variant_name: string | null;
     }> = [];
 
     // RG API: paidDateTo exclusive → 하루 추가해야 to 날짜 포함
@@ -171,6 +206,7 @@ export async function POST(
                 selling_price: item.unitSalesPrice,
                 coupang_order_item_id: key,
                 channel: 'rocket_growth',
+                variant_name: variantsCache[String(item.vendorItemId)] ?? null,
               });
             }
           }
@@ -189,7 +225,7 @@ export async function POST(
     ]);
     const naverItems: Array<{
       sold_at: string; quantity: number; selling_price: number;
-      coupang_order_item_id: string; channel: string;
+      coupang_order_item_id: string; channel: string; variant_name: string | null;
     }> = [];
 
     if (naverChannelProductNo) {
@@ -211,6 +247,7 @@ export async function POST(
               : order.totalPaymentAmount,
             coupang_order_item_id: `naver-${order.productOrderId}`,
             channel: 'naver',
+            variant_name: null,
           });
         }
         console.log(`[import] 네이버 items: ${naverItems.length} (channelProductNo=${naverChannelProductNo})`);
@@ -228,13 +265,38 @@ export async function POST(
     for (const item of allItems) {
       const result = await pool.query(
         `INSERT INTO sale_records
-           (user_id, product_cost_id, sold_at, quantity, selling_price, channel, coupang_order_item_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+           (user_id, product_cost_id, sold_at, quantity, selling_price, channel, coupang_order_item_id, variant_name)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT (coupang_order_item_id) DO NOTHING`,
-        [user.userId, id, item.sold_at, item.quantity, item.selling_price, item.channel, item.coupang_order_item_id],
+        [user.userId, id, item.sold_at, item.quantity, item.selling_price, item.channel, item.coupang_order_item_id, item.variant_name ?? null],
       );
       if ((result.rowCount ?? 0) > 0) imported++;
       else skipped++;
+    }
+
+    // 기존 variant_name=null 레코드 소급 적용
+    if (Object.keys(variantsCache).length > 0) {
+      const { rows: nullRows } = await pool.query(
+        `SELECT id, coupang_order_item_id FROM sale_records
+         WHERE product_cost_id = $1 AND variant_name IS NULL AND coupang_order_item_id IS NOT NULL`,
+        [id],
+      );
+      let backfilled = 0;
+      for (const row of nullRows) {
+        const key: string = row.coupang_order_item_id;
+        // key 형식: rg-{orderId}-{vendorItemId} 또는 {orderId}-{vendorItemId}
+        const parts = key.split('-');
+        const vendorItemId = parts[parts.length - 1];
+        const variantName = variantsCache[vendorItemId];
+        if (variantName) {
+          await pool.query(
+            `UPDATE sale_records SET variant_name = $1 WHERE id = $2`,
+            [variantName, row.id],
+          );
+          backfilled++;
+        }
+      }
+      if (backfilled > 0) console.log(`[import] 소급 적용: ${backfilled}건`);
     }
 
     return NextResponse.json({ success: true, data: { imported, skipped, total: allItems.length } });
