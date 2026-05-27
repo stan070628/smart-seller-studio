@@ -8,6 +8,45 @@ import AddProductModal from './AddProductModal';
 import RocketGrowthShipmentModal from './RocketGrowthShipmentModal';
 import { WinnerBadge } from '@/components/ui';
 
+function VariantStockBreakdown({
+  productId,
+  variants,
+}: {
+  productId: string;
+  variants: Record<string, string>;
+}) {
+  const [breakdown, setBreakdown] = React.useState<Record<string, number> | null>(null);
+
+  React.useEffect(() => {
+    fetch(`/api/cost-management/products/${productId}/variant-stock`)
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success) setBreakdown(json.data as Record<string, number>);
+      })
+      .catch(() => null);
+  }, [productId]);
+
+  if (!breakdown) return null;
+
+  const variantNames = Object.values(variants);
+  const hasData = variantNames.some((name) => (breakdown[name] ?? 0) !== 0);
+  if (!hasData) return null;
+
+  return (
+    <div style={{ fontSize: '9px', color: '#71717a', marginTop: '3px', textAlign: 'left' }}>
+      {variantNames.map((name) => {
+        const qty = breakdown[name] ?? 0;
+        return (
+          <div key={name} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+            <span>{name}</span>
+            <span style={{ color: qty > 0 ? '#16a34a' : qty < 0 ? '#ef4444' : '#a1a1aa' }}>{qty}개</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 interface ProductRow {
   id: string;
   product_name: string;
@@ -31,6 +70,7 @@ interface ProductRow {
   margin_rate: number;
   breakeven_roas: number;
   winner_status: 'winner' | 'watch' | 'normal';
+  variants: Record<string, string> | null;
 }
 
 function fmt(n: number): string {
@@ -301,7 +341,19 @@ export default function CostManagementTab() {
     else alert(json.error ?? '저장 실패');
   }
 
-
+  async function fetchVariants(productId: string) {
+    const res = await fetch(`/api/cost-management/products/${productId}/fetch-variants`, {
+      method: 'POST',
+    });
+    const json = await res.json();
+    if (json.success) {
+      const count = Object.keys(json.data.variants as Record<string, string>).length;
+      alert(`사이즈 ${count}개 매핑 저장 완료`);
+      load();
+    } else {
+      alert(json.error ?? 'variants 조회 실패');
+    }
+  }
 
   const fetchApiRevenue = useCallback(async () => {
     const range = getDateRange(preset, customFrom, customTo);
@@ -674,6 +726,14 @@ export default function CostManagementTab() {
                         <div style={{ display: 'flex', gap: '4px' }}>
                           <button onClick={() => saveEditChannel(p.id)} style={{ padding: '2px 8px', fontSize: '10px', background: '#18181b', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>저장</button>
                           <button onClick={() => setEditChannelId(null)} style={{ padding: '2px 8px', fontSize: '10px', background: '#f4f4f5', color: '#71717a', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>취소</button>
+                          {p.seller_product_id && (
+                            <button
+                              onClick={() => fetchVariants(p.id)}
+                              style={{ padding: '2px 8px', fontSize: '10px', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: '4px', cursor: 'pointer' }}
+                            >
+                              variants 불러오기
+                            </button>
+                          )}
                         </div>
                       </div>
                     ) : (
@@ -712,7 +772,10 @@ export default function CostManagementTab() {
                     {p.weighted_avg_rg_shipping > 0 ? fmt(p.weighted_avg_rg_shipping) : '—'}
                   </td>
                   <td style={{ padding: '10px 12px', textAlign: 'right', color: '#18181b' }}>
-                    {fmt(p.current_stock)}개
+                    <div>{fmt(p.current_stock)}개</div>
+                    {p.variants && Object.keys(p.variants).length > 0 && (
+                      <VariantStockBreakdown productId={p.id} variants={p.variants} />
+                    )}
                   </td>
                   <td style={{ padding: '10px 12px', textAlign: 'right', color: '#52525b' }}>
                     {p.current_stock > 0 ? `${fmt(p.stock_value)}원` : '—'}
