@@ -10,6 +10,7 @@ interface SaleRecord {
   selling_price: number;
   channel: string;
   coupang_order_item_id: string | null;
+  variant_name?: string | null;
 }
 
 interface SaleForm {
@@ -175,14 +176,14 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
           <thead>
             <tr style={{ background: '#f9f9f9', borderBottom: '1px solid #e5e5e5' }}>
-              {['판매일', '수량', '판매가', '채널', ''].map((h) => (
-                <th key={h} style={{ padding: '6px 8px', textAlign: h === '판매일' ? 'left' : 'right', fontWeight: 600, color: '#27272a' }}>{h}</th>
+              {['판매일', '수량', '판매가', '채널', '사이즈', ''].map((h, i) => (
+                <th key={`${h}-${i}`} style={{ padding: '6px 8px', textAlign: h === '판매일' ? 'left' : 'right', fontWeight: 600, color: '#27272a' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={5} style={{ padding: '20px', textAlign: 'center', color: '#52525b' }}>불러오는 중...</td></tr>
+              <tr><td colSpan={6} style={{ padding: '20px', textAlign: 'center', color: '#52525b' }}>불러오는 중...</td></tr>
             ) : sales.map((s) => (
               editingId === s.id ? (
                 // 인라인 편집 행
@@ -199,7 +200,7 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
                     <input type="number" value={form.selling_price} onChange={(e) => setForm((f) => ({ ...f, selling_price: e.target.value }))}
                       style={{ width: '80px', padding: '3px 5px', borderRadius: '4px', border: '1px solid #86efac', fontSize: '11px', color: '#18181b' }} />
                   </td>
-                  <td colSpan={2} style={{ padding: '4px 6px' }}>
+                  <td colSpan={3} style={{ padding: '4px 6px' }}>
                     <div style={{ display: 'flex', gap: '4px' }}>
                       <button onClick={save} disabled={saving || !canSave}
                         style={{ padding: '3px 8px', borderRadius: '4px', background: canSave ? '#16a34a' : '#d4d4d4', color: canSave ? '#fff' : '#71717a', border: 'none', fontSize: '11px', cursor: canSave ? 'pointer' : 'not-allowed' }}>
@@ -227,6 +228,12 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
                       ? <span style={{ background: '#f0fff8', color: '#03c75a', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>네이버</span>
                       : <span style={{ background: '#f3f4f6', color: '#6b7280', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>직접</span>}
                   </td>
+                  {/* 사이즈(variant_name) 배지 */}
+                  <td style={{ padding: '6px 8px', textAlign: 'right' }}>
+                    {s.variant_name
+                      ? <span style={{ background: '#f0fdf4', color: '#16a34a', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>{s.variant_name}</span>
+                      : <span style={{ color: '#e5e5e5', fontSize: '10px' }}>—</span>}
+                  </td>
                   <td style={{ padding: '6px 8px', textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end' }}>
                       <button onClick={() => startEdit(s)} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '2px' }}><Pencil size={12} color="#6b7280" /></button>
@@ -251,7 +258,7 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
                   <input type="number" value={form.selling_price} onChange={(e) => setForm((f) => ({ ...f, selling_price: e.target.value }))}
                     style={{ width: '80px', padding: '3px 5px', borderRadius: '4px', border: '1px solid #86efac', fontSize: '11px', color: '#18181b' }} />
                 </td>
-                <td colSpan={2} style={{ padding: '4px 6px' }}>
+                <td colSpan={3} style={{ padding: '4px 6px' }}>
                   <div style={{ display: 'flex', gap: '4px' }}>
                     <button onClick={save} disabled={saving || !canSave}
                       style={{ padding: '3px 8px', borderRadius: '4px', background: canSave ? '#16a34a' : '#d4d4d4', color: canSave ? '#fff' : '#71717a', border: 'none', fontSize: '11px', cursor: canSave ? 'pointer' : 'not-allowed' }}>
