@@ -951,6 +951,7 @@ export default function CostManagementTab() {
             vendorItemId={dp?.vendor_item_id ?? null}
             naverChannelProductNo={dp?.naver_channel_product_no ?? null}
             subdivisionUnit={dp?.subdivision_unit ?? null}
+            variants={products.find((p) => p.id === drawerProductId)?.variants ?? null}
             onClose={() => setDrawerProductId(null)}
             onChanged={load}
           />
