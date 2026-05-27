@@ -11,7 +11,7 @@ import {
   buildUserPrompt,
   extractJson,
   parseSuggestions,
-} from '@/app/api/ai/detail-page-suggest-answers/route';
+} from '@/app/api/ai/detail-page-suggest-answers/utils';
 import { ALL_QUESTION_IDS } from '@/lib/conversational-detail/questions';
 
 describe('detail-page-suggest-answers RequestSchema', () => {

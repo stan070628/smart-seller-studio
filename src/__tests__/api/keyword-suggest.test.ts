@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseKeywordSuggestResponse } from '@/app/api/ai/keyword-suggest/route';
+import { parseKeywordSuggestResponse } from '@/app/api/ai/keyword-suggest/utils';
 
 describe('parseKeywordSuggestResponse', () => {
   it('정상 JSON 응답을 파싱한다', () => {

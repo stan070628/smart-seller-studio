@@ -3,18 +3,10 @@ import { callClaude } from '@/lib/ai/claude-cli';
 import { checkRateLimit, getRateLimitKey, RATE_LIMITS } from '@/lib/rate-limit';
 import { requireAuth } from '@/lib/supabase/auth';
 import { getKeywordStats } from '@/lib/naver-ad';
-import { evaluateKeyword } from '@/app/api/ai/keyword-evaluate/route';
+import { evaluateKeyword } from '@/app/api/ai/keyword-evaluate/utils';
+import { type SuggestedKeyword, parseKeywordSuggestResponse } from './utils';
 
 // ─── 타입 ────────────────────────────────────────────────────────────────────
-
-export interface SuggestedKeyword {
-  keyword: string;
-  reason: string;
-  searchVolume: number | null;
-  competitorCount: number | null;
-  pass: boolean | null;
-  reasoning: string | null;
-}
 
 interface ApiSuccessResponse {
   success: true;
@@ -24,25 +16,6 @@ interface ApiSuccessResponse {
 interface ApiErrorResponse {
   success: false;
   error: string;
-}
-
-// ─── 응답 파서 (export — 테스트용) ───────────────────────────────────────────
-
-export function parseKeywordSuggestResponse(raw: string): { keyword: string; reason: string }[] {
-  try {
-    const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    const parsed = JSON.parse(cleaned);
-    if (!parsed.keywords || !Array.isArray(parsed.keywords)) return [];
-    return parsed.keywords.filter(
-      (k: unknown): k is { keyword: string; reason: string } =>
-        typeof k === 'object' &&
-        k !== null &&
-        typeof (k as Record<string, unknown>).keyword === 'string' &&
-        typeof (k as Record<string, unknown>).reason === 'string',
-    );
-  } catch {
-    return [];
-  }
 }
 
 // ─── 프롬프트 ────────────────────────────────────────────────────────────────

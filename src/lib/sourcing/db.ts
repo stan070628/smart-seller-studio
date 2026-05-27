@@ -5,6 +5,9 @@
 
 import pg from 'pg';
 
+// date 타입(OID 1082)을 Date 객체 대신 문자열로 반환 — 타임존 변환으로 날짜가 하루 밀리는 문제 방지
+pg.types.setTypeParser(1082, (val: string) => val);
+
 // 모듈 스코프 싱글톤 — cold start 시 새로 생성, 웜 인스턴스에서는 재사용
 let pool: pg.Pool | null = null;
 

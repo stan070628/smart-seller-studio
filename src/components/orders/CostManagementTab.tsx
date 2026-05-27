@@ -771,7 +771,7 @@ export default function CostManagementTab() {
                             placeholder="예: 12345678"
                             value={editSellerProductId}
                             onChange={(e) => setEditSellerProductId(e.target.value)}
-                            style={{ width: '100%', padding: '2px 6px', fontSize: '11px', border: '1px solid #fca5a5', borderRadius: '4px', outline: 'none', boxSizing: 'border-box' }}
+                            style={{ width: '100%', padding: '2px 6px', fontSize: '11px', border: '1px solid #fca5a5', borderRadius: '4px', outline: 'none', boxSizing: 'border-box', color: '#18181b' }}
                           />
                         </div>
                         <div style={{ width: '100%' }}>
@@ -785,7 +785,7 @@ export default function CostManagementTab() {
                               const match = v.match(/[?&]vendorItemId=(\d+)/);
                               setEditVendorItemId(match ? match[1] : v);
                             }}
-                            style={{ width: '100%', padding: '2px 6px', fontSize: '11px', border: '1px solid #7dd3fc', borderRadius: '4px', outline: 'none', boxSizing: 'border-box' }}
+                            style={{ width: '100%', padding: '2px 6px', fontSize: '11px', border: '1px solid #7dd3fc', borderRadius: '4px', outline: 'none', boxSizing: 'border-box', color: '#18181b' }}
                           />
                         </div>
                         <div style={{ width: '100%' }}>
@@ -799,7 +799,7 @@ export default function CostManagementTab() {
                               const match = v.match(/\/products\/(\d+)/);
                               setEditNaverChannelProductNo(match ? match[1] : v);
                             }}
-                            style={{ width: '100%', padding: '2px 6px', fontSize: '11px', border: '1px solid #86efac', borderRadius: '4px', outline: 'none', boxSizing: 'border-box' }}
+                            style={{ width: '100%', padding: '2px 6px', fontSize: '11px', border: '1px solid #86efac', borderRadius: '4px', outline: 'none', boxSizing: 'border-box', color: '#18181b' }}
                           />
                         </div>
                         <div style={{ display: 'flex', gap: '4px' }}>

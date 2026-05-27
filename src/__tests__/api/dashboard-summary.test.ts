@@ -37,7 +37,8 @@ const mockNaverClient = getNaverCommerceClient as ReturnType<typeof vi.fn>;
 const mockSettleCoupang = fetchCoupangSettlement as ReturnType<typeof vi.fn>;
 const mockSettleNaver = fetchNaverSettlement as ReturnType<typeof vi.fn>;
 
-const { GET, _resetDashboardCacheForTests } = await import('@/app/api/dashboard/summary/route');
+const { GET } = await import('@/app/api/dashboard/summary/route');
+const { _resetDashboardCacheForTests } = await import('@/app/api/dashboard/summary/cache');
 
 function makeRequest(period?: string): NextRequest {
   const url = period

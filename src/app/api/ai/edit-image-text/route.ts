@@ -18,8 +18,8 @@
 
 import { NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { z } from 'zod';
 import { requireAuth } from '@/lib/supabase/auth';
+import { RequestSchema } from './utils';
 import { checkRateLimit, getRateLimitKey } from '@/lib/rate-limit';
 import { fetchImagesFromUrls, resizeForClaude } from '@/lib/ai/claude-vision';
 import {
@@ -36,19 +36,6 @@ import {
 const RATE_LIMIT = { windowMs: 60_000, maxRequests: 5 };
 const LISTING_IMAGES_BUCKET = 'smart-seller-studio';
 const STORAGE_PATH_PREFIX = 'ai-edited-text';
-
-// ─────────────────────────────────────────
-// Zod 스키마
-// ─────────────────────────────────────────
-
-export const RequestSchema = z.object({
-  imageUrl: z.string().min(1, 'imageUrl은 비어있을 수 없습니다.'),
-  instruction: z
-    .string()
-    .min(1, 'instruction은 비어있을 수 없습니다.')
-    .max(500, 'instruction은 500자 이내여야 합니다.'),
-  productName: z.string().max(200).optional(),
-});
 
 interface ApiSuccess {
   success: true;

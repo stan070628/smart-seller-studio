@@ -20,16 +20,9 @@ import {
   type NaverOrderRow,
 } from '@/lib/dashboard/pipeline-aggregator';
 import { fetchCoupangSettlement, fetchNaverSettlement } from '@/lib/dashboard/settlement-clients';
+import { CACHE_TTL_MS, cache } from './cache';
 
 export const dynamic = 'force-dynamic';
-
-const CACHE_TTL_MS = 30_000;
-const cache = new Map<string, { data: DashboardSummaryData; expiresAt: number }>();
-
-// Export only for tests — used by integration tests to reset cache between cases
-export function _resetDashboardCacheForTests(): void {
-  cache.clear();
-}
 
 function toDateStr(d: Date): string {
   // KST = UTC+9. 한국 시간대 기준 YYYY-MM-DD 반환 (서버 TZ 무관).

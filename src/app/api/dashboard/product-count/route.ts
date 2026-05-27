@@ -19,7 +19,7 @@ const MEMORY_TTL_MS = 5 * 60_000;
 const CACHE_FRESH_MS = 26 * 60 * 60 * 1000;  // 일 1회 cron이라 여유 1시간 더해 26시간 fresh
 const memCache = new Map<string, { data: ProductCountData; expiresAt: number }>();
 
-export function _resetProductCountCacheForTests(): void {
+function _resetProductCountCacheForTests(): void {
   memCache.clear();
 }
 

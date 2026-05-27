@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { RequestSchema } from '@/app/api/ai/edit-image-text/route';
+import { RequestSchema } from '@/app/api/ai/edit-image-text/utils';
 
 describe('edit-image-text RequestSchema', () => {
   const validBody = {

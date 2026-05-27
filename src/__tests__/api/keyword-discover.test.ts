@@ -28,7 +28,7 @@ vi.mock('@/app/api/ai/keyword-evaluate/route', () => ({
 import { POST } from '@/app/api/ai/keyword-discover/route';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { expandKeywords } from '@/lib/naver-ad';
-import { evaluateKeyword } from '@/app/api/ai/keyword-evaluate/route';
+import { evaluateKeyword } from '@/app/api/ai/keyword-evaluate/utils';
 
 function makeRequest() {
   return new NextRequest('http://localhost/api/ai/keyword-discover', { method: 'POST' });

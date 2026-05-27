@@ -3,7 +3,7 @@ import { requireAuth } from '@/lib/supabase/auth';
 import { checkRateLimit, getRateLimitKey, RATE_LIMITS } from '@/lib/rate-limit';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { expandKeywords } from '@/lib/naver-ad';
-import { evaluateKeyword } from '@/app/api/ai/keyword-evaluate/route';
+import { evaluateKeyword } from '@/app/api/ai/keyword-evaluate/utils';
 
 // 씨드가 없을 때 사용하는 폴백 씨드 목록
 const FALLBACK_SEEDS = ['주방용품', '생활용품', '청소용품', '반려동물', '캠핑용품'];

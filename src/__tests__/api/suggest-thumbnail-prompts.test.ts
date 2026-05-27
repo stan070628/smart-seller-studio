@@ -35,7 +35,7 @@ describe('suggest-thumbnail-prompts schema', () => {
 describe('buildDetailHtmlSystemPrompt', () => {
   it('HTML 편집 지시문 관련 키워드를 포함한다', async () => {
     const { buildDetailHtmlSystemPrompt } = await import(
-      '@/app/api/ai/suggest-thumbnail-prompts/route'
+      '@/app/api/ai/suggest-thumbnail-prompts/utils'
     );
     const prompt = buildDetailHtmlSystemPrompt();
     expect(typeof prompt).toBe('string');

@@ -9,7 +9,7 @@ import {
   RequestSchema,
   buildUserPrompt,
   extractValue,
-} from '@/app/api/ai/detail-page-delegate-answer/route';
+} from '@/app/api/ai/detail-page-delegate-answer/utils';
 
 describe('detail-page-delegate-answer RequestSchema', () => {
   const validBody = {

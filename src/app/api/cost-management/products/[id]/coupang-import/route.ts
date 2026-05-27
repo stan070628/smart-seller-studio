@@ -118,7 +118,10 @@ export async function POST(
 
       generalItems.push(...allOrders.flatMap((order) =>
         order.orderItems
-          .filter((item) => Number(item.sellerProductId) === Number(sellerProductId) && !item.canceled)
+          .filter((item) => (
+            Number(item.sellerProductId) === Number(sellerProductId) ||
+            Number(item.vendorItemId) === Number(sellerProductId)
+          ) && !item.canceled)
           .map((item) => ({
             sold_at: order.paidAt?.slice(0, 10) ?? order.orderedAt.slice(0, 10),
             quantity: item.shippingCount,

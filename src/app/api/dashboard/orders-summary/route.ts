@@ -27,7 +27,7 @@ export const dynamic = 'force-dynamic';
 const CACHE_TTL_MS = 30_000;
 const cache = new Map<string, { data: OrdersSummaryData; expiresAt: number }>();
 
-export function _resetOrdersSummaryCacheForTests(): void {
+function _resetOrdersSummaryCacheForTests(): void {
   cache.clear();
 }
 
