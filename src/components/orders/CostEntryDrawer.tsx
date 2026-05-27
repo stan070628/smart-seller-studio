@@ -493,7 +493,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
                 <label style={{ display: 'block', fontSize: 12, color: '#6b7280', marginBottom: 4 }}>입고 채널</label>
                 <div style={{ display: 'flex', gap: 16 }}>
                   {(['wing', 'rg'] as const).map((ch) => (
-                    <label key={ch} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
+                    <label key={ch} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, color: '#18181b' }}>
                       <input
                         type="radio"
                         name="entryChannel"
