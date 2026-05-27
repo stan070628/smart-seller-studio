@@ -229,6 +229,7 @@ export default function CostManagementTab() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showRgModal, setShowRgModal] = useState(false);
   const [importingAll, setImportingAll] = useState(false);
+  const [settingUpVariants, setSettingUpVariants] = useState(false);
   const [editChannelId, setEditChannelId] = useState<string | null>(null);
   const [editSellerProductId, setEditSellerProductId] = useState('');
   const [editVendorItemId, setEditVendorItemId] = useState('');
@@ -314,6 +315,23 @@ export default function CostManagementTab() {
       load();
     } finally {
       setImportingAll(false);
+    }
+  }
+
+  async function runBulkSetupVariants() {
+    setSettingUpVariants(true);
+    try {
+      const res = await fetch('/api/cost-management/bulk-setup-variants', { method: 'POST' });
+      const json = await res.json();
+      if (json.success) {
+        const { updated, skipped, total } = json.data;
+        alert(`variants 일괄 설정 완료 — 총 ${total}개 상품, ${updated}개 업데이트, ${skipped}개 스킵`);
+        load();
+      } else {
+        alert(json.error ?? 'variants 설정 실패');
+      }
+    } finally {
+      setSettingUpVariants(false);
     }
   }
 
@@ -693,6 +711,13 @@ export default function CostManagementTab() {
           style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', background: '#fff', color: '#15803d', border: '1px solid #bbf7d0', fontSize: '12px', cursor: importingAll ? 'not-allowed' : 'pointer', opacity: importingAll ? 0.6 : 1 }}
         >
           <CloudDownload size={13} /> {importingAll ? '가져오는 중...' : '판매 가져오기'}
+        </button>
+        <button
+          onClick={runBulkSetupVariants}
+          disabled={settingUpVariants}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', background: '#fff', color: '#7c3aed', border: '1px solid #ddd6fe', fontSize: '12px', cursor: settingUpVariants ? 'not-allowed' : 'pointer', opacity: settingUpVariants ? 0.6 : 1 }}
+        >
+          {settingUpVariants ? '설정 중...' : '🏷️ variants 일괄 설정'}
         </button>
         <div style={{ marginLeft: 'auto', position: 'relative' }}>
           <Search size={13} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#999' }} />
