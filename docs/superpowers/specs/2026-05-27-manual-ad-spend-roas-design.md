@@ -5,141 +5,110 @@
 
 ## 배경
 
-쿠팡 공식 Ads API가 없어 광고비 데이터는 로컬 Playwright 스크래퍼(`scripts/ad-scraper`)로만 수집 가능하다. 스크래퍼가 작동하지 않으면 `ad_spend`/`ad_roas`가 빈값으로 표시된다. 광고를 수시로 상품을 바꿔가며 운영하므로 수동 입력 + 이력 관리가 필요하다.
+쿠팡 공식 Ads API가 없어 광고비 데이터는 로컬 Playwright 스크래퍼로만 수집 가능하다. 스크래퍼가 작동하지 않으면 `ad_spend`/`ad_roas`가 모두 빈값으로 표시된다. 상품별로 월 단위 광고비를 직접 입력하고 ROAS를 자동 계산하는 기능이 필요하다.
 
 ## 목표
 
-- 비용관리 탭에서 복수 상품을 선택하고 기간 + 총 광고비를 입력
-- Wing API 실제 매출 자동 조회 → ROAS 자동 계산
-- 과거 광고 이력 저장 및 최신 1건을 행에 표시
+- 수익 원가 탭 테이블에서 상품별 광고비 셀을 인라인으로 클릭 편집
+- 월 단위로 저장 (기간 필터에 연동)
+- 광고비 입력 즉시 ROAS 자동 계산 표시
 
 ## 데이터 모델
 
-### 새 테이블: `product_ad_records` (Render PostgreSQL)
+### 새 테이블: `product_ad_spend`
 
 ```sql
-CREATE TABLE product_ad_records (
-  id              SERIAL PRIMARY KEY,
-  product_cost_id INTEGER NOT NULL REFERENCES product_costs(id) ON DELETE CASCADE,
-  user_id         TEXT NOT NULL,
-  period_from     DATE NOT NULL,
-  period_to       DATE NOT NULL,
-  ad_spend        NUMERIC NOT NULL,           -- 균등 분배된 상품별 광고비 (원)
-  revenue         NUMERIC NOT NULL DEFAULT 0, -- Wing API 자동 조회 매출
-  roas            NUMERIC GENERATED ALWAYS AS
-                    (CASE WHEN ad_spend > 0 THEN revenue / ad_spend * 100 ELSE NULL END)
-                    STORED,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+CREATE TABLE product_ad_spend (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  product_id   UUID NOT NULL REFERENCES product_costs(id) ON DELETE CASCADE,
+  year_month   CHAR(7) NOT NULL,  -- 'YYYY-MM' 형식, 예: '2026-05'
+  ad_spend     NUMERIC(12,2) NOT NULL DEFAULT 0,
+  created_at   TIMESTAMPTZ DEFAULT now(),
+  updated_at   TIMESTAMPTZ DEFAULT now(),
+  UNIQUE (user_id, product_id, year_month)
 );
 
-CREATE INDEX ON product_ad_records (product_cost_id, created_at DESC);
-CREATE INDEX ON product_ad_records (user_id, created_at DESC);
+-- RLS: user_id = auth.uid()
+ALTER TABLE product_ad_spend ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "user owns rows" ON product_ad_spend
+  USING (user_id = auth.uid());
 ```
 
-- `ad_spend`: 총 광고비를 선택 상품 수로 균등 분배한 값
-- `roas`: DB generated column, 저장 시 자동 계산
-- 상품당 여러 기록 누적 가능
+- `year_month`: 기간 필터에서 추출한 월 목록과 매칭
+- 기간이 복수 월에 걸치면 해당 월들의 `ad_spend` 합산
+- `UNIQUE (user_id, product_id, year_month)` → upsert로 수정
 
 ## API
 
-### POST `/api/cost-management/ad-records`
+### PATCH `/api/cost-management/products/[id]/ad-spend`
+
+광고비 저장 (upsert).
 
 ```ts
-body: {
-  product_cost_ids: number[]  // 선택된 상품 ID 목록
-  period_from: string         // 'YYYY-MM-DD'
-  period_to: string           // 'YYYY-MM-DD'
-  total_ad_spend: number      // 총 광고비 (원)
-}
+// Request
+{ year_month: "2026-05", ad_spend: 150000 }
+
+// Response
+{ success: true, data: { id, product_id, year_month, ad_spend } }
 ```
 
-처리 흐름:
-1. `total_ad_spend ÷ product_cost_ids.length` 로 상품별 광고비 계산
-2. 각 상품의 `vendor_item_id`를 `product_costs` 테이블에서 조회
-3. Wing API `getRevenueHistory`를 기간 한 번 호출 → 전체 응답을 `vendorItemId`로 필터링해 상품별 매출 계산 (Wing API는 상품별 필터 미지원)
-4. `product_ad_records`에 상품별 레코드 INSERT (`roas`는 API에서 계산 후 저장)
-5. 저장된 레코드 목록 반환
-
-> **참고**: `roas` 컬럼은 DB generated column 대신 INSERT 시 서버에서 계산해 저장하는 방식으로 구현해도 무방. Render PostgreSQL 버전에 따라 generated column 지원 여부 확인 필요.
-
-### GET `/api/cost-management/ad-records?product_cost_id=xxx`
-
-- 해당 상품의 광고 이력 전체 반환 (최신순)
-- 드로어 이력 섹션에서 사용
-
-### DELETE `/api/cost-management/ad-records/[id]`
-
-- 잘못 입력한 레코드 삭제
+처리: `product_ad_spend` 테이블에 `ON CONFLICT (user_id, product_id, year_month) DO UPDATE SET ad_spend = EXCLUDED.ad_spend`.
 
 ### GET `/api/cost-management/products` 수정
 
-- 기존: `ad_strategy_cache` 스크래퍼 데이터로 `ad_spend`/`ad_roas` 채움
-- 변경: `product_ad_records` 최신 1건을 LEFT JOIN으로 함께 조회
-  - 수동 입력 기록이 있으면 우선 사용
-  - 없으면 기존 스크래퍼 캐시 폴백
+기존 `ad_strategy_cache` 매칭 로직을 `product_ad_spend` JOIN으로 대체.
 
-## UI
+- 기간 필터에서 `year_month` 목록 추출 (예: `['2026-03', '2026-04', '2026-05']`)
+- 해당 월들의 `ad_spend` 합산값을 `ad_spend` 필드에 포함
+- `ad_spend`가 없으면 0 반환
 
-### 비용관리 탭
+## ROAS 계산 (프론트엔드)
 
-- 각 상품 행 좌측에 체크박스 추가
-- 1개 이상 선택 시 테이블 상단 툴바에 "광고비 입력" 버튼 활성화
-- 기존 광고비/ROAS 셀은 `product_ad_records` 최신 1건값 표시
-  - 없으면 `—` (기존 동작 유지)
-  - 셀 호버 시 입력 기간 툴팁 표시
+별도 API 없이 이미 응답에 포함된 값으로 프론트에서 계산:
 
-### 광고비 입력 드로어
-
-```
-┌──────────────────────────────────────┐
-│ 광고비 입력 (3개 상품 선택됨)         │
-├──────────────────────────────────────┤
-│ 광고 기간                             │
-│  [2025-05-01] ~ [2025-05-31]         │
-│                                       │
-│ 총 광고비                             │
-│  [________] 원  ÷ 3 = 20만원/상품    │
-├──────────────────────────────────────┤
-│ 상품명        매출(Wing) ROAS         │
-│ ○ 에어팟케이스  ₩620,000  310%  ✅  │
-│ ○ 충전케이블    ₩180,000   90%  🔴  │
-│ ○ 마우스패드    ₩410,000  205%  ⚠️  │
-├──────────────────────────────────────┤
-│          [취소]        [저장]         │
-└──────────────────────────────────────┘
+```ts
+const adRoas = ad_spend > 0 ? (total_sales_amount / ad_spend) * 100 : 0;
 ```
 
-동작:
-- 기간 + 광고비 입력 완료 시 → Wing API 자동 조회 (디바운스 500ms)
-- 상품별 매출·ROAS 실시간 미리보기 업데이트
-- ROAS 색상: `breakeven_roas` 초과 시 초록, 미달 시 빨강, 근접(±20%) 시 주황
-- 저장 시 상품별 레코드 N개 생성
+- `ad_spend = 0` → `—` 표시
+- 손익분기 ROAS(`breakeven_roas`) 대비 색상:
+  - `adRoas ≥ breakeven_roas` → 초록
+  - `adRoas < breakeven_roas` → 빨강
 
-### 이력 섹션 (단일 상품 선택 시 드로어 하단)
+## UI — 인라인 편집
 
-- 해당 상품의 과거 광고 기록 목록 (최신순)
-- 각 행: 기간 / 광고비 / ROAS / 삭제 버튼
+**광고비 셀 동작:**
+1. 평상시: 저장된 합산값 표시 (`—` 또는 `150,000원`)
+2. **단일 월 기간** (이번 달 / 지난 달 / 직접 입력 단일 월): 셀 클릭 → 숫자 input 전환, 현재 값 pre-fill
+3. Enter / blur → `PATCH /api/cost-management/products/[id]/ad-spend` 호출
+4. 저장 완료 → ROAS 컬럼 즉시 재계산 표시
+5. Escape → 편집 취소 (원래 값 복원)
 
-## 컴포넌트 구조
+**복수 월 기간** (최근 3개월 / 6개월 / 전체):
+- 광고비 셀 클릭 비활성화 (읽기 전용)
+- 호버 시 툴팁: "단일 월을 선택하면 편집할 수 있습니다"
 
+**편집 가능 여부 판단 (프론트):**
+```ts
+const isEditablePeriod =
+  preset === 'this_month' ||
+  preset === 'last_month' ||
+  (preset === 'custom' && customFrom && customTo &&
+    customFrom.slice(0, 7) === customTo.slice(0, 7));
 ```
-src/
-  components/orders/
-    CostManagementTab.tsx         -- 체크박스 + 툴바 버튼 추가
-    AdSpendDrawer.tsx             -- 신규: 광고비 입력 드로어
-  app/api/cost-management/
-    ad-records/
-      route.ts                    -- GET, POST
-      [id]/
-        route.ts                  -- DELETE
-```
 
-## 에러 처리
+## 파일 변경 목록
 
-- Wing API 매출 조회 실패 시: 해당 상품 ROAS를 `—`로 표시하고 저장은 허용 (`revenue=0`)
-- 기간이 겹치는 기록 존재 시: 저장 허용 (덮어쓰지 않고 이력 누적, 사용자가 직접 오래된 것 삭제)
+| 파일 | 작업 |
+|---|---|
+| `supabase/migrations/073_product_ad_spend.sql` | NEW — `product_ad_spend` 테이블 생성 |
+| `src/app/api/cost-management/products/[id]/ad-spend/route.ts` | NEW — PATCH upsert |
+| `src/app/api/cost-management/products/route.ts` | MODIFY — `ad_spend` 소스를 `product_ad_spend` JOIN으로 변경 |
+| `src/components/orders/CostManagementTab.tsx` | MODIFY — 인라인 편집 상태 관리, 셀 클릭 핸들러, ROAS 프론트 계산 |
 
 ## 범위 외
 
-- 광고비 자동 균등 분배가 아닌 상품별 개별 입력 (추후 고려)
-- 쿠팡 외 플랫폼(네이버) 광고비 입력
+- 복수 월에 걸친 기간에서 월별 개별 편집 (추후)
+- 네이버/쿠팡 플랫폼별 광고비 분리
+- 광고비 이력 조회
