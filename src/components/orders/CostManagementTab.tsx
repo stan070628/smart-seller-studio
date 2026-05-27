@@ -244,6 +244,8 @@ export default function CostManagementTab() {
   const [channelFilter, setChannelFilter] = useState<'all' | 'rg' | 'wing' | 'naver'>('all');
   const [rgInventory, setRgInventory] = useState<Map<string, number | null>>(new Map());
   const [rgInventoryLoading, setRgInventoryLoading] = useState(false);
+  const [editingAdSpendId, setEditingAdSpendId] = useState<string | null>(null);
+  const [editingAdSpendValue, setEditingAdSpendValue] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -439,6 +441,56 @@ export default function CostManagementTab() {
   const filtered = products
     .filter((p) => p.product_name.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => b.sale_count - a.sale_count);
+
+  const isEditablePeriod =
+    preset === 'this_month' ||
+    preset === 'last_month' ||
+    (preset === 'custom' &&
+      customFrom !== '' &&
+      customTo !== '' &&
+      customFrom.slice(0, 7) === customTo.slice(0, 7));
+
+  function getCurrentYearMonth(): string {
+    if (preset === 'this_month') {
+      const now = new Date();
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    }
+    if (preset === 'last_month') {
+      const now = new Date();
+      const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    }
+    return customFrom.slice(0, 7);
+  }
+
+  async function saveAdSpend(productId: string, value: string) {
+    const num = parseFloat(value.replace(/,/g, ''));
+    if (isNaN(num) || num < 0) {
+      setEditingAdSpendId(null);
+      return;
+    }
+    const yearMonth = getCurrentYearMonth();
+    const res = await fetch(`/api/cost-management/products/${productId}/ad-spend`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ year_month: yearMonth, ad_spend: num }),
+    });
+    const json = await res.json();
+    if (json.success) {
+      setProducts((prev) =>
+        prev.map((p) =>
+          p.id === productId
+            ? {
+                ...p,
+                ad_spend: num,
+                ad_roas: num > 0 ? (p.total_sales_amount / num) * 100 : 0,
+              }
+            : p,
+        ),
+      );
+    }
+    setEditingAdSpendId(null);
+  }
 
   return (
     <div>
@@ -786,11 +838,55 @@ export default function CostManagementTab() {
                   <td style={{ padding: '10px 12px', textAlign: 'right', color: p.margin_rate > 0 ? '#2563eb' : '#ccc' }}>
                     {p.margin_rate > 0 ? `${(p.margin_rate * 100).toFixed(1)}%` : '—'}
                   </td>
-                  <td style={{ padding: '10px 12px', textAlign: 'right', color: p.ad_spend > 0 ? '#7c3aed' : '#ccc' }}>
-                    {p.ad_spend > 0 ? `${fmt(p.ad_spend)}원` : '—'}
+                  <td
+                    style={{
+                      padding: editingAdSpendId === p.id ? '6px 12px' : '10px 12px',
+                      textAlign: 'right',
+                      color: p.ad_spend > 0 ? '#7c3aed' : '#ccc',
+                      cursor: isEditablePeriod ? 'pointer' : 'default',
+                      position: 'relative',
+                    }}
+                    onClick={() => {
+                      if (!isEditablePeriod || editingAdSpendId === p.id) return;
+                      setEditingAdSpendId(p.id);
+                      setEditingAdSpendValue(p.ad_spend > 0 ? String(p.ad_spend) : '');
+                    }}
+                    title={!isEditablePeriod ? '단일 월을 선택하면 편집할 수 있습니다' : undefined}
+                  >
+                    {editingAdSpendId === p.id ? (
+                      <input
+                        autoFocus
+                        type="number"
+                        min="0"
+                        value={editingAdSpendValue}
+                        onChange={(e) => setEditingAdSpendValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') saveAdSpend(p.id, editingAdSpendValue);
+                          if (e.key === 'Escape') setEditingAdSpendId(null);
+                        }}
+                        onBlur={() => saveAdSpend(p.id, editingAdSpendValue)}
+                        style={{
+                          width: '90px',
+                          padding: '3px 6px',
+                          fontSize: '12px',
+                          border: '1px solid #7c3aed',
+                          borderRadius: '4px',
+                          textAlign: 'right',
+                          outline: 'none',
+                        }}
+                      />
+                    ) : (
+                      <span>
+                        {p.ad_spend > 0 ? `${fmt(p.ad_spend)}원` : (isEditablePeriod ? <span style={{ color: '#d4b8ff' }}>+ 입력</span> : '—')}
+                      </span>
+                    )}
                   </td>
-                  <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: p.ad_roas > 0 ? 600 : 400,
-                    color: p.ad_roas === 0 ? '#ccc' : p.ad_roas >= 250 ? '#16a34a' : '#ef4444' }}>
+                  <td style={{
+                    padding: '10px 12px', textAlign: 'right', fontWeight: p.ad_roas > 0 ? 600 : 400,
+                    color: p.ad_roas === 0 ? '#ccc'
+                      : p.ad_roas >= p.breakeven_roas ? '#16a34a'
+                      : '#ef4444',
+                  }}>
                     {p.ad_roas > 0 ? `${Math.round(p.ad_roas)}%` : '—'}
                   </td>
                   <td style={{ padding: '10px 12px', textAlign: 'center' }}>
