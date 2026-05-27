@@ -100,7 +100,7 @@ export const VoiceInputButton: React.FC<VoiceInputButtonProps> = ({ onTranscript
       const response = await fetch('/api/ai/speech-to-text', {
         method: 'POST',
         headers: { 'Content-Type': 'application/octet-stream' },
-        body: pcm16.buffer,
+        body: pcm16.buffer as ArrayBuffer,
       });
       const data = (await response.json()) as { success: boolean; text?: string; error?: string };
       if (data.success && data.text) {
