@@ -242,7 +242,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
   function startEdit(e: Entry) {
     setEditingId(e.id);
     setAddingNew(false);
-    setForm({ received_at: e.received_at.slice(0, 10), quantity: String(e.quantity), unit_cost: String(e.unit_cost), unit_shipping_fee: String(e.unit_shipping_fee) });
+    setForm({ received_at: e.received_at.slice(0, 10), quantity: String(e.quantity), unit_cost: String(e.unit_cost), unit_shipping_fee: String(e.unit_shipping_fee), variant_name: e.variant_name ?? '' });
   }
 
   const canSave = !!form.received_at && Number(form.quantity) > 0;
