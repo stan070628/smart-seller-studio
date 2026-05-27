@@ -146,6 +146,8 @@ export async function POST(
         for (const order of result.items) {
           // paidAt ms → KST 날짜 (UTC+9)
           const paidDate = new Date(Number(order.paidAt) + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+          // 동일 orderId+vendorItemId가 여러 orderItems로 분리 반환될 때 수량 합산
+          const orderItemMap = new Map<string, (typeof rgItems)[number]>();
           for (const item of order.orderItems) {
             // seller_api가 Wing 상품의 vendorItemId를 반환하지 않을 때,
             // RG 주문의 productName ↔ storedProductName 대소문자 무시 + 양방향 prefix 매칭
@@ -158,14 +160,21 @@ export async function POST(
               && (nItem.startsWith(nStored) || nStored.startsWith(nItem));
             if (!matchByVendorItemId && !matchByProductName) continue;
             if (item.salesQuantity <= 0) continue;
-            rgItems.push({
-              sold_at: paidDate,
-              quantity: item.salesQuantity,
-              selling_price: item.unitSalesPrice,
-              coupang_order_item_id: `rg-${order.orderId}-${item.vendorItemId}`,
-              channel: 'rocket_growth',
-            });
+            const key = `rg-${order.orderId}-${item.vendorItemId}`;
+            const existing = orderItemMap.get(key);
+            if (existing) {
+              existing.quantity += item.salesQuantity;
+            } else {
+              orderItemMap.set(key, {
+                sold_at: paidDate,
+                quantity: item.salesQuantity,
+                selling_price: item.unitSalesPrice,
+                coupang_order_item_id: key,
+                channel: 'rocket_growth',
+              });
+            }
           }
+          rgItems.push(...orderItemMap.values());
         }
         rgToken = result.nextToken ?? undefined;
       } while (rgToken);

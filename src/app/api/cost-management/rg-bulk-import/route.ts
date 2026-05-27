@@ -67,18 +67,27 @@ export async function POST(request: NextRequest) {
         });
         for (const order of result.items) {
           const soldAt = new Date(Number(order.paidAt) + KST).toISOString().slice(0, 10);
+          // 동일 orderId+vendorItemId가 여러 orderItems로 분리 반환될 때 수량 합산
+          const orderItemMap = new Map<string, (typeof items)[number]>();
           for (const item of order.orderItems) {
             const productCostId = vendorItemMap.get(item.vendorItemId);
             if (!productCostId) continue;
             if (item.salesQuantity <= 0) continue;
-            items.push({
-              product_cost_id: productCostId,
-              sold_at: soldAt,
-              quantity: item.salesQuantity,
-              selling_price: item.unitSalesPrice,
-              coupang_order_item_id: `rg-${order.orderId}-${item.vendorItemId}`,
-            });
+            const key = `rg-${order.orderId}-${item.vendorItemId}`;
+            const existing = orderItemMap.get(key);
+            if (existing) {
+              existing.quantity += item.salesQuantity;
+            } else {
+              orderItemMap.set(key, {
+                product_cost_id: productCostId,
+                sold_at: soldAt,
+                quantity: item.salesQuantity,
+                selling_price: item.unitSalesPrice,
+                coupang_order_item_id: key,
+              });
+            }
           }
+          items.push(...orderItemMap.values());
         }
         nextToken = result.nextToken ?? undefined;
       } while (nextToken);
