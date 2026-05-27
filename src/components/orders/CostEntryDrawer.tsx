@@ -16,6 +16,7 @@ interface Entry {
   shipping_group_name: string | null;
   purchase_quantity: number | null;   // 소분: 사입 총량
   subdivision_unit: number | null;    // 소분: 소분 단위
+  variant_name?: string | null;
 }
 
 interface EntryForm {
@@ -23,10 +24,11 @@ interface EntryForm {
   quantity: string;
   unit_cost: string;
   unit_shipping_fee: string;
+  variant_name: string;
 }
 
 function emptyForm(): EntryForm {
-  return { received_at: new Date().toISOString().slice(0, 10), quantity: '', unit_cost: '', unit_shipping_fee: '0' };
+  return { received_at: new Date().toISOString().slice(0, 10), quantity: '', unit_cost: '', unit_shipping_fee: '0', variant_name: '' };
 }
 
 function fmt(n: number) { return n.toLocaleString('ko-KR'); }
@@ -44,11 +46,12 @@ interface Props {
   vendorItemId?: number | null;
   naverChannelProductNo?: number | null;
   subdivisionUnit?: number | null;   // 소분 단위 (>0 이면 소분 상품)
+  variants?: Record<string, string> | null;
   onClose: () => void;
   onChanged: () => void;
 }
 
-export default function CostEntryDrawer({ productId, productName, sellerProductId, vendorItemId, naverChannelProductNo, subdivisionUnit, onClose, onChanged }: Props) {
+export default function CostEntryDrawer({ productId, productName, sellerProductId, vendorItemId, naverChannelProductNo, subdivisionUnit, variants, onClose, onChanged }: Props) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -147,7 +150,13 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
     if (!form.received_at || qty <= 0) { alert('입고일과 수량을 입력해 주세요.'); return; }
     setSaving(true);
     try {
-      const basePayload = { received_at: form.received_at, quantity: qty, unit_cost: cost, unit_shipping_fee: Math.round(Number(form.unit_shipping_fee)) };
+      const basePayload = {
+        received_at: form.received_at,
+        quantity: qty,
+        unit_cost: cost,
+        unit_shipping_fee: Math.round(Number(form.unit_shipping_fee)),
+        ...(form.variant_name ? { variant_name: form.variant_name } : {}),
+      };
       // 신규 입고 등록 시 채널 정보 포함
       const payload = editingId ? basePayload : { ...basePayload, channel: entryChannel };
       const url = editingId
@@ -281,7 +290,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
                 <thead>
                   <tr style={{ background: '#f9f9f9', borderBottom: '1px solid #e5e5e5' }}>
-                    {['입고일', '수량', '단가', '배송비', 'RG배송비', ''].map((h) => (
+                    {['입고일', '수량', '단가', '배송비', 'RG배송비', ...(variants ? ['사이즈'] : []), ''].map((h) => (
                       <th key={h} style={{ padding: '6px 8px', textAlign: h === '입고일' ? 'left' : 'right', fontWeight: 600, color: '#27272a' }}>{h}</th>
                     ))}
                   </tr>
@@ -327,6 +336,13 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
                         <td style={{ padding: '6px 8px', textAlign: 'right', color: (e.unit_rg_shipping_fee ?? 0) > 0 ? '#0369a1' : '#ccc' }}>
                           {(e.unit_rg_shipping_fee ?? 0) > 0 ? fmt(e.unit_rg_shipping_fee) : '—'}
                         </td>
+                        {variants && (
+                          <td style={{ padding: '6px 8px', textAlign: 'right' }}>
+                            {e.variant_name
+                              ? <span style={{ background: '#f0fdf4', color: '#16a34a', padding: '1px 5px', borderRadius: '4px', fontSize: '9px' }}>{e.variant_name}</span>
+                              : <span style={{ color: '#e5e5e5', fontSize: '9px' }}>—</span>}
+                          </td>
+                        )}
                         <td style={{ padding: '6px 8px', textAlign: 'right' }}>
                           <div style={{ display: 'flex', gap: '3px', justifyContent: 'flex-end' }}>
                             <button onClick={() => startEdit(e)} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '2px' }}><Pencil size={11} color="#6b7280" /></button>
@@ -438,6 +454,20 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
                           />
                         </td>
                       ))}
+                      {variants && Object.keys(variants).length > 0 && (
+                        <td style={{ padding: '4px 6px' }}>
+                          <select
+                            value={form.variant_name}
+                            onChange={(ev) => setForm((f) => ({ ...f, variant_name: ev.target.value }))}
+                            style={{ width: '100%', padding: '3px 5px', borderRadius: '4px', border: '1px solid #86efac', fontSize: '11px', color: '#18181b', boxSizing: 'border-box' }}
+                          >
+                            <option value="">미분류</option>
+                            {Object.values(variants).map((name) => (
+                              <option key={name} value={name}>{name}</option>
+                            ))}
+                          </select>
+                        </td>
+                      )}
                       <td style={{ padding: '4px 6px' }}>
                         <div style={{ display: 'flex', gap: '3px' }}>
                           <button onClick={save} disabled={saving || !canSave} style={{ padding: '3px 7px', borderRadius: '4px', background: canSave ? '#16a34a' : '#d4d4d4', color: canSave ? '#fff' : '#71717a', border: 'none', fontSize: '10px', cursor: canSave ? 'pointer' : 'not-allowed' }}>
