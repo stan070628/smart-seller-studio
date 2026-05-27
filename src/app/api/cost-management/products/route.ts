@@ -5,9 +5,7 @@ import { calculateProductMetrics } from '@/lib/cost-management/calculations';
 import type { CostEntryRow } from '@/lib/cost-management/calculations';
 import { calculateFifo, ENTRY_CHANNEL, SALE_CHANNEL } from '@/lib/cost-management/fifo';
 import type { PurchaseBatch, SaleRow, FifoSummary } from '@/lib/cost-management/fifo';
-import { getSupabaseServerClient } from '@/lib/supabase/server';
-import type { CollectedData, RawProduct } from '@/lib/ad-strategy/types';
-import { matchAdProduct } from '@/lib/ad-strategy/match';
+import { getYearMonths } from '@/lib/cost-management/ad-spend';
 import { calcBreakevenRoas, isWinner } from '@/lib/roi/calculations';
 
 // ─────────────────────────────────────────
@@ -102,18 +100,21 @@ export async function GET(request: NextRequest) {
       salesByProduct.set(s.product_cost_id, list);
     }
 
-    // ad_strategy_cache에서 최신 광고 데이터 조회 (24시간 이내)
-    const supabase = getSupabaseServerClient();
-    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const adCacheResult = await supabase
-      .from('ad_strategy_cache')
-      .select('collected_data')
-      .eq('user_id', user.userId)
-      .gte('collected_at', cutoff)
-      .order('collected_at', { ascending: false })
-      .limit(1)
-      .single();
-    const adProducts: RawProduct[] = (adCacheResult.data?.collected_data as CollectedData)?.products ?? [];
+    // product_ad_spend 테이블에서 기간 내 광고비 합산
+    const yearMonths = getYearMonths(from, to);
+    const adSpendByProduct = new Map<string, number>();
+    if (yearMonths.length > 0) {
+      const { rows: adRows } = await pool.query(
+        `SELECT product_id, SUM(ad_spend)::float AS total_ad_spend
+         FROM product_ad_spend
+         WHERE user_id = $1 AND year_month = ANY($2::text[])
+         GROUP BY product_id`,
+        [user.userId, yearMonths],
+      );
+      for (const row of adRows) {
+        adSpendByProduct.set(row.product_id, Number(row.total_ad_spend));
+      }
+    }
 
     // 채널 필터에 따라 상품 목록 필터링
     const filteredProducts = channelFilter === 'rg'
@@ -175,11 +176,9 @@ export async function GET(request: NextRequest) {
         .reduce((sum, d) => sum + d.realized_profit_per_unit * (pSalesById.get(d.saleId)?.quantity ?? 0), 0);
       const periodSalesAmount = pFilteredSales.reduce((s, sale) => s + sale.selling_price * sale.quantity, 0);
 
-      // 광고 데이터 매칭
-      const adMatch = matchAdProduct(adProducts, p.product_name);
-      const adSpend = adMatch?.adSpend ?? 0;
-      const adRoas = adMatch?.adRoas ?? 0;
-      const adOrders = adMatch?.adOrders ?? 0;
+      // product_ad_spend 에서 광고비 조회 및 ROAS 계산
+      const adSpend = adSpendByProduct.get(p.id) ?? 0;
+      const adRoas = adSpend > 0 ? (periodSalesAmount / adSpend) * 100 : 0;
 
       // ROI 계산
       const totalQtySold = pFilteredSales.reduce((s, x) => s + x.quantity, 0);
@@ -187,8 +186,7 @@ export async function GET(request: NextRequest) {
       const avgSellingPrice = totalQtySold > 0 ? periodSalesAmount / totalQtySold : 0;
       const avgMarginPerUnit = totalQtySold > 0 ? periodRealizedProfit / totalQtySold : 0;
       const breakevenRoas = calcBreakevenRoas(avgSellingPrice, avgMarginPerUnit);
-      const conversionRate = adOrders > 0 ? (totalQtySold / adOrders) * 100 : 0;
-      const winnerStatus = isWinner(adOrders, conversionRate, adRoas, totalQtySold);
+      const winnerStatus = isWinner(0, 0, adRoas, totalQtySold);
 
       return {
         id: p.id,
