@@ -71,6 +71,7 @@ export async function POST(
     channel,
     purchase_quantity,
     subdivision_unit: bodySubdivisionUnit,
+    variant_name,
   } = body ?? {};
 
   // 소분 모드 여부 판별: purchase_quantity가 양수로 전달된 경우
@@ -169,8 +170,8 @@ export async function POST(
 
       ({ rows } = await client.query(
         `INSERT INTO cost_entries
-           (user_id, product_cost_id, received_at, quantity, unit_cost, unit_shipping_fee, unit_rg_shipping_fee, channel, purchase_quantity, subdivision_unit)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           (user_id, product_cost_id, received_at, quantity, unit_cost, unit_shipping_fee, unit_rg_shipping_fee, channel, purchase_quantity, subdivision_unit, variant_name)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          RETURNING *`,
         [
           user.userId,
@@ -183,6 +184,7 @@ export async function POST(
           (channel === ENTRY_CHANNEL.RG || channel === ENTRY_CHANNEL.WING) ? channel : ENTRY_CHANNEL.WING,
           finalPurchaseQuantity,
           finalSubdivisionUnit,
+          variant_name ?? null,
         ],
       ));
 
