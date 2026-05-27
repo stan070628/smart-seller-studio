@@ -34,7 +34,7 @@ export async function PATCH(
     );
   }
 
-  // ad_spend 검증: 음이 아닌 정수
+  // ad_spend 검증: 음이 아닌 숫자 (소수 허용)
   if (typeof ad_spend !== 'number' || ad_spend < 0) {
     return NextResponse.json(
       { success: false, error: 'ad_spend must be a non-negative number' },
@@ -45,12 +45,17 @@ export async function PATCH(
   const pool = getSourcingPool();
   const { rows } = await pool.query(
     `INSERT INTO product_ad_spend (user_id, product_id, year_month, ad_spend, updated_at)
-     VALUES ($1, $2, $3, $4, now())
+     SELECT $1, $2, $3, $4, now()
+     WHERE EXISTS (SELECT 1 FROM product_costs WHERE id = $2 AND user_id = $1)
      ON CONFLICT (user_id, product_id, year_month)
      DO UPDATE SET ad_spend = EXCLUDED.ad_spend, updated_at = now()
      RETURNING id, product_id, year_month, ad_spend`,
     [user.userId, id, year_month, ad_spend],
   );
+
+  if (rows.length === 0) {
+    return NextResponse.json({ success: false, error: 'Product not found' }, { status: 404 });
+  }
 
   return NextResponse.json({ success: true, data: rows[0] });
 }

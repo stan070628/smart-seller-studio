@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Truck, Package, Search, Trash2, TrendingUp, TrendingDown, AlertCircle, CloudDownload, Pencil } from 'lucide-react';
 import CostEntryDrawer from './CostEntryDrawer';
 import ShippingGroupModal from './ShippingGroupModal';
@@ -463,6 +463,8 @@ export default function CostManagementTab() {
     return customFrom.slice(0, 7);
   }
 
+  const saveTriggeredByKey = useRef(false);
+
   async function saveAdSpend(productId: string, value: string) {
     const num = parseFloat(value.replace(/,/g, ''));
     if (isNaN(num) || num < 0) {
@@ -861,10 +863,16 @@ export default function CostManagementTab() {
                         value={editingAdSpendValue}
                         onChange={(e) => setEditingAdSpendValue(e.target.value)}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') saveAdSpend(p.id, editingAdSpendValue);
+                          if (e.key === 'Enter') {
+                            saveTriggeredByKey.current = true;
+                            saveAdSpend(p.id, editingAdSpendValue);
+                          }
                           if (e.key === 'Escape') setEditingAdSpendId(null);
                         }}
-                        onBlur={() => saveAdSpend(p.id, editingAdSpendValue)}
+                        onBlur={() => {
+                          if (!saveTriggeredByKey.current) saveAdSpend(p.id, editingAdSpendValue);
+                          saveTriggeredByKey.current = false;
+                        }}
                         style={{
                           width: '90px',
                           padding: '3px 6px',
