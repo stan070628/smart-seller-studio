@@ -24,7 +24,7 @@ const FETCH_TIMEOUT_MS = 15_000;
  * 보정이 필요 없으면 원본 URL을 반환합니다.
  */
 async function bufferFromDataUrl(dataUrl: string): Promise<Buffer> {
-  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/s);
+  const match = dataUrl.match(/^data:([^;]+);base64,([\s\S]+)$/);
   if (!match) throw new Error('지원하지 않는 data URL 형식');
   return Buffer.from(match[2], 'base64');
 }
