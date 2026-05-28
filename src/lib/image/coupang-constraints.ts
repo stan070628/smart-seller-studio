@@ -23,6 +23,12 @@ const FETCH_TIMEOUT_MS = 15_000;
  * 단일 이미지 URL을 쿠팡 규격에 맞게 보정합니다.
  * 보정이 필요 없으면 원본 URL을 반환합니다.
  */
+async function bufferFromDataUrl(dataUrl: string): Promise<Buffer> {
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/s);
+  if (!match) throw new Error('지원하지 않는 data URL 형식');
+  return Buffer.from(match[2], 'base64');
+}
+
 export async function ensureCoupangImage(imageUrl: string): Promise<string> {
   // 이미 규격 처리된 이미지(coupang-images/ 경로)는 재처리 불필요
   if (imageUrl.includes('supabase.co/storage') && imageUrl.includes('/coupang-images/')) {
@@ -30,10 +36,15 @@ export async function ensureCoupangImage(imageUrl: string): Promise<string> {
   }
 
   try {
-    const res = await fetch(imageUrl, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-    if (!res.ok) return imageUrl;
-
-    const inputBuffer = Buffer.from(await res.arrayBuffer());
+    let inputBuffer: Buffer;
+    if (imageUrl.startsWith('data:')) {
+      // base64 data URL → Buffer 변환 (fetch 불가 우회)
+      inputBuffer = await bufferFromDataUrl(imageUrl);
+    } else {
+      const res = await fetch(imageUrl, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+      if (!res.ok) return imageUrl;
+      inputBuffer = Buffer.from(await res.arrayBuffer());
+    }
     const metadata = await sharp(inputBuffer).metadata();
     const w = metadata.width ?? 0;
     const h = metadata.height ?? 0;
