@@ -1,6 +1,6 @@
 // src/lib/label/label-templates.ts
 
-export type LabelType = 'quality' | 'quality2x3' | 'event' | 'image2x2' | 'nutrition2x3' | 'cosmetic2x3';
+export type LabelType = 'quality' | 'quality2x3' | 'event' | 'image2x2' | 'image2x3' | 'nutrition2x3' | 'cosmetic2x3';
 
 export interface QualityFields {
   productName: string;
