@@ -116,7 +116,7 @@ export default function CalendarPage() {
   }
 
   async function handleSuggestCategories() {
-    if (suggestCatLoading) return;
+    if (suggestCatLoading || suggestLoading) return;
     setSuggestCatLoading(true);
     try {
       const res = await fetch('/api/calendar/suggest-categories', {
@@ -155,14 +155,14 @@ export default function CalendarPage() {
         </div>
         <button
           onClick={handleSuggestCategories}
-          disabled={suggestCatLoading}
+          disabled={suggestCatLoading || suggestLoading}
           style={{
             display: 'flex', alignItems: 'center', gap: 6,
             padding: '8px 16px', fontSize: 13, fontWeight: 600,
-            background: suggestCatLoading ? '#f4f4f5' : 'rgba(99,102,241,0.08)',
-            color: suggestCatLoading ? C.textSub : '#6366f1',
-            border: `1px solid ${suggestCatLoading ? C.border : 'rgba(99,102,241,0.3)'}`,
-            borderRadius: 8, cursor: suggestCatLoading ? 'not-allowed' : 'pointer',
+            background: (suggestCatLoading || suggestLoading) ? '#f4f4f5' : 'rgba(99,102,241,0.08)',
+            color: (suggestCatLoading || suggestLoading) ? C.textSub : '#6366f1',
+            border: `1px solid ${(suggestCatLoading || suggestLoading) ? C.border : 'rgba(99,102,241,0.3)'}`,
+            borderRadius: 8, cursor: (suggestCatLoading || suggestLoading) ? 'not-allowed' : 'pointer',
             whiteSpace: 'nowrap', transition: 'all 0.15s',
           }}
         >
