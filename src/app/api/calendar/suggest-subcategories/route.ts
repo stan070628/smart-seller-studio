@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAnthropicClient } from '@/lib/ai/claude';
+import { callClaude } from '@/lib/ai/claude-cli';
 
 const SYSTEM_PROMPT = `당신은 쿠팡 소싱 전문가입니다.
 주어진 대분류에서 현재 트렌드에 맞는 소분류를 추천합니다.
@@ -61,15 +61,7 @@ export async function POST(req: NextRequest) {
 JSON 배열만 반환: ["보온병", "캠핑컵", ...]`;
 
   try {
-    const client = getAnthropicClient();
-    const message = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 256,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: userContent }],
-    });
-
-    const rawText = (message.content[0] as { type: string; text: string }).text;
+    const rawText = await callClaude(SYSTEM_PROMPT, userContent, 'haiku');
     const names = parseNames(rawText);
     const now = Date.now();
     const subcategories = names.length > 0

@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
-vi.mock('@/lib/ai/claude', () => ({
-  getAnthropicClient: vi.fn(),
+vi.mock('@/lib/ai/claude-cli', () => ({
+  callClaude: vi.fn(),
 }));
 
-import { getAnthropicClient } from '@/lib/ai/claude';
+import { callClaude } from '@/lib/ai/claude-cli';
 import { POST } from '../suggest-subcategories/route';
 
 describe('POST /api/calendar/suggest-subcategories', () => {
@@ -28,13 +28,10 @@ describe('POST /api/calendar/suggest-subcategories', () => {
     expect(data.error).toBeDefined();
   });
 
-  it('Claude 정상 응답 시 소분류 배열 반환 (200)', async () => {
-    const mockCreate = vi.fn().mockResolvedValue({
-      content: [{ type: 'text', text: '["보온병", "캠핑컵", "스포츠 텀블러", "아이스 텀블러", "소형 텀블러", "이중 텀블러"]' }],
-    });
-    (getAnthropicClient as ReturnType<typeof vi.fn>).mockReturnValue({
-      messages: { create: mockCreate },
-    });
+  it('callClaude 정상 응답 시 소분류 배열 반환 (200)', async () => {
+    (callClaude as ReturnType<typeof vi.fn>).mockResolvedValue(
+      '["보온병", "캠핑컵", "스포츠 텀블러", "아이스 텀블러", "소형 텀블러", "이중 텀블러"]',
+    );
 
     const res = await POST(makeReq({
       parentCategory: '잡화',
@@ -48,31 +45,22 @@ describe('POST /api/calendar/suggest-subcategories', () => {
     expect(data.suggestedAt).toBeDefined();
   });
 
-  it('ANTHROPIC_API_KEY 없어서 getAnthropicClient throw 시 폴백 반환 (200)', async () => {
-    (getAnthropicClient as ReturnType<typeof vi.fn>).mockImplementation(() => {
-      throw new Error('ANTHROPIC_API_KEY가 설정되지 않았습니다');
-    });
+  it('callClaude throw 시 폴백 반환 (200)', async () => {
+    (callClaude as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error('ANTHROPIC_API_KEY 미설정'),
+    );
 
-    const res = await POST(makeReq({
-      parentCategory: '잡화',
-      currentSubcategories: [],
-    }));
+    const res = await POST(makeReq({ parentCategory: '잡화', currentSubcategories: [] }));
     expect(res.status).toBe(200);
     const data = await res.json() as { subcategories: { id: string; name: string }[] };
     expect(data.subcategories.length).toBeGreaterThan(0);
     expect(data.subcategories[0].name).toContain('잡화');
   });
 
-  it('Claude API 호출 실패 시 폴백 반환 (200)', async () => {
-    const mockCreate = vi.fn().mockRejectedValue(new Error('네트워크 오류'));
-    (getAnthropicClient as ReturnType<typeof vi.fn>).mockReturnValue({
-      messages: { create: mockCreate },
-    });
+  it('callClaude 네트워크 오류 시 폴백 반환 (200)', async () => {
+    (callClaude as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('네트워크 오류'));
 
-    const res = await POST(makeReq({
-      parentCategory: '잡화',
-      currentSubcategories: [],
-    }));
+    const res = await POST(makeReq({ parentCategory: '잡화', currentSubcategories: [] }));
     expect(res.status).toBe(200);
     const data = await res.json() as { subcategories: { id: string; name: string }[] };
     expect(data.subcategories.length).toBeGreaterThan(0);
