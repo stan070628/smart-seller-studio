@@ -63,11 +63,12 @@ JSON만 반환: [{"name": "반려동물용품", "subcategories": ["강아지 간
     const parsed = parseCategories(rawText);
 
     const now = Date.now();
-    const categories = parsed.map((cat, catIdx) => ({
-      id: `ai-cat-${cat.name}-${now + catIdx}`,
+    let seq = 0;
+    const categories = parsed.map((cat) => ({
+      id: `ai-cat-${cat.name}-${now}-${seq++}`,
       name: cat.name,
-      subcategories: cat.subcategories.map((subName, subIdx) => ({
-        id: `ai-sub-${subName}-${now + catIdx * 100 + subIdx}`,
+      subcategories: cat.subcategories.map((subName) => ({
+        id: `ai-sub-${subName}-${now}-${seq++}`,
         name: subName,
       })),
     }));
