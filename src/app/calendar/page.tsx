@@ -16,6 +16,11 @@ interface SuggestResponse {
   suggestedAt: string;
 }
 
+interface SuggestCategoriesResponse {
+  categories: ParentCategory[];
+  suggestedAt: string;
+}
+
 function loadCategories(): ParentCategory[] {
   try {
     const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
@@ -30,7 +35,9 @@ export default function CalendarPage() {
   const [activeCatId, setActiveCatId] = useState<string>(DEFAULT_CATEGORY_TREE[0].id);
   const [activeSubId, setActiveSubId] = useState<string | null>(null);
   const [suggestLoading, setSuggestLoading] = useState(false);
+  const [suggestCatLoading, setSuggestCatLoading] = useState(false);
   const [suggestedIds, setSuggestedIds] = useState<Set<string>>(new Set());
+  const [suggestedCatIds, setSuggestedCatIds] = useState<Set<string>>(new Set());
   const [newSubName, setNewSubName] = useState('');
   const [addingNew, setAddingNew] = useState(false);
 
@@ -82,7 +89,7 @@ export default function CalendarPage() {
   }
 
   async function handleSuggest() {
-    if (!activeCat || suggestLoading) return;
+    if (!activeCat || suggestLoading || suggestCatLoading) return;
     setSuggestLoading(true);
     try {
       const res = await fetch('/api/calendar/suggest-subcategories', {
@@ -108,20 +115,66 @@ export default function CalendarPage() {
     }
   }
 
+  async function handleSuggestCategories() {
+    if (suggestCatLoading) return;
+    setSuggestCatLoading(true);
+    try {
+      const res = await fetch('/api/calendar/suggest-categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentCategories: categories.map((c) => c.name) }),
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as SuggestCategoriesResponse;
+      const newCats = data.categories;
+      persistCategories(newCats);
+      setActiveCatId(newCats[0].id);
+      setActiveSubId(null);
+      setSuggestedIds(new Set());
+      setSuggestedCatIds(new Set(newCats.map((c) => c.id)));
+    } catch {
+      // 실패 시 기존 목록 유지
+    } finally {
+      setSuggestCatLoading(false);
+    }
+  }
+
   return (
     <div style={{ minHeight: '100vh', background: C.bg, fontFamily: "'Noto Sans KR', sans-serif", color: C.text }}>
-      {/* 헤더 */}
-      <div style={{ background: C.card, borderBottom: `1px solid ${C.border}`, padding: '16px 24px' }}>
-        <h1 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: C.text }}>소싱 캘린더</h1>
-        <p style={{ fontSize: 12, color: C.textSub, margin: '4px 0 0' }}>
-          카테고리별 소싱 후보 관리 · AI 소분류 추천
-        </p>
+      {/* 헤더 — 대분류 AI 추천 버튼 */}
+      <div style={{
+        background: C.card, borderBottom: `1px solid ${C.border}`,
+        padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <div>
+          <h1 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: C.text }}>소싱 캘린더</h1>
+          <p style={{ fontSize: 12, color: C.textSub, margin: '4px 0 0' }}>
+            카테고리별 소싱 후보 관리 · AI 소분류 추천
+          </p>
+        </div>
+        <button
+          onClick={handleSuggestCategories}
+          disabled={suggestCatLoading}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '8px 16px', fontSize: 13, fontWeight: 600,
+            background: suggestCatLoading ? '#f4f4f5' : 'rgba(99,102,241,0.08)',
+            color: suggestCatLoading ? C.textSub : '#6366f1',
+            border: `1px solid ${suggestCatLoading ? C.border : 'rgba(99,102,241,0.3)'}`,
+            borderRadius: 8, cursor: suggestCatLoading ? 'not-allowed' : 'pointer',
+            whiteSpace: 'nowrap', transition: 'all 0.15s',
+          }}
+        >
+          <Sparkles size={13} />
+          {suggestCatLoading ? '추천 중...' : '✦ 대분류 AI 추천'}
+        </button>
       </div>
 
-      {/* 대분류 탭 + AI 추천 버튼 */}
+      {/* 대분류 탭 + 소분류 AI 추천 버튼 */}
       <div style={{
         background: C.card, borderBottom: `2px solid ${C.border}`,
         display: 'flex', alignItems: 'center', padding: '0 24px',
+        opacity: suggestCatLoading ? 0.5 : 1, transition: 'opacity 0.15s',
       }}>
         <div style={{ display: 'flex', flex: 1, flexWrap: 'wrap' }}>
           {categories.map((cat) => (
@@ -129,28 +182,32 @@ export default function CalendarPage() {
               key={cat.id}
               onClick={() => handleSelectParent(cat.id)}
               style={{
-                padding: '12px 20px', border: 'none', cursor: 'pointer', fontSize: 14,
+                padding: '12px 16px', border: 'none', cursor: 'pointer', fontSize: 14,
                 fontWeight: activeCatId === cat.id ? 700 : 500,
                 color: activeCatId === cat.id ? C.accent : C.textSub,
                 background: 'transparent',
                 borderBottom: activeCatId === cat.id ? `2px solid ${C.accent}` : '2px solid transparent',
                 marginBottom: '-2px', transition: 'all 0.15s',
+                display: 'flex', alignItems: 'center', gap: 4,
               }}
             >
               {cat.name}
+              {suggestedCatIds.has(cat.id) && (
+                <span style={{ fontSize: 10, color: '#6366f1', fontWeight: 700 }}>AI</span>
+              )}
             </button>
           ))}
         </div>
         <button
           onClick={handleSuggest}
-          disabled={suggestLoading}
+          disabled={suggestLoading || suggestCatLoading}
           style={{
             display: 'flex', alignItems: 'center', gap: 6,
             padding: '7px 14px', fontSize: 12, fontWeight: 600,
-            background: suggestLoading ? '#f4f4f5' : 'rgba(99,102,241,0.08)',
-            color: suggestLoading ? C.textSub : '#6366f1',
-            border: `1px solid ${suggestLoading ? C.border : 'rgba(99,102,241,0.3)'}`,
-            borderRadius: 8, cursor: suggestLoading ? 'not-allowed' : 'pointer',
+            background: (suggestLoading || suggestCatLoading) ? '#f4f4f5' : 'rgba(99,102,241,0.08)',
+            color: (suggestLoading || suggestCatLoading) ? C.textSub : '#6366f1',
+            border: `1px solid ${(suggestLoading || suggestCatLoading) ? C.border : 'rgba(99,102,241,0.3)'}`,
+            borderRadius: 8, cursor: (suggestLoading || suggestCatLoading) ? 'not-allowed' : 'pointer',
             whiteSpace: 'nowrap', marginLeft: 12, transition: 'all 0.15s',
           }}
         >
@@ -178,11 +235,7 @@ export default function CalendarPage() {
                   opacity: suggestLoading ? 0.5 : 1,
                 }}
               >
-                <span style={{
-                  fontSize: 13,
-                  color: isActive ? C.accent : C.text,
-                  fontWeight: isActive ? 600 : 400,
-                }}>
+                <span style={{ fontSize: 13, color: isActive ? C.accent : C.text, fontWeight: isActive ? 600 : 400 }}>
                   {sub.name}
                 </span>
                 {isSuggested && (
@@ -190,10 +243,7 @@ export default function CalendarPage() {
                 )}
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDeleteSub(sub.id); }}
-                  style={{
-                    background: 'none', border: 'none', cursor: 'pointer',
-                    padding: 2, color: C.textSub, display: 'flex',
-                  }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: C.textSub, display: 'flex' }}
                 >
                   <Trash2 size={12} />
                 </button>
@@ -201,7 +251,6 @@ export default function CalendarPage() {
             );
           })}
 
-          {/* 소분류 추가 */}
           {addingNew ? (
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
               <input
@@ -220,17 +269,11 @@ export default function CalendarPage() {
               />
               <button
                 onClick={handleAddSub}
-                style={{
-                  padding: '6px 10px', fontSize: 13, background: C.accent,
-                  color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer',
-                }}
+                style={{ padding: '6px 10px', fontSize: 13, background: C.accent, color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}
               >추가</button>
               <button
                 onClick={() => { setAddingNew(false); setNewSubName(''); }}
-                style={{
-                  padding: '6px 10px', fontSize: 13, background: C.bg, color: C.textSub,
-                  border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer',
-                }}
+                style={{ padding: '6px 10px', fontSize: 13, background: C.bg, color: C.textSub, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer' }}
               >취소</button>
             </div>
           ) : (
@@ -247,7 +290,6 @@ export default function CalendarPage() {
           )}
         </div>
 
-        {/* 선택 안내 */}
         {activeSubId ? (
           <p style={{ fontSize: 13, color: C.textSub, margin: 0 }}>
             선택됨: <strong style={{ color: C.text }}>{activeCat?.name}</strong>
