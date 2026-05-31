@@ -5,6 +5,9 @@
 
 # dependencies
 /node_modules
+node_modules.nosync
+proxy-server/node_modules
+proxy-server/node_modules.nosync
 scripts/ad-scraper/node_modules
 /.pnp
 .pnp.*

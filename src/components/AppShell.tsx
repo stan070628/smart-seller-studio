@@ -33,17 +33,6 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    href: '/calendar',
-    label: '소싱 캘린더',
-    icon: (
-      <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <rect x="3" y="4" width="18" height="18" rx="2" strokeWidth="1.5" />
-        <path d="M16 2v4M8 2v4M3 10h18" strokeWidth="1.5" strokeLinecap="round" />
-        <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01" strokeWidth="2" strokeLinecap="round" />
-      </svg>
-    ),
-  },
-  {
     href: '/listing',
     label: '상품등록',
     icon: (
