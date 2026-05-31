@@ -26,7 +26,10 @@ function parseNames(rawText: string): string[] {
       .replace(/\s*```\s*$/, '')
       .trim();
     const parsed = JSON.parse(stripped) as unknown;
-    if (!Array.isArray(parsed)) return [];
+    if (!Array.isArray(parsed)) {
+      console.warn('[suggest-subcategories] unexpected shape:', typeof parsed);
+      return [];
+    }
     return (parsed as unknown[]).filter((v): v is string => typeof v === 'string').slice(0, 8);
   } catch {
     return [];
