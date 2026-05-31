@@ -127,6 +127,7 @@ export default function CalendarPage() {
       if (!res.ok) return;
       const data = (await res.json()) as SuggestCategoriesResponse;
       const newCats = data.categories;
+      if (!newCats || newCats.length === 0) return;
       persistCategories(newCats);
       setActiveCatId(newCats[0].id);
       setActiveSubId(null);
@@ -175,6 +176,7 @@ export default function CalendarPage() {
         background: C.card, borderBottom: `2px solid ${C.border}`,
         display: 'flex', alignItems: 'center', padding: '0 24px',
         opacity: suggestCatLoading ? 0.5 : 1, transition: 'opacity 0.15s',
+        pointerEvents: suggestCatLoading ? 'none' : 'auto',
       }}>
         <div style={{ display: 'flex', flex: 1, flexWrap: 'wrap' }}>
           {categories.map((cat) => (
