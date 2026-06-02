@@ -46,6 +46,10 @@ export async function GET(request: NextRequest) {
     );
     return NextResponse.json({ success: true, data: rows });
   } catch (err) {
+    // 마이그레이션 미적용 시 테이블이 없으면 빈 이력 반환
+    if ((err as { code?: string }).code === '42P01') {
+      return NextResponse.json({ success: true, data: [] });
+    }
     console.error('[rg-shipments GET]', err);
     return NextResponse.json({ success: false, error: '서버 오류' }, { status: 500 });
   }
