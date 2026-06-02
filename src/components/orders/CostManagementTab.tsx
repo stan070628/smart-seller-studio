@@ -230,7 +230,6 @@ export default function CostManagementTab() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showRgModal, setShowRgModal] = useState(false);
   const [showRgHistory, setShowRgHistory] = useState(false);
-  const rgBtnGroupRef = useRef<HTMLDivElement>(null);
   const [importingAll, setImportingAll] = useState(false);
   const [settingUpVariants, setSettingUpVariants] = useState(false);
   const [editChannelId, setEditChannelId] = useState<string | null>(null);
@@ -704,10 +703,10 @@ export default function CostManagementTab() {
         >
           <Truck size={13} /> 배송비 그룹 생성
         </button>
-        <div ref={rgBtnGroupRef} style={{ position: 'relative', display: 'flex', borderRadius: '8px', overflow: 'hidden', border: '1px solid #bae6fd' }}>
+        <div style={{ position: 'relative', display: 'flex', borderRadius: '8px', border: '1px solid #bae6fd' }}>
           <button
             onClick={() => setShowRgModal(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', background: '#fff', color: '#0369a1', border: 'none', fontSize: '12px', cursor: 'pointer' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', background: '#fff', color: '#0369a1', border: 'none', fontSize: '12px', cursor: 'pointer', borderRadius: '8px 0 0 8px' }}
           >
             <Package size={13} /> 로켓그로스 입고 등록
           </button>
@@ -718,6 +717,7 @@ export default function CostManagementTab() {
               background: showRgHistory ? '#e0f2fe' : '#f0f9ff',
               color: '#0369a1', border: 'none', borderLeft: '1px solid #bae6fd',
               fontSize: '13px', cursor: 'pointer', fontWeight: 700,
+              borderRadius: '0 8px 8px 0',
             }}
             title="입고 이력 보기"
           >
