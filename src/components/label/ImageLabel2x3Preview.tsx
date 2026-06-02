@@ -14,19 +14,21 @@ const CELL_HEIGHT_MM = 99;
 const GRID_STYLE: React.CSSProperties = {
   display: 'grid',
   gridTemplateColumns: `repeat(2, ${CELL_WIDTH_MM}mm)`,
-  gridTemplateRows: 'repeat(3, 1fr)',
+  gridTemplateRows: `repeat(3, ${CELL_HEIGHT_MM}mm)`,
   columnGap: 0,
   rowGap: 0,
   padding: 0,
   width: '210mm',
   height: '297mm',
+  overflow: 'hidden',
   boxSizing: 'border-box' as const,
   background: '#fff',
 };
 
 const CELL_STYLE: React.CSSProperties = {
   width: `${CELL_WIDTH_MM}mm`,
-  height: '100%',
+  height: `${CELL_HEIGHT_MM}mm`,
+  minHeight: 0,
   overflow: 'hidden',
   position: 'relative',
   boxSizing: 'border-box' as const,
