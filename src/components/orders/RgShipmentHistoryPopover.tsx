@@ -90,7 +90,7 @@ export default function RgShipmentHistoryPopover({ onClose }: Props) {
             아직 등록된 입고 이력이 없습니다
           </div>
         )}
-        {events.map((event, idx) => {
+        {!loading && !error && events.map((event, idx) => {
           const totalQty = event.items.reduce((s, i) => s + i.quantity, 0);
           return (
             <div
@@ -121,7 +121,7 @@ export default function RgShipmentHistoryPopover({ onClose }: Props) {
                   ))}
                 </tbody>
               </table>
-              <div style={{ textAlign: 'right', fontSize: '10px', color: '#bae6fd', marginTop: '6px' }}>
+              <div style={{ textAlign: 'right', fontSize: '10px', color: '#71717a', marginTop: '6px' }}>
                 총 {fmt(totalQty)}개
               </div>
             </div>
