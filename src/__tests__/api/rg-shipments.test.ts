@@ -76,4 +76,12 @@ describe('GET /api/cost-management/rg-shipments', () => {
     expect(sql).toMatch(/LIMIT/i);
     expect(params).toContain(5);
   });
+
+  it('limit이 숫자가 아니면 기본값 20을 사용한다', async () => {
+    mockQuery.mockResolvedValue({ rows: [] });
+    const { GET } = await import('@/app/api/cost-management/rg-shipments/route');
+    await GET(makeGetRequest('?limit=abc'));
+    const [, params] = mockQuery.mock.calls[0];
+    expect(params[1]).toBe(20);
+  });
 });

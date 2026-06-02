@@ -15,7 +15,8 @@ export async function GET(request: NextRequest) {
   if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
   const { searchParams } = new URL(request.url);
-  const limit = Math.min(parseInt(searchParams.get('limit') ?? '20', 10), 100);
+  const rawLimit = parseInt(searchParams.get('limit') ?? '20', 10);
+  const limit = Math.min(Number.isNaN(rawLimit) || rawLimit < 1 ? 20 : rawLimit, 100);
 
   const pool = getSourcingPool();
   try {
