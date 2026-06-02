@@ -14,7 +14,7 @@ CREATE INDEX IF NOT EXISTS idx_rg_shipment_events_user
 
 CREATE TABLE IF NOT EXISTS rg_shipment_event_items (
   id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  shipment_event_id uuid REFERENCES rg_shipment_events(id) ON DELETE CASCADE,
+  shipment_event_id uuid NOT NULL REFERENCES rg_shipment_events(id) ON DELETE CASCADE,
   product_cost_id   uuid NOT NULL,
   product_name      text NOT NULL,
   quantity          integer NOT NULL CHECK (quantity > 0),
