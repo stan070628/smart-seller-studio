@@ -184,11 +184,15 @@ export async function POST(request: NextRequest) {
     const eventId = eventRows[0].id as string;
 
     for (const item of items as RgShipmentItem[]) {
+      const productName = productNames.get(item.product_cost_id);
+      if (!productName) {
+        throw new Error(`product_name missing for ${item.product_cost_id}`);
+      }
       await client.query(
         `INSERT INTO rg_shipment_event_items
            (shipment_event_id, product_cost_id, product_name, quantity, unit_rg_fee)
          VALUES ($1, $2, $3, $4, $5)`,
-        [eventId, item.product_cost_id, productNames.get(item.product_cost_id) ?? '', item.quantity, item.unit_rg_fee],
+        [eventId, item.product_cost_id, productName, item.quantity, item.unit_rg_fee],
       );
     }
 

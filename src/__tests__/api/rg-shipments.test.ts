@@ -144,6 +144,15 @@ describe('POST /api/cost-management/rg-shipments — 이벤트 저장', () => {
     const allSql = mockClient.query.mock.calls.map(([sql]: [string]) => sql);
     expect(allSql.some((s) => /INSERT INTO rg_shipment_events/i.test(s))).toBe(true);
     expect(allSql.some((s) => /INSERT INTO rg_shipment_event_items/i.test(s))).toBe(true);
+
+    const itemsInsertCall = mockClient.query.mock.calls.find(
+      ([sql]: [string]) => /INSERT INTO rg_shipment_event_items/i.test(sql)
+    );
+    expect(itemsInsertCall).toBeDefined();
+    const itemsParams = itemsInsertCall![1];
+    expect(itemsParams[2]).toBe('상품A'); // product_name
+
+    expect(mockClient.release).toHaveBeenCalledTimes(1);
   });
 
   it('INSERT 실패 시 트랜잭션 롤백됨', async () => {
@@ -169,5 +178,6 @@ describe('POST /api/cost-management/rg-shipments — 이벤트 저장', () => {
     expect(res.status).toBe(500);
     const allSql = mockClient.query.mock.calls.map(([sql]: [string]) => sql);
     expect(allSql.some((s) => /ROLLBACK/i.test(s))).toBe(true);
+    expect(mockClient.release).toHaveBeenCalledTimes(1);
   });
 });
