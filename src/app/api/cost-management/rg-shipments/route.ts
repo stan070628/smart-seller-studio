@@ -182,6 +182,7 @@ export async function POST(request: NextRequest) {
     await client.query('COMMIT');
 
     // FIFO 완료 후 별도로 이벤트 기록 (트랜잭션 밖 — 실패해도 FIFO에 영향 없음)
+    let _debugEventErr: string | null = null;
     try {
       const { rows: eventRows } = await pool.query(
         `INSERT INTO rg_shipment_events (user_id, shipped_at, total_shipping_fee)
@@ -202,9 +203,10 @@ export async function POST(request: NextRequest) {
       }
     } catch (eventErr) {
       console.warn('[rg-shipments] 이벤트 기록 실패', eventErr);
+      _debugEventErr = eventErr instanceof Error ? eventErr.message : String(eventErr);
     }
 
-    return NextResponse.json({ success: true, data: { affected_entries: affectedEntries, split_entries: splitEntries } });
+    return NextResponse.json({ success: true, data: { affected_entries: affectedEntries, split_entries: splitEntries }, _debug: _debugEventErr });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('[rg-shipments]', err);
