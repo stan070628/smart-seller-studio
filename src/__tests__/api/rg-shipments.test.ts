@@ -155,8 +155,8 @@ describe('POST /api/cost-management/rg-shipments — 이벤트 저장', () => {
     expect(mockClient.release).toHaveBeenCalledTimes(1);
   });
 
-  it('INSERT 실패 시 트랜잭션 롤백됨', async () => {
-    // INSERT rg_shipment_events에서 에러 발생
+  it('이벤트 INSERT 실패 시에도 FIFO는 COMMIT됨 (non-fatal)', async () => {
+    // INSERT rg_shipment_events에서 에러 발생해도 COMMIT은 정상 진행
     mockClient.query.mockReset();
     mockClient.query
       .mockResolvedValueOnce({})                                                  // BEGIN
@@ -165,7 +165,7 @@ describe('POST /api/cost-management/rg-shipments — 이벤트 저장', () => {
       .mockResolvedValueOnce({ rows: [{ id: 'entry-uuid-1', quantity: 100 }] })
       .mockResolvedValueOnce({})                                                  // UPDATE cost_entries
       .mockRejectedValueOnce(new Error('DB error'))                              // INSERT rg_shipment_events 실패
-      .mockResolvedValueOnce({});                                                 // ROLLBACK
+      .mockResolvedValueOnce({});                                                 // COMMIT
 
     const { POST } = await import('@/app/api/cost-management/rg-shipments/route');
     const res = await POST(
@@ -175,9 +175,10 @@ describe('POST /api/cost-management/rg-shipments — 이벤트 저장', () => {
         items: [{ product_cost_id: 'prod-uuid', quantity: 100, unit_rg_fee: 152 }],
       })
     );
-    expect(res.status).toBe(500);
+    // 이벤트 기록 실패해도 FIFO 처리는 성공 → 200 반환
+    expect(res.status).toBe(200);
     const allSql = mockClient.query.mock.calls.map(([sql]: [string]) => sql);
-    expect(allSql.some((s) => /ROLLBACK/i.test(s))).toBe(true);
+    expect(allSql.some((s) => /COMMIT/i.test(s))).toBe(true);
     expect(mockClient.release).toHaveBeenCalledTimes(1);
   });
 });
