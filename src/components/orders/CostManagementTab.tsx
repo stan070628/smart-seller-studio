@@ -6,6 +6,7 @@ import CostEntryDrawer from './CostEntryDrawer';
 import ShippingGroupModal from './ShippingGroupModal';
 import AddProductModal from './AddProductModal';
 import RocketGrowthShipmentModal from './RocketGrowthShipmentModal';
+import RgShipmentHistoryPopover from './RgShipmentHistoryPopover';
 import { WinnerBadge } from '@/components/ui';
 
 function VariantStockBreakdown({
@@ -228,6 +229,8 @@ export default function CostManagementTab() {
   const [showShippingModal, setShowShippingModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showRgModal, setShowRgModal] = useState(false);
+  const [showRgHistory, setShowRgHistory] = useState(false);
+  const rgBtnGroupRef = useRef<HTMLDivElement>(null);
   const [importingAll, setImportingAll] = useState(false);
   const [settingUpVariants, setSettingUpVariants] = useState(false);
   const [editChannelId, setEditChannelId] = useState<string | null>(null);
@@ -247,6 +250,8 @@ export default function CostManagementTab() {
   const [rgInventoryLoading, setRgInventoryLoading] = useState(false);
   const [editingAdSpendId, setEditingAdSpendId] = useState<string | null>(null);
   const [editingAdSpendValue, setEditingAdSpendValue] = useState('');
+
+  const handleCloseRgHistory = useCallback(() => setShowRgHistory(false), []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -699,12 +704,29 @@ export default function CostManagementTab() {
         >
           <Truck size={13} /> 배송비 그룹 생성
         </button>
-        <button
-          onClick={() => setShowRgModal(true)}
-          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', background: '#fff', color: '#0369a1', border: '1px solid #bae6fd', fontSize: '12px', cursor: 'pointer' }}
-        >
-          <Package size={13} /> 로켓그로스 입고 등록
-        </button>
+        <div ref={rgBtnGroupRef} style={{ position: 'relative', display: 'flex', borderRadius: '8px', overflow: 'hidden', border: '1px solid #bae6fd' }}>
+          <button
+            onClick={() => setShowRgModal(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', background: '#fff', color: '#0369a1', border: 'none', fontSize: '12px', cursor: 'pointer' }}
+          >
+            <Package size={13} /> 로켓그로스 입고 등록
+          </button>
+          <button
+            onClick={() => setShowRgHistory((prev) => !prev)}
+            style={{
+              padding: '8px 10px',
+              background: showRgHistory ? '#e0f2fe' : '#f0f9ff',
+              color: '#0369a1', border: 'none', borderLeft: '1px solid #bae6fd',
+              fontSize: '13px', cursor: 'pointer', fontWeight: 700,
+            }}
+            title="입고 이력 보기"
+          >
+            🕐
+          </button>
+          {showRgHistory && (
+            <RgShipmentHistoryPopover onClose={handleCloseRgHistory} />
+          )}
+        </div>
         <button
           onClick={runAllBulkImport}
           disabled={importingAll}
