@@ -10,6 +10,46 @@ interface RgShipmentItem {
   unit_rg_fee: number;
 }
 
+export async function GET(request: NextRequest) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+
+  const { searchParams } = new URL(request.url);
+  const limit = Math.min(parseInt(searchParams.get('limit') ?? '20', 10), 100);
+
+  const pool = getSourcingPool();
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         e.id,
+         e.shipped_at::text,
+         e.total_shipping_fee,
+         e.created_at,
+         COALESCE(
+           json_agg(
+             json_build_object(
+               'product_name', i.product_name,
+               'quantity',     i.quantity,
+               'unit_rg_fee',  i.unit_rg_fee
+             ) ORDER BY i.product_name
+           ) FILTER (WHERE i.id IS NOT NULL),
+           '[]'
+         ) AS items
+       FROM rg_shipment_events e
+       LEFT JOIN rg_shipment_event_items i ON i.shipment_event_id = e.id
+       WHERE e.user_id = $1
+       GROUP BY e.id
+       ORDER BY e.shipped_at DESC, e.created_at DESC
+       LIMIT $2`,
+      [user.userId, limit],
+    );
+    return NextResponse.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('[rg-shipments GET]', err);
+    return NextResponse.json({ success: false, error: '서버 오류' }, { status: 500 });
+  }
+}
+
 export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
