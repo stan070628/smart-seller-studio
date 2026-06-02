@@ -99,36 +99,33 @@ function makePostRequest(body: unknown): NextRequest {
 
 describe('POST /api/cost-management/rg-shipments — 이벤트 저장', () => {
   let mockClient: { query: ReturnType<typeof vi.fn>; release: ReturnType<typeof vi.fn> };
+  let mockPoolQuery: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetCurrentUser.mockResolvedValue({ userId: 'user-uuid-123', email: 'test@example.com' });
 
-    mockClient = {
-      query: vi.fn(),
-      release: vi.fn(),
-    };
+    mockClient = { query: vi.fn(), release: vi.fn() };
+    mockPoolQuery = vi.fn();
 
-    // 쿼리 순서:
-    // 0: BEGIN
-    // 1: ownerCheck (id + product_name)
-    // 2: stockRows
-    // 3: batches
-    // 4: UPDATE cost_entries (FIFO — 단일 배치 전량 소진)
-    // 5: INSERT rg_shipment_events → event id 반환
-    // 6: INSERT rg_shipment_event_items
-    // 7: COMMIT
+    // client.query 순서: BEGIN / ownerCheck / stockRows / batches / UPDATE / COMMIT
     mockClient.query
-      .mockResolvedValueOnce({})                                                  // BEGIN
+      .mockResolvedValueOnce({})                                                   // BEGIN
       .mockResolvedValueOnce({ rows: [{ id: 'prod-uuid', product_name: '상품A' }] }) // ownerCheck
-      .mockResolvedValueOnce({ rows: [{ total_stock: 100 }] })                    // stockRows
-      .mockResolvedValueOnce({ rows: [{ id: 'entry-uuid-1', quantity: 100 }] })  // batches
-      .mockResolvedValueOnce({})                                                  // UPDATE cost_entries
-      .mockResolvedValueOnce({ rows: [{ id: 'event-uuid-1' }] })                 // INSERT rg_shipment_events
-      .mockResolvedValueOnce({})                                                  // INSERT rg_shipment_event_items
-      .mockResolvedValueOnce({});                                                 // COMMIT
+      .mockResolvedValueOnce({ rows: [{ total_stock: 100 }] })                     // stockRows
+      .mockResolvedValueOnce({ rows: [{ id: 'entry-uuid-1', quantity: 100 }] })   // batches
+      .mockResolvedValueOnce({})                                                   // UPDATE cost_entries
+      .mockResolvedValueOnce({});                                                  // COMMIT
 
-    mockGetPool.mockReturnValue({ connect: vi.fn().mockResolvedValue(mockClient) });
+    // pool.query 순서: INSERT rg_shipment_events / INSERT rg_shipment_event_items
+    mockPoolQuery
+      .mockResolvedValueOnce({ rows: [{ id: 'event-uuid-1' }] })   // INSERT rg_shipment_events
+      .mockResolvedValueOnce({});                                    // INSERT rg_shipment_event_items
+
+    mockGetPool.mockReturnValue({
+      connect: vi.fn().mockResolvedValue(mockClient),
+      query: mockPoolQuery,
+    });
   });
 
   it('유효한 요청 시 rg_shipment_events에 INSERT됨', async () => {
@@ -141,31 +138,22 @@ describe('POST /api/cost-management/rg-shipments — 이벤트 저장', () => {
       })
     );
     expect(res.status).toBe(200);
-    const allSql = mockClient.query.mock.calls.map(([sql]: [string]) => sql);
-    expect(allSql.some((s) => /INSERT INTO rg_shipment_events/i.test(s))).toBe(true);
-    expect(allSql.some((s) => /INSERT INTO rg_shipment_event_items/i.test(s))).toBe(true);
 
-    const itemsInsertCall = mockClient.query.mock.calls.find(
-      ([sql]: [string]) => /INSERT INTO rg_shipment_event_items/i.test(sql)
-    );
-    expect(itemsInsertCall).toBeDefined();
-    const itemsParams = itemsInsertCall![1];
-    expect(itemsParams[2]).toBe('상품A'); // product_name
+    // 이벤트 INSERT는 pool.query로 실행됨
+    const poolSqlCalls = mockPoolQuery.mock.calls.map(([sql]: [string]) => sql);
+    expect(poolSqlCalls.some((s) => /INSERT INTO rg_shipment_events/i.test(s))).toBe(true);
+    expect(poolSqlCalls.some((s) => /INSERT INTO rg_shipment_event_items/i.test(s))).toBe(true);
+
+    // product_name 파라미터 검증
+    const itemsCall = mockPoolQuery.mock.calls.find(([sql]: [string]) => /INSERT INTO rg_shipment_event_items/i.test(sql));
+    expect(itemsCall![1][2]).toBe('상품A');
 
     expect(mockClient.release).toHaveBeenCalledTimes(1);
   });
 
   it('이벤트 INSERT 실패 시에도 FIFO는 COMMIT됨 (non-fatal)', async () => {
-    // INSERT rg_shipment_events에서 에러 발생해도 COMMIT은 정상 진행
-    mockClient.query.mockReset();
-    mockClient.query
-      .mockResolvedValueOnce({})                                                  // BEGIN
-      .mockResolvedValueOnce({ rows: [{ id: 'prod-uuid', product_name: '상품A' }] })
-      .mockResolvedValueOnce({ rows: [{ total_stock: 100 }] })
-      .mockResolvedValueOnce({ rows: [{ id: 'entry-uuid-1', quantity: 100 }] })
-      .mockResolvedValueOnce({})                                                  // UPDATE cost_entries
-      .mockRejectedValueOnce(new Error('DB error'))                              // INSERT rg_shipment_events 실패
-      .mockResolvedValueOnce({});                                                 // COMMIT
+    mockPoolQuery.mockReset();
+    mockPoolQuery.mockRejectedValueOnce(new Error('DB error')); // INSERT rg_shipment_events 실패
 
     const { POST } = await import('@/app/api/cost-management/rg-shipments/route');
     const res = await POST(
@@ -175,10 +163,10 @@ describe('POST /api/cost-management/rg-shipments — 이벤트 저장', () => {
         items: [{ product_cost_id: 'prod-uuid', quantity: 100, unit_rg_fee: 152 }],
       })
     );
-    // 이벤트 기록 실패해도 FIFO 처리는 성공 → 200 반환
+    // 이벤트 기록 실패해도 FIFO는 이미 COMMIT → 200 반환
     expect(res.status).toBe(200);
-    const allSql = mockClient.query.mock.calls.map(([sql]: [string]) => sql);
-    expect(allSql.some((s) => /COMMIT/i.test(s))).toBe(true);
+    const clientSqlCalls = mockClient.query.mock.calls.map(([sql]: [string]) => sql);
+    expect(clientSqlCalls.some((s) => /COMMIT/i.test(s))).toBe(true);
     expect(mockClient.release).toHaveBeenCalledTimes(1);
   });
 });

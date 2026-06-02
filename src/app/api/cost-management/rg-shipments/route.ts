@@ -179,32 +179,31 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 입고 이벤트 기록 (테이블 미생성 시 경고만 남기고 COMMIT 계속 진행)
+    await client.query('COMMIT');
+
+    // FIFO 완료 후 별도로 이벤트 기록 (트랜잭션 밖 — 실패해도 FIFO에 영향 없음)
     try {
-      const { rows: eventRows } = await client.query(
+      const { rows: eventRows } = await pool.query(
         `INSERT INTO rg_shipment_events (user_id, shipped_at, total_shipping_fee)
          VALUES ($1, $2, $3) RETURNING id`,
         [user.userId, shipped_at, total_shipping_fee],
       );
       const eventId = eventRows[0].id as string;
-
       for (const item of items as RgShipmentItem[]) {
         const productName = productNames.get(item.product_cost_id);
-        if (!productName) {
-          throw new Error(`product_name missing for ${item.product_cost_id}`);
+        if (productName) {
+          await pool.query(
+            `INSERT INTO rg_shipment_event_items
+               (shipment_event_id, product_cost_id, product_name, quantity, unit_rg_fee)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [eventId, item.product_cost_id, productName, item.quantity, item.unit_rg_fee],
+          );
         }
-        await client.query(
-          `INSERT INTO rg_shipment_event_items
-             (shipment_event_id, product_cost_id, product_name, quantity, unit_rg_fee)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [eventId, item.product_cost_id, productName, item.quantity, item.unit_rg_fee],
-        );
       }
     } catch (eventErr) {
-      console.warn('[rg-shipments] 이벤트 기록 실패 (마이그레이션 미적용?)', eventErr);
+      console.warn('[rg-shipments] 이벤트 기록 실패', eventErr);
     }
 
-    await client.query('COMMIT');
     return NextResponse.json({ success: true, data: { affected_entries: affectedEntries, split_entries: splitEntries } });
   } catch (err) {
     await client.query('ROLLBACK');
