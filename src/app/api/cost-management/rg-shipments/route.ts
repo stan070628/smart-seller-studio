@@ -104,6 +104,7 @@ export async function POST(request: NextRequest) {
   try {
     await client.query('BEGIN');
 
+    const productNames = new Map<string, string>();
     let affectedEntries = 0;
     let splitEntries = 0;
 
@@ -112,13 +113,14 @@ export async function POST(request: NextRequest) {
 
       // 소유권 확인
       const { rows: ownerCheck } = await client.query(
-        `SELECT id FROM product_costs WHERE id = $1 AND user_id = $2`,
+        `SELECT id, product_name FROM product_costs WHERE id = $1 AND user_id = $2`,
         [product_cost_id, user.userId],
       );
       if (ownerCheck.length === 0) {
         await client.query('ROLLBACK');
         return NextResponse.json({ success: false, error: `product_cost_id ${product_cost_id} not found` }, { status: 404 });
       }
+      productNames.set(product_cost_id, ownerCheck[0].product_name as string);
 
       // 현재 재고 확인
       const { rows: stockRows } = await client.query(
@@ -171,6 +173,23 @@ export async function POST(request: NextRequest) {
           splitEntries++;
         }
       }
+    }
+
+    // 입고 이벤트 기록
+    const { rows: eventRows } = await client.query(
+      `INSERT INTO rg_shipment_events (user_id, shipped_at, total_shipping_fee)
+       VALUES ($1, $2, $3) RETURNING id`,
+      [user.userId, shipped_at, total_shipping_fee],
+    );
+    const eventId = eventRows[0].id as string;
+
+    for (const item of items as RgShipmentItem[]) {
+      await client.query(
+        `INSERT INTO rg_shipment_event_items
+           (shipment_event_id, product_cost_id, product_name, quantity, unit_rg_fee)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [eventId, item.product_cost_id, productNames.get(item.product_cost_id) ?? '', item.quantity, item.unit_rg_fee],
+      );
     }
 
     await client.query('COMMIT');
