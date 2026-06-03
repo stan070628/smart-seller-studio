@@ -72,15 +72,12 @@ export async function hasWatermarkCandidate(buffer: Buffer): Promise<boolean> {
 
 /**
  * 이미지 우측 하단의 Gemini 워터마크를 제거합니다.
- * hasWatermarkCandidate()로 먼저 감지한 뒤, 감지된 경우에만 Stability AI를 호출합니다.
- * API 키 미설정, 워터마크 미감지, 호출 실패 시 원본 버퍼를 그대로 반환합니다.
+ * STABILITY_API_KEY가 설정된 경우 항상 Stability AI를 호출합니다.
+ * API 키 미설정 또는 호출 실패 시 원본 버퍼를 그대로 반환합니다.
  */
 export async function removeGeminiWatermark(buffer: Buffer): Promise<Buffer> {
   const apiKey = process.env.STABILITY_API_KEY;
   if (!apiKey) return buffer;
-
-  const detected = await hasWatermarkCandidate(buffer);
-  if (!detected) return buffer;
 
   try {
     return await inpaintWithStabilityAI(buffer, apiKey);

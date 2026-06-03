@@ -112,8 +112,7 @@ describe('removeGeminiWatermark — Stability AI 인페인팅 경로', () => {
   it('STABILITY_API_KEY가 설정되면 Stability AI API를 호출하고 결과를 반환한다', async () => {
     mockFetch.mockResolvedValue(new Response(FAKE_RESULT, { status: 200 }));
 
-    // 워터마크 감지가 true를 반환하는 이미지 사용
-    const input = await makeWatermarkedImage(200, 200);
+    const input = await makeTestImage({ width: 200, height: 200 });
     const result = await removeGeminiWatermark(input);
 
     expect(mockFetch).toHaveBeenCalledOnce();
@@ -125,7 +124,7 @@ describe('removeGeminiWatermark — Stability AI 인페인팅 경로', () => {
   it('Stability AI API가 실패(401)하면 원본 버퍼를 반환한다 (이미지 수정 없음)', async () => {
     mockFetch.mockResolvedValue(new Response('Unauthorized', { status: 401 }));
 
-    const input = await makeWatermarkedImage(200, 200);
+    const input = await makeTestImage({ width: 200, height: 200 });
     const result = await removeGeminiWatermark(input);
 
     expect(result).toBe(input);
@@ -161,7 +160,7 @@ describe('removeGeminiWatermark — Stability AI 인페인팅 경로', () => {
   it('Stability AI 요청에 Bearer 형식의 Authorization 헤더가 포함된다', async () => {
     mockFetch.mockResolvedValue(new Response(FAKE_RESULT, { status: 200 }));
 
-    const input = await makeWatermarkedImage(200, 200);
+    const input = await makeTestImage({ width: 200, height: 200 });
     await removeGeminiWatermark(input);
 
     const [, requestInit] = mockFetch.mock.calls[0] as [string, RequestInit];
