@@ -8,6 +8,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { LookupResult } from '@/app/api/sourcing/costco/lookup/route';
 import type { NaverCompareResponse } from '@/app/api/sourcing/costco/naver-compare/route';
+import { calcCostcoPrice, PACKING_COST } from '@/lib/sourcing/costco-pricing';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Props
@@ -146,6 +147,36 @@ export default function MobileCodeSearchCard({ code, onClose }: Props) {
   // 입력된 오프라인 가격을 정수로 파싱
   const offlinePriceNum = Number(offlinePrice);
   const isValidPrice = !isNaN(offlinePriceNum) && offlinePriceNum > 0;
+
+  // 오프라인가 기반 weightKg 파생 (LookupResult 필드 기준)
+  const offlineWeightKg =
+    product?.unitType === 'weight' &&
+    product.totalQuantity !== null &&
+    product.totalQuantity > 0
+      ? product.totalQuantity / 1000
+      : null;
+
+  const naverRec = isValidPrice && product
+    ? calcCostcoPrice({
+        buyPrice: offlinePriceNum,
+        packQty: 1,
+        categoryName: product.categoryName ?? null,
+        channel: 'naver',
+        weightKg: offlineWeightKg,
+        targetRate: 0.2,
+      })
+    : null;
+
+  const coupangRec = isValidPrice && product
+    ? calcCostcoPrice({
+        buyPrice: offlinePriceNum,
+        packQty: 1,
+        categoryName: product.categoryName ?? null,
+        channel: 'coupang',
+        weightKg: offlineWeightKg,
+        targetRate: 0.2,
+      })
+    : null;
 
   // ── 로딩 상태 ────────────────────────────────────────────────────────────
 
@@ -290,6 +321,63 @@ export default function MobileCodeSearchCard({ code, onClose }: Props) {
             <div style={{ marginTop: 6, fontSize: 10, color: '#9ca3af' }}>
               온라인과 다른 실제 매장 가격을 입력하세요
             </div>
+            {/* 추천 판매가 블록 — isValidPrice일 때만 표시 */}
+            {naverRec && coupangRec && (
+              <div style={{
+                marginTop: 10,
+                background: '#f0fdf4',
+                borderRadius: 8,
+                padding: '10px 12px',
+                border: '1px solid #bbf7d0',
+              }}>
+                {/* 블록 제목 */}
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#16a34a', marginBottom: 8, letterSpacing: '0.3px' }}>
+                  추천 판매가 (마진 20%)
+                </div>
+
+                {/* 네이버·쿠팡 2열 */}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {/* 네이버 */}
+                  <div style={{
+                    flex: 1, background: '#fff', borderRadius: 6, padding: '8px 10px',
+                    border: '1px solid #e5e7eb',
+                  }}>
+                    <div style={{ fontSize: 10, color: '#03c75a', fontWeight: 700, marginBottom: 4 }}>네이버 쇼핑</div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: '#1a1c1c' }}>
+                      {naverRec.recommendedPrice.toLocaleString('ko-KR')}원
+                    </div>
+                    <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>
+                      마진율 <span style={{ color: '#16a34a', fontWeight: 700 }}>{naverRec.realMarginRate.toFixed(1)}%</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#6b7280' }}>
+                      순이익 <span style={{ color: '#1a1c1c', fontWeight: 600 }}>{naverRec.netProfit.toLocaleString('ko-KR')}원</span>
+                    </div>
+                  </div>
+
+                  {/* 쿠팡 */}
+                  <div style={{
+                    flex: 1, background: '#fff', borderRadius: 6, padding: '8px 10px',
+                    border: '1px solid #e5e7eb',
+                  }}>
+                    <div style={{ fontSize: 10, color: '#e52222', fontWeight: 700, marginBottom: 4 }}>쿠팡</div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: '#1a1c1c' }}>
+                      {coupangRec.recommendedPrice.toLocaleString('ko-KR')}원
+                    </div>
+                    <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>
+                      마진율 <span style={{ color: '#16a34a', fontWeight: 700 }}>{coupangRec.realMarginRate.toFixed(1)}%</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#6b7280' }}>
+                      순이익 <span style={{ color: '#1a1c1c', fontWeight: 600 }}>{coupangRec.netProfit.toLocaleString('ko-KR')}원</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 배송비·포장비 안내 */}
+                <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 8 }}>
+                  배송비 {naverRec.shippingCost.toLocaleString('ko-KR')}원 + 포장비 {PACKING_COST.toLocaleString('ko-KR')}원 포함
+                </div>
+              </div>
+            )}
           </div>
         </>
       ) : (
