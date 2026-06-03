@@ -194,3 +194,32 @@ describe('calcRecommendedPrice — 하위 호환 래퍼', () => {
     expect(legacy.vsMarket).toBe(v2.vsMarket);
   });
 });
+
+describe('calcCostcoPrice — targetRate override', () => {
+  it('targetRate: 0.2 전달 시 realMarginRate ≈ 20% (±2%p 허용)', () => {
+    const r = calcCostcoPrice({
+      buyPrice: 20000,
+      packQty: 1,
+      categoryName: '식품',   // 기본 카테고리 마진율 13%
+      channel: 'naver',
+      targetRate: 0.2,         // override
+    });
+    // 목표 마진 20% → realMarginRate 는 추천가 역산 후 실제 계산이므로 근사
+    expect(r.realMarginRate).toBeGreaterThanOrEqual(18);
+    expect(r.realMarginRate).toBeLessThanOrEqual(22);
+  });
+
+  it('targetRate: 0.2 는 카테고리 기본값(13%)보다 높은 추천가를 만든다', () => {
+    const base = { buyPrice: 20000, packQty: 1, categoryName: '식품', channel: 'naver' as const };
+    const withOverride    = calcCostcoPrice({ ...base, targetRate: 0.2 });
+    const withoutOverride = calcCostcoPrice({ ...base });
+    expect(withOverride.recommendedPrice).toBeGreaterThan(withoutOverride.recommendedPrice);
+  });
+
+  it('targetRate 미전달 시 기존 동작 유지 (하위 호환)', () => {
+    const r1 = calcCostcoPrice({ buyPrice: 20000, packQty: 1, categoryName: '생활용품', channel: 'naver' });
+    const r2 = calcCostcoPrice({ buyPrice: 20000, packQty: 1, categoryName: '생활용품', channel: 'naver', targetRate: undefined });
+    expect(r1.recommendedPrice).toBe(r2.recommendedPrice);
+    expect(r1.netProfit).toBe(r2.netProfit);
+  });
+});

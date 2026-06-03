@@ -114,6 +114,8 @@ export interface CostcoPriceInput {
   packingCost?: number | null;
   /** 시장 최저가 (null이면 vsMarket 계산 불가) */
   marketPrice?: number | null;
+  /** 목표 마진율 override (0~1). 미전달 시 카테고리 기본값 적용 */
+  targetRate?: number;
 }
 
 export interface CostcoPriceResult {
@@ -152,12 +154,24 @@ export function calcCostcoPrice(input: CostcoPriceInput): CostcoPriceResult {
   const packing    = input.packingCost ?? PACKING_COST;
   const totalCost  = buyPrice + shipping + packing;
 
-  const targetRate   = CATEGORY_TARGET_RATES[categoryName ?? ''] ?? COSTCO_TARGET_MARGIN_RATE;
-  const targetProfit = Math.max(Math.floor(totalCost * targetRate), 2000);
-
   const deductionRate = 1 - CHANNEL_FEE[channel] - VAT_RATE;
-  const raw = (totalCost + targetProfit) / deductionRate;
-  const recommendedPrice = Math.round(raw / 100) * 100;
+
+  let recommendedPrice: number;
+
+  if (input.targetRate !== undefined) {
+    // targetRate override: 판매가 기준 목표 마진율로 역산
+    // realMarginRate = netProfit / recommendedPrice = (recommendedPrice × deductionRate - totalCost) / recommendedPrice = deductionRate - totalCost/recommendedPrice
+    // 따라서: recommendedPrice = totalCost / (deductionRate - targetRate)
+    const overrideRate = input.targetRate;
+    const raw = totalCost / (deductionRate - overrideRate);
+    recommendedPrice = Math.round(raw / 100) * 100;
+  } else {
+    // 카테고리 기본값: 원가 대비 목표이익 방식
+    const categoryRate = CATEGORY_TARGET_RATES[categoryName ?? ''] ?? COSTCO_TARGET_MARGIN_RATE;
+    const targetProfit = Math.max(Math.floor(totalCost * categoryRate), 2000);
+    const raw = (totalCost + targetProfit) / deductionRate;
+    recommendedPrice = Math.round(raw / 100) * 100;
+  }
 
   const safePackQty  = Math.max(packQty, 1);
   const perUnitPrice = Math.round(recommendedPrice / safePackQty / 10) * 10;
