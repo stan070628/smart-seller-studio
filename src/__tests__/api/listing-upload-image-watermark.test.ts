@@ -3,9 +3,8 @@
  * POST /api/listing/upload-image — 워터마크 제거 연동 테스트
  *
  * 검증 대상:
- *   1. usageContext === 'listing_detail' 일 때 removeGeminiWatermark 가 호출된다
- *   2. usageContext === 'listing_thumbnail' 일 때도 removeGeminiWatermark 가 호출된다
- *      (썸네일이 상세페이지 생성 fallback으로 쓰이므로 컨텍스트 무관 적용)
+ *   1. removeWatermark=true 일 때만 removeGeminiWatermark 가 호출된다
+ *   2. removeWatermark 없거나 false 이면 호출되지 않는다 (일반 이미지 보호)
  *   3. removeGeminiWatermark 가 throw 해도 업로드는 성공(non-fatal)한다
  */
 
@@ -114,13 +113,17 @@ function makeMinimalJpegBuffer(): Buffer {
  * jsdom 환경에서 실제 multipart 파싱이 불가하므로
  * formData() 메서드를 spyOn으로 대체합니다.
  */
-function makeUploadRequest(usageContext: 'listing_thumbnail' | 'listing_detail'): NextRequest {
+function makeUploadRequest(
+  usageContext: 'listing_thumbnail' | 'listing_detail',
+  removeWatermark = false,
+): NextRequest {
   const jpegBuffer = makeMinimalJpegBuffer()
   const file = new File([new Uint8Array(jpegBuffer)], 'test.jpg', { type: 'image/jpeg' })
 
   const formData = new FormData()
   formData.append('file', file)
   formData.append('usageContext', usageContext)
+  formData.append('removeWatermark', String(removeWatermark))
 
   const request = new NextRequest('http://localhost:3000/api/listing/upload-image', {
     method: 'POST',
@@ -146,8 +149,8 @@ describe('POST /api/listing/upload-image — 워터마크 제거 연동', () => 
 
   // ── 테스트 1 ──────────────────────────────────────────────────────────────
 
-  it('listing_detail 컨텍스트로 업로드하면 removeGeminiWatermark 가 1회 호출된다', async () => {
-    const request = makeUploadRequest('listing_detail')
+  it('removeWatermark=true 이면 removeGeminiWatermark 가 1회 호출된다', async () => {
+    const request = makeUploadRequest('listing_detail', true)
 
     const response = await POST(request)
     const json = await response.json()
@@ -159,29 +162,27 @@ describe('POST /api/listing/upload-image — 워터마크 제거 연동', () => 
 
   // ── 테스트 2 ──────────────────────────────────────────────────────────────
 
-  it('listing_thumbnail 컨텍스트로 업로드해도 removeGeminiWatermark 가 1회 호출된다', async () => {
-    const request = makeUploadRequest('listing_thumbnail')
+  it('removeWatermark=false(기본값) 이면 removeGeminiWatermark 가 호출되지 않는다', async () => {
+    const request = makeUploadRequest('listing_detail', false)
 
     const response = await POST(request)
     const json = await response.json()
 
     expect(response.status).toBe(201)
     expect(json.success).toBe(true)
-    expect(removeGeminiWatermarkMock).toHaveBeenCalledTimes(1)
+    expect(removeGeminiWatermarkMock).not.toHaveBeenCalled()
   })
 
   // ── 테스트 3 ──────────────────────────────────────────────────────────────
 
   it('removeGeminiWatermark 가 throw 해도 업로드는 201로 성공한다 (non-fatal)', async () => {
-    // 워터마크 제거 실패 시뮬레이션
     removeGeminiWatermarkMock.mockRejectedValue(new Error('워터마크 제거 실패'))
 
-    const request = makeUploadRequest('listing_detail')
+    const request = makeUploadRequest('listing_detail', true)
 
     const response = await POST(request)
     const json = await response.json()
 
-    // 워터마크 제거 실패에도 업로드 자체는 성공해야 함
     expect(response.status).toBe(201)
     expect(json.success).toBe(true)
     expect(json.data).toHaveProperty('url')

@@ -109,6 +109,7 @@ export default function ImageInputSection({
   );
   const [uploadErrors, setUploadErrors] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [removeWatermark, setRemoveWatermark] = useState(false);
 
   // URL 탭 textarea의 원본 텍스트 (urls 배열과 분리해 관리)
   const [rawUrlText, setRawUrlText] = useState(() => urls.join('\n'));
@@ -159,6 +160,7 @@ export default function ImageInputSection({
         const formData = new FormData();
         formData.append('file', file);
         formData.append('usageContext', usageContext);
+        formData.append('removeWatermark', String(removeWatermark));
 
         try {
           const res = await fetch('/api/listing/upload-image', {
@@ -289,6 +291,19 @@ export default function ImageInputSection({
       {/* ── 파일 업로드 탭 ──────────────────────────────────────────────────── */}
       {activeTab === 'upload' && (
         <div>
+          {/* Gemini 워터마크 제거 옵션 */}
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', userSelect: 'none', marginBottom: '8px' }}>
+            <input
+              type="checkbox"
+              checked={removeWatermark}
+              onChange={(e) => setRemoveWatermark(e.target.checked)}
+              style={{ width: '14px', height: '14px', cursor: 'pointer' }}
+            />
+            <span style={{ fontSize: '12px', color: C.textSub }}>
+              Gemini 생성 이미지 워터마크 제거
+            </span>
+          </label>
+
           <ImageDropZone
             onFilesSelected={handleFilesSelected}
             maxCount={maxCount}
