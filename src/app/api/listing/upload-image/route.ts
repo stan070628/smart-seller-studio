@@ -295,10 +295,11 @@ export async function POST(
     // listing_detail 컨텍스트: Gemini 워터마크 자동 제거
     if (usageContext === 'listing_detail') {
       try {
-        processedBuffer = await removeGeminiWatermark(processedBuffer)
-        processedSize = processedBuffer.length
+        const deWatermarked = await removeGeminiWatermark(processedBuffer)
+        processedBuffer = deWatermarked
+        processedSize = deWatermarked.length
       } catch {
-        // non-fatal — 원본 processedBuffer 유지
+        // non-fatal — processedBuffer / processedSize 그대로 유지
       }
     }
 
