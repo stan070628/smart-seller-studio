@@ -15,49 +15,26 @@ async function makeTestImage(options: {
     .toBuffer();
 }
 
-// ── Sharp fallback 경로 (API 키 없음) ────────────────────────────────────────
+// ── API 키 없음 — 원본 반환 ───────────────────────────────────────────────────
 
-describe('removeGeminiWatermark — Sharp fallback (STABILITY_API_KEY 없음)', () => {
+describe('removeGeminiWatermark — STABILITY_API_KEY 없음', () => {
   beforeEach(() => {
-    vi.unstubAllEnvs(); // API 키 없는 상태 보장
+    delete process.env.STABILITY_API_KEY;
   });
 
-  it('우측 하단 워터마크 영역이 위 영역 픽셀로 덮어씌워진다', async () => {
-    const width = 100;
-    const height = 100;
-    const wmWidth = Math.floor(width * 0.28);  // 28px
-    const wmHeight = Math.floor(height * 0.05); // 5px (커버 영역 7% 안에 포함됨)
-
-    const whiteBg = await makeTestImage({ width, height });
-    const blackPatch = await sharp({
-      create: { width: wmWidth, height: wmHeight, channels: 3, background: { r: 0, g: 0, b: 0 } },
-    })
-      .jpeg()
-      .toBuffer();
-
-    const withWatermark = await sharp(whiteBg)
-      .composite([{ input: blackPatch, left: width - wmWidth, top: height - wmHeight }])
-      .jpeg({ quality: 95 })
-      .toBuffer();
-
-    const result = await removeGeminiWatermark(withWatermark);
-
-    const { data } = await sharp(result)
-      .extract({ left: width - 10, top: height - 3, width: 1, height: 1 })
-      .raw()
-      .toBuffer({ resolveWithObject: true });
-
-    // 원본 흰 이미지(255) 근처여야 함 — JPEG 압축 손실 감안해 > 180
-    expect(data[0]).toBeGreaterThan(180);
+  it('API 키 없으면 원본 버퍼를 그대로 반환한다 (이미지 수정 없음)', async () => {
+    const input = await makeTestImage({ width: 200, height: 200 });
+    const result = await removeGeminiWatermark(input);
+    expect(result).toBe(input);
   });
 
-  it('높이가 40px 미만인 이미지는 원본 버퍼를 그대로 반환한다', async () => {
+  it('높이가 40px 미만인 이미지도 원본 버퍼를 그대로 반환한다', async () => {
     const tinyBuffer = await makeTestImage({ width: 100, height: 30 });
     const result = await removeGeminiWatermark(tinyBuffer);
     expect(result).toBe(tinyBuffer);
   });
 
-  it('손상된 버퍼를 입력하면 예외 없이 원본 버퍼를 반환한다', async () => {
+  it('손상된 버퍼를 입력해도 예외 없이 원본 버퍼를 반환한다', async () => {
     const invalidBuffer = Buffer.from('not-an-image-at-all');
     const result = await removeGeminiWatermark(invalidBuffer);
     expect(result).toBe(invalidBuffer);
@@ -94,13 +71,13 @@ describe('removeGeminiWatermark — Stability AI 인페인팅 경로', () => {
     expect(Buffer.compare(result, FAKE_RESULT)).toBe(0);
   });
 
-  it('Stability AI API가 실패(401)하면 Sharp fallback으로 버퍼를 반환한다', async () => {
+  it('Stability AI API가 실패(401)하면 원본 버퍼를 반환한다 (이미지 수정 없음)', async () => {
     mockFetch.mockResolvedValue(new Response('Unauthorized', { status: 401 }));
 
     const input = await makeTestImage({ width: 200, height: 200 });
     const result = await removeGeminiWatermark(input);
 
-    expect(result).toBeInstanceOf(Buffer);
+    expect(result).toBe(input);
   });
 
   it('STABILITY_API_KEY가 없으면 fetch를 전혀 호출하지 않는다', async () => {
@@ -112,24 +89,22 @@ describe('removeGeminiWatermark — Stability AI 인페인팅 경로', () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it('네트워크 오류(fetch throw)가 발생해도 Sharp fallback으로 유효한 버퍼를 반환한다', async () => {
+  it('네트워크 오류(fetch throw)가 발생하면 원본 버퍼를 반환한다 (이미지 수정 없음)', async () => {
     mockFetch.mockRejectedValue(new Error('network error'));
 
     const input = await makeTestImage({ width: 200, height: 200 });
     const result = await removeGeminiWatermark(input);
 
-    expect(result).toBeInstanceOf(Buffer);
-    expect(result.length).toBeGreaterThan(0);
+    expect(result).toBe(input);
   });
 
-  it('Stability AI가 빈 응답 바디를 반환하면 Sharp fallback으로 유효한 이미지를 반환한다', async () => {
+  it('Stability AI가 빈 응답 바디를 반환하면 원본 버퍼를 반환한다', async () => {
     mockFetch.mockResolvedValue(new Response(new ArrayBuffer(0), { status: 200 }));
 
     const input = await makeTestImage({ width: 200, height: 200 });
     const result = await removeGeminiWatermark(input);
 
-    // 빈 버퍼(length 0)가 아닌 유효한 이미지여야 한다
-    expect(result.length).toBeGreaterThan(100);
+    expect(result).toBe(input);
   });
 
   it('Stability AI 요청에 Bearer 형식의 Authorization 헤더가 포함된다', async () => {

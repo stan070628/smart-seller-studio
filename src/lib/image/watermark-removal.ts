@@ -1,25 +1,25 @@
 import sharp from 'sharp';
 
-const WATERMARK_WIDTH_RATIO = 0.28;
-const WATERMARK_HEIGHT_RATIO = 0.07;
+// Gemini G 로고 실측 기준: 너비 12%, 높이 8% (우측 하단 고정)
+const WATERMARK_WIDTH_RATIO = 0.12;
+const WATERMARK_HEIGHT_RATIO = 0.08;
 const MIN_HEIGHT_PX = 40;
-const BLUR_SIGMA = 3;
 
 /**
  * 이미지 우측 하단의 Gemini 워터마크를 제거합니다.
- * STABILITY_API_KEY 환경변수가 설정된 경우 AI 인페인팅을 사용하고,
- * 없거나 실패하면 Sharp 패치 복사 방식으로 fallback합니다.
+ * STABILITY_API_KEY 환경변수가 설정된 경우에만 AI 인페인팅을 실행합니다.
+ * API 키 미설정이거나 호출 실패 시 원본 버퍼를 그대로 반환합니다
+ * (Sharp 패치 복사는 일반 제품 이미지에 흔적을 남기므로 사용하지 않음).
  */
 export async function removeGeminiWatermark(buffer: Buffer): Promise<Buffer> {
   const apiKey = process.env.STABILITY_API_KEY;
-  if (apiKey) {
-    try {
-      return await inpaintWithStabilityAI(buffer, apiKey);
-    } catch (err) {
-      console.warn('[removeGeminiWatermark] Stability AI 실패, Sharp fallback:', err);
-    }
+  if (!apiKey) return buffer;
+  try {
+    return await inpaintWithStabilityAI(buffer, apiKey);
+  } catch (err) {
+    console.warn('[removeGeminiWatermark] Stability AI 실패, 원본 반환:', err);
+    return buffer;
   }
-  return patchWatermarkWithSharp(buffer);
 }
 
 /** Stability AI Stable Image Edit - Erase 엔드포인트로 워터마크 영역 제거 */
@@ -80,33 +80,3 @@ async function inpaintWithStabilityAI(buffer: Buffer, apiKey: string): Promise<B
   return resultBuffer;
 }
 
-/** Sharp 패치 복사 방식 (API 키 없을 때 fallback) */
-async function patchWatermarkWithSharp(buffer: Buffer): Promise<Buffer> {
-  try {
-    const meta = await sharp(buffer).metadata();
-    const width = meta.width ?? 0;
-    const height = meta.height ?? 0;
-    if (!width || !height || height < MIN_HEIGHT_PX) return buffer;
-
-    const wmWidth = Math.floor(width * WATERMARK_WIDTH_RATIO);
-    const wmHeight = Math.floor(height * WATERMARK_HEIGHT_RATIO);
-    if (wmWidth < 1 || wmHeight < 1) return buffer;
-
-    const wmLeft = width - wmWidth;
-    const wmTop = height - wmHeight;
-    const patchTop = wmTop - wmHeight;
-    if (patchTop < 0) return buffer;
-
-    const patchBuffer = await sharp(buffer)
-      .extract({ left: wmLeft, top: patchTop, width: wmWidth, height: wmHeight })
-      .blur(BLUR_SIGMA)
-      .toBuffer();
-
-    return sharp(buffer)
-      .composite([{ input: patchBuffer, left: wmLeft, top: wmTop }])
-      .toBuffer();
-  } catch (err) {
-    console.warn('[removeGeminiWatermark] Sharp 처리 실패, 원본 반환:', err);
-    return buffer;
-  }
-}
