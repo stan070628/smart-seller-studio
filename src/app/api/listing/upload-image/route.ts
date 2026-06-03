@@ -292,15 +292,13 @@ export async function POST(
       )
     }
 
-    // removeWatermark=true 일 때만 Gemini 워터마크 제거 (기본값: false)
-    if (formData.get("removeWatermark") === "true") {
-      try {
-        const deWatermarked = await removeGeminiWatermark(processedBuffer)
-        processedBuffer = deWatermarked
-        processedSize = deWatermarked.length
-      } catch {
-        // non-fatal — processedBuffer / processedSize 그대로 유지
-      }
+    // Gemini 워터마크 자동 감지 후 제거 (워터마크 없는 이미지는 원본 반환)
+    try {
+      const deWatermarked = await removeGeminiWatermark(processedBuffer)
+      processedBuffer = deWatermarked
+      processedSize = deWatermarked.length
+    } catch {
+      // non-fatal — processedBuffer / processedSize 그대로 유지
     }
 
     // 8. 스토리지 경로 생성

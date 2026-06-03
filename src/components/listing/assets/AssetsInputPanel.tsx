@@ -46,7 +46,6 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
   const [detailUrlInput, setDetailUrlInput] = useState('');
   const [detailUrlLoading, setDetailUrlLoading] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<string | null>(null);
-  const [removeWatermark, setRemoveWatermark] = useState(false);
 
   // 생성 가능 조건: URL 모드면 URL이 있거나, 업로드 모드면 두 슬롯 중 하나라도 채워져야 함
   const canGenerate = !isGenerating && (
@@ -165,7 +164,6 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
         const fd = new FormData();
         fd.append('file', blob, filename);
         fd.append('usageContext', slot === 'thumbnail' ? 'listing_thumbnail' : 'listing_detail');
-        fd.append('removeWatermark', String(removeWatermark));
         const res = await fetch('/api/listing/upload-image', { method: 'POST', body: fd });
         const ct = res.headers.get('content-type') ?? '';
         if (!ct.includes('application/json')) {
@@ -689,19 +687,6 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
           </div>
         </div>
       )}
-
-      {/* Gemini 워터마크 제거 옵션 */}
-      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', userSelect: 'none' }}>
-        <input
-          type="checkbox"
-          checked={removeWatermark}
-          onChange={(e) => setRemoveWatermark(e.target.checked)}
-          style={{ width: '14px', height: '14px', cursor: 'pointer' }}
-        />
-        <span style={{ fontSize: '12px', color: C.textSub }}>
-          Gemini 생성 이미지 워터마크 제거
-        </span>
-      </label>
 
       {/* 자산 생성 / 대화로 만들기 버튼 */}
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>

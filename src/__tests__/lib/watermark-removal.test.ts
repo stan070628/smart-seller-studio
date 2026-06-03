@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import sharp from 'sharp';
-import { removeGeminiWatermark } from '@/lib/image/watermark-removal';
+import { removeGeminiWatermark, hasWatermarkCandidate } from '@/lib/image/watermark-removal';
 
 async function makeTestImage(options: {
   width: number;
@@ -14,6 +14,56 @@ async function makeTestImage(options: {
     .jpeg({ quality: 95 })
     .toBuffer();
 }
+
+/** 우측 하단에 밝은 G 워터마크 시뮬레이션이 있는 이미지를 생성합니다. */
+async function makeWatermarkedImage(width: number, height: number): Promise<Buffer> {
+  // 중간 회색 배경 (워터마크와 밝기 대비)
+  const base = await makeTestImage({ width, height, bg: { r: 100, g: 100, b: 100 } });
+  const wmW = Math.floor(width * 0.12);
+  const wmH = Math.floor(height * 0.08);
+  const brightPatch = await sharp({
+    create: { width: wmW, height: wmH, channels: 3, background: { r: 245, g: 245, b: 245 } },
+  }).jpeg().toBuffer();
+  return sharp(base)
+    .composite([{ input: brightPatch, left: width - wmW, top: height - wmH }])
+    .jpeg({ quality: 95 })
+    .toBuffer();
+}
+
+// ── 워터마크 자동 감지 ────────────────────────────────────────────────────────
+
+describe('hasWatermarkCandidate', () => {
+  it('우측 하단에 밝은 스파클 패턴이 있으면 true를 반환한다', async () => {
+    const width = 200, height = 200;
+
+    // 균일한 회색 배경
+    const base = await makeTestImage({ width, height, bg: { r: 120, g: 120, b: 120 } });
+
+    // 우측 하단 12%×8% 영역에 밝은 흰 픽셀 군집 합성 (G 워터마크 시뮬레이션)
+    const wmW = Math.floor(width * 0.12);  // 24px
+    const wmH = Math.floor(height * 0.08); // 16px
+    const brightPatch = await sharp({
+      create: { width: wmW, height: wmH, channels: 3, background: { r: 255, g: 255, b: 255 } },
+    }).jpeg().toBuffer();
+
+    const withWatermark = await sharp(base)
+      .composite([{ input: brightPatch, left: width - wmW, top: height - wmH }])
+      .jpeg({ quality: 95 })
+      .toBuffer();
+
+    expect(await hasWatermarkCandidate(withWatermark)).toBe(true);
+  });
+
+  it('균일한 배경 이미지는 false를 반환한다', async () => {
+    const clean = await makeTestImage({ width: 200, height: 200, bg: { r: 255, g: 255, b: 255 } });
+    expect(await hasWatermarkCandidate(clean)).toBe(false);
+  });
+
+  it('높이 40px 미만 이미지는 false를 반환한다', async () => {
+    const tiny = await makeTestImage({ width: 200, height: 30 });
+    expect(await hasWatermarkCandidate(tiny)).toBe(false);
+  });
+});
 
 // ── API 키 없음 — 원본 반환 ───────────────────────────────────────────────────
 
@@ -62,7 +112,8 @@ describe('removeGeminiWatermark — Stability AI 인페인팅 경로', () => {
   it('STABILITY_API_KEY가 설정되면 Stability AI API를 호출하고 결과를 반환한다', async () => {
     mockFetch.mockResolvedValue(new Response(FAKE_RESULT, { status: 200 }));
 
-    const input = await makeTestImage({ width: 200, height: 200 });
+    // 워터마크 감지가 true를 반환하는 이미지 사용
+    const input = await makeWatermarkedImage(200, 200);
     const result = await removeGeminiWatermark(input);
 
     expect(mockFetch).toHaveBeenCalledOnce();
@@ -74,7 +125,7 @@ describe('removeGeminiWatermark — Stability AI 인페인팅 경로', () => {
   it('Stability AI API가 실패(401)하면 원본 버퍼를 반환한다 (이미지 수정 없음)', async () => {
     mockFetch.mockResolvedValue(new Response('Unauthorized', { status: 401 }));
 
-    const input = await makeTestImage({ width: 200, height: 200 });
+    const input = await makeWatermarkedImage(200, 200);
     const result = await removeGeminiWatermark(input);
 
     expect(result).toBe(input);
@@ -110,7 +161,7 @@ describe('removeGeminiWatermark — Stability AI 인페인팅 경로', () => {
   it('Stability AI 요청에 Bearer 형식의 Authorization 헤더가 포함된다', async () => {
     mockFetch.mockResolvedValue(new Response(FAKE_RESULT, { status: 200 }));
 
-    const input = await makeTestImage({ width: 200, height: 200 });
+    const input = await makeWatermarkedImage(200, 200);
     await removeGeminiWatermark(input);
 
     const [, requestInit] = mockFetch.mock.calls[0] as [string, RequestInit];
