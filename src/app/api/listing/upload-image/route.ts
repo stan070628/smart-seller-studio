@@ -11,7 +11,6 @@
 import { NextRequest } from "next/server"
 import { z } from "zod"
 import sharp from "sharp"
-import { removeGeminiWatermark } from "@/lib/image/watermark-removal"
 import { requireAuth } from "@/lib/supabase/auth"
 import {
   uploadToStorage,
@@ -290,15 +289,6 @@ export async function POST(
         } satisfies ApiErrorResponse,
         { status: 500 }
       )
-    }
-
-    // Gemini 워터마크 자동 감지 후 제거 (워터마크 없는 이미지는 원본 반환)
-    try {
-      const deWatermarked = await removeGeminiWatermark(processedBuffer)
-      processedBuffer = deWatermarked
-      processedSize = deWatermarked.length
-    } catch {
-      // non-fatal — processedBuffer / processedSize 그대로 유지
     }
 
     // 8. 스토리지 경로 생성

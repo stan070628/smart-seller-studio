@@ -24,6 +24,7 @@ import { requireAuth } from "@/lib/supabase/auth";
 import { withRetry } from "@/lib/ai/resilience";
 import { uploadToStorage } from "@/lib/supabase/server";
 import { appendPrivacyFooter } from "@/lib/detail-page-privacy";
+import { removeGeminiWatermark } from "@/lib/image/watermark-removal";
 
 // ─────────────────────────────────────────
 // 상수
@@ -172,7 +173,9 @@ async function fetchImagesFromUrls(
       const mimeType: AllowedMimeType =
         (ALLOWED_MIME_TYPES.find((m) => contentType.includes(m)) as AllowedMimeType | undefined) ??
         'image/jpeg';
-      const buffer = Buffer.from(await res.arrayBuffer());
+      const raw = Buffer.from(await res.arrayBuffer());
+      // Gemini 워터마크 제거 (STABILITY_API_KEY 미설정 시 원본 반환)
+      const buffer = await removeGeminiWatermark(raw);
       return { imageBase64: buffer.toString('base64'), mimeType };
     }),
   );
