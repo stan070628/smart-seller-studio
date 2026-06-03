@@ -20,19 +20,29 @@ export async function removeGeminiWatermark(buffer: Buffer): Promise<Buffer> {
 
     const wmWidth = Math.floor(width * WATERMARK_WIDTH_RATIO);
     const wmHeight = Math.floor(height * WATERMARK_HEIGHT_RATIO);
+
+    // I-2: wmWidth/wmHeight가 0이면 sharp가 예외를 던지므로 조기 반환
+    if (wmHeight < 1 || wmWidth < 1) return buffer;
+
     const wmLeft = width - wmWidth;
     const wmTop = height - wmHeight;
 
+    // I-1: 패치 추출 시작 좌표가 음수이면 처리 불가 → 원본 반환
+    const patchTop = wmTop - wmHeight;
+    if (patchTop < 0) return buffer;
+
     // 워터마크 바로 위 동일 크기 구간을 추출하여 블렌딩 소스로 사용
     const patchBuffer = await sharp(buffer)
-      .extract({ left: wmLeft, top: wmTop - wmHeight, width: wmWidth, height: wmHeight })
+      .extract({ left: wmLeft, top: patchTop, width: wmWidth, height: wmHeight })
       .blur(BLUR_SIGMA)
       .toBuffer();
 
     return sharp(buffer)
       .composite([{ input: patchBuffer, left: wmLeft, top: wmTop }])
       .toBuffer();
-  } catch {
+  } catch (err) {
+    // M-3: 처리 실패 원인을 warn으로 기록 후 원본 반환
+    console.warn('[removeGeminiWatermark] 처리 실패, 원본 반환:', err);
     return buffer;
   }
 }
