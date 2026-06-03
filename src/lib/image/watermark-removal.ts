@@ -49,8 +49,8 @@ async function inpaintWithStabilityAI(buffer: Buffer, apiKey: string): Promise<B
     .toBuffer();
 
   const form = new FormData();
-  form.append('image', new Blob([buffer], { type: 'image/jpeg' }), 'image.jpg');
-  form.append('mask', new Blob([maskBuffer], { type: 'image/png' }), 'mask.png');
+  form.append('image', new Blob([new Uint8Array(buffer)], { type: 'image/jpeg' }), 'image.jpg');
+  form.append('mask', new Blob([new Uint8Array(maskBuffer)], { type: 'image/png' }), 'mask.png');
   form.append('output_format', 'jpeg');
 
   const signal =

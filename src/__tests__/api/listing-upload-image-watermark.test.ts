@@ -116,7 +116,7 @@ function makeMinimalJpegBuffer(): Buffer {
  */
 function makeUploadRequest(usageContext: 'listing_thumbnail' | 'listing_detail'): NextRequest {
   const jpegBuffer = makeMinimalJpegBuffer()
-  const file = new File([jpegBuffer], 'test.jpg', { type: 'image/jpeg' })
+  const file = new File([new Uint8Array(jpegBuffer)], 'test.jpg', { type: 'image/jpeg' })
 
   const formData = new FormData()
   formData.append('file', file)
