@@ -2,8 +2,8 @@ import sharp from 'sharp';
 
 // 이미지 너비 대비 워터마크 너비 비율 (Gemini 기준 실측값)
 const WATERMARK_WIDTH_RATIO = 0.28;
-// 이미지 높이 대비 워터마크 높이 비율
-const WATERMARK_HEIGHT_RATIO = 0.05;
+// 이미지 높이 대비 워터마크 높이 비율 (G 로고 여유 확보를 위해 7%)
+const WATERMARK_HEIGHT_RATIO = 0.07;
 // 처리를 건너뛸 최소 이미지 높이 (px)
 const MIN_HEIGHT_PX = 40;
 // 패치 영역에 적용할 블러 강도 (sigma)

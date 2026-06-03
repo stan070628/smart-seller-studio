@@ -4,7 +4,8 @@
  *
  * 검증 대상:
  *   1. usageContext === 'listing_detail' 일 때 removeGeminiWatermark 가 호출된다
- *   2. usageContext === 'listing_thumbnail' 일 때 removeGeminiWatermark 가 호출되지 않는다
+ *   2. usageContext === 'listing_thumbnail' 일 때도 removeGeminiWatermark 가 호출된다
+ *      (썸네일이 상세페이지 생성 fallback으로 쓰이므로 컨텍스트 무관 적용)
  *   3. removeGeminiWatermark 가 throw 해도 업로드는 성공(non-fatal)한다
  */
 
@@ -158,7 +159,7 @@ describe('POST /api/listing/upload-image — 워터마크 제거 연동', () => 
 
   // ── 테스트 2 ──────────────────────────────────────────────────────────────
 
-  it('listing_thumbnail 컨텍스트로 업로드하면 removeGeminiWatermark 가 호출되지 않는다', async () => {
+  it('listing_thumbnail 컨텍스트로 업로드해도 removeGeminiWatermark 가 1회 호출된다', async () => {
     const request = makeUploadRequest('listing_thumbnail')
 
     const response = await POST(request)
@@ -166,7 +167,7 @@ describe('POST /api/listing/upload-image — 워터마크 제거 연동', () => 
 
     expect(response.status).toBe(201)
     expect(json.success).toBe(true)
-    expect(removeGeminiWatermarkMock).not.toHaveBeenCalled()
+    expect(removeGeminiWatermarkMock).toHaveBeenCalledTimes(1)
   })
 
   // ── 테스트 3 ──────────────────────────────────────────────────────────────

@@ -292,15 +292,14 @@ export async function POST(
       )
     }
 
-    // listing_detail 컨텍스트: Gemini 워터마크 자동 제거
-    if (usageContext === 'listing_detail') {
-      try {
-        const deWatermarked = await removeGeminiWatermark(processedBuffer)
-        processedBuffer = deWatermarked
-        processedSize = deWatermarked.length
-      } catch {
-        // non-fatal — processedBuffer / processedSize 그대로 유지
-      }
+    // 모든 업로드에 Gemini 워터마크 자동 제거
+    // (썸네일이 상세페이지 생성 fallback으로 쓰이므로 컨텍스트 무관 적용)
+    try {
+      const deWatermarked = await removeGeminiWatermark(processedBuffer)
+      processedBuffer = deWatermarked
+      processedSize = deWatermarked.length
+    } catch {
+      // non-fatal — processedBuffer / processedSize 그대로 유지
     }
 
     // 8. 스토리지 경로 생성
