@@ -1,37 +1,98 @@
 import sharp from 'sharp';
 
-// 이미지 너비 대비 워터마크 너비 비율 (Gemini 기준 실측값)
 const WATERMARK_WIDTH_RATIO = 0.28;
-// 이미지 높이 대비 워터마크 높이 비율 (G 로고 여유 확보를 위해 7%)
 const WATERMARK_HEIGHT_RATIO = 0.07;
-// 처리를 건너뛸 최소 이미지 높이 (px)
 const MIN_HEIGHT_PX = 40;
-// 패치 영역에 적용할 블러 강도 (sigma)
 const BLUR_SIGMA = 3;
 
 /**
- * 이미지 우측 하단의 Gemini 워터마크를 인접 픽셀로 덮어 제거합니다.
- * 실패 시 원본 버퍼를 그대로 반환합니다 (non-fatal).
+ * 이미지 우측 하단의 Gemini 워터마크를 제거합니다.
+ * STABILITY_API_KEY 환경변수가 설정된 경우 AI 인페인팅을 사용하고,
+ * 없거나 실패하면 Sharp 패치 복사 방식으로 fallback합니다.
  */
 export async function removeGeminiWatermark(buffer: Buffer): Promise<Buffer> {
+  const apiKey = process.env.STABILITY_API_KEY;
+  if (apiKey) {
+    try {
+      return await inpaintWithStabilityAI(buffer, apiKey);
+    } catch (err) {
+      console.warn('[removeGeminiWatermark] Stability AI 실패, Sharp fallback:', err);
+    }
+  }
+  return patchWatermarkWithSharp(buffer);
+}
+
+/** Stability AI Stable Image Edit - Erase 엔드포인트로 워터마크 영역 제거 */
+async function inpaintWithStabilityAI(buffer: Buffer, apiKey: string): Promise<Buffer> {
+  const meta = await sharp(buffer).metadata();
+  const width = meta.width ?? 0;
+  const height = meta.height ?? 0;
+  if (!width || !height || height < MIN_HEIGHT_PX) return buffer;
+
+  const wmWidth = Math.floor(width * WATERMARK_WIDTH_RATIO);
+  const wmHeight = Math.floor(height * WATERMARK_HEIGHT_RATIO);
+  if (wmWidth < 1 || wmHeight < 1) return buffer;
+
+  const wmLeft = width - wmWidth;
+  const wmTop = height - wmHeight;
+
+  // 마스크: 전체 검정 배경 + 워터마크 영역 흰색 PNG (white = erase)
+  const whiteRectPng = await sharp({
+    create: { width: wmWidth, height: wmHeight, channels: 3, background: { r: 255, g: 255, b: 255 } },
+  }).png().toBuffer();
+
+  const maskBuffer = await sharp({
+    create: { width, height, channels: 3, background: { r: 0, g: 0, b: 0 } },
+  })
+    .composite([{ input: whiteRectPng, left: wmLeft, top: wmTop }])
+    .png()
+    .toBuffer();
+
+  const form = new FormData();
+  form.append('image', new Blob([buffer], { type: 'image/jpeg' }), 'image.jpg');
+  form.append('mask', new Blob([maskBuffer], { type: 'image/png' }), 'mask.png');
+  form.append('output_format', 'jpeg');
+
+  const signal =
+    typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+      ? AbortSignal.timeout(30_000)
+      : undefined;
+
+  const res = await fetch('https://api.stability.ai/v2beta/stable-image/edit/erase', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      Accept: 'image/*',
+    },
+    body: form,
+    ...(signal ? { signal } : {}),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Stability AI erase 실패 (${res.status}): ${text.slice(0, 120)}`);
+  }
+
+  return Buffer.from(await res.arrayBuffer());
+}
+
+/** Sharp 패치 복사 방식 (API 키 없을 때 fallback) */
+async function patchWatermarkWithSharp(buffer: Buffer): Promise<Buffer> {
   try {
-    const { width, height } = await sharp(buffer).metadata();
+    const meta = await sharp(buffer).metadata();
+    const width = meta.width ?? 0;
+    const height = meta.height ?? 0;
     if (!width || !height || height < MIN_HEIGHT_PX) return buffer;
 
     const wmWidth = Math.floor(width * WATERMARK_WIDTH_RATIO);
     const wmHeight = Math.floor(height * WATERMARK_HEIGHT_RATIO);
-
-    // I-2: wmWidth/wmHeight가 0이면 sharp가 예외를 던지므로 조기 반환
-    if (wmHeight < 1 || wmWidth < 1) return buffer;
+    if (wmWidth < 1 || wmHeight < 1) return buffer;
 
     const wmLeft = width - wmWidth;
     const wmTop = height - wmHeight;
-
-    // I-1: 패치 추출 시작 좌표가 음수이면 처리 불가 → 원본 반환
     const patchTop = wmTop - wmHeight;
     if (patchTop < 0) return buffer;
 
-    // 워터마크 바로 위 동일 크기 구간을 추출하여 블렌딩 소스로 사용
     const patchBuffer = await sharp(buffer)
       .extract({ left: wmLeft, top: patchTop, width: wmWidth, height: wmHeight })
       .blur(BLUR_SIGMA)
@@ -41,8 +102,7 @@ export async function removeGeminiWatermark(buffer: Buffer): Promise<Buffer> {
       .composite([{ input: patchBuffer, left: wmLeft, top: wmTop }])
       .toBuffer();
   } catch (err) {
-    // M-3: 처리 실패 원인을 warn으로 기록 후 원본 반환
-    console.warn('[removeGeminiWatermark] 처리 실패, 원본 반환:', err);
+    console.warn('[removeGeminiWatermark] Sharp 처리 실패, 원본 반환:', err);
     return buffer;
   }
 }
