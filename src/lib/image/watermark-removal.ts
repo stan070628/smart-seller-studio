@@ -73,7 +73,11 @@ async function inpaintWithStabilityAI(buffer: Buffer, apiKey: string): Promise<B
     throw new Error(`Stability AI erase 실패 (${res.status}): ${text.slice(0, 120)}`);
   }
 
-  return Buffer.from(await res.arrayBuffer());
+  const resultBuffer = Buffer.from(await res.arrayBuffer());
+  if (resultBuffer.length === 0) {
+    throw new Error('Stability AI erase 응답 바디가 비어 있습니다.');
+  }
+  return resultBuffer;
 }
 
 /** Sharp 패치 복사 방식 (API 키 없을 때 fallback) */

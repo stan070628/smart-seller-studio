@@ -111,4 +111,35 @@ describe('removeGeminiWatermark — Stability AI 인페인팅 경로', () => {
 
     expect(mockFetch).not.toHaveBeenCalled();
   });
+
+  it('네트워크 오류(fetch throw)가 발생해도 Sharp fallback으로 유효한 버퍼를 반환한다', async () => {
+    mockFetch.mockRejectedValue(new Error('network error'));
+
+    const input = await makeTestImage({ width: 200, height: 200 });
+    const result = await removeGeminiWatermark(input);
+
+    expect(result).toBeInstanceOf(Buffer);
+    expect(result.length).toBeGreaterThan(0);
+  });
+
+  it('Stability AI가 빈 응답 바디를 반환하면 Sharp fallback으로 유효한 이미지를 반환한다', async () => {
+    mockFetch.mockResolvedValue(new Response(new ArrayBuffer(0), { status: 200 }));
+
+    const input = await makeTestImage({ width: 200, height: 200 });
+    const result = await removeGeminiWatermark(input);
+
+    // 빈 버퍼(length 0)가 아닌 유효한 이미지여야 한다
+    expect(result.length).toBeGreaterThan(100);
+  });
+
+  it('Stability AI 요청에 Bearer 형식의 Authorization 헤더가 포함된다', async () => {
+    mockFetch.mockResolvedValue(new Response(FAKE_RESULT, { status: 200 }));
+
+    const input = await makeTestImage({ width: 200, height: 200 });
+    await removeGeminiWatermark(input);
+
+    const [, requestInit] = mockFetch.mock.calls[0] as [string, RequestInit];
+    const headers = requestInit?.headers as Record<string, string>;
+    expect(headers?.Authorization).toBe(`Bearer ${FAKE_API_KEY}`);
+  });
 });
