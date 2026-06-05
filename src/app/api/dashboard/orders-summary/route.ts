@@ -5,7 +5,7 @@
  */
 import { NextRequest } from 'next/server';
 import { requireAuth } from '@/lib/supabase/auth';
-import { isPeriod, type Period, type OrdersSummaryData, type ChannelPipeline } from '@/lib/dashboard/types';
+import { isPeriod, type Period, type OrdersSummaryData, type ChannelPipeline, type SettlementStageMetric } from '@/lib/dashboard/types';
 import { PLAN_START, WEEKLY_TARGETS } from '@/lib/plan/constants';
 import { getCurrentWeek, getWeekForDate } from '@/lib/plan/week';
 import { getCoupangClient } from '@/lib/listing/coupang-client';
@@ -376,6 +376,12 @@ async function buildOrdersSummary(period: Period): Promise<OrdersSummaryData> {
   naverPipeline.정산완료 = naverSettle;
 
   const rgPipeline: ChannelPipeline = aggregateRgPipeline(rgOrders);
+  const rgSettle: SettlementStageMetric = {
+    count: rgOrders.length,
+    amount: rgOrders.reduce((s, o) => s + o.totalAmount, 0),
+    available: true,
+  };
+  rgPipeline.정산완료 = rgSettle;
 
   // Wing 누적 + RG 누적 합산. Wing이 null(미래 주차)이면 그대로 null 유지.
   let rgAcc = 0;
