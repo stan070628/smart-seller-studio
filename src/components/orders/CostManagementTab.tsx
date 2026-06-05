@@ -110,7 +110,10 @@ interface ApiRevenue {
 type Preset = 'this_month' | 'last_month' | '3months' | '6months' | 'all' | 'custom';
 
 function toDateStr(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function getDateRange(p: Preset, customFrom: string, customTo: string): { from: string; to: string } | null {
