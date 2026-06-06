@@ -134,11 +134,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
 
       // Content-Type 헤더로 MIME 타입 결정 (허용 타입으로 제한)
-      const contentType = fetchRes.headers.get('content-type') ?? 'image/jpeg';
+      const contentType = fetchRes.headers.get('content-type') ?? '';
       const detectedMime = contentType.split(';')[0].trim();
-      mimeType = (ALLOWED_MIME_TYPES as readonly string[]).includes(detectedMime)
-        ? (detectedMime as AllowedMimeType)
-        : 'image/jpeg';
+      if (!(ALLOWED_MIME_TYPES as readonly string[]).includes(detectedMime)) {
+        return NextResponse.json(
+          { success: false, error: `지원하지 않는 이미지 형식: ${detectedMime || '알 수 없음'}` },
+          { status: 415 },
+        );
+      }
+      mimeType = detectedMime as AllowedMimeType;
 
       buffer = Buffer.from(await fetchRes.arrayBuffer());
     }
