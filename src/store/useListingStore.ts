@@ -14,6 +14,7 @@ import { DEFAULT_THEME } from '@/lib/detail-page/palette-config';
 import { contentToSections } from '@/lib/detail-page/section-parser';
 import type { DetailPageContent } from '@/lib/ai/prompts/detail-page';
 import type { CategoryKey, QuestionAnswer } from '@/lib/conversational-detail/types';
+import type { AiImageSlot } from '@/lib/detail-page/ai-html-builder';
 
 // ─── SharedDraft 타입 ────────────────────────────────────────────────────────
 // 탭 이동 시에도 입력값이 유지되도록 공통 필드를 스토어에서 관리
@@ -226,6 +227,8 @@ interface AssetsDraft {
   category: CategoryKey | null;
   /** 마지막 대화에서 수집한 답변. 결과 디버깅·재현용으로 보관. */
   conversationAnswers: QuestionAnswer[];
+  includeAiImages: boolean;
+  aiImageSlots: AiImageSlot[];
 }
 
 const ASSETS_DRAFT_INITIAL: AssetsDraft = {
@@ -242,6 +245,8 @@ const ASSETS_DRAFT_INITIAL: AssetsDraft = {
   detailPageTheme: DEFAULT_THEME,
   category: null,
   conversationAnswers: [],
+  includeAiImages: false,
+  aiImageSlots: [],
 };
 
 interface ListingStore {
