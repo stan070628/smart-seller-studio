@@ -198,6 +198,8 @@ export default function AssetsResultPanel() {
       void refreshRenderedHtml(detailPageSections, detailPageTheme);
     }
     prevSectionsLengthRef.current = detailPageSections.length;
+  // detailPageTheme, refreshRenderedHtml, includeAiImages, aiDetailContent 의도적 제외:
+  // sections가 0→N으로 처음 채워지는 단 한 번만 실행되어야 하므로 exhaustive-deps 억제
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detailPageSections]);
 
@@ -448,6 +450,8 @@ export default function AssetsResultPanel() {
     const patch: Parameters<typeof updateAssetsDraft>[0] = { aiImageSlots: newSlots };
     if (aiDetailContent && newSlots.length > 0) {
       patch.generatedDetailHtml = appendPrivacyFooter(buildAiDetailPageHtml(aiDetailContent, newSlots));
+    } else if (newSlots.length === 0) {
+      patch.generatedDetailHtml = '';
     }
     updateAssetsDraft(patch);
   };
