@@ -58,6 +58,21 @@ describe('buildAiDetailPageSnippet', () => {
   it('슬롯이 비어있어도 에러가 나지 않는다', () => {
     expect(() => buildAiDetailPageSnippet(mockContent, [])).not.toThrow();
   });
+
+  it('HTML escape: 헤드라인의 특수문자가 이스케이프된다', () => {
+    const content = { ...mockContent, headline: '<script>alert(1)</script>' };
+    const html = buildAiDetailPageSnippet(content, mockSlots);
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('specOverride가 있으면 content.specs 대신 사용된다', () => {
+    const override = [{ label: '무게', value: '500g' }];
+    const html = buildAiDetailPageSnippet(mockContent, mockSlots, override);
+    expect(html).toContain('무게');
+    expect(html).toContain('500g');
+    expect(html).not.toContain('린넨 100%'); // content.specs의 값
+  });
 });
 
 describe('buildAiDetailPageHtml', () => {

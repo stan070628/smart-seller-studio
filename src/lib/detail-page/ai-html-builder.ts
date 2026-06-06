@@ -77,7 +77,7 @@ function buildLifestyleSection(content: DetailPageContent, slot?: AiImageSlot): 
         <div style="font-size:20px;font-weight:600;color:#111;margin-bottom:12px;line-height:1.4;">${escapeHtml(sp.title)}</div>
         <div style="font-size:15px;color:#666;line-height:1.8;">${escapeHtml(sp.description)}</div>
       </div>`
-    : '<div class="ai-col-text" style="flex:1;min-width:0;"></div>';
+    : '';
 
   const imgBlock = slot
     ? `<div class="ai-col-img" style="flex:1;min-width:0;">
@@ -123,7 +123,7 @@ function buildDetailSection(content: DetailPageContent, slot?: AiImageSlot): str
         <div style="font-size:20px;font-weight:600;color:#111;margin-bottom:12px;line-height:1.4;">${escapeHtml(sp.title)}</div>
         <div style="font-size:15px;color:#666;line-height:1.8;">${escapeHtml(sp.description)}</div>
       </div>`
-    : '<div class="ai-col-text" style="flex:1;min-width:0;"></div>';
+    : '';
 
   return `
     <section style="background:#fff;">
@@ -257,8 +257,10 @@ function buildWarningsSection(content: DetailPageContent): string {
 
 const RESPONSIVE_STYLE = `<style>
   @media (max-width: 600px) {
-    .ai-two-col { flex-direction: column !important; }
-    .ai-col-img img { min-height: 200px !important; }
+    #ai-dp-root .ai-two-col { flex-direction: column !important; }
+    #ai-dp-root .ai-col-img,
+    #ai-dp-root .ai-col-text { width: 100%; }
+    #ai-dp-root .ai-col-img img { min-height: 200px !important; }
   }
 </style>`;
 
@@ -266,7 +268,13 @@ const RESPONSIVE_STYLE = `<style>
 // 메인 빌더
 // ─────────────────────────────────────────
 
-/** 역할 기반 섹션 배열을 조합한다 */
+/**
+ * 역할 기반 섹션 배열을 조합한다.
+ *
+ * Layout uses 4 image roles: hero, lifestyle, detail, feature.
+ * sellingPoints[0] → lifestyle section, sellingPoints[1] → detail section.
+ * sellingPoints[2+] are not rendered in image sections (no slot for them).
+ */
 function buildAllSections(
   content: DetailPageContent,
   slots: AiImageSlot[],
@@ -307,7 +315,7 @@ export function buildAiDetailPageSnippet(
   maxWidth = 780,
 ): string {
   const sections = buildAllSections(content, slots, specOverride);
-  return `${RESPONSIVE_STYLE}<div style="max-width:${maxWidth}px;margin:0 auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden;">
+  return `${RESPONSIVE_STYLE}<div id="ai-dp-root" style="max-width:${maxWidth}px;margin:0 auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden;">
 ${sections}
 </div>`;
 }
@@ -350,8 +358,10 @@ export function buildAiDetailPageHtml(
     }
     /* 2컬럼 섹션은 600px 이하에서 1컬럼으로 전환 */
     @media (max-width: 600px) {
-      .ai-two-col { flex-direction: column !important; }
-      .ai-col-img img { min-height: 200px !important; }
+      #ai-dp-root .ai-two-col { flex-direction: column !important; }
+      #ai-dp-root .ai-col-img,
+      #ai-dp-root .ai-col-text { width: 100%; }
+      #ai-dp-root .ai-col-img img { min-height: 200px !important; }
     }
   </style>
 </head>
