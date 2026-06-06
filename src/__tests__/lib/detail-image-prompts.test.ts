@@ -70,6 +70,23 @@ describe('parseImagePromptsResponse', () => {
     const raw = JSON.stringify({ visualIdentity: {}, imagePrompts: 'wrong' });
     expect(() => parseImagePromptsResponse(raw)).toThrow();
   });
+
+  it('알 수 없는 role 값은 feature로 폴백된다', () => {
+    const raw = JSON.stringify({
+      visualIdentity: { colorPalette: 'x', mood: 'y', lighting: 'z', background: 'w' },
+      imagePrompts: [{ role: 'banner', scene: 'test', referenceImageIndex: 0 }],
+    });
+    const result = parseImagePromptsResponse(raw);
+    expect(result.imagePrompts[0].role).toBe('feature');
+  });
+
+  it('visualIdentity가 없으면 기본값을 사용한다', () => {
+    const raw = JSON.stringify({
+      imagePrompts: [{ role: 'hero', scene: 'test', referenceImageIndex: 0 }],
+    });
+    const result = parseImagePromptsResponse(raw);
+    expect(result.visualIdentity.colorPalette).toBe('neutral tones');
+  });
 });
 
 describe('buildFinalGeminiPrompt', () => {

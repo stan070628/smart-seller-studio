@@ -110,8 +110,8 @@ export function parseImagePromptsResponse(rawText: string): ImagePromptsResponse
   let parsed: unknown;
   try {
     parsed = JSON.parse(jsonMatch[0]);
-  } catch {
-    throw new Error('이미지 프롬프트 응답 JSON 파싱 실패');
+  } catch (e) {
+    throw new Error('이미지 프롬프트 응답 JSON 파싱 실패', { cause: e });
   }
 
   const data = parsed as Record<string, unknown>;
@@ -129,7 +129,7 @@ export function parseImagePromptsResponse(rawText: string): ImagePromptsResponse
       background: String(vi.background ?? 'clean white'),
     },
     imagePrompts: (data.imagePrompts as Array<Record<string, unknown>>).map((p) => ({
-      role: VALID_ROLES.includes(p.role as never)
+      role: typeof p.role === 'string' && VALID_ROLES.includes(p.role as SectionImagePrompt['role'])
         ? (p.role as SectionImagePrompt['role'])
         : 'feature',
       scene: String(p.scene ?? ''),
