@@ -24,7 +24,6 @@ const CATEGORY_OPTIONS: Array<{ key: CategoryKey; label: string }> = [
   { key: 'food', label: '식품' },
 ];
 
-
 export default function AssetsResultPanel() {
   const { assetsDraft, updateAssetsDraft, sharedDraft } = useListingStore();
   const {
