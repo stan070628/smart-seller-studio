@@ -688,6 +688,22 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
         </div>
       )}
 
+      {/* Gemini AI 이미지 포함 생성 토글 */}
+      {canGenerate && (
+        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: '#374151', userSelect: 'none' }}>
+          <input
+            type="checkbox"
+            checked={assetsDraft.includeAiImages}
+            onChange={e => updateAssetsDraft({ includeAiImages: e.target.checked })}
+            style={{ width: '15px', height: '15px', accentColor: '#7c3aed', cursor: 'pointer' }}
+          />
+          <span>
+            <strong style={{ color: '#7c3aed' }}>Gemini AI 이미지</strong> 포함 생성
+            <span style={{ color: '#9ca3af', marginLeft: '4px' }}>(+30~50초)</span>
+          </span>
+        </label>
+      )}
+
       {/* 자산 생성 / 대화로 만들기 버튼 */}
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
         {/* 자동 생성 버튼 */}
