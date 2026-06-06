@@ -64,11 +64,14 @@ if (prevSectionsLengthRef.current === 0 && detailPageSections.length > 0 && aiIm
 
 변경 후:
 ```typescript
-// aiDetailContent가 있으면 AI HTML을 직접 빌드했으므로 render API 자동 호출 불필요
-if (prevSectionsLengthRef.current === 0 && detailPageSections.length > 0 && !aiDetailContent) {
+// includeAiImages=true이고 aiDetailContent가 있으면 AI HTML을 직접 빌드했으므로 render API 자동 호출 불필요
+// 일반 생성(includeAiImages=false)에서는 refreshRenderedHtml이 필요하므로 조건 유지
+if (prevSectionsLengthRef.current === 0 && detailPageSections.length > 0 && !(includeAiImages && aiDetailContent)) {
   void refreshRenderedHtml(detailPageSections, detailPageTheme);
 }
 ```
+
+`includeAiImages`는 `assetsDraft`에서 destructuring해서 사용한다.
 
 **수정: `AssetsTab.tsx` — `includeAiImages` 기본값 활성화**
 
