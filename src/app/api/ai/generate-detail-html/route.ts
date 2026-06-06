@@ -25,10 +25,19 @@ import { withRetry } from "@/lib/ai/resilience";
 import { uploadToStorage } from "@/lib/supabase/server";
 import { appendPrivacyFooter } from "@/lib/detail-page-privacy";
 import { removeGeminiWatermark } from "@/lib/image/watermark-removal";
+import {
+  IMAGE_PROMPTS_SYSTEM_PROMPT,
+  buildImagePromptsUserPrompt,
+  parseImagePromptsResponse,
+  buildFinalGeminiPrompt,
+} from '@/lib/ai/prompts/detail-image-prompts';
+import type { ImagePromptsResponse } from '@/lib/ai/prompts/detail-image-prompts';
 
 // ─────────────────────────────────────────
 // 상수
 // ─────────────────────────────────────────
+
+export const maxDuration = 120;
 
 const DETAIL_HTML_RATE_LIMIT = { windowMs: 60_000, maxRequests: 5 };
 
@@ -260,6 +269,7 @@ interface ApiSuccessResponse {
   snippet: string;           // 쿠팡용 780px
   naverSnippet: string;      // 네이버용 860px
   content?: DetailPageContent; // 섹션 편집기 초기화용 구조화 데이터 (신규 생성 모드에서만 포함)
+  imagePrompts?: ImagePromptsResponse;
 }
 
 interface ApiErrorResponse {
@@ -584,6 +594,36 @@ export async function POST(
     );
   }
 
+  // ── imagePrompts 생성 (content 파싱 성공 후) ──────────────────────────────
+  let imagePromptsResult: ImagePromptsResponse | undefined;
+  try {
+    const promptsUserMsg = buildImagePromptsUserPrompt(imageAnalysis, content, productName);
+    const promptsResp = await withRetry(
+      () =>
+        client.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 1024,
+          system: IMAGE_PROMPTS_SYSTEM_PROMPT,
+          messages: [{ role: 'user', content: promptsUserMsg }],
+        }),
+      { label: 'Claude generateImagePrompts' },
+    );
+    const promptsRaw = promptsResp.content
+      .filter(b => b.type === 'text')
+      .map(b => (b as { type: 'text'; text: string }).text)
+      .join('');
+    const parsed = parseImagePromptsResponse(promptsRaw);
+    imagePromptsResult = {
+      ...parsed,
+      imagePrompts: parsed.imagePrompts.map(p => ({
+        ...p,
+        scene: buildFinalGeminiPrompt(parsed.visualIdentity, p.scene),
+      })),
+    };
+  } catch (err) {
+    console.warn('[generate-detail-html] imagePrompts 생성 실패 — 무시:', err);
+  }
+
   // content 필드를 포함시켜 클라이언트의 섹션 편집기(DetailPageEditor)를 활성화할 수 있도록 한다.
   return NextResponse.json({
     success: true,
@@ -591,5 +631,6 @@ export async function POST(
     snippet: appendPrivacyFooter(snippet),
     naverSnippet: appendPrivacyFooter(naverSnippet),
     content,
+    ...(imagePromptsResult ? { imagePrompts: imagePromptsResult } : {}),
   }, { status: 200 });
 }
