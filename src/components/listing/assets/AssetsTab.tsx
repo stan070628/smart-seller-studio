@@ -177,7 +177,7 @@ export default function AssetsTab() {
           );
         }
 
-        updateAssetsDraft({ isGenerating: false, generatingMessage: null, generatedThumbnails: thumbnails, generatedDetailHtml: detailHtml, detailPageSections, aiImageSlots: aiSlots });
+        updateAssetsDraft({ isGenerating: false, generatingMessage: null, generatedThumbnails: thumbnails, generatedDetailHtml: detailHtml, detailPageSections, aiImageSlots: aiSlots, aiDetailContent: detailContent ?? null });
         return;
       }
 
@@ -216,7 +216,7 @@ export default function AssetsTab() {
         );
       }
 
-      updateAssetsDraft({ isGenerating: false, generatingMessage: null, generatedThumbnails: thumbnails, generatedDetailHtml: detailHtml, detailPageSections, aiImageSlots: aiSlots });
+      updateAssetsDraft({ isGenerating: false, generatingMessage: null, generatedThumbnails: thumbnails, generatedDetailHtml: detailHtml, detailPageSections, aiImageSlots: aiSlots, aiDetailContent: detailContent ?? null });
     } catch (e) {
       updateAssetsDraft({ isGenerating: false, generatingMessage: null, lastError: e instanceof Error ? e.message : '알 수 없는 오류' });
     }

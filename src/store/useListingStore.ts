@@ -229,6 +229,7 @@ interface AssetsDraft {
   conversationAnswers: QuestionAnswer[];
   includeAiImages: boolean;
   aiImageSlots: AiImageSlot[];
+  aiDetailContent: import('@/lib/ai/prompts/detail-page').DetailPageContent | null;
 }
 
 const ASSETS_DRAFT_INITIAL: AssetsDraft = {
@@ -245,8 +246,9 @@ const ASSETS_DRAFT_INITIAL: AssetsDraft = {
   detailPageTheme: DEFAULT_THEME,
   category: null,
   conversationAnswers: [],
-  includeAiImages: false,
+  includeAiImages: true,
   aiImageSlots: [],
+  aiDetailContent: null,
 };
 
 interface ListingStore {

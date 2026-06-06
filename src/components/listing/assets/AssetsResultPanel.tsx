@@ -134,6 +134,8 @@ export default function AssetsResultPanel() {
     detailPageSections,
     detailPageTheme,
     aiImageSlots,
+    aiDetailContent,
+    includeAiImages,
   } = assetsDraft;
   const hasResult = generatedThumbnails.length > 0 || generatedDetailHtml.length > 0;
 
@@ -190,7 +192,9 @@ export default function AssetsResultPanel() {
   // 대화 완료 후 sections가 처음 채워질 때 한 번만 render 호출 → data-edit-path 포함 HTML 확보
   const prevSectionsLengthRef = useRef(detailPageSections.length);
   useEffect(() => {
-    if (prevSectionsLengthRef.current === 0 && detailPageSections.length > 0) {
+    // includeAiImages=true이고 aiDetailContent가 있으면 AI HTML을 직접 빌드했으므로 render API 자동 호출 불필요
+    // 일반 생성(includeAiImages=false)에서는 refreshRenderedHtml로 data-edit-path 포함 HTML 확보
+    if (prevSectionsLengthRef.current === 0 && detailPageSections.length > 0 && !(includeAiImages && aiDetailContent)) {
       void refreshRenderedHtml(detailPageSections, detailPageTheme);
     }
     prevSectionsLengthRef.current = detailPageSections.length;
@@ -432,12 +436,20 @@ export default function AssetsResultPanel() {
 
   const handleReplaceSlot = (index: number, newUrl: string, isReplaced: boolean) => {
     const newSlots = aiImageSlots.map((s, i) => i === index ? { ...s, url: newUrl, isReplaced } : s);
-    updateAssetsDraft({ aiImageSlots: newSlots });
+    const patch: Parameters<typeof updateAssetsDraft>[0] = { aiImageSlots: newSlots };
+    if (aiDetailContent && newSlots.length > 0) {
+      patch.generatedDetailHtml = appendPrivacyFooter(buildAiDetailPageHtml(aiDetailContent, newSlots));
+    }
+    updateAssetsDraft(patch);
   };
 
   const handleDeleteSlot = (index: number) => {
     const newSlots = aiImageSlots.filter((_, i) => i !== index);
-    updateAssetsDraft({ aiImageSlots: newSlots });
+    const patch: Parameters<typeof updateAssetsDraft>[0] = { aiImageSlots: newSlots };
+    if (aiDetailContent && newSlots.length > 0) {
+      patch.generatedDetailHtml = appendPrivacyFooter(buildAiDetailPageHtml(aiDetailContent, newSlots));
+    }
+    updateAssetsDraft(patch);
   };
 
   const handleRegenerateSlot = async (index: number) => {
@@ -461,7 +473,7 @@ export default function AssetsResultPanel() {
       const uploadData = await uploadRes.json() as { success: boolean; url?: string };
       if (!uploadData.success || !uploadData.url) throw new Error('업로드 실패');
 
-      handleReplaceSlot(index, uploadData.url, false);
+      handleReplaceSlot(index, uploadData.url, false);  // HTML 재빌드 포함
     } catch (e) {
       updateAssetsDraft({ lastError: e instanceof Error ? e.message : '재생성 실패' });
     } finally {
