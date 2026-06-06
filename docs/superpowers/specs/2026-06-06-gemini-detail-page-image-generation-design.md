@@ -16,10 +16,11 @@
 ## 요구사항
 
 1. 상세 HTML 생성 시 `includeAiImages` 옵션을 켜면 Gemini가 섹션 이미지 3~5장을 함께 생성한다.
-2. 원본 상품(소재, 텍스트, 크기, 형태)은 절대 변형하지 않는다. 배경·조명·환경만 변경한다.
-3. 생성된 이미지가 마음에 들지 않으면 파일 업로드 또는 URL로 교체할 수 있다.
-4. 이미지 생성 실패 시 원본 업로드 이미지로 graceful fallback한다.
-5. AssetsTab과 AI 상품등록 Step 3 양쪽에 동일하게 적용된다.
+2. 모든 섹션 이미지는 동일한 비주얼 아이덴티티(색감·무드·조명·타이포)를 공유하여 디자인 통일성을 갖는다.
+3. 원본 상품(소재, 텍스트, 크기, 형태)은 절대 변형하지 않는다. 배경·조명·환경만 변경한다.
+4. 생성된 이미지가 마음에 들지 않으면 파일 업로드 또는 URL로 교체할 수 있다.
+5. 이미지 생성 실패 시 원본 업로드 이미지로 graceful fallback한다.
+6. AssetsTab과 AI 상품등록 Step 3 양쪽에 동일하게 적용된다.
 
 ---
 
@@ -30,7 +31,9 @@
 ```
 [Phase 1 — Claude, ~5초]
   이미지 분석(기존) + 콘텐츠 구조 생성(기존)
+  + 비주얼 아이덴티티 정의 (신규)          ← 전체 이미지 통일성의 기준
   + 섹션별 Gemini 이미지 프롬프트 3~5개 생성 (신규)
+    각 프롬프트 = 비주얼 아이덴티티 prefix + 섹션 장면 + 상품 보존 규칙 suffix
 
 [Phase 2 — Gemini, ~15초, 병렬]
   원본 업로드 이미지(reference) + 각 프롬프트로 섹션 이미지 병렬 생성
@@ -59,6 +62,44 @@ Phase 2 내부(이미지 3~5장)는 `Promise.all`로 병렬 실행.
 | img_5 | 추가 앵글 (선택) | 상품 복잡도에 따라 옵션 |
 
 Claude가 상품 분석 결과를 바탕으로 각 이미지에 맞는 영어 프롬프트를 생성하고, 해당 프롬프트를 Gemini에 전달한다.
+
+---
+
+## 비주얼 아이덴티티 (디자인 통일성)
+
+### 목적
+
+모든 섹션 이미지가 동일한 색감·무드·조명·타이포 스타일을 공유하여 상세페이지가 하나의 일관된 브랜드 세계관처럼 보이도록 한다.
+
+### 생성 방식
+
+Claude가 Phase 1에서 상품 이미지와 카테고리를 분석한 후, 아래 항목으로 구성된 **비주얼 아이덴티티 블록**을 먼저 생성한다:
+
+| 항목 | 예시 (리빙 제품) | 예시 (패션 제품) |
+|------|----------------|----------------|
+| Color palette | warm ivory, soft beige, muted sage | deep navy, crisp white, gold accent |
+| Mood | premium minimal, calm, sophisticated | bold, editorial, confident |
+| Lighting | soft diffused natural light | dramatic side lighting, sharp shadows |
+| Background | off-white linen texture | clean studio white / dark charcoal |
+| Typography style | thin modern sans-serif, wide letter-spacing, lowercase | condensed bold sans-serif, uppercase |
+
+### 프롬프트 조합 구조
+
+각 섹션 이미지 프롬프트는 아래 3가지를 순서대로 결합한다:
+
+```
+[1] 비주얼 아이덴티티 (공유 prefix — 모든 이미지 동일)
+  "Visual identity: {color_palette}. Mood: {mood}.
+   Lighting: {lighting}. Background: {background}.
+   If any text appears in the image, use {typography_style} only."
+
+[2] 섹션별 장면 설명 (각 이미지마다 다름)
+  예: "Show the product being used in a cozy living room setting,
+       emphasizing ease of use."
+
+[3] 상품 원형 보존 규칙 (공유 suffix — 모든 이미지 동일)
+  "CRITICAL: Do NOT alter the product itself..."
+```
 
 ---
 
@@ -154,12 +195,14 @@ aiImages?: Array<{
 
 ---
 
-## 영향 범위
+
+## 영향 범위 (업데이트)
 
 | 파일 | 변경 유형 |
 |------|----------|
-| `src/app/api/ai/generate-detail-html/route.ts` | 수정 (Phase 1~3 파이프라인 추가) |
+| `src/app/api/ai/generate-detail-html/route.ts` | 수정 (Phase 1~3 파이프라인 + 비주얼 아이덴티티 생성 추가) |
 | `src/lib/ai/imagen.ts` | 재사용 (기존 `generateFrameImage` 활용) |
+| `src/lib/ai/prompts/detail-page.ts` | 수정 (비주얼 아이덴티티 + 이미지 프롬프트 생성 로직 추가) |
 | `src/components/listing/assets/AssetsInputPanel.tsx` | 수정 (토글 추가) |
 | `src/components/listing/assets/AssetsResultPanel.tsx` | 수정 (이미지 교체 패널 추가) |
 | `src/components/listing/assets/AssetsTab.tsx` | 수정 (includeAiImages 플래그 전달) |
