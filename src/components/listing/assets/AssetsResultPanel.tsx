@@ -11,6 +11,9 @@ import ConversationalDetailModal from './ConversationalDetailModal';
 import { contentToSections } from '@/lib/detail-page/section-parser';
 import type { CategoryKey, ConversationContext } from '@/lib/conversational-detail/types';
 import type { DetailPageContent } from '@/lib/ai/prompts/detail-page';
+import { buildAiDetailPageHtml } from '@/lib/detail-page/ai-html-builder';
+import { appendPrivacyFooter } from '@/lib/detail-page-privacy';
+import type { AiImageSlot } from '@/lib/detail-page/ai-html-builder';
 
 const CATEGORY_OPTIONS: Array<{ key: CategoryKey; label: string }> = [
   { key: 'basic', label: '기본' },
@@ -19,6 +22,110 @@ const CATEGORY_OPTIONS: Array<{ key: CategoryKey; label: string }> = [
   { key: 'food', label: '식품' },
 ];
 
+const ROLE_LABELS: Record<AiImageSlot['role'], string> = {
+  hero: '메인 히어로',
+  lifestyle: '라이프스타일',
+  detail: '소재/디테일',
+  feature: '기능 강조',
+};
+
+interface AiImageSlotsPanelProps {
+  slots: AiImageSlot[];
+  onReplace: (index: number, newUrl: string, isReplaced: boolean) => void;
+  onRegenerate: (index: number) => void;
+  onDelete: (index: number) => void;
+}
+
+function AiImageSlotsPanel({ slots, onReplace, onRegenerate, onDelete }: AiImageSlotsPanelProps) {
+  const [replacingIndex, setReplacingIndex] = React.useState<number | null>(null);
+  const [urlInput, setUrlInput] = React.useState('');
+  const [urlLoading, setUrlLoading] = React.useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result as string;
+      const mimeType = (file.type as 'image/jpeg' | 'image/png' | 'image/webp') || 'image/jpeg';
+      try {
+        const res = await fetch('/api/image/upload-ai', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64: dataUrl, mimeType, role: slots[index]?.role }),
+        });
+        const data = await res.json() as { success: boolean; url?: string };
+        if (data.success && data.url) {
+          onReplace(index, data.url, true);
+          setReplacingIndex(null);
+        }
+      } catch { /* silent */ }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleUrlReplace = async (index: number) => {
+    if (!urlInput.trim()) return;
+    setUrlLoading(true);
+    try {
+      const res = await fetch('/api/image/upload-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl: urlInput.trim(), role: slots[index]?.role }),
+      });
+      const data = await res.json() as { success: boolean; url?: string };
+      if (data.success && data.url) {
+        onReplace(index, data.url, true);
+        setReplacingIndex(null);
+        setUrlInput('');
+      }
+    } catch { /* silent */ } finally { setUrlLoading(false); }
+  };
+
+  if (slots.length === 0) return null;
+
+  return (
+    <div style={{ backgroundColor: '#faf5ff', border: '1px solid #c4b5fd', borderRadius: '12px', padding: '16px', marginBottom: '0' }}>
+      <div style={{ fontSize: '13px', fontWeight: 700, color: '#7c3aed', marginBottom: '10px' }}>
+        AI 생성 이미지
+      </div>
+      {slots.map((slot, idx) => (
+        <div key={slot.role} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '6px', marginBottom: '6px', background: slot.isReplaced ? '#f0fdf4' : '#fff' }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={slot.url} alt={ROLE_LABELS[slot.role]} style={{ width: '52px', height: '52px', objectFit: 'cover', borderRadius: '4px', flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: '12px', fontWeight: 600, color: '#374151' }}>{ROLE_LABELS[slot.role]}</div>
+            <div style={{ fontSize: '11px', color: slot.isReplaced ? '#16a34a' : '#9ca3af' }}>{slot.isReplaced ? '교체됨' : 'AI 생성'}</div>
+          </div>
+          <div style={{ display: 'flex', gap: '4px' }}>
+            <button onClick={() => { setReplacingIndex(idx); setUrlInput(''); }} style={{ fontSize: '11px', padding: '3px 7px', border: '1px solid #d1d5db', borderRadius: '4px', background: '#fff', cursor: 'pointer', color: '#374151' }}>교체</button>
+            <button onClick={() => onRegenerate(idx)} style={{ fontSize: '11px', padding: '3px 7px', border: '1px solid #d1d5db', borderRadius: '4px', background: '#fff', cursor: 'pointer', color: '#374151' }}>재생성</button>
+            <button onClick={() => onDelete(idx)} style={{ fontSize: '11px', padding: '3px 7px', border: '1px solid #fecaca', borderRadius: '4px', background: '#fff', cursor: 'pointer', color: '#dc2626' }}>삭제</button>
+          </div>
+        </div>
+      ))}
+      {replacingIndex !== null && (
+        <div style={{ padding: '10px', border: '1px solid #c4b5fd', borderRadius: '6px', background: '#faf5ff', marginTop: '6px' }}>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: '#7c3aed', marginBottom: '8px' }}>
+            {slots[replacingIndex] ? ROLE_LABELS[slots[replacingIndex].role] : ''} 이미지 교체
+          </div>
+          <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
+            <input type="file" ref={fileInputRef} accept="image/*" style={{ display: 'none' }} onChange={e => { void handleFileChange(e, replacingIndex); }} />
+            <button onClick={() => fileInputRef.current?.click()} style={{ fontSize: '12px', padding: '5px 10px', border: '1px solid #d1d5db', borderRadius: '4px', background: '#fff', cursor: 'pointer' }}>📁 파일 선택</button>
+          </div>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <input value={urlInput} onChange={e => setUrlInput(e.target.value)} placeholder="이미지 URL 붙여넣기" style={{ flex: 1, fontSize: '12px', padding: '5px 8px', border: '1px solid #d1d5db', borderRadius: '4px', color: '#1a1a1a' }} />
+            <button onClick={() => void handleUrlReplace(replacingIndex)} disabled={urlLoading || !urlInput.trim()} style={{ fontSize: '12px', padding: '5px 10px', border: 'none', borderRadius: '4px', background: '#7c3aed', color: '#fff', cursor: 'pointer', opacity: urlLoading ? 0.6 : 1 }}>적용</button>
+          </div>
+          <button onClick={() => setReplacingIndex(null)} style={{ fontSize: '11px', color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer', marginTop: '4px' }}>취소</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AssetsResultPanel() {
   const { assetsDraft, updateAssetsDraft, sharedDraft } = useListingStore();
   const {
@@ -26,6 +133,7 @@ export default function AssetsResultPanel() {
     generatedDetailHtml,
     detailPageSections,
     detailPageTheme,
+    aiImageSlots,
   } = assetsDraft;
   const hasResult = generatedThumbnails.length > 0 || generatedDetailHtml.length > 0;
 
@@ -322,6 +430,45 @@ export default function AssetsResultPanel() {
     setImageEditTarget(null);
   };
 
+  const handleReplaceSlot = (index: number, newUrl: string, isReplaced: boolean) => {
+    const newSlots = aiImageSlots.map((s, i) => i === index ? { ...s, url: newUrl, isReplaced } : s);
+    updateAssetsDraft({ aiImageSlots: newSlots });
+  };
+
+  const handleDeleteSlot = (index: number) => {
+    const newSlots = aiImageSlots.filter((_, i) => i !== index);
+    updateAssetsDraft({ aiImageSlots: newSlots });
+  };
+
+  const handleRegenerateSlot = async (index: number) => {
+    const slot = aiImageSlots[index];
+    if (!slot) return;
+    updateAssetsDraft({ isGenerating: true, generatingMessage: `${ROLE_LABELS[slot.role]} 재생성 중...` });
+    try {
+      const genRes = await fetch('/api/ai/generate-frame-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ frameType: 'hero', imagePrompt: slot.prompt }),
+      });
+      const genData = await genRes.json() as { success: boolean; data?: { imageBase64: string; mimeType: string } };
+      if (!genData.success || !genData.data) throw new Error('재생성 실패');
+
+      const uploadRes = await fetch('/api/image/upload-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: genData.data.imageBase64, mimeType: genData.data.mimeType, role: slot.role }),
+      });
+      const uploadData = await uploadRes.json() as { success: boolean; url?: string };
+      if (!uploadData.success || !uploadData.url) throw new Error('업로드 실패');
+
+      handleReplaceSlot(index, uploadData.url, false);
+    } catch (e) {
+      updateAssetsDraft({ lastError: e instanceof Error ? e.message : '재생성 실패' });
+    } finally {
+      updateAssetsDraft({ isGenerating: false, generatingMessage: null });
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
@@ -427,6 +574,16 @@ export default function AssetsResultPanel() {
           })}
         </div>
       </div>
+
+      {/* AI 생성 이미지 슬롯 관리 */}
+      {aiImageSlots.length > 0 && (
+        <AiImageSlotsPanel
+          slots={aiImageSlots}
+          onReplace={handleReplaceSlot}
+          onRegenerate={handleRegenerateSlot}
+          onDelete={handleDeleteSlot}
+        />
+      )}
 
       {/* 상세페이지 (DetailPageEditor 또는 레거시 iframe) */}
       {generatedDetailHtml.length > 0 && (
