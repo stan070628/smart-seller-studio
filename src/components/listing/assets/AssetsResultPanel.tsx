@@ -14,6 +14,7 @@ import type { DetailPageContent } from '@/lib/ai/prompts/detail-page';
 import { buildAiDetailPageHtml } from '@/lib/detail-page/ai-html-builder';
 import { appendPrivacyFooter } from '@/lib/detail-page-privacy';
 import type { AiImageSlot } from '@/lib/detail-page/ai-html-builder';
+import { ROLE_LABELS } from './roleLabels';
 
 const CATEGORY_OPTIONS: Array<{ key: CategoryKey; label: string }> = [
   { key: 'basic', label: '기본' },
@@ -21,13 +22,6 @@ const CATEGORY_OPTIONS: Array<{ key: CategoryKey; label: string }> = [
   { key: 'living', label: '리빙' },
   { key: 'food', label: '식품' },
 ];
-
-const ROLE_LABELS: Record<AiImageSlot['role'], string> = {
-  hero: '메인 히어로',
-  lifestyle: '라이프스타일',
-  detail: '소재/디테일',
-  feature: '기능 강조',
-};
 
 interface AiImageSlotsPanelProps {
   slots: AiImageSlot[];

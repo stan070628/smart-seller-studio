@@ -2,14 +2,7 @@
 
 import React, { useRef } from 'react';
 import type { AiImageSlot } from '@/lib/detail-page/ai-html-builder';
-
-// 역할별 한국어 레이블
-const ROLE_LABELS: Record<AiImageSlot['role'], string> = {
-  hero: '메인 히어로',
-  lifestyle: '라이프스타일',
-  detail: '소재·디테일',
-  feature: '기능 강조',
-};
+import { ROLE_LABELS } from './roleLabels';
 
 interface SceneImageDrawerProps {
   slots: AiImageSlot[];
@@ -57,8 +50,8 @@ export default function SceneImageDrawer({
           onReplace(activeIndex, data.url, true);
           onClose();
         }
-      } catch {
-        // 업로드 오류는 조용히 무시
+      } catch (err) {
+        console.warn('[SceneImageDrawer] 이미지 업로드 실패:', err);
       } finally {
         setUploading(false);
       }
