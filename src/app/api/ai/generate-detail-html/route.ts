@@ -617,11 +617,11 @@ export async function POST(
       ...parsed,
       imagePrompts: parsed.imagePrompts.map(p => ({
         ...p,
-        scene: buildFinalGeminiPrompt(parsed.visualIdentity, p.scene),
+        prompt: buildFinalGeminiPrompt(parsed.visualIdentity, p.scene),
       })),
     };
   } catch (err) {
-    console.warn('[generate-detail-html] imagePrompts 생성 실패 — 무시:', err);
+    console.warn('[generate-detail-html] imagePrompts 생성 실패 (model: claude-haiku-4-5-20251001) — 무시:', err);
   }
 
   // content 필드를 포함시켜 클라이언트의 섹션 편집기(DetailPageEditor)를 활성화할 수 있도록 한다.

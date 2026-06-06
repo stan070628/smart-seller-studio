@@ -13,7 +13,8 @@ export interface VisualIdentity {
 
 export interface SectionImagePrompt {
   role: 'hero' | 'lifestyle' | 'detail' | 'feature';
-  scene: string;
+  scene: string;           // Claude가 생성한 원본 장면 설명
+  prompt?: string;         // 라우트에서 조립한 Gemini 최종 프롬프트 (파서에서 세팅하지 않음)
   referenceImageIndex: number;
 }
 
