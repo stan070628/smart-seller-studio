@@ -56,6 +56,7 @@ export default function SceneImageDrawer({
         setUploading(false);
       }
     };
+    reader.onerror = () => { setUploading(false); };
     reader.readAsDataURL(file);
     e.target.value = '';
   };

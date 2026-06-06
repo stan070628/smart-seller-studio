@@ -340,6 +340,7 @@ export default function AssetsResultPanel() {
   const handleReplaceSlot = (index: number, newUrl: string, isReplaced: boolean) => {
     const newSlots = aiImageSlots.map((s, i) => i === index ? { ...s, url: newUrl, isReplaced } : s);
     const patch: Parameters<typeof updateAssetsDraft>[0] = { aiImageSlots: newSlots };
+    // aiDetailContent는 includeAiImages=true일 때 slots와 함께 항상 존재하는 불변 조건
     if (aiDetailContent && newSlots.length > 0) {
       patch.generatedDetailHtml = appendPrivacyFooter(buildAiDetailPageHtml(aiDetailContent, newSlots));
     }
