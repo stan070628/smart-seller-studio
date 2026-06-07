@@ -119,7 +119,9 @@ export default function DashboardClient() {
 
   const chartActual = useMemo(() => {
     const apiActual = orders?.revenue12w?.actual;
-    if (apiActual?.some((v) => v !== null)) return apiActual;
+    // API 데이터에 실제 값(>0)이 하나라도 있을 때만 사용.
+    // API가 all-zero를 반환하면(Wing/RG 데이터 없음) planData fallback 허용.
+    if (apiActual?.some((v) => v !== null && v > 0)) return apiActual;
     return planData?.cumulativeActual ?? new Array(12).fill(null);
   }, [orders, planData]);
 

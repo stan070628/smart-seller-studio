@@ -303,9 +303,13 @@ export async function POST(
     // 9. Supabase Storage 업로드
     let uploadResult: { url: string; path: string; size: number }
     try {
+      const processedArrayBuffer = processedBuffer.buffer.slice(
+        processedBuffer.byteOffset,
+        processedBuffer.byteOffset + processedBuffer.byteLength
+      ) as ArrayBuffer
       uploadResult = await uploadToStorage(
         storagePath,
-        processedBuffer.buffer as ArrayBuffer,
+        processedArrayBuffer,
         "image/jpeg",
         processedSize
       )

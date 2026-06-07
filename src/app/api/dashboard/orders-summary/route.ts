@@ -383,11 +383,16 @@ async function buildOrdersSummary(period: Period): Promise<OrdersSummaryData> {
   };
   rgPipeline.정산완료 = rgSettle;
 
-  // Wing 누적 + RG 누적 합산. Wing이 null(미래 주차)이면 그대로 null 유지.
+  // Wing 누적 + RG 누적 합산.
+  // Wing API 실패(all-null)여도 RG 데이터는 살린다. 미래 주차만 null.
+  const currentWeek = getCurrentWeek();
   let rgAcc = 0;
-  const mergedActual = wingWeekly.map((wingVal, i) => {
+  const mergedActual: (number | null)[] = wingWeekly.map((wingVal, i) => {
     rgAcc += rgWeeklyRaw[i] ?? 0;
-    return wingVal !== null ? wingVal + rgAcc : null;
+    const w = i + 1;
+    if (w > currentWeek) return null;
+    // wingVal null = Wing API 실패 → 0으로 처리해 RG 기여 보존
+    return (wingVal ?? 0) + rgAcc;
   });
 
   return {
