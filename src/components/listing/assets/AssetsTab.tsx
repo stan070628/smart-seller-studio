@@ -7,8 +7,10 @@ import { useListingStore } from '@/store/useListingStore';
 import { parseSpecText } from '@/lib/utils/parseSpecText';
 import { contentToSections } from '@/lib/detail-page/section-parser';
 import type { DetailPageContent } from '@/lib/ai/prompts/detail-page';
+import { buildAiDetailPageHtml } from '@/lib/detail-page/ai-html-builder';
 import type { AiImageSlot } from '@/lib/detail-page/ai-html-builder';
 import type { ImagePromptsResponse, SectionImagePrompt } from '@/lib/ai/prompts/detail-image-prompts';
+import { appendPrivacyFooter } from '@/lib/detail-page-privacy';
 import SceneReviewPanel from './SceneReviewPanel';
 import type { CropItem } from '@/store/useListingStore';
 
@@ -406,6 +408,12 @@ export default function AssetsTab() {
           }
         }
 
+        // 씬 이미지가 있으면 텍스트 오버레이 포함 HTML 재빌드
+        if (includeAiImages && aiSlots.length > 0 && detailContent) {
+          updateAssetsDraft({ generatingMessage: 'HTML 완성 중...' });
+          detailHtml = appendPrivacyFooter(buildAiDetailPageHtml(detailContent, aiSlots));
+        }
+
         let detailPageSections = assetsDraft.detailPageSections;
         if (!existingContentUrl && detailContent) {
           try { detailPageSections = contentToSections(detailContent); } catch { /* silent */ }
@@ -453,6 +461,12 @@ export default function AssetsTab() {
         } else if (includeAiImages && result.imagePromptsError) {
           updateAssetsDraft({ lastError: `AI 이미지 프롬프트 생성 실패: ${result.imagePromptsError}` });
         }
+      }
+
+      // 씬 이미지가 있으면 텍스트 오버레이 포함 HTML 재빌드
+      if (includeAiImages && aiSlots.length > 0 && detailContent) {
+        updateAssetsDraft({ generatingMessage: 'HTML 완성 중...' });
+        detailHtml = appendPrivacyFooter(buildAiDetailPageHtml(detailContent, aiSlots));
       }
 
       let detailPageSections = assetsDraft.detailPageSections;
