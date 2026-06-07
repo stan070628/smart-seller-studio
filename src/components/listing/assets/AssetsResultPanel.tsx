@@ -282,9 +282,22 @@ export default function AssetsResultPanel() {
     conversationContext: ConversationContext;
   }) => {
     let newSections = assetsDraft.detailPageSections;
+    let hasPreservedImages = false;
     if (content) {
       try {
-        newSections = contentToSections(content);
+        const parsed = contentToSections(content);
+        const existing = assetsDraft.detailPageSections;
+        // 개선 후 사용자가 첨부한 소스 이미지/지시사항 보존 (인덱스 기준)
+        newSections = parsed.map((section, idx) => {
+          const prev = existing[idx];
+          if (!prev) return section;
+          return {
+            ...section,
+            ...(prev.attachedImages?.length && { attachedImages: prev.attachedImages }),
+            ...(prev.aiInstruction && { aiInstruction: prev.aiInstruction }),
+          };
+        });
+        hasPreservedImages = newSections.some((s) => s.attachedImages?.length > 0);
       } catch {
         // 파싱 실패 시 silent fallback
       }
@@ -296,6 +309,10 @@ export default function AssetsResultPanel() {
       conversationAnswers: conversationContext.answers,
       lastError: null,
     });
+    // 소스 이미지가 보존된 경우 미리보기 HTML 재빌드 (AI 씬 이미지 모드는 별도 파이프라인)
+    if (hasPreservedImages && !includeAiImages) {
+      void refreshRenderedHtml(newSections, detailPageTheme);
+    }
     setImproveModalOpen(false);
     setShowCategoryPicker(false);
   };
