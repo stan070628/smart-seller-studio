@@ -203,6 +203,16 @@ interface NaverProduct {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type NaverProductDetail = Record<string, any>;
 
+// ─── CropItem 타입 ────────────────────────────────────────────────────────────
+// Gemini Scene Composite Pipeline — 씬별 크롭 결과물
+export interface CropItem {
+  id: string;
+  originalImageUrl: string;
+  cropBox?: { x: number; y: number; width: number; height: number }; // 정규화 0~1
+  sectionType: 'hero' | 'lifestyle' | 'detail' | 'feature';
+  croppedImageUrl: string;
+}
+
 // ─── AssetsDraft 타입 ─────────────────────────────────────────────────────────
 // 썸네일·상세만 만들기 탭의 임시 작업 상태
 interface AssetsDraft {
@@ -230,6 +240,13 @@ interface AssetsDraft {
   includeAiImages: boolean;
   aiImageSlots: AiImageSlot[];
   aiDetailContent: import('@/lib/ai/prompts/detail-page').DetailPageContent | null;
+  // ─── Gemini Scene Composite Pipeline ──────────────────────────────────────
+  /** 씬 분석 대기 중인 크롭 목록. 사용자 확인 전 임시 보관. */
+  pendingCrops: CropItem[] | null;
+  /** 사용자가 확인·확정한 크롭 목록. 이미지 생성에 실제로 사용. */
+  confirmedCrops: CropItem[] | null;
+  /** Gemini 씬 분석 / 이미지 생성 진행 중 여부 */
+  isAnalyzing: boolean;
 }
 
 const ASSETS_DRAFT_INITIAL: AssetsDraft = {
@@ -249,6 +266,10 @@ const ASSETS_DRAFT_INITIAL: AssetsDraft = {
   includeAiImages: true,
   aiImageSlots: [],
   aiDetailContent: null,
+  // Gemini Scene Composite Pipeline
+  pendingCrops: null,
+  confirmedCrops: null,
+  isAnalyzing: false,
 };
 
 interface ListingStore {

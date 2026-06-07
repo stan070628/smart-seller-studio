@@ -11,6 +11,9 @@ import { requireAuth } from "@/lib/supabase/auth";
 import { checkRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { generateFrameImage } from "@/lib/ai/imagen";
 
+// Vercel 서버리스 함수 최대 실행 시간 (이미지 생성은 오래 걸릴 수 있음)
+export const maxDuration = 60;
+
 // ─────────────────────────────────────────
 // Rate Limit 설정 (이미지 생성은 무거우므로 분당 10회)
 // ─────────────────────────────────────────
