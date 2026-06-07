@@ -326,6 +326,12 @@ export default function AssetsTab() {
 
       const finalContent = detailContent;
 
+      // 씬 이미지가 있으면 텍스트 오버레이 포함 HTML 재빌드 (handleGenerate와 동일)
+      if (aiSlots.length > 0 && finalContent) {
+        updateAssetsDraft({ generatingMessage: 'HTML 완성 중...' });
+        baseHtml = appendPrivacyFooter(buildAiDetailPageHtml(finalContent, aiSlots));
+      }
+
       let detailPageSections = assetsDraft.detailPageSections;
       if (!existingContentForCrops && finalContent) {
         try { detailPageSections = contentToSections(finalContent); } catch { /* silent */ }
