@@ -629,6 +629,7 @@ export default function AssetsResultPanel() {
                 isGenerating={isRendering}
                 onSectionsChange={(sections) => {
                   updateAssetsDraft({ detailPageSections: sections });
+                  void refreshRenderedHtml(sections, detailPageTheme);
                 }}
                 onThemeChange={(theme) => {
                   updateAssetsDraft({ detailPageTheme: theme });

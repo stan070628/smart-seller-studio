@@ -63,7 +63,13 @@ export async function POST(req: NextRequest) {
       // 세로가 가로의 2.5배 초과인 경우 긴 이미지로 판단 → Claude Vision에 cropBox 제안 요청
       const isLongImage = height > 2.5 * width;
       const mediaType = format === 'png' ? 'image/png' : 'image/jpeg';
-      const imageBase64 = imgBuffer.toString('base64');
+      // Claude Vision 분석용: 이미지가 너무 크면 리사이즈 (API 크기 제한 회피)
+      // crop 좌표는 0~1 비율이므로 리사이즈 후에도 원본 이미지에 동일하게 적용 가능
+      const visionBuffer = await sharp(imgBuffer)
+        .resize(1000, 4000, { fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 80 })
+        .toBuffer();
+      const imageBase64 = visionBuffer.toString('base64');
 
       if (isLongImage) {
         // 긴 이미지: Claude Sonnet으로 구역별 cropBox 좌표 추출
@@ -76,7 +82,7 @@ export async function POST(req: NextRequest) {
               content: [
                 {
                   type: 'image',
-                  source: { type: 'base64', media_type: mediaType as 'image/jpeg' | 'image/png', data: imageBase64 },
+                  source: { type: 'base64', media_type: 'image/jpeg', data: imageBase64 },
                 },
                 {
                   type: 'text',
@@ -121,7 +127,7 @@ export async function POST(req: NextRequest) {
                 croppedBuffer.byteOffset + croppedBuffer.byteLength,
               );
               const croppedPath = `ai-detail/${Date.now()}-crop-${crop.sectionType}.jpg`;
-              const uploadResult = await uploadToStorage(croppedPath, croppedArrayBuffer, 'image/jpeg', croppedBuffer.byteLength);
+              const uploadResult = await uploadToStorage(croppedPath, croppedArrayBuffer as ArrayBuffer, 'image/jpeg', croppedBuffer.byteLength);
 
               processedImages.push({
                 originalImageUrl: imageUrl,
@@ -148,7 +154,7 @@ export async function POST(req: NextRequest) {
             messages: [{
               role: 'user',
               content: [
-                { type: 'image', source: { type: 'base64', media_type: mediaType as 'image/jpeg' | 'image/png', data: imageBase64 } },
+                { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: imageBase64 } },
                 { type: 'text', text: '이 이미지의 역할을 하나만 반환하세요: hero, lifestyle, detail, feature' },
               ],
             }],
@@ -171,11 +177,23 @@ export async function POST(req: NextRequest) {
     SECTIONS.forEach((s) => processedImages.push({ originalImageUrl: fallbackUrl, croppedImageUrl: fallbackUrl, suggestedSectionType: s }));
   }
 
-  // 4개 섹션 모두 채우기: 부족한 섹션은 circular reuse
+  // 4개 섹션 모두 채우기: 이미 사용된 이미지를 제외하고 서로 다른 이미지 할당
+  const usedIndices = new Set<number>();
   const crops = SECTIONS.map((sectionType, idx) => {
-    const existing = processedImages.find(p => p.suggestedSectionType === sectionType);
-    const fallback = processedImages[idx % processedImages.length];
-    const source = existing ?? fallback;
+    // 1순위: 해당 섹션으로 분류된 미사용 이미지
+    let srcIdx = processedImages.findIndex(
+      (p, i) => p.suggestedSectionType === sectionType && !usedIndices.has(i)
+    );
+    // 2순위: 미사용 이미지 중 첫 번째
+    if (srcIdx < 0) {
+      srcIdx = processedImages.findIndex((_, i) => !usedIndices.has(i));
+    }
+    // 3순위: circular reuse (이미지가 섹션 수보다 적은 경우만)
+    if (srcIdx < 0) {
+      srcIdx = idx % processedImages.length;
+    }
+    usedIndices.add(srcIdx);
+    const source = processedImages[srcIdx];
     return {
       id: `crop-${sectionType}-${Date.now()}-${idx}`,
       originalImageUrl: source.originalImageUrl,

@@ -23,6 +23,19 @@ export default function SceneImageDrawer({
 }: SceneImageDrawerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
+
+  const handleCopyPrompt = async () => {
+    const prompt = slots[activeIndex]?.prompt;
+    if (!prompt) return;
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1000);
+    } catch {
+      // clipboard 접근 실패 시 무시
+    }
+  };
 
   // activeIndex가 범위 밖이면 렌더링 생략
   const activeSlot = slots[activeIndex];
@@ -172,6 +185,61 @@ export default function SceneImageDrawer({
               {ROLE_LABELS[slot.role]}
             </button>
           ))}
+        </div>
+      )}
+
+      {/* Claude 생성 프롬프트 */}
+      {activeSlot.prompt && (
+        <div
+          style={{
+            padding: '12px 16px',
+            borderBottom: '1px solid #f3f4f6',
+            flexShrink: 0,
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '6px',
+            }}
+          >
+            <span style={{ fontSize: '12px', fontWeight: 600, color: '#6b7280' }}>
+              Claude 생성 프롬프트
+            </span>
+            <button
+              onClick={() => { void handleCopyPrompt(); }}
+              style={{
+                fontSize: '11px',
+                padding: '2px 8px',
+                borderRadius: '4px',
+                border: '1px solid #e5e7eb',
+                background: copied ? '#f0fdf4' : '#fff',
+                color: copied ? '#16a34a' : '#6b7280',
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+              }}
+            >
+              {copied ? '✓ 복사됨' : '복사'}
+            </button>
+          </div>
+          <div
+            style={{
+              background: '#faf5ff',
+              border: '1px solid #e9d5ff',
+              borderRadius: '6px',
+              padding: '8px 10px',
+              fontSize: '11px',
+              color: '#4b5563',
+              lineHeight: 1.5,
+              wordBreak: 'break-word',
+              maxHeight: '120px',
+              overflowY: 'auto',
+            }}
+          >
+            {activeSlot.prompt}
+          </div>
         </div>
       )}
 

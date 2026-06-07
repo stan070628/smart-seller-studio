@@ -26,6 +26,9 @@ const FRAME_IMAGE_RATE_LIMIT = { windowMs: 60_000, maxRequests: 10 };
 
 const FRAME_TYPES = [
   "hero",
+  "lifestyle",
+  "detail",
+  "feature",
   "pain_point",
   "solution",
   "usp",
