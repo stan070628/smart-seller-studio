@@ -287,17 +287,18 @@ export default function AssetsResultPanel() {
       try {
         const parsed = contentToSections(content);
         const existing = assetsDraft.detailPageSections;
-        // 개선 후 사용자가 첨부한 소스 이미지/지시사항 보존 (인덱스 기준)
+        // 개선 후 사용자가 첨부한 소스 이미지/지시사항 보존 (인덱스 + 타입 기준)
+        // AI 개선 시 선택 섹션 추가/제거로 인덱스가 달라질 수 있으므로 타입 일치 확인
         newSections = parsed.map((section, idx) => {
           const prev = existing[idx];
-          if (!prev) return section;
+          if (!prev || prev.type !== section.type) return section;
           return {
             ...section,
-            ...(prev.attachedImages?.length && { attachedImages: prev.attachedImages }),
+            ...(prev.attachedImages.length > 0 && { attachedImages: prev.attachedImages }),
             ...(prev.aiInstruction && { aiInstruction: prev.aiInstruction }),
           };
         });
-        hasPreservedImages = newSections.some((s) => s.attachedImages?.length > 0);
+        hasPreservedImages = newSections.some((s) => s.attachedImages.length > 0);
       } catch {
         // 파싱 실패 시 silent fallback
       }
