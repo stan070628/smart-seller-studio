@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
               const w = Math.max(0.05, Math.min(1 - x, cb.width));
               const h = Math.max(0.05, Math.min(1 - y, cb.height));
 
-              // 너무 작은 영역은 원본 URL을 그대로 사용
+              // 너무 작은 크롭 영역(10% 미만)은 의미 없으므로 원본 URL 그대로 사용
               if (w < 0.1 || h < 0.1) {
                 processedImages.push({ originalImageUrl: imageUrl, croppedImageUrl: imageUrl, suggestedSectionType: crop.sectionType });
                 continue;

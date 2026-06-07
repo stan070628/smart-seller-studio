@@ -89,6 +89,8 @@ describe('POST /api/image/analyze-detail-images', () => {
     const data = await res.json();
 
     expect(res.status).toBe(200);
+    expect(data.success).toBe(true);
+    expect(data.crops).toHaveLength(4);
     expect(data.crops.some((c: { cropBox?: unknown }) => c.cropBox !== undefined)).toBe(true);
   });
 
@@ -98,7 +100,7 @@ describe('POST /api/image/analyze-detail-images', () => {
     expect(res.status).toBe(400);
   });
 
-  it('Claude Vision 실패 → 폴백으로 이미지 순서대로 섹션 매핑', async () => {
+  it('Claude Vision 실패 → 폴백으로 4개 섹션 반환', async () => {
     const { getAnthropicClient } = await import('@/lib/ai/claude');
     (getAnthropicClient().messages.create as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Claude 오류'));
 
