@@ -95,6 +95,8 @@ const RequestSchema = z.object({
   category: z.enum(['basic', 'fashion', 'living', 'food'] as const).optional(),
   /** 소스 URL에서 추출한 실측 스펙 (이미지 분석보다 우선 반영) */
   productSpecs: z.array(z.object({ label: z.string(), value: z.string() })).max(20).optional(),
+  /** true일 때만 imagePrompts(Gemini 씬 프롬프트)를 생성·반환한다. 기본값 false. */
+  includeImagePrompts: z.boolean().optional(),
   /**
    * 대화식 상세페이지 생성 모드에서 수집한 마케팅 브리프.
    * 디자인 문서: docs/superpowers/specs/2026-05-16-conversational-detail-page-design.md §5.3
@@ -270,6 +272,7 @@ interface ApiSuccessResponse {
   naverSnippet: string;      // 네이버용 860px
   content?: DetailPageContent; // 섹션 편집기 초기화용 구조화 데이터 (신규 생성 모드에서만 포함)
   imagePrompts?: ImagePromptsResponse;
+  imagePromptsError?: string; // includeImagePrompts=true 였지만 생성 실패 시 이유
 }
 
 interface ApiErrorResponse {
@@ -338,7 +341,7 @@ export async function POST(
     );
   }
 
-  const { images: rawImages, imageUrls, productName, existingHtml, studioMode, productSpecs, category, conversationContext } = parseResult.data;
+  const { images: rawImages, imageUrls, productName, existingHtml, studioMode, productSpecs, category, conversationContext, includeImagePrompts } = parseResult.data;
 
   // imageUrls가 있으면 서버에서 fetch → base64 변환 후 rawImages와 합산
   let images: Array<{ imageBase64: string; mimeType: AllowedMimeType }>;
@@ -594,34 +597,40 @@ export async function POST(
     );
   }
 
-  // ── imagePrompts 생성 (content 파싱 성공 후) ──────────────────────────────
+  // ── imagePrompts 생성 (includeImagePrompts=true 일 때만) ─────────────────
   let imagePromptsResult: ImagePromptsResponse | undefined;
-  try {
-    const promptsUserMsg = buildImagePromptsUserPrompt(imageAnalysis, content, productName);
-    const promptsResp = await withRetry(
-      () =>
-        client.messages.create({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 1024,
-          system: IMAGE_PROMPTS_SYSTEM_PROMPT,
-          messages: [{ role: 'user', content: promptsUserMsg }],
-        }),
-      { label: 'Claude generateImagePrompts' },
-    );
-    const promptsRaw = promptsResp.content
-      .filter(b => b.type === 'text')
-      .map(b => (b as { type: 'text'; text: string }).text)
-      .join('');
-    const parsed = parseImagePromptsResponse(promptsRaw);
-    imagePromptsResult = {
-      ...parsed,
-      imagePrompts: parsed.imagePrompts.map(p => ({
-        ...p,
-        prompt: buildFinalGeminiPrompt(parsed.visualIdentity, p.scene),
-      })),
-    };
-  } catch (err) {
-    console.warn('[generate-detail-html] imagePrompts 생성 실패 (model: claude-haiku-4-5-20251001) — 무시:', err);
+  let imagePromptsError: string | undefined;
+
+  if (includeImagePrompts) {
+    try {
+      const promptsUserMsg = buildImagePromptsUserPrompt(imageAnalysis, content, productName);
+      const promptsResp = await withRetry(
+        () =>
+          client.messages.create({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 1024,
+            system: IMAGE_PROMPTS_SYSTEM_PROMPT,
+            messages: [{ role: 'user', content: promptsUserMsg }],
+          }),
+        { label: 'Claude generateImagePrompts' },
+      );
+      const promptsRaw = promptsResp.content
+        .filter(b => b.type === 'text')
+        .map(b => (b as { type: 'text'; text: string }).text)
+        .join('');
+      const parsedPrompts = parseImagePromptsResponse(promptsRaw);
+      imagePromptsResult = {
+        ...parsedPrompts,
+        imagePrompts: parsedPrompts.imagePrompts.map(p => ({
+          ...p,
+          prompt: buildFinalGeminiPrompt(parsedPrompts.visualIdentity, p.scene),
+        })),
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'imagePrompts 생성 실패';
+      console.error('[generate-detail-html] imagePrompts 생성 실패:', err);
+      imagePromptsError = msg;
+    }
   }
 
   // content 필드를 포함시켜 클라이언트의 섹션 편집기(DetailPageEditor)를 활성화할 수 있도록 한다.
@@ -632,5 +641,6 @@ export async function POST(
     naverSnippet: appendPrivacyFooter(naverSnippet),
     content,
     ...(imagePromptsResult ? { imagePrompts: imagePromptsResult } : {}),
+    ...(imagePromptsError ? { imagePromptsError } : {}),
   }, { status: 200 });
 }

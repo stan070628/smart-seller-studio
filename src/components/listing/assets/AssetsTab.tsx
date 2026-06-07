@@ -19,7 +19,7 @@ export default function AssetsTab() {
   const generateDetailHtml = async (
     imageUrls: string[],
     requestImagePrompts = false,
-  ): Promise<{ html: string; content?: DetailPageContent; imagePrompts?: ImagePromptsResponse }> => {
+  ): Promise<{ html: string; content?: DetailPageContent; imagePrompts?: ImagePromptsResponse; imagePromptsError?: string }> => {
     if (imageUrls.length === 0) return { html: '' };
     const productSpecs = parseSpecText(sharedDraft.productSpecText);
     const res = await fetch('/api/ai/generate-detail-html', {
@@ -28,6 +28,7 @@ export default function AssetsTab() {
       body: JSON.stringify({
         imageUrls: imageUrls.slice(0, 6),
         studioMode: true,
+        ...(requestImagePrompts ? { includeImagePrompts: true } : {}),
         ...(productSpecs ? { productSpecs } : {}),
       }),
     });
@@ -36,14 +37,15 @@ export default function AssetsTab() {
       const text = await res.text();
       throw new Error(`상세페이지 생성 실패 (HTTP ${res.status}): ${text.slice(0, 160)}`);
     }
-    const data = (await res.json()) as { html?: string; content?: DetailPageContent; imagePrompts?: ImagePromptsResponse; error?: string };
+    const data = (await res.json()) as { html?: string; content?: DetailPageContent; imagePrompts?: ImagePromptsResponse; imagePromptsError?: string; error?: string };
     if (!res.ok || !data.html) {
       throw new Error(data.error ?? '상세페이지 생성 실패');
     }
     return {
       html: data.html,
       content: data.content,
-      imagePrompts: requestImagePrompts ? data.imagePrompts : undefined,
+      imagePrompts: data.imagePrompts,
+      imagePromptsError: data.imagePromptsError,
     };
   };
 
@@ -164,6 +166,8 @@ export default function AssetsTab() {
               updateAssetsDraft({ generatingMessage: 'HTML 완성 중...' });
               detailHtml = appendPrivacyFooter(buildAiDetailPageHtml(detailContent, aiSlots));
             }
+          } else if (includeAiImages && result.imagePromptsError) {
+            updateAssetsDraft({ lastError: `AI 이미지 프롬프트 생성 실패: ${result.imagePromptsError}` });
           }
         }
 
@@ -203,6 +207,8 @@ export default function AssetsTab() {
             updateAssetsDraft({ generatingMessage: 'HTML 완성 중...' });
             detailHtml = appendPrivacyFooter(buildAiDetailPageHtml(detailContent, aiSlots));
           }
+        } else if (includeAiImages && result.imagePromptsError) {
+          updateAssetsDraft({ lastError: `AI 이미지 프롬프트 생성 실패: ${result.imagePromptsError}` });
         }
       }
 
