@@ -14,7 +14,7 @@ vi.mock('@/components/listing/assets/ConversationalDetailModal', () => ({
 describe('AssetsInputPanel', () => {
   it('URL/직접 업로드 모드 토글이 동작한다', () => {
     useListingStore.getState().resetAssetsDraft();
-    render(<AssetsInputPanel onGenerate={() => {}} />);
+    render(<AssetsInputPanel onGenerate={() => {}} onAnalyze={() => {}} />);
     expect(screen.getByRole('radio', { name: /URL/ })).toBeChecked();
     fireEvent.click(screen.getByRole('radio', { name: /직접 업로드/ }));
     expect(useListingStore.getState().assetsDraft.mode).toBe('upload');
@@ -22,7 +22,7 @@ describe('AssetsInputPanel', () => {
 
   it('URL 모드에서 빈 입력은 생성 버튼이 비활성화된다', () => {
     useListingStore.getState().updateAssetsDraft({ mode: 'url', url: '' });
-    render(<AssetsInputPanel onGenerate={() => {}} />);
+    render(<AssetsInputPanel onGenerate={() => {}} onAnalyze={() => {}} />);
     expect(screen.getByRole('button', { name: /자동 생성/ })).toBeDisabled();
   });
 
@@ -37,7 +37,7 @@ describe('AssetsInputPanel', () => {
     });
     store.updateSharedDraft({ name: '테스트 상품' });
 
-    render(<AssetsInputPanel onGenerate={() => {}} />);
+    render(<AssetsInputPanel onGenerate={() => {}} onAnalyze={() => {}} />);
     fireEvent.click(screen.getByRole('button', { name: /AI와 함께 만들기/ }));
 
     const modal = await waitFor(() => screen.getByTestId('modal'));
@@ -56,7 +56,7 @@ describe('AssetsInputPanel', () => {
     });
     store.updateSharedDraft({ name: '테스트 상품' });
 
-    render(<AssetsInputPanel onGenerate={() => {}} />);
+    render(<AssetsInputPanel onGenerate={() => {}} onAnalyze={() => {}} />);
     expect(screen.getByRole('button', { name: /AI와 함께 만들기/ })).not.toBeDisabled();
   });
 
@@ -71,7 +71,7 @@ describe('AssetsInputPanel', () => {
     });
     store.updateSharedDraft({ name: '테스트 상품' });
 
-    render(<AssetsInputPanel onGenerate={() => {}} />);
+    render(<AssetsInputPanel onGenerate={() => {}} onAnalyze={() => {}} />);
     fireEvent.click(screen.getByRole('button', { name: /AI와 함께 만들기/ }));
 
     const modal = await waitFor(() => screen.getByTestId('modal'));
@@ -85,7 +85,7 @@ describe('AssetsInputPanel', () => {
     store.updateAssetsDraft({ mode: 'url', url: 'https://example.com/product', category: null });
     store.updateSharedDraft({ name: '테스트 상품' });
 
-    render(<AssetsInputPanel onGenerate={() => {}} />);
+    render(<AssetsInputPanel onGenerate={() => {}} onAnalyze={() => {}} />);
     expect(screen.getByRole('button', { name: /AI와 함께 만들기/ })).toBeDisabled();
   });
 
@@ -95,7 +95,7 @@ describe('AssetsInputPanel', () => {
     store.updateAssetsDraft({ mode: 'url', url: 'https://example.com/product', category: 'basic' });
     store.updateSharedDraft({ name: '테스트 상품' });
 
-    render(<AssetsInputPanel onGenerate={() => {}} />);
+    render(<AssetsInputPanel onGenerate={() => {}} onAnalyze={() => {}} />);
     expect(screen.getByRole('button', { name: /AI와 함께 만들기/ })).not.toBeDisabled();
   });
 
@@ -108,7 +108,7 @@ describe('AssetsInputPanel', () => {
       detailFiles: [],
     });
 
-    render(<AssetsInputPanel onGenerate={() => {}} />);
+    render(<AssetsInputPanel onGenerate={() => {}} onAnalyze={() => {}} />);
     // 업로드된 이미지가 있을 때 다운로드 버튼이 렌더링되어야 한다
     expect(screen.getAllByRole('button', { name: /이미지 다운로드/ })).toHaveLength(1);
   });
@@ -122,7 +122,7 @@ describe('AssetsInputPanel', () => {
       detailFiles: ['https://example.com/detail1.jpg'],
     });
 
-    render(<AssetsInputPanel onGenerate={() => {}} />);
+    render(<AssetsInputPanel onGenerate={() => {}} onAnalyze={() => {}} />);
     // 썸네일 2장 + 상세 1장 = 다운로드 버튼 총 3개
     expect(screen.getAllByRole('button', { name: /이미지 다운로드/ })).toHaveLength(3);
   });
@@ -136,7 +136,7 @@ describe('AssetsInputPanel', () => {
       detailFiles: [],
     });
 
-    render(<AssetsInputPanel onGenerate={() => {}} />);
+    render(<AssetsInputPanel onGenerate={() => {}} onAnalyze={() => {}} />);
     expect(screen.queryAllByRole('button', { name: /이미지 다운로드/ })).toHaveLength(0);
   });
 });

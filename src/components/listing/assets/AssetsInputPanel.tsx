@@ -20,13 +20,14 @@ const CATEGORY_OPTIONS: Array<{ key: CategoryKey; label: string }> = [
 
 interface Props {
   onGenerate: () => void;
+  onAnalyze: () => void;
 }
 
 type UploadSlot = 'thumbnail' | 'detail';
 
-export default function AssetsInputPanel({ onGenerate }: Props) {
+export default function AssetsInputPanel({ onGenerate, onAnalyze }: Props) {
   const { assetsDraft, updateAssetsDraft, sharedDraft, updateSharedDraft } = useListingStore();
-  const { mode, url, thumbnailFiles, detailFiles, isGenerating, category } = assetsDraft;
+  const { mode, url, thumbnailFiles, detailFiles, isGenerating, isAnalyzing, includeAiImages, category } = assetsDraft;
   const {
     isGenerating: _ig,
     generatingMessage: _gm,
@@ -693,7 +694,7 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
         <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: '#374151', userSelect: 'none' }}>
           <input
             type="checkbox"
-            checked={assetsDraft.includeAiImages}
+            checked={includeAiImages}
             onChange={e => updateAssetsDraft({ includeAiImages: e.target.checked })}
             style={{ width: '15px', height: '15px', accentColor: '#7c3aed', cursor: 'pointer' }}
           />
@@ -777,6 +778,30 @@ export default function AssetsInputPanel({ onGenerate }: Props) {
           </button>
         )}
       </div>
+
+      {/* 씬 이미지 분석 버튼 — Gemini AI 이미지 포함 생성 ON일 때만 표시 */}
+      {includeAiImages && (
+        <button
+          type="button"
+          onClick={onAnalyze}
+          disabled={!canGenerate || isGenerating || isAnalyzing}
+          style={{
+            width: '100%',
+            padding: '10px 0',
+            backgroundColor: canGenerate && !isGenerating && !isAnalyzing ? '#7c3aed' : '#c4b5fd',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 8,
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: canGenerate && !isGenerating && !isAnalyzing ? 'pointer' : 'not-allowed',
+            marginTop: 6,
+          }}
+        >
+          {isAnalyzing ? '이미지 분석 중...' : '🔍 씬 이미지 분석'}
+        </button>
+      )}
+
       {/* 업로드 이미지 AI 편집 모달 — 상세 슬롯이면 detail 컨텍스트로 자유롭게 편집 */}
       {inputImageEditTarget && (
         <AiEditModal
