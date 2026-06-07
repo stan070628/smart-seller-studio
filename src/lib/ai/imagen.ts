@@ -60,13 +60,19 @@ export async function generateFrameImage(
     });
   }
 
-  // 이미지 프롬프트 text part 추가
-  parts.push({ text: input.imagePrompt });
+  // 이미지 프롬프트 text part 추가 (단일 프레임 제약 suffix 포함)
+  const singleFrameConstraint =
+    "\n\nCRITICAL COMPOSITION RULE: Generate exactly ONE single-frame photograph. " +
+    "Absolutely NO split-panel, diptych, multi-view, collage, triptych, before/after comparison, " +
+    "or composite image layouts. The entire image must be a single continuous photographic scene.";
+
+  parts.push({ text: input.imagePrompt + singleFrameConstraint });
 
   const response = await ai.models.generateContent({
     model: MODEL,
     config: {
       responseModalities: ["Text", "Image"],
+      imageConfig: { imageSize: "1K" },
     },
     contents: [
       {
