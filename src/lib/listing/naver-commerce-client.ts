@@ -483,22 +483,31 @@ export class NaverCommerceClient {
     fromDate: string;  // YYYY-MM-DD
     toDate: string;
   }): Promise<{ items: Array<{ productOrderId: string; settlementAmount: number; paymentDate: string }> }> {
-    const query = new URLSearchParams({
-      paymentDateFrom: `${params.fromDate}T00:00:00.000+09:00`,
-      paymentDateTo:   `${params.toDate}T23:59:59.000+09:00`,
-    });
-    const res = await this.request<{ data?: Array<Record<string, unknown>> }>(
-      'GET',
-      `/external/v1/settlements?${query.toString()}`,
-    );
-    const rawItems = res.data ?? [];
-    return {
-      items: rawItems.map((r) => ({
+    const PAGE_SIZE = 100;
+    const MAX_PAGES = 50;
+    const allItems: Array<{ productOrderId: string; settlementAmount: number; paymentDate: string }> = [];
+
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const query = new URLSearchParams({
+        paymentDateFrom: `${params.fromDate}T00:00:00.000+09:00`,
+        paymentDateTo:   `${params.toDate}T23:59:59.000+09:00`,
+        size: String(PAGE_SIZE),
+        page: String(page),
+      });
+      const res = await this.request<{ data?: Array<Record<string, unknown>> }>(
+        'GET',
+        `/external/v1/pay-order/seller/settlements?${query.toString()}`,
+      );
+      const rawItems = res.data ?? [];
+      allItems.push(...rawItems.map((r) => ({
         productOrderId: String(r.productOrderId ?? r.productOrderNo ?? ''),
         settlementAmount: Number(r.settlementAmount ?? r.amount ?? 0),
         paymentDate: String(r.paymentDate ?? r.payoutDate ?? ''),
-      })),
-    };
+      })));
+      // 페이지가 가득 차지 않으면 마지막 페이지
+      if (rawItems.length < PAGE_SIZE) break;
+    }
+    return { items: allItems };
   }
 
   // ─── 카테고리 조회 ────────────────────────────────────────
