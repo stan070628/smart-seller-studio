@@ -43,7 +43,7 @@ const FRAME_TYPES = [
 
 const RequestBodySchema = z.object({
   frameType: z.enum(FRAME_TYPES),
-  imagePrompt: z.string().min(10).max(500),
+  imagePrompt: z.string().min(10).max(2000),
   productImageBase64: z.string().optional(),
   productImageMimeType: z
     .enum(["image/jpeg", "image/png", "image/webp"])
