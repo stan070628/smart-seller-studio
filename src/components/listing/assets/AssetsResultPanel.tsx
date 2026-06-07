@@ -13,6 +13,7 @@ import type { CategoryKey, ConversationContext } from '@/lib/conversational-deta
 import type { DetailPageContent } from '@/lib/ai/prompts/detail-page';
 import { buildAiDetailPageHtml } from '@/lib/detail-page/ai-html-builder';
 import { appendPrivacyFooter } from '@/lib/detail-page-privacy';
+import { renderAllSections } from '@/lib/detail-page/section-renderer';
 import type { AiImageSlot } from '@/lib/detail-page/ai-html-builder';
 import { ROLE_LABELS } from './roleLabels';
 import SceneImageDrawer from './SceneImageDrawer';
@@ -223,9 +224,15 @@ export default function AssetsResultPanel() {
   };
 
   const handleGoToRegisterPreview = () => {
+    // HTML이 없고 섹션만 있으면 클라이언트에서 즉시 빌드 (Step3 빈 화면 방지)
+    let htmlToPass = generatedDetailHtml || null;
+    if (!htmlToPass && detailPageSections.length > 0) {
+      const snippet = `<div style="max-width:780px;margin:0 auto;font-family:sans-serif;">\n${renderAllSections(detailPageSections, detailPageTheme)}\n</div>`;
+      htmlToPass = appendPrivacyFooter(snippet);
+    }
     updateSharedDraft({
       detailPageSections,
-      detailPageFullHtml: generatedDetailHtml || null,
+      detailPageFullHtml: htmlToPass,
       detailPageTheme,
     });
     setCurrentStep(3);
@@ -303,8 +310,13 @@ export default function AssetsResultPanel() {
         // 파싱 실패 시 silent fallback
       }
     }
+    // includeAiImages=true일 때 기존 씬 이미지 슬롯을 새 content에 맞춰 HTML 재빌드
+    const finalHtml =
+      includeAiImages && content && aiImageSlots.length > 0
+        ? appendPrivacyFooter(buildAiDetailPageHtml(content, aiImageSlots))
+        : html;
     updateAssetsDraft({
-      generatedDetailHtml: html,
+      generatedDetailHtml: finalHtml,
       detailPageSections: newSections,
       aiDetailContent: content ?? null,
       conversationAnswers: conversationContext.answers,

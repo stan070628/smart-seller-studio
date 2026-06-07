@@ -385,7 +385,13 @@ export default function AssetsTab() {
           // 기존 "AI와 함께 만들기" content 재사용 — 씬 이미지만 새로 생성
           detailContent = existingContentUrl;
           detailHtml = assetsDraft.generatedDetailHtml;
+          const previousSlots = assetsDraft.aiImageSlots;
           aiSlots = await runSceneImageGenerationFromUrl(existingContentUrl, thumbnails[0]);
+          // 전건 실패 시 기존 슬롯 유지, 에러 표시
+          if (aiSlots.length === 0 && previousSlots.length > 0) {
+            aiSlots = previousSlots;
+            updateAssetsDraft({ lastError: '씬 이미지 생성에 모두 실패했습니다. 기존 이미지를 유지합니다.' });
+          }
         } else if ((includeAiImages || !detailHtml) && thumbnails.length > 0) {
           updateAssetsDraft({ generatingMessage: '상세페이지 HTML 생성 중...' });
           const result = await generateDetailHtml(thumbnails, includeAiImages);
@@ -427,7 +433,13 @@ export default function AssetsTab() {
         // 기존 "AI와 함께 만들기" content 재사용 — 씬 이미지만 새로 생성
         detailContent = existingContentUpload;
         detailHtml = assetsDraft.generatedDetailHtml;
+        const previousSlots = assetsDraft.aiImageSlots;
         aiSlots = await runSceneImageGenerationFromUrl(existingContentUpload, detailSources[0]);
+        // 전건 실패 시 기존 슬롯 유지, 에러 표시
+        if (aiSlots.length === 0 && previousSlots.length > 0) {
+          aiSlots = previousSlots;
+          updateAssetsDraft({ lastError: '씬 이미지 생성에 모두 실패했습니다. 기존 이미지를 유지합니다.' });
+        }
       } else if (detailSources.length > 0) {
         updateAssetsDraft({ generatingMessage: '상품 분석 중...' });
         const result = await generateDetailHtml(detailSources, includeAiImages);
