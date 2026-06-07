@@ -18,6 +18,7 @@ interface Props {
 }
 
 export default function SceneReviewPanel({ crops, onConfirm, onCancel }: Props) {
+  // 부모가 pendingCrops 변경 시 조건부 렌더링으로 remount되므로 초기값만으로 충분
   const [editedCrops, setEditedCrops] = useState<CropItem[]>(crops);
 
   const updateCrop = (id: string, patch: Partial<CropItem>) =>
@@ -29,6 +30,7 @@ export default function SceneReviewPanel({ crops, onConfirm, onCancel }: Props) 
   const handleFileChange = (id: string, file: File) => {
     const reader = new FileReader();
     reader.onload = ev => updateCrop(id, { croppedImageUrl: ev.target?.result as string });
+    reader.onerror = () => { /* 파일 읽기 실패 시 이미지 교체 취소 */ };
     reader.readAsDataURL(file);
   };
 
@@ -42,7 +44,7 @@ export default function SceneReviewPanel({ crops, onConfirm, onCancel }: Props) 
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={crop.croppedImageUrl}
-                alt={crop.sectionType}
+                alt={SECTION_LABELS[crop.sectionType] ?? crop.sectionType}
                 style={{ width: '100%', height: 110, objectFit: 'cover', display: 'block' }}
               />
               <div style={{ position: 'absolute', bottom: 4, right: 4, background: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: 10, padding: '2px 6px', borderRadius: 4 }}>

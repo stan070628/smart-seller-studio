@@ -69,6 +69,9 @@ export default function AssetsInputPanel({ onGenerate, onAnalyze }: Props) {
     url.trim().length > 0 &&
     category !== null;
 
+  // 씬 분석 버튼 활성화 조건
+  const canAnalyze = canGenerate && !isGenerating && !isAnalyzing;
+
   // URL 모드면 이미 추출된 generatedThumbnails, 업로드 모드면 기존 로직
   const conversationImageUrls =
     mode === 'url'
@@ -784,17 +787,17 @@ export default function AssetsInputPanel({ onGenerate, onAnalyze }: Props) {
         <button
           type="button"
           onClick={onAnalyze}
-          disabled={!canGenerate || isGenerating || isAnalyzing}
+          disabled={!canAnalyze}
           style={{
             width: '100%',
             padding: '10px 0',
-            backgroundColor: canGenerate && !isGenerating && !isAnalyzing ? '#7c3aed' : '#c4b5fd',
+            backgroundColor: canAnalyze ? '#7c3aed' : '#c4b5fd',
             color: '#fff',
             border: 'none',
             borderRadius: 8,
             fontSize: 14,
             fontWeight: 600,
-            cursor: canGenerate && !isGenerating && !isAnalyzing ? 'pointer' : 'not-allowed',
+            cursor: canAnalyze ? 'pointer' : 'not-allowed',
             marginTop: 6,
           }}
         >
