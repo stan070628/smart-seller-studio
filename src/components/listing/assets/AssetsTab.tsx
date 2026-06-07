@@ -131,6 +131,7 @@ export default function AssetsTab() {
   };
 
   const handleAnalyze = async () => {
+    if (assetsDraft.isAnalyzing) return;
     const { mode, url, thumbnailFiles, detailFiles } = assetsDraft;
     const imageUrls = mode === 'url'
       ? [url.trim()]
@@ -287,6 +288,7 @@ export default function AssetsTab() {
       updateAssetsDraft({
         isGenerating: false,
         generatingMessage: null,
+        confirmedCrops: null,
         lastError: e instanceof Error ? e.message : '알 수 없는 오류',
       });
     }
