@@ -151,7 +151,7 @@ export default function AssetsTab() {
         let detailContent: DetailPageContent | undefined;
         let aiSlots: AiImageSlot[] = [];
 
-        if (!detailHtml && thumbnails.length > 0) {
+        if ((includeAiImages || !detailHtml) && thumbnails.length > 0) {
           updateAssetsDraft({ generatingMessage: '상세페이지 HTML 생성 중...' });
           const result = await generateDetailHtml(thumbnails, includeAiImages);
           detailHtml = result.html;
