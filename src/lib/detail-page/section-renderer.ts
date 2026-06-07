@@ -17,12 +17,12 @@ import type {
 } from '@/types/detail-page';
 import type { PaletteColors } from '@/lib/detail-page/palette-config';
 import { PALETTES } from '@/lib/detail-page/palette-config';
+import { editableMarkupText } from '@/lib/detail-page/inline-markup';
 
 // ─────────────────────────────────────────
 // 보안 헬퍼
 // ─────────────────────────────────────────
 
-// HTML 특수문자를 이스케이프하여 XSS/인젝션 방지
 function escapeHtml(str: string): string {
   return str
     .replace(/&/g, '&amp;')
@@ -32,7 +32,6 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#39;');
 }
 
-// 이미지 URL 검증: http:// 또는 https://로 시작하지 않으면 빈 문자열 반환
 function sanitizeUrl(url: string): string {
   if (/^https?:\/\//i.test(url)) return url;
   return '';
@@ -57,23 +56,30 @@ function sectionAttrs(section: DetailSection): string {
   return `data-section-id="${escapeHtml(section.id)}" data-section-type="${escapeHtml(section.type)}" data-section-label="${escapeHtml(SECTION_LABELS[section.type])}"`;
 }
 
-// fontStyle에 따른 제목 font-family 인라인 스타일 조각 (sans는 빈 문자열)
 function headingFontStyle(fontStyle: string): string {
   return fontStyle !== 'sans' ? ";font-family:'Batang','HY신명조',Georgia,serif" : '';
+}
+
+// eyebrow 레이블 — section.eyebrow가 있을 때만 렌더링
+function renderEyebrow(section: DetailSection, colors: PaletteColors, theme: DetailPageTheme): string {
+  if (!section.eyebrow) return '';
+  const fontFamily =
+    theme.fontStyle !== 'sans'
+      ? "'Batang','HY신명조',Georgia,serif"
+      : 'system-ui,-apple-system,sans-serif';
+  return `<div style="font-size:10px;letter-spacing:3px;color:${colors.labelColor};text-transform:uppercase;font-weight:600;margin-bottom:8px;font-family:${fontFamily};">${escapeHtml(section.eyebrow)}</div>`;
 }
 
 // ─────────────────────────────────────────
 // 첨부 이미지 렌더러
 // ─────────────────────────────────────────
 
-// 레이아웃별 단일 이미지 스타일 (모듈 레벨 상수)
 const IMAGE_SINGLE_STYLE: Record<ImageLayout, string> = {
   fullbleed: 'width:100%;display:block;max-width:100%;height:auto;margin-bottom:24px;',
   composed:  'width:88%;max-width:560px;display:block;margin:0 auto 24px;height:auto;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,0.12);',
   split:     'width:100%;display:block;max-width:100%;height:auto;margin-bottom:24px;border-radius:6px;',
 };
 
-// 첨부 이미지가 없으면 빈 문자열, 2장 이상이면 flex 컨테이너로 나란히, 1장이면 단일 이미지 반환
 function renderAttachedImage(section: DetailSection, imageLayout: ImageLayout): string {
   if (section.attachedImages.length === 0) return '';
 
@@ -105,33 +111,35 @@ function renderAttachedImage(section: DetailSection, imageLayout: ImageLayout): 
 // 섹션 렌더러
 // ─────────────────────────────────────────
 
-// hero 섹션: fullbleed 레이아웃, headline h2(32px bold) + subheadline p(18px)
 function renderHero(content: HeroContent, section: DetailSection, colors: PaletteColors, theme: DetailPageTheme): string {
   const imageHtml = renderAttachedImage(section, theme.imageLayout);
   const headingFont = headingFontStyle(theme.fontStyle);
+  const eyebrowHtml = renderEyebrow(section, colors, theme);
 
   return `<div ${sectionAttrs(section)} style="background-color:${colors.bg};color:${colors.text};padding:60px 40px;text-align:center;width:100%;box-sizing:border-box;">
+  ${eyebrowHtml}
   ${imageHtml}
-  <h2 style="font-size:32px;font-weight:700;color:${colors.text};margin:0 0 16px 0;line-height:1.3${headingFont};">${editableText('content.headline', content.headline)}</h2>
-  <p style="font-size:18px;color:${colors.textSub};margin:0;line-height:1.6;">${editableText('content.subheadline', content.subheadline)}</p>
+  <h2 style="font-size:clamp(20px,4vw,32px);font-weight:700;color:${colors.text};margin:0 0 16px 0;line-height:1.3${headingFont};">${editableText('content.headline', content.headline)}</h2>
+  <p style="font-size:18px;color:${colors.textSub};margin:0;line-height:1.6;">${editableMarkupText('content.subheadline', content.subheadline, colors.accent)}</p>
 </div>`;
 }
 
-// selling_points 섹션: 최대 2컬럼 그리드, icon + title + description, cardBg 배경
 function renderSellingPoints(content: SellingPointsContent, section: DetailSection, colors: PaletteColors, theme: DetailPageTheme): string {
   const imageHtml = renderAttachedImage(section, theme.imageLayout);
   const headingFont = headingFontStyle(theme.fontStyle);
+  const eyebrowHtml = renderEyebrow(section, colors, theme);
 
   const pointsHtml = content.points
     .map(
       (point, index) => `<div style="flex:1;min-width:calc(50% - 12px);background-color:${colors.cardBg};border:1px solid ${colors.border};border-top:4px solid ${colors.accent};border-radius:8px;padding:24px;box-sizing:border-box;">
       <div style="font-size:16px;font-weight:700;color:${colors.text};margin-bottom:8px${headingFont};">${editableText(`content.points.${index}.title`, point.title)}</div>
-      <div style="font-size:14px;color:${colors.textSub};line-height:1.6;">${editableText(`content.points.${index}.description`, point.description)}</div>
+      <div style="font-size:14px;color:${colors.textSub};line-height:1.6;">${editableMarkupText(`content.points.${index}.description`, point.description, colors.accent)}</div>
     </div>`
     )
     .join('\n');
 
   return `<div ${sectionAttrs(section)} style="background-color:${colors.bg};padding:60px 40px;box-sizing:border-box;">
+  ${eyebrowHtml}
   ${imageHtml}
   <div style="display:flex;flex-wrap:wrap;gap:24px;">
     ${pointsHtml}
@@ -139,30 +147,31 @@ function renderSellingPoints(content: SellingPointsContent, section: DetailSecti
 </div>`;
 }
 
-// features 섹션: title + description 쌍, bgAlt 배경, 각 아이템 border-bottom
 function renderFeatures(content: FeaturesContent, section: DetailSection, colors: PaletteColors, theme: DetailPageTheme): string {
   const imageHtml = renderAttachedImage(section, theme.imageLayout);
   const headingFont = headingFontStyle(theme.fontStyle);
+  const eyebrowHtml = renderEyebrow(section, colors, theme);
 
   const itemsHtml = content.items
     .map(
       (item, index) => `<div style="padding:24px 0;border-bottom:${index < content.items.length - 1 ? `1px solid ${colors.border}` : 'none'};">
       <div style="font-size:18px;font-weight:700;color:${colors.text};margin-bottom:8px${headingFont};">${editableText(`content.items.${index}.title`, item.title)}</div>
-      <div style="font-size:15px;color:${colors.textSub};line-height:1.7;">${editableText(`content.items.${index}.description`, item.description)}</div>
+      <div style="font-size:15px;color:${colors.textSub};line-height:1.7;">${editableMarkupText(`content.items.${index}.description`, item.description, colors.accent)}</div>
     </div>`
     )
     .join('\n');
 
   return `<div ${sectionAttrs(section)} style="background-color:${colors.bgAlt};padding:60px 40px;box-sizing:border-box;">
+  ${eyebrowHtml}
   ${imageHtml}
   ${itemsHtml}
 </div>`;
 }
 
-// stats 섹션: 숫자 48px bold accent색, 레이블 16px textSub, 수평 배치
 function renderStats(content: StatsContent, section: DetailSection, colors: PaletteColors, theme: DetailPageTheme): string {
   const imageHtml = renderAttachedImage(section, theme.imageLayout);
   const headingFont = headingFontStyle(theme.fontStyle);
+  const eyebrowHtml = renderEyebrow(section, colors, theme);
 
   const statsHtml = content.stats
     .map(
@@ -174,6 +183,7 @@ function renderStats(content: StatsContent, section: DetailSection, colors: Pale
     .join('\n');
 
   return `<div ${sectionAttrs(section)} style="background-color:${colors.bg};padding:60px 40px;box-sizing:border-box;">
+  ${eyebrowHtml}
   ${imageHtml}
   <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:0;">
     ${statsHtml}
@@ -181,10 +191,10 @@ function renderStats(content: StatsContent, section: DetailSection, colors: Pale
 </div>`;
 }
 
-// spec_table 섹션: 2컬럼 테이블, label=bgAlt, value=cardBg, border=colors.border
 function renderSpecTable(content: SpecTableContent, section: DetailSection, colors: PaletteColors, theme: DetailPageTheme): string {
   const imageHtml = renderAttachedImage(section, theme.imageLayout);
   const headingFont = headingFontStyle(theme.fontStyle);
+  const eyebrowHtml = renderEyebrow(section, colors, theme);
 
   const rowsHtml = content.specs
     .map(
@@ -196,6 +206,7 @@ function renderSpecTable(content: SpecTableContent, section: DetailSection, colo
     .join('\n');
 
   return `<div ${sectionAttrs(section)} style="background-color:${colors.bg};padding:60px 40px;box-sizing:border-box;">
+  ${eyebrowHtml}
   ${imageHtml}
   <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
     ${rowsHtml}
@@ -203,54 +214,56 @@ function renderSpecTable(content: SpecTableContent, section: DetailSection, colo
 </div>`;
 }
 
-// usage_steps 섹션: 번호 뱃지(원형, accent 배경, accentTextColor 텍스트) + 단계 설명, 수직 스택
 function renderUsageSteps(content: UsageStepsContent, section: DetailSection, colors: PaletteColors, theme: DetailPageTheme): string {
   const imageHtml = renderAttachedImage(section, theme.imageLayout);
   const headingFont = headingFontStyle(theme.fontStyle);
+  const eyebrowHtml = renderEyebrow(section, colors, theme);
 
   const stepsHtml = content.steps
     .map(
       (step, index) => `<div style="display:flex;align-items:flex-start;gap:16px;margin-bottom:24px;">
       <div style="flex-shrink:0;width:36px;height:36px;border-radius:50%;background-color:${colors.accent};color:${colors.accentTextColor};display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;line-height:36px;text-align:center;min-width:36px${headingFont};">${index + 1}</div>
-      <div style="font-size:16px;color:${colors.text};line-height:1.7;padding-top:6px;">${editableText(`content.steps.${index}`, step)}</div>
+      <div style="font-size:16px;color:${colors.text};line-height:1.7;padding-top:6px;">${editableMarkupText(`content.steps.${index}`, step, colors.accent)}</div>
     </div>`
     )
     .join('\n');
 
   return `<div ${sectionAttrs(section)} style="background-color:${colors.bgAlt};padding:60px 40px;box-sizing:border-box;">
+  ${eyebrowHtml}
   ${imageHtml}
   ${stepsHtml}
 </div>`;
 }
 
-// warning 섹션: 배경 #FFF3CD, border-left 4px solid #FFC107, 각 항목 앞에 ⚠️ 접두
-// 경고 섹션은 WCAG 가시성 보장을 위해 고정 색상 사용 (palette 색상 미적용)
-function renderWarning(content: WarningContent, section: DetailSection, theme: DetailPageTheme): string {
+// warning: 배경·border 고정 색상 유지 (WCAG 가시성), markup은 palette accent 적용
+function renderWarning(content: WarningContent, section: DetailSection, colors: PaletteColors, theme: DetailPageTheme): string {
   const imageHtml = renderAttachedImage(section, theme.imageLayout);
+  const eyebrowHtml = renderEyebrow(section, colors, theme);
   const itemsHtml = content.warnings
     .map(
-      (warning, index) => `<div style="margin-bottom:12px;font-size:15px;color:#6B4F00;line-height:1.6;"><span style="font-weight:700;margin-right:6px;">&#9650;</span>${editableText(`content.warnings.${index}`, warning)}</div>`
+      (warning, index) => `<div style="margin-bottom:12px;font-size:15px;color:#6B4F00;line-height:1.6;"><span style="font-weight:700;margin-right:6px;">&#9650;</span>${editableMarkupText(`content.warnings.${index}`, warning, colors.accent)}</div>`
     )
     .join('\n');
 
   return `<div ${sectionAttrs(section)} style="background-color:#FFF3CD;border-left:4px solid #FFC107;padding:32px 40px;box-sizing:border-box;">
+  ${eyebrowHtml}
   ${imageHtml}
   ${itemsHtml}
 </div>`;
 }
 
-// cta 섹션: fullbleed, accent 배경, 중앙 정렬, 32px 이상 폰트
 function renderCta(content: CtaContent, section: DetailSection, colors: PaletteColors, theme: DetailPageTheme): string {
   const imageHtml = renderAttachedImage(section, theme.imageLayout);
   const headingFont = headingFontStyle(theme.fontStyle);
+  const eyebrowHtml = renderEyebrow(section, colors, theme);
 
   return `<div ${sectionAttrs(section)} style="background-color:${colors.accent};padding:60px 40px;text-align:center;box-sizing:border-box;">
+  ${eyebrowHtml}
   ${imageHtml}
   <p style="font-size:36px;font-weight:700;color:${colors.accentTextColor};margin:0;line-height:1.4${headingFont};">${editableText('content.text', content.text)}</p>
 </div>`;
 }
 
-// 단일 섹션 렌더링 — section.type 기반 discriminated union으로 타입 안전성 보장
 export function renderSection(section: DetailSection, theme: DetailPageTheme): string {
   const colors = PALETTES[theme.palette];
   switch (section.type) {
@@ -267,13 +280,12 @@ export function renderSection(section: DetailSection, theme: DetailPageTheme): s
     case 'usage_steps':
       return renderUsageSteps(section.content as UsageStepsContent, section, colors, theme);
     case 'warning':
-      return renderWarning(section.content as WarningContent, section, theme);
+      return renderWarning(section.content as WarningContent, section, colors, theme);
     case 'cta':
       return renderCta(section.content as CtaContent, section, colors, theme);
   }
 }
 
-// 전체 섹션 배열을 order 기준으로 정렬 후 HTML 문자열로 합산
 export function renderAllSections(sections: DetailSection[], theme: DetailPageTheme): string {
   return [...sections]
     .sort((a, b) => a.order - b.order)

@@ -50,13 +50,14 @@ const RequestSchema = z.object({
       )
       .default([]),
     aiInstruction: z.string().optional(),
+    eyebrow: z.string().optional(),
   }),
   instruction: z
     .string()
     .min(1, '지시어를 입력해주세요.')
     .max(500, '지시어는 500자 이하로 입력해주세요.'),
   theme: z.object({
-    palette: z.enum(['warm_cream', 'cool_white', 'deep_dark', 'nature_green', 'tech_navy']),
+    palette: z.enum(['warm_cream', 'cool_white', 'deep_dark', 'nature_green', 'tech_navy', 'rose_soft', 'cream_cozy', 'sunset_warm', 'fresh_mint']),
     primaryColor: z.string(),
     accentColor: z.string(),
     fontStyle: z.enum(['serif', 'sans', 'mixed']),
@@ -151,6 +152,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     content: rawSection.content as unknown as SectionContent,
     attachedImages: rawSection.attachedImages,
     aiInstruction: rawSection.aiInstruction,
+    eyebrow: rawSection.eyebrow,
   };
 
   const themeValue: DetailPageTheme = theme;
@@ -227,6 +229,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const updatedSection: DetailSection = {
     ...section,
     content: updatedContent,
+    eyebrow: section.eyebrow,
   };
 
   // renderSection으로 HTML 렌더링

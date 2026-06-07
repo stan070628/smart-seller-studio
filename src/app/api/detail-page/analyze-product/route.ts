@@ -45,7 +45,44 @@ const VALID_PALETTE_NAMES = new Set<string>([
   'deep_dark',
   'nature_green',
   'tech_navy',
+  'rose_soft',
+  'cream_cozy',
+  'sunset_warm',
+  'fresh_mint',
 ]);
+
+// Stage 1: 카테고리 키워드 → 후보 팔레트 축소 (결정론적)
+const CATEGORY_PALETTE_CANDIDATES: Record<string, PaletteName[]> = {
+  '뷰티': ['rose_soft', 'cool_white', 'deep_dark'],
+  '스킨케어': ['rose_soft', 'cool_white', 'deep_dark'],
+  '여성패션': ['rose_soft', 'deep_dark', 'cool_white'],
+  '식품': ['cream_cozy', 'warm_cream', 'sunset_warm'],
+  '홈카페': ['cream_cozy', 'warm_cream', 'sunset_warm'],
+  '주방': ['sunset_warm', 'cream_cozy', 'warm_cream'],
+  '건강': ['fresh_mint', 'nature_green', 'cool_white'],
+  '헬스케어': ['fresh_mint', 'nature_green', 'cool_white'],
+  '건기식': ['fresh_mint', 'nature_green', 'cool_white'],
+  '유아': ['fresh_mint', 'cream_cozy', 'cool_white'],
+  '디지털': ['tech_navy', 'cool_white', 'deep_dark'],
+  'IT': ['tech_navy', 'cool_white', 'deep_dark'],
+  '가전': ['tech_navy', 'cool_white', 'deep_dark'],
+  '패션': ['deep_dark', 'cool_white', 'rose_soft'],
+  '홈리빙': ['warm_cream', 'cream_cozy', 'cool_white'],
+  '인테리어': ['warm_cream', 'cream_cozy', 'cool_white'],
+  '반려동물': ['warm_cream', 'nature_green', 'cream_cozy'],
+  '유기농': ['nature_green', 'fresh_mint', 'warm_cream'],
+  '아웃도어': ['nature_green', 'tech_navy', 'cool_white'],
+  '스포츠': ['tech_navy', 'cool_white', 'deep_dark'],
+};
+
+function getCandidatePalettes(categoryKeyword: string): PaletteName[] {
+  for (const [key, candidates] of Object.entries(CATEGORY_PALETTE_CANDIDATES)) {
+    if (categoryKeyword.includes(key)) {
+      return candidates;
+    }
+  }
+  return ['cool_white', 'warm_cream', 'nature_green'];
+}
 
 // 유효한 SectionType 집합 (런타임 검증용)
 const VALID_SECTION_TYPES = new Set<string>([
@@ -94,7 +131,7 @@ const ANALYZE_SYSTEM_PROMPT = `당신은 한국 이커머스 상품 이미지를
 
 반환 형식:
 {
-  "recommendedPalette": "warm_cream" | "cool_white" | "deep_dark" | "nature_green" | "tech_navy",
+  "recommendedPalette": "팔레트명",
   "dominantColors": ["hex색상1", "hex색상2"],
   "mood": "elegant" | "energetic" | "natural" | "tech" | "casual",
   "suggestedSections": ["hero", "selling_points", ...],
@@ -102,11 +139,15 @@ const ANALYZE_SYSTEM_PROMPT = `당신은 한국 이커머스 상품 이미지를
 }
 
 팔레트 선택 기준:
-- warm_cream: 뷰티, 식품, 홈데코, 따뜻한 느낌
-- cool_white: 생활용품, 의류, 깔끔하고 미니멀한 제품
-- deep_dark: 전자기기, 프리미엄 제품, 고급스러운 느낌
-- nature_green: 친환경, 식물, 건강식품, 자연 관련
-- tech_navy: IT 기기, 사무용품, B2B 제품
+- warm_cream: 홈리빙, 식품, 반려동물, 인테리어 — 따뜻한 크림 계열
+- cool_white: 디지털, 가전, B2B, 사무용품 — 깔끔하고 미니멀한 제품
+- deep_dark: 패션, 뷰티, 주류, 명품 — 고급스러운 다크 계열
+- nature_green: 유기농식품, 건강식품, 아웃도어 — 자연 그린 계열
+- tech_navy: IT, 디지털, 스포츠, 자동차용품 — 테크 네이비 계열
+- rose_soft: 뷰티, 스킨케어, 여성패션 — 소프트 핑크 계열
+- cream_cozy: 홈카페, 식품, 유아, 반려동물 — 따뜻한 크림 계열
+- sunset_warm: 식품, 주방, 라이프스타일 — 웜 오렌지 계열
+- fresh_mint: 헬스케어, 건기식, 유아, 의약외품 — 민트 그린 계열
 
 suggestedSections 순서: hero는 항상 첫 번째. 제품 특성에 맞는 3-6개 섹션.`;
 
@@ -193,7 +234,11 @@ export async function POST(request: NextRequest) {
         textPrompt = `상품명: ${productName}\n\n` + textPrompt;
       }
     }
-    // categoryCode가 있으면 프롬프트 앞에 추가
+    // Stage 1: 카테고리 기반 후보 팔레트 축소
+    const categoryHint = categoryCode ?? productName ?? '';
+    const candidates = getCandidatePalettes(categoryHint);
+    textPrompt += `\n\n다음 후보 팔레트 중에서만 선택하세요: ${candidates.join(', ')}`;
+
     if (categoryCode) textPrompt = `카테고리 코드: ${categoryCode}\n` + textPrompt;
     contents.push({ text: textPrompt });
 

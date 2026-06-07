@@ -15,7 +15,11 @@ export type PaletteName =
   | 'cool_white'
   | 'deep_dark'
   | 'nature_green'
-  | 'tech_navy';
+  | 'tech_navy'
+  | 'rose_soft'
+  | 'cream_cozy'
+  | 'sunset_warm'
+  | 'fresh_mint';
 
 export type ImageLayout = 'fullbleed' | 'composed' | 'split';
 export type FontStyle = 'serif' | 'sans' | 'mixed';
@@ -85,6 +89,7 @@ export interface DetailSection {
   content: SectionContent;
   attachedImages: AttachedImage[];
   aiInstruction?: string;
+  eyebrow?: string;
 }
 
 export interface DetailPageTheme {

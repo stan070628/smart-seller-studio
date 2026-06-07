@@ -17,6 +17,10 @@ const PALETTE_NAMES: PaletteName[] = [
   'deep_dark',
   'nature_green',
   'tech_navy',
+  'rose_soft',
+  'cream_cozy',
+  'sunset_warm',
+  'fresh_mint',
 ];
 
 // 이미지 레이아웃 레이블

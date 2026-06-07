@@ -30,6 +30,7 @@ export function contentToSections(content: DetailPageContent): DetailSection[] {
     },
     attachedImages: [],
     aiInstruction: undefined,
+    eyebrow: undefined,
   });
 
   // selling_points — 빈 배열이면 섹션 생략
@@ -44,6 +45,7 @@ export function contentToSections(content: DetailPageContent): DetailSection[] {
       },
       attachedImages: [],
       aiInstruction: undefined,
+      eyebrow: undefined,
     });
   }
 
@@ -59,6 +61,7 @@ export function contentToSections(content: DetailPageContent): DetailSection[] {
       },
       attachedImages: [],
       aiInstruction: undefined,
+      eyebrow: undefined,
     });
   }
 
@@ -74,6 +77,7 @@ export function contentToSections(content: DetailPageContent): DetailSection[] {
       },
       attachedImages: [],
       aiInstruction: undefined,
+      eyebrow: undefined,
     });
   }
 
@@ -89,6 +93,7 @@ export function contentToSections(content: DetailPageContent): DetailSection[] {
       },
       attachedImages: [],
       aiInstruction: undefined,
+      eyebrow: undefined,
     });
   }
 
@@ -104,6 +109,7 @@ export function contentToSections(content: DetailPageContent): DetailSection[] {
       },
       attachedImages: [],
       aiInstruction: undefined,
+      eyebrow: undefined,
     });
   }
 
@@ -118,6 +124,7 @@ export function contentToSections(content: DetailPageContent): DetailSection[] {
     },
     attachedImages: [],
     aiInstruction: undefined,
+    eyebrow: undefined,
   });
 
   // 'stats' 섹션은 DetailPageContent에 해당 데이터가 없으므로 생성하지 않음.
