@@ -40,140 +40,132 @@ function findSlot(slots: AiImageSlot[], role: AiImageSlot['role']): AiImageSlot 
 // ─────────────────────────────────────────
 
 /**
- * hero 섹션: 전체 폭 이미지 + headline + subheadline
- * 슬롯이 없으면 이미지 없이 텍스트만 렌더링한다.
+ * hero 섹션: 전체 폭 이미지 위에 하단 그라디언트 오버레이로 headline + subheadline 표시
+ * 슬롯이 없으면 이미지 없이 텍스트만 fallback으로 렌더링한다.
  */
 function buildHeroSection(content: DetailPageContent, slot?: AiImageSlot): string {
-  const imgTag = slot
-    ? `<img
-        src="${escapeHtml(slot.url)}"
-        alt="${escapeHtml(content.headline)}"
-        style="width:100%;height:auto;display:block;"
-      />`
-    : '';
-
-  return `
-    <section style="width:100%;background:#fff;">
-      ${imgTag}
-      <div style="padding:40px 28px 32px;text-align:center;">
-        <h1 style="margin:0 0 14px;font-size:30px;font-weight:300;color:#111;line-height:1.3;letter-spacing:-0.5px;">${escapeHtml(content.headline)}</h1>
-        <p style="margin:0;font-size:17px;font-weight:400;color:#777;line-height:1.8;letter-spacing:0.2px;">${escapeHtml(content.subheadline)}</p>
-      </div>
-    </section>`;
+  if (!slot) {
+    return `<div style="padding:32px 28px;background:#f8f9fa;">
+      <h1 style="margin:0 0 12px;font-size:28px;font-weight:700;color:#111;line-height:1.3;">${escapeHtml(content.headline)}</h1>
+      <p style="margin:0;font-size:16px;color:#555;line-height:1.6;">${escapeHtml(content.subheadline ?? '')}</p>
+    </div>`;
+  }
+  return `<div style="position:relative;width:100%;line-height:0;overflow:hidden;">
+    <img src="${escapeHtml(slot.url)}" style="width:100%;display:block;max-height:500px;object-fit:cover;" alt="" />
+    <div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,0.72));padding:28px 28px 24px;">
+      <h1 style="margin:0 0 8px;font-size:26px;font-weight:700;color:#fff;line-height:1.3;text-shadow:0 1px 3px rgba(0,0,0,0.4);">${escapeHtml(content.headline)}</h1>
+      <p style="margin:0;font-size:15px;color:rgba(255,255,255,0.88);line-height:1.5;">${escapeHtml(content.subheadline ?? '')}</p>
+    </div>
+  </div>`;
 }
 
 /**
- * lifestyle 섹션: 2컬럼 (텍스트 좌 + 이미지 우)
- * sellingPoints[0] 텍스트 사용. 600px 이하에서는 1컬럼.
+ * lifestyle 섹션: 이미지 위 좌측 반투명 패널 오버레이로 sellingPoints[0] 표시
+ * 슬롯이 없으면 텍스트만 fallback으로 렌더링한다.
+ * sellingPoints 항목이 객체({icon, title, description})이면 title을 사용하고,
+ * 문자열이면 그대로 사용한다.
  */
 function buildLifestyleSection(content: DetailPageContent, slot?: AiImageSlot): string {
-  const sp = content.sellingPoints[0];
-  if (!sp && !slot) return '';
+  const raw = content.sellingPoints[0] as unknown;
+  const text =
+    raw == null
+      ? ''
+      : typeof raw === 'string'
+        ? raw
+        : escapeHtml((raw as { title: string }).title ?? '');
 
-  const textBlock = sp
-    ? `<div class="ai-col-text" style="flex:1;min-width:0;padding:32px 24px;display:flex;flex-direction:column;justify-content:center;">
-        <div style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;">Highlight</div>
-        <div style="font-size:26px;margin-bottom:16px;">${escapeHtml(sp.icon)}</div>
-        <div style="font-size:20px;font-weight:600;color:#111;margin-bottom:12px;line-height:1.4;">${escapeHtml(sp.title)}</div>
-        <div style="font-size:15px;color:#666;line-height:1.8;">${escapeHtml(sp.description)}</div>
-      </div>`
-    : '';
+  if (!text && !slot) return '';
 
-  const imgBlock = slot
-    ? `<div class="ai-col-img" style="flex:1;min-width:0;">
-        <img
-          src="${escapeHtml(slot.url)}"
-          alt="${sp ? escapeHtml(sp.title) : 'lifestyle'}"
-          style="width:100%;height:100%;object-fit:cover;display:block;min-height:280px;"
-        />
-      </div>`
-    : '';
-
-  return `
-    <section style="background:#fafafa;">
-      <div class="ai-two-col" style="display:flex;">
-        ${textBlock}
-        ${imgBlock}
-      </div>
-    </section>`;
+  if (!slot) {
+    return `<div style="padding:28px;background:#fff;border-top:1px solid #f0f0f0;">
+      <p style="margin:0;font-size:15px;color:#444;line-height:1.7;">${typeof raw === 'string' ? escapeHtml(raw) : text}</p>
+    </div>`;
+  }
+  return `<div style="position:relative;width:100%;line-height:0;overflow:hidden;">
+    <img src="${escapeHtml(slot.url)}" style="width:100%;display:block;max-height:480px;object-fit:cover;" alt="" />
+    <div style="position:absolute;top:0;left:0;bottom:0;width:42%;background:rgba(255,255,255,0.88);padding:24px 20px;display:flex;align-items:center;box-sizing:border-box;">
+      <p style="margin:0;font-size:14px;color:#333;line-height:1.8;">${typeof raw === 'string' ? escapeHtml(raw) : text}</p>
+    </div>
+  </div>`;
 }
 
 /**
- * detail 섹션: 2컬럼 (이미지 좌 + 텍스트 우)
- * sellingPoints[1] 텍스트 사용. 600px 이하에서는 1컬럼.
+ * detail 섹션: 이미지 위 우측 반투명 패널 오버레이로 sellingPoints[1] 표시
+ * 슬롯이 없으면 텍스트만 fallback으로 렌더링한다.
+ * sellingPoints 항목이 객체({icon, title, description})이면 title을 사용하고,
+ * 문자열이면 그대로 사용한다.
  */
 function buildDetailSection(content: DetailPageContent, slot?: AiImageSlot): string {
-  const sp = content.sellingPoints[1];
-  if (!sp && !slot) return '';
+  const raw = content.sellingPoints[1] as unknown;
+  const text =
+    raw == null
+      ? ''
+      : typeof raw === 'string'
+        ? raw
+        : escapeHtml((raw as { title: string }).title ?? '');
 
-  const imgBlock = slot
-    ? `<div class="ai-col-img" style="flex:1;min-width:0;">
-        <img
-          src="${escapeHtml(slot.url)}"
-          alt="${sp ? escapeHtml(sp.title) : 'detail'}"
-          style="width:100%;height:100%;object-fit:cover;display:block;min-height:280px;"
-        />
-      </div>`
-    : '';
+  if (!text && !slot) return '';
 
-  const textBlock = sp
-    ? `<div class="ai-col-text" style="flex:1;min-width:0;padding:32px 24px;display:flex;flex-direction:column;justify-content:center;">
-        <div style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;">Detail</div>
-        <div style="font-size:26px;margin-bottom:16px;">${escapeHtml(sp.icon)}</div>
-        <div style="font-size:20px;font-weight:600;color:#111;margin-bottom:12px;line-height:1.4;">${escapeHtml(sp.title)}</div>
-        <div style="font-size:15px;color:#666;line-height:1.8;">${escapeHtml(sp.description)}</div>
-      </div>`
-    : '';
-
-  return `
-    <section style="background:#fff;">
-      <div class="ai-two-col" style="display:flex;">
-        ${imgBlock}
-        ${textBlock}
-      </div>
-    </section>`;
+  if (!slot) {
+    return `<div style="padding:28px;background:#fafafa;border-top:1px solid #f0f0f0;">
+      <p style="margin:0;font-size:15px;color:#444;line-height:1.7;">${typeof raw === 'string' ? escapeHtml(raw) : text}</p>
+    </div>`;
+  }
+  return `<div style="position:relative;width:100%;line-height:0;overflow:hidden;">
+    <img src="${escapeHtml(slot.url)}" style="width:100%;display:block;max-height:480px;object-fit:cover;" alt="" />
+    <div style="position:absolute;top:0;right:0;bottom:0;width:42%;background:rgba(255,255,255,0.88);padding:24px 20px;display:flex;align-items:center;box-sizing:border-box;">
+      <p style="margin:0;font-size:14px;color:#333;line-height:1.8;">${typeof raw === 'string' ? escapeHtml(raw) : text}</p>
+    </div>
+  </div>`;
 }
 
 /**
- * feature 섹션: 전체 폭 이미지 + features 목록
- * 슬롯이 없으면 이미지 없이 features만 렌더링한다.
+ * feature 항목 하나에서 표시할 텍스트 문자열을 추출한다.
+ * 항목이 객체({title, description})이면 title을 반환하고, 문자열이면 그대로 반환한다.
+ */
+function featureText(f: unknown): string {
+  if (typeof f === 'string') return f;
+  if (f && typeof (f as { title?: unknown }).title === 'string') {
+    return (f as { title: string }).title;
+  }
+  return String(f ?? '');
+}
+
+/**
+ * feature 섹션: 이미지 위 하단 반투명 오버레이에 feature 태그 목록 표시
+ * 슬롯이 없으면 이미지 없이 features만 fallback으로 렌더링한다.
+ * features 항목이 객체({title, description})이면 title을 태그 텍스트로 사용하고,
+ * 문자열이면 그대로 사용한다.
  */
 function buildFeatureSection(content: DetailPageContent, slot?: AiImageSlot): string {
-  if (content.features.length === 0 && !slot) return '';
+  const features = content.features as unknown as unknown[];
+  if (features.length === 0 && !slot) return '';
 
-  const imgTag = slot
-    ? `<img
-        src="${escapeHtml(slot.url)}"
-        alt="상품 특징"
-        style="width:100%;height:auto;display:block;"
-      />`
-    : '';
+  if (!slot) {
+    const fallbackTags = features
+      .map(
+        (f) =>
+          `<span style="display:inline-block;background:#f0f4ff;border:1px solid #c7d7ff;color:#2952a3;padding:5px 14px;border-radius:20px;font-size:13px;">${escapeHtml(featureText(f))}</span>`,
+      )
+      .join('');
+    return `<div style="padding:28px;background:#fff;border-top:1px solid #f0f0f0;">
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">${fallbackTags}</div>
+    </div>`;
+  }
 
-  const featureItems = content.features
+  const tags = features
     .map(
-      (f) => `
-        <li style="padding:20px 0;border-bottom:1px solid #ebebeb;">
-          <div style="font-size:16px;font-weight:600;color:#111;margin-bottom:6px;letter-spacing:0.3px;">${escapeHtml(f.title)}</div>
-          <div style="font-size:15px;color:#888;line-height:1.8;">${escapeHtml(f.description)}</div>
-        </li>`
+      (f) =>
+        `<span style="display:inline-block;background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.35);color:#fff;padding:4px 14px;border-radius:20px;font-size:13px;font-weight:500;">${escapeHtml(featureText(f))}</span>`,
     )
-    .join('');
+    .join(' ');
 
-  const featureList = content.features.length > 0
-    ? `<div style="padding:40px 28px;">
-        <div style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;">Features</div>
-        <h2 style="margin:0 0 24px;font-size:22px;font-weight:300;color:#111;letter-spacing:-0.3px;">상품 특징</h2>
-        <ul style="list-style:none;margin:0;padding:0;border-top:1px solid #ebebeb;">
-          ${featureItems}
-        </ul>
-      </div>`
-    : '';
-
-  return `
-    <section style="background:#fff;">
-      ${imgTag}
-      ${featureList}
-    </section>`;
+  return `<div style="position:relative;width:100%;line-height:0;overflow:hidden;">
+    <img src="${escapeHtml(slot.url)}" style="width:100%;display:block;max-height:480px;object-fit:cover;" alt="" />
+    <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.62);padding:16px 20px;">
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">${tags}</div>
+    </div>
+  </div>`;
 }
 
 /** specs 테이블 섹션 */
