@@ -10,6 +10,7 @@ import React, { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Upload, X, Loader2, FolderOpen } from 'lucide-react';
 import type { AttachedImage, ImageProcessingMode, PaletteName } from '@/types/detail-page';
+import type { AiImageSlot } from '@/lib/detail-page/ai-html-builder';
 import { useListingStore } from '@/store/useListingStore';
 
 // ─────────────────────────────────────────
@@ -77,6 +78,7 @@ export default function SectionImageAttachment({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { sharedDraft, assetsDraft } = useListingStore();
+  const aiImageSlots: AiImageSlot[] = assetsDraft.aiImageSlots ?? [];
   const sourceImages = [
     ...sharedDraft.thumbnailImages,
     ...sharedDraft.detailImages,
@@ -158,6 +160,13 @@ export default function SectionImageAttachment({
     } finally {
       setIsUploading(false);
     }
+  };
+
+  // AI 생성 이미지 직접 추가 — process-image 없이 원본 URL 그대로 추가
+  const handleAiImageDirectAdd = (slot: AiImageSlot) => {
+    setShowPicker(false);
+    if (images.length >= MAX_IMAGES) return;
+    onChange([...images, { url: slot.url, order: images.length, processingMode: 'original' }]);
   };
 
   // 이미지 삭제 → order 재할당
@@ -448,7 +457,7 @@ export default function SectionImageAttachment({
             </button>
 
             {/* 소스 이미지 불러오기 버튼 */}
-            {sourceImages.length > 0 && (
+            {(sourceImages.length > 0 || aiImageSlots.length > 0) && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -555,37 +564,110 @@ export default function SectionImageAttachment({
             </div>
 
             {/* 이미지 그리드 */}
-            <div style={{ padding: 12, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-              {sourceImages.map((url) => (
-                <button
-                  key={url}
-                  onClick={() => handleSourceImageSelect(url)}
-                  style={{
-                    padding: 0,
-                    border: '2px solid transparent',
-                    borderRadius: 8,
-                    overflow: 'hidden',
-                    cursor: 'pointer',
-                    aspectRatio: '1',
-                    background: '#f5f5f5',
-                    transition: 'border-color 0.15s',
-                  }}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.borderColor = '#3b82f6';
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.borderColor = 'transparent';
-                  }}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={url}
-                    alt="소스 이미지"
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                  />
-                </button>
-              ))}
+            <div style={{ padding: 12, overflowY: 'auto' }}>
+              {/* AI 생성 이미지 섹션 */}
+              {aiImageSlots.length > 0 && (
+                <div style={{ marginBottom: 12 }}>
+                  <p style={{ margin: '0 0 6px', fontSize: 11, fontWeight: 700, color: '#7c3aed', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+                    AI 생성 이미지
+                  </p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                    {aiImageSlots.map((slot) => (
+                      <button
+                        key={slot.url}
+                        onClick={() => handleAiImageDirectAdd(slot)}
+                        title={slot.role}
+                        style={{
+                          padding: 0,
+                          border: '2px solid #ede9fe',
+                          borderRadius: 8,
+                          overflow: 'hidden',
+                          cursor: 'pointer',
+                          aspectRatio: '1',
+                          background: '#faf5ff',
+                          position: 'relative',
+                          transition: 'border-color 0.15s',
+                        }}
+                        onMouseEnter={(e) => {
+                          (e.currentTarget as HTMLButtonElement).style.borderColor = '#7c3aed';
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.currentTarget as HTMLButtonElement).style.borderColor = '#ede9fe';
+                        }}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={slot.url}
+                          alt={slot.role}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        />
+                        <div style={{
+                          position: 'absolute',
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          background: 'rgba(124,58,237,0.75)',
+                          fontSize: 9,
+                          color: '#fff',
+                          textAlign: 'center',
+                          padding: '2px 0',
+                          fontFamily: 'system-ui, sans-serif',
+                          fontWeight: 600,
+                        }}>
+                          {slot.role === 'hero' ? '히어로' : slot.role === 'lifestyle' ? '라이프' : slot.role === 'detail' ? '디테일' : '특징'}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  {sourceImages.length > 0 && (
+                    <hr style={{ margin: '12px 0 0', border: 'none', borderTop: '1px solid #eeeeee' }} />
+                  )}
+                </div>
+              )}
+
+              {/* 업로드 이미지 그리드 */}
+              {sourceImages.length > 0 && (
+                <div>
+                  {aiImageSlots.length > 0 && (
+                    <p style={{ margin: '8px 0 6px', fontSize: 11, fontWeight: 700, color: '#888888', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+                      업로드 이미지
+                    </p>
+                  )}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                    {sourceImages.map((url) => (
+                      <button
+                        key={url}
+                        onClick={() => handleSourceImageSelect(url)}
+                        style={{
+                          padding: 0,
+                          border: '2px solid transparent',
+                          borderRadius: 8,
+                          overflow: 'hidden',
+                          cursor: 'pointer',
+                          aspectRatio: '1',
+                          background: '#f5f5f5',
+                          transition: 'border-color 0.15s',
+                        }}
+                        onMouseEnter={(e) => {
+                          (e.currentTarget as HTMLButtonElement).style.borderColor = '#3b82f6';
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.currentTarget as HTMLButtonElement).style.borderColor = 'transparent';
+                        }}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={url}
+                          alt="소스 이미지"
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>,

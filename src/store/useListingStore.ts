@@ -71,6 +71,7 @@ interface SharedDraft {
   // ─── 상세페이지 섹션 편집 ──────────────────────────────────────────────────
   detailPageSections: DetailSection[];
   detailPageTheme: DetailPageTheme;
+  aiDetailContent: DetailPageContent | null;
 
   // ─── 제조사 / 원산지 ─────────────────────────────────────────────────────────
   manufacturer?: string;   // 제조사/브랜드 (parse-url에서 추출, 네이버 등록에 사용)
@@ -133,6 +134,7 @@ const SHARED_DRAFT_INITIAL: SharedDraft = {
   // 상세페이지 섹션 편집
   detailPageSections: [],
   detailPageTheme: DEFAULT_THEME,
+  aiDetailContent: null,
   // 제조사 / 원산지
   manufacturer: undefined,
   countryOfOrigin: undefined,
@@ -1261,7 +1263,7 @@ export const useListingStore = create<ListingStore>()(
 
       generateDetailPageFromPicked: async () => {
         const { sharedDraft } = get();
-        const { pickedDetailImages, detailImages, thumbnailImages, name } = sharedDraft;
+        const { pickedDetailImages, detailImages, thumbnailImages, name, detailPageSections, aiDetailContent } = sharedDraft;
 
         // 우선순위: 사용자 선택 → detailImages → thumbnailImages(최후 수단)
         // detailImages는 Step2에서 이미지 삭제 시 함께 업데이트되므로 삭제된 이미지 미포함.
@@ -1273,21 +1275,70 @@ export const useListingStore = create<ListingStore>()(
 
         if (allImageUrls.length === 0) return;
 
-        // analyzing 상태 (스튜디오 편집 단계 없이 바로 시작)
         set(
-          (s) => ({
-            sharedDraft: {
-              ...s.sharedDraft,
-              detailPageStatus: 'analyzing',
-              detailPageError: null,
-            },
-          }),
+          (s) => ({ sharedDraft: { ...s.sharedDraft, detailPageStatus: 'analyzing', detailPageError: null } }),
           false,
           'listing/generateDetailPageFromPicked/analyzing',
         );
 
         try {
-          // 외부 URL vs base64 data URL 분리 (선택 순서 유지)
+          // 기존 "AI와 함께 만들기" content가 있으면 HTML 재생성 없이 씬 이미지만 생성
+          if (detailPageSections.length > 0 && aiDetailContent) {
+            set(
+              (s) => ({ sharedDraft: { ...s.sharedDraft, detailPageStatus: 'generating' } }),
+              false,
+              'listing/generateDetailPageFromPicked/generatingSceneOnly',
+            );
+
+            const referenceUrl = allImageUrls.find((u) => !u.startsWith('data:')) ?? allImageUrls[0];
+            const sectionTypes: Array<'hero' | 'lifestyle' | 'detail' | 'feature'> = ['hero', 'lifestyle', 'detail', 'feature'];
+            const results = await Promise.allSettled(
+              sectionTypes.map(async (sectionType) => {
+                const sceneRes = await fetch('/api/ai/generate-scene-image', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    sectionType,
+                    productImageUrl: referenceUrl.startsWith('data:') ? undefined : referenceUrl,
+                    productInfo: {
+                      headline: aiDetailContent.headline,
+                      subheadline: aiDetailContent.subheadline,
+                      sellingPoints: aiDetailContent.sellingPoints.map((sp) => ({ title: sp.title, description: sp.description })),
+                      features: aiDetailContent.features.map((f) => ({ title: f.title })),
+                    },
+                  }),
+                });
+                const sceneData = (await sceneRes.json()) as { success: boolean; data?: { imageBase64: string; mimeType: string; prompt: string }; error?: string };
+                if (!sceneRes.ok || !sceneData.success || !sceneData.data) throw new Error(sceneData.error ?? '씬 이미지 생성 실패');
+
+                const uploadRes = await fetch('/api/image/upload-ai', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ imageBase64: sceneData.data.imageBase64, mimeType: sceneData.data.mimeType, role: sectionType }),
+                });
+                const uploadData = (await uploadRes.json()) as { success: boolean; url?: string };
+                if (!uploadData.success || !uploadData.url) throw new Error('이미지 업로드 실패');
+
+                return { role: sectionType, url: uploadData.url, prompt: sceneData.data.prompt, isReplaced: false } as AiImageSlot;
+              }),
+            );
+
+            const aiSlots = results
+              .filter((r): r is PromiseFulfilledResult<AiImageSlot> => r.status === 'fulfilled')
+              .map((r) => r.value);
+
+            set(
+              (s) => ({
+                sharedDraft: { ...s.sharedDraft, detailPageStatus: 'done' },
+                assetsDraft: { ...s.assetsDraft, aiImageSlots: aiSlots },
+              }),
+              false,
+              'listing/generateDetailPageFromPicked/sceneOnlyDone',
+            );
+            return;
+          }
+
+          // 기존 content 없음 — 전체 새로 생성
           const externalUrls: string[] = [];
           const base64Images: Array<{ imageBase64: string; mimeType: 'image/jpeg' }> = [];
 
@@ -1299,8 +1350,6 @@ export const useListingStore = create<ListingStore>()(
             }
           }
 
-          // existingHtml은 전달하지 않음 — 항상 신규 생성 모드로 실행.
-          // scraped description을 supplement로 넘기면 인코딩 깨짐 + 이미지 중복 발생.
           const requestBody: Record<string, unknown> = {
             productName: name || undefined,
             studioMode: true,
@@ -1311,7 +1360,6 @@ export const useListingStore = create<ListingStore>()(
           const parsedSpecsB = parseSpecText(get().sharedDraft.productSpecText);
           if (parsedSpecsB) requestBody.productSpecs = normalizeSalesUnitSpecs(parsedSpecsB);
 
-          // generating 상태
           set(
             (s) => ({ sharedDraft: { ...s.sharedDraft, detailPageStatus: 'generating' } }),
             false,
@@ -1344,7 +1392,7 @@ export const useListingStore = create<ListingStore>()(
             'listing/generateDetailPageFromPicked/done',
           );
 
-          // content가 있으면 섹션 편집기 초기화 (DetailPageEditor 활성화)
+          // content가 있으면 섹션 편집기 초기화 + aiDetailContent 저장
           if (data.content) {
             try {
               const sections = contentToSections(data.content as DetailPageContent);
@@ -1353,13 +1401,14 @@ export const useListingStore = create<ListingStore>()(
                   sharedDraft: {
                     ...s.sharedDraft,
                     detailPageSections: sections,
+                    aiDetailContent: data.content as DetailPageContent,
                   },
                 }),
                 false,
                 'listing/generateDetailPageFromPicked/setSections',
               );
             } catch {
-              // 파싱 실패 시 silent fallback — 기존 HTML 모드로 표시
+              // 파싱 실패 시 silent fallback
             }
           }
         } catch (err) {

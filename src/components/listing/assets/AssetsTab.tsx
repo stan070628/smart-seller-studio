@@ -7,19 +7,11 @@ import { useListingStore } from '@/store/useListingStore';
 import { parseSpecText } from '@/lib/utils/parseSpecText';
 import { contentToSections } from '@/lib/detail-page/section-parser';
 import type { DetailPageContent } from '@/lib/ai/prompts/detail-page';
-import { buildAiDetailPageHtml } from '@/lib/detail-page/ai-html-builder';
 import type { AiImageSlot } from '@/lib/detail-page/ai-html-builder';
 import type { ImagePromptsResponse, SectionImagePrompt } from '@/lib/ai/prompts/detail-image-prompts';
-import { appendPrivacyFooter } from '@/lib/detail-page-privacy';
 import SceneReviewPanel from './SceneReviewPanel';
 import type { CropItem } from '@/store/useListingStore';
 
-const SECTION_PROMPTS: Record<'hero' | 'lifestyle' | 'detail' | 'feature', string> = {
-  hero: 'Clean studio background with dramatic gradient lighting. Empty product display space, minimal and elegant. Photographic quality. No objects, no text.',
-  lifestyle: 'Natural living space with warm ambient lighting. Marble table or wooden shelf with morning window light. No people, no text.',
-  detail: 'Minimal textured surface (linen or stone). Soft diffused macro photography light. Clean and focused composition. No distractions.',
-  feature: 'Abstract geometric background suggesting the product function. Brand-appropriate color palette. No text, no objects.',
-};
 
 export default function AssetsTab() {
   const { assetsDraft, updateAssetsDraft, sharedDraft } = useListingStore();
@@ -130,12 +122,75 @@ export default function AssetsTab() {
       .map(r => r.value);
   };
 
+  /** 기존 aiDetailContent를 재사용해서 URL 이미지를 레퍼런스로 4개 섹션 씬 이미지 생성 */
+  const runSceneImageGenerationFromUrl = async (
+    content: DetailPageContent,
+    referenceImageUrl: string,
+  ): Promise<AiImageSlot[]> => {
+    let refBase64: string | undefined;
+    let refMime: 'image/jpeg' | 'image/png' | 'image/webp' = 'image/jpeg';
+    try {
+      const refRes = await fetch(referenceImageUrl);
+      const blob = await refRes.blob();
+      const rawMime = blob.type || 'image/jpeg';
+      refMime = (['image/jpeg', 'image/png', 'image/webp'].includes(rawMime) ? rawMime : 'image/jpeg') as typeof refMime;
+      const ab = await blob.arrayBuffer();
+      const bytes = new Uint8Array(ab);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i += 8192) {
+        binary += String.fromCharCode(...bytes.slice(i, i + 8192));
+      }
+      refBase64 = btoa(binary);
+    } catch { /* base64 없이 계속 */ }
+
+    const sectionTypes: Array<'hero' | 'lifestyle' | 'detail' | 'feature'> = ['hero', 'lifestyle', 'detail', 'feature'];
+    let doneCount = 0;
+    const results = await Promise.allSettled(
+      sectionTypes.map(async (sectionType) => {
+        const sceneRes = await fetch('/api/ai/generate-scene-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sectionType,
+            ...(refBase64 ? { productImageBase64: refBase64, productImageMimeType: refMime } : {}),
+            productInfo: {
+              headline: content.headline,
+              subheadline: content.subheadline,
+              sellingPoints: content.sellingPoints.map((sp) => ({ title: sp.title, description: sp.description })),
+              features: content.features.map((f) => ({ title: f.title })),
+            },
+          }),
+        });
+        const sceneData = (await sceneRes.json()) as { success: boolean; data?: { imageBase64: string; mimeType: string; prompt: string }; error?: string };
+        if (!sceneRes.ok || !sceneData.success || !sceneData.data) throw new Error(sceneData.error ?? '씬 이미지 생성 실패');
+
+        const uploadRes = await fetch('/api/image/upload-ai', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64: sceneData.data.imageBase64, mimeType: sceneData.data.mimeType, role: sectionType }),
+        });
+        const uploadData = (await uploadRes.json()) as { success: boolean; url?: string };
+        if (!uploadData.success || !uploadData.url) throw new Error('이미지 업로드 실패');
+
+        doneCount++;
+        updateAssetsDraft({ generatingMessage: `씬 이미지 생성 중 (${doneCount}/${sectionTypes.length})...` });
+
+        return { role: sectionType, url: uploadData.url, prompt: sceneData.data.prompt, isReplaced: false } as AiImageSlot;
+      }),
+    );
+
+    return results
+      .filter((r): r is PromiseFulfilledResult<AiImageSlot> => r.status === 'fulfilled')
+      .map((r) => r.value);
+  };
+
   const handleAnalyze = async () => {
     if (assetsDraft.isAnalyzing) return;
     const { mode, url, thumbnailFiles, detailFiles } = assetsDraft;
-    const imageUrls = mode === 'url'
-      ? [url.trim()]
-      : (detailFiles.length > 0 ? detailFiles : thumbnailFiles);
+    // URL 모드에서도 크롤링된 이미지가 있으면 우선 사용 (쿠팡 페이지 URL은 이미지가 아님)
+    const imageUrls = detailFiles.length > 0
+      ? detailFiles
+      : (thumbnailFiles.length > 0 ? thumbnailFiles : [url.trim()]);
 
     if (imageUrls.length === 0 || imageUrls[0] === '') return;
 
@@ -171,88 +226,93 @@ export default function AssetsTab() {
     try {
       const imageUrls = [...new Set(confirmedCrops.map(c => c.originalImageUrl))];
 
-      // 1. 상세페이지 HTML 콘텐츠 생성
-      updateAssetsDraft({ generatingMessage: '상세페이지 HTML 생성 중...' });
-      const { html: baseHtml, content: detailContent } = await generateDetailHtml(imageUrls, false);
+      // 1. 기존 "AI와 함께 만들기" 결과 재사용. 없으면 새로 생성
+      const existingContentForCrops = assetsDraft.aiDetailContent;
+      let baseHtml: string;
+      let detailContent: DetailPageContent | undefined;
 
-      // 2. 배경 제거 (동일 URL dedupe)
-      updateAssetsDraft({ generatingMessage: '배경 제거 중...' });
-      const uniqueCroppedUrls = [...new Set(confirmedCrops.map(c => c.croppedImageUrl))];
-      const bgMap: Record<string, string> = {};
+      if (existingContentForCrops) {
+        detailContent = existingContentForCrops;
+        baseHtml = assetsDraft.generatedDetailHtml;
+      } else {
+        updateAssetsDraft({ generatingMessage: '상세페이지 HTML 생성 중...' });
+        const generated = await generateDetailHtml(imageUrls, false);
+        baseHtml = generated.html;
+        detailContent = generated.content;
+      }
 
-      await Promise.all(
-        uniqueCroppedUrls.map(async (croppedUrl) => {
-          const res = await fetch('/api/image/remove-background', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ imageUrl: croppedUrl }),
-          });
-          const data = (await res.json()) as { success: boolean; data?: { transparentImageUrl: string } };
-          bgMap[croppedUrl] = data.success && data.data ? data.data.transparentImageUrl : croppedUrl;
-        }),
-      );
-
-      // 3. Gemini 씬 생성 + 합성 (병렬)
+      // 2. Claude + Gemini로 섹션별 완성된 씬 이미지 생성 (병렬)
+      updateAssetsDraft({ generatingMessage: 'AI 씬 이미지 생성 중...' });
       let doneCount = 0;
       const results = await Promise.allSettled(
         confirmedCrops.map(async (crop) => {
-          const productUrl = bgMap[crop.croppedImageUrl] ?? crop.croppedImageUrl;
-          const prompt = SECTION_PROMPTS[crop.sectionType];
-
-          // Gemini 배경 씬 생성
-          const genRes = await fetch('/api/ai/generate-frame-image', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ frameType: crop.sectionType, imagePrompt: prompt }),
-          });
-          const genData = (await genRes.json()) as {
-            success: boolean;
-            data?: { imageBase64: string; mimeType: string };
-            error?: string;
-          };
-          if (!genRes.ok || !genData.success || !genData.data) {
-            throw new Error(genData.error ?? 'Gemini 씬 생성 실패');
+          // 크롭 이미지를 참조 이미지(base64)로 변환
+          let refBase64: string | undefined;
+          let refMime: 'image/jpeg' | 'image/png' | 'image/webp' = 'image/jpeg';
+          try {
+            const refRes = await fetch(crop.croppedImageUrl);
+            const blob = await refRes.blob();
+            const rawMime = blob.type || 'image/jpeg';
+            refMime = (['image/jpeg', 'image/png', 'image/webp'].includes(rawMime)
+              ? rawMime
+              : 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/webp';
+            const ab = await blob.arrayBuffer();
+            const bytes = new Uint8Array(ab);
+            // 큰 이미지의 경우 btoa spread 대신 청크 처리
+            let binary = '';
+            const chunkSize = 8192;
+            for (let i = 0; i < bytes.length; i += chunkSize) {
+              binary += String.fromCharCode(...bytes.slice(i, i + chunkSize));
+            }
+            refBase64 = btoa(binary);
+          } catch {
+            // 변환 실패 시 참조 없이 생성
           }
 
-          // Gemini 배경 업로드
+          // generate-scene-image: Claude 프롬프트 생성 + Gemini 이미지 생성 통합
+          const sceneRes = await fetch('/api/ai/generate-scene-image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              sectionType: crop.sectionType,
+              ...(refBase64 ? { productImageBase64: refBase64, productImageMimeType: refMime } : {}),
+              productInfo: detailContent ? {
+                headline: detailContent.headline,
+                subheadline: detailContent.subheadline,
+                sellingPoints: detailContent.sellingPoints.map((sp) => ({ title: sp.title, description: sp.description })),
+                features: detailContent.features.map((f) => ({ title: f.title })),
+              } : undefined,
+            }),
+          });
+          const sceneData = (await sceneRes.json()) as {
+            success: boolean;
+            data?: { imageBase64: string; mimeType: string; prompt: string };
+            error?: string;
+          };
+          if (!sceneRes.ok || !sceneData.success || !sceneData.data) {
+            throw new Error(sceneData.error ?? '씬 이미지 생성 실패');
+          }
+
+          // 생성된 이미지 업로드
           const uploadRes = await fetch('/api/image/upload-ai', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              imageBase64: genData.data.imageBase64,
-              mimeType: genData.data.mimeType,
+              imageBase64: sceneData.data.imageBase64,
+              mimeType: sceneData.data.mimeType,
               role: crop.sectionType,
             }),
           });
           const uploadData = (await uploadRes.json()) as { success: boolean; url?: string };
-          if (!uploadData.success || !uploadData.url) throw new Error('배경 이미지 업로드 실패');
-
-          // Sharp 합성
-          const compositeRes = await fetch('/api/image/composite', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              productImageUrl: productUrl,
-              backgroundImageUrl: uploadData.url,
-              placement: 'bottom-center',
-            }),
-          });
-          const compositeData = (await compositeRes.json()) as {
-            success: boolean;
-            data?: { url: string };
-            error?: string;
-          };
-          if (!compositeData.success || !compositeData.data) {
-            throw new Error(compositeData.error ?? '합성 실패');
-          }
+          if (!uploadData.success || !uploadData.url) throw new Error('이미지 업로드 실패');
 
           doneCount++;
-          updateAssetsDraft({ generatingMessage: `이미지 합성 중 (${doneCount}/${confirmedCrops.length})...` });
+          updateAssetsDraft({ generatingMessage: `씬 이미지 생성 중 (${doneCount}/${confirmedCrops.length})...` });
 
           return {
             role: crop.sectionType,
-            url: compositeData.data.url,
-            prompt,
+            url: uploadData.url,
+            prompt: sceneData.data.prompt,
             isReplaced: false,
           } as AiImageSlot;
         }),
@@ -262,13 +322,7 @@ export default function AssetsTab() {
         .filter((r): r is PromiseFulfilledResult<AiImageSlot> => r.status === 'fulfilled')
         .map(r => r.value);
 
-      let finalHtml = baseHtml;
       const finalContent = detailContent;
-
-      if (aiSlots.length > 0 && detailContent) {
-        updateAssetsDraft({ generatingMessage: 'HTML 완성 중...' });
-        finalHtml = appendPrivacyFooter(buildAiDetailPageHtml(detailContent, aiSlots));
-      }
 
       let detailPageSections = assetsDraft.detailPageSections;
       if (finalContent) {
@@ -278,7 +332,7 @@ export default function AssetsTab() {
       updateAssetsDraft({
         isGenerating: false,
         generatingMessage: null,
-        generatedDetailHtml: finalHtml,
+        generatedDetailHtml: baseHtml,
         detailPageSections,
         aiImageSlots: aiSlots,
         aiDetailContent: finalContent ?? null,
@@ -326,7 +380,13 @@ export default function AssetsTab() {
         let detailContent: DetailPageContent | undefined;
         let aiSlots: AiImageSlot[] = [];
 
-        if ((includeAiImages || !detailHtml) && thumbnails.length > 0) {
+        const existingContentUrl = assetsDraft.aiDetailContent;
+        if (existingContentUrl && includeAiImages && thumbnails.length > 0) {
+          // 기존 "AI와 함께 만들기" content 재사용 — 씬 이미지만 새로 생성
+          detailContent = existingContentUrl;
+          detailHtml = assetsDraft.generatedDetailHtml;
+          aiSlots = await runSceneImageGenerationFromUrl(existingContentUrl, thumbnails[0]);
+        } else if ((includeAiImages || !detailHtml) && thumbnails.length > 0) {
           updateAssetsDraft({ generatingMessage: '상세페이지 HTML 생성 중...' });
           const result = await generateDetailHtml(thumbnails, includeAiImages);
           detailHtml = result.html;
@@ -335,10 +395,6 @@ export default function AssetsTab() {
             aiSlots = await runGeminiImageGeneration(result.imagePrompts, thumbnails[0], (done, total) => {
               updateAssetsDraft({ generatingMessage: `Gemini 이미지 생성 중 (${done}/${total})...` });
             });
-            if (aiSlots.length > 0 && detailContent) {
-              updateAssetsDraft({ generatingMessage: 'HTML 완성 중...' });
-              detailHtml = appendPrivacyFooter(buildAiDetailPageHtml(detailContent, aiSlots));
-            }
           } else if (includeAiImages && result.imagePromptsError) {
             updateAssetsDraft({ lastError: `AI 이미지 프롬프트 생성 실패: ${result.imagePromptsError}` });
           }
@@ -366,7 +422,13 @@ export default function AssetsTab() {
       let detailContent: DetailPageContent | undefined;
       let aiSlots: AiImageSlot[] = [];
 
-      if (detailSources.length > 0) {
+      const existingContentUpload = assetsDraft.aiDetailContent;
+      if (existingContentUpload && includeAiImages && detailSources.length > 0) {
+        // 기존 "AI와 함께 만들기" content 재사용 — 씬 이미지만 새로 생성
+        detailContent = existingContentUpload;
+        detailHtml = assetsDraft.generatedDetailHtml;
+        aiSlots = await runSceneImageGenerationFromUrl(existingContentUpload, detailSources[0]);
+      } else if (detailSources.length > 0) {
         updateAssetsDraft({ generatingMessage: '상품 분석 중...' });
         const result = await generateDetailHtml(detailSources, includeAiImages);
         detailHtml = result.html;
@@ -376,10 +438,6 @@ export default function AssetsTab() {
           aiSlots = await runGeminiImageGeneration(result.imagePrompts, detailSources[0], (done, total) => {
             updateAssetsDraft({ generatingMessage: `Gemini 이미지 생성 중 (${done}/${total})...` });
           });
-          if (aiSlots.length > 0 && detailContent) {
-            updateAssetsDraft({ generatingMessage: 'HTML 완성 중...' });
-            detailHtml = appendPrivacyFooter(buildAiDetailPageHtml(detailContent, aiSlots));
-          }
         } else if (includeAiImages && result.imagePromptsError) {
           updateAssetsDraft({ lastError: `AI 이미지 프롬프트 생성 실패: ${result.imagePromptsError}` });
         }
