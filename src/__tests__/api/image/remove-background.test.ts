@@ -2,6 +2,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
+vi.mock('@/lib/supabase/auth', () => ({
+  requireAuth: vi.fn().mockResolvedValue({ userId: 'user-1' }),
+}));
+
 vi.mock('@/lib/supabase/server', () => ({
   uploadToStorage: vi.fn().mockResolvedValue({ url: 'https://storage.example.com/bg-removed.png' }),
 }));
@@ -46,6 +50,7 @@ describe('POST /api/image/remove-background', () => {
   });
 
   it('STABILITY_API_KEY 없음 → 500', async () => {
+    vi.resetModules();
     delete process.env.STABILITY_API_KEY;
     const { POST } = await import('@/app/api/image/remove-background/route');
     const res = await POST(makeRequest({ imageUrl: 'https://example.com/product.jpg' }));

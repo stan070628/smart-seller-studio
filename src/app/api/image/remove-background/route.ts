@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { checkRateLimit, getRateLimitKey } from '@/lib/rate-limit';
 import { uploadToStorage } from '@/lib/supabase/server';
+import { requireAuth } from '@/lib/supabase/auth';
 
 export const maxDuration = 60;
 
@@ -12,7 +13,12 @@ const RequestSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const ip = req.headers.get('x-forwarded-for') ?? 'unknown';
+  // 인증 검사
+  const authResult = await requireAuth(req);
+  if (authResult instanceof Response) return authResult as NextResponse;
+
+  // Rate Limit 검사
+  const ip = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? 'unknown';
   const rl = checkRateLimit(getRateLimitKey(ip, 'remove-background'), RATE_LIMIT);
   if (!rl.allowed) {
     return NextResponse.json(
@@ -37,7 +43,8 @@ export async function POST(req: NextRequest) {
 
   const { imageUrl } = parsed.data;
 
-  const imgRes = await fetch(imageUrl);
+  // 30초 타임아웃으로 이미지 fetch
+  const imgRes = await fetch(imageUrl, { signal: AbortSignal.timeout(30_000) });
   if (!imgRes.ok) {
     return NextResponse.json({ success: false, error: '이미지를 가져오지 못했습니다.' }, { status: 400 });
   }
@@ -72,7 +79,15 @@ export async function POST(req: NextRequest) {
 
   const pngBuffer = await stabilityRes.arrayBuffer();
   const path = `ai-detail/${Date.now()}-bg-removed.png`;
-  const result = await uploadToStorage(path, pngBuffer, 'image/png', pngBuffer.byteLength);
 
-  return NextResponse.json({ success: true, data: { transparentImageUrl: result.url } });
+  // Storage 업로드 — 실패 시 500 반환
+  let uploadResult: { url: string };
+  try {
+    uploadResult = await uploadToStorage(path, pngBuffer, 'image/png', pngBuffer.byteLength);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Storage 업로드 실패';
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true, data: { transparentImageUrl: uploadResult.url } });
 }
