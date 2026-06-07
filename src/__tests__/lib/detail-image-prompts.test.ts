@@ -105,4 +105,13 @@ describe('buildFinalGeminiPrompt', () => {
     expect(prompt).toContain('Do NOT render any text');
     expect(prompt).toContain('IDENTICAL to the reference image');
   });
+
+  it('PRODUCT_PRESERVATION_RULES 포함으로 프롬프트가 500자를 초과한다 — route max(2000) 범위 내', () => {
+    // 버그 재현: buildFinalGeminiPrompt가 생성하는 프롬프트는 항상 500자 초과.
+    // 구버그(max(500) Zod 제한)에서는 이 프롬프트로 만든 모든 Gemini 요청이 400 실패했음.
+    const scene = 'Clean front-facing studio product shot on white background with soft shadows';
+    const prompt = buildFinalGeminiPrompt(visualIdentity, scene);
+    expect(prompt.length).toBeGreaterThan(500);
+    expect(prompt.length).toBeLessThan(2000);
+  });
 });

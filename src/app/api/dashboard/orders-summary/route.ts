@@ -10,6 +10,7 @@ import { PLAN_START, WEEKLY_TARGETS } from '@/lib/plan/constants';
 import { getCurrentWeek, getWeekForDate } from '@/lib/plan/week';
 import { getCoupangClient } from '@/lib/listing/coupang-client';
 import { getNaverCommerceClient } from '@/lib/listing/naver-commerce-client';
+import { mergeWeeklyActual } from '@/lib/dashboard/merge-weekly-actual';
 import {
   aggregateCoupangPipeline,
   aggregateNaverPipeline,
@@ -383,17 +384,7 @@ async function buildOrdersSummary(period: Period): Promise<OrdersSummaryData> {
   };
   rgPipeline.정산완료 = rgSettle;
 
-  // Wing 누적 + RG 누적 합산.
-  // Wing API 실패(all-null)여도 RG 데이터는 살린다. 미래 주차만 null.
-  const currentWeek = getCurrentWeek();
-  let rgAcc = 0;
-  const mergedActual: (number | null)[] = wingWeekly.map((wingVal, i) => {
-    rgAcc += rgWeeklyRaw[i] ?? 0;
-    const w = i + 1;
-    if (w > currentWeek) return null;
-    // wingVal null = Wing API 실패 → 0으로 처리해 RG 기여 보존
-    return (wingVal ?? 0) + rgAcc;
-  });
+  const mergedActual = mergeWeeklyActual(wingWeekly, rgWeeklyRaw, getCurrentWeek());
 
   return {
     pipeline: { coupang: coupangPipeline, naver: naverPipeline, rg: rgPipeline },
