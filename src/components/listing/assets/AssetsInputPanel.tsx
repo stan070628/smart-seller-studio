@@ -102,6 +102,7 @@ export default function AssetsInputPanel({ onGenerate, onAnalyze }: Props) {
       generatedThumbnails: mode === 'url' ? assetsDraft.generatedThumbnails : thumbnailFiles,
       generatedDetailHtml: html,
       detailPageSections,
+      aiDetailContent: content ?? null,
       conversationAnswers: conversationContext.answers,
       lastError: null,
     });

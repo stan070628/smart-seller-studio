@@ -325,7 +325,7 @@ export default function AssetsTab() {
       const finalContent = detailContent;
 
       let detailPageSections = assetsDraft.detailPageSections;
-      if (finalContent) {
+      if (!existingContentForCrops && finalContent) {
         try { detailPageSections = contentToSections(finalContent); } catch { /* silent */ }
       }
 
@@ -401,13 +401,13 @@ export default function AssetsTab() {
         }
 
         let detailPageSections = assetsDraft.detailPageSections;
-        if (detailContent) {
+        if (!existingContentUrl && detailContent) {
           try { detailPageSections = contentToSections(detailContent); } catch { /* silent */ }
-        }
-        if (detailPageSections.length > 0 && thumbnails.length > 0) {
-          detailPageSections = detailPageSections.map((s, idx) =>
-            idx === 0 ? { ...s, attachedImages: thumbnails.map((url, order) => ({ url, order, processingMode: 'original' as const })) } : s
-          );
+          if (detailPageSections.length > 0 && thumbnails.length > 0) {
+            detailPageSections = detailPageSections.map((s, idx) =>
+              idx === 0 ? { ...s, attachedImages: thumbnails.map((url, order) => ({ url, order, processingMode: 'original' as const })) } : s
+            );
+          }
         }
 
         updateAssetsDraft({ isGenerating: false, generatingMessage: null, generatedThumbnails: thumbnails, generatedDetailHtml: detailHtml, detailPageSections, aiImageSlots: aiSlots, aiDetailContent: detailContent ?? null });
@@ -444,13 +444,13 @@ export default function AssetsTab() {
       }
 
       let detailPageSections = assetsDraft.detailPageSections;
-      if (detailContent) {
+      if (!existingContentUpload && detailContent) {
         try { detailPageSections = contentToSections(detailContent); } catch { /* silent */ }
-      }
-      if (detailPageSections.length > 0 && detailSources.length > 0) {
-        detailPageSections = detailPageSections.map((s, idx) =>
-          idx === 0 ? { ...s, attachedImages: detailSources.map((url, order) => ({ url, order, processingMode: 'original' as const })) } : s
-        );
+        if (detailPageSections.length > 0 && detailSources.length > 0) {
+          detailPageSections = detailPageSections.map((s, idx) =>
+            idx === 0 ? { ...s, attachedImages: detailSources.map((url, order) => ({ url, order, processingMode: 'original' as const })) } : s
+          );
+        }
       }
 
       updateAssetsDraft({ isGenerating: false, generatingMessage: null, generatedThumbnails: thumbnails, generatedDetailHtml: detailHtml, detailPageSections, aiImageSlots: aiSlots, aiDetailContent: detailContent ?? null });

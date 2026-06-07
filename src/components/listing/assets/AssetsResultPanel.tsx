@@ -25,7 +25,7 @@ const CATEGORY_OPTIONS: Array<{ key: CategoryKey; label: string }> = [
 ];
 
 export default function AssetsResultPanel() {
-  const { assetsDraft, updateAssetsDraft, sharedDraft } = useListingStore();
+  const { assetsDraft, updateAssetsDraft, sharedDraft, updateSharedDraft, setCurrentStep, setListingMode } = useListingStore();
   const {
     generatedThumbnails,
     generatedDetailHtml,
@@ -222,6 +222,16 @@ export default function AssetsResultPanel() {
     }
   };
 
+  const handleGoToRegisterPreview = () => {
+    updateSharedDraft({
+      detailPageSections,
+      detailPageFullHtml: generatedDetailHtml || null,
+      detailPageTheme,
+    });
+    setCurrentStep(3);
+    setListingMode('register');
+  };
+
   // 모든 자산을 ZIP으로 일괄 다운로드. 각 썸네일을 Blob으로 받아서 그대로 zip에 넣는다.
   const handleDownloadZip = async () => {
     try {
@@ -282,6 +292,7 @@ export default function AssetsResultPanel() {
     updateAssetsDraft({
       generatedDetailHtml: html,
       detailPageSections: newSections,
+      aiDetailContent: content ?? null,
       conversationAnswers: conversationContext.answers,
       lastError: null,
     });
@@ -630,6 +641,19 @@ export default function AssetsResultPanel() {
 
       {/* 액션 버튼 영역 */}
       <div style={{ display: 'flex', gap: '8px' }}>
+        {(detailPageSections.length > 0 || generatedDetailHtml.length > 0) && (
+          <button
+            type="button"
+            onClick={handleGoToRegisterPreview}
+            style={{
+              padding: '10px 16px', fontSize: '13px', fontWeight: 600,
+              backgroundColor: '#2563eb', color: '#fff',
+              border: 'none', borderRadius: '8px', cursor: 'pointer',
+            }}
+          >
+            등록 미리보기로 이동
+          </button>
+        )}
         <button
           type="button"
           onClick={handleDownloadZip}
