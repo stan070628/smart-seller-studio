@@ -11,6 +11,15 @@ import { buildAiDetailPageHtml } from '@/lib/detail-page/ai-html-builder';
 import type { AiImageSlot } from '@/lib/detail-page/ai-html-builder';
 import type { ImagePromptsResponse, SectionImagePrompt } from '@/lib/ai/prompts/detail-image-prompts';
 import { appendPrivacyFooter } from '@/lib/detail-page-privacy';
+import SceneReviewPanel from './SceneReviewPanel';
+import type { CropItem } from '@/store/useListingStore';
+
+const SECTION_PROMPTS: Record<'hero' | 'lifestyle' | 'detail' | 'feature', string> = {
+  hero: 'Clean studio background with dramatic gradient lighting. Empty product display space, minimal and elegant. Photographic quality. No objects, no text.',
+  lifestyle: 'Natural living space with warm ambient lighting. Marble table or wooden shelf with morning window light. No people, no text.',
+  detail: 'Minimal textured surface (linen or stone). Soft diffused macro photography light. Clean and focused composition. No distractions.',
+  feature: 'Abstract geometric background suggesting the product function. Brand-appropriate color palette. No text, no objects.',
+};
 
 export default function AssetsTab() {
   const { assetsDraft, updateAssetsDraft, sharedDraft } = useListingStore();
@@ -119,6 +128,168 @@ export default function AssetsTab() {
     return results
       .filter((r): r is PromiseFulfilledResult<AiImageSlot> => r.status === 'fulfilled')
       .map(r => r.value);
+  };
+
+  const handleAnalyze = async () => {
+    const { mode, url, thumbnailFiles, detailFiles } = assetsDraft;
+    const imageUrls = mode === 'url'
+      ? [url.trim()]
+      : (detailFiles.length > 0 ? detailFiles : thumbnailFiles);
+
+    if (imageUrls.length === 0 || imageUrls[0] === '') return;
+
+    updateAssetsDraft({ isAnalyzing: true, lastError: null });
+    try {
+      const res = await fetch('/api/image/analyze-detail-images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrls: imageUrls.slice(0, 8) }),
+      });
+      const data = (await res.json()) as { success: boolean; crops?: CropItem[]; error?: string };
+      if (!res.ok || !data.success || !data.crops) {
+        throw new Error(data.error ?? '이미지 분석 실패');
+      }
+      updateAssetsDraft({ isAnalyzing: false, pendingCrops: data.crops });
+    } catch (e) {
+      updateAssetsDraft({
+        isAnalyzing: false,
+        lastError: e instanceof Error ? e.message : '이미지 분석 중 오류가 발생했습니다.',
+      });
+    }
+  };
+
+  const handleConfirmCrops = async (confirmedCrops: CropItem[]) => {
+    updateAssetsDraft({
+      pendingCrops: null,
+      confirmedCrops,
+      isGenerating: true,
+      generatingMessage: '상세페이지 분석 중...',
+      lastError: null,
+    });
+
+    try {
+      const imageUrls = [...new Set(confirmedCrops.map(c => c.originalImageUrl))];
+
+      // 1. 상세페이지 HTML 콘텐츠 생성
+      updateAssetsDraft({ generatingMessage: '상세페이지 HTML 생성 중...' });
+      const { html: baseHtml, content: detailContent } = await generateDetailHtml(imageUrls, false);
+
+      // 2. 배경 제거 (동일 URL dedupe)
+      updateAssetsDraft({ generatingMessage: '배경 제거 중...' });
+      const uniqueCroppedUrls = [...new Set(confirmedCrops.map(c => c.croppedImageUrl))];
+      const bgMap: Record<string, string> = {};
+
+      await Promise.all(
+        uniqueCroppedUrls.map(async (croppedUrl) => {
+          const res = await fetch('/api/image/remove-background', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ imageUrl: croppedUrl }),
+          });
+          const data = (await res.json()) as { success: boolean; data?: { transparentImageUrl: string } };
+          bgMap[croppedUrl] = data.success && data.data ? data.data.transparentImageUrl : croppedUrl;
+        }),
+      );
+
+      // 3. Gemini 씬 생성 + 합성 (병렬)
+      let doneCount = 0;
+      const results = await Promise.allSettled(
+        confirmedCrops.map(async (crop) => {
+          const productUrl = bgMap[crop.croppedImageUrl] ?? crop.croppedImageUrl;
+          const prompt = SECTION_PROMPTS[crop.sectionType];
+
+          // Gemini 배경 씬 생성
+          const genRes = await fetch('/api/ai/generate-frame-image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ frameType: crop.sectionType, imagePrompt: prompt }),
+          });
+          const genData = (await genRes.json()) as {
+            success: boolean;
+            data?: { imageBase64: string; mimeType: string };
+            error?: string;
+          };
+          if (!genRes.ok || !genData.success || !genData.data) {
+            throw new Error(genData.error ?? 'Gemini 씬 생성 실패');
+          }
+
+          // Gemini 배경 업로드
+          const uploadRes = await fetch('/api/image/upload-ai', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              imageBase64: genData.data.imageBase64,
+              mimeType: genData.data.mimeType,
+              role: crop.sectionType,
+            }),
+          });
+          const uploadData = (await uploadRes.json()) as { success: boolean; url?: string };
+          if (!uploadData.success || !uploadData.url) throw new Error('배경 이미지 업로드 실패');
+
+          // Sharp 합성
+          const compositeRes = await fetch('/api/image/composite', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              productImageUrl: productUrl,
+              backgroundImageUrl: uploadData.url,
+              placement: 'bottom-center',
+            }),
+          });
+          const compositeData = (await compositeRes.json()) as {
+            success: boolean;
+            data?: { url: string };
+            error?: string;
+          };
+          if (!compositeData.success || !compositeData.data) {
+            throw new Error(compositeData.error ?? '합성 실패');
+          }
+
+          doneCount++;
+          updateAssetsDraft({ generatingMessage: `이미지 합성 중 (${doneCount}/${confirmedCrops.length})...` });
+
+          return {
+            role: crop.sectionType,
+            url: compositeData.data.url,
+            prompt,
+            isReplaced: false,
+          } as AiImageSlot;
+        }),
+      );
+
+      const aiSlots = results
+        .filter((r): r is PromiseFulfilledResult<AiImageSlot> => r.status === 'fulfilled')
+        .map(r => r.value);
+
+      let finalHtml = baseHtml;
+      const finalContent = detailContent;
+
+      if (aiSlots.length > 0 && detailContent) {
+        updateAssetsDraft({ generatingMessage: 'HTML 완성 중...' });
+        finalHtml = appendPrivacyFooter(buildAiDetailPageHtml(detailContent, aiSlots));
+      }
+
+      let detailPageSections = assetsDraft.detailPageSections;
+      if (finalContent) {
+        try { detailPageSections = contentToSections(finalContent); } catch { /* silent */ }
+      }
+
+      updateAssetsDraft({
+        isGenerating: false,
+        generatingMessage: null,
+        generatedDetailHtml: finalHtml,
+        detailPageSections,
+        aiImageSlots: aiSlots,
+        aiDetailContent: finalContent ?? null,
+        confirmedCrops: null,
+      });
+    } catch (e) {
+      updateAssetsDraft({
+        isGenerating: false,
+        generatingMessage: null,
+        lastError: e instanceof Error ? e.message : '알 수 없는 오류',
+      });
+    }
   };
 
   const handleGenerate = async () => {
@@ -231,9 +402,16 @@ export default function AssetsTab() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '20px', alignItems: 'start' }}>
-        <AssetsInputPanel onGenerate={handleGenerate} />
+        <AssetsInputPanel onGenerate={handleGenerate} onAnalyze={handleAnalyze} />
         <AssetsResultPanel />
       </div>
+      {assetsDraft.pendingCrops && (
+        <SceneReviewPanel
+          crops={assetsDraft.pendingCrops}
+          onConfirm={handleConfirmCrops}
+          onCancel={() => updateAssetsDraft({ pendingCrops: null, isAnalyzing: false })}
+        />
+      )}
       {assetsDraft.generatingMessage && (
         <div
           style={{
