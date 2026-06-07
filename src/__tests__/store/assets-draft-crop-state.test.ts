@@ -5,8 +5,7 @@ import { useListingStore } from '@/store/useListingStore';
 
 describe('AssetsDraft 크롭 상태', () => {
   beforeEach(() => {
-    const { result } = renderHook(() => useListingStore());
-    act(() => result.current.resetAssetsDraft());
+    useListingStore.getState().resetAssetsDraft();
   });
 
   it('초기 상태에 pendingCrops, confirmedCrops, isAnalyzing이 있다', () => {
@@ -41,5 +40,17 @@ describe('AssetsDraft 크롭 상태', () => {
     act(() => result.current.resetAssetsDraft());
     expect(result.current.assetsDraft.pendingCrops).toBeNull();
     expect(result.current.assetsDraft.isAnalyzing).toBe(false);
+  });
+
+  it('updateAssetsDraft로 confirmedCrops를 설정할 수 있다', () => {
+    const { result } = renderHook(() => useListingStore());
+    const crop = {
+      id: 'crop-lifestyle-1',
+      originalImageUrl: 'https://example.com/original.jpg',
+      croppedImageUrl: 'https://example.com/cropped.jpg',
+      sectionType: 'lifestyle' as const,
+    };
+    act(() => result.current.updateAssetsDraft({ confirmedCrops: [crop] }));
+    expect(result.current.assetsDraft.confirmedCrops).toEqual([crop]);
   });
 });
