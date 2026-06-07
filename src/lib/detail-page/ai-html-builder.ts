@@ -67,24 +67,19 @@ function buildHeroSection(content: DetailPageContent, slot?: AiImageSlot): strin
  */
 function buildLifestyleSection(content: DetailPageContent, slot?: AiImageSlot): string {
   const raw = content.sellingPoints[0] as unknown;
-  const text =
-    raw == null
-      ? ''
-      : typeof raw === 'string'
-        ? raw
-        : escapeHtml((raw as { title: string }).title ?? '');
+  const text = raw == null ? '' : typeof raw === 'string' ? raw : ((raw as { title?: string }).title ?? '');
 
   if (!text && !slot) return '';
 
   if (!slot) {
     return `<div style="padding:28px;background:#fff;border-top:1px solid #f0f0f0;">
-      <p style="margin:0;font-size:15px;color:#444;line-height:1.7;">${typeof raw === 'string' ? escapeHtml(raw) : text}</p>
+      <p style="margin:0;font-size:15px;color:#444;line-height:1.7;">${escapeHtml(text)}</p>
     </div>`;
   }
   return `<div style="position:relative;width:100%;line-height:0;overflow:hidden;">
     <img src="${escapeHtml(slot.url)}" style="width:100%;display:block;max-height:480px;object-fit:cover;" alt="" />
     <div style="position:absolute;top:0;left:0;bottom:0;width:42%;background:rgba(255,255,255,0.88);padding:24px 20px;display:flex;align-items:center;box-sizing:border-box;">
-      <p style="margin:0;font-size:14px;color:#333;line-height:1.8;">${typeof raw === 'string' ? escapeHtml(raw) : text}</p>
+      <p style="margin:0;font-size:14px;color:#333;line-height:1.8;">${escapeHtml(text)}</p>
     </div>
   </div>`;
 }
@@ -97,24 +92,19 @@ function buildLifestyleSection(content: DetailPageContent, slot?: AiImageSlot): 
  */
 function buildDetailSection(content: DetailPageContent, slot?: AiImageSlot): string {
   const raw = content.sellingPoints[1] as unknown;
-  const text =
-    raw == null
-      ? ''
-      : typeof raw === 'string'
-        ? raw
-        : escapeHtml((raw as { title: string }).title ?? '');
+  const text = raw == null ? '' : typeof raw === 'string' ? raw : ((raw as { title?: string }).title ?? '');
 
   if (!text && !slot) return '';
 
   if (!slot) {
     return `<div style="padding:28px;background:#fafafa;border-top:1px solid #f0f0f0;">
-      <p style="margin:0;font-size:15px;color:#444;line-height:1.7;">${typeof raw === 'string' ? escapeHtml(raw) : text}</p>
+      <p style="margin:0;font-size:15px;color:#444;line-height:1.7;">${escapeHtml(text)}</p>
     </div>`;
   }
   return `<div style="position:relative;width:100%;line-height:0;overflow:hidden;">
     <img src="${escapeHtml(slot.url)}" style="width:100%;display:block;max-height:480px;object-fit:cover;" alt="" />
     <div style="position:absolute;top:0;right:0;bottom:0;width:42%;background:rgba(255,255,255,0.88);padding:24px 20px;display:flex;align-items:center;box-sizing:border-box;">
-      <p style="margin:0;font-size:14px;color:#333;line-height:1.8;">${typeof raw === 'string' ? escapeHtml(raw) : text}</p>
+      <p style="margin:0;font-size:14px;color:#333;line-height:1.8;">${escapeHtml(text)}</p>
     </div>
   </div>`;
 }

@@ -49,4 +49,32 @@ describe('buildAiDetailPageHtml — CSS 텍스트 오버레이', () => {
     expect(html).toContain('프리미엄 텀블러');
     expect(html).toContain('스테인리스 소재로 위생적');
   });
+
+  it('lifestyle 섹션에 이미지가 있을 때 왼쪽 패널 오버레이가 sellingPoints[0]을 포함한다', () => {
+    const slot: AiImageSlot = {
+      role: 'lifestyle',
+      url: 'https://storage.example.com/lifestyle.jpg',
+      prompt: 'lifestyle background',
+      isReplaced: false,
+    };
+    const html = buildAiDetailPageHtml(mockContent, [slot]);
+    expect(html).toContain('스테인리스 소재로 위생적');
+    expect(html).toContain(slot.url);
+    expect(html).toContain('left:0');
+    expect(html).toContain('position:absolute');
+  });
+
+  it('detail 섹션에 이미지가 있을 때 오른쪽 패널 오버레이가 sellingPoints[1]을 포함한다', () => {
+    const slot: AiImageSlot = {
+      role: 'detail',
+      url: 'https://storage.example.com/detail.jpg',
+      prompt: 'detail background',
+      isReplaced: false,
+    };
+    const html = buildAiDetailPageHtml(mockContent, [slot]);
+    expect(html).toContain('슬림한 디자인으로 휴대 편리');
+    expect(html).toContain(slot.url);
+    expect(html).toContain('right:0');
+    expect(html).toContain('position:absolute');
+  });
 });
