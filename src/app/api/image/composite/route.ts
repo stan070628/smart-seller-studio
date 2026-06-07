@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
   // Storage 업로드 — 실패 시 500 반환
   let uploadResult: { url: string };
   try {
-    uploadResult = await uploadToStorage(path, resultArrayBuffer, 'image/jpeg', resultBuffer.byteLength);
+    uploadResult = await uploadToStorage(path, resultArrayBuffer as ArrayBuffer, 'image/jpeg', resultBuffer.byteLength);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Storage 업로드 실패';
     return NextResponse.json({ success: false, error: message }, { status: 500 });
