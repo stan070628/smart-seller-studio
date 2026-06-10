@@ -52,6 +52,16 @@ const NAV_ITEMS: NavItem[] = [
           </svg>
         ),
       },
+      {
+        href: '/listing/detail-maker',
+        label: '상품상세 자동만들기',
+        icon: (
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <rect x="4" y="4" width="16" height="16" rx="2" strokeWidth="1.5" />
+            <path d="M4 9h16M9 9v11" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+        ),
+      },
     ],
   },
   {
