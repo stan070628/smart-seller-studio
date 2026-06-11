@@ -92,12 +92,13 @@ export default function DetailMakerClient() {
     setIsGenerating(true);
     setError(null);
     try {
+      const fullProductName = [brandName.trim(), productName.trim()].filter(Boolean).join(' ');
       const res = await fetch('/api/ai/generate-detail-html', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           imageUrls: uploadedUrls,
-          productName: productName.trim(),
+          productName: fullProductName,
           category,
         }),
       });
