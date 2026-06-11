@@ -516,6 +516,24 @@ export async function POST(
         .join("");
     } catch (error) {
       console.error("[/api/ai/generate-detail-html] 모바일 카피 생성 실패:", error);
+
+      if (error instanceof Error && error.message.includes("ANTHROPIC_API_KEY")) {
+        return NextResponse.json(
+          { success: false, error: "서버 설정 오류: AI API 키가 구성되지 않았습니다." },
+          { status: 503 }
+        );
+      }
+
+      if (error instanceof Error && error.message.includes("overloaded")) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "AI 서비스가 일시적으로 과부하 상태입니다. 잠시 후 다시 시도해 주세요.",
+          },
+          { status: 503 }
+        );
+      }
+
       return NextResponse.json(
         { success: false, error: error instanceof Error ? `카피 생성 실패: ${error.message}` : "카피 생성 중 오류가 발생했습니다." },
         { status: 502 }
