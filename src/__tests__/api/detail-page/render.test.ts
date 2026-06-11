@@ -325,6 +325,18 @@ describe('POST /api/detail-page/render', () => {
     expect(data).toHaveProperty('error');
   });
 
+  it('mobile theme + hero eyebrow → html에 eyebrow 텍스트가 포함된다', async () => {
+    const request = makeRequest({
+      sections: [{ ...VALID_HERO_SECTION, eyebrow: 'Keep Till' }],
+      theme: { ...VALID_THEME, layoutMode: 'mobile' },
+    });
+    const response = await POST(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.html).toContain('Keep Till');
+  });
+
   it('attachedImages 6장은 허용한다 (max 6장 경계값)', async () => {
     const request = makeRequest({
       sections: [

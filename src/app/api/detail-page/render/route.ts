@@ -43,6 +43,7 @@ const RequestSchema = z.object({
           .max(6)
           .default([]),
         aiInstruction: z.string().optional(),
+        eyebrow: z.string().optional(),
       }),
     )
     .min(1, '섹션은 최소 1개 이상이어야 합니다.')

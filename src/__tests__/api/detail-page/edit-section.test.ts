@@ -236,6 +236,92 @@ describe('POST /api/detail-page/edit-section', () => {
     expect(data.section.type).toBe('selling_points');
   });
 
+  it('point 섹션 타입도 Zod 검증을 통과하고 정상 처리된다', async () => {
+    const pointSection = {
+      id: 'point-001',
+      type: 'point' as const,
+      order: 2,
+      content: {
+        type: 'point',
+        pointLabel: 'Point 1',
+        headline: '기존 헤드라인',
+        subheadline: '기존 서브',
+      },
+      attachedImages: [],
+    };
+
+    mockClaudeSuccess({
+      type: 'point',
+      pointLabel: 'Point 1',
+      headline: '수정된 헤드라인',
+      subheadline: '수정된 서브',
+    });
+
+    const request = makeRequest({
+      section: pointSection,
+      instruction: '더 임팩트 있게',
+      theme: { ...VALID_THEME, layoutMode: 'mobile' as const },
+    });
+    const response = await POST(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.section.type).toBe('point');
+  });
+
+  it('brand_header / image_grid 섹션 타입도 Zod 검증을 통과한다 (400 아님)', async () => {
+    const bhSection = {
+      id: 'bh-001',
+      type: 'brand_header' as const,
+      order: 0,
+      content: { type: 'brand_header', brandName: 'Keep Till', rightLabel: 'SINCE 2024' },
+      attachedImages: [],
+    };
+
+    mockClaudeSuccess({
+      type: 'brand_header',
+      brandName: 'Keep Till',
+      rightLabel: 'SINCE 2024',
+    });
+
+    const request = makeRequest({
+      section: bhSection,
+      instruction: '브랜드명을 강조해주세요',
+      theme: VALID_THEME,
+    });
+    const response = await POST(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.section.type).toBe('brand_header');
+
+    const igSection = {
+      id: 'ig-001',
+      type: 'image_grid' as const,
+      order: 3,
+      content: { type: 'image_grid', title: '컬러 옵션', items: [{ label: '베이지' }] },
+      attachedImages: [],
+    };
+
+    mockClaudeSuccess({
+      type: 'image_grid',
+      title: '컬러 옵션',
+      items: [{ label: '베이지' }],
+    });
+
+    const igResponse = await POST(
+      makeRequest({
+        section: igSection,
+        instruction: '라벨을 더 자연스럽게',
+        theme: VALID_THEME,
+      }),
+    );
+    const igData = await igResponse.json();
+
+    expect(igResponse.status).toBe(200);
+    expect(igData.section.type).toBe('image_grid');
+  });
+
   it('금지어(선착순)가 포함된 AI 응답 → 400을 반환한다', async () => {
     mockClaudeSuccess({
       type: 'hero',

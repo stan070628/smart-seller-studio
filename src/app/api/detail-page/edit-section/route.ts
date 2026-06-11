@@ -37,6 +37,9 @@ const RequestSchema = z.object({
       'usage_steps',
       'warning',
       'cta',
+      'brand_header',
+      'point',
+      'image_grid',
     ]),
     order: z.number().int().min(0),
     content: z.record(z.string(), z.unknown()),
@@ -62,6 +65,7 @@ const RequestSchema = z.object({
     accentColor: z.string(),
     fontStyle: z.enum(['serif', 'sans', 'mixed']),
     imageLayout: z.enum(['fullbleed', 'composed', 'split']),
+    layoutMode: z.enum(['desktop', 'mobile']).optional(),
   }),
   // 컨텍스트 (선택 — AI 일관성 유지에 활용)
   productName: z.string().max(100).optional(),
