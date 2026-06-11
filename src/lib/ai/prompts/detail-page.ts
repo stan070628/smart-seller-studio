@@ -36,6 +36,25 @@ export interface DetailPageContent {
   ctaText: string;
 }
 
+export interface MobileDetailPageContent {
+  brandName: string;            // 빈 문자열이면 brand_header 섹션 생략
+  categoryLabelEn: string;      // 예: "pencil pouch"
+  hook: {
+    eyebrow: string;            // 예: "Keep Till" — 필기체 렌더링
+    headline: string;           // 예: "완전 오픈 · 넉넉한 수납"
+    hashtags: string[];         // 예: ["#한눈에 보여", "#쉽게 꺼내", "#깔끔하게 정리"]
+  };
+  points: Array<{
+    pointLabel: string;         // "Point 1" 또는 "" (요약 섹션)
+    headline: string;
+    subheadline: string;
+  }>;
+  colorOptions: Array<{ label: string; swatchColor: string }>;
+  specs: Array<{ label: string; value: string }>;
+  warnings: string[];
+  ctaText: string;
+}
+
 // ─────────────────────────────────────────
 // 금지 문구 (쿠팡 광고 정책 기반 — 절대 금지 표현)
 // ─────────────────────────────────────────
