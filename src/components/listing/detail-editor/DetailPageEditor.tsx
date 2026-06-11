@@ -106,6 +106,16 @@ function buildEditablePreviewDocument(html: string): string {
         el.addEventListener('input', () => post('input', el));
         el.addEventListener('blur', () => post('commit', el));
       });
+      // 스크롤 위치를 부모에 보고 — commit 재렌더링(srcDoc 교체) 후 복원에 사용
+      let scrollTimer = null;
+      window.addEventListener('scroll', () => {
+        if (scrollTimer) return;
+        scrollTimer = setTimeout(() => {
+          scrollTimer = null;
+          window.parent.postMessage({ source: 'detail-preview-inline-editor', type: 'scroll', y: window.scrollY }, '*');
+        }, 150);
+      }, { passive: true });
+      window.parent.postMessage({ source: 'detail-preview-inline-editor', type: 'ready' }, '*');
     })();
   `;
   return `<!doctype html>
@@ -189,14 +199,24 @@ export default function DetailPageEditor({
     [hidePreview, generatedHtml],
   );
 
-  // 인라인 편집: iframe → parent postMessage 수신
+  // 인라인 편집: 미리보기 스크롤 위치 (commit 재렌더링 후 복원용)
+  const previewScrollYRef = useRef(0);
+  const previewIframeRef = useRef<HTMLIFrameElement>(null);
+
+  const restorePreviewScroll = useCallback(() => {
+    previewIframeRef.current?.contentWindow?.scrollTo(0, previewScrollYRef.current);
+  }, []);
+
+  // 인라인 편집: iframe → parent postMessage 수신.
+  // 'input'(매 입력)은 ref만 갱신하고, 'commit'(blur)에만 onSectionsChange를 호출한다 —
+  // 입력마다 재렌더링(srcDoc 교체)하면 스크롤·포커스가 리셋되어 편집이 불가능해진다.
   const handleInlineEdit = useCallback(
-    (sectionId: string, path: string, value: string) => {
+    (sectionId: string, path: string, value: string, commit: boolean) => {
       const next = sectionsRef.current.map((s) =>
         s.id === sectionId ? updateSectionText(s, path, value) : s,
       );
       sectionsRef.current = next;
-      onSectionsChange(next);
+      if (commit) onSectionsChange(next);
     },
     [onSectionsChange],
   );
@@ -211,14 +231,23 @@ export default function DetailPageEditor({
         sectionId?: string;
         path?: string;
         value?: string;
+        y?: number;
       };
       if (data?.source !== 'detail-preview-inline-editor') return;
+      if (data.type === 'scroll') {
+        if (typeof data.y === 'number') previewScrollYRef.current = data.y;
+        return;
+      }
+      if (data.type === 'ready') {
+        restorePreviewScroll();
+        return;
+      }
       if (!data.sectionId || !data.path || typeof data.value !== 'string') return;
-      handleInlineEdit(data.sectionId, data.path, data.value);
+      handleInlineEdit(data.sectionId, data.path, data.value, data.type === 'commit');
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [hidePreview, handleInlineEdit]);
+  }, [hidePreview, handleInlineEdit, restorePreviewScroll]);
 
   // dnd-kit 센서 설정
   const sensors = useSensors(
@@ -564,8 +593,10 @@ export default function DetailPageEditor({
           <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
             {generatedHtml ? (
               <iframe
+                ref={previewIframeRef}
                 srcDoc={editablePreviewHtml}
                 title="상세페이지 미리보기"
+                onLoad={restorePreviewScroll}
                 sandbox="allow-scripts allow-same-origin"
                 style={{
                   width: '100%',

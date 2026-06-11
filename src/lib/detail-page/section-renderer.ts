@@ -118,7 +118,7 @@ function renderAttachedImage(section: DetailSection, imageLayout: ImageLayout): 
 // ─────────────────────────────────────────
 
 function renderHero(content: HeroContent, section: DetailSection, colors: PaletteColors, theme: DetailPageTheme): string {
-  if (theme.layoutMode === 'mobile') return renderMobileHero(content, section, colors);
+  if (theme.layoutMode === 'mobile') return renderMobileHero(content, section, colors, theme);
 
   const imageHtml = renderAttachedImage(section, theme.imageLayout);
   const headingFont = headingFontStyle(theme.fontStyle);
@@ -133,18 +133,19 @@ function renderHero(content: HeroContent, section: DetailSection, colors: Palett
 }
 
 // 모바일 hero — 쿠팡 모바일 스타일: 필기체 eyebrow + 34px 헤드라인 + 해시태그/문단 subheadline
-function renderMobileHero(content: HeroContent, section: DetailSection, colors: PaletteColors): string {
+function renderMobileHero(content: HeroContent, section: DetailSection, colors: PaletteColors, theme: DetailPageTheme): string {
+  const headingFont = headingFontStyle(theme.fontStyle);
   const eyebrowHtml = section.eyebrow
-    ? `<div style="font-family:'Snell Roundhand','Brush Script MT',cursive;font-size:22px;color:#8a7560;margin-bottom:10px;">${escapeHtml(section.eyebrow)}</div>`
+    ? `<div style="font-family:'Snell Roundhand','Brush Script MT',cursive;font-size:22px;color:${colors.labelColor};margin-bottom:10px;">${escapeHtml(section.eyebrow)}</div>`
     : '';
   const sub = content.subheadline.trim();
   const subHtml = sub.startsWith('#')
-    ? `<div style="text-align:center;"><span data-edit-path="content.subheadline" style="font-size:18px;font-weight:700;color:#222;word-spacing:12px;line-height:1.8;">${escapeHtml(sub)}</span></div>`
-    : `<p style="margin:0;font-size:17px;color:#555;line-height:1.6;">${editableMarkupText('content.subheadline', content.subheadline, colors.accent)}</p>`;
-  return `<div ${sectionAttrs(section)} style="background-color:#fff;padding:0;box-sizing:border-box;">
+    ? `<div style="text-align:center;"><span data-edit-path="content.subheadline" style="font-size:18px;font-weight:700;color:${colors.text};word-spacing:12px;line-height:1.8;">${escapeHtml(sub)}</span></div>`
+    : `<p style="margin:0;font-size:17px;color:${colors.textSub};line-height:1.6;">${editableMarkupText('content.subheadline', content.subheadline, colors.accent)}</p>`;
+  return `<div ${sectionAttrs(section)} style="background-color:${colors.cardBg};padding:0;box-sizing:border-box;">
   <div style="padding:32px 20px 24px;text-align:center;">
     ${eyebrowHtml}
-    <h1 style="margin:0 0 14px;font-size:34px;font-weight:800;color:#1a1a1a;letter-spacing:-1px;line-height:1.3;">${editableText('content.headline', content.headline)}</h1>
+    <h1 style="margin:0 0 14px;font-size:34px;font-weight:800;color:${colors.text};letter-spacing:-1px;line-height:1.3${headingFont};">${editableText('content.headline', content.headline)}</h1>
     ${subHtml}
   </div>
   ${renderFullBleedImages(section)}
@@ -219,7 +220,7 @@ function renderStats(content: StatsContent, section: DetailSection, colors: Pale
 }
 
 function renderSpecTable(content: SpecTableContent, section: DetailSection, colors: PaletteColors, theme: DetailPageTheme): string {
-  if (theme.layoutMode === 'mobile') return renderMobileSpecTable(content, section);
+  if (theme.layoutMode === 'mobile') return renderMobileSpecTable(content, section, colors);
 
   const imageHtml = renderAttachedImage(section, theme.imageLayout);
   const headingFont = headingFontStyle(theme.fontStyle);
@@ -243,18 +244,20 @@ function renderSpecTable(content: SpecTableContent, section: DetailSection, colo
 </div>`;
 }
 
-// 모바일 spec_table — 쿠팡 모바일 스타일: 회색 패널(#f4f5f7) 안에 보더리스 행
-function renderMobileSpecTable(content: SpecTableContent, section: DetailSection): string {
+// 모바일 spec_table — 쿠팡 모바일 스타일: 팔레트 패널 안에 보더리스 행
+function renderMobileSpecTable(content: SpecTableContent, section: DetailSection, colors: PaletteColors): string {
+  // 패널은 외곽(cardBg)과 구분되어야 한다 — bg가 cardBg와 같은 팔레트(cool_white 등)는 bgAlt 사용
+  const panelBg = colors.bg.toLowerCase() === colors.cardBg.toLowerCase() ? colors.bgAlt : colors.bg;
   const rowsHtml = content.specs
     .map(
       (spec, index) => `<tr>
-      <td style="padding:14px 8px;font-size:15px;font-weight:600;color:#666;width:32%;border-bottom:1px solid #e3e5e8;vertical-align:top;word-break:break-word;">${editableText(`content.specs.${index}.label`, spec.label)}</td>
-      <td style="padding:14px 8px;font-size:15px;color:#222;border-bottom:1px solid #e3e5e8;vertical-align:top;word-break:break-word;">${editableText(`content.specs.${index}.value`, spec.value)}</td>
+      <td style="padding:14px 8px;font-size:15px;font-weight:600;color:${colors.textSub};width:32%;border-bottom:1px solid ${colors.border};vertical-align:top;word-break:break-word;">${editableText(`content.specs.${index}.label`, spec.label)}</td>
+      <td style="padding:14px 8px;font-size:15px;color:${colors.text};border-bottom:1px solid ${colors.border};vertical-align:top;word-break:break-word;">${editableText(`content.specs.${index}.value`, spec.value)}</td>
     </tr>`,
     )
     .join('\n');
-  return `<div ${sectionAttrs(section)} style="background-color:#fff;padding:32px 20px;box-sizing:border-box;">
-  <div style="background-color:#f4f5f7;border-radius:8px;padding:8px 16px;">
+  return `<div ${sectionAttrs(section)} style="background-color:${colors.cardBg};padding:32px 20px;box-sizing:border-box;">
+  <div style="background-color:${panelBg};border-radius:8px;padding:8px 16px;">
     <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
       ${rowsHtml}
     </table>
@@ -334,30 +337,31 @@ function sanitizeSwatchColor(color: string | undefined): string {
   return color && /^#(?:[0-9A-Fa-f]{3,4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/.test(color) ? color : '#cccccc';
 }
 
-function renderBrandHeader(content: BrandHeaderContent, section: DetailSection): string {
-  return `<div ${sectionAttrs(section)} style="display:flex;justify-content:space-between;align-items:baseline;padding:16px 20px;border-bottom:1px solid #ddd;background-color:#fff;box-sizing:border-box;">
-  <span style="font-size:15px;font-weight:600;color:#333;">${editableText('content.brandName', content.brandName)}</span>
-  <span style="font-size:13px;color:#999;">${editableText('content.rightLabel', content.rightLabel)}</span>
+function renderBrandHeader(content: BrandHeaderContent, section: DetailSection, colors: PaletteColors): string {
+  return `<div ${sectionAttrs(section)} style="display:flex;justify-content:space-between;align-items:baseline;padding:16px 20px;border-bottom:1px solid ${colors.border};background-color:${colors.cardBg};box-sizing:border-box;">
+  <span style="font-size:15px;font-weight:600;color:${colors.text};">${editableText('content.brandName', content.brandName)}</span>
+  <span style="font-size:13px;color:${colors.textSub};">${editableText('content.rightLabel', content.rightLabel)}</span>
 </div>`;
 }
 
-function renderPoint(content: PointContent, section: DetailSection, colors: PaletteColors): string {
+function renderPoint(content: PointContent, section: DetailSection, colors: PaletteColors, theme: DetailPageTheme): string {
+  const headingFont = headingFontStyle(theme.fontStyle);
   const labelHtml = content.pointLabel
-    ? `<div style="margin-bottom:12px;"><span style="display:block;font-size:18px;color:#999;margin-bottom:6px;">&#9745;</span><span style="font-family:Georgia,serif;font-style:italic;font-size:26px;color:#999;">${editableText('content.pointLabel', content.pointLabel)}</span></div>`
+    ? `<div style="margin-bottom:12px;"><span style="display:block;font-size:18px;color:${colors.labelColor};margin-bottom:6px;">&#9745;</span><span style="font-family:Georgia,serif;font-style:italic;font-size:26px;color:${colors.labelColor};">${editableText('content.pointLabel', content.pointLabel)}</span></div>`
     : '';
-  return `<div ${sectionAttrs(section)} style="background-color:#fff;padding:0;box-sizing:border-box;">
+  return `<div ${sectionAttrs(section)} style="background-color:${colors.cardBg};padding:0;box-sizing:border-box;">
   <div style="padding:40px 20px 28px;text-align:center;">
     ${labelHtml}
-    <h2 style="margin:0 0 10px;font-size:28px;font-weight:800;color:#111;line-height:1.35;letter-spacing:-0.5px;">${editableText('content.headline', content.headline)}</h2>
-    <p style="margin:0;font-size:17px;color:#555;line-height:1.6;">${editableMarkupText('content.subheadline', content.subheadline, colors.accent)}</p>
+    <h2 style="margin:0 0 10px;font-size:28px;font-weight:800;color:${colors.text};line-height:1.35;letter-spacing:-0.5px${headingFont};">${editableText('content.headline', content.headline)}</h2>
+    <p style="margin:0;font-size:17px;color:${colors.textSub};line-height:1.6;">${editableMarkupText('content.subheadline', content.subheadline, colors.accent)}</p>
   </div>
   ${renderFullBleedImages(section)}
 </div>`;
 }
 
-function renderImageGrid(content: ImageGridContent, section: DetailSection): string {
+function renderImageGrid(content: ImageGridContent, section: DetailSection, colors: PaletteColors): string {
   const titleHtml = content.title
-    ? `<h2 style="margin:0 0 24px;font-family:Georgia,serif;font-size:26px;font-weight:400;color:#5c4f42;text-align:center;">${editableText('content.title', content.title)}</h2>`
+    ? `<h2 style="margin:0 0 24px;font-family:Georgia,serif;font-size:26px;font-weight:400;color:${colors.textSub};text-align:center;">${editableText('content.title', content.title)}</h2>`
     : '';
   const cells = content.items
     .map((item, i) => {
@@ -368,12 +372,12 @@ function renderImageGrid(content: ImageGridContent, section: DetailSection): str
         ? `<span style="display:inline-block;width:14px;height:14px;border-radius:50%;background-color:${sanitizeSwatchColor(item.swatchColor)};margin-right:6px;vertical-align:-2px;"></span>`
         : '';
       const labelHtml = item.label
-        ? `<div style="margin-top:8px;font-size:15px;color:#333;">${swatchHtml}${editableText(`content.items.${i}.label`, item.label)}</div>`
+        ? `<div style="margin-top:8px;font-size:15px;color:${colors.text};">${swatchHtml}${editableText(`content.items.${i}.label`, item.label)}</div>`
         : '';
       return `<div style="width:50%;padding:8px;box-sizing:border-box;text-align:center;">${imgHtml}${labelHtml}</div>`;
     })
     .join('');
-  return `<div ${sectionAttrs(section)} style="background-color:#fff;padding:40px 12px;box-sizing:border-box;">
+  return `<div ${sectionAttrs(section)} style="background-color:${colors.cardBg};padding:40px 12px;box-sizing:border-box;">
   ${titleHtml}
   <div style="display:flex;flex-wrap:wrap;">${cells}</div>
 </div>`;
@@ -399,11 +403,11 @@ export function renderSection(section: DetailSection, theme: DetailPageTheme): s
     case 'cta':
       return renderCta(section.content as CtaContent, section, colors, theme);
     case 'brand_header':
-      return renderBrandHeader(section.content as BrandHeaderContent, section);
+      return renderBrandHeader(section.content as BrandHeaderContent, section, colors);
     case 'point':
-      return renderPoint(section.content as PointContent, section, colors);
+      return renderPoint(section.content as PointContent, section, colors, theme);
     case 'image_grid':
-      return renderImageGrid(section.content as ImageGridContent, section);
+      return renderImageGrid(section.content as ImageGridContent, section, colors);
   }
 }
 

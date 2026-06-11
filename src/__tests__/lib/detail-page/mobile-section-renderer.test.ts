@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { renderSection } from '@/lib/detail-page/section-renderer';
+import { PALETTES } from '@/lib/detail-page/palette-config';
 import type { DetailSection, DetailPageTheme } from '@/types/detail-page';
 
 const MOBILE_THEME: DetailPageTheme = {
@@ -175,13 +176,22 @@ describe('renderSection — mobile layoutMode 분기', () => {
     expect(html).not.toContain('font-size:34px');
   });
 
-  it('mobile spec_table: 회색 패널(#f4f5f7) 스타일로 렌더링한다', () => {
+  it('mobile spec_table: 팔레트 기반 패널(bg) 스타일로 렌더링한다', () => {
     const html = renderSection(
       makeSection({ type: 'spec_table', content: { type: 'spec_table', specs: [{ label: '소재', value: '옥스퍼드' }] } }),
       MOBILE_THEME,
     );
-    expect(html).toContain('#f4f5f7');
+    // warm_cream: bg(#F5F0E8) ≠ cardBg(#FFFDF8) → 패널은 bg
+    expect(html).toContain(PALETTES.warm_cream.bg);
     expect(html).toContain('소재');
+  });
+
+  it('mobile spec_table: bg와 cardBg가 같은 팔레트(cool_white)는 패널에 bgAlt를 쓴다', () => {
+    const html = renderSection(
+      makeSection({ type: 'spec_table', content: { type: 'spec_table', specs: [{ label: '소재', value: '옥스퍼드' }] } }),
+      { ...MOBILE_THEME, palette: 'cool_white' },
+    );
+    expect(html).toContain(PALETTES.cool_white.bgAlt);
   });
 
   it('desktop spec_table: 기존 테이블 스타일을 유지한다 (회귀)', () => {
@@ -218,5 +228,68 @@ describe('renderSection — mobile layoutMode 분기', () => {
     expect(warningHtml).toContain('padding:32px 40px');
     expect(ctaHtml).toContain('padding:60px 40px');
     expect(ctaHtml).toContain('font-size:36px');
+  });
+});
+
+describe('renderSection — 모바일 렌더러 팔레트/폰트 테마 적용', () => {
+  const DARK_THEME: DetailPageTheme = { ...MOBILE_THEME, palette: 'deep_dark' };
+
+  const heroSection = makeSection({
+    type: 'hero',
+    content: { type: 'hero', headline: '완전 오픈 · 넉넉한 수납', subheadline: '일반 설명 문장' },
+    eyebrow: 'Keep Till',
+  });
+
+  it('mobile hero: deep_dark 팔레트의 text/cardBg가 적용되고 하드코딩 색이 사라진다', () => {
+    const html = renderSection(heroSection, DARK_THEME);
+    expect(html).toContain(PALETTES.deep_dark.text);       // h1 색
+    expect(html).toContain(PALETTES.deep_dark.cardBg);     // 배경
+    expect(html).not.toContain('#1a1a1a;');                // 기존 하드코딩 h1 색 부재
+  });
+
+  it('mobile hero: eyebrow에 팔레트 labelColor가 적용된다', () => {
+    const html = renderSection(heroSection, MOBILE_THEME);
+    expect(html).toContain(PALETTES.warm_cream.labelColor);
+    expect(html).not.toContain('#8a7560');
+  });
+
+  it('mobile hero: fontStyle mixed면 h1에 명조 폰트가 적용된다', () => {
+    const mixed = renderSection(heroSection, { ...MOBILE_THEME, fontStyle: 'mixed' });
+    const sans = renderSection(heroSection, MOBILE_THEME);
+    expect(mixed).toContain('Batang');
+    expect(sans).not.toContain('Batang');
+  });
+
+  it('brand_header: 팔레트의 text/textSub/border가 적용된다', () => {
+    const html = renderSection(
+      makeSection({ type: 'brand_header', content: { type: 'brand_header', brandName: '킵틸', rightLabel: 'pouch' } }),
+      DARK_THEME,
+    );
+    expect(html).toContain(PALETTES.deep_dark.text);
+    expect(html).toContain(PALETTES.deep_dark.textSub);
+    expect(html).toContain(PALETTES.deep_dark.border);
+  });
+
+  it('point: 라벨에 labelColor, 헤드라인에 text가 적용되고 fontStyle을 따른다', () => {
+    const section = makeSection({
+      type: 'point',
+      content: { type: 'point', pointLabel: 'Point 1', headline: '넉넉하게', subheadline: '20cm 자도 들어가요' },
+    });
+    const html = renderSection(section, { ...DARK_THEME, fontStyle: 'mixed' });
+    expect(html).toContain(PALETTES.deep_dark.labelColor);
+    expect(html).toContain(PALETTES.deep_dark.text);
+    expect(html).toContain('Batang');
+  });
+
+  it('image_grid: 팔레트의 cardBg/text가 적용된다', () => {
+    const html = renderSection(
+      makeSection({
+        type: 'image_grid',
+        content: { type: 'image_grid', title: 'Product Info.', items: [{ label: '레드', swatchColor: '#D9442C' }] },
+      }),
+      DARK_THEME,
+    );
+    expect(html).toContain(PALETTES.deep_dark.cardBg);
+    expect(html).toContain(PALETTES.deep_dark.text);
   });
 });
