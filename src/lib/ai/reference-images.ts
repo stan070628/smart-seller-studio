@@ -19,6 +19,7 @@ export interface LoadReferenceImagesInput {
   productImageUrls?: string[];
   /** @deprecated 하위호환: 단일 base64 */
   productImageBase64?: string;
+  /** @deprecated 무시됨 — 출력은 항상 image/jpeg로 정규화된다 */
   productImageMimeType?: string;
   /** @deprecated 하위호환: 단일 URL */
   productImageUrl?: string;
@@ -48,30 +49,28 @@ export async function loadReferenceImages(
   }
   if (input.productImageBase64) directBase64.push(input.productImageBase64);
   for (const b64 of directBase64) {
-    try {
-      buffers.push(Buffer.from(b64, 'base64'));
-    } catch {
-      // 잘못된 base64는 건너뛴다
-    }
+    buffers.push(Buffer.from(b64, 'base64'));
   }
 
-  // 2. URL 입력 (병렬 fetch)
-  const urls: string[] = [];
-  if (input.productImageUrls?.length) urls.push(...input.productImageUrls);
-  if (input.productImageUrl) urls.push(input.productImageUrl);
-  if (urls.length) {
-    const fetched = await Promise.all(
-      urls.map(async (u) => {
-        try {
-          const res = await fetch(u, { signal: AbortSignal.timeout(15_000) });
-          if (!res.ok) return null;
-          return Buffer.from(await res.arrayBuffer());
-        } catch {
-          return null;
-        }
-      }),
-    );
-    for (const f of fetched) if (f) buffers.push(f);
+  // 2. URL 입력 (병렬 fetch) — base64 입력만으로 상한을 이미 채웠으면 생략
+  if (buffers.length < MAX_REFERENCES) {
+    const urls: string[] = [];
+    if (input.productImageUrls?.length) urls.push(...input.productImageUrls);
+    if (input.productImageUrl) urls.push(input.productImageUrl);
+    if (urls.length) {
+      const fetched = await Promise.all(
+        urls.map(async (u) => {
+          try {
+            const res = await fetch(u, { signal: AbortSignal.timeout(15_000) });
+            if (!res.ok) return null;
+            return Buffer.from(await res.arrayBuffer());
+          } catch {
+            return null;
+          }
+        }),
+      );
+      for (const f of fetched) if (f) buffers.push(f);
+    }
   }
 
   // 3. 상한 적용 + 정규화

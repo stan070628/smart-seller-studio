@@ -60,6 +60,16 @@ describe('loadReferenceImages', () => {
     expect(result).toHaveLength(1);
   });
 
+  it('하위호환: 단일 productImageUrl을 fetch하여 1장으로 처리한다', async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(10)),
+    });
+    const result = await loadReferenceImages({ productImageUrl: 'https://x/single.jpg' });
+    expect(result).toHaveLength(1);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
   it('입력이 전혀 없으면 빈 배열을 반환한다', async () => {
     const result = await loadReferenceImages({});
     expect(result).toHaveLength(0);
