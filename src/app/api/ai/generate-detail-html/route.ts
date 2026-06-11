@@ -12,13 +12,20 @@ import { getAnthropicClient } from "@/lib/ai/claude";
 import {
   buildDetailPageUserPrompt,
   buildCategorySystemPrompt,
+  buildMobileCategorySystemPrompt,
   parseDetailPageResponse,
+  parseMobileDetailPageResponse,
   checkProhibitedPhrases,
   type ProductImageAnalysis,
   type DetailPageCategory,
   type DetailPageContent,
+  type MobileDetailPageContent,
 } from "@/lib/ai/prompts/detail-page";
 import { buildDetailPageHtml, buildDetailPageSnippet } from "@/lib/detail-page/html-builder";
+import { mobileContentToSections } from "@/lib/detail-page/section-parser";
+import { renderAllSections } from "@/lib/detail-page/section-renderer";
+import { DEFAULT_THEME } from "@/lib/detail-page/palette-config";
+import type { DetailPageTheme } from "@/types/detail-page";
 import { checkRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { requireAuth } from "@/lib/supabase/auth";
 import { withRetry } from "@/lib/ai/resilience";
@@ -91,6 +98,8 @@ const RequestSchema = z.object({
   existingHtml: z.string().optional(),
   /** 스튜디오 감성 프롬프트 사용 여부 (신규 생성 모드에서만 적용) */
   studioMode: z.boolean().optional(),
+  /** 쿠팡 모바일 스타일 생성 모드 — MobileDetailPageContent 스키마로 카피 생성 */
+  mobileMode: z.boolean().optional(),
   /** 카테고리별 최적화 프롬프트 선택 (기본값: 'basic') */
   category: z.enum(['basic', 'fashion', 'living', 'food'] as const).optional(),
   /** 소스 URL에서 추출한 실측 스펙 (이미지 분석보다 우선 반영) */
@@ -271,6 +280,7 @@ interface ApiSuccessResponse {
   snippet: string;           // 쿠팡용 780px
   naverSnippet: string;      // 네이버용 860px
   content?: DetailPageContent; // 섹션 편집기 초기화용 구조화 데이터 (신규 생성 모드에서만 포함)
+  mobileContent?: MobileDetailPageContent; // mobileMode=true 응답에만 포함
   imagePrompts?: ImagePromptsResponse;
   imagePromptsError?: string; // includeImagePrompts=true 였지만 생성 실패 시 이유
 }
@@ -341,7 +351,7 @@ export async function POST(
     );
   }
 
-  const { images: rawImages, imageUrls, productName, existingHtml, studioMode, productSpecs, category, conversationContext, includeImagePrompts } = parseResult.data;
+  const { images: rawImages, imageUrls, productName, existingHtml, studioMode, mobileMode, productSpecs, category, conversationContext, includeImagePrompts } = parseResult.data;
 
   // imageUrls가 있으면 서버에서 fetch → base64 변환 후 rawImages와 합산
   let images: Array<{ imageBase64: string; mimeType: AllowedMimeType }>;
@@ -483,8 +493,93 @@ export async function POST(
     );
   }
 
-  // DetailPageContent 생성
   const client = getAnthropicClient();
+
+  // ── 모바일 모드: MobileDetailPageContent 생성 → 섹션 렌더링 ──
+  if (mobileMode) {
+    const mobileUserMessage = buildDetailPageUserPrompt(imageAnalysis, productName, productSpecs, conversationContext);
+    let rawMobileText: string;
+    try {
+      const resp = await withRetry(
+        () =>
+          client.messages.create({
+            model: "claude-sonnet-4-6",
+            max_tokens: 2048,
+            system: buildMobileCategorySystemPrompt((category ?? 'basic') as DetailPageCategory),
+            messages: [{ role: "user", content: mobileUserMessage }],
+          }),
+        { label: "Claude generateMobileDetailPageContent" }
+      );
+      rawMobileText = resp.content
+        .filter((b) => b.type === "text")
+        .map((b) => (b as { type: "text"; text: string }).text)
+        .join("");
+    } catch (error) {
+      console.error("[/api/ai/generate-detail-html] 모바일 카피 생성 실패:", error);
+      return NextResponse.json(
+        { success: false, error: error instanceof Error ? `카피 생성 실패: ${error.message}` : "카피 생성 중 오류가 발생했습니다." },
+        { status: 502 }
+      );
+    }
+
+    let mobileContent: MobileDetailPageContent;
+    try {
+      mobileContent = parseMobileDetailPageResponse(rawMobileText);
+    } catch (error) {
+      console.error("[/api/ai/generate-detail-html] 모바일 카피 파싱 실패:", error);
+      return NextResponse.json(
+        { success: false, error: error instanceof Error ? `카피 파싱 실패: ${error.message}` : "AI 응답 파싱 중 오류가 발생했습니다." },
+        { status: 502 }
+      );
+    }
+
+    // productSpecs가 있으면 AI 생성 specs보다 우선
+    if (productSpecs && productSpecs.length > 0) {
+      mobileContent = { ...mobileContent, specs: productSpecs };
+    }
+
+    // 금지 문구 검사 (서버 로그 경고만)
+    const mobileAllText = [
+      mobileContent.hook.headline,
+      ...mobileContent.hook.hashtags,
+      ...mobileContent.points.map((p) => `${p.headline} ${p.subheadline}`),
+      ...mobileContent.warnings,
+    ].join(' ');
+    const mobileCheck = checkProhibitedPhrases(mobileAllText);
+    if (mobileCheck.violations.length > 0) {
+      console.warn(`[generate-detail-html] 금지 문구 감지 (mobile, category=${category ?? 'basic'}):`, mobileCheck.violations);
+    }
+
+    // 섹션 변환 + 렌더링 (클라이언트 fallback과 동일 경로)
+    const mobilePublicUrls = imagesWithUrls
+      .map((img) => ('publicUrl' in img ? img.publicUrl : undefined))
+      .filter((u): u is string => Boolean(u));
+    const mobileTheme: DetailPageTheme = { ...DEFAULT_THEME, layoutMode: 'mobile' };
+
+    let mobileSnippet: string;
+    try {
+      const sections = mobileContentToSections(mobileContent, mobilePublicUrls);
+      const rendered = renderAllSections(sections, mobileTheme);
+      mobileSnippet = `<div style="max-width:780px;margin:0 auto;font-family:'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif;">\n${rendered}\n</div>`;
+    } catch (error) {
+      console.error("[/api/ai/generate-detail-html] 모바일 렌더링 실패:", error);
+      return NextResponse.json(
+        { success: false, error: "HTML 생성 중 오류가 발생했습니다." },
+        { status: 500 }
+      );
+    }
+
+    const mobileNaverSnippet = mobileSnippet.replace(/max-width\s*:\s*780px/g, "max-width:860px");
+    return NextResponse.json({
+      success: true,
+      html: appendPrivacyFooter(mobileSnippet),
+      snippet: appendPrivacyFooter(mobileSnippet),
+      naverSnippet: appendPrivacyFooter(mobileNaverSnippet),
+      mobileContent,
+    }, { status: 200 });
+  }
+
+  // DetailPageContent 생성
   const userMessage = buildDetailPageUserPrompt(imageAnalysis, productName, productSpecs, conversationContext);
 
   let rawCopyText: string;
