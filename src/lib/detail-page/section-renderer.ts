@@ -14,6 +14,9 @@ import type {
   UsageStepsContent,
   WarningContent,
   CtaContent,
+  BrandHeaderContent,
+  PointContent,
+  ImageGridContent,
 } from '@/types/detail-page';
 import type { PaletteColors } from '@/lib/detail-page/palette-config';
 import { PALETTES } from '@/lib/detail-page/palette-config';
@@ -267,6 +270,70 @@ function renderCta(content: CtaContent, section: DetailSection, colors: PaletteC
 </div>`;
 }
 
+// ─────────────────────────────────────────
+// 모바일 섹션 렌더러 (brand_header / point / image_grid)
+// ─────────────────────────────────────────
+
+/** attachedImages 전체를 전체폭 이미지로 렌더링 (패딩 0) */
+function renderFullBleedImages(section: DetailSection): string {
+  return section.attachedImages
+    .map((img) => {
+      const safe = sanitizeUrl(img.url);
+      return safe ? `<img src="${escapeHtml(safe)}" alt="" style="width:100%;display:block;" />` : '';
+    })
+    .join('');
+}
+
+/** #RGB/#RRGGBB/#RRGGBBAA hex만 허용, 그 외 기본 회색 (CSS 인젝션 방지) */
+function sanitizeSwatchColor(color: string | undefined): string {
+  return color && /^#[0-9A-Fa-f]{3,8}$/.test(color) ? color : '#cccccc';
+}
+
+function renderBrandHeader(content: BrandHeaderContent, section: DetailSection): string {
+  return `<div ${sectionAttrs(section)} style="display:flex;justify-content:space-between;align-items:baseline;padding:16px 20px;border-bottom:1px solid #ddd;background-color:#fff;box-sizing:border-box;">
+  <span style="font-size:15px;font-weight:600;color:#333;">${editableText('content.brandName', content.brandName)}</span>
+  <span style="font-size:13px;color:#999;">${editableText('content.rightLabel', content.rightLabel)}</span>
+</div>`;
+}
+
+function renderPoint(content: PointContent, section: DetailSection, colors: PaletteColors): string {
+  const labelHtml = content.pointLabel
+    ? `<div style="margin-bottom:12px;"><span style="display:block;font-size:18px;color:#999;margin-bottom:6px;">&#9745;</span><span style="font-family:Georgia,serif;font-style:italic;font-size:26px;color:#999;">${editableText('content.pointLabel', content.pointLabel)}</span></div>`
+    : '';
+  return `<div ${sectionAttrs(section)} style="background-color:#fff;padding:0;box-sizing:border-box;">
+  <div style="padding:40px 20px 28px;text-align:center;">
+    ${labelHtml}
+    <h2 style="margin:0 0 10px;font-size:28px;font-weight:800;color:#111;line-height:1.35;letter-spacing:-0.5px;">${editableText('content.headline', content.headline)}</h2>
+    <p style="margin:0;font-size:17px;color:#555;line-height:1.6;">${editableMarkupText('content.subheadline', content.subheadline, colors.accent)}</p>
+  </div>
+  ${renderFullBleedImages(section)}
+</div>`;
+}
+
+function renderImageGrid(content: ImageGridContent, section: DetailSection): string {
+  const titleHtml = content.title
+    ? `<h2 style="margin:0 0 24px;font-family:Georgia,serif;font-size:26px;font-weight:400;color:#5c4f42;text-align:center;">${editableText('content.title', content.title)}</h2>`
+    : '';
+  const cells = content.items
+    .map((item, i) => {
+      const img = section.attachedImages[i];
+      const safe = img ? sanitizeUrl(img.url) : '';
+      const imgHtml = safe ? `<img src="${escapeHtml(safe)}" alt="" style="width:100%;display:block;border-radius:8px;" />` : '';
+      const swatchHtml = item.swatchColor !== undefined
+        ? `<span style="display:inline-block;width:14px;height:14px;border-radius:50%;background-color:${sanitizeSwatchColor(item.swatchColor)};margin-right:6px;vertical-align:-2px;"></span>`
+        : '';
+      const labelHtml = item.label
+        ? `<div style="margin-top:8px;font-size:15px;color:#333;">${swatchHtml}${editableText(`content.items.${i}.label`, item.label)}</div>`
+        : '';
+      return `<div style="width:50%;padding:8px;box-sizing:border-box;text-align:center;">${imgHtml}${labelHtml}</div>`;
+    })
+    .join('');
+  return `<div ${sectionAttrs(section)} style="background-color:#fff;padding:40px 12px;box-sizing:border-box;">
+  ${titleHtml}
+  <div style="display:flex;flex-wrap:wrap;">${cells}</div>
+</div>`;
+}
+
 export function renderSection(section: DetailSection, theme: DetailPageTheme): string {
   const colors = PALETTES[theme.palette];
   switch (section.type) {
@@ -287,11 +354,11 @@ export function renderSection(section: DetailSection, theme: DetailPageTheme): s
     case 'cta':
       return renderCta(section.content as CtaContent, section, colors, theme);
     case 'brand_header':
-      return '';
+      return renderBrandHeader(section.content as BrandHeaderContent, section);
     case 'point':
-      return '';
+      return renderPoint(section.content as PointContent, section, colors);
     case 'image_grid':
-      return '';
+      return renderImageGrid(section.content as ImageGridContent, section);
   }
 }
 
