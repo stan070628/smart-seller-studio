@@ -1,0 +1,89 @@
+// src/lib/ai/reference-images.ts
+/**
+ * 멀티참조 이미지 로더
+ * 다양한 입력 소스(직접 base64, URL, 단일 하위호환 필드)를 받아
+ * 최대 3장의 정규화된 참조 이미지(장변 1024px JPEG)로 변환한다.
+ */
+import sharp from 'sharp';
+
+export interface ReferenceImage {
+  /** data URL prefix 제외 base64 */
+  base64: string;
+  mimeType: 'image/jpeg';
+}
+
+export interface LoadReferenceImagesInput {
+  /** 직접 전달된 base64 참조 (data URL prefix 제외) */
+  referenceImages?: Array<{ base64: string; mimeType?: string }>;
+  /** 서버가 fetch할 이미지 URL 목록 */
+  productImageUrls?: string[];
+  /** @deprecated 하위호환: 단일 base64 */
+  productImageBase64?: string;
+  productImageMimeType?: string;
+  /** @deprecated 하위호환: 단일 URL */
+  productImageUrl?: string;
+}
+
+const MAX_REFERENCES = 3;
+const MAX_EDGE = 1024;
+
+/** 단일 Buffer를 장변 1024px JPEG q80으로 정규화하여 base64 반환 */
+async function normalizeBuffer(buf: Buffer): Promise<string> {
+  const out = await sharp(buf)
+    .resize(MAX_EDGE, MAX_EDGE, { fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: 80 })
+    .toBuffer();
+  return out.toString('base64');
+}
+
+export async function loadReferenceImages(
+  input: LoadReferenceImagesInput,
+): Promise<ReferenceImage[]> {
+  const buffers: Buffer[] = [];
+
+  // 1. base64 직접 입력 (referenceImages → 단일 productImageBase64)
+  const directBase64: string[] = [];
+  if (input.referenceImages?.length) {
+    for (const r of input.referenceImages) directBase64.push(r.base64);
+  }
+  if (input.productImageBase64) directBase64.push(input.productImageBase64);
+  for (const b64 of directBase64) {
+    try {
+      buffers.push(Buffer.from(b64, 'base64'));
+    } catch {
+      // 잘못된 base64는 건너뛴다
+    }
+  }
+
+  // 2. URL 입력 (병렬 fetch)
+  const urls: string[] = [];
+  if (input.productImageUrls?.length) urls.push(...input.productImageUrls);
+  if (input.productImageUrl) urls.push(input.productImageUrl);
+  if (urls.length) {
+    const fetched = await Promise.all(
+      urls.map(async (u) => {
+        try {
+          const res = await fetch(u, { signal: AbortSignal.timeout(15_000) });
+          if (!res.ok) return null;
+          return Buffer.from(await res.arrayBuffer());
+        } catch {
+          return null;
+        }
+      }),
+    );
+    for (const f of fetched) if (f) buffers.push(f);
+  }
+
+  // 3. 상한 적용 + 정규화
+  const limited = buffers.slice(0, MAX_REFERENCES);
+  const normalized = await Promise.all(
+    limited.map(async (b) => {
+      try {
+        return { base64: await normalizeBuffer(b), mimeType: 'image/jpeg' as const };
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return normalized.filter((x): x is ReferenceImage => x !== null);
+}
