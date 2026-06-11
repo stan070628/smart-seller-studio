@@ -115,7 +115,9 @@ export default function DetailMakerClient() {
           await refreshRenderedHtml(parsed, theme);
         } catch (e) {
           console.warn('[detail-maker] mobileContentToSections 실패:', e);
+          setError('생성 결과를 편집기로 불러오지 못했습니다. 다시 시도해주세요.');
         }
+      // 구버전 서버(mobileMode 미지원)가 desktop content를 반환하는 롤링 배포 케이스 대비 fallback
       } else if (json.content) {
         try {
           const parsed = contentToSections(json.content as DetailPageContent);
@@ -123,6 +125,7 @@ export default function DetailMakerClient() {
           await refreshRenderedHtml(parsed, theme);
         } catch (e) {
           console.warn('[detail-maker] contentToSections 실패:', e);
+          setError('생성 결과를 편집기로 불러오지 못했습니다. 다시 시도해주세요.');
         }
       }
     } catch (e) {
