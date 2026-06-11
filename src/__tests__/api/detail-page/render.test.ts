@@ -304,16 +304,16 @@ describe('POST /api/detail-page/render', () => {
     expect(data.snippet).toContain('Apple SD Gothic Neo');
   });
 
-  it('attachedImages가 3장이면 400을 반환한다 (max 2장 제한)', async () => {
+  it('attachedImages가 7장이면 400을 반환한다 (max 6장 제한)', async () => {
     const request = makeRequest({
       sections: [
         {
           ...VALID_HERO_SECTION,
-          attachedImages: [
-            { url: 'https://example.com/img1.jpg', order: 0, processingMode: 'original' },
-            { url: 'https://example.com/img2.jpg', order: 1, processingMode: 'original' },
-            { url: 'https://example.com/img3.jpg', order: 2, processingMode: 'original' },
-          ],
+          attachedImages: Array.from({ length: 7 }, (_, i) => ({
+            url: `https://example.com/img${i + 1}.jpg`,
+            order: i,
+            processingMode: 'original',
+          })),
         },
       ],
       theme: VALID_THEME,
@@ -323,5 +323,24 @@ describe('POST /api/detail-page/render', () => {
 
     expect(response.status).toBe(400);
     expect(data).toHaveProperty('error');
+  });
+
+  it('attachedImages 6장은 허용한다 (max 6장 경계값)', async () => {
+    const request = makeRequest({
+      sections: [
+        {
+          ...VALID_HERO_SECTION,
+          attachedImages: Array.from({ length: 6 }, (_, i) => ({
+            url: `https://example.com/img${i + 1}.jpg`,
+            order: i,
+            processingMode: 'original',
+          })),
+        },
+      ],
+      theme: VALID_THEME,
+    });
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
   });
 });

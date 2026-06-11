@@ -324,7 +324,11 @@ export const MOBILE_DETAIL_PAGE_SYSTEM_PROMPT = `당신은 한국 이커머스 �
 
 /** 모바일 베이스 프롬프트 + 카테고리 가이드 결합 */
 export function buildMobileCategorySystemPrompt(category: DetailPageCategory = 'basic'): string {
-  return `${MOBILE_DETAIL_PAGE_SYSTEM_PROMPT}${CATEGORY_GUIDE[category]}`;
+  // CATEGORY_GUIDE는 데스크톱 스키마(sellingPoints/features/usageSteps) 기준으로 작성되어 있다.
+  // 모바일 스키마에는 해당 필드가 없으므로, 가이드를 소구점 선정 기준으로만 참고하도록 브리징한다.
+  const bridge =
+    '\n\n## 카테고리 가이드 적용 방법\n아래 카테고리 가이드는 데스크톱 스키마 기준으로 작성되어 있습니다. sellingPoints·features·usageSteps 등의 필드명은 무시하고, 내용은 points·specs·warnings 작성 시 소구점 선정과 강조 우선순위 기준으로만 참고하세요. 출력 JSON 구조는 반드시 위 모바일 스키마를 따릅니다.';
+  return `${MOBILE_DETAIL_PAGE_SYSTEM_PROMPT}${bridge}${CATEGORY_GUIDE[category]}`;
 }
 
 /**
@@ -363,8 +367,9 @@ export function parseMobileDetailPageResponse(rawText: string): MobileDetailPage
     categoryLabelEn: str(data.categoryLabelEn),
     hook: {
       eyebrow: str(hook.eyebrow),
-      headline: hook.headline,
-      hashtags: strArr(hook.hashtags).slice(0, 4),
+      headline: hook.headline.trim(),
+      // 프롬프트는 정확히 3개를 지시하지만 파서는 1개 초과분까지 관용 허용 후 최대 3개로 절단
+      hashtags: strArr(hook.hashtags).slice(0, 3),
     },
     points: (data.points as Array<Record<string, unknown> | null>).map((p) => {
       const o = (p ?? {}) as Record<string, unknown>;
