@@ -35,7 +35,7 @@ const SCENE_PROMPT_SYSTEM = `You are an expert e-commerce product photographer a
 Given one or more reference images of the SAME product (often photographed from different angles) and product information, create a highly detailed English prompt for Gemini image generation that will produce a professional commercial lifestyle scene.
 
 Rules:
-- The product from the reference image MUST appear prominently in the generated scene
+- The product from the reference image(s) MUST appear prominently in the generated scene
 - Create a COMPLETE scene with the product naturally integrated — not just a background
 - Be extremely specific: lighting quality, environment details, props, camera angle, mood, color palette
 - Do NOT include any text, logos, watermarks, or price tags in the scene description
@@ -60,7 +60,7 @@ function buildUserPrompt(
     features?: Array<{ title: string }>;
   },
 ): string {
-  const lines: string[] = ['Product reference image is attached above.'];
+  const lines: string[] = ['Product reference image(s) are attached above.'];
 
   if (productInfo) {
     if (productInfo.headline) lines.push(`Product headline: ${productInfo.headline}`);
@@ -104,16 +104,16 @@ export async function POST(req: NextRequest) {
 
   const { sectionType, productInfo } = parsed.data;
 
-  // 참조 이미지 로딩 (멀티참조: URL fetch + Sharp 리사이즈 + base64, 최대 3장)
-  const referenceImages = await loadReferenceImages({
-    referenceImages: parsed.data.referenceImages,
-    productImageUrls: parsed.data.productImageUrls,
-    productImageBase64: parsed.data.productImageBase64,
-    productImageMimeType: parsed.data.productImageMimeType,
-    productImageUrl: parsed.data.productImageUrl,
-  });
-
   try {
+    // 참조 이미지 로딩 (멀티참조: URL fetch + Sharp 리사이즈 + base64, 최대 3장)
+    const referenceImages = await loadReferenceImages({
+      referenceImages: parsed.data.referenceImages,
+      productImageUrls: parsed.data.productImageUrls,
+      productImageBase64: parsed.data.productImageBase64,
+      productImageMimeType: parsed.data.productImageMimeType,
+      productImageUrl: parsed.data.productImageUrl,
+    });
+
     // Step 1: Claude Sonnet으로 섹션별 씬 프롬프트 생성
     const client = getAnthropicClient();
 

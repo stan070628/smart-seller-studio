@@ -46,6 +46,7 @@ describe('buildImagePromptsUserPrompt', () => {
 });
 
 describe('parseImagePromptsResponse', () => {
+  // NOTE: 일부 fixture는 레거시 referenceImageIndex 필드를 포함한다 — 파서가 이를 무시하고 정상 파싱하는지 검증한다.
   it('유효한 JSON을 파싱한다', () => {
     const raw = JSON.stringify({
       visualIdentity: {

@@ -57,9 +57,11 @@ export async function loadReferenceImages(
     const urls: string[] = [];
     if (input.productImageUrls?.length) urls.push(...input.productImageUrls);
     if (input.productImageUrl) urls.push(input.productImageUrl);
-    if (urls.length) {
+    const remaining = MAX_REFERENCES - buffers.length;
+    const urlsToFetch = urls.slice(0, remaining);
+    if (urlsToFetch.length) {
       const fetched = await Promise.all(
-        urls.map(async (u) => {
+        urlsToFetch.map(async (u) => {
           try {
             const res = await fetch(u, { signal: AbortSignal.timeout(15_000) });
             if (!res.ok) return null;
