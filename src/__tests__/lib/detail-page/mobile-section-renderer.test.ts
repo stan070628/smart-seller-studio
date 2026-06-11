@@ -205,4 +205,18 @@ describe('renderSection — mobile layoutMode 분기', () => {
     expect(warningHtml).toContain('padding:32px 20px');
     expect(ctaHtml).toContain('padding:40px 20px');
   });
+
+  it('desktop warning/cta: layoutMode 미지정 시 기존 패딩·폰트를 유지한다 (회귀)', () => {
+    const warningHtml = renderSection(
+      makeSection({ type: 'warning', content: { type: 'warning', warnings: ['주의1'] } }),
+      DESKTOP_THEME,
+    );
+    const ctaHtml = renderSection(
+      makeSection({ type: 'cta', content: { type: 'cta', text: '지금 구매하기' } }),
+      DESKTOP_THEME,
+    );
+    expect(warningHtml).toContain('padding:32px 40px');
+    expect(ctaHtml).toContain('padding:60px 40px');
+    expect(ctaHtml).toContain('font-size:36px');
+  });
 });
