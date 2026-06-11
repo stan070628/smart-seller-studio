@@ -3,11 +3,11 @@
 import React, { useState } from 'react';
 import { C } from '@/lib/design-tokens';
 import { DEFAULT_THEME } from '@/lib/detail-page/palette-config';
-import { contentToSections } from '@/lib/detail-page/section-parser';
+import { contentToSections, mobileContentToSections } from '@/lib/detail-page/section-parser';
 import DetailPageEditor from '@/components/listing/detail-editor/DetailPageEditor';
 import DetailMakerInputPanel from '@/components/listing/detail-maker/DetailMakerInputPanel';
 import type { DetailSection, DetailPageTheme } from '@/types/detail-page';
-import type { DetailPageContent } from '@/lib/ai/prompts/detail-page';
+import type { DetailPageContent, MobileDetailPageContent } from '@/lib/ai/prompts/detail-page';
 
 type Category = 'basic' | 'fashion' | 'living' | 'food';
 
@@ -21,7 +21,7 @@ export default function DetailMakerClient() {
 
   // 결과
   const [sections, setSections] = useState<DetailSection[]>([]);
-  const [theme, setTheme] = useState<DetailPageTheme>(DEFAULT_THEME);
+  const [theme, setTheme] = useState<DetailPageTheme>({ ...DEFAULT_THEME, layoutMode: 'mobile' });
   const [generatedHtml, setGeneratedHtml] = useState<string>('');
 
   // 진행 상태
@@ -100,6 +100,7 @@ export default function DetailMakerClient() {
           imageUrls: uploadedUrls,
           productName: fullProductName,
           category,
+          mobileMode: true,
         }),
       });
       const json = await res.json();
@@ -107,7 +108,15 @@ export default function DetailMakerClient() {
 
       setGeneratedHtml(json.html);
 
-      if (json.content) {
+      if (json.mobileContent) {
+        try {
+          const parsed = mobileContentToSections(json.mobileContent as MobileDetailPageContent, uploadedUrls);
+          setSections(parsed);
+          await refreshRenderedHtml(parsed, theme);
+        } catch (e) {
+          console.warn('[detail-maker] mobileContentToSections 실패:', e);
+        }
+      } else if (json.content) {
         try {
           const parsed = contentToSections(json.content as DetailPageContent);
           setSections(parsed);

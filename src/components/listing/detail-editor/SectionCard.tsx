@@ -284,6 +284,7 @@ export default function SectionCard({
         <SectionImageAttachment
           images={section.attachedImages}
           palette={palette}
+          sectionType={section.type}
           onChange={(imgs) => onImagesChange(section.id, imgs)}
           onAiEdit={
             onSectionImageAiEdit

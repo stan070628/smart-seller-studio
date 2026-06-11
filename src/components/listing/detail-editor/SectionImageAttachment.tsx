@@ -3,13 +3,14 @@
  * SectionImageAttachment
  *
  * 섹션 카드 하단에 표시되는 이미지 첨부 패널입니다.
- * 최대 2장까지 업로드 가능하며, 처리 모드(bg_composed / bg_removed / original)를 선택할 수 있습니다.
+ * 섹션 타입별 최대 개수(image_grid 6장, 그 외 2장)까지 업로드 가능하며,
+ * 처리 모드(bg_composed / bg_removed / original)를 선택할 수 있습니다.
  */
 
 import React, { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Upload, X, Loader2, FolderOpen } from 'lucide-react';
-import type { AttachedImage, ImageProcessingMode, PaletteName } from '@/types/detail-page';
+import type { AttachedImage, ImageProcessingMode, PaletteName, SectionType } from '@/types/detail-page';
 import type { AiImageSlot } from '@/lib/detail-page/ai-html-builder';
 import { useListingStore } from '@/store/useListingStore';
 
@@ -20,6 +21,7 @@ import { useListingStore } from '@/store/useListingStore';
 interface SectionImageAttachmentProps {
   images: AttachedImage[];
   palette: PaletteName;
+  sectionType?: SectionType;
   onChange: (images: AttachedImage[]) => void;
   onAiEdit?: (imageUrl: string, index: number) => void;
 }
@@ -28,7 +30,8 @@ interface SectionImageAttachmentProps {
 // 상수
 // ─────────────────────────────────────────
 
-const MAX_IMAGES = 2;
+const DEFAULT_MAX_IMAGES = 2;
+const IMAGE_GRID_MAX_IMAGES = 6; // 렌더 API Zod .max(6)과 동기화
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
 const MODE_LABELS: Record<ImageProcessingMode, string> = {
@@ -63,9 +66,12 @@ const toBase64 = (file: File): Promise<string> =>
 export default function SectionImageAttachment({
   images,
   palette,
+  sectionType,
   onChange,
   onAiEdit,
 }: SectionImageAttachmentProps) {
+  // 섹션 타입별 최대 첨부 개수 — image_grid는 6장, 그 외 2장
+  const maxImages = sectionType === 'image_grid' ? IMAGE_GRID_MAX_IMAGES : DEFAULT_MAX_IMAGES;
   // 현재 선택된 처리 모드
   const [processingMode, setProcessingMode] = useState<ImageProcessingMode>('bg_composed');
   // 업로드 진행 중 여부
@@ -88,7 +94,7 @@ export default function SectionImageAttachment({
     ...assetsDraft.generatedThumbnails,
   ].filter((url, idx, arr) => url && arr.indexOf(url) === idx);
 
-  const canAddMore = images.length < MAX_IMAGES;
+  const canAddMore = images.length < maxImages;
 
   // 파일 선택 → 업로드 처리
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -96,7 +102,7 @@ export default function SectionImageAttachment({
     if (files.length === 0) return;
 
     // 최대 개수 초과 방어
-    const slots = MAX_IMAGES - images.length;
+    const slots = maxImages - images.length;
     const filesToProcess = files.slice(0, slots);
 
     // input 초기화 (같은 파일 재선택 가능하도록)
@@ -165,7 +171,7 @@ export default function SectionImageAttachment({
   // AI 생성 이미지 직접 추가 — process-image 없이 원본 URL 그대로 추가
   const handleAiImageDirectAdd = (slot: AiImageSlot) => {
     setShowPicker(false);
-    if (images.length >= MAX_IMAGES) return;
+    if (images.length >= maxImages) return;
     onChange([...images, { url: slot.url, order: images.length, processingMode: 'original' }]);
   };
 
@@ -180,7 +186,7 @@ export default function SectionImageAttachment({
   // 소스 이미지 URL 선택 → process-image API 호출
   const handleSourceImageSelect = async (imageUrl: string) => {
     setShowPicker(false);
-    if (images.length >= MAX_IMAGES) return;
+    if (images.length >= maxImages) return;
 
     setIsUploading(true);
     setErrorMsg(null);
