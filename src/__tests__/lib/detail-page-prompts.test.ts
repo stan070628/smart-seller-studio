@@ -13,6 +13,8 @@ import {
   buildDetailPageUserPrompt,
   checkProhibitedPhrases,
   buildCategorySystemPrompt,
+  parseMobileDetailPageResponse,
+  buildMobileCategorySystemPrompt,
   type ProductImageAnalysis,
   type DetailPageCategory,
 } from '@/lib/ai/prompts/detail-page';
@@ -360,5 +362,65 @@ describe('buildCategorySystemPrompt', () => {
     const withBasic = buildCategorySystemPrompt('basic');
     const withDefault = buildCategorySystemPrompt();
     expect(withDefault).toBe(withBasic);
+  });
+});
+
+// ─── parseMobileDetailPageResponse ──────────────────────────────────────────
+
+function makeMobileJson(overrides: Record<string, unknown> = {}): string {
+  return JSON.stringify({
+    brandName: '킵틸',
+    categoryLabelEn: 'pencil pouch',
+    hook: { eyebrow: 'Keep Till', headline: '완전 오픈 · 넉넉한 수납', hashtags: ['#한눈에 보여', '#쉽게 꺼내', '#깔끔하게 정리'] },
+    points: [
+      { pointLabel: 'Point 1', headline: '펼치면 보이는 필통', subheadline: '180도 완전 오픈형' },
+      { pointLabel: 'Point 2', headline: '박스처럼 서는 설계', subheadline: '책상 위 안정적' },
+      { pointLabel: '', headline: '넉넉하게', subheadline: '20cm 자도 들어가요' },
+    ],
+    colorOptions: [{ label: '레드', swatchColor: '#D9442C' }],
+    specs: [{ label: '소재', value: '옥스퍼드' }, { label: '사이즈', value: '20cm' }],
+    warnings: ['세탁기 금지', '직사광선 금지'],
+    ctaText: '지금 구매하기',
+    ...overrides,
+  });
+}
+
+describe('parseMobileDetailPageResponse', () => {
+  it('유효한 JSON을 MobileDetailPageContent로 파싱한다', () => {
+    const content = parseMobileDetailPageResponse(makeMobileJson());
+    expect(content.hook.headline).toBe('완전 오픈 · 넉넉한 수납');
+    expect(content.points).toHaveLength(3);
+  });
+
+  it('앞뒤 설명 텍스트가 섞여 있어도 JSON을 추출한다', () => {
+    const content = parseMobileDetailPageResponse(`다음과 같습니다:\n${makeMobileJson()}\n끝.`);
+    expect(content.brandName).toBe('킵틸');
+  });
+
+  it('hook.headline 누락 시 throw한다', () => {
+    expect(() => parseMobileDetailPageResponse(makeMobileJson({ hook: { eyebrow: '', headline: '', hashtags: [] } }))).toThrow();
+  });
+
+  it('points가 2개 미만이면 throw한다', () => {
+    expect(() => parseMobileDetailPageResponse(makeMobileJson({ points: [{ pointLabel: '', headline: 'x', subheadline: 'y' }] }))).toThrow();
+  });
+
+  it('선택 필드 누락 시 안전한 기본값으로 채운다', () => {
+    const content = parseMobileDetailPageResponse(
+      makeMobileJson({ brandName: undefined, colorOptions: undefined, specs: undefined, warnings: undefined, ctaText: undefined }),
+    );
+    expect(content.brandName).toBe('');
+    expect(content.colorOptions).toEqual([]);
+    expect(content.specs).toEqual([]);
+    expect(content.warnings).toEqual([]);
+    expect(content.ctaText).toBe('지금 구매하기');
+  });
+});
+
+describe('buildMobileCategorySystemPrompt', () => {
+  it('모바일 베이스 프롬프트에 카테고리 가이드를 덧붙인다', () => {
+    const prompt = buildMobileCategorySystemPrompt('fashion');
+    expect(prompt).toContain('Point');
+    expect(prompt).toContain('패션잡화');
   });
 });

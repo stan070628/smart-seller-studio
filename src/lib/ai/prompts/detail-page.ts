@@ -268,6 +268,125 @@ export function buildCategorySystemPrompt(
 }
 
 // ─────────────────────────────────────────
+// 모바일(쿠팡 스타일) 시스템 프롬프트
+// ─────────────────────────────────────────
+
+export const MOBILE_DETAIL_PAGE_SYSTEM_PROMPT = `당신은 한국 이커머스 모바일 상세 페이지 전문 카피라이터입니다.
+쿠팡 모바일 앱에서 상위 0.1% 전환율을 기록한 상세 페이지를 500개 이상 제작했습니다.
+좁은 모바일 화면에서 스크롤을 멈추게 하는 큰 타이포·짧은 카피·Point 구조를 사용합니다.
+
+## 데이터 충실도 원칙 (반드시 준수)
+- 소스 텍스트 스펙이 제공된 경우: 반드시 그 데이터만을 기반으로 작성합니다.
+- 원본 스펙에 없는 특징(오버핏, 드롭숄더, 두툼한 소재 등)을 이미지 추론이나 창작으로 덧붙이지 않습니다.
+- 이미지 분석 결과와 텍스트 스펙이 충돌하면 텍스트 스펙을 절대 우선합니다.
+- 불확실한 정보를 쓰느니 정확한 정보를 적게 쓰는 것이 낫습니다.
+
+## 출력 규칙
+- 반드시 아래 JSON 구조만 출력합니다.
+- 코드 블록(\`\`\`), 마크다운, 설명 텍스트를 절대 포함하지 않습니다.
+- brandName·categoryLabelEn 외 모든 문자열은 한국어로 작성합니다.
+- 과대광고 표현(최초, 1위, 유일, 혁명적, 기적, 압도적, 역대급) 사용 금지.
+- 번역투·어색한 표현 금지: '본 제품은', '해당 제품의', '~이 됩니다', '~에 의해', '제공되어집니다' 등 딱딱한 직역 표현 사용 금지. 실제 쿠팡 상세페이지처럼 자연스러운 한국어 구어체를 사용합니다.
+
+## 카피 스타일 규칙 (쿠팡 모바일 패턴)
+- hook.headline: 명사형 압축, 가운뎃점(·)으로 핵심 가치 2개 연결. 예: "완전 오픈 · 넉넉한 수납". 12자 이내.
+- hook.hashtags: 정확히 3개, 각 5~7자. 예: "#한눈에 보여", "#쉽게 꺼내".
+- hook.eyebrow: 브랜드명 영문 표기 (없으면 빈 문자열).
+- points: 3~4개. 앞의 2~3개는 pointLabel을 "Point 1", "Point 2"...로 부여.
+  마지막 1개는 pointLabel을 ""(빈 문자열)로 두고 headline을 부사형 한 단어로 작성. 예: "넉넉하게", "든든하게", "조용하게".
+- point.headline: 작은따옴표 강조 활용. 예: "펼치면 바로 '보이는' 필통", "펼치면 '박스처럼' 서는 설계". 16자 이내.
+- point.subheadline: 구체적 사실 1문장. 예: "180도 완전 오픈형 구조", "흐물거림 없이 책상 위에서 안정적으로 착!". 24자 이내.
+- colorOptions: 이미지에서 색상·옵션이 2개 이상 확인될 때만 작성, 아니면 빈 배열. swatchColor는 #RRGGBB hex.
+
+## JSON 스키마
+{
+  "brandName": "string (브랜드명, 모르면 빈 문자열)",
+  "categoryLabelEn": "string (영문 카테고리 소문자, 예: pencil pouch)",
+  "hook": {
+    "eyebrow": "string",
+    "headline": "string (12자 이내)",
+    "hashtags": ["string (정확히 3개, 각 5~7자)"]
+  },
+  "points": [
+    { "pointLabel": "string (Point 1 형식 또는 빈 문자열)", "headline": "string (16자 이내)", "subheadline": "string (24자 이내)" }
+  ],
+  "colorOptions": [{ "label": "string (한국어 색상명)", "swatchColor": "string (#RRGGBB)" }],
+  "specs": [{ "label": "string", "value": "string" }],
+  "warnings": ["string"],
+  "ctaText": "string (20자 이내)"
+}
+
+## 수량 제약
+- points: 3개 이상 4개 이하
+- hashtags: 정확히 3개
+- specs: 2개 이상 6개 이하
+- warnings: 2개 이상 3개 이하`;
+
+/** 모바일 베이스 프롬프트 + 카테고리 가이드 결합 */
+export function buildMobileCategorySystemPrompt(category: DetailPageCategory = 'basic'): string {
+  return `${MOBILE_DETAIL_PAGE_SYSTEM_PROMPT}${CATEGORY_GUIDE[category]}`;
+}
+
+/**
+ * 모바일 상세페이지 AI 응답을 MobileDetailPageContent로 파싱한다.
+ * 파서가 모든 필드의 검증·기본값 채움을 책임진다 — mobileContentToSections는
+ * 출력 형태를 신뢰하고 raw 접근(trim, join 등)하므로 반환값은 완전한 형태여야 한다.
+ */
+export function parseMobileDetailPageResponse(rawText: string): MobileDetailPageContent {
+  const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    throw new Error('Claude 응답에서 JSON을 찾을 수 없습니다.');
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonMatch[0]);
+  } catch {
+    throw new Error('Claude 응답 JSON 파싱에 실패했습니다.');
+  }
+
+  const data = parsed as Record<string, unknown>;
+  const hook = data.hook as Record<string, unknown> | undefined;
+
+  if (!hook || typeof hook.headline !== 'string' || hook.headline.trim().length === 0) {
+    throw new Error('hook.headline 필드가 누락되었거나 올바르지 않습니다.');
+  }
+  if (!Array.isArray(data.points) || data.points.length < 2 || data.points.length > 5) {
+    throw new Error('points는 2개 이상 5개 이하여야 합니다.');
+  }
+
+  const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+  const strArr = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+
+  return {
+    brandName: str(data.brandName),
+    categoryLabelEn: str(data.categoryLabelEn),
+    hook: {
+      eyebrow: str(hook.eyebrow),
+      headline: hook.headline,
+      hashtags: strArr(hook.hashtags).slice(0, 4),
+    },
+    points: (data.points as Array<Record<string, unknown>>).map((p) => ({
+      pointLabel: str(p.pointLabel),
+      headline: str(p.headline),
+      subheadline: str(p.subheadline),
+    })),
+    colorOptions: Array.isArray(data.colorOptions)
+      ? (data.colorOptions as Array<Record<string, unknown>>)
+          .filter((c) => typeof c.label === 'string' && c.label.length > 0)
+          .map((c) => ({ label: c.label as string, swatchColor: str(c.swatchColor) }))
+      : [],
+    specs: Array.isArray(data.specs)
+      ? (data.specs as Array<Record<string, unknown>>)
+          .filter((s) => typeof s.label === 'string' && typeof s.value === 'string')
+          .map((s) => ({ label: s.label as string, value: s.value as string }))
+      : [],
+    warnings: strArr(data.warnings),
+    ctaText: str(data.ctaText).trim() || '지금 구매하기',
+  };
+}
+
+// ─────────────────────────────────────────
 // 유저 프롬프트 빌더
 // ─────────────────────────────────────────
 
@@ -386,6 +505,13 @@ export function parseDetailPageResponse(rawText: string): DetailPageContent {
 // 섹션 편집 프롬프트 빌더 (edit-section API 공유 유틸)
 // ─────────────────────────────────────────
 
+// edit-section AI가 신규 모바일 섹션 타입의 구조를 이해하도록 돕는 타입별 힌트
+const SECTION_TYPE_HINTS: Partial<Record<string, string>> = {
+  brand_header: 'brandName(브랜드명)과 rightLabel(영문 카테고리)을 가진 상단 헤더',
+  point: "pointLabel('Point 1' 또는 빈 문자열), headline(작은따옴표 강조 가능), subheadline(구체적 사실 1문장)을 가진 쿠팡 스타일 포인트 섹션",
+  image_grid: 'title과 items[{label, swatchColor}](색상 옵션 라벨)를 가진 2컬럼 이미지 그리드',
+};
+
 /**
  * 섹션 편집 요청에 대한 유저 프롬프트를 생성한다.
  * existingSections가 있으면 현재 상세페이지 구성 맥락을 추가하여 AI 일관성을 높인다.
@@ -400,6 +526,10 @@ export function buildSectionEditPrompt(
     `## 섹션 타입: ${section.type}`,
     `## 편집 지시어: ${instruction}`,
   ];
+  const hint = SECTION_TYPE_HINTS[section.type];
+  if (hint) {
+    lines.push(`## 섹션 타입 설명: ${hint}`);
+  }
   if (productName) {
     lines.push(`## 상품명: ${productName}`);
   }
