@@ -415,6 +415,23 @@ describe('parseMobileDetailPageResponse', () => {
     expect(content.warnings).toEqual([]);
     expect(content.ctaText).toBe('지금 구매하기');
   });
+
+  it('배열 원소가 null이어도 throw하지 않고 안전하게 정규화한다', () => {
+    const content = parseMobileDetailPageResponse(
+      makeMobileJson({
+        points: [
+          null,
+          { pointLabel: 'Point 1', headline: 'x', subheadline: 'y' },
+          { pointLabel: '', headline: 'z', subheadline: 'w' },
+        ],
+        colorOptions: [null, { label: '레드', swatchColor: '#D9442C' }],
+        specs: [null, { label: '소재', value: '옥스퍼드' }],
+      }),
+    );
+    expect(content.points[0]).toEqual({ pointLabel: '', headline: '', subheadline: '' });
+    expect(content.colorOptions).toEqual([{ label: '레드', swatchColor: '#D9442C' }]);
+    expect(content.specs).toEqual([{ label: '소재', value: '옥스퍼드' }]);
+  });
 });
 
 describe('buildMobileCategorySystemPrompt', () => {

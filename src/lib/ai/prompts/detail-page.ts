@@ -366,19 +366,22 @@ export function parseMobileDetailPageResponse(rawText: string): MobileDetailPage
       headline: hook.headline,
       hashtags: strArr(hook.hashtags).slice(0, 4),
     },
-    points: (data.points as Array<Record<string, unknown>>).map((p) => ({
-      pointLabel: str(p.pointLabel),
-      headline: str(p.headline),
-      subheadline: str(p.subheadline),
-    })),
+    points: (data.points as Array<Record<string, unknown> | null>).map((p) => {
+      const o = (p ?? {}) as Record<string, unknown>;
+      return {
+        pointLabel: str(o.pointLabel),
+        headline: str(o.headline),
+        subheadline: str(o.subheadline),
+      };
+    }),
     colorOptions: Array.isArray(data.colorOptions)
-      ? (data.colorOptions as Array<Record<string, unknown>>)
-          .filter((c) => typeof c.label === 'string' && c.label.length > 0)
+      ? (data.colorOptions as Array<Record<string, unknown> | null>)
+          .filter((c): c is Record<string, unknown> => c != null && typeof c.label === 'string' && c.label.length > 0)
           .map((c) => ({ label: c.label as string, swatchColor: str(c.swatchColor) }))
       : [],
     specs: Array.isArray(data.specs)
-      ? (data.specs as Array<Record<string, unknown>>)
-          .filter((s) => typeof s.label === 'string' && typeof s.value === 'string')
+      ? (data.specs as Array<Record<string, unknown> | null>)
+          .filter((s): s is Record<string, unknown> => s != null && typeof s.label === 'string' && typeof s.value === 'string')
           .map((s) => ({ label: s.label as string, value: s.value as string }))
       : [],
     warnings: strArr(data.warnings),
