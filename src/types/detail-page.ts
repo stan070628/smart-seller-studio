@@ -8,7 +8,10 @@ export type SectionType =
   | 'spec_table'
   | 'usage_steps'
   | 'warning'
-  | 'cta';
+  | 'cta'
+  | 'brand_header'
+  | 'point'
+  | 'image_grid';
 
 export type PaletteName =
   | 'warm_cream'
@@ -72,6 +75,25 @@ export interface CtaContent {
   text: string;
 }
 
+export interface BrandHeaderContent {
+  type: 'brand_header';
+  brandName: string;     // 좌측 브랜드명 (예: "킵틸 KeepTill")
+  rightLabel: string;    // 우측 영문 카테고리 (예: "pencil pouch")
+}
+
+export interface PointContent {
+  type: 'point';
+  pointLabel: string;    // "Point 1" — 빈 문자열이면 라벨 줄 숨김
+  headline: string;      // 예: "펼치면 바로 '보이는' 필통"
+  subheadline: string;   // 예: "180도 완전 오픈형 구조"
+}
+
+export interface ImageGridContent {
+  type: 'image_grid';
+  title: string;                                          // "Product Info." (빈 값이면 생략)
+  items: Array<{ label: string; swatchColor?: string }>;  // 이미지는 attachedImages와 index 매칭
+}
+
 export type SectionContent =
   | HeroContent
   | SellingPointsContent
@@ -80,7 +102,10 @@ export type SectionContent =
   | SpecTableContent
   | UsageStepsContent
   | WarningContent
-  | CtaContent;
+  | CtaContent
+  | BrandHeaderContent
+  | PointContent
+  | ImageGridContent;
 
 export interface DetailSection {
   id: string;
@@ -98,6 +123,8 @@ export interface DetailPageTheme {
   accentColor: string;
   fontStyle: FontStyle;
   imageLayout: ImageLayout;
+  /** 렌더링 레이아웃 모드 — 미지정 시 'desktop' (기존 흐름 무영향) */
+  layoutMode?: 'desktop' | 'mobile';
 }
 
 export interface DetailPageData {
@@ -130,4 +157,13 @@ export function isWarningContent(c: SectionContent): c is WarningContent {
 }
 export function isCtaContent(c: SectionContent): c is CtaContent {
   return c.type === 'cta';
+}
+export function isBrandHeaderContent(c: SectionContent): c is BrandHeaderContent {
+  return c.type === 'brand_header';
+}
+export function isPointContent(c: SectionContent): c is PointContent {
+  return c.type === 'point';
+}
+export function isImageGridContent(c: SectionContent): c is ImageGridContent {
+  return c.type === 'image_grid';
 }

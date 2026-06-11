@@ -14,6 +14,9 @@ import {
   isUsageStepsContent,
   isWarningContent,
   isCtaContent,
+  isBrandHeaderContent,
+  isPointContent,
+  isImageGridContent,
 } from '@/types/detail-page';
 import SectionInstructionPanel from './SectionInstructionPanel';
 import SectionImageAttachment from './SectionImageAttachment';
@@ -42,6 +45,9 @@ const SECTION_TYPE_LABELS: Record<SectionType, string> = {
   usage_steps: '사용법',
   warning: '주의사항',
   cta: '구매 유도',
+  brand_header: '브랜드 헤더',
+  point: '포인트',
+  image_grid: '이미지 그리드',
 };
 
 // 섹션 콘텐츠를 한 줄 요약 텍스트로 변환
@@ -71,6 +77,15 @@ function getSectionSummary(content: SectionContent): string {
   }
   if (isCtaContent(content)) {
     return content.text || '(텍스트 없음)';
+  }
+  if (isBrandHeaderContent(content)) {
+    return content.brandName || '(브랜드 없음)';
+  }
+  if (isPointContent(content)) {
+    return content.headline || '(제목 없음)';
+  }
+  if (isImageGridContent(content)) {
+    return `${content.items.length}개 이미지`;
   }
   return '';
 }

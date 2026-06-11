@@ -369,3 +369,25 @@ describe('reorderSections', () => {
     expect(result[0].order).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// 신규 모바일 섹션 타입 (brand_header / point / image_grid)
+// ---------------------------------------------------------------------------
+
+describe('createEmptySection — 신규 모바일 타입', () => {
+  it('brand_header 빈 섹션을 생성한다', () => {
+    const s = createEmptySection('brand_header', 0);
+    expect(s.type).toBe('brand_header');
+    expect(s.content).toEqual({ type: 'brand_header', brandName: '', rightLabel: '' });
+  });
+
+  it('point 빈 섹션을 생성한다', () => {
+    const s = createEmptySection('point', 1);
+    expect(s.content).toEqual({ type: 'point', pointLabel: '', headline: '', subheadline: '' });
+  });
+
+  it('image_grid 빈 섹션을 생성한다', () => {
+    const s = createEmptySection('image_grid', 2);
+    expect(s.content).toEqual({ type: 'image_grid', title: '', items: [] });
+  });
+});

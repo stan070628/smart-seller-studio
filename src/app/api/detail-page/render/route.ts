@@ -29,7 +29,7 @@ const RequestSchema = z.object({
     .array(
       z.object({
         id: z.string(),
-        type: z.enum(['hero', 'selling_points', 'features', 'stats', 'spec_table', 'usage_steps', 'warning', 'cta']),
+        type: z.enum(['hero', 'selling_points', 'features', 'stats', 'spec_table', 'usage_steps', 'warning', 'cta', 'brand_header', 'point', 'image_grid']),
         order: z.number().int().min(0),
         content: z.record(z.string(), z.unknown()),
         attachedImages: z
@@ -40,7 +40,7 @@ const RequestSchema = z.object({
               processingMode: z.enum(['original', 'bg_removed', 'bg_composed'] as const),
             }),
           )
-          .max(2)
+          .max(6)
           .default([]),
         aiInstruction: z.string().optional(),
       }),
@@ -53,6 +53,7 @@ const RequestSchema = z.object({
     accentColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'accentColor는 #RRGGBB 형식이어야 합니다.'),
     fontStyle: z.enum(['serif', 'sans', 'mixed']),
     imageLayout: z.enum(['fullbleed', 'composed', 'split']),
+    layoutMode: z.enum(['desktop', 'mobile']).optional(),
   }),
 });
 

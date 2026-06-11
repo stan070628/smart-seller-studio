@@ -163,6 +163,12 @@ export function createEmptySection(type: SectionType, order: number): DetailSect
       return { ...base, type: 'warning', content: { type: 'warning', warnings: [] } };
     case 'cta':
       return { ...base, type: 'cta', content: { type: 'cta', text: '' } };
+    case 'brand_header':
+      return { ...base, type: 'brand_header', content: { type: 'brand_header', brandName: '', rightLabel: '' } };
+    case 'point':
+      return { ...base, type: 'point', content: { type: 'point', pointLabel: '', headline: '', subheadline: '' } };
+    case 'image_grid':
+      return { ...base, type: 'image_grid', content: { type: 'image_grid', title: '', items: [] } };
   }
 }
 

@@ -153,6 +153,9 @@ const ADD_SECTION_OPTIONS: Array<{ type: SectionType; label: string }> = [
   { type: 'usage_steps',    label: '사용법' },
   { type: 'warning',        label: '주의사항' },
   { type: 'cta',            label: '구매 유도' },
+  { type: 'brand_header',   label: '브랜드 헤더' },
+  { type: 'point',          label: '포인트' },
+  { type: 'image_grid',     label: '이미지 그리드' },
 ];
 
 export default function DetailPageEditor({

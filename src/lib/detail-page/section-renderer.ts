@@ -50,6 +50,9 @@ const SECTION_LABELS: Record<DetailSection['type'], string> = {
   usage_steps: '사용법',
   warning: '주의사항',
   cta: '구매 유도',
+  brand_header: '브랜드 헤더',
+  point: '포인트',
+  image_grid: '이미지 그리드',
 };
 
 function sectionAttrs(section: DetailSection): string {
@@ -283,6 +286,12 @@ export function renderSection(section: DetailSection, theme: DetailPageTheme): s
       return renderWarning(section.content as WarningContent, section, colors, theme);
     case 'cta':
       return renderCta(section.content as CtaContent, section, colors, theme);
+    case 'brand_header':
+      return '';
+    case 'point':
+      return '';
+    case 'image_grid':
+      return '';
   }
 }
 
