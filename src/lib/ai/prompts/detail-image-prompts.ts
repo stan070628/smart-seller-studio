@@ -15,7 +15,6 @@ export interface SectionImagePrompt {
   role: 'hero' | 'lifestyle' | 'detail' | 'feature';
   scene: string;           // Claude가 생성한 원본 장면 설명
   prompt?: string;         // 라우트에서 조립한 Gemini 최종 프롬프트 (파서에서 세팅하지 않음)
-  referenceImageIndex: number;
 }
 
 export interface ImagePromptsResponse {
@@ -73,6 +72,7 @@ export function buildImagePromptsUserPrompt(
   lines.push(`Selling points: ${content.sellingPoints.map(sp => sp.title).join(', ')}`);
 
   lines.push(`
+Multiple reference photos of the SAME product (different angles) will be provided to the image generator.
 Define a visual identity and 4 section image prompts for this product.
 Output this exact JSON:
 {
@@ -83,10 +83,10 @@ Output this exact JSON:
     "background": "background description, e.g. off-white linen texture"
   },
   "imagePrompts": [
-    { "role": "hero", "scene": "clean front-facing studio product shot description", "referenceImageIndex": 0 },
-    { "role": "lifestyle", "scene": "realistic lifestyle usage scene description", "referenceImageIndex": 0 },
-    { "role": "detail", "scene": "macro close-up of material or craftsmanship description", "referenceImageIndex": 0 },
-    { "role": "feature", "scene": "key functional feature highlight description", "referenceImageIndex": 0 }
+    { "role": "hero", "scene": "clean front-facing studio product shot description" },
+    { "role": "lifestyle", "scene": "realistic lifestyle usage scene description" },
+    { "role": "detail", "scene": "macro close-up of material or craftsmanship description" },
+    { "role": "feature", "scene": "key functional feature highlight description" }
   ]
 }
 Rules: scene descriptions must be in English, concise (1-2 sentences), specific to this product.`);
@@ -134,7 +134,6 @@ export function parseImagePromptsResponse(rawText: string): ImagePromptsResponse
         ? (p.role as SectionImagePrompt['role'])
         : 'feature',
       scene: String(p.scene ?? ''),
-      referenceImageIndex: typeof p.referenceImageIndex === 'number' ? p.referenceImageIndex : 0,
     })),
   };
 }
