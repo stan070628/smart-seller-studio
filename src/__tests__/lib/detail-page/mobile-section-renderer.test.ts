@@ -125,4 +125,84 @@ describe('renderSection — image_grid', () => {
     expect(html).not.toContain('url(x)');
     expect(html).toContain('#cccccc');
   });
+
+  it('5자리·7자리 hex는 유효하지 않으므로 기본 회색으로 대체한다', () => {
+    const html = renderSection(
+      makeSection({
+        type: 'image_grid',
+        content: { type: 'image_grid', title: '', items: [{ label: 'X', swatchColor: '#12345' }] },
+      }),
+      MOBILE_THEME,
+    );
+    expect(html).not.toContain('#12345');
+    expect(html).toContain('#cccccc');
+  });
+});
+
+const DESKTOP_THEME: DetailPageTheme = { ...MOBILE_THEME, layoutMode: undefined };
+
+describe('renderSection — mobile layoutMode 분기', () => {
+  const heroSection = makeSection({
+    type: 'hero',
+    content: { type: 'hero', headline: '완전 오픈 · 넉넉한 수납', subheadline: '#한눈에 보여  #쉽게 꺼내  #깔끔하게 정리' },
+    eyebrow: 'Keep Till',
+  });
+
+  it('mobile hero: 34px 헤드라인 + 필기체 eyebrow를 렌더링한다', () => {
+    const html = renderSection(heroSection, MOBILE_THEME);
+    expect(html).toContain('font-size:34px');
+    expect(html).toContain('Keep Till');
+    expect(html).toContain('cursive');
+  });
+
+  it('mobile hero: #으로 시작하는 subheadline은 해시태그 행으로 렌더링한다', () => {
+    const html = renderSection(heroSection, MOBILE_THEME);
+    expect(html).toContain('word-spacing');
+    expect(html).toContain('#한눈에 보여');
+  });
+
+  it('mobile hero: 일반 subheadline은 문단으로 렌더링한다', () => {
+    const html = renderSection(
+      makeSection({ type: 'hero', content: { type: 'hero', headline: 'A', subheadline: '일반 설명 문장' } }),
+      MOBILE_THEME,
+    );
+    expect(html).not.toContain('word-spacing');
+  });
+
+  it('desktop hero: layoutMode 미지정 시 기존 60px 40px 패딩을 유지한다 (회귀)', () => {
+    const html = renderSection(heroSection, DESKTOP_THEME);
+    expect(html).toContain('padding:60px 40px');
+    expect(html).not.toContain('font-size:34px');
+  });
+
+  it('mobile spec_table: 회색 패널(#f4f5f7) 스타일로 렌더링한다', () => {
+    const html = renderSection(
+      makeSection({ type: 'spec_table', content: { type: 'spec_table', specs: [{ label: '소재', value: '옥스퍼드' }] } }),
+      MOBILE_THEME,
+    );
+    expect(html).toContain('#f4f5f7');
+    expect(html).toContain('소재');
+  });
+
+  it('desktop spec_table: 기존 테이블 스타일을 유지한다 (회귀)', () => {
+    const html = renderSection(
+      makeSection({ type: 'spec_table', content: { type: 'spec_table', specs: [{ label: '소재', value: '옥스퍼드' }] } }),
+      DESKTOP_THEME,
+    );
+    expect(html).not.toContain('#f4f5f7');
+    expect(html).toContain('padding:60px 40px');
+  });
+
+  it('mobile warning/cta: 패딩이 20px 좌우로 축소된다', () => {
+    const warningHtml = renderSection(
+      makeSection({ type: 'warning', content: { type: 'warning', warnings: ['주의1'] } }),
+      MOBILE_THEME,
+    );
+    const ctaHtml = renderSection(
+      makeSection({ type: 'cta', content: { type: 'cta', text: '지금 구매하기' } }),
+      MOBILE_THEME,
+    );
+    expect(warningHtml).toContain('padding:32px 20px');
+    expect(ctaHtml).toContain('padding:40px 20px');
+  });
 });

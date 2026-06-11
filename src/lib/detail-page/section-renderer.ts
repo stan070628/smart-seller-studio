@@ -118,6 +118,8 @@ function renderAttachedImage(section: DetailSection, imageLayout: ImageLayout): 
 // ─────────────────────────────────────────
 
 function renderHero(content: HeroContent, section: DetailSection, colors: PaletteColors, theme: DetailPageTheme): string {
+  if (theme.layoutMode === 'mobile') return renderMobileHero(content, section, colors);
+
   const imageHtml = renderAttachedImage(section, theme.imageLayout);
   const headingFont = headingFontStyle(theme.fontStyle);
   const eyebrowHtml = renderEyebrow(section, colors, theme);
@@ -127,6 +129,25 @@ function renderHero(content: HeroContent, section: DetailSection, colors: Palett
   ${imageHtml}
   <h2 style="font-size:clamp(20px,4vw,32px);font-weight:700;color:${colors.text};margin:0 0 16px 0;line-height:1.3${headingFont};">${editableText('content.headline', content.headline)}</h2>
   <p style="font-size:18px;color:${colors.textSub};margin:0;line-height:1.6;">${editableMarkupText('content.subheadline', content.subheadline, colors.accent)}</p>
+</div>`;
+}
+
+// 모바일 hero — 쿠팡 모바일 스타일: 필기체 eyebrow + 34px 헤드라인 + 해시태그/문단 subheadline
+function renderMobileHero(content: HeroContent, section: DetailSection, colors: PaletteColors): string {
+  const eyebrowHtml = section.eyebrow
+    ? `<div style="font-family:'Snell Roundhand','Brush Script MT',cursive;font-size:22px;color:#8a7560;margin-bottom:10px;">${escapeHtml(section.eyebrow)}</div>`
+    : '';
+  const sub = content.subheadline.trim();
+  const subHtml = sub.startsWith('#')
+    ? `<div style="text-align:center;"><span data-edit-path="content.subheadline" style="font-size:18px;font-weight:700;color:#222;word-spacing:12px;line-height:1.8;">${escapeHtml(sub)}</span></div>`
+    : `<p style="margin:0;font-size:17px;color:#555;line-height:1.6;">${editableMarkupText('content.subheadline', content.subheadline, colors.accent)}</p>`;
+  return `<div ${sectionAttrs(section)} style="background-color:#fff;padding:0;box-sizing:border-box;">
+  <div style="padding:32px 20px 24px;text-align:center;">
+    ${eyebrowHtml}
+    <h1 style="margin:0 0 14px;font-size:34px;font-weight:800;color:#1a1a1a;letter-spacing:-1px;line-height:1.3;">${editableText('content.headline', content.headline)}</h1>
+    ${subHtml}
+  </div>
+  ${renderFullBleedImages(section)}
 </div>`;
 }
 
@@ -198,6 +219,8 @@ function renderStats(content: StatsContent, section: DetailSection, colors: Pale
 }
 
 function renderSpecTable(content: SpecTableContent, section: DetailSection, colors: PaletteColors, theme: DetailPageTheme): string {
+  if (theme.layoutMode === 'mobile') return renderMobileSpecTable(content, section);
+
   const imageHtml = renderAttachedImage(section, theme.imageLayout);
   const headingFont = headingFontStyle(theme.fontStyle);
   const eyebrowHtml = renderEyebrow(section, colors, theme);
@@ -217,6 +240,25 @@ function renderSpecTable(content: SpecTableContent, section: DetailSection, colo
   <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
     ${rowsHtml}
   </table>
+</div>`;
+}
+
+// 모바일 spec_table — 쿠팡 모바일 스타일: 회색 패널(#f4f5f7) 안에 보더리스 행
+function renderMobileSpecTable(content: SpecTableContent, section: DetailSection): string {
+  const rowsHtml = content.specs
+    .map(
+      (spec, index) => `<tr>
+      <td style="padding:14px 8px;font-size:15px;font-weight:600;color:#666;width:32%;border-bottom:1px solid #e3e5e8;vertical-align:top;word-break:break-word;">${editableText(`content.specs.${index}.label`, spec.label)}</td>
+      <td style="padding:14px 8px;font-size:15px;color:#222;border-bottom:1px solid #e3e5e8;vertical-align:top;word-break:break-word;">${editableText(`content.specs.${index}.value`, spec.value)}</td>
+    </tr>`,
+    )
+    .join('\n');
+  return `<div ${sectionAttrs(section)} style="background-color:#fff;padding:32px 20px;box-sizing:border-box;">
+  <div style="background-color:#f4f5f7;border-radius:8px;padding:8px 16px;">
+    <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
+      ${rowsHtml}
+    </table>
+  </div>
 </div>`;
 }
 
@@ -250,8 +292,9 @@ function renderWarning(content: WarningContent, section: DetailSection, colors: 
       (warning, index) => `<div style="margin-bottom:12px;font-size:15px;color:#6B4F00;line-height:1.6;"><span style="font-weight:700;margin-right:6px;">&#9650;</span>${editableMarkupText(`content.warnings.${index}`, warning, colors.accent)}</div>`
     )
     .join('\n');
+  const pad = theme.layoutMode === 'mobile' ? '32px 20px' : '32px 40px';
 
-  return `<div ${sectionAttrs(section)} style="background-color:#FFF3CD;border-left:4px solid #FFC107;padding:32px 40px;box-sizing:border-box;">
+  return `<div ${sectionAttrs(section)} style="background-color:#FFF3CD;border-left:4px solid #FFC107;padding:${pad};box-sizing:border-box;">
   ${eyebrowHtml}
   ${imageHtml}
   ${itemsHtml}
@@ -262,11 +305,13 @@ function renderCta(content: CtaContent, section: DetailSection, colors: PaletteC
   const imageHtml = renderAttachedImage(section, theme.imageLayout);
   const headingFont = headingFontStyle(theme.fontStyle);
   const eyebrowHtml = renderEyebrow(section, colors, theme);
+  const pad = theme.layoutMode === 'mobile' ? '40px 20px' : '60px 40px';
+  const fontSize = theme.layoutMode === 'mobile' ? '24px' : '36px';
 
-  return `<div ${sectionAttrs(section)} style="background-color:${colors.accent};padding:60px 40px;text-align:center;box-sizing:border-box;">
+  return `<div ${sectionAttrs(section)} style="background-color:${colors.accent};padding:${pad};text-align:center;box-sizing:border-box;">
   ${eyebrowHtml}
   ${imageHtml}
-  <p style="font-size:36px;font-weight:700;color:${colors.accentTextColor};margin:0;line-height:1.4${headingFont};">${editableText('content.text', content.text)}</p>
+  <p style="font-size:${fontSize};font-weight:700;color:${colors.accentTextColor};margin:0;line-height:1.4${headingFont};">${editableText('content.text', content.text)}</p>
 </div>`;
 }
 
@@ -284,9 +329,9 @@ function renderFullBleedImages(section: DetailSection): string {
     .join('');
 }
 
-/** #RGB/#RRGGBB/#RRGGBBAA hex만 허용, 그 외 기본 회색 (CSS 인젝션 방지) */
+/** #RGB/#RGBA/#RRGGBB/#RRGGBBAA hex만 허용, 그 외 기본 회색 (CSS 인젝션 방지) */
 function sanitizeSwatchColor(color: string | undefined): string {
-  return color && /^#[0-9A-Fa-f]{3,8}$/.test(color) ? color : '#cccccc';
+  return color && /^#(?:[0-9A-Fa-f]{3,4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/.test(color) ? color : '#cccccc';
 }
 
 function renderBrandHeader(content: BrandHeaderContent, section: DetailSection): string {
