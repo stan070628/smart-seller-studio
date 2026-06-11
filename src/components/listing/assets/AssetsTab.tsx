@@ -52,26 +52,16 @@ export default function AssetsTab() {
     };
   };
 
-  /** Gemini 이미지 생성 → 업로드 → AiImageSlot 배열 반환 */
+  /** Gemini 이미지 생성 → 업로드 → AiImageSlot 배열 반환 (멀티참조) */
   const runGeminiImageGeneration = async (
     imagePromptsResponse: ImagePromptsResponse,
-    referenceImageUrl: string,
+    referenceImageUrls: string[],
     onProgress: (done: number, total: number) => void,
   ): Promise<AiImageSlot[]> => {
     const { imagePrompts } = imagePromptsResponse;
     if (imagePrompts.length === 0) return [];
 
-    let refBase64 = '';
-    let refMime = 'image/jpeg';
-    try {
-      const refRes = await fetch(referenceImageUrl);
-      const blob = await refRes.blob();
-      refMime = blob.type || 'image/jpeg';
-      const ab = await blob.arrayBuffer();
-      refBase64 = btoa(String.fromCharCode(...new Uint8Array(ab)));
-    } catch {
-      // reference 없이도 생성 가능
-    }
+    const productImageUrls = referenceImageUrls.filter(Boolean).slice(0, 3);
 
     let doneCount = 0;
     const total = imagePrompts.length;
@@ -84,7 +74,7 @@ export default function AssetsTab() {
           body: JSON.stringify({
             frameType: 'hero',
             imagePrompt: p.prompt ?? p.scene,
-            ...(refBase64 ? { productImageBase64: refBase64, productImageMimeType: refMime } : {}),
+            ...(productImageUrls.length ? { productImageUrls } : {}),
           }),
         });
         const genData = (await genRes.json()) as { success: boolean; data?: { imageBase64: string; mimeType: string }; error?: string };
@@ -124,27 +114,12 @@ export default function AssetsTab() {
       .map(r => r.value);
   };
 
-  /** 기존 aiDetailContent를 재사용해서 URL 이미지를 레퍼런스로 4개 섹션 씬 이미지 생성 */
+  /** 기존 aiDetailContent를 재사용해서 URL 이미지들을 레퍼런스로 4개 섹션 씬 이미지 생성 (멀티참조) */
   const runSceneImageGenerationFromUrl = async (
     content: DetailPageContent,
-    referenceImageUrl: string,
+    referenceImageUrls: string[],
   ): Promise<AiImageSlot[]> => {
-    let refBase64: string | undefined;
-    let refMime: 'image/jpeg' | 'image/png' | 'image/webp' = 'image/jpeg';
-    try {
-      const refRes = await fetch(referenceImageUrl);
-      const blob = await refRes.blob();
-      const rawMime = blob.type || 'image/jpeg';
-      refMime = (['image/jpeg', 'image/png', 'image/webp'].includes(rawMime) ? rawMime : 'image/jpeg') as typeof refMime;
-      const ab = await blob.arrayBuffer();
-      const bytes = new Uint8Array(ab);
-      let binary = '';
-      for (let i = 0; i < bytes.length; i += 8192) {
-        binary += String.fromCharCode(...bytes.slice(i, i + 8192));
-      }
-      refBase64 = btoa(binary);
-    } catch { /* base64 없이 계속 */ }
-
+    const productImageUrls = referenceImageUrls.filter(Boolean).slice(0, 3);
     const sectionTypes: Array<'hero' | 'lifestyle' | 'detail' | 'feature'> = ['hero', 'lifestyle', 'detail', 'feature'];
     let doneCount = 0;
     const results = await Promise.allSettled(
@@ -154,7 +129,7 @@ export default function AssetsTab() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             sectionType,
-            ...(refBase64 ? { productImageBase64: refBase64, productImageMimeType: refMime } : {}),
+            ...(productImageUrls.length ? { productImageUrls } : {}),
             productInfo: {
               headline: content.headline,
               subheadline: content.subheadline,
@@ -245,39 +220,20 @@ export default function AssetsTab() {
 
       // 2. Claude + Gemini로 섹션별 완성된 씬 이미지 생성 (병렬)
       updateAssetsDraft({ generatingMessage: 'AI 씬 이미지 생성 중...' });
+      // 모든 섹션이 공유할 원본 참조 이미지(최대 3장)
+      const productImageUrls = [...new Set(confirmedCrops.map((c) => c.originalImageUrl))]
+        .filter(Boolean)
+        .slice(0, 3);
       let doneCount = 0;
       const results = await Promise.allSettled(
         confirmedCrops.map(async (crop) => {
-          // 크롭 이미지를 참조 이미지(base64)로 변환
-          let refBase64: string | undefined;
-          let refMime: 'image/jpeg' | 'image/png' | 'image/webp' = 'image/jpeg';
-          try {
-            const refRes = await fetch(crop.croppedImageUrl);
-            const blob = await refRes.blob();
-            const rawMime = blob.type || 'image/jpeg';
-            refMime = (['image/jpeg', 'image/png', 'image/webp'].includes(rawMime)
-              ? rawMime
-              : 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/webp';
-            const ab = await blob.arrayBuffer();
-            const bytes = new Uint8Array(ab);
-            // 큰 이미지의 경우 btoa spread 대신 청크 처리
-            let binary = '';
-            const chunkSize = 8192;
-            for (let i = 0; i < bytes.length; i += chunkSize) {
-              binary += String.fromCharCode(...bytes.slice(i, i + chunkSize));
-            }
-            refBase64 = btoa(binary);
-          } catch {
-            // 변환 실패 시 참조 없이 생성
-          }
-
           // generate-scene-image: Claude 프롬프트 생성 + Gemini 이미지 생성 통합
           const sceneRes = await fetch('/api/ai/generate-scene-image', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               sectionType: crop.sectionType,
-              ...(refBase64 ? { productImageBase64: refBase64, productImageMimeType: refMime } : {}),
+              ...(productImageUrls.length ? { productImageUrls } : {}),
               productInfo: detailContent ? {
                 headline: detailContent.headline,
                 subheadline: detailContent.subheadline,
@@ -394,7 +350,7 @@ export default function AssetsTab() {
           detailContent = existingContentUrl;
           detailHtml = assetsDraft.generatedDetailHtml;
           const previousSlots = assetsDraft.aiImageSlots;
-          aiSlots = await runSceneImageGenerationFromUrl(existingContentUrl, thumbnails[0]);
+          aiSlots = await runSceneImageGenerationFromUrl(existingContentUrl, thumbnails);
           // 전건 실패 시 기존 슬롯 유지, 에러 표시
           if (aiSlots.length === 0 && previousSlots.length > 0) {
             aiSlots = previousSlots;
@@ -406,7 +362,7 @@ export default function AssetsTab() {
           detailHtml = result.html;
           detailContent = result.content;
           if (includeAiImages && result.imagePrompts) {
-            aiSlots = await runGeminiImageGeneration(result.imagePrompts, thumbnails[0], (done, total) => {
+            aiSlots = await runGeminiImageGeneration(result.imagePrompts, thumbnails, (done, total) => {
               updateAssetsDraft({ generatingMessage: `Gemini 이미지 생성 중 (${done}/${total})...` });
             });
           } else if (includeAiImages && result.imagePromptsError) {
@@ -448,7 +404,7 @@ export default function AssetsTab() {
         detailContent = existingContentUpload;
         detailHtml = assetsDraft.generatedDetailHtml;
         const previousSlots = assetsDraft.aiImageSlots;
-        aiSlots = await runSceneImageGenerationFromUrl(existingContentUpload, detailSources[0]);
+        aiSlots = await runSceneImageGenerationFromUrl(existingContentUpload, detailSources);
         // 전건 실패 시 기존 슬롯 유지, 에러 표시
         if (aiSlots.length === 0 && previousSlots.length > 0) {
           aiSlots = previousSlots;
@@ -461,7 +417,7 @@ export default function AssetsTab() {
         detailContent = result.content;
 
         if (includeAiImages && result.imagePrompts) {
-          aiSlots = await runGeminiImageGeneration(result.imagePrompts, detailSources[0], (done, total) => {
+          aiSlots = await runGeminiImageGeneration(result.imagePrompts, detailSources, (done, total) => {
             updateAssetsDraft({ generatingMessage: `Gemini 이미지 생성 중 (${done}/${total})...` });
           });
         } else if (includeAiImages && result.imagePromptsError) {
