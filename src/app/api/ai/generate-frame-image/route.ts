@@ -10,6 +10,7 @@ import { z } from "zod";
 import { requireAuth } from "@/lib/supabase/auth";
 import { checkRateLimit, getRateLimitKey } from "@/lib/rate-limit";
 import { generateFrameImage } from "@/lib/ai/imagen";
+import { loadReferenceImages } from "@/lib/ai/reference-images";
 
 // Vercel 서버리스 함수 최대 실행 시간 (이미지 생성은 오래 걸릴 수 있음)
 export const maxDuration = 60;
@@ -50,6 +51,13 @@ const FRAME_TYPES = [
 const RequestBodySchema = z.object({
   frameType: z.enum(FRAME_TYPES),
   imagePrompt: z.string().min(10).max(2000),
+  // 신규: 멀티참조 입력
+  referenceImages: z
+    .array(z.object({ base64: z.string(), mimeType: z.string().optional() }))
+    .max(3)
+    .optional(),
+  productImageUrls: z.array(z.string().url()).max(3).optional(),
+  // 하위호환: 단일 입력
   productImageBase64: z.string().optional(),
   productImageMimeType: z
     .enum(["image/jpeg", "image/png", "image/webp"])
@@ -147,11 +155,18 @@ export async function POST(
       );
     }
 
+    // 참조 이미지 로딩 (URL fetch + Sharp 리사이즈 + base64, 최대 3장)
+    const referenceImages = await loadReferenceImages({
+      referenceImages: body.referenceImages,
+      productImageUrls: body.productImageUrls,
+      productImageBase64: body.productImageBase64,
+      productImageMimeType: body.productImageMimeType,
+    });
+
     // Gemini Imagen 호출
     const result = await generateFrameImage({
       imagePrompt: body.imagePrompt,
-      productImageBase64: body.productImageBase64,
-      productImageMimeType: body.productImageMimeType,
+      referenceImages,
     });
 
     return NextResponse.json(
