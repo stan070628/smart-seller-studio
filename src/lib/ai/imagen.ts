@@ -19,9 +19,11 @@ const MODEL = "gemini-2.5-flash-image";
 export interface GenerateFrameImageInput {
   /** Gemini Imagen에 직접 입력할 상세 영어 프롬프트 */
   imagePrompt: string;
-  /** needsProductImage: true일 때 상품 원본 이미지 (base64, data URL prefix 제외) */
+  /** 여러 참조 이미지 (최대 3장, base64 + mimeType) */
+  referenceImages?: Array<{ base64: string; mimeType: string }>;
+  /** @deprecated 단일 참조 — 내부에서 referenceImages로 흡수 */
   productImageBase64?: string;
-  /** 상품 이미지 MIME 타입 (예: "image/jpeg") */
+  /** @deprecated 상품 이미지 MIME 타입 */
   productImageMimeType?: string;
 }
 
@@ -48,15 +50,20 @@ export async function generateFrameImage(
 ): Promise<GenerateFrameImageOutput> {
   const ai = getGeminiGenAI();
 
-  // parts 배열 구성: 상품 참조 이미지가 있으면 먼저 추가
+  // 참조 이미지 정규화: referenceImages 우선, 없으면 단일 필드를 1장으로 흡수
+  const refs =
+    input.referenceImages && input.referenceImages.length > 0
+      ? input.referenceImages
+      : input.productImageBase64 && input.productImageMimeType
+        ? [{ base64: input.productImageBase64, mimeType: input.productImageMimeType }]
+        : [];
+
+  // parts 배열 구성: 모든 참조 이미지를 inlineData로 추가
   const parts: Array<{ text?: string; inlineData?: { data: string; mimeType: string } }> = [];
 
-  if (input.productImageBase64 && input.productImageMimeType) {
+  for (const ref of refs) {
     parts.push({
-      inlineData: {
-        data: input.productImageBase64,
-        mimeType: input.productImageMimeType,
-      },
+      inlineData: { data: ref.base64, mimeType: ref.mimeType },
     });
   }
 
