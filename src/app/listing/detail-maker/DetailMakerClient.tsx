@@ -151,7 +151,8 @@ export default function DetailMakerClient() {
     catch { throw new Error(`섹션 편집 실패 (${res.status})`); }
     if (!res.ok) throw new Error((json.error as string | undefined) ?? '섹션 편집 실패');
 
-    const updatedSection = json.section as DetailSection;
+    const updatedSection = json.section as DetailSection | undefined;
+    if (!updatedSection) throw new Error('섹션 편집 응답이 유효하지 않습니다.');
     const updated = sections.map(s => s.id === section.id ? { ...s, ...updatedSection } : s);
     setSections(updated);
     await refreshRenderedHtml(updated, theme);

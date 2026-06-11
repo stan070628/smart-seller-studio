@@ -5,6 +5,8 @@ import { C } from '@/lib/design-tokens';
 
 type Category = 'basic' | 'fashion' | 'living' | 'food';
 
+const BRAND_PURPLE = '#7c3aed';
+
 const CATEGORY_LABELS: Record<Category, string> = {
   basic: '기본',
   fashion: '패션',
@@ -114,9 +116,9 @@ export default function DetailMakerInputPanel({
                   padding: '5px 12px',
                   fontSize: '12px',
                   borderRadius: '20px',
-                  border: category === cat ? '1.5px solid #7c3aed' : `1px solid ${C.border}`,
+                  border: category === cat ? `1.5px solid ${BRAND_PURPLE}` : `1px solid ${C.border}`,
                   background: category === cat ? '#f5f3ff' : '#fff',
-                  color: category === cat ? '#7c3aed' : C.text,
+                  color: category === cat ? BRAND_PURPLE : C.text,
                   cursor: 'pointer',
                   fontWeight: category === cat ? 600 : 400,
                 }}
@@ -275,7 +277,7 @@ export default function DetailMakerInputPanel({
             fontWeight: 700,
             borderRadius: '8px',
             border: 'none',
-            background: canGenerate ? '#7c3aed' : C.border,
+            background: canGenerate ? BRAND_PURPLE : C.border,
             color: canGenerate ? '#fff' : C.textSub,
             cursor: canGenerate ? 'pointer' : 'not-allowed',
             transition: 'background 0.15s',
