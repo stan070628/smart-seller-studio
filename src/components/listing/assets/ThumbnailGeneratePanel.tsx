@@ -6,7 +6,7 @@
  * assets 탭(상품상세 자동만들기)의 AI 썸네일 생성 패널.
  *
  * 흐름:
- *  1. 업로드/크롤링한 이미지(thumbnailFiles → detailFiles → generatedThumbnails)를 참조(최대 3장)로 사용
+ *  1. 참조 이미지: url 모드 → generatedThumbnails, upload 모드 → thumbnailFiles(있으면) 또는 detailFiles (최대 3장)
  *  2. 연출 방향 입력 + "AI 썸네일 생성" 클릭
  *  3. POST /api/ai/generate-thumbnail { refImageUrls, direction }
  *  4. 결과 base64 → POST /api/image/upload-ai → generatedThumbnails에 append
@@ -25,7 +25,7 @@ const DIRECTION_EXAMPLES = [
 
 export default function ThumbnailGeneratePanel() {
   const { assetsDraft, updateAssetsDraft } = useListingStore();
-  const { mode, thumbnailFiles, detailFiles, generatedThumbnails } = assetsDraft;
+  const { mode, thumbnailFiles, detailFiles, generatedThumbnails, isGenerating } = assetsDraft;
 
   const [direction, setDirection] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -43,7 +43,7 @@ export default function ThumbnailGeneratePanel() {
     .slice(0, 3);
 
   const hasRef = refImageUrls.length > 0;
-  const canGenerate = hasRef && direction.trim().length >= 5 && !isLoading;
+  const canGenerate = hasRef && direction.trim().length >= 5 && !isLoading && !isGenerating;
 
   const handleGenerate = async () => {
     if (!canGenerate) return;

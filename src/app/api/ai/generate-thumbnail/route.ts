@@ -4,9 +4,10 @@
  * 참조 사진 1~3장 + 연출 방향 텍스트를 Gemini에 전달하여
  * 1:1 정사각형 썸네일 이미지를 생성합니다.
  *
- * 요청:
+ * 요청 (refImages 또는 refImageUrls 중 최소 하나 필요):
  *   {
- *     refImages: [{ imageBase64: string, mimeType: string }]  // 1~3장
+ *     refImages?: [{ imageBase64: string, mimeType: string }]  // 하위호환(에디터): base64 1~3장
+ *     refImageUrls?: string[]                                   // assets 탭: 서버가 fetch, 1~3장
  *     direction: string   // 예: "스튜디오 조명, 화이트 배경으로 합성해줘"
  *   }
  * 응답:
@@ -148,6 +149,7 @@ export async function POST(request: NextRequest) {
       throw new Error('이미지 생성에 실패했습니다. 다른 사진이나 방향으로 다시 시도해주세요.');
     }
 
+    // 참고: Gemini는 통상 image/png를 반환. 호출 측 upload-ai는 jpeg/png/webp만 허용하므로 그 외 타입이면 업로드가 400이 될 수 있다.
     return NextResponse.json({
       success: true,
       data: {

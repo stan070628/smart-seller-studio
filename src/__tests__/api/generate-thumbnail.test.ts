@@ -104,4 +104,28 @@ describe('POST /api/ai/generate-thumbnail', () => {
     const res = await POST(makeRequest({ refImageUrls: ['https://x/a.jpg'], direction: VALID_DIRECTION }));
     expect(res.status).toBe(400);
   });
+
+  it('refImages와 refImageUrls를 함께 보내면 둘 다 loadReferenceImages에 전달되고 200', async () => {
+    mockLoadReferenceImages.mockResolvedValue([
+      { base64: 'A', mimeType: 'image/jpeg' },
+      { base64: 'B', mimeType: 'image/jpeg' },
+      { base64: 'C', mimeType: 'image/jpeg' },
+    ]);
+
+    const res = await POST(
+      makeRequest({
+        refImages: [{ imageBase64: 'AAA', mimeType: 'image/jpeg' }],
+        refImageUrls: ['https://x/a.jpg', 'https://x/b.jpg'],
+        direction: VALID_DIRECTION,
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockLoadReferenceImages).toHaveBeenCalledWith(
+      expect.objectContaining({
+        referenceImages: [{ base64: 'AAA', mimeType: 'image/jpeg' }],
+        productImageUrls: ['https://x/a.jpg', 'https://x/b.jpg'],
+      }),
+    );
+  });
 });
