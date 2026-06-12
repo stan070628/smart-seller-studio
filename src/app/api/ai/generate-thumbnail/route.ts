@@ -18,6 +18,7 @@ import { z } from 'zod';
 import { requireAuth } from '@/lib/supabase/auth';
 import { checkRateLimit, getRateLimitKey } from '@/lib/rate-limit';
 import { getGeminiGenAI } from '@/lib/ai/gemini';
+import { loadReferenceImages } from '@/lib/ai/reference-images';
 
 const RATE_LIMIT = { windowMs: 60_000, maxRequests: 10 };
 const MODEL = 'gemini-2.5-flash-image';
@@ -25,6 +26,7 @@ const MODEL = 'gemini-2.5-flash-image';
 const MimeTypeEnum = z.enum(['image/jpeg', 'image/png', 'image/webp']);
 
 const RequestSchema = z.object({
+  // 하위호환: 에디터(ThumbnailGenerateSection)의 base64 입력
   refImages: z
     .array(
       z.object({
@@ -32,8 +34,10 @@ const RequestSchema = z.object({
         mimeType: MimeTypeEnum,
       }),
     )
-    .min(1, '참조 사진이 최소 1장 필요합니다')
-    .max(3, '참조 사진은 최대 3장까지 가능합니다'),
+    .max(3, '참조 사진은 최대 3장까지 가능합니다')
+    .optional(),
+  // 신규: assets 탭의 URL 입력 (서버가 fetch)
+  refImageUrls: z.array(z.string().url()).max(3, '참조 사진은 최대 3장까지 가능합니다').optional(),
   direction: z
     .string()
     .min(5, '연출 방향을 입력해주세요 (5자 이상)')
@@ -76,7 +80,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: msg }, { status: 400 });
     }
 
-    const { refImages, direction } = parsed.data;
+    const { refImages, refImageUrls, direction } = parsed.data;
+
+    // 두 소스 모두 비어있으면 400
+    if ((!refImages || refImages.length === 0) && (!refImageUrls || refImageUrls.length === 0)) {
+      return NextResponse.json(
+        { success: false, error: '참조 사진이 최소 1장 필요합니다' },
+        { status: 400 },
+      );
+    }
+
+    // 참조 이미지 정규화 (URL fetch + Sharp 리사이즈 + base64, 최대 3장)
+    const referenceImages = await loadReferenceImages({
+      referenceImages: refImages?.map((r) => ({ base64: r.imageBase64, mimeType: r.mimeType })),
+      productImageUrls: refImageUrls,
+    });
+
+    if (referenceImages.length === 0) {
+      return NextResponse.json(
+        { success: false, error: '참조 사진을 불러오지 못했습니다' },
+        { status: 400 },
+      );
+    }
 
     // Gemini parts 구성: 참조 이미지들 → 텍스트 프롬프트
     type GeminiPart =
@@ -85,9 +110,9 @@ export async function POST(request: NextRequest) {
 
     const parts: GeminiPart[] = [];
 
-    for (const img of refImages) {
+    for (const ref of referenceImages) {
       parts.push({
-        inlineData: { data: img.imageBase64, mimeType: img.mimeType },
+        inlineData: { data: ref.base64, mimeType: ref.mimeType },
       });
     }
 
