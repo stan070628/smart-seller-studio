@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/supabase/auth';
 import { checkRateLimit, getRateLimitKey } from '@/lib/rate-limit';
 import { getAnthropicClient } from '@/lib/ai/claude';
 import { generateFrameImage } from '@/lib/ai/imagen';
+import { loadReferenceImages } from '@/lib/ai/reference-images';
 
 export const maxDuration = 90;
 
@@ -11,6 +12,13 @@ const RATE_LIMIT = { windowMs: 60_000, maxRequests: 8 };
 
 const RequestBodySchema = z.object({
   sectionType: z.enum(['hero', 'lifestyle', 'detail', 'feature']),
+  // 신규: 멀티참조
+  referenceImages: z
+    .array(z.object({ base64: z.string(), mimeType: z.string().optional() }))
+    .max(3)
+    .optional(),
+  productImageUrls: z.array(z.string().url()).max(3).optional(),
+  // 하위호환: 단일
   productImageBase64: z.string().optional(),
   productImageMimeType: z.enum(['image/jpeg', 'image/png', 'image/webp']).optional(),
   productImageUrl: z.string().url().optional(),
@@ -24,16 +32,15 @@ const RequestBodySchema = z.object({
 
 const SCENE_PROMPT_SYSTEM = `You are an expert e-commerce product photographer and AI image prompt engineer.
 
-Given a product reference image and product information, create a highly detailed English prompt
-for Gemini image generation that will produce a professional commercial lifestyle scene.
+Given one or more reference images of the SAME product (often photographed from different angles) and product information, create a highly detailed English prompt for Gemini image generation that will produce a professional commercial lifestyle scene.
 
 Rules:
-- The product from the reference image MUST appear prominently in the generated scene
+- The product from the reference image(s) MUST appear prominently in the generated scene
 - Create a COMPLETE scene with the product naturally integrated — not just a background
 - Be extremely specific: lighting quality, environment details, props, camera angle, mood, color palette
 - Do NOT include any text, logos, watermarks, or price tags in the scene description
 - The output must be a photorealistic commercial photography scene
-- CRITICAL PRODUCT COUNT: First, carefully count the EXACT number of each item type visible in the reference image (e.g., "1 spoon and 1 chopstick set" or "3 bottles"). Your prompt MUST specify this EXACT count. NEVER duplicate, multiply, or add more items than what appears in the reference. State the count explicitly in your prompt: "exactly 1 [item]" or "exactly 2 [items]" etc.
+- CRITICAL PRODUCT COUNT: The multiple reference images show the SAME single product from different angles — they do NOT represent multiple products. Carefully count the EXACT number of each item type that makes up ONE product unit (e.g., "1 spoon and 1 chopstick set" or "3 bottles sold together"). Your prompt MUST specify this EXACT count. NEVER duplicate or multiply items based on the number of reference images provided. State the count explicitly: "exactly 1 [item]" etc.
 - CRITICAL: The generated prompt MUST end with this exact instruction: "The attached product image must be placed in this scene exactly as it appears — do not transform, distort, modify, or reimagine the product's shape, color, material, or appearance in any way. Minor cleanup only (background removal, sharpening, white balance correction) is acceptable. Create an entirely new scene/background/environment around the unchanged product. IMPORTANT: Use EXACTLY the same quantity of items as shown in the reference image — do not add more items, do not duplicate products. SINGLE FRAME ONLY: Generate exactly one single continuous photograph — no split panels, diptychs, multi-view layouts, before/after comparisons, or composite image compositions."
 
 Section type directions:
@@ -53,7 +60,7 @@ function buildUserPrompt(
     features?: Array<{ title: string }>;
   },
 ): string {
-  const lines: string[] = ['Product reference image is attached above.'];
+  const lines: string[] = ['Product reference image(s) are attached above.'];
 
   if (productInfo) {
     if (productInfo.headline) lines.push(`Product headline: ${productInfo.headline}`);
@@ -95,33 +102,18 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let { productImageBase64, productImageMimeType } = parsed.data;
-  const { sectionType, productImageUrl, productInfo } = parsed.data;
-
-  // productImageUrl이 있으면 서버에서 fetch → base64 변환
-  if (productImageUrl && !productImageBase64) {
-    try {
-      const imgRes = await fetch(productImageUrl, { signal: AbortSignal.timeout(15_000) });
-      if (imgRes.ok) {
-        const blob = await imgRes.blob();
-        const rawMime = blob.type || 'image/jpeg';
-        productImageMimeType = (['image/jpeg', 'image/png', 'image/webp'].includes(rawMime)
-          ? rawMime
-          : 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/webp';
-        const ab = await blob.arrayBuffer();
-        const bytes = new Uint8Array(ab);
-        let binary = '';
-        for (let i = 0; i < bytes.length; i += 8192) {
-          binary += String.fromCharCode(...bytes.slice(i, i + 8192));
-        }
-        productImageBase64 = btoa(binary);
-      }
-    } catch {
-      // URL fetch 실패 시 이미지 없이 계속 진행
-    }
-  }
+  const { sectionType, productInfo } = parsed.data;
 
   try {
+    // 참조 이미지 로딩 (멀티참조: URL fetch + Sharp 리사이즈 + base64, 최대 3장)
+    const referenceImages = await loadReferenceImages({
+      referenceImages: parsed.data.referenceImages,
+      productImageUrls: parsed.data.productImageUrls,
+      productImageBase64: parsed.data.productImageBase64,
+      productImageMimeType: parsed.data.productImageMimeType,
+      productImageUrl: parsed.data.productImageUrl,
+    });
+
     // Step 1: Claude Sonnet으로 섹션별 씬 프롬프트 생성
     const client = getAnthropicClient();
 
@@ -131,10 +123,10 @@ export async function POST(req: NextRequest) {
 
     const userContent: ContentBlock[] = [];
 
-    if (productImageBase64 && productImageMimeType) {
+    for (const ref of referenceImages) {
       userContent.push({
         type: 'image',
-        source: { type: 'base64', media_type: productImageMimeType, data: productImageBase64 },
+        source: { type: 'base64', media_type: ref.mimeType, data: ref.base64 },
       });
     }
 
@@ -162,8 +154,7 @@ export async function POST(req: NextRequest) {
     // Step 2: Gemini로 완성된 씬 이미지 생성
     const imageResult = await generateFrameImage({
       imagePrompt: scenePrompt,
-      productImageBase64,
-      productImageMimeType,
+      referenceImages,
     });
 
     return NextResponse.json({

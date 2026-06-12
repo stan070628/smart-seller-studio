@@ -21,6 +21,11 @@ vi.mock('@/lib/ai/imagen', () => ({
   generateFrameImage: (...args: unknown[]) => mockGenerateFrameImage(...args),
 }));
 
+const mockLoadReferenceImages = vi.fn();
+vi.mock('@/lib/ai/reference-images', () => ({
+  loadReferenceImages: (...args: unknown[]) => mockLoadReferenceImages(...args),
+}));
+
 function makeRequest(body: unknown): NextRequest {
   return new NextRequest('http://localhost/api/ai/generate-frame-image', {
     method: 'POST',
@@ -49,6 +54,7 @@ const LONG_PROMPT =
 
 beforeEach(() => {
   mockGenerateFrameImage.mockResolvedValue(MOCK_SUCCESS);
+  mockLoadReferenceImages.mockResolvedValue([]);
 });
 
 describe('POST /api/ai/generate-frame-image — imagePrompt 길이 제한 회귀', () => {
@@ -90,6 +96,31 @@ describe('POST /api/ai/generate-frame-image — imagePrompt 길이 제한 회귀
 
     expect(res.status).toBe(400);
     expect(body.success).toBe(false);
+  });
+
+  it('productImageUrls를 받으면 로더 결과를 generateFrameImage에 referenceImages로 전달한다', async () => {
+    mockLoadReferenceImages.mockResolvedValue([
+      { base64: 'R1', mimeType: 'image/jpeg' },
+      { base64: 'R2', mimeType: 'image/jpeg' },
+    ]);
+
+    const res = await POST(
+      makeRequest({
+        frameType: 'hero',
+        imagePrompt: LONG_PROMPT,
+        productImageUrls: ['https://x/a.jpg', 'https://x/b.jpg'],
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockGenerateFrameImage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        referenceImages: [
+          { base64: 'R1', mimeType: 'image/jpeg' },
+          { base64: 'R2', mimeType: 'image/jpeg' },
+        ],
+      }),
+    );
   });
 
   it('productImageBase64와 mimeType이 함께 있으면 200을 반환한다', async () => {

@@ -38,9 +38,15 @@ describe('buildImagePromptsUserPrompt', () => {
     const prompt = buildImagePromptsUserPrompt(mockAnalysis, mockContent, '린넨 쿠션 베이지');
     expect(prompt).toContain('린넨 쿠션 베이지');
   });
+
+  it('멀티앵글 참조 안내를 포함한다', () => {
+    const prompt = buildImagePromptsUserPrompt(mockAnalysis, mockContent);
+    expect(prompt.toLowerCase()).toContain('reference');
+  });
 });
 
 describe('parseImagePromptsResponse', () => {
+  // NOTE: 일부 fixture는 레거시 referenceImageIndex 필드를 포함한다 — 파서가 이를 무시하고 정상 파싱하는지 검증한다.
   it('유효한 JSON을 파싱한다', () => {
     const raw = JSON.stringify({
       visualIdentity: {
@@ -86,6 +92,20 @@ describe('parseImagePromptsResponse', () => {
     });
     const result = parseImagePromptsResponse(raw);
     expect(result.visualIdentity.colorPalette).toBe('neutral tones');
+  });
+
+  it('referenceImageIndex 없이도 정상 파싱한다 (멀티참조 전환)', () => {
+    const raw = JSON.stringify({
+      visualIdentity: { colorPalette: 'x', mood: 'y', lighting: 'z', background: 'w' },
+      imagePrompts: [
+        { role: 'hero', scene: 'front shot' },
+        { role: 'lifestyle', scene: 'living room' },
+      ],
+    });
+    const result = parseImagePromptsResponse(raw);
+    expect(result.imagePrompts).toHaveLength(2);
+    // referenceImageIndex 필드는 더 이상 존재하지 않는다
+    expect('referenceImageIndex' in result.imagePrompts[0]).toBe(false);
   });
 });
 
