@@ -339,6 +339,10 @@ export default function DetailMakerClient() {
         onUploadFiles={handleUploadFiles}
         onRemoveImage={handleRemoveImage}
         onGenerate={handleGenerate}
+        suggestedMoodIds={suggestedMoodIds}
+        selectedMoodId={creativeBrief?.moodId ?? null}
+        isSuggestingMood={isSuggestingMood}
+        onSelectMood={handleSelectMood}
       />
 
       {/* 우측 — DetailPageEditor 또는 EmptyState */}

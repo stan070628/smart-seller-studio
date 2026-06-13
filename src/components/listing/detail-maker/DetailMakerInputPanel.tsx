@@ -2,6 +2,7 @@
 
 import React, { useRef } from 'react';
 import { C } from '@/lib/design-tokens';
+import CreativeBriefPanel from './CreativeBriefPanel';
 
 type Category = 'basic' | 'fashion' | 'living' | 'food';
 
@@ -28,6 +29,10 @@ interface Props {
   onUploadFiles: (files: FileList | File[]) => void;
   onRemoveImage: (idx: number) => void;
   onGenerate: () => void;
+  suggestedMoodIds: string[];
+  selectedMoodId: string | null;
+  isSuggestingMood: boolean;
+  onSelectMood: (id: string) => void;
 }
 
 export default function DetailMakerInputPanel({
@@ -44,6 +49,10 @@ export default function DetailMakerInputPanel({
   onUploadFiles,
   onRemoveImage,
   onGenerate,
+  suggestedMoodIds,
+  selectedMoodId,
+  isSuggestingMood,
+  onSelectMood,
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -247,6 +256,14 @@ export default function DetailMakerInputPanel({
             </div>
           )}
         </div>
+
+        {/* 무드 브리프 */}
+        <CreativeBriefPanel
+          suggestedMoodIds={suggestedMoodIds}
+          selectedMoodId={selectedMoodId}
+          isSuggesting={isSuggestingMood}
+          onSelectMood={onSelectMood}
+        />
 
         {/* 에러 */}
         {error && (
