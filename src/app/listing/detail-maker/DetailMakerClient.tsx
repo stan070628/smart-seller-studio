@@ -32,6 +32,8 @@ export default function DetailMakerClient() {
   const [error, setError] = useState<string | null>(null);
   // 씬 생성 취소용 — 새 생성 요청 시 이전 결과 무시
   const sceneGenIdRef = useRef(0);
+  // 무드 추천 취소용 — 새 추천 요청 시 이전(느린) 응답 무시
+  const suggestMoodIdRef = useRef(0);
 
   // 크리에이티브 브리프
   const [creativeBrief, setCreativeBrief] = useState<CreativeBrief | null>(null);
@@ -68,6 +70,8 @@ export default function DetailMakerClient() {
   // 무드 추천 (논블로킹) — 실패해도 조용히 무시
   async function suggestMood(urls: string[]) {
     if (urls.length === 0) return;
+    suggestMoodIdRef.current += 1;
+    const reqId = suggestMoodIdRef.current;
     setIsSuggestingMood(true);
     try {
       const res = await fetch('/api/ai/suggest-mood', {
@@ -76,11 +80,14 @@ export default function DetailMakerClient() {
         body: JSON.stringify({ productImageUrls: urls.slice(0, 3), productName: productName.trim() || undefined }),
       });
       const json = await res.json() as { success: boolean; data?: { moodIds: string[] } };
+      // 더 최신 추천 요청이 시작됐으면 이 응답은 폐기 (느린 응답이 최신 결과를 덮어쓰지 않도록)
+      if (suggestMoodIdRef.current !== reqId) return;
       if (json.success && json.data) setSuggestedMoodIds(json.data.moodIds);
     } catch {
       // 무시
     } finally {
-      setIsSuggestingMood(false);
+      // 최신 요청만 로딩 상태를 해제 (구식 응답이 진행 중 플래그를 끄지 않도록)
+      if (suggestMoodIdRef.current === reqId) setIsSuggestingMood(false);
     }
   }
 
@@ -93,7 +100,13 @@ export default function DetailMakerClient() {
   }
 
   function handleRemoveImage(idx: number) {
-    setUploadedUrls(prev => prev.filter((_, i) => i !== idx));
+    const next = uploadedUrls.filter((_, i) => i !== idx);
+    setUploadedUrls(next);
+    // 이미지가 모두 사라지면 그 이미지 기반 추천은 더 이상 유효하지 않음 → 초기화
+    if (next.length === 0) {
+      setSuggestedMoodIds([]);
+      suggestMoodIdRef.current += 1; // 진행 중인 추천 응답도 폐기
+    }
   }
 
   // ─── render API 헬퍼 ────────────────────────────────────────────────────────
@@ -212,6 +225,8 @@ export default function DetailMakerClient() {
       (section.content.type === 'hero' || section.content.type === 'point')
         ? section.content.headline
         : undefined;
+    const REGEN_FAIL_MSG = '씬 이미지 재생성에 실패했습니다. 잠시 후 다시 시도해주세요.';
+    setError(null);
 
     try {
       const sceneRes = await fetch('/api/ai/generate-scene-image', {
@@ -224,11 +239,11 @@ export default function DetailMakerClient() {
           sceneHint: creativeBrief?.sceneHint,
         }),
       });
-      if (!sceneRes.ok) return;
+      if (!sceneRes.ok) { setError(REGEN_FAIL_MSG); return; }
       const sceneData = await sceneRes.json() as {
         success: boolean; data?: { imageBase64: string; mimeType: string };
       };
-      if (!sceneData.success || !sceneData.data) return;
+      if (!sceneData.success || !sceneData.data) { setError(REGEN_FAIL_MSG); return; }
 
       const uploadRes = await fetch('/api/image/upload-ai', {
         method: 'POST',
@@ -239,9 +254,9 @@ export default function DetailMakerClient() {
           role: sectionType,
         }),
       });
-      if (!uploadRes.ok) return;
+      if (!uploadRes.ok) { setError(REGEN_FAIL_MSG); return; }
       const uploadData = await uploadRes.json() as { success: boolean; url?: string };
-      if (!uploadData.success || !uploadData.url) return;
+      if (!uploadData.success || !uploadData.url) { setError(REGEN_FAIL_MSG); return; }
 
       const newUrl = uploadData.url;
       setSections(prev => {
@@ -254,7 +269,7 @@ export default function DetailMakerClient() {
         return updated;
       });
     } catch {
-      // 무시 — 버튼이 다시 활성화됨
+      setError(REGEN_FAIL_MSG); // 버튼은 SectionCard에서 다시 활성화됨
     }
   }
 
