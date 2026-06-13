@@ -6,7 +6,8 @@ import { DEFAULT_THEME } from '@/lib/detail-page/palette-config';
 import { contentToSections, mobileContentToSections } from '@/lib/detail-page/section-parser';
 import DetailPageEditor from '@/components/listing/detail-editor/DetailPageEditor';
 import DetailMakerInputPanel from '@/components/listing/detail-maker/DetailMakerInputPanel';
-import type { DetailSection, DetailPageTheme } from '@/types/detail-page';
+import { getMoodPreset } from '@/lib/detail-page/mood-presets';
+import type { DetailSection, DetailPageTheme, CreativeBrief } from '@/types/detail-page';
 import type { DetailPageContent, MobileDetailPageContent } from '@/lib/ai/prompts/detail-page';
 
 type Category = 'basic' | 'fashion' | 'living' | 'food';
@@ -32,6 +33,11 @@ export default function DetailMakerClient() {
   // 씬 생성 취소용 — 새 생성 요청 시 이전 결과 무시
   const sceneGenIdRef = useRef(0);
 
+  // 크리에이티브 브리프
+  const [creativeBrief, setCreativeBrief] = useState<CreativeBrief | null>(null);
+  const [suggestedMoodIds, setSuggestedMoodIds] = useState<string[]>([]);
+  const [isSuggestingMood, setIsSuggestingMood] = useState(false);
+
   // ─── 이미지 업로드 ──────────────────────────────────────────────────────────
   async function uploadOne(file: File): Promise<string> {
     const fd = new FormData();
@@ -49,12 +55,41 @@ export default function DetailMakerClient() {
     try {
       const arr = Array.from(files).slice(0, 6 - uploadedUrls.length);
       const urls = await Promise.all(arr.map(uploadOne));
-      setUploadedUrls(prev => [...prev, ...urls].slice(0, 6));
+      const nextUrls = [...uploadedUrls, ...urls].slice(0, 6);
+      setUploadedUrls(nextUrls);
+      void suggestMood(nextUrls);
     } catch (e) {
       setError(e instanceof Error ? e.message : '이미지 업로드 실패');
     } finally {
       setUploading(false);
     }
+  }
+
+  // 무드 추천 (논블로킹) — 실패해도 조용히 무시
+  async function suggestMood(urls: string[]) {
+    if (urls.length === 0) return;
+    setIsSuggestingMood(true);
+    try {
+      const res = await fetch('/api/ai/suggest-mood', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productImageUrls: urls.slice(0, 3), productName: productName.trim() || undefined }),
+      });
+      const json = await res.json() as { success: boolean; data?: { moodIds: string[] } };
+      if (json.success && json.data) setSuggestedMoodIds(json.data.moodIds);
+    } catch {
+      // 무시
+    } finally {
+      setIsSuggestingMood(false);
+    }
+  }
+
+  // 무드 선택 — 브리프 확정 + 페이지 팔레트 통일
+  function handleSelectMood(id: string) {
+    const preset = getMoodPreset(id);
+    if (!preset) return;
+    setCreativeBrief({ moodId: preset.id, sceneHint: preset.sceneHint });
+    setTheme(prev => ({ ...prev, palette: preset.palette }));
   }
 
   function handleRemoveImage(idx: number) {
@@ -94,6 +129,7 @@ export default function DetailMakerClient() {
     refUrls: string[],
     genId: number,
     currentTheme: DetailPageTheme,
+    sceneHint?: string,
   ) {
     const targets = sectionsSnapshot.filter(s => s.type === 'hero' || s.type === 'point');
     if (targets.length === 0 || refUrls.length === 0) return;
@@ -114,6 +150,7 @@ export default function DetailMakerClient() {
               sectionType,
               productImageUrls: refUrls.slice(0, 3),
               productInfo: headline ? { headline } : undefined,
+              sceneHint,
             }),
           });
           if (!sceneRes.ok) return null;
@@ -220,7 +257,7 @@ export default function DetailMakerClient() {
       // Claude 생성 완료 → 즉시 페이지 표시 후 Gemini 씬 이미지 교체
       if (parsed && parsed.length > 0) {
         setIsGeneratingScenes(true);
-        void generateSceneImages(parsed, uploadedUrls, currentGenId, theme).finally(() => {
+        void generateSceneImages(parsed, uploadedUrls, currentGenId, theme, creativeBrief?.sceneHint).finally(() => {
           if (sceneGenIdRef.current === currentGenId) setIsGeneratingScenes(false);
         });
       }
