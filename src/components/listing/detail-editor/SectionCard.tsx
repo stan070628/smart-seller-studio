@@ -33,6 +33,8 @@ interface SectionCardProps {
   palette: PaletteName;
   /** 섹션 이미지 AI 편집 콜백 */
   onSectionImageAiEdit?: (sectionId: string, imageUrl: string, imageIndex: number) => void;
+  /** 섹션 씬 이미지 재생성 콜백 (hero/point에서만 노출) */
+  onSceneRegenerate?: (section: DetailSection) => Promise<void>;
 }
 
 // 섹션 타입별 한국어 레이블
@@ -99,6 +101,7 @@ export default function SectionCard({
   onImagesChange,
   palette,
   onSectionImageAiEdit,
+  onSceneRegenerate,
 }: SectionCardProps) {
   // AI 지시어 패널 표시 여부
   const [showPanel, setShowPanel] = useState(false);
@@ -156,6 +159,22 @@ export default function SectionCard({
       setShowPanel(false);
     }
   };
+
+  // 씬 재생성 — hero/point 섹션에서만 노출, 콜백이 있을 때만 활성
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const canRegenerate =
+    !!onSceneRegenerate && (section.type === 'hero' || section.type === 'point');
+
+  async function handleRegenerateClick(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!onSceneRegenerate || isRegenerating) return;
+    setIsRegenerating(true);
+    try {
+      await onSceneRegenerate(section);
+    } finally {
+      setIsRegenerating(false);
+    }
+  }
 
   const typeLabel = SECTION_TYPE_LABELS[section.type];
   const summary = getSectionSummary(section.content);
@@ -219,6 +238,34 @@ export default function SectionCard({
           >
             {summary}
           </span>
+
+          {/* 씬 재생성 버튼 (hero/point) */}
+          {canRegenerate && (
+            <button
+              type="button"
+              onClick={handleRegenerateClick}
+              disabled={isRegenerating}
+              aria-busy={isRegenerating}
+              title="브리프 톤으로 이 씬 이미지 재생성"
+              style={{
+                padding: '4px 8px',
+                borderRadius: 5,
+                border: `1px solid #dddddd`,
+                background: 'transparent',
+                color: isRegenerating ? '#bbbbbb' : C.textSub,
+                cursor: isRegenerating ? 'wait' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                fontSize: 12,
+                flexShrink: 0,
+                transition: 'border-color 0.15s, background 0.15s, color 0.15s',
+              }}
+            >
+              <span>{isRegenerating ? '⏳' : '🎨'}</span>
+              <span>재생성</span>
+            </button>
+          )}
 
           {/* AI 수정 버튼 */}
           <button

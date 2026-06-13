@@ -151,6 +151,8 @@ export interface DetailPageEditorProps {
   hidePreview?: boolean;
   /** 섹션 이미지 AI 편집 — 없으면 버튼 미노출 */
   onSectionImageAiEdit?: (sectionId: string, imageUrl: string, imageIndex: number) => void;
+  /** 섹션 씬 이미지 재생성 콜백 */
+  onSceneRegenerate?: (section: DetailSection) => Promise<void>;
 }
 
 // 섹션 추가 드롭다운 옵션
@@ -181,6 +183,7 @@ export default function DetailPageEditor({
   generatedHtml,
   hidePreview = false,
   onSectionImageAiEdit,
+  onSceneRegenerate,
 }: DetailPageEditorProps) {
   // 섹션 추가 드롭다운 열림 여부
   const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -506,6 +509,7 @@ export default function DetailPageEditor({
                       onImagesChange={handleImagesChange}
                       palette={theme.palette}
                       onSectionImageAiEdit={onSectionImageAiEdit}
+                      onSceneRegenerate={onSceneRegenerate}
                     />
                   ))
                 )}
