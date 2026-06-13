@@ -167,3 +167,20 @@ export function isPointContent(c: SectionContent): c is PointContent {
 export function isImageGridContent(c: SectionContent): c is ImageGridContent {
   return c.type === 'image_grid';
 }
+
+/** 무드 프리셋 — 정적 카탈로그 항목. AI 추천과 갤러리가 모두 이 id를 가리킨다. */
+export interface MoodPreset {
+  id: string;            // 'nordic_minimal' 등
+  label: string;         // '북유럽 미니멀'
+  emoji: string;         // 🌿 (썸네일 대용)
+  keywords: string[];    // ['밝은 우드','린넨','자연광']
+  palette: PaletteName;  // 선택 시 페이지 테마로 세팅
+  sceneHint: string;     // 영문 — 씬 프롬프트 art direction
+}
+
+/** 크리에이티브 브리프 — 무드 선택 결과. 비어 있으면 기존 동작과 동일. */
+export interface CreativeBrief {
+  moodId: string | null;
+  sceneHint: string;
+  paletteOverride?: PaletteName;
+}
