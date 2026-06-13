@@ -204,6 +204,60 @@ export default function DetailMakerClient() {
     }
   }
 
+  // ─── ③ 단일 섹션 씬 재생성 ──────────────────────────────────────────────────
+  async function handleSceneRegenerate(section: DetailSection) {
+    if (uploadedUrls.length === 0) return;
+    const sectionType = section.type === 'hero' ? 'hero' : 'lifestyle';
+    const headline =
+      (section.content.type === 'hero' || section.content.type === 'point')
+        ? section.content.headline
+        : undefined;
+
+    try {
+      const sceneRes = await fetch('/api/ai/generate-scene-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sectionType,
+          productImageUrls: uploadedUrls.slice(0, 3),
+          productInfo: headline ? { headline } : undefined,
+          sceneHint: creativeBrief?.sceneHint,
+        }),
+      });
+      if (!sceneRes.ok) return;
+      const sceneData = await sceneRes.json() as {
+        success: boolean; data?: { imageBase64: string; mimeType: string };
+      };
+      if (!sceneData.success || !sceneData.data) return;
+
+      const uploadRes = await fetch('/api/image/upload-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageBase64: sceneData.data.imageBase64,
+          mimeType: sceneData.data.mimeType,
+          role: sectionType,
+        }),
+      });
+      if (!uploadRes.ok) return;
+      const uploadData = await uploadRes.json() as { success: boolean; url?: string };
+      if (!uploadData.success || !uploadData.url) return;
+
+      const newUrl = uploadData.url;
+      setSections(prev => {
+        const updated = prev.map(s =>
+          s.id === section.id
+            ? { ...s, attachedImages: [{ url: newUrl, order: 0, processingMode: 'original' as const }] }
+            : s,
+        );
+        void refreshRenderedHtml(updated, theme);
+        return updated;
+      });
+    } catch {
+      // 무시 — 버튼이 다시 활성화됨
+    }
+  }
+
   // ─── AI 생성 ────────────────────────────────────────────────────────────────
   async function handleGenerate() {
     if (!productName.trim()) { setError('상품명을 입력하세요.'); return; }
@@ -356,6 +410,7 @@ export default function DetailMakerClient() {
               onSectionsChange={handleSectionsChange}
               onThemeChange={handleThemeChange}
               onSectionAiEdit={handleSectionAiEdit}
+              onSceneRegenerate={handleSceneRegenerate}
               onHtmlCopy={handleHtmlCopy}
               onDownload={handleDownload}
               generatedHtml={generatedHtml}
