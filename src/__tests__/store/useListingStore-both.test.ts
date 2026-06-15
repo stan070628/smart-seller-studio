@@ -76,6 +76,7 @@ function resetStore() {
       categoryHint: '',
       detailPageSections: [],
       detailPageTheme: DEFAULT_THEME,
+      aiDetailContent: null,
     },
     bothRegistration: {
       coupang: { status: 'idle' },
