@@ -28,6 +28,45 @@ export interface LoadReferenceImagesInput {
 const MAX_REFERENCES = 3;
 const MAX_EDGE = 1024;
 
+/**
+ * 서버가 fetch해도 되는 이미지 호스트 allowlist를 구성한다.
+ * 기본은 Supabase Storage 호스트(업로드된 사용자 이미지)이며,
+ * REFERENCE_IMAGE_ALLOWED_HOSTS(쉼표구분)로 확장할 수 있다.
+ * SSRF 방어: allowlist에 없는 호스트(사내망·메타데이터 IP 등)는 fetch하지 않는다.
+ */
+function getAllowedImageHosts(): Set<string> {
+  const hosts = new Set<string>();
+  for (const key of ['NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_URL'] as const) {
+    const v = process.env[key];
+    if (!v) continue;
+    try {
+      hosts.add(new URL(v).hostname.toLowerCase());
+    } catch {
+      /* 잘못된 URL은 무시 */
+    }
+  }
+  const extra = process.env.REFERENCE_IMAGE_ALLOWED_HOSTS;
+  if (extra) {
+    for (const h of extra.split(',')) {
+      const t = h.trim().toLowerCase();
+      if (t) hosts.add(t);
+    }
+  }
+  return hosts;
+}
+
+/** allowlist에 속한 http(s) URL만 허용 (대소문자 무시) */
+function isAllowedImageUrl(raw: string, allowed: Set<string>): boolean {
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return false;
+  return allowed.has(u.hostname.toLowerCase());
+}
+
 /** 단일 Buffer를 장변 1024px JPEG q80으로 정규화하여 base64 반환 */
 async function normalizeBuffer(buf: Buffer): Promise<string> {
   const out = await sharp(buf)
@@ -58,7 +97,15 @@ export async function loadReferenceImages(
     if (input.productImageUrls?.length) urls.push(...input.productImageUrls);
     if (input.productImageUrl) urls.push(input.productImageUrl);
     const remaining = MAX_REFERENCES - buffers.length;
-    const urlsToFetch = urls.slice(0, remaining);
+    // SSRF 방어: allowlist에 속한 호스트만 fetch한다.
+    const allowedHosts = getAllowedImageHosts();
+    const urlsToFetch = urls
+      .filter((u) => {
+        const ok = isAllowedImageUrl(u, allowedHosts);
+        if (!ok) console.warn('[reference-images] 허용되지 않은 이미지 호스트, fetch 생략:', u);
+        return ok;
+      })
+      .slice(0, remaining);
     if (urlsToFetch.length) {
       const fetched = await Promise.all(
         urlsToFetch.map(async (u) => {

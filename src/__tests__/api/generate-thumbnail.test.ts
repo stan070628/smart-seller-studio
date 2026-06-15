@@ -105,6 +105,37 @@ describe('POST /api/ai/generate-thumbnail', () => {
     expect(res.status).toBe(400);
   });
 
+  it('Gemini가 허용 mimeType(webp)을 반환하면 그대로 전달한다', async () => {
+    mockGenerateContent.mockResolvedValue({
+      candidates: [{ content: { parts: [{ inlineData: { data: 'GEN', mimeType: 'image/webp' } }] } }],
+    });
+    const res = await POST(makeRequest({ refImageUrls: ['https://x/a.jpg'], direction: VALID_DIRECTION }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.mimeType).toBe('image/webp');
+  });
+
+  it('Gemini가 비허용 mimeType(heic)을 반환하면 image/png로 폴백한다', async () => {
+    mockGenerateContent.mockResolvedValue({
+      candidates: [{ content: { parts: [{ inlineData: { data: 'GEN', mimeType: 'image/heic' } }] } }],
+    });
+    const res = await POST(makeRequest({ refImageUrls: ['https://x/a.jpg'], direction: VALID_DIRECTION }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.mimeType).toBe('image/png');
+    expect(body.data.imageBase64).toBe('GEN');
+  });
+
+  it('Gemini가 mimeType을 누락하면 image/png로 폴백한다', async () => {
+    mockGenerateContent.mockResolvedValue({
+      candidates: [{ content: { parts: [{ inlineData: { data: 'GEN' } }] } }],
+    });
+    const res = await POST(makeRequest({ refImageUrls: ['https://x/a.jpg'], direction: VALID_DIRECTION }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.mimeType).toBe('image/png');
+  });
+
   it('refImages와 refImageUrls를 함께 보내면 둘 다 loadReferenceImages에 전달되고 200', async () => {
     mockLoadReferenceImages.mockResolvedValue([
       { base64: 'A', mimeType: 'image/jpeg' },
