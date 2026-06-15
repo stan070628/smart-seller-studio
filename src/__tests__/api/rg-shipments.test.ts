@@ -140,12 +140,12 @@ describe('POST /api/cost-management/rg-shipments — 이벤트 저장', () => {
     expect(res.status).toBe(200);
 
     // 이벤트 INSERT는 pool.query로 실행됨
-    const poolSqlCalls = mockPoolQuery.mock.calls.map(([sql]: [string]) => sql);
+    const poolSqlCalls = mockPoolQuery.mock.calls.map((args: unknown[]) => args[0] as string);
     expect(poolSqlCalls.some((s) => /INSERT INTO rg_shipment_events/i.test(s))).toBe(true);
     expect(poolSqlCalls.some((s) => /INSERT INTO rg_shipment_event_items/i.test(s))).toBe(true);
 
     // product_name 파라미터 검증
-    const itemsCall = mockPoolQuery.mock.calls.find(([sql]: [string]) => /INSERT INTO rg_shipment_event_items/i.test(sql));
+    const itemsCall = mockPoolQuery.mock.calls.find((args: unknown[]) => /INSERT INTO rg_shipment_event_items/i.test(args[0] as string));
     expect(itemsCall![1][2]).toBe('상품A');
 
     expect(mockClient.release).toHaveBeenCalledTimes(1);
@@ -165,7 +165,7 @@ describe('POST /api/cost-management/rg-shipments — 이벤트 저장', () => {
     );
     // 이벤트 기록 실패해도 FIFO는 이미 COMMIT → 200 반환
     expect(res.status).toBe(200);
-    const clientSqlCalls = mockClient.query.mock.calls.map(([sql]: [string]) => sql);
+    const clientSqlCalls = mockClient.query.mock.calls.map((args: unknown[]) => args[0] as string);
     expect(clientSqlCalls.some((s) => /COMMIT/i.test(s))).toBe(true);
     expect(mockClient.release).toHaveBeenCalledTimes(1);
   });

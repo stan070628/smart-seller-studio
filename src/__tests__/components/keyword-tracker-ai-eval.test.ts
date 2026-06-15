@@ -33,7 +33,7 @@ describe('KeywordTrackerTab — AI 평가 기반', () => {
   });
 
   it('reasoning을 title 속성으로 툴팁에 표시한다', () => {
-    expect(src).toMatch(/title.*aiReasoning|aiReasoning.*title/s);
+    expect(src).toMatch(/title[\s\S]*aiReasoning|aiReasoning[\s\S]*title/);
   });
 
   it('상단 통계에 미평가 카운트가 있다', () => {
@@ -50,7 +50,7 @@ describe('KeywordTrackerTab — AI 평가 기반', () => {
   });
 
   it('SuggestedKeyword에 reasoning 필드가 있다', () => {
-    expect(src).toMatch(/reasoning.*string.*null|string.*null.*reasoning/s);
+    expect(src).toMatch(/reasoning[\s\S]*string[\s\S]*null|string[\s\S]*null[\s\S]*reasoning/);
   });
 
   it('모달 배지가 s.pass로 판정한다', () => {

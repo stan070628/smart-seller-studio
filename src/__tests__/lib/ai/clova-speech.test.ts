@@ -10,8 +10,8 @@ describe('transcribeAudio', () => {
   it('환경변수 미설정 시 Error throw', async () => {
     vi.stubEnv('NAVER_CLOVA_SPEECH_API_KEY_ID', '');
     vi.stubEnv('NAVER_CLOVA_SPEECH_API_KEY', '');
-    const blob = new Blob(['audio'], { type: 'audio/webm' });
-    await expect(transcribeAudio(blob)).rejects.toThrow('환경변수');
+    const audio = new ArrayBuffer(5);
+    await expect(transcribeAudio(audio)).rejects.toThrow('환경변수');
   });
 
   it('API 성공 응답에서 텍스트 반환', async () => {
@@ -22,8 +22,8 @@ describe('transcribeAudio', () => {
       json: () => Promise.resolve({ text: '안녕하세요 테스트입니다' }),
     } as Response);
 
-    const blob = new Blob(['audio'], { type: 'audio/webm' });
-    const result = await transcribeAudio(blob);
+    const audio = new ArrayBuffer(5);
+    const result = await transcribeAudio(audio);
     expect(result).toBe('안녕하세요 테스트입니다');
   });
 
@@ -32,7 +32,7 @@ describe('transcribeAudio', () => {
     vi.stubEnv('NAVER_CLOVA_SPEECH_API_KEY', 'test-key');
     vi.spyOn(global, 'fetch').mockResolvedValue({ ok: false, status: 400 } as Response);
 
-    const blob = new Blob(['audio'], { type: 'audio/webm' });
-    await expect(transcribeAudio(blob)).rejects.toThrow('CLOVA Speech API 오류: 400');
+    const audio = new ArrayBuffer(5);
+    await expect(transcribeAudio(audio)).rejects.toThrow('CLOVA Speech API 오류: 400');
   });
 });

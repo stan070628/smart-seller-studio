@@ -65,7 +65,7 @@ describe('POST /api/image/analyze-detail-images', () => {
 
   it('긴 이미지 (height > 2.5× width) → Claude Vision cropBox 제안 사용', async () => {
     const sharpMock = await import('sharp');
-    (sharpMock.default as ReturnType<typeof vi.fn>).mockImplementation(() => ({
+    (sharpMock.default as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => ({
       metadata: vi.fn().mockResolvedValue({ width: 400, height: 2000, format: 'jpeg' }),
       extract: vi.fn().mockReturnThis(),
       toBuffer: vi.fn().mockResolvedValue(Buffer.from('fake')),

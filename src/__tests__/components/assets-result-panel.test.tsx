@@ -11,7 +11,7 @@ const makeSection = (): DetailSection => ({
   id: 'sec-1',
   type: 'hero',
   order: 0,
-  content: { headline: '타이틀', subheadline: '서브타이틀' },
+  content: { type: 'hero' as const, headline: '타이틀', subheadline: '서브타이틀' },
   attachedImages: [],
 });
 

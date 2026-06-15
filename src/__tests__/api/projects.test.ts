@@ -93,12 +93,14 @@ function makeRequest(
   } = {}
 ): NextRequest {
   const { method = 'GET', body, headers = {} } = options
-  const init: RequestInit = { method, headers }
   if (body !== undefined) {
-    init.body = JSON.stringify(body)
-    init.headers = { 'Content-Type': 'application/json', ...headers }
+    return new NextRequest(url, {
+      method,
+      body: JSON.stringify(body),
+      headers: { 'Content-Type': 'application/json', ...headers },
+    })
   }
-  return new NextRequest(url, init)
+  return new NextRequest(url, { method, headers })
 }
 
 function makeRouteContext(id: string) {

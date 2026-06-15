@@ -22,7 +22,7 @@ describe('KeywordTrackerTab — enriched 모달', () => {
   });
 
   it('searchVolume이 null일 때를 처리한다', () => {
-    expect(src).toMatch(/searchVolume.*null|null.*searchVolume/s);
+    expect(src).toMatch(/searchVolume[\s\S]*null|null[\s\S]*searchVolume/);
   });
 
   it('통과 키워드 상단 정렬 로직이 있다', () => {

@@ -4,6 +4,9 @@ import { checkRateLimit, getRateLimitKey, RATE_LIMITS } from '@/lib/rate-limit';
 import { evaluateKeyword } from './utils';
 import type { EvaluateResult } from './utils';
 
+// 테스트 및 외부에서 헬퍼를 라우트 모듈을 통해 참조할 수 있도록 재노출 (정의는 ./utils 단일)
+export { evaluateKeyword } from './utils';
+
 interface ApiSuccessResponse {
   success: true;
   data: EvaluateResult;

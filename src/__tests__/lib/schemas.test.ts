@@ -210,7 +210,7 @@ describe('AiResponseParseError', () => {
   it('rawText, zodIssues 필드가 정상 설정되는지 확인', () => {
     const rawText = '원본 텍스트 내용';
     const zodIssues = [
-      { code: 'too_small' as const, path: ['sellingPoints'], message: '소구점이 너무 짧습니다', minimum: 5, type: 'string' as const, inclusive: true },
+      { code: 'too_small' as const, path: ['sellingPoints'], message: '소구점이 너무 짧습니다', minimum: 5, origin: 'string' as const, inclusive: true },
     ];
 
     const err = new AiResponseParseError('스키마 검증 실패', rawText, zodIssues);

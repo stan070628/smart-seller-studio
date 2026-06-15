@@ -1,3 +1,4 @@
+import { describe, it, expect } from 'vitest';
 import { parseAdStrategyResponse } from '@/lib/ad-strategy/analyzer-prompt';
 
 const VALID_JSON = JSON.stringify({

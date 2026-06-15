@@ -92,22 +92,22 @@ function makeRequest(body: unknown): NextRequest {
 // ---------------------------------------------------------------------------
 
 function getCoupangMocks() {
-  const client = (getCoupangClient as ReturnType<typeof vi.fn>)();
+  const client = (getCoupangClient as unknown as () => Record<string, ReturnType<typeof vi.fn>>)();
   return {
-    registerProduct: client.registerProduct as ReturnType<typeof vi.fn>,
-    getOutboundShippingPlaces: client.getOutboundShippingPlaces as ReturnType<typeof vi.fn>,
-    getReturnShippingCenters: client.getReturnShippingCenters as ReturnType<typeof vi.fn>,
-    getOutboundShippingPlaceCode: client.getOutboundShippingPlaceCode as ReturnType<typeof vi.fn>,
-    getReturnCenterCode: client.getReturnCenterCode as ReturnType<typeof vi.fn>,
-    getCategoryMeta: client.getCategoryMeta as ReturnType<typeof vi.fn>,
+    registerProduct: client.registerProduct,
+    getOutboundShippingPlaces: client.getOutboundShippingPlaces,
+    getReturnShippingCenters: client.getReturnShippingCenters,
+    getOutboundShippingPlaceCode: client.getOutboundShippingPlaceCode,
+    getReturnCenterCode: client.getReturnCenterCode,
+    getCategoryMeta: client.getCategoryMeta,
   };
 }
 
 function getNaverMocks() {
-  const client = (getNaverCommerceClient as ReturnType<typeof vi.fn>)();
+  const client = (getNaverCommerceClient as unknown as () => Record<string, ReturnType<typeof vi.fn>>)();
   return {
-    registerProduct: client.registerProduct as ReturnType<typeof vi.fn>,
-    uploadImagesFromUrls: client.uploadImagesFromUrls as ReturnType<typeof vi.fn>,
+    registerProduct: client.registerProduct,
+    uploadImagesFromUrls: client.uploadImagesFromUrls,
   };
 }
 

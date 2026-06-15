@@ -52,7 +52,7 @@ import { uploadToStorage } from '@/lib/supabase/server';
 import { POST } from '@/app/api/render/route';
 
 // 타입 단언
-const mockSharp = sharp as ReturnType<typeof vi.fn>;
+const mockSharp = sharp as unknown as ReturnType<typeof vi.fn>;
 const mockUpload = uploadToStorage as ReturnType<typeof vi.fn>;
 
 // ---------------------------------------------------------------------------

@@ -46,7 +46,7 @@ function naverNetworkErrorHandler() {
 function productsPostHandler(spy: ReturnType<typeof vi.fn>) {
   return http.post('/api/cost-management/products', async ({ request }) => {
     const body = await request.json();
-    spy(body);
+    (spy as unknown as (arg: unknown) => void)(body);
     return HttpResponse.json({ success: true }, { status: 201 });
   });
 }
@@ -58,7 +58,7 @@ describe('AddProductModal — 네이버 탭', () => {
   beforeEach(() => {
     onClose.mockClear();
     onAdded.mockClear();
-    (global.alert as ReturnType<typeof vi.fn>).mockClear();
+    (global.alert as unknown as ReturnType<typeof vi.fn>).mockClear();
 
     // 쿠팡 상품 목록(초기 로드) 기본 mock
     server.use(

@@ -51,6 +51,7 @@ function makeImageAnalysis(overrides?: Partial<ImageAnalysisResult>): ImageAnaly
     colors: ['블랙', '실버'],
     keyComponents: ['이중벽 구조', '원터치 뚜껑'],
     visualPrompt: 'A cinematic shot of a matte black tumbler',
+    ocrText: [],
     ...overrides,
   };
 }
