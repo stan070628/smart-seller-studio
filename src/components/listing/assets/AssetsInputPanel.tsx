@@ -7,6 +7,7 @@ import { useListingStore } from '@/store/useListingStore';
 import { C } from '@/lib/design-tokens';
 import { prepareUpload } from '@/lib/image/prepare-upload';
 import AssetsSaveLoad from './AssetsSaveLoad';
+import ThumbnailGeneratePanel from './ThumbnailGeneratePanel';
 import type { CategoryKey } from '@/lib/conversational-detail/types';
 import { contentToSections } from '@/lib/detail-page/section-parser';
 import type { DetailPageContent } from '@/lib/ai/prompts/detail-page';
@@ -805,6 +806,9 @@ export default function AssetsInputPanel({ onGenerate, onAnalyze }: Props) {
           {isAnalyzing ? '이미지 분석 중...' : '🔍 씬 이미지 분석'}
         </button>
       )}
+
+      {/* AI 썸네일 생성 패널 */}
+      <ThumbnailGeneratePanel />
 
       {/* 업로드 이미지 AI 편집 모달 — 상세 슬롯이면 detail 컨텍스트로 자유롭게 편집 */}
       {inputImageEditTarget && (

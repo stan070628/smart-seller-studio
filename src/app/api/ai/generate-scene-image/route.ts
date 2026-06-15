@@ -5,6 +5,7 @@ import { checkRateLimit, getRateLimitKey } from '@/lib/rate-limit';
 import { getAnthropicClient } from '@/lib/ai/claude';
 import { generateFrameImage } from '@/lib/ai/imagen';
 import { loadReferenceImages } from '@/lib/ai/reference-images';
+import { buildSceneUserPrompt } from './prompt';
 
 export const maxDuration = 90;
 
@@ -28,6 +29,7 @@ const RequestBodySchema = z.object({
     sellingPoints: z.array(z.object({ title: z.string(), description: z.string() })).optional(),
     features: z.array(z.object({ title: z.string() })).optional(),
   }).optional(),
+  sceneHint: z.string().max(600).optional(),
 });
 
 const SCENE_PROMPT_SYSTEM = `You are an expert e-commerce product photographer and AI image prompt engineer.
@@ -51,35 +53,6 @@ Section type directions:
 
 Return ONLY valid JSON: {"prompt": "your detailed English prompt here"}`;
 
-function buildUserPrompt(
-  sectionType: string,
-  productInfo?: {
-    headline?: string;
-    subheadline?: string;
-    sellingPoints?: Array<{ title: string; description: string }>;
-    features?: Array<{ title: string }>;
-  },
-): string {
-  const lines: string[] = ['Product reference image(s) are attached above.'];
-
-  if (productInfo) {
-    if (productInfo.headline) lines.push(`Product headline: ${productInfo.headline}`);
-    if (productInfo.subheadline) lines.push(`Subheadline: ${productInfo.subheadline}`);
-    if (productInfo.sellingPoints?.length) {
-      lines.push(`Key selling points: ${productInfo.sellingPoints.map((sp) => sp.title).join(', ')}`);
-    }
-    if (productInfo.features?.length) {
-      lines.push(`Product features: ${productInfo.features.map((f) => f.title).join(', ')}`);
-    }
-  }
-
-  lines.push('');
-  lines.push(`Section type: ${sectionType}`);
-  lines.push('Generate a detailed Gemini image generation prompt for this section. Return only JSON.');
-
-  return lines.join('\n');
-}
-
 export async function POST(req: NextRequest) {
   const authResult = await requireAuth(req);
   if (authResult instanceof Response) return authResult as NextResponse;
@@ -102,7 +75,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { sectionType, productInfo } = parsed.data;
+  const { sectionType, productInfo, sceneHint } = parsed.data;
 
   try {
     // 참조 이미지 로딩 (멀티참조: URL fetch + Sharp 리사이즈 + base64, 최대 3장)
@@ -130,7 +103,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    userContent.push({ type: 'text', text: buildUserPrompt(sectionType, productInfo) });
+    userContent.push({ type: 'text', text: buildSceneUserPrompt(sectionType, productInfo, sceneHint) });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const claudeRes = await client.messages.create({

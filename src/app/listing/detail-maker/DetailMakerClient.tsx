@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { C } from '@/lib/design-tokens';
 import { DEFAULT_THEME } from '@/lib/detail-page/palette-config';
 import { contentToSections, mobileContentToSections } from '@/lib/detail-page/section-parser';
 import DetailPageEditor from '@/components/listing/detail-editor/DetailPageEditor';
 import DetailMakerInputPanel from '@/components/listing/detail-maker/DetailMakerInputPanel';
-import type { DetailSection, DetailPageTheme } from '@/types/detail-page';
+import { getMoodPreset } from '@/lib/detail-page/mood-presets';
+import type { DetailSection, DetailPageTheme, CreativeBrief } from '@/types/detail-page';
 import type { DetailPageContent, MobileDetailPageContent } from '@/lib/ai/prompts/detail-page';
 
 type Category = 'basic' | 'fashion' | 'living' | 'food';
@@ -26,8 +27,18 @@ export default function DetailMakerClient() {
 
   // 진행 상태
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isGeneratingScenes, setIsGeneratingScenes] = useState(false);
   const [isRendering, setIsRendering] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 씬 생성 취소용 — 새 생성 요청 시 이전 결과 무시
+  const sceneGenIdRef = useRef(0);
+  // 무드 추천 취소용 — 새 추천 요청 시 이전(느린) 응답 무시
+  const suggestMoodIdRef = useRef(0);
+
+  // 크리에이티브 브리프
+  const [creativeBrief, setCreativeBrief] = useState<CreativeBrief | null>(null);
+  const [suggestedMoodIds, setSuggestedMoodIds] = useState<string[]>([]);
+  const [isSuggestingMood, setIsSuggestingMood] = useState(false);
 
   // ─── 이미지 업로드 ──────────────────────────────────────────────────────────
   async function uploadOne(file: File): Promise<string> {
@@ -46,7 +57,9 @@ export default function DetailMakerClient() {
     try {
       const arr = Array.from(files).slice(0, 6 - uploadedUrls.length);
       const urls = await Promise.all(arr.map(uploadOne));
-      setUploadedUrls(prev => [...prev, ...urls].slice(0, 6));
+      const nextUrls = [...uploadedUrls, ...urls].slice(0, 6);
+      setUploadedUrls(nextUrls);
+      void suggestMood(nextUrls);
     } catch (e) {
       setError(e instanceof Error ? e.message : '이미지 업로드 실패');
     } finally {
@@ -54,8 +67,46 @@ export default function DetailMakerClient() {
     }
   }
 
+  // 무드 추천 (논블로킹) — 실패해도 조용히 무시
+  async function suggestMood(urls: string[]) {
+    if (urls.length === 0) return;
+    suggestMoodIdRef.current += 1;
+    const reqId = suggestMoodIdRef.current;
+    setIsSuggestingMood(true);
+    try {
+      const res = await fetch('/api/ai/suggest-mood', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productImageUrls: urls.slice(0, 3), productName: productName.trim() || undefined }),
+      });
+      const json = await res.json() as { success: boolean; data?: { moodIds: string[] } };
+      // 더 최신 추천 요청이 시작됐으면 이 응답은 폐기 (느린 응답이 최신 결과를 덮어쓰지 않도록)
+      if (suggestMoodIdRef.current !== reqId) return;
+      if (json.success && json.data) setSuggestedMoodIds(json.data.moodIds);
+    } catch {
+      // 무시
+    } finally {
+      // 최신 요청만 로딩 상태를 해제 (구식 응답이 진행 중 플래그를 끄지 않도록)
+      if (suggestMoodIdRef.current === reqId) setIsSuggestingMood(false);
+    }
+  }
+
+  // 무드 선택 — 브리프 확정 + 페이지 팔레트 통일
+  function handleSelectMood(id: string) {
+    const preset = getMoodPreset(id);
+    if (!preset) return;
+    setCreativeBrief({ moodId: preset.id, sceneHint: preset.sceneHint });
+    setTheme(prev => ({ ...prev, palette: preset.palette }));
+  }
+
   function handleRemoveImage(idx: number) {
-    setUploadedUrls(prev => prev.filter((_, i) => i !== idx));
+    const next = uploadedUrls.filter((_, i) => i !== idx);
+    setUploadedUrls(next);
+    // 이미지가 모두 사라지면 그 이미지 기반 추천은 더 이상 유효하지 않음 → 초기화
+    if (next.length === 0) {
+      setSuggestedMoodIds([]);
+      suggestMoodIdRef.current += 1; // 진행 중인 추천 응답도 폐기
+    }
   }
 
   // ─── render API 헬퍼 ────────────────────────────────────────────────────────
@@ -85,12 +136,154 @@ export default function DetailMakerClient() {
     }
   }
 
+  // ─── Gemini 씬 이미지 생성 ─────────────────────────────────────────────────
+  async function generateSceneImages(
+    sectionsSnapshot: DetailSection[],
+    refUrls: string[],
+    genId: number,
+    currentTheme: DetailPageTheme,
+    sceneHint?: string,
+  ) {
+    const targets = sectionsSnapshot.filter(s => s.type === 'hero' || s.type === 'point');
+    if (targets.length === 0 || refUrls.length === 0) return;
+
+    const results = await Promise.allSettled(
+      targets.map(async (section) => {
+        try {
+          const sectionType = section.type === 'hero' ? 'hero' : 'lifestyle';
+          const headline =
+            (section.content.type === 'hero' || section.content.type === 'point')
+              ? section.content.headline
+              : undefined;
+
+          const sceneRes = await fetch('/api/ai/generate-scene-image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              sectionType,
+              productImageUrls: refUrls.slice(0, 3),
+              productInfo: headline ? { headline } : undefined,
+              sceneHint,
+            }),
+          });
+          if (!sceneRes.ok) return null;
+
+          const sceneData = await sceneRes.json() as {
+            success: boolean;
+            data?: { imageBase64: string; mimeType: string };
+          };
+          if (!sceneData.success || !sceneData.data) return null;
+
+          const uploadRes = await fetch('/api/image/upload-ai', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              imageBase64: sceneData.data.imageBase64,
+              mimeType: sceneData.data.mimeType,
+              role: sectionType,
+            }),
+          });
+          if (!uploadRes.ok) return null;
+
+          const uploadData = await uploadRes.json() as { success: boolean; url?: string };
+          if (!uploadData.success || !uploadData.url) return null;
+
+          return { sectionId: section.id, url: uploadData.url };
+        } catch {
+          return null;
+        }
+      }),
+    );
+
+    // 새 생성이 시작됐으면 결과 폐기
+    if (sceneGenIdRef.current !== genId) return;
+
+    const urlUpdates = results
+      .filter((r): r is PromiseFulfilledResult<{ sectionId: string; url: string } | null> =>
+        r.status === 'fulfilled')
+      .map(r => r.value)
+      .filter((v): v is { sectionId: string; url: string } => v !== null);
+
+    if (urlUpdates.length > 0) {
+      setSections(prev => {
+        const updated = prev.map(s => {
+          const hit = urlUpdates.find(u => u.sectionId === s.id);
+          if (!hit) return s;
+          return { ...s, attachedImages: [{ url: hit.url, order: 0, processingMode: 'original' as const }] };
+        });
+        void refreshRenderedHtml(updated, currentTheme);
+        return updated;
+      });
+    }
+  }
+
+  // ─── ③ 단일 섹션 씬 재생성 ──────────────────────────────────────────────────
+  async function handleSceneRegenerate(section: DetailSection) {
+    if (uploadedUrls.length === 0) return;
+    const sectionType = section.type === 'hero' ? 'hero' : 'lifestyle';
+    const headline =
+      (section.content.type === 'hero' || section.content.type === 'point')
+        ? section.content.headline
+        : undefined;
+    const REGEN_FAIL_MSG = '씬 이미지 재생성에 실패했습니다. 잠시 후 다시 시도해주세요.';
+    setError(null);
+
+    try {
+      const sceneRes = await fetch('/api/ai/generate-scene-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sectionType,
+          productImageUrls: uploadedUrls.slice(0, 3),
+          productInfo: headline ? { headline } : undefined,
+          sceneHint: creativeBrief?.sceneHint,
+        }),
+      });
+      if (!sceneRes.ok) { setError(REGEN_FAIL_MSG); return; }
+      const sceneData = await sceneRes.json() as {
+        success: boolean; data?: { imageBase64: string; mimeType: string };
+      };
+      if (!sceneData.success || !sceneData.data) { setError(REGEN_FAIL_MSG); return; }
+
+      const uploadRes = await fetch('/api/image/upload-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageBase64: sceneData.data.imageBase64,
+          mimeType: sceneData.data.mimeType,
+          role: sectionType,
+        }),
+      });
+      if (!uploadRes.ok) { setError(REGEN_FAIL_MSG); return; }
+      const uploadData = await uploadRes.json() as { success: boolean; url?: string };
+      if (!uploadData.success || !uploadData.url) { setError(REGEN_FAIL_MSG); return; }
+
+      const newUrl = uploadData.url;
+      setSections(prev => {
+        const updated = prev.map(s =>
+          s.id === section.id
+            ? { ...s, attachedImages: [{ url: newUrl, order: 0, processingMode: 'original' as const }] }
+            : s,
+        );
+        void refreshRenderedHtml(updated, theme);
+        return updated;
+      });
+    } catch {
+      setError(REGEN_FAIL_MSG); // 버튼은 SectionCard에서 다시 활성화됨
+    }
+  }
+
   // ─── AI 생성 ────────────────────────────────────────────────────────────────
   async function handleGenerate() {
     if (!productName.trim()) { setError('상품명을 입력하세요.'); return; }
     if (uploadedUrls.length === 0) { setError('이미지를 1장 이상 업로드하세요.'); return; }
     setIsGenerating(true);
+    setIsGeneratingScenes(false);
     setError(null);
+    // 이전 씬 생성 결과 무시
+    sceneGenIdRef.current += 1;
+    const currentGenId = sceneGenIdRef.current;
+
     try {
       const fullProductName = [brandName.trim(), productName.trim()].filter(Boolean).join(' ');
       const res = await fetch('/api/ai/generate-detail-html', {
@@ -108,9 +301,10 @@ export default function DetailMakerClient() {
 
       setGeneratedHtml(json.html);
 
+      let parsed: DetailSection[] | null = null;
       if (json.mobileContent) {
         try {
-          const parsed = mobileContentToSections(json.mobileContent as MobileDetailPageContent, uploadedUrls);
+          parsed = mobileContentToSections(json.mobileContent as MobileDetailPageContent, uploadedUrls);
           setSections(parsed);
           await refreshRenderedHtml(parsed, theme);
         } catch (e) {
@@ -120,13 +314,21 @@ export default function DetailMakerClient() {
       // 구버전 서버(mobileMode 미지원)가 desktop content를 반환하는 롤링 배포 케이스 대비 fallback
       } else if (json.content) {
         try {
-          const parsed = contentToSections(json.content as DetailPageContent);
+          parsed = contentToSections(json.content as DetailPageContent);
           setSections(parsed);
           await refreshRenderedHtml(parsed, theme);
         } catch (e) {
           console.warn('[detail-maker] contentToSections 실패:', e);
           setError('생성 결과를 편집기로 불러오지 못했습니다. 다시 시도해주세요.');
         }
+      }
+
+      // Claude 생성 완료 → 즉시 페이지 표시 후 Gemini 씬 이미지 교체
+      if (parsed && parsed.length > 0) {
+        setIsGeneratingScenes(true);
+        void generateSceneImages(parsed, uploadedUrls, currentGenId, theme, creativeBrief?.sceneHint).finally(() => {
+          if (sceneGenIdRef.current === currentGenId) setIsGeneratingScenes(false);
+        });
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'AI 생성 중 오류가 발생했습니다.');
@@ -201,27 +403,55 @@ export default function DetailMakerClient() {
         setCategory={setCategory}
         uploadedUrls={uploadedUrls}
         uploading={uploading}
-        isGenerating={isGenerating}
+        isGenerating={isGenerating || isGeneratingScenes}
         error={error}
         onUploadFiles={handleUploadFiles}
         onRemoveImage={handleRemoveImage}
         onGenerate={handleGenerate}
+        suggestedMoodIds={suggestedMoodIds}
+        selectedMoodId={creativeBrief?.moodId ?? null}
+        isSuggestingMood={isSuggestingMood}
+        onSelectMood={handleSelectMood}
       />
 
       {/* 우측 — DetailPageEditor 또는 EmptyState */}
-      <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+      <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', position: 'relative' }}>
         {sections.length > 0 ? (
-          <DetailPageEditor
-            sections={sections}
-            theme={theme}
-            isGenerating={isRendering}
-            onSectionsChange={handleSectionsChange}
-            onThemeChange={handleThemeChange}
-            onSectionAiEdit={handleSectionAiEdit}
-            onHtmlCopy={handleHtmlCopy}
-            onDownload={handleDownload}
-            generatedHtml={generatedHtml}
-          />
+          <>
+            <DetailPageEditor
+              sections={sections}
+              theme={theme}
+              isGenerating={isRendering}
+              onSectionsChange={handleSectionsChange}
+              onThemeChange={handleThemeChange}
+              onSectionAiEdit={handleSectionAiEdit}
+              onSceneRegenerate={handleSceneRegenerate}
+              onHtmlCopy={handleHtmlCopy}
+              onDownload={handleDownload}
+              generatedHtml={generatedHtml}
+            />
+            {/* Gemini 씬 이미지 생성 중 배너 */}
+            {isGeneratingScenes && (
+              <div style={{
+                position: 'absolute',
+                bottom: '16px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                background: 'rgba(124,58,237,0.92)',
+                color: '#fff',
+                padding: '8px 18px',
+                borderRadius: '24px',
+                fontSize: '13px',
+                fontWeight: 600,
+                backdropFilter: 'blur(4px)',
+                pointerEvents: 'none',
+                whiteSpace: 'nowrap',
+                zIndex: 10,
+              }}>
+                ✨ AI 씬 이미지 생성 중...
+              </div>
+            )}
+          </>
         ) : (
           <div
             style={{
