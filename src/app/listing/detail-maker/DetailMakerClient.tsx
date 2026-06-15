@@ -6,6 +6,8 @@ import { DEFAULT_THEME } from '@/lib/detail-page/palette-config';
 import { contentToSections, mobileContentToSections } from '@/lib/detail-page/section-parser';
 import DetailPageEditor from '@/components/listing/detail-editor/DetailPageEditor';
 import DetailMakerInputPanel from '@/components/listing/detail-maker/DetailMakerInputPanel';
+import DetailMakerThumbnailGallery from '@/components/listing/detail-maker/DetailMakerThumbnailGallery';
+import { generateCoupangThumbnail, editThumbnail } from '@/lib/detail-page/thumbnail-flow';
 import { getMoodPreset } from '@/lib/detail-page/mood-presets';
 import type { DetailSection, DetailPageTheme, CreativeBrief } from '@/types/detail-page';
 import type { DetailPageContent, MobileDetailPageContent } from '@/lib/ai/prompts/detail-page';
@@ -39,6 +41,12 @@ export default function DetailMakerClient() {
   const [creativeBrief, setCreativeBrief] = useState<CreativeBrief | null>(null);
   const [suggestedMoodIds, setSuggestedMoodIds] = useState<string[]>([]);
   const [isSuggestingMood, setIsSuggestingMood] = useState(false);
+
+  // 썸네일
+  const [generatedThumbnails, setGeneratedThumbnails] = useState<string[]>([]);
+  const [isGeneratingThumbnail, setIsGeneratingThumbnail] = useState(false);
+  const [editingThumbnailUrl, setEditingThumbnailUrl] = useState<string | null>(null);
+  const [thumbnailError, setThumbnailError] = useState<string | null>(null);
 
   // ─── 이미지 업로드 ──────────────────────────────────────────────────────────
   async function uploadOne(file: File): Promise<string> {
@@ -97,6 +105,55 @@ export default function DetailMakerClient() {
     if (!preset) return;
     setCreativeBrief({ moodId: preset.id, sceneHint: preset.sceneHint });
     setTheme(prev => ({ ...prev, palette: preset.palette }));
+  }
+
+  // ─── 썸네일 생성/수정/관리 ────────────────────────────────────────────────────
+  async function handleGenerateThumbnail(direction: string) {
+    if (uploadedUrls.length === 0) { setThumbnailError('참고 이미지를 먼저 업로드하세요.'); return; }
+    setIsGeneratingThumbnail(true);
+    setThumbnailError(null);
+    try {
+      const url = await generateCoupangThumbnail(uploadedUrls.slice(0, 3), direction);
+      setGeneratedThumbnails(prev => [...prev, url]);
+    } catch (e) {
+      setThumbnailError(e instanceof Error ? e.message : '썸네일 생성 중 오류가 발생했습니다.');
+    } finally {
+      setIsGeneratingThumbnail(false);
+    }
+  }
+
+  async function handleEditThumbnail(url: string, prompt: string) {
+    setEditingThumbnailUrl(url);
+    setThumbnailError(null);
+    try {
+      const editedUrl = await editThumbnail(url, prompt);
+      setGeneratedThumbnails(prev => prev.map(u => (u === url ? editedUrl : u)));
+    } catch (e) {
+      setThumbnailError(e instanceof Error ? e.message : '썸네일 수정 중 오류가 발생했습니다.');
+    } finally {
+      setEditingThumbnailUrl(null);
+    }
+  }
+
+  function handleRemoveThumbnail(url: string) {
+    setGeneratedThumbnails(prev => prev.filter(u => u !== url));
+  }
+
+  async function handleDownloadThumbnail(url: string) {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = `thumbnail-${Date.now()}.jpg`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      setThumbnailError('다운로드에 실패했습니다.');
+    }
   }
 
   function handleRemoveImage(idx: number) {
@@ -412,10 +469,23 @@ export default function DetailMakerClient() {
         selectedMoodId={creativeBrief?.moodId ?? null}
         isSuggestingMood={isSuggestingMood}
         onSelectMood={handleSelectMood}
+        thumbnailRefUrls={uploadedUrls}
+        isGeneratingThumbnail={isGeneratingThumbnail}
+        thumbnailError={thumbnailError}
+        onGenerateThumbnail={handleGenerateThumbnail}
       />
 
       {/* 우측 — DetailPageEditor 또는 EmptyState */}
-      <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', position: 'relative' }}>
+      <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+        {generatedThumbnails.length > 0 && (
+          <DetailMakerThumbnailGallery
+            thumbnails={generatedThumbnails}
+            editingUrl={editingThumbnailUrl}
+            onDownload={handleDownloadThumbnail}
+            onRemove={handleRemoveThumbnail}
+            onEdit={handleEditThumbnail}
+          />
+        )}
         {sections.length > 0 ? (
           <>
             <DetailPageEditor
