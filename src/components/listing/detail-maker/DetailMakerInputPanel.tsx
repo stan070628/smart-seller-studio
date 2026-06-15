@@ -3,6 +3,7 @@
 import React, { useRef } from 'react';
 import { C } from '@/lib/design-tokens';
 import CreativeBriefPanel from './CreativeBriefPanel';
+import DetailMakerThumbnailPanel from './DetailMakerThumbnailPanel';
 
 type Category = 'basic' | 'fashion' | 'living' | 'food';
 
@@ -33,6 +34,11 @@ interface Props {
   selectedMoodId: string | null;
   isSuggestingMood: boolean;
   onSelectMood: (id: string) => void;
+  // 썸네일 생성
+  thumbnailRefUrls: string[];
+  isGeneratingThumbnail: boolean;
+  thumbnailError: string | null;
+  onGenerateThumbnail: (direction: string) => void;
 }
 
 export default function DetailMakerInputPanel({
@@ -53,6 +59,10 @@ export default function DetailMakerInputPanel({
   selectedMoodId,
   isSuggestingMood,
   onSelectMood,
+  thumbnailRefUrls,
+  isGeneratingThumbnail,
+  thumbnailError,
+  onGenerateThumbnail,
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -263,6 +273,14 @@ export default function DetailMakerInputPanel({
           selectedMoodId={selectedMoodId}
           isSuggesting={isSuggestingMood}
           onSelectMood={onSelectMood}
+        />
+
+        {/* AI 썸네일 생성 */}
+        <DetailMakerThumbnailPanel
+          refImageUrls={thumbnailRefUrls}
+          isGenerating={isGeneratingThumbnail}
+          error={thumbnailError}
+          onGenerate={onGenerateThumbnail}
         />
 
         {/* 에러 */}
