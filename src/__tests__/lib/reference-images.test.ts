@@ -1,5 +1,5 @@
 // src/__tests__/lib/reference-images.test.ts
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('sharp', () => ({
   default: vi.fn(() => ({
@@ -17,6 +17,13 @@ describe('loadReferenceImages', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     global.fetch = vi.fn();
+    // 테스트 URL의 호스트('x')를 allowlist에 포함시킨다 (실제로는 Supabase 호스트)
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://x');
+    vi.stubEnv('REFERENCE_IMAGE_ALLOWED_HOSTS', '');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('referenceImages 3장을 정규화하여 3개 반환한다', async () => {
@@ -73,5 +80,43 @@ describe('loadReferenceImages', () => {
   it('입력이 전혀 없으면 빈 배열을 반환한다', async () => {
     const result = await loadReferenceImages({});
     expect(result).toHaveLength(0);
+  });
+
+  it('SSRF: allowlist에 없는 호스트는 fetch하지 않고 건너뛴다', async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(10)),
+    });
+    const result = await loadReferenceImages({
+      productImageUrls: ['http://169.254.169.254/latest/meta-data/', 'http://localhost/secret'],
+    });
+    expect(result).toHaveLength(0);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('SSRF: 허용 호스트와 비허용 호스트가 섞이면 허용 호스트만 fetch한다', async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(10)),
+    });
+    const result = await loadReferenceImages({
+      productImageUrls: ['https://x/ok.jpg', 'http://192.168.0.1/internal.jpg'],
+    });
+    expect(result).toHaveLength(1);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledWith('https://x/ok.jpg', expect.anything());
+  });
+
+  it('SSRF: REFERENCE_IMAGE_ALLOWED_HOSTS로 호스트를 추가 허용한다', async () => {
+    vi.stubEnv('REFERENCE_IMAGE_ALLOWED_HOSTS', 'cdn.example.com');
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(10)),
+    });
+    const result = await loadReferenceImages({
+      productImageUrls: ['https://cdn.example.com/a.jpg'],
+    });
+    expect(result).toHaveLength(1);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 });

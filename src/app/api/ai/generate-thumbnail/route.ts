@@ -149,12 +149,19 @@ export async function POST(request: NextRequest) {
       throw new Error('이미지 생성에 실패했습니다. 다른 사진이나 방향으로 다시 시도해주세요.');
     }
 
-    // 참고: Gemini는 통상 image/png를 반환. 호출 측 upload-ai는 jpeg/png/webp만 허용하므로 그 외 타입이면 업로드가 400이 될 수 있다.
+    // 호출 측 upload-ai는 jpeg/png/webp만 허용한다. Gemini가 통상 image/png를
+    // 반환하지만, 그 외(또는 누락) 타입이면 png로 폴백하여 업로드 400을 막는다.
+    const rawMime = imagePart.inlineData.mimeType;
+    const mimeType =
+      typeof rawMime === 'string' && MimeTypeEnum.options.includes(rawMime as never)
+        ? rawMime
+        : 'image/png';
+
     return NextResponse.json({
       success: true,
       data: {
         imageBase64: imagePart.inlineData.data as string,
-        mimeType: imagePart.inlineData.mimeType as string,
+        mimeType,
       },
     });
   } catch (err) {
