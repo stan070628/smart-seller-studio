@@ -14,6 +14,20 @@ export interface PaletteColors {
   labelColor: string;
 }
 
+// 팔레트 이름 단일 소스. Zod enum 등 런타임 검증에서 재사용한다.
+// PaletteName 타입(src/types/detail-page.ts)과 값·순서를 일치시킬 것.
+export const PALETTE_NAMES = [
+  'warm_cream',
+  'cool_white',
+  'deep_dark',
+  'nature_green',
+  'tech_navy',
+  'rose_soft',
+  'cream_cozy',
+  'sunset_warm',
+  'fresh_mint',
+] as const satisfies readonly PaletteName[];
+
 export const PALETTES: Record<PaletteName, PaletteColors> = {
   warm_cream: {
     bg: '#F5F0E8',

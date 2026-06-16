@@ -13,6 +13,7 @@ import { getAnthropicClient } from '@/lib/ai/claude';
 import { withRetry } from '@/lib/ai/resilience';
 import { checkProhibitedPhrases, buildSectionEditPrompt, parseJsonFromText } from '@/lib/ai/prompts/detail-page';
 import { renderSection } from '@/lib/detail-page/section-renderer';
+import { PALETTE_NAMES } from '@/lib/detail-page/palette-config';
 import type { DetailSection, DetailPageTheme, SectionContent } from '@/types/detail-page';
 
 // ─────────────────────────────────────────
@@ -60,7 +61,7 @@ const RequestSchema = z.object({
     .min(1, '지시어를 입력해주세요.')
     .max(500, '지시어는 500자 이하로 입력해주세요.'),
   theme: z.object({
-    palette: z.enum(['warm_cream', 'cool_white', 'deep_dark', 'nature_green', 'tech_navy', 'rose_soft', 'cream_cozy', 'sunset_warm', 'fresh_mint']),
+    palette: z.enum(PALETTE_NAMES),
     primaryColor: z.string(),
     accentColor: z.string(),
     fontStyle: z.enum(['serif', 'sans', 'mixed']),

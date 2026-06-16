@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAuth } from '@/lib/supabase/auth';
 import { renderAllSections } from '@/lib/detail-page/section-renderer';
+import { PALETTE_NAMES } from '@/lib/detail-page/palette-config';
 import { appendPrivacyFooter } from '@/lib/detail-page-privacy';
 import type { DetailSection, DetailPageTheme, FontStyle } from '@/types/detail-page';
 
@@ -49,7 +50,7 @@ const RequestSchema = z.object({
     .min(1, '섹션은 최소 1개 이상이어야 합니다.')
     .max(20, '섹션은 최대 20개까지 허용됩니다.'),
   theme: z.object({
-    palette: z.enum(['warm_cream', 'cool_white', 'deep_dark', 'nature_green', 'tech_navy']),
+    palette: z.enum(PALETTE_NAMES),
     primaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'primaryColor는 #RRGGBB 형식이어야 합니다.'),
     accentColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'accentColor는 #RRGGBB 형식이어야 합니다.'),
     fontStyle: z.enum(['serif', 'sans', 'mixed']),

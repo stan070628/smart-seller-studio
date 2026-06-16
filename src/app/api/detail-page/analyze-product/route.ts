@@ -25,7 +25,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getGeminiGenAI } from '@/lib/ai/gemini';
 import { parseJsonFromText } from '@/lib/ai/prompts/detail-page';
-import { PALETTES } from '@/lib/detail-page/palette-config';
+import { PALETTES, PALETTE_NAMES } from '@/lib/detail-page/palette-config';
 import type { PaletteName, SectionType, DetailPageTheme } from '@/types/detail-page';
 import { requireAuth } from '@/lib/supabase/auth';
 import { checkRateLimit, getRateLimitKey } from '@/lib/rate-limit';
@@ -38,18 +38,8 @@ import { withRetry } from '@/lib/ai/resilience';
 const RATE_LIMIT = { windowMs: 60_000, maxRequests: 20 };
 const MODEL = 'gemini-2.5-flash';
 
-// 유효한 PaletteName 집합 (런타임 검증용)
-const VALID_PALETTE_NAMES = new Set<string>([
-  'warm_cream',
-  'cool_white',
-  'deep_dark',
-  'nature_green',
-  'tech_navy',
-  'rose_soft',
-  'cream_cozy',
-  'sunset_warm',
-  'fresh_mint',
-]);
+// 유효한 PaletteName 집합 (런타임 검증용) — PALETTE_NAMES 단일 소스에서 구성
+const VALID_PALETTE_NAMES = new Set<string>(PALETTE_NAMES);
 
 // Stage 1: 카테고리 키워드 → 후보 팔레트 축소 (결정론적)
 const CATEGORY_PALETTE_CANDIDATES: Record<string, PaletteName[]> = {

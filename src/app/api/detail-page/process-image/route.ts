@@ -13,7 +13,7 @@ import sharp from 'sharp';
 import { requireAuth } from '@/lib/supabase/auth';
 import { checkRateLimit, getRateLimitKey } from '@/lib/rate-limit';
 import { uploadToStorage } from '@/lib/supabase/server';
-import { PALETTES } from '@/lib/detail-page/palette-config';
+import { PALETTES, PALETTE_NAMES } from '@/lib/detail-page/palette-config';
 import type { ImageProcessingMode } from '@/types/detail-page';
 
 // ─────────────────────────────────────────
@@ -31,9 +31,7 @@ const RequestSchema = z
     imageBase64: z.string().optional(),
     imageUrl: z.string().url().optional(),
     processingMode: z.enum(['original', 'bg_removed', 'bg_composed']),
-    palette: z
-      .enum(['warm_cream', 'cool_white', 'deep_dark', 'nature_green', 'tech_navy'])
-      .optional(),
+    palette: z.enum(PALETTE_NAMES).optional(),
     // storagePath는 클라이언트에서 받지 않는다. 경로 트래버설 취약점 방지.
   })
   .refine((d) => d.imageBase64 || d.imageUrl, {

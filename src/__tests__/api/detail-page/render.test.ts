@@ -267,6 +267,23 @@ describe('POST /api/detail-page/render', () => {
     expect(data.html).toContain('#1A1A1A');
   });
 
+  // 회귀: render Zod enum이 9종 전체를 허용해야 한다.
+  // (이전엔 5종만 허용해 신규 팔레트 추천 시 자동만들기가 400으로 실패했음)
+  it.each(['rose_soft', 'cream_cozy', 'sunset_warm', 'fresh_mint'] as const)(
+    '신규 팔레트 %s로 요청 시 200을 반환한다',
+    async (palette) => {
+      const request = makeRequest({
+        sections: [VALID_HERO_SECTION],
+        theme: { ...VALID_THEME, palette },
+      });
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data).toHaveProperty('html');
+    },
+  );
+
   it('fontStyle=sans → snippet wrapper에 Apple SD Gothic Neo 폰트 적용', async () => {
     const request = makeRequest({
       sections: [VALID_HERO_SECTION],
