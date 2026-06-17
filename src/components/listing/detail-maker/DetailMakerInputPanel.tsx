@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { C } from '@/lib/design-tokens';
 import CreativeBriefPanel from './CreativeBriefPanel';
 import DetailMakerThumbnailPanel from './DetailMakerThumbnailPanel';
 
 type Category = 'basic' | 'fashion' | 'living' | 'food';
+type Tab = 'detail' | 'thumbnail';
 
 const BRAND_PURPLE = '#7c3aed';
 
@@ -34,11 +35,12 @@ interface Props {
   selectedMoodId: string | null;
   isSuggestingMood: boolean;
   onSelectMood: (id: string) => void;
-  // 썸네일 생성
   thumbnailRefUrls: string[];
   isGeneratingThumbnail: boolean;
   thumbnailError: string | null;
   onGenerateThumbnail: (direction: string) => void;
+  referenceText: string;
+  setReferenceText: (v: string) => void;
 }
 
 export default function DetailMakerInputPanel({
@@ -63,8 +65,12 @@ export default function DetailMakerInputPanel({
   isGeneratingThumbnail,
   thumbnailError,
   onGenerateThumbnail,
+  referenceText,
+  setReferenceText,
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [activeTab, setActiveTab] = useState<Tab>('detail');
+  const [showReferenceText, setShowReferenceText] = useState(false);
 
   const canGenerate = !isGenerating && productName.trim().length > 0 && uploadedUrls.length > 0;
 
@@ -96,241 +102,346 @@ export default function DetailMakerInputPanel({
         </div>
       </div>
 
-      <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', flex: 1 }}>
-        {/* 상품명 */}
-        <div>
-          <label style={{ fontSize: '12px', fontWeight: 600, color: C.text, display: 'block', marginBottom: '6px' }}>
-            상품명 <span style={{ color: '#ef4444' }}>*</span>
-          </label>
-          <input
-            type="text"
-            value={productName}
-            onChange={e => setProductName(e.target.value)}
-            placeholder="예) 나이키 에어맥스 런닝화 270"
+      {/* 탭 토글 */}
+      <div
+        style={{
+          display: 'flex',
+          padding: '8px 16px',
+          borderBottom: `1px solid ${C.border}`,
+          gap: '4px',
+        }}
+      >
+        {(['detail', 'thumbnail'] as const).map(tab => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setActiveTab(tab)}
             style={{
-              width: '100%',
-              padding: '8px 10px',
+              flex: 1,
+              padding: '7px 0',
               fontSize: '13px',
-              border: `1px solid ${C.border}`,
+              fontWeight: activeTab === tab ? 700 : 400,
+              border: 'none',
               borderRadius: '6px',
-              background: '#fff',
-              color: '#111',
-              outline: 'none',
-              boxSizing: 'border-box',
+              background: activeTab === tab ? BRAND_PURPLE : 'transparent',
+              color: activeTab === tab ? '#fff' : C.textSub,
+              cursor: 'pointer',
+              transition: 'background 0.15s',
             }}
-          />
-        </div>
+          >
+            {tab === 'detail' ? '상세페이지' : '썸네일'}
+          </button>
+        ))}
+      </div>
 
-        {/* 카테고리 */}
-        <div>
-          <label style={{ fontSize: '12px', fontWeight: 600, color: C.text, display: 'block', marginBottom: '6px' }}>
-            카테고리
-          </label>
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-            {(Object.keys(CATEGORY_LABELS) as Category[]).map(cat => (
-              <button
-                key={cat}
-                onClick={() => setCategory(cat)}
+      {/* ── 상세페이지 탭 ── */}
+      {activeTab === 'detail' && (
+        <>
+          <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', flex: 1 }}>
+            {/* 상품명 */}
+            <div>
+              <label style={{ fontSize: '12px', fontWeight: 600, color: C.text, display: 'block', marginBottom: '6px' }}>
+                상품명 <span style={{ color: '#ef4444' }}>*</span>
+              </label>
+              <input
+                type="text"
+                value={productName}
+                onChange={e => setProductName(e.target.value)}
+                placeholder="예) 나이키 에어맥스 런닝화 270"
                 style={{
-                  padding: '5px 12px',
-                  fontSize: '12px',
-                  borderRadius: '20px',
-                  border: category === cat ? `1.5px solid ${BRAND_PURPLE}` : `1px solid ${C.border}`,
-                  background: category === cat ? '#f5f3ff' : '#fff',
-                  color: category === cat ? BRAND_PURPLE : C.text,
-                  cursor: 'pointer',
-                  fontWeight: category === cat ? 600 : 400,
+                  width: '100%',
+                  padding: '8px 10px',
+                  fontSize: '13px',
+                  border: `1px solid ${C.border}`,
+                  borderRadius: '6px',
+                  background: '#fff',
+                  color: '#111',
+                  outline: 'none',
+                  boxSizing: 'border-box',
                 }}
-              >
-                {CATEGORY_LABELS[cat]}
-              </button>
-            ))}
-          </div>
-        </div>
+              />
+            </div>
 
-        {/* 브랜드명 (선택) */}
-        <div>
-          <label style={{ fontSize: '12px', fontWeight: 600, color: C.text, display: 'block', marginBottom: '6px' }}>
-            브랜드명 <span style={{ fontSize: '11px', color: C.textSub, fontWeight: 400 }}>(선택)</span>
-          </label>
-          <input
-            type="text"
-            value={brandName}
-            onChange={e => setBrandName(e.target.value)}
-            placeholder="예) 나이키"
-            style={{
-              width: '100%',
-              padding: '8px 10px',
-              fontSize: '13px',
-              border: `1px solid ${C.border}`,
-              borderRadius: '6px',
-              background: '#fff',
-              color: '#111',
-              outline: 'none',
-              boxSizing: 'border-box',
-            }}
-          />
-        </div>
+            {/* 카테고리 */}
+            <div>
+              <label style={{ fontSize: '12px', fontWeight: 600, color: C.text, display: 'block', marginBottom: '6px' }}>
+                카테고리
+              </label>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {(Object.keys(CATEGORY_LABELS) as Category[]).map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => setCategory(cat)}
+                    style={{
+                      padding: '5px 12px',
+                      fontSize: '12px',
+                      borderRadius: '20px',
+                      border: category === cat ? `1.5px solid ${BRAND_PURPLE}` : `1px solid ${C.border}`,
+                      background: category === cat ? '#f5f3ff' : '#fff',
+                      color: category === cat ? BRAND_PURPLE : C.text,
+                      cursor: 'pointer',
+                      fontWeight: category === cat ? 600 : 400,
+                    }}
+                  >
+                    {CATEGORY_LABELS[cat]}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-        {/* 참고 이미지 */}
-        <div>
-          <label style={{ fontSize: '12px', fontWeight: 600, color: C.text, display: 'block', marginBottom: '6px' }}>
-            참고 이미지 <span style={{ color: '#ef4444' }}>*</span>{' '}
-            <span style={{ fontSize: '11px', color: C.textSub, fontWeight: 400 }}>
-              ({uploadedUrls.length}/6, 권장 3장)
-            </span>
-          </label>
+            {/* 브랜드명 */}
+            <div>
+              <label style={{ fontSize: '12px', fontWeight: 600, color: C.text, display: 'block', marginBottom: '6px' }}>
+                브랜드명 <span style={{ fontSize: '11px', color: C.textSub, fontWeight: 400 }}>(선택)</span>
+              </label>
+              <input
+                type="text"
+                value={brandName}
+                onChange={e => setBrandName(e.target.value)}
+                placeholder="예) 나이키"
+                style={{
+                  width: '100%',
+                  padding: '8px 10px',
+                  fontSize: '13px',
+                  border: `1px solid ${C.border}`,
+                  borderRadius: '6px',
+                  background: '#fff',
+                  color: '#111',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
 
-          {/* 업로드 영역 */}
-          {uploadedUrls.length < 6 && (
-            <div
-              onClick={() => fileInputRef.current?.click()}
-              style={{
-                border: `2px dashed ${C.border}`,
-                borderRadius: '8px',
-                padding: '20px',
-                textAlign: 'center',
-                cursor: 'pointer',
-                background: '#fafafa',
-                marginBottom: uploadedUrls.length > 0 ? '10px' : undefined,
-              }}
-            >
-              {uploading ? (
-                <div style={{ fontSize: '13px', color: C.textSub }}>업로드 중...</div>
-              ) : (
-                <>
-                  <div style={{ fontSize: '24px', marginBottom: '4px' }}>📷</div>
-                  <div style={{ fontSize: '12px', color: C.textSub }}>
-                    클릭하여 이미지 선택
-                    <br />
-                    JPG, PNG, WebP · 최대 10MB
-                  </div>
-                </>
+            {/* 참고 이미지 */}
+            <div>
+              <label style={{ fontSize: '12px', fontWeight: 600, color: C.text, display: 'block', marginBottom: '6px' }}>
+                참고 이미지 <span style={{ color: '#ef4444' }}>*</span>{' '}
+                <span style={{ fontSize: '11px', color: C.textSub, fontWeight: 400 }}>
+                  ({uploadedUrls.length}/6, 권장 3장)
+                </span>
+              </label>
+
+              {uploadedUrls.length < 6 && (
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  style={{
+                    border: `2px dashed ${C.border}`,
+                    borderRadius: '8px',
+                    padding: '20px',
+                    textAlign: 'center',
+                    cursor: 'pointer',
+                    background: '#fafafa',
+                    marginBottom: uploadedUrls.length > 0 ? '10px' : undefined,
+                  }}
+                >
+                  {uploading ? (
+                    <div style={{ fontSize: '13px', color: C.textSub }}>업로드 중...</div>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: '24px', marginBottom: '4px' }}>📷</div>
+                      <div style={{ fontSize: '12px', color: C.textSub }}>
+                        클릭하여 이미지 선택
+                        <br />
+                        JPG, PNG, WebP · 최대 10MB
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                style={{ display: 'none' }}
+                onChange={e => {
+                  if (e.target.files) onUploadFiles(e.target.files);
+                  e.target.value = '';
+                }}
+              />
+
+              {uploadedUrls.length > 0 && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+                  {uploadedUrls.map((url, idx) => (
+                    <div key={url} style={{ position: 'relative' }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={url}
+                        alt={`참고 이미지 ${idx + 1}`}
+                        style={{
+                          width: '100%',
+                          aspectRatio: '1',
+                          objectFit: 'cover',
+                          borderRadius: '6px',
+                          border: `1px solid ${C.border}`,
+                        }}
+                      />
+                      <button
+                        onClick={() => onRemoveImage(idx)}
+                        style={{
+                          position: 'absolute',
+                          top: '2px',
+                          right: '2px',
+                          width: '18px',
+                          height: '18px',
+                          borderRadius: '50%',
+                          background: 'rgba(0,0,0,0.6)',
+                          color: '#fff',
+                          border: 'none',
+                          cursor: 'pointer',
+                          fontSize: '10px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          lineHeight: 1,
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
-          )}
 
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            multiple
-            style={{ display: 'none' }}
-            onChange={e => {
-              if (e.target.files) onUploadFiles(e.target.files);
-              e.target.value = '';
-            }}
-          />
+            {/* 무드 브리프 */}
+            <CreativeBriefPanel
+              suggestedMoodIds={suggestedMoodIds}
+              selectedMoodId={selectedMoodId}
+              isSuggesting={isSuggestingMood}
+              onSelectMood={onSelectMood}
+            />
 
-          {/* 업로드된 이미지 썸네일 */}
-          {uploadedUrls.length > 0 && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
-              {uploadedUrls.map((url, idx) => (
-                <div key={url} style={{ position: 'relative' }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={url}
-                    alt={`참고 이미지 ${idx + 1}`}
-                    style={{
-                      width: '100%',
-                      aspectRatio: '1',
-                      objectFit: 'cover',
-                      borderRadius: '6px',
-                      border: `1px solid ${C.border}`,
-                    }}
-                  />
+            {/* 참고 텍스트 */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowReferenceText(v => !v)}
+                  style={{
+                    fontSize: '12px',
+                    color: BRAND_PURPLE,
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: 0,
+                    fontWeight: 600,
+                  }}
+                >
+                  {showReferenceText ? '참고 텍스트 ▲' : '+ 참고 텍스트 추가'}
+                </button>
+                {showReferenceText && (
                   <button
-                    onClick={() => onRemoveImage(idx)}
+                    type="button"
+                    onClick={() => { setReferenceText(''); setShowReferenceText(false); }}
+                    aria-label="참고 텍스트 초기화"
                     style={{
-                      position: 'absolute',
-                      top: '2px',
-                      right: '2px',
-                      width: '18px',
-                      height: '18px',
-                      borderRadius: '50%',
-                      background: 'rgba(0,0,0,0.6)',
-                      color: '#fff',
+                      fontSize: '14px',
+                      color: C.textSub,
+                      background: 'none',
                       border: 'none',
                       cursor: 'pointer',
-                      fontSize: '10px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
+                      padding: '0 2px',
                       lineHeight: 1,
                     }}
                   >
                     ×
                   </button>
+                )}
+              </div>
+              {showReferenceText && (
+                <div style={{ marginTop: '8px' }}>
+                  <textarea
+                    value={referenceText}
+                    onChange={e => setReferenceText(e.target.value)}
+                    placeholder="경쟁사 상세페이지, 제품 스펙, 셀링 포인트 등 참고할 내용을 자유롭게 입력하세요"
+                    maxLength={3000}
+                    rows={5}
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px',
+                      fontSize: '12px',
+                      color: '#111827',
+                      border: `1px solid ${C.border}`,
+                      borderRadius: '8px',
+                      resize: 'vertical',
+                      outline: 'none',
+                      lineHeight: 1.5,
+                      boxSizing: 'border-box',
+                      fontFamily: 'inherit',
+                    }}
+                  />
+                  <div style={{ textAlign: 'right', fontSize: '11px', color: C.textSub, marginTop: '2px' }}>
+                    {referenceText.length}/3000
+                  </div>
                 </div>
-              ))}
+              )}
             </div>
-          )}
+
+            {/* 에러 */}
+            {error && (
+              <div
+                style={{
+                  padding: '10px 12px',
+                  background: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  color: '#dc2626',
+                }}
+              >
+                {error}
+              </div>
+            )}
+          </div>
+
+          {/* 생성 버튼 (하단 고정) */}
+          <div style={{ padding: '12px 16px', borderTop: `1px solid ${C.border}` }}>
+            <button
+              onClick={onGenerate}
+              disabled={!canGenerate}
+              style={{
+                width: '100%',
+                padding: '12px',
+                fontSize: '14px',
+                fontWeight: 700,
+                borderRadius: '8px',
+                border: 'none',
+                background: canGenerate ? BRAND_PURPLE : C.border,
+                color: canGenerate ? '#fff' : C.textSub,
+                cursor: canGenerate ? 'pointer' : 'not-allowed',
+                transition: 'background 0.15s',
+              }}
+            >
+              {isGenerating ? '✨ 생성 중...' : '✨ AI 상세페이지 생성'}
+            </button>
+            {!productName.trim() && (
+              <div style={{ fontSize: '11px', color: C.textSub, textAlign: 'center', marginTop: '6px' }}>
+                상품명을 입력하세요
+              </div>
+            )}
+            {productName.trim() && uploadedUrls.length === 0 && (
+              <div style={{ fontSize: '11px', color: C.textSub, textAlign: 'center', marginTop: '6px' }}>
+                이미지를 1장 이상 업로드하세요
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ── 썸네일 탭 ── */}
+      {activeTab === 'thumbnail' && (
+        <div style={{ padding: '16px', flex: 1 }}>
+          <DetailMakerThumbnailPanel
+            refImageUrls={thumbnailRefUrls}
+            isGenerating={isGeneratingThumbnail}
+            error={thumbnailError}
+            onGenerate={onGenerateThumbnail}
+          />
         </div>
-
-        {/* 무드 브리프 */}
-        <CreativeBriefPanel
-          suggestedMoodIds={suggestedMoodIds}
-          selectedMoodId={selectedMoodId}
-          isSuggesting={isSuggestingMood}
-          onSelectMood={onSelectMood}
-        />
-
-        {/* AI 썸네일 생성 */}
-        <DetailMakerThumbnailPanel
-          refImageUrls={thumbnailRefUrls}
-          isGenerating={isGeneratingThumbnail}
-          error={thumbnailError}
-          onGenerate={onGenerateThumbnail}
-        />
-
-        {/* 에러 */}
-        {error && (
-          <div
-            style={{
-              padding: '10px 12px',
-              background: '#fef2f2',
-              border: '1px solid #fecaca',
-              borderRadius: '6px',
-              fontSize: '12px',
-              color: '#dc2626',
-            }}
-          >
-            {error}
-          </div>
-        )}
-      </div>
-
-      {/* 생성 버튼 (하단 고정) */}
-      <div style={{ padding: '12px 16px', borderTop: `1px solid ${C.border}` }}>
-        <button
-          onClick={onGenerate}
-          disabled={!canGenerate}
-          style={{
-            width: '100%',
-            padding: '12px',
-            fontSize: '14px',
-            fontWeight: 700,
-            borderRadius: '8px',
-            border: 'none',
-            background: canGenerate ? BRAND_PURPLE : C.border,
-            color: canGenerate ? '#fff' : C.textSub,
-            cursor: canGenerate ? 'pointer' : 'not-allowed',
-            transition: 'background 0.15s',
-          }}
-        >
-          {isGenerating ? '✨ 생성 중...' : '✨ AI 상세페이지 생성'}
-        </button>
-        {!productName.trim() && (
-          <div style={{ fontSize: '11px', color: C.textSub, textAlign: 'center', marginTop: '6px' }}>
-            상품명을 입력하세요
-          </div>
-        )}
-        {productName.trim() && uploadedUrls.length === 0 && (
-          <div style={{ fontSize: '11px', color: C.textSub, textAlign: 'center', marginTop: '6px' }}>
-            이미지를 1장 이상 업로드하세요
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }
