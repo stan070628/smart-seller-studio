@@ -408,6 +408,11 @@ export function buildDetailPageUserPrompt(
    * 디자인 문서 §5.3 참고.
    */
   conversationContext?: import('@/lib/conversational-detail/types').ConversationContext,
+  /**
+   * 판매자가 직접 입력한 참고 텍스트 (경쟁사 분석, 강조 포인트 등).
+   * 공백만 있는 경우 무시. 스펙 블록 이후, 최종 지시 직전에 삽입.
+   */
+  referenceText?: string,
 ): string {
   const lines: string[] = [];
 
@@ -441,6 +446,10 @@ export function buildDetailPageUserPrompt(
     lines.push('- 예: "44개입 (총 4.1kg) / 개당 93.2g"처럼 소분 수량, 총량, 개당 중량을 함께 보여주세요.');
     lines.push('- 원재료·함량·내용량 항목도 전체 중량보다 실제 판매되는 소분 포장 단위를 먼저 노출하세요.');
     lines.push('↑ 위 스펙에 명시되지 않은 속성(핏, 두께감, 질감 등)은 절대 기재하지 마세요.');
+  }
+
+  if (referenceText?.trim()) {
+    lines.push(`\n[판매자 참고 텍스트]\n${referenceText.trim()}`);
   }
 
   lines.push(

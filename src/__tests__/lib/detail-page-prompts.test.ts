@@ -272,6 +272,36 @@ describe('buildDetailPageUserPrompt', () => {
       expect(result).not.toMatch(/- usp:\s*$/m);
     });
   });
+
+  describe('referenceText (판매자 참고 텍스트)', () => {
+    it('referenceText가 있으면 프롬프트에 판매자 참고 텍스트 블록이 포함된다', () => {
+      const result = buildDetailPageUserPrompt(
+        validImageAnalysis,
+        '텀블러',
+        undefined,
+        undefined,
+        '경쟁사 셀링 포인트: 보온력 뛰어남, 가벼움',
+      );
+      expect(result).toContain('[판매자 참고 텍스트]');
+      expect(result).toContain('경쟁사 셀링 포인트: 보온력 뛰어남, 가벼움');
+    });
+
+    it('referenceText가 없으면 판매자 참고 텍스트 블록이 없다', () => {
+      const result = buildDetailPageUserPrompt(validImageAnalysis, '텀블러');
+      expect(result).not.toContain('[판매자 참고 텍스트]');
+    });
+
+    it('referenceText가 공백만이면 판매자 참고 텍스트 블록이 없다', () => {
+      const result = buildDetailPageUserPrompt(
+        validImageAnalysis,
+        '텀블러',
+        undefined,
+        undefined,
+        '   ',
+      );
+      expect(result).not.toContain('[판매자 참고 텍스트]');
+    });
+  });
 });
 
 // ─── checkProhibitedPhrases ─────────────────────────────────────────────────
