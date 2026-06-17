@@ -42,6 +42,9 @@ export default function DetailMakerClient() {
   const [suggestedMoodIds, setSuggestedMoodIds] = useState<string[]>([]);
   const [isSuggestingMood, setIsSuggestingMood] = useState(false);
 
+  // 참고 텍스트
+  const [referenceText, setReferenceText] = useState('');
+
   // 썸네일
   const [generatedThumbnails, setGeneratedThumbnails] = useState<string[]>([]);
   const [isGeneratingThumbnail, setIsGeneratingThumbnail] = useState(false);
@@ -351,6 +354,7 @@ export default function DetailMakerClient() {
           productName: fullProductName,
           category,
           mobileMode: true,
+          referenceText: referenceText.trim() || undefined,
         }),
       });
       const json = await res.json();
@@ -473,6 +477,8 @@ export default function DetailMakerClient() {
         isGeneratingThumbnail={isGeneratingThumbnail}
         thumbnailError={thumbnailError}
         onGenerateThumbnail={handleGenerateThumbnail}
+        referenceText={referenceText}
+        setReferenceText={setReferenceText}
       />
 
       {/* 우측 — DetailPageEditor 또는 EmptyState */}
