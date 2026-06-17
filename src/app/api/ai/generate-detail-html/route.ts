@@ -126,6 +126,8 @@ const RequestSchema = z.object({
       ).max(20),
     })
     .optional(),
+  /** 판매자가 AI 생성 시 참고할 자유 텍스트 (경쟁사 카피, 스펙, 셀링 포인트 등) */
+  referenceText: z.string().max(3000).optional(),
 }).refine(
   (d) => (d.images && d.images.length > 0) || (d.imageUrls && d.imageUrls.length > 0),
   { message: 'images 또는 imageUrls 중 하나는 필수입니다.' },
@@ -351,7 +353,7 @@ export async function POST(
     );
   }
 
-  const { images: rawImages, imageUrls, productName, existingHtml, studioMode, mobileMode, productSpecs, category, conversationContext, includeImagePrompts } = parseResult.data;
+  const { images: rawImages, imageUrls, productName, existingHtml, studioMode, mobileMode, productSpecs, category, conversationContext, includeImagePrompts, referenceText } = parseResult.data;
 
   // imageUrls가 있으면 서버에서 fetch → base64 변환 후 rawImages와 합산
   let images: Array<{ imageBase64: string; mimeType: AllowedMimeType }>;
@@ -497,7 +499,7 @@ export async function POST(
 
   // ── 모바일 모드: MobileDetailPageContent 생성 → 섹션 렌더링 ──
   if (mobileMode) {
-    const mobileUserMessage = buildDetailPageUserPrompt(imageAnalysis, productName, productSpecs, conversationContext);
+    const mobileUserMessage = buildDetailPageUserPrompt(imageAnalysis, productName, productSpecs, conversationContext, referenceText);
     let rawMobileText: string;
     try {
       const resp = await withRetry(
@@ -598,7 +600,7 @@ export async function POST(
   }
 
   // DetailPageContent 생성
-  const userMessage = buildDetailPageUserPrompt(imageAnalysis, productName, productSpecs, conversationContext);
+  const userMessage = buildDetailPageUserPrompt(imageAnalysis, productName, productSpecs, conversationContext, referenceText);
 
   let rawCopyText: string;
   try {
