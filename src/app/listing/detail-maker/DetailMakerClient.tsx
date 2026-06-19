@@ -50,6 +50,9 @@ export default function DetailMakerClient() {
   const [isGeneratingThumbnail, setIsGeneratingThumbnail] = useState(false);
   const [editingThumbnailUrl, setEditingThumbnailUrl] = useState<string | null>(null);
   const [thumbnailError, setThumbnailError] = useState<string | null>(null);
+  // 썸네일 탭 전용 참조 이미지
+  const [thumbnailExtraUrls, setThumbnailExtraUrls] = useState<string[]>([]);
+  const [uploadingThumbnailRef, setUploadingThumbnailRef] = useState(false);
 
   // ─── 이미지 업로드 ──────────────────────────────────────────────────────────
   async function uploadOne(file: File): Promise<string> {
@@ -110,13 +113,33 @@ export default function DetailMakerClient() {
     setTheme(prev => ({ ...prev, palette: preset.palette }));
   }
 
+  // ─── 썸네일 전용 참조 이미지 업로드/제거 ────────────────────────────────────
+  async function handleUploadThumbnailRefFiles(files: FileList | File[]) {
+    setUploadingThumbnailRef(true);
+    setThumbnailError(null);
+    try {
+      const arr = Array.from(files).slice(0, 3 - thumbnailExtraUrls.length);
+      const urls = await Promise.all(arr.map(uploadOne));
+      setThumbnailExtraUrls(prev => [...prev, ...urls].slice(0, 3));
+    } catch (e) {
+      setThumbnailError(e instanceof Error ? e.message : '이미지 업로드 실패');
+    } finally {
+      setUploadingThumbnailRef(false);
+    }
+  }
+
+  function handleRemoveThumbnailRefImage(idx: number) {
+    setThumbnailExtraUrls(prev => prev.filter((_, i) => i !== idx));
+  }
+
   // ─── 썸네일 생성/수정/관리 ────────────────────────────────────────────────────
   async function handleGenerateThumbnail(direction: string) {
-    if (uploadedUrls.length === 0) { setThumbnailError('참고 이미지를 먼저 업로드하세요.'); return; }
+    const refImgs = thumbnailExtraUrls.length > 0 ? thumbnailExtraUrls : uploadedUrls;
+    if (refImgs.length === 0) { setThumbnailError('참고 이미지를 먼저 업로드하세요.'); return; }
     setIsGeneratingThumbnail(true);
     setThumbnailError(null);
     try {
-      const url = await generateCoupangThumbnail(uploadedUrls.slice(0, 3), direction);
+      const url = await generateCoupangThumbnail(refImgs.slice(0, 3), direction);
       setGeneratedThumbnails(prev => [...prev, url]);
     } catch (e) {
       setThumbnailError(e instanceof Error ? e.message : '썸네일 생성 중 오류가 발생했습니다.');
@@ -477,6 +500,10 @@ export default function DetailMakerClient() {
         isGeneratingThumbnail={isGeneratingThumbnail}
         thumbnailError={thumbnailError}
         onGenerateThumbnail={handleGenerateThumbnail}
+        thumbnailExtraUrls={thumbnailExtraUrls}
+        uploadingThumbnailRef={uploadingThumbnailRef}
+        onUploadThumbnailRef={handleUploadThumbnailRefFiles}
+        onRemoveThumbnailRef={handleRemoveThumbnailRefImage}
         referenceText={referenceText}
         setReferenceText={setReferenceText}
       />

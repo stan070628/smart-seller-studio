@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Wand2, Loader2 } from 'lucide-react';
 import { C } from '@/lib/design-tokens';
 
@@ -16,6 +16,11 @@ interface Props {
   isGenerating: boolean;
   error: string | null;
   onGenerate: (direction: string) => void;
+  // 썸네일 탭 전용 참조 이미지
+  extraRefUrls?: string[];
+  uploadingExtraRef?: boolean;
+  onUploadExtraRef?: (files: FileList | File[]) => void;
+  onRemoveExtraRef?: (idx: number) => void;
 }
 
 export default function DetailMakerThumbnailPanel({
@@ -23,15 +28,117 @@ export default function DetailMakerThumbnailPanel({
   isGenerating,
   error,
   onGenerate,
+  extraRefUrls = [],
+  uploadingExtraRef = false,
+  onUploadExtraRef,
+  onRemoveExtraRef,
 }: Props) {
   const [direction, setDirection] = useState('');
-  const hasRef = refImageUrls.length > 0;
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const effectiveCount = extraRefUrls.length > 0 ? extraRefUrls.length : Math.min(refImageUrls.length, 3);
+  const hasRef = extraRefUrls.length > 0 || refImageUrls.length > 0;
   const canGenerate = hasRef && direction.trim().length >= 5 && !isGenerating;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {/* 섹션 제목 */}
       <div style={{ fontSize: 12, fontWeight: 600, color: C.text }}>AI 썸네일 생성</div>
+
+      {/* 썸네일 전용 참조 이미지 업로드 */}
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 6 }}>
+          썸네일 참조 이미지{' '}
+          <span style={{ fontSize: 11, color: C.textSub, fontWeight: 400 }}>
+            ({extraRefUrls.length}/3) — 없으면 상세페이지 이미지 사용
+          </span>
+        </div>
+
+        {/* 업로드 영역 */}
+        {extraRefUrls.length < 3 && onUploadExtraRef && (
+          <div
+            onClick={() => fileInputRef.current?.click()}
+            style={{
+              border: `2px dashed ${C.border}`,
+              borderRadius: 8,
+              padding: '14px',
+              textAlign: 'center',
+              cursor: 'pointer',
+              background: '#fafafa',
+              marginBottom: extraRefUrls.length > 0 ? 8 : 0,
+            }}
+          >
+            {uploadingExtraRef ? (
+              <div style={{ fontSize: 12, color: C.textSub }}>업로드 중...</div>
+            ) : (
+              <>
+                <div style={{ fontSize: 20, marginBottom: 2 }}>📷</div>
+                <div style={{ fontSize: 11, color: C.textSub }}>
+                  클릭하여 이미지 선택 (최대 3장)
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          multiple
+          style={{ display: 'none' }}
+          onChange={e => {
+            if (e.target.files && onUploadExtraRef) onUploadExtraRef(e.target.files);
+            e.target.value = '';
+          }}
+        />
+
+        {/* 업로드된 이미지 그리드 */}
+        {extraRefUrls.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+            {extraRefUrls.map((url, idx) => (
+              <div key={url} style={{ position: 'relative' }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={url}
+                  alt={`썸네일 참조 ${idx + 1}`}
+                  style={{
+                    width: '100%',
+                    aspectRatio: '1',
+                    objectFit: 'cover',
+                    borderRadius: 6,
+                    border: `1px solid ${C.border}`,
+                  }}
+                />
+                {onRemoveExtraRef && (
+                  <button
+                    onClick={() => onRemoveExtraRef(idx)}
+                    style={{
+                      position: 'absolute',
+                      top: 2,
+                      right: 2,
+                      width: 18,
+                      height: 18,
+                      borderRadius: '50%',
+                      background: 'rgba(0,0,0,0.6)',
+                      color: '#fff',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: 10,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      lineHeight: 1,
+                    }}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* 참조 이미지 상태 표시 */}
       <div
@@ -44,7 +151,11 @@ export default function DetailMakerThumbnailPanel({
           color: hasRef ? '#16a34a' : '#9ca3af',
         }}
       >
-        {hasRef ? `참조 사진 ${Math.min(refImageUrls.length, 3)}장 사용` : '참고 이미지를 먼저 업로드하세요'}
+        {extraRefUrls.length > 0
+          ? `썸네일 전용 이미지 ${effectiveCount}장 사용`
+          : refImageUrls.length > 0
+            ? `상세페이지 이미지 ${effectiveCount}장 사용`
+            : '참고 이미지를 업로드하세요'}
       </div>
 
       {/* 연출 방향 입력 */}

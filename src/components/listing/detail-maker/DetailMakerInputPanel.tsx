@@ -39,6 +39,10 @@ interface Props {
   isGeneratingThumbnail: boolean;
   thumbnailError: string | null;
   onGenerateThumbnail: (direction: string) => void;
+  thumbnailExtraUrls: string[];
+  uploadingThumbnailRef: boolean;
+  onUploadThumbnailRef: (files: FileList | File[]) => void;
+  onRemoveThumbnailRef: (idx: number) => void;
   referenceText: string;
   setReferenceText: (v: string) => void;
 }
@@ -65,6 +69,10 @@ export default function DetailMakerInputPanel({
   isGeneratingThumbnail,
   thumbnailError,
   onGenerateThumbnail,
+  thumbnailExtraUrls,
+  uploadingThumbnailRef,
+  onUploadThumbnailRef,
+  onRemoveThumbnailRef,
   referenceText,
   setReferenceText,
 }: Props) {
@@ -439,6 +447,10 @@ export default function DetailMakerInputPanel({
             isGenerating={isGeneratingThumbnail}
             error={thumbnailError}
             onGenerate={onGenerateThumbnail}
+            extraRefUrls={thumbnailExtraUrls}
+            uploadingExtraRef={uploadingThumbnailRef}
+            onUploadExtraRef={onUploadThumbnailRef}
+            onRemoveExtraRef={onRemoveThumbnailRef}
           />
         </div>
       )}

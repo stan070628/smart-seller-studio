@@ -24,6 +24,10 @@ const baseProps = {
   isGeneratingThumbnail: false,
   thumbnailError: null,
   onGenerateThumbnail: vi.fn(),
+  thumbnailExtraUrls: [],
+  uploadingThumbnailRef: false,
+  onUploadThumbnailRef: vi.fn(),
+  onRemoveThumbnailRef: vi.fn(),
   referenceText: '',
   setReferenceText: vi.fn(),
 };
