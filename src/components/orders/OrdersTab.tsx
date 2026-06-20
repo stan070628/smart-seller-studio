@@ -455,8 +455,8 @@ export default function OrdersTab() {
                         {firstName?.sellerProductName ?? '-'}
                         {extraCount > 0 && <span style={{ marginLeft: '4px', fontSize: '11px', color: '#71717a' }}>외 {extraCount}건</span>}
                       </td>
-                      <td style={{ ...td, textAlign: 'right', color: '#71717a' }}>{totalQty}</td>
-                      <td style={{ ...td, textAlign: 'right', fontWeight: 600 }}>{totalAmt.toLocaleString()}원</td>
+                      <td style={{ ...td, textAlign: 'right', color: '#18181b' }}>{totalQty}</td>
+                      <td style={{ ...td, textAlign: 'right', fontWeight: 600, color: '#18181b' }}>{totalAmt.toLocaleString()}원</td>
                       <td style={{ ...td, textAlign: 'center' }}><StatusBadge status={order.status} platform={order.platform} /></td>
                       <td style={{ ...td, color: '#71717a', fontSize: '12px' }}>{formatDate(order.orderedAt)}</td>
                       <td style={{ ...td, color: '#71717a', fontSize: '12px' }}>{order.receiverName ?? '-'}</td>

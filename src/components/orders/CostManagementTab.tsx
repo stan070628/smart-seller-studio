@@ -1,52 +1,14 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, Truck, Package, Search, Trash2, TrendingUp, TrendingDown, AlertCircle, CloudDownload, Pencil } from 'lucide-react';
+import { Plus, Truck, Package, Search, Trash2, TrendingUp, TrendingDown, AlertCircle, CloudDownload } from 'lucide-react';
 import CostEntryDrawer from './CostEntryDrawer';
 import ShippingGroupModal from './ShippingGroupModal';
 import AddProductModal from './AddProductModal';
 import RocketGrowthShipmentModal from './RocketGrowthShipmentModal';
 import RgShipmentHistoryPopover from './RgShipmentHistoryPopover';
 import { WinnerBadge } from '@/components/ui';
-
-function VariantStockBreakdown({
-  productId,
-  variants,
-}: {
-  productId: string;
-  variants: Record<string, string>;
-}) {
-  const [breakdown, setBreakdown] = React.useState<Record<string, number> | null>(null);
-
-  React.useEffect(() => {
-    fetch(`/api/cost-management/products/${productId}/variant-stock`)
-      .then((r) => r.json())
-      .then((json) => {
-        if (json.success) setBreakdown(json.data as Record<string, number>);
-      })
-      .catch(() => null);
-  }, [productId]);
-
-  if (!breakdown) return null;
-
-  const variantNames = Object.values(variants);
-  const hasData = variantNames.some((name) => (breakdown[name] ?? 0) !== 0);
-  if (!hasData) return null;
-
-  return (
-    <div style={{ fontSize: '9px', color: '#71717a', marginTop: '3px', textAlign: 'left' }}>
-      {variantNames.map((name) => {
-        const qty = breakdown[name] ?? 0;
-        return (
-          <div key={name} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-            <span>{name}</span>
-            <span style={{ color: qty > 0 ? '#16a34a' : qty < 0 ? '#ef4444' : '#a1a1aa' }}>{qty}개</span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+import ChannelCell from './ChannelCell';
 
 interface ProductRow {
   id: string;
@@ -54,6 +16,9 @@ interface ProductRow {
   seller_product_id: number | null;
   vendor_item_id: number | null;
   naver_channel_product_no: number | null;
+  variants: Record<string, string> | null;
+  naver_variants: Record<string, string> | null;
+  naver_origin_product_no: number | null;
   subdivision_unit: number | null;
   platform_fee_rate: number;
   entry_count: number;
@@ -71,7 +36,6 @@ interface ProductRow {
   margin_rate: number;
   breakeven_roas: number;
   winner_status: 'winner' | 'watch' | 'normal';
-  variants: Record<string, string> | null;
 }
 
 function fmt(n: number): string {
@@ -490,6 +454,10 @@ export default function CostManagementTab() {
 
   const saveTriggeredByKey = useRef(false);
 
+  function handleProductUpdate(productId: string, updates: Partial<ProductRow>) {
+    setProducts((prev) => prev.map((item) => item.id === productId ? { ...item, ...updates } : item));
+  }
+
   async function saveAdSpend(productId: string, value: string) {
     const num = parseFloat(value.replace(/,/g, ''));
     if (isNaN(num) || num < 0) {
@@ -841,28 +809,11 @@ export default function CostManagementTab() {
                         </div>
                       </div>
                     ) : (
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px', flexWrap: 'wrap' }}>
-                        {p.seller_product_id && p.vendor_item_id ? (
-                          <span style={{ background: '#f5f3ff', color: '#7c3aed', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>윙+RG</span>
-                        ) : p.seller_product_id ? (
-                          <span style={{ background: '#fef2f2', color: '#be0014', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>윙판매</span>
-                        ) : p.vendor_item_id ? (
-                          <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>RG</span>
-                        ) : null}
-                        {p.naver_channel_product_no && (
-                          <span style={{ background: '#f0fff8', color: '#03c75a', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>네이버</span>
-                        )}
-                        {!p.seller_product_id && !p.vendor_item_id && !p.naver_channel_product_no && (
-                          <span style={{ color: '#ccc', fontSize: '10px' }}>—</span>
-                        )}
-                        <button
-                          onClick={() => openEditChannel(p)}
-                          title="채널 ID 편집"
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '1px 2px', color: '#d4d4d4', lineHeight: 1, display: 'flex', alignItems: 'center' }}
-                        >
-                          <Pencil size={10} />
-                        </button>
-                      </div>
+                      <ChannelCell
+                        product={p}
+                        onEditChannel={() => openEditChannel(p)}
+                        onProductUpdate={(updates) => handleProductUpdate(p.id, updates as Partial<ProductRow>)}
+                      />
                     )}
                   </td>
                   <td style={{ padding: '10px 12px', fontWeight: 500, color: p.entry_count === 0 ? '#999' : '#18181b' }}>{p.product_name}</td>
@@ -876,10 +827,7 @@ export default function CostManagementTab() {
                     {p.weighted_avg_rg_shipping > 0 ? fmt(p.weighted_avg_rg_shipping) : '—'}
                   </td>
                   <td style={{ padding: '10px 12px', textAlign: 'right', color: '#18181b' }}>
-                    <div>{fmt(p.current_stock)}개</div>
-                    {p.variants && Object.keys(p.variants).length > 0 && (
-                      <VariantStockBreakdown productId={p.id} variants={p.variants} />
-                    )}
+                    {fmt(p.current_stock)}개
                   </td>
                   <td style={{ padding: '10px 12px', textAlign: 'right', color: '#52525b' }}>
                     {p.current_stock > 0 ? `${fmt(p.stock_value)}원` : '—'}
