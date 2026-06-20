@@ -64,8 +64,8 @@ describe('GET /api/cost-management/coupang-product-options', () => {
     expect(json.success).toBe(true);
     expect(json.productName).toBe('테스트 상품');
     expect(json.data).toHaveLength(2);
-    expect(json.data[0]).toMatchObject({ vendorItemId: 111, alreadyAdded: true });
-    expect(json.data[1]).toMatchObject({ vendorItemId: 222, alreadyAdded: false });
+    expect(json.data[0]).toMatchObject({ vendorItemId: '111', alreadyAdded: true });
+    expect(json.data[1]).toMatchObject({ vendorItemId: '222', alreadyAdded: false });
   });
 
   it('vendorItemId가 0인 항목 필터링', async () => {
@@ -80,6 +80,6 @@ describe('GET /api/cost-management/coupang-product-options', () => {
     const res = await GET(makeRequest('999'));
     const json = await res.json();
     expect(json.data).toHaveLength(1);
-    expect(json.data[0].vendorItemId).toBe(333);
+    expect(json.data[0].vendorItemId).toBe('333');
   });
 });

@@ -21,23 +21,23 @@ export async function GET(request: NextRequest) {
 
     const options = rawItems
       .map((i) => ({
-        vendorItemId: Number(i.vendorItemId ?? 0),
+        vendorItemId: String(i.vendorItemId ?? ''),
         itemName: String(i.itemName ?? i.vendorItemName ?? ''),
         salePrice: Number(i.salePrice ?? i.originalPrice ?? 0),
       }))
-      .filter((i) => i.vendorItemId > 0);
+      .filter((i) => i.vendorItemId !== '' && i.vendorItemId !== '0');
 
     // 현재 유저의 등록된 vendor_item_id 목록 조회 → alreadyAdded 마킹
     const pool = getSourcingPool();
     const { rows } = await pool.query(
-      `SELECT vendor_item_id FROM product_costs WHERE user_id = $1`,
+      `SELECT vendor_item_id FROM product_costs WHERE user_id = $1 AND vendor_item_id IS NOT NULL`,
       [user.userId],
     );
     const existingIds = new Set(rows.map((r: Record<string, unknown>) => String(r.vendor_item_id)));
 
     const data = options.map((opt) => ({
       ...opt,
-      alreadyAdded: existingIds.has(String(opt.vendorItemId)),
+      alreadyAdded: existingIds.has(opt.vendorItemId),
     }));
 
     return NextResponse.json({ success: true, productName, data });
