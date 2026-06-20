@@ -41,8 +41,8 @@ describe('GET /api/listing/sourcing', () => {
   it('ids 배치 조회 후 map 반환', async () => {
     mockQuery.mockResolvedValueOnce({
       rows: [
-        { product_id: '111', sourcing_type: 'online', sourcing_value: 'https://1688.com/x' },
-        { product_id: '222', sourcing_type: 'offline', sourcing_value: '코스트코' },
+        { product_id: '111', sourcing_type: 'online', sourcing_value: 'https://1688.com/x', costco_stock_status: null, costco_stock_checked_at: null },
+        { product_id: '222', sourcing_type: 'offline', sourcing_value: '코스트코', costco_stock_status: null, costco_stock_checked_at: null },
       ],
     });
     const req = new NextRequest('http://localhost/api/listing/sourcing?platform=coupang&ids=111,222');
@@ -50,8 +50,23 @@ describe('GET /api/listing/sourcing', () => {
     const json = await res.json();
     expect(res.status).toBe(200);
     expect(json.sourcing).toEqual({
-      '111': { type: 'online', value: 'https://1688.com/x' },
-      '222': { type: 'offline', value: '코스트코' },
+      '111': { type: 'online', value: 'https://1688.com/x', costcoStockStatus: null, costcoStockCheckedAt: null },
+      '222': { type: 'offline', value: '코스트코', costcoStockStatus: null, costcoStockCheckedAt: null },
+    });
+  });
+
+  it('코스트코 URL 소싱이 있고 재고 상태 값이 있는 경우 반환', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        { product_id: '333', sourcing_type: 'online', sourcing_value: 'https://www.costco.co.kr/p/1234567', costco_stock_status: 'inStock', costco_stock_checked_at: '2026-06-20T00:00:00Z' },
+      ],
+    });
+    const req = new NextRequest('http://localhost/api/listing/sourcing?platform=coupang&ids=333');
+    const res = await GET(req);
+    const json = await res.json();
+    expect(res.status).toBe(200);
+    expect(json.sourcing).toEqual({
+      '333': { type: 'online', value: 'https://www.costco.co.kr/p/1234567', costcoStockStatus: 'inStock', costcoStockCheckedAt: '2026-06-20T00:00:00Z' },
     });
   });
 

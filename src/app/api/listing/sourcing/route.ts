@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     const sourcing: Record<string, {
       type: string;
       value: string;
-      costcoStockStatus: string | null;
+      costcoStockStatus: 'inStock' | 'outOfStock' | 'lowStock' | null;
       costcoStockCheckedAt: string | null;
     }> = {};
     for (const row of result.rows) {
