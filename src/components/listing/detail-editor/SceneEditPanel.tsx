@@ -180,16 +180,29 @@ export default function SceneEditPanel({
               const selected = selectedRefUrls.includes(url);
               const disabled = !selected && allRefUrls.length >= MAX_REF;
               return (
-                <div
+                <button
                   key={url}
-                  role="img"
+                  type="button"
                   onClick={() => !disabled && toggleRefUrl(url)}
-                  style={{ position: 'relative', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.4 : 1 }}
+                  disabled={disabled}
+                  aria-pressed={selected}
+                  aria-label={`레퍼런스 이미지 ${selectedRefUrls.indexOf(url) + 1 || ''}`}
+                  style={{
+                    position: 'relative',
+                    cursor: disabled ? 'not-allowed' : 'pointer',
+                    opacity: disabled ? 0.4 : 1,
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    display: 'block',
+                    width: '100%',
+                  }}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={url}
                     alt=""
+                    role="img"
                     style={{
                       width: '100%', aspectRatio: '1', objectFit: 'cover',
                       borderRadius: 4, border: `2px solid ${selected ? BRAND_PURPLE : C.border}`,
@@ -203,7 +216,7 @@ export default function SceneEditPanel({
                       fontSize: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700,
                     }}>✓</div>
                   )}
-                </div>
+                </button>
               );
             })}
           </div>
