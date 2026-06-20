@@ -733,7 +733,12 @@ export const useListingStore = create<ListingStore>()(
         const prevMap = get().sourcingMap;
         const hadKey = key in prevMap;
         const prevVal = prevMap[key] ?? null;
-        set((s) => ({ sourcingMap: { ...s.sourcingMap, [key]: { type, value } } }), false, 'listing/saveSourcing/optimistic');
+        set((s) => ({
+          sourcingMap: {
+            ...s.sourcingMap,
+            [key]: { ...(s.sourcingMap[key] ?? {}), type, value },
+          },
+        }), false, 'listing/saveSourcing/optimistic');
         try {
           const res = await fetch('/api/listing/sourcing', {
             method: 'PUT',
@@ -793,6 +798,8 @@ export const useListingStore = create<ListingStore>()(
           const json = await res.json() as { status: 'inStock' | 'outOfStock' | 'lowStock'; checkedAt: string };
           set((s) => {
             const existing = s.sourcingMap[key];
+            // entry가 없으면(fetchSourcing 미완료 또는 삭제 상태) 상태 변경 없이 skip.
+            // DB는 이미 업데이트됐으므로 다음 fetchSourcing 시 반영됨.
             if (!existing) return {};
             return {
               sourcingMap: {
