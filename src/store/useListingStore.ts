@@ -16,6 +16,14 @@ import type { DetailPageContent } from '@/lib/ai/prompts/detail-page';
 import type { CategoryKey, QuestionAnswer } from '@/lib/conversational-detail/types';
 import type { AiImageSlot } from '@/lib/detail-page/ai-html-builder';
 
+// ─── SourcingEntry 타입 ─────────────────────────────────────────────────────
+export type SourcingEntry = {
+  type: 'online' | 'offline';
+  value: string;
+  costcoStockStatus?: 'inStock' | 'outOfStock' | 'lowStock' | null;
+  costcoStockCheckedAt?: string | null;
+};
+
 // ─── SharedDraft 타입 ────────────────────────────────────────────────────────
 // 탭 이동 시에도 입력값이 유지되도록 공통 필드를 스토어에서 관리
 interface SharedDraft {
@@ -341,7 +349,7 @@ interface ListingStore {
   clearError: () => void;
 
   // ─── 소싱 출처 ──────────────────────────────────────────────────────────────
-  sourcingMap: Record<string, { type: 'online' | 'offline'; value: string } | null>;
+  sourcingMap: Record<string, SourcingEntry | null>;
   fetchSourcing: (platform: 'coupang' | 'naver', ids: string[]) => Promise<void>;
   saveSourcing: (
     platform: 'coupang' | 'naver',
@@ -351,6 +359,11 @@ interface ListingStore {
     productName?: string,
   ) => Promise<boolean>;
   deleteSourcing: (platform: 'coupang' | 'naver', productId: string) => Promise<boolean>;
+  checkCostcoStock: (
+    platform: 'coupang' | 'naver',
+    productId: string,
+    sourcingUrl: string,
+  ) => Promise<'inStock' | 'outOfStock' | 'lowStock' | null>;
 
   // ─── SharedDraft 액션 ───────────────────────────────────────────────────────
   sharedDraft: SharedDraft;
@@ -700,8 +713,13 @@ export const useListingStore = create<ListingStore>()(
           if (!res.ok) return;
           set((s) => ({
             sourcingMap: { ...s.sourcingMap, ...Object.fromEntries(
-              Object.entries((json.sourcing ?? {}) as Record<string, { type: 'online' | 'offline'; value: string }>).map(
-                ([id, val]) => [`${platform}:${id}`, val],
+              Object.entries((json.sourcing ?? {}) as Record<string, { type: 'online' | 'offline'; value: string; costcoStockStatus?: string | null; costcoStockCheckedAt?: string | null }>).map(
+                ([id, val]) => [`${platform}:${id}`, {
+                  type: val.type,
+                  value: val.value,
+                  costcoStockStatus: (val.costcoStockStatus as SourcingEntry['costcoStockStatus']) ?? null,
+                  costcoStockCheckedAt: val.costcoStockCheckedAt ?? null,
+                } satisfies SourcingEntry],
               ),
             )},
           }), false, 'listing/fetchSourcing');
@@ -760,6 +778,32 @@ export const useListingStore = create<ListingStore>()(
             return { sourcingMap: next };
           }, false, 'listing/deleteSourcing/rollback');
           return false;
+        }
+      },
+
+      checkCostcoStock: async (platform, productId, sourcingUrl) => {
+        const key = `${platform}:${productId}`;
+        try {
+          const res = await fetch('/api/listing/sourcing/check-costco-stock', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ platform, productId, sourcingUrl }),
+          });
+          if (!res.ok) return null;
+          const json = await res.json() as { status: 'inStock' | 'outOfStock' | 'lowStock'; checkedAt: string };
+          set((s) => {
+            const existing = s.sourcingMap[key];
+            if (!existing) return {};
+            return {
+              sourcingMap: {
+                ...s.sourcingMap,
+                [key]: { ...existing, costcoStockStatus: json.status, costcoStockCheckedAt: json.checkedAt },
+              },
+            };
+          }, false, 'listing/checkCostcoStock');
+          return json.status;
+        } catch {
+          return null;
         }
       },
 
