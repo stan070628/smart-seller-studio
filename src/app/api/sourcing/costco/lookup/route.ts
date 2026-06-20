@@ -51,6 +51,7 @@ export interface LookupResult {
   unitType: 'weight' | 'volume' | 'count' | null;
   totalQuantity: number | null;
   baseUnit: string | null;
+  stockStatus: 'inStock' | 'outOfStock' | 'lowStock';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -75,6 +76,7 @@ function rowToResult(row: CostcoProductRow): LookupResult {
     unitType: row.unit_type ?? null,
     totalQuantity: row.total_quantity ?? null,
     baseUnit: null,
+    stockStatus: row.stock_status ?? 'inStock',
   };
 }
 
@@ -100,6 +102,7 @@ function apiProductToLookupResult(product: CostcoApiProduct): LookupResult {
     unitType: null,
     totalQuantity: null,
     baseUnit: null,
+    stockStatus: product.stockStatus,
   };
 }
 
