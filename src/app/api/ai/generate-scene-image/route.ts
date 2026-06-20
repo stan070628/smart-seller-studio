@@ -10,6 +10,7 @@ import { buildSceneUserPrompt } from './prompt';
 export const maxDuration = 90;
 
 const RATE_LIMIT = { windowMs: 60_000, maxRequests: 8 };
+const EDIT_RATE_LIMIT = { windowMs: 60_000, maxRequests: 6 };
 
 const RequestBodySchema = z.object({
   sectionType: z.enum(['hero', 'lifestyle', 'detail', 'feature']),
@@ -30,6 +31,10 @@ const RequestBodySchema = z.object({
     features: z.array(z.object({ title: z.string() })).optional(),
   }).optional(),
   sceneHint: z.string().max(600).optional(),
+  // 편집 모드: 기존 씬 이미지 URL (있으면 편집, 없으면 새 생성)
+  baseImageUrl: z.string().url().optional(),
+  // 편집 지시어 또는 새 생성 art direction
+  instruction: z.string().max(500).optional(),
 });
 
 const SCENE_PROMPT_SYSTEM = `You are an expert e-commerce product photographer and AI image prompt engineer.
@@ -58,7 +63,12 @@ export async function POST(req: NextRequest) {
   if (authResult instanceof Response) return authResult as NextResponse;
 
   const ip = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? 'unknown';
-  const rl = checkRateLimit(getRateLimitKey(ip, 'generate-scene-image'), RATE_LIMIT);
+  const bodyForRL = await req.clone().json().catch(() => ({})) as { baseImageUrl?: string };
+  const isEditMode = !!bodyForRL.baseImageUrl;
+  const rl = checkRateLimit(
+    getRateLimitKey(ip, isEditMode ? 'edit-scene-image' : 'generate-scene-image'),
+    isEditMode ? EDIT_RATE_LIMIT : RATE_LIMIT,
+  );
   if (!rl.allowed) {
     return NextResponse.json(
       { success: false, error: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' },
@@ -75,11 +85,24 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { sectionType, productInfo, sceneHint } = parsed.data;
+  const { sectionType, productInfo, sceneHint, baseImageUrl, instruction } = parsed.data;
+  // isEditMode는 rate limit 분기에서 이미 선언됨 (req.clone()으로 선행 결정)
 
   try {
-    // 참조 이미지 로딩 (멀티참조: URL fetch + Sharp 리사이즈 + base64, 최대 3장)
-    const referenceImages = await loadReferenceImages({
+    // 편집 모드: base 이미지를 첫 번째 reference로 로딩 (실패 시 명시적 에러)
+    let baseImages: import('@/lib/ai/reference-images').ReferenceImage[] = [];
+    if (baseImageUrl) {
+      baseImages = await loadReferenceImages({ productImageUrls: [baseImageUrl] });
+      if (baseImages.length === 0) {
+        return NextResponse.json(
+          { success: false, error: '현재 씬 이미지를 불러오지 못했습니다. 이미지 URL이 만료되었거나 접근이 제한되었습니다.' },
+          { status: 422 },
+        );
+      }
+    }
+
+    // 상품 레퍼런스 이미지 로딩 (편집 모드는 base 1장을 이미 소비 → 최대 2장)
+    const productRefs = await loadReferenceImages({
       referenceImages: parsed.data.referenceImages,
       productImageUrls: parsed.data.productImageUrls,
       productImageBase64: parsed.data.productImageBase64,
@@ -87,23 +110,30 @@ export async function POST(req: NextRequest) {
       productImageUrl: parsed.data.productImageUrl,
     });
 
+    // base 먼저, 그다음 product refs (합산 최대 3장)
+    const allImages = [...baseImages, ...productRefs].slice(0, 3);
+
     // Step 1: Claude Sonnet으로 섹션별 씬 프롬프트 생성
     const client = getAnthropicClient();
 
+    // Claude 유저 콘텐츠 구성
     type ContentBlock =
       | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
       | { type: 'text'; text: string };
 
     const userContent: ContentBlock[] = [];
 
-    for (const ref of referenceImages) {
+    for (const ref of allImages) {
       userContent.push({
         type: 'image',
         source: { type: 'base64', media_type: ref.mimeType, data: ref.base64 },
       });
     }
 
-    userContent.push({ type: 'text', text: buildSceneUserPrompt(sectionType, productInfo, sceneHint) });
+    userContent.push({
+      type: 'text',
+      text: buildSceneUserPrompt(sectionType, productInfo, sceneHint, { isEditMode, instruction }),
+    });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const claudeRes = await client.messages.create({
@@ -127,7 +157,7 @@ export async function POST(req: NextRequest) {
     // Step 2: Gemini로 완성된 씬 이미지 생성
     const imageResult = await generateFrameImage({
       imagePrompt: scenePrompt,
-      referenceImages,
+      referenceImages: allImages,
     });
 
     return NextResponse.json({
