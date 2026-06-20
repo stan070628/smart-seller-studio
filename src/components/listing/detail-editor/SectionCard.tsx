@@ -20,6 +20,7 @@ import {
 } from '@/types/detail-page';
 import SectionInstructionPanel from './SectionInstructionPanel';
 import SectionImageAttachment from './SectionImageAttachment';
+import SceneEditPanel from './SceneEditPanel';
 
 interface SectionCardProps {
   section: DetailSection;
@@ -33,8 +34,13 @@ interface SectionCardProps {
   palette: PaletteName;
   /** 섹션 이미지 AI 편집 콜백 */
   onSectionImageAiEdit?: (sectionId: string, imageUrl: string, imageIndex: number) => void;
-  /** 섹션 씬 이미지 재생성 콜백 (hero/point에서만 노출) */
-  onSceneRegenerate?: (section: DetailSection) => Promise<void>;
+  /** 씬 이미지 편집/재생성 (hero/point에서만 노출) */
+  onSceneEdit?: (section: DetailSection, opts: { instruction: string; referenceImageUrls: string[] }) => Promise<void>;
+  uploadedUrls?: string[];
+  isSceneEditing?: boolean;
+  sceneEditError?: string | null;
+  prevSceneUrl?: string;
+  onSceneUndo?: () => void;
 }
 
 // 섹션 타입별 한국어 레이블
@@ -101,7 +107,12 @@ export default function SectionCard({
   onImagesChange,
   palette,
   onSectionImageAiEdit,
-  onSceneRegenerate,
+  onSceneEdit,
+  uploadedUrls = [],
+  isSceneEditing = false,
+  sceneEditError = null,
+  prevSceneUrl,
+  onSceneUndo,
 }: SectionCardProps) {
   // AI 지시어 패널 표시 여부
   const [showPanel, setShowPanel] = useState(false);
@@ -160,21 +171,8 @@ export default function SectionCard({
     }
   };
 
-  // 씬 재생성 — hero/point 섹션에서만 노출, 콜백이 있을 때만 활성
-  const [isRegenerating, setIsRegenerating] = useState(false);
-  const canRegenerate =
-    !!onSceneRegenerate && (section.type === 'hero' || section.type === 'point');
-
-  async function handleRegenerateClick(e: React.MouseEvent) {
-    e.stopPropagation();
-    if (!onSceneRegenerate || isRegenerating) return;
-    setIsRegenerating(true);
-    try {
-      await onSceneRegenerate(section);
-    } finally {
-      setIsRegenerating(false);
-    }
-  }
+  const [showScenePanel, setShowScenePanel] = useState(false);
+  const canSceneEdit = !!onSceneEdit && (section.type === 'hero' || section.type === 'point');
 
   const typeLabel = SECTION_TYPE_LABELS[section.type];
   const summary = getSectionSummary(section.content);
@@ -239,31 +237,22 @@ export default function SectionCard({
             {summary}
           </span>
 
-          {/* 씬 재생성 버튼 (hero/point) */}
-          {canRegenerate && (
+          {/* 씬 편집 버튼 (hero/point) */}
+          {canSceneEdit && (
             <button
               type="button"
-              onClick={handleRegenerateClick}
-              disabled={isRegenerating}
-              aria-busy={isRegenerating}
-              title="브리프 톤으로 이 씬 이미지 재생성"
+              onClick={(e) => { e.stopPropagation(); setShowScenePanel(v => !v); }}
               style={{
-                padding: '4px 8px',
-                borderRadius: 5,
-                border: `1px solid #dddddd`,
-                background: 'transparent',
-                color: isRegenerating ? '#bbbbbb' : C.textSub,
-                cursor: isRegenerating ? 'wait' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                fontSize: 12,
-                flexShrink: 0,
+                padding: '4px 8px', borderRadius: 5, flexShrink: 0,
+                border: `1px solid ${showScenePanel ? '#7c3aed' : '#dddddd'}`,
+                background: showScenePanel ? '#7c3aed10' : 'transparent',
+                color: showScenePanel ? '#7c3aed' : C.textSub,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12,
                 transition: 'border-color 0.15s, background 0.15s, color 0.15s',
               }}
             >
-              <span>{isRegenerating ? '⏳' : '🎨'}</span>
-              <span>재생성</span>
+              <span>🎨</span>
+              <span>씬 편집 {showScenePanel ? '▴' : '▾'}</span>
             </button>
           )}
 
@@ -339,6 +328,27 @@ export default function SectionCard({
               : undefined
           }
         />
+
+        {/* 씬 편집 패널 */}
+        {showScenePanel && onSceneEdit && (
+          <SceneEditPanel
+            section={section}
+            uploadedUrls={uploadedUrls}
+            isEditing={isSceneEditing}
+            error={sceneEditError}
+            prevSceneUrl={prevSceneUrl}
+            onEdit={async (opts) => {
+              try {
+                await onSceneEdit(section, opts);
+                setShowScenePanel(false); // 성공 시만 닫힘
+              } catch {
+                // 실패 시 패널 유지 — 에러는 sceneEditError prop으로 표시
+              }
+            }}
+            onUndo={onSceneUndo}
+            onClose={() => setShowScenePanel(false)}
+          />
+        )}
       </div>
     </div>
   );
