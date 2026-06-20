@@ -36,15 +36,26 @@ export async function GET(request: NextRequest) {
     const pool = getSourcingPool();
     const placeholders = ids.map((_, i) => `$${i + 2}`).join(',');
     const result = await pool.query(
-      `SELECT product_id, sourcing_type, sourcing_value
+      `SELECT product_id, sourcing_type, sourcing_value,
+              costco_stock_status, costco_stock_checked_at
        FROM product_sourcing
        WHERE platform = $1 AND product_id IN (${placeholders})`,
       [platform, ...ids],
     );
 
-    const sourcing: Record<string, { type: string; value: string }> = {};
+    const sourcing: Record<string, {
+      type: string;
+      value: string;
+      costcoStockStatus: string | null;
+      costcoStockCheckedAt: string | null;
+    }> = {};
     for (const row of result.rows) {
-      sourcing[row.product_id] = { type: row.sourcing_type, value: row.sourcing_value };
+      sourcing[row.product_id] = {
+        type: row.sourcing_type,
+        value: row.sourcing_value,
+        costcoStockStatus: row.costco_stock_status ?? null,
+        costcoStockCheckedAt: row.costco_stock_checked_at ?? null,
+      };
     }
 
     return Response.json({ sourcing });
