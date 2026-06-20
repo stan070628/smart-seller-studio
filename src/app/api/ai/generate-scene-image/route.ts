@@ -4,7 +4,7 @@ import { requireAuth } from '@/lib/supabase/auth';
 import { checkRateLimit, getRateLimitKey } from '@/lib/rate-limit';
 import { getAnthropicClient } from '@/lib/ai/claude';
 import { generateFrameImage } from '@/lib/ai/imagen';
-import { loadReferenceImages } from '@/lib/ai/reference-images';
+import { loadReferenceImages, type ReferenceImage } from '@/lib/ai/reference-images';
 import { buildSceneUserPrompt } from './prompt';
 
 export const maxDuration = 90;
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
 
   const ip = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? 'unknown';
   const bodyForRL = await req.clone().json().catch(() => ({})) as { baseImageUrl?: string };
-  const isEditMode = !!bodyForRL.baseImageUrl;
+  let isEditMode = !!bodyForRL.baseImageUrl;
   const rl = checkRateLimit(
     getRateLimitKey(ip, isEditMode ? 'edit-scene-image' : 'generate-scene-image'),
     isEditMode ? EDIT_RATE_LIMIT : RATE_LIMIT,
@@ -86,11 +86,11 @@ export async function POST(req: NextRequest) {
   }
 
   const { sectionType, productInfo, sceneHint, baseImageUrl, instruction } = parsed.data;
-  // isEditMode는 rate limit 분기에서 이미 선언됨 (req.clone()으로 선행 결정)
+  isEditMode = !!baseImageUrl; // Zod 검증된 값으로 덮어쓰기
 
   try {
     // 편집 모드: base 이미지를 첫 번째 reference로 로딩 (실패 시 명시적 에러)
-    let baseImages: import('@/lib/ai/reference-images').ReferenceImage[] = [];
+    let baseImages: ReferenceImage[] = [];
     if (baseImageUrl) {
       baseImages = await loadReferenceImages({ productImageUrls: [baseImageUrl] });
       if (baseImages.length === 0) {
