@@ -241,6 +241,30 @@ function SourcingPopover({ platform, productId, productName, current, onClose }:
   );
 }
 
+// ─── 코스트코 재고 배지 상수 ──────────────────────────────────────────────────
+const STOCK_BADGE = {
+  inStock:    { label: '✓ 재고있음',     bg: '#f0fdf4', color: '#15803d', border: '#bbf7d0' },
+  lowStock:   { label: '⚡ 재고부족',    bg: '#fff7ed', color: '#c2410c', border: '#fed7aa' },
+  outOfStock: { label: '⚠ 코스트코 품절', bg: '#fee2e2', color: '#b91c1c', border: '#fecaca' },
+} as const;
+
+// stale 기준: 6시간
+const STALE_MS = 6 * 60 * 60 * 1000;
+
+function isCostcoUrl(value: string) {
+  return value.includes('costco.co.kr');
+}
+
+function formatCheckedAt(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diffMs / 60_000);
+  if (mins < 1) return '방금 전';
+  if (mins < 60) return `${mins}분 전`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}시간 전`;
+  return `${Math.floor(hrs / 24)}일 전`;
+}
+
 // ─── 소싱 배지 ────────────────────────────────────────────────────────────────
 interface SourcingBadgeProps {
   platform: 'coupang' | 'naver';
@@ -249,10 +273,38 @@ interface SourcingBadgeProps {
 }
 
 function SourcingBadge({ platform, productId, productName }: SourcingBadgeProps) {
-  const { sourcingMap } = useListingStore();
+  const { sourcingMap, checkCostcoStock } = useListingStore();
   const [open, setOpen] = React.useState(false);
+  const [checking, setChecking] = React.useState(false);
+  const checkingRef = React.useRef<Set<string>>(new Set());
   const key = `${platform}:${productId}`;
   const sourcing = sourcingMap[key] ?? null;
+
+  const isCostco = sourcing?.type === 'online' && isCostcoUrl(sourcing.value);
+  const stockStatus = isCostco ? (sourcing?.costcoStockStatus ?? null) : null;
+  const checkedAt = isCostco ? (sourcing?.costcoStockCheckedAt ?? null) : null;
+
+  // stale 감지 + 자동 백그라운드 재확인
+  React.useEffect(() => {
+    if (!isCostco || !sourcing?.value) return;
+    const isStale = !checkedAt || Date.now() - new Date(checkedAt).getTime() > STALE_MS;
+    if (!isStale) return;
+    if (checkingRef.current.has(key)) return;
+
+    checkingRef.current.add(key);
+    checkCostcoStock(platform, productId, sourcing.value).finally(() => {
+      checkingRef.current.delete(key);
+    });
+  }, [key, isCostco, checkedAt, platform, productId, sourcing?.value, checkCostcoStock]);
+
+  const handleRefresh = async () => {
+    if (!sourcing?.value || checkingRef.current.has(key)) return;
+    checkingRef.current.add(key);
+    setChecking(true);
+    await checkCostcoStock(platform, productId, sourcing.value);
+    setChecking(false);
+    checkingRef.current.delete(key);
+  };
 
   const badgeStyle: React.CSSProperties = sourcing
     ? sourcing.type === 'online'
@@ -287,6 +339,53 @@ function SourcingBadge({ platform, productId, productName }: SourcingBadgeProps)
       >
         {badgeLabel}
       </button>
+      {/* 코스트코 재고 상태 배지 */}
+      {isCostco && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+          {stockStatus ? (
+            <span
+              style={{
+                fontSize: '10px',
+                fontWeight: 700,
+                padding: '2px 6px',
+                borderRadius: '100px',
+                border: `1px solid ${STOCK_BADGE[stockStatus].border}`,
+                background: STOCK_BADGE[stockStatus].bg,
+                color: STOCK_BADGE[stockStatus].color,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {STOCK_BADGE[stockStatus].label}
+              {checkedAt && (
+                <span style={{ fontWeight: 400, color: '#9ca3af', marginLeft: '4px' }}>
+                  · {formatCheckedAt(checkedAt)}
+                </span>
+              )}
+            </span>
+          ) : (
+            <span style={{ fontSize: '10px', color: '#9ca3af' }}>
+              {checking ? '확인 중...' : '미확인'}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={checking}
+            title="코스트코 재고 재확인"
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: checking ? 'not-allowed' : 'pointer',
+              fontSize: '11px',
+              color: checking ? '#d1d5db' : '#9ca3af',
+              padding: '0 2px',
+              lineHeight: 1,
+            }}
+          >
+            🔄
+          </button>
+        </div>
+      )}
       {open && (
         <SourcingPopover
           platform={platform}
@@ -344,6 +443,7 @@ function CoupangBrowser() {
     updateCoupangProduct,
     isRegistering,
     clearError,
+    sourcingMap,
   } = useListingStore();
 
   // 상태 필터 변경 시 목록 재조회
@@ -674,8 +774,11 @@ function CoupangBrowser() {
             <tbody>
               {filtered.map((pr) => {
                 const sc = statusColors[pr.statusName] ?? { bg: '#f3f3f3', text: '#71717a' };
+                const coupangSourcingKey = `coupang:${String(pr.sellerProductId)}`;
+                const coupangSourcing = sourcingMap[coupangSourcingKey];
+                const isOutOfStock = coupangSourcing?.costcoStockStatus === 'outOfStock';
                 return (
-                  <tr key={pr.sellerProductId} style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <tr key={pr.sellerProductId} style={{ borderBottom: `1px solid ${C.border}`, background: isOutOfStock ? '#fff5f5' : undefined }}>
                     <td
                       style={{
                         padding: '11px 16px',
@@ -811,6 +914,7 @@ function NaverBrowser() {
     error,
     browseFilters,
     fetchNaverProducts,
+    sourcingMap,
   } = useListingStore();
 
   // 상태 필터 변경 시 목록 재조회
@@ -897,8 +1001,11 @@ function NaverBrowser() {
             <tbody>
               {filtered.map((p) => {
                 const st = statusMap[p.statusType] ?? { label: p.statusType, bg: '#f3f3f3', text: '#71717a' };
+                const naverSourcingKey = `naver:${String(p.originProductNo)}`;
+                const naverSourcing = sourcingMap[naverSourcingKey];
+                const isOutOfStock = naverSourcing?.costcoStockStatus === 'outOfStock';
                 return (
-                  <tr key={p.channelProductNo} style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <tr key={p.channelProductNo} style={{ borderBottom: `1px solid ${C.border}`, background: isOutOfStock ? '#fff5f5' : undefined }}>
                     <td style={{ padding: '8px 16px' }}>
                       {p.imageUrl ? (
                         <img
