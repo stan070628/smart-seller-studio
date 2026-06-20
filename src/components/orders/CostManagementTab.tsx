@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { buildTableItems, type TableItem, type GroupRow } from '@/lib/cost-management/product-grouping';
 import { Plus, Truck, Package, Search, Trash2, TrendingUp, TrendingDown, AlertCircle, CloudDownload } from 'lucide-react';
 import CostEntryDrawer from './CostEntryDrawer';
 import ShippingGroupModal from './ShippingGroupModal';
@@ -36,6 +37,7 @@ interface ProductRow {
   margin_rate: number;
   breakeven_roas: number;
   winner_status: 'winner' | 'watch' | 'normal';
+  [key: string]: unknown;
 }
 
 function fmt(n: number): string {
@@ -192,6 +194,7 @@ export default function CostManagementTab() {
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [drawerProductId, setDrawerProductId] = useState<string | null>(null);
   const [showShippingModal, setShowShippingModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -427,9 +430,12 @@ export default function CostManagementTab() {
     else alert(json.error ?? '삭제에 실패했습니다.');
   }
 
-  const filtered = products
-    .filter((p) => p.product_name.toLowerCase().includes(search.toLowerCase()))
-    .sort((a, b) => b.sale_count - a.sale_count);
+  const tableItems = useMemo(() => {
+    const filtered = products
+      .filter((p) => p.product_name.toLowerCase().includes(search.toLowerCase()))
+      .sort((a, b) => b.sale_count - a.sale_count);
+    return buildTableItems(filtered);
+  }, [products, search]);
 
   const isEditablePeriod =
     preset === 'this_month' ||
@@ -453,6 +459,15 @@ export default function CostManagementTab() {
   }
 
   const saveTriggeredByKey = useRef(false);
+
+  function toggleGroup(sellerProductId: string) {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(sellerProductId)) next.delete(sellerProductId);
+      else next.add(sellerProductId);
+      return next;
+    });
+  }
 
   function handleProductUpdate(productId: string, updates: Partial<ProductRow>) {
     setProducts((prev) => prev.map((item) => item.id === productId ? { ...item, ...updates } : item));
@@ -485,6 +500,302 @@ export default function CostManagementTab() {
       );
     }
     setEditingAdSpendId(null);
+  }
+
+  // ─── 그룹 행 렌더 ──────────────────────────────────────────────────────────
+  // thead 컬럼 순서: 채널(1) | 상품명(2) | 원가(3) | 배송비(4) | RG배송비(5) |
+  //   재고(6) | 재고가치(7) | 실현손익(8) | 마진율(9) | 광고비(10) | ROAS(11) |
+  //   위너(12) | 입고(13) | 판매(14) | 내역(15) | [RG실재고](조건) | 삭제(마지막)
+  function renderGroupRow(group: GroupRow<ProductRow>) {
+    const isExpanded = expandedGroups.has(group.sellerProductId);
+    return (
+      <React.Fragment key={`group-${group.sellerProductId}`}>
+        <tr
+          style={{
+            background: '#fff7f7',
+            cursor: 'pointer',
+            borderLeft: '3px solid #be0014',
+            borderBottom: isExpanded ? 'none' : '2px solid #fca5a5',
+          }}
+          onClick={() => toggleGroup(group.sellerProductId)}
+        >
+          {/* 1: 채널 — 쿠팡 배지 + sellerProductId */}
+          <td style={{ padding: '8px 12px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+            <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+              <span style={{
+                background: '#fef2f2', color: '#be0014',
+                padding: '1px 5px', borderRadius: '3px',
+                fontSize: '8px', fontWeight: 700,
+              }}>쿠팡</span>
+              <span style={{ color: '#a1a1aa', fontSize: '9px', fontFamily: 'monospace' }}>
+                {group.sellerProductId}
+              </span>
+            </div>
+          </td>
+          {/* 2: 상품명 + 옵션 수 표시 */}
+          <td style={{ padding: '8px 12px' }}>
+            <div style={{ fontSize: '12px', fontWeight: 600, color: '#18181b', marginBottom: '2px' }}>
+              {group.productName}
+            </div>
+            <div style={{ fontSize: '10px', color: '#a1a1aa', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span>{isExpanded ? '▴' : '▾'}</span>
+              <span>옵션 {group.children.length}개</span>
+            </div>
+          </td>
+          {/* 3: 원가 — 재고 가중평균 */}
+          <td style={{ padding: '8px 12px', textAlign: 'right', color: '#52525b' }}>
+            <div style={{ fontSize: '11px' }}>{fmt(Math.round(group.avgCost))}</div>
+            <div style={{ fontSize: '8px', color: '#a1a1aa' }}>재고평균</div>
+          </td>
+          {/* 4: 배송비 — 빈 칸 */}
+          <td style={{ padding: '8px 12px' }} />
+          {/* 5: RG배송비 — 빈 칸 */}
+          <td style={{ padding: '8px 12px' }} />
+          {/* 6: 재고 합산 */}
+          <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#16a34a' }}>{fmt(group.totalStock)}개</div>
+            <div style={{ fontSize: '8px', color: '#a1a1aa' }}>합계</div>
+          </td>
+          {/* 7: 재고가치 */}
+          <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '11px', color: '#52525b' }}>
+            {group.totalStock > 0 ? `${fmt(Math.round(group.totalStockValue))}원` : '—'}
+          </td>
+          {/* 8: 실현손익 합산 */}
+          <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+            <div style={{
+              fontSize: '11px', fontWeight: 600,
+              color: group.totalProfit >= 0 ? '#16a34a' : '#ef4444',
+            }}>
+              {fmt(Math.round(group.totalProfit))}원
+            </div>
+            <div style={{ fontSize: '8px', color: '#a1a1aa' }}>합계(기간)</div>
+          </td>
+          {/* 9: 마진율 */}
+          <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '11px', color: '#2563eb' }}>
+            {group.groupMarginRate.toFixed(1)}%
+          </td>
+          {/* 10: 광고비 — 빈 칸 */}
+          <td style={{ padding: '8px 12px' }} />
+          {/* 11: ROAS — 빈 칸 */}
+          <td style={{ padding: '8px 12px' }} />
+          {/* 12: 위너 — 빈 칸 */}
+          <td style={{ padding: '8px 12px' }} />
+          {/* 13: 입고 — 빈 칸 */}
+          <td style={{ padding: '8px 12px' }} />
+          {/* 14: 판매 — 빈 칸 */}
+          <td style={{ padding: '8px 12px' }} />
+          {/* 15: 내역 — 빈 칸 */}
+          <td style={{ padding: '8px 12px' }} />
+          {/* RG 실재고 (조건부) — 빈 칸 */}
+          {channelFilter === 'rg' && <td style={{ padding: '8px 12px' }} />}
+          {/* 삭제 버튼 열 — 빈 칸 */}
+          <td style={{ padding: '8px 12px' }} />
+        </tr>
+        {/* 자식 행들 (펼쳐진 경우) */}
+        {isExpanded && group.children.map((p) => renderProductRow(p, true))}
+        {/* 그룹 하단 구분선 */}
+        {isExpanded && (
+          <tr key={`group-sep-${group.sellerProductId}`}>
+            <td colSpan={999} style={{ borderBottom: '2px solid #fca5a5', padding: 0 }} />
+          </tr>
+        )}
+      </React.Fragment>
+    );
+  }
+
+  // ─── 공통 상품 행 렌더 (standalone 및 그룹 자식 모두 사용) ────────────────
+  function renderProductRow(p: ProductRow, isChild = false) {
+    const rowStyle: React.CSSProperties = isChild
+      ? { borderBottom: '1px solid #f4f4f5', background: '#fafafa', borderLeft: '3px solid #fca5a5' }
+      : { borderBottom: '1px solid #f0f0f0', background: '#fff' };
+    const firstTdPaddingLeft = isChild ? '22px' : '12px';
+
+    return (
+      <tr key={p.id} style={rowStyle}>
+        <td style={{ padding: `10px ${firstTdPaddingLeft}`, textAlign: 'center', whiteSpace: 'nowrap' }}>
+          {editChannelId === p.id ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start', minWidth: '180px' }}>
+              <div style={{ width: '100%' }}>
+                <div style={{ fontSize: '9px', color: '#be0014', marginBottom: '2px', fontWeight: 500 }}>윙 판매자상품ID</div>
+                <div style={{ fontSize: '9px', color: '#52525b', marginBottom: '3px' }}>Wing 셀러센터 → 상품관리 → 판매자상품ID</div>
+                <input
+                  placeholder="예: 12345678"
+                  value={editSellerProductId}
+                  onChange={(e) => setEditSellerProductId(e.target.value)}
+                  style={{ width: '100%', padding: '2px 6px', fontSize: '11px', border: '1px solid #fca5a5', borderRadius: '4px', outline: 'none', boxSizing: 'border-box', color: '#18181b' }}
+                />
+              </div>
+              <div style={{ width: '100%' }}>
+                <div style={{ fontSize: '9px', color: '#0369a1', marginBottom: '2px', fontWeight: 500 }}>RG vendorItemId</div>
+                <div style={{ fontSize: '9px', color: '#52525b', marginBottom: '3px' }}>쿠팡 URL의 vendorItemId= 값 (URL 붙여넣기 가능)</div>
+                <input
+                  placeholder="예: 95346957211"
+                  value={editVendorItemId}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    const match = v.match(/[?&]vendorItemId=(\d+)/);
+                    setEditVendorItemId(match ? match[1] : v);
+                  }}
+                  style={{ width: '100%', padding: '2px 6px', fontSize: '11px', border: '1px solid #7dd3fc', borderRadius: '4px', outline: 'none', boxSizing: 'border-box', color: '#18181b' }}
+                />
+              </div>
+              <div style={{ width: '100%' }}>
+                <div style={{ fontSize: '9px', color: '#03c75a', marginBottom: '2px', fontWeight: 500 }}>네이버 채널상품번호</div>
+                <div style={{ fontSize: '9px', color: '#52525b', marginBottom: '3px' }}>스마트스토어 URL의 /products/숫자 (URL 붙여넣기 가능)</div>
+                <input
+                  placeholder="예: 5012345678"
+                  value={editNaverChannelProductNo}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    const match = v.match(/\/products\/(\d+)/);
+                    setEditNaverChannelProductNo(match ? match[1] : v);
+                  }}
+                  style={{ width: '100%', padding: '2px 6px', fontSize: '11px', border: '1px solid #86efac', borderRadius: '4px', outline: 'none', boxSizing: 'border-box', color: '#18181b' }}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <button onClick={() => saveEditChannel(p.id)} style={{ padding: '2px 8px', fontSize: '10px', background: '#18181b', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>저장</button>
+                <button onClick={() => setEditChannelId(null)} style={{ padding: '2px 8px', fontSize: '10px', background: '#f4f4f5', color: '#71717a', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>취소</button>
+                {p.seller_product_id && (
+                  <button
+                    onClick={() => fetchVariants(p.id)}
+                    style={{ padding: '2px 8px', fontSize: '10px', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: '4px', cursor: 'pointer' }}
+                  >
+                    variants 불러오기
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <ChannelCell
+              product={p}
+              onEditChannel={() => openEditChannel(p)}
+              onProductUpdate={(updates) => handleProductUpdate(p.id, updates as Partial<ProductRow>)}
+            />
+          )}
+        </td>
+        <td style={{ padding: '10px 12px', fontWeight: 500, color: p.entry_count === 0 ? '#999' : '#18181b' }}>{p.product_name}</td>
+        <td style={{ padding: '10px 12px', textAlign: 'right', color: p.entry_count === 0 ? '#ccc' : '#ef4444' }}>
+          {p.entry_count === 0 ? '—' : fmt(p.weighted_avg_cost)}
+        </td>
+        <td style={{ padding: '10px 12px', textAlign: 'right', color: p.entry_count === 0 ? '#ccc' : '#f97316' }}>
+          {p.entry_count === 0 ? '—' : fmt(p.weighted_avg_shipping)}
+        </td>
+        <td style={{ padding: '10px 12px', textAlign: 'right', color: p.weighted_avg_rg_shipping > 0 ? '#0369a1' : '#ccc' }}>
+          {p.weighted_avg_rg_shipping > 0 ? fmt(p.weighted_avg_rg_shipping) : '—'}
+        </td>
+        <td style={{ padding: '10px 12px', textAlign: 'right', color: '#18181b' }}>
+          {fmt(p.current_stock)}개
+        </td>
+        <td style={{ padding: '10px 12px', textAlign: 'right', color: '#52525b' }}>
+          {p.current_stock > 0 ? `${fmt(p.stock_value)}원` : '—'}
+        </td>
+        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, color: p.total_realized_profit >= 0 ? '#16a34a' : '#ef4444' }}>
+          {p.sale_count === 0 ? <span style={{ color: '#ccc' }}>—</span> : `${fmt(p.total_realized_profit)}원`}
+        </td>
+        <td style={{ padding: '10px 12px', textAlign: 'right', color: p.margin_rate > 0 ? '#2563eb' : '#ccc' }}>
+          {p.margin_rate > 0 ? `${(p.margin_rate * 100).toFixed(1)}%` : '—'}
+        </td>
+        <td
+          style={{
+            padding: editingAdSpendId === p.id ? '6px 12px' : '10px 12px',
+            textAlign: 'right',
+            color: p.ad_spend > 0 ? '#7c3aed' : '#ccc',
+            cursor: isEditablePeriod ? 'pointer' : 'default',
+            position: 'relative',
+          }}
+          onClick={() => {
+            if (!isEditablePeriod || editingAdSpendId === p.id) return;
+            setEditingAdSpendId(p.id);
+            setEditingAdSpendValue(p.ad_spend > 0 ? String(p.ad_spend) : '');
+          }}
+          title={!isEditablePeriod ? '단일 월을 선택하면 편집할 수 있습니다' : undefined}
+        >
+          {editingAdSpendId === p.id ? (
+            <input
+              autoFocus
+              type="number"
+              min="0"
+              value={editingAdSpendValue}
+              onChange={(e) => setEditingAdSpendValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  saveTriggeredByKey.current = true;
+                  saveAdSpend(p.id, editingAdSpendValue);
+                }
+                if (e.key === 'Escape') setEditingAdSpendId(null);
+              }}
+              onBlur={() => {
+                if (!saveTriggeredByKey.current) saveAdSpend(p.id, editingAdSpendValue);
+                saveTriggeredByKey.current = false;
+              }}
+              style={{
+                width: '90px',
+                padding: '3px 6px',
+                fontSize: '12px',
+                border: '1px solid #7c3aed',
+                borderRadius: '4px',
+                textAlign: 'right',
+                outline: 'none',
+              }}
+            />
+          ) : (
+            <span>
+              {p.ad_spend > 0 ? `${fmt(p.ad_spend)}원` : (isEditablePeriod ? <span style={{ color: '#d4b8ff' }}>+ 입력</span> : '—')}
+            </span>
+          )}
+        </td>
+        <td style={{
+          padding: '10px 12px', textAlign: 'right', fontWeight: p.ad_roas > 0 ? 600 : 400,
+          color: p.ad_roas === 0 ? '#ccc'
+            : p.ad_roas >= p.breakeven_roas ? '#16a34a'
+            : '#ef4444',
+        }}>
+          {p.ad_roas > 0 ? `${Math.round(p.ad_roas)}%` : '—'}
+        </td>
+        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+          <WinnerBadge status={p.winner_status} />
+        </td>
+        <td style={{ padding: '10px 12px', textAlign: 'right', color: '#52525b' }}>{p.entry_count}건</td>
+        <td style={{ padding: '10px 12px', textAlign: 'right', color: '#52525b' }}>{p.sale_count}건</td>
+        <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+          <button
+            onClick={() => setDrawerProductId(p.id)}
+            style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid #e5e5e5', background: '#fff', fontSize: '11px', cursor: 'pointer', color: '#555' }}
+          >
+            📋 보기
+          </button>
+        </td>
+        {channelFilter === 'rg' && (
+          <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: 13 }}>
+            {rgInventoryLoading ? '…' : (() => {
+              const actual = rgInventory.get(p.id);
+              if (actual === undefined || actual === null) return '—';
+              const diff = actual - p.current_stock;
+              return (
+                <span>
+                  {actual.toLocaleString()}개
+                  {diff !== 0 && (
+                    <span title={`원가재고 ${p.current_stock}개 / 실재고 ${actual}개`} style={{ marginLeft: 4, cursor: 'help' }}>⚠️</span>
+                  )}
+                </span>
+              );
+            })()}
+          </td>
+        )}
+        <td style={{ padding: '10px 8px', textAlign: 'right' }}>
+          <button
+            onClick={() => deleteProduct(p.id, p.product_name)}
+            style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '4px', borderRadius: '4px', opacity: 0.25 }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.25')}
+            title="상품 삭제"
+          >
+            <Trash2 size={13} color="#ef4444" />
+          </button>
+        </td>
+      </tr>
+    );
   }
 
   return (
@@ -732,7 +1043,7 @@ export default function CostManagementTab() {
       <div style={{ background: '#fff', borderRadius: '10px', border: '1px solid #e5e5e5', overflow: 'hidden' }}>
         {loading ? (
           <div style={{ padding: '40px', textAlign: 'center', color: '#71717a', fontSize: '13px' }}>불러오는 중...</div>
-        ) : filtered.length === 0 ? (
+        ) : tableItems.length === 0 ? (
           <div style={{ padding: '40px', textAlign: 'center', color: '#71717a', fontSize: '13px' }}>
             {search ? '검색 결과가 없습니다.' : '상품을 추가해주세요.'}
           </div>
@@ -752,192 +1063,10 @@ export default function CostManagementTab() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((p) => (
-                <tr key={p.id} style={{ borderBottom: '1px solid #f0f0f0', background: '#fff' }}>
-                  <td style={{ padding: '10px 12px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                    {editChannelId === p.id ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start', minWidth: '180px' }}>
-                        <div style={{ width: '100%' }}>
-                          <div style={{ fontSize: '9px', color: '#be0014', marginBottom: '2px', fontWeight: 500 }}>윙 판매자상품ID</div>
-                          <div style={{ fontSize: '9px', color: '#52525b', marginBottom: '3px' }}>Wing 셀러센터 → 상품관리 → 판매자상품ID</div>
-                          <input
-                            placeholder="예: 12345678"
-                            value={editSellerProductId}
-                            onChange={(e) => setEditSellerProductId(e.target.value)}
-                            style={{ width: '100%', padding: '2px 6px', fontSize: '11px', border: '1px solid #fca5a5', borderRadius: '4px', outline: 'none', boxSizing: 'border-box', color: '#18181b' }}
-                          />
-                        </div>
-                        <div style={{ width: '100%' }}>
-                          <div style={{ fontSize: '9px', color: '#0369a1', marginBottom: '2px', fontWeight: 500 }}>RG vendorItemId</div>
-                          <div style={{ fontSize: '9px', color: '#52525b', marginBottom: '3px' }}>쿠팡 URL의 vendorItemId= 값 (URL 붙여넣기 가능)</div>
-                          <input
-                            placeholder="예: 95346957211"
-                            value={editVendorItemId}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              const match = v.match(/[?&]vendorItemId=(\d+)/);
-                              setEditVendorItemId(match ? match[1] : v);
-                            }}
-                            style={{ width: '100%', padding: '2px 6px', fontSize: '11px', border: '1px solid #7dd3fc', borderRadius: '4px', outline: 'none', boxSizing: 'border-box', color: '#18181b' }}
-                          />
-                        </div>
-                        <div style={{ width: '100%' }}>
-                          <div style={{ fontSize: '9px', color: '#03c75a', marginBottom: '2px', fontWeight: 500 }}>네이버 채널상품번호</div>
-                          <div style={{ fontSize: '9px', color: '#52525b', marginBottom: '3px' }}>스마트스토어 URL의 /products/숫자 (URL 붙여넣기 가능)</div>
-                          <input
-                            placeholder="예: 5012345678"
-                            value={editNaverChannelProductNo}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              const match = v.match(/\/products\/(\d+)/);
-                              setEditNaverChannelProductNo(match ? match[1] : v);
-                            }}
-                            style={{ width: '100%', padding: '2px 6px', fontSize: '11px', border: '1px solid #86efac', borderRadius: '4px', outline: 'none', boxSizing: 'border-box', color: '#18181b' }}
-                          />
-                        </div>
-                        <div style={{ display: 'flex', gap: '4px' }}>
-                          <button onClick={() => saveEditChannel(p.id)} style={{ padding: '2px 8px', fontSize: '10px', background: '#18181b', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>저장</button>
-                          <button onClick={() => setEditChannelId(null)} style={{ padding: '2px 8px', fontSize: '10px', background: '#f4f4f5', color: '#71717a', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>취소</button>
-                          {p.seller_product_id && (
-                            <button
-                              onClick={() => fetchVariants(p.id)}
-                              style={{ padding: '2px 8px', fontSize: '10px', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: '4px', cursor: 'pointer' }}
-                            >
-                              variants 불러오기
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <ChannelCell
-                        product={p}
-                        onEditChannel={() => openEditChannel(p)}
-                        onProductUpdate={(updates) => handleProductUpdate(p.id, updates as Partial<ProductRow>)}
-                      />
-                    )}
-                  </td>
-                  <td style={{ padding: '10px 12px', fontWeight: 500, color: p.entry_count === 0 ? '#999' : '#18181b' }}>{p.product_name}</td>
-                  <td style={{ padding: '10px 12px', textAlign: 'right', color: p.entry_count === 0 ? '#ccc' : '#ef4444' }}>
-                    {p.entry_count === 0 ? '—' : fmt(p.weighted_avg_cost)}
-                  </td>
-                  <td style={{ padding: '10px 12px', textAlign: 'right', color: p.entry_count === 0 ? '#ccc' : '#f97316' }}>
-                    {p.entry_count === 0 ? '—' : fmt(p.weighted_avg_shipping)}
-                  </td>
-                  <td style={{ padding: '10px 12px', textAlign: 'right', color: p.weighted_avg_rg_shipping > 0 ? '#0369a1' : '#ccc' }}>
-                    {p.weighted_avg_rg_shipping > 0 ? fmt(p.weighted_avg_rg_shipping) : '—'}
-                  </td>
-                  <td style={{ padding: '10px 12px', textAlign: 'right', color: '#18181b' }}>
-                    {fmt(p.current_stock)}개
-                  </td>
-                  <td style={{ padding: '10px 12px', textAlign: 'right', color: '#52525b' }}>
-                    {p.current_stock > 0 ? `${fmt(p.stock_value)}원` : '—'}
-                  </td>
-                  <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, color: p.total_realized_profit >= 0 ? '#16a34a' : '#ef4444' }}>
-                    {p.sale_count === 0 ? <span style={{ color: '#ccc' }}>—</span> : `${fmt(p.total_realized_profit)}원`}
-                  </td>
-                  <td style={{ padding: '10px 12px', textAlign: 'right', color: p.margin_rate > 0 ? '#2563eb' : '#ccc' }}>
-                    {p.margin_rate > 0 ? `${(p.margin_rate * 100).toFixed(1)}%` : '—'}
-                  </td>
-                  <td
-                    style={{
-                      padding: editingAdSpendId === p.id ? '6px 12px' : '10px 12px',
-                      textAlign: 'right',
-                      color: p.ad_spend > 0 ? '#7c3aed' : '#ccc',
-                      cursor: isEditablePeriod ? 'pointer' : 'default',
-                      position: 'relative',
-                    }}
-                    onClick={() => {
-                      if (!isEditablePeriod || editingAdSpendId === p.id) return;
-                      setEditingAdSpendId(p.id);
-                      setEditingAdSpendValue(p.ad_spend > 0 ? String(p.ad_spend) : '');
-                    }}
-                    title={!isEditablePeriod ? '단일 월을 선택하면 편집할 수 있습니다' : undefined}
-                  >
-                    {editingAdSpendId === p.id ? (
-                      <input
-                        autoFocus
-                        type="number"
-                        min="0"
-                        value={editingAdSpendValue}
-                        onChange={(e) => setEditingAdSpendValue(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            saveTriggeredByKey.current = true;
-                            saveAdSpend(p.id, editingAdSpendValue);
-                          }
-                          if (e.key === 'Escape') setEditingAdSpendId(null);
-                        }}
-                        onBlur={() => {
-                          if (!saveTriggeredByKey.current) saveAdSpend(p.id, editingAdSpendValue);
-                          saveTriggeredByKey.current = false;
-                        }}
-                        style={{
-                          width: '90px',
-                          padding: '3px 6px',
-                          fontSize: '12px',
-                          border: '1px solid #7c3aed',
-                          borderRadius: '4px',
-                          textAlign: 'right',
-                          outline: 'none',
-                        }}
-                      />
-                    ) : (
-                      <span>
-                        {p.ad_spend > 0 ? `${fmt(p.ad_spend)}원` : (isEditablePeriod ? <span style={{ color: '#d4b8ff' }}>+ 입력</span> : '—')}
-                      </span>
-                    )}
-                  </td>
-                  <td style={{
-                    padding: '10px 12px', textAlign: 'right', fontWeight: p.ad_roas > 0 ? 600 : 400,
-                    color: p.ad_roas === 0 ? '#ccc'
-                      : p.ad_roas >= p.breakeven_roas ? '#16a34a'
-                      : '#ef4444',
-                  }}>
-                    {p.ad_roas > 0 ? `${Math.round(p.ad_roas)}%` : '—'}
-                  </td>
-                  <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                    <WinnerBadge status={p.winner_status} />
-                  </td>
-                  <td style={{ padding: '10px 12px', textAlign: 'right', color: '#52525b' }}>{p.entry_count}건</td>
-                  <td style={{ padding: '10px 12px', textAlign: 'right', color: '#52525b' }}>{p.sale_count}건</td>
-                  <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                    <button
-                      onClick={() => setDrawerProductId(p.id)}
-                      style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid #e5e5e5', background: '#fff', fontSize: '11px', cursor: 'pointer', color: '#555' }}
-                    >
-                      📋 보기
-                    </button>
-                  </td>
-                  {channelFilter === 'rg' && (
-                    <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: 13 }}>
-                      {rgInventoryLoading ? '…' : (() => {
-                        const actual = rgInventory.get(p.id);
-                        if (actual === undefined || actual === null) return '—';
-                        const diff = actual - p.current_stock;
-                        return (
-                          <span>
-                            {actual.toLocaleString()}개
-                            {diff !== 0 && (
-                              <span title={`원가재고 ${p.current_stock}개 / 실재고 ${actual}개`} style={{ marginLeft: 4, cursor: 'help' }}>⚠️</span>
-                            )}
-                          </span>
-                        );
-                      })()}
-                    </td>
-                  )}
-                  <td style={{ padding: '10px 8px', textAlign: 'right' }}>
-                    <button
-                      onClick={() => deleteProduct(p.id, p.product_name)}
-                      style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '4px', borderRadius: '4px', opacity: 0.25 }}
-                      onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
-                      onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.25')}
-                      title="상품 삭제"
-                    >
-                      <Trash2 size={13} color="#ef4444" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {tableItems.map((item) => {
+                if (item.kind === 'group') return renderGroupRow(item);
+                return renderProductRow(item.product, false);
+              })}
             </tbody>
           </table>
         )}
