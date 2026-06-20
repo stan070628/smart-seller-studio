@@ -37,6 +37,12 @@ export default function DetailMakerClient() {
   // 무드 추천 취소용 — 새 추천 요청 시 이전(느린) 응답 무시
   const suggestMoodIdRef = useRef(0);
 
+  // 씬 편집 상태
+  const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
+  const [sceneEditError, setSceneEditError] = useState<{ sectionId: string; message: string } | null>(null);
+  const sceneEditIdRef = useRef(0);
+  const prevSceneUrls = useRef<Map<string, string>>(new Map());
+
   // 크리에이티브 브리프
   const [creativeBrief, setCreativeBrief] = useState<CreativeBrief | null>(null);
   const [suggestedMoodIds, setSuggestedMoodIds] = useState<string[]>([]);
@@ -300,46 +306,64 @@ export default function DetailMakerClient() {
     }
   }
 
-  // ─── ③ 단일 섹션 씬 재생성 ──────────────────────────────────────────────────
-  async function handleSceneRegenerate(section: DetailSection) {
-    if (uploadedUrls.length === 0) return;
-    const sectionType = section.type === 'hero' ? 'hero' : 'lifestyle';
-    const headline =
-      (section.content.type === 'hero' || section.content.type === 'point')
-        ? section.content.headline
-        : undefined;
-    const REGEN_FAIL_MSG = '씬 이미지 재생성에 실패했습니다. 잠시 후 다시 시도해주세요.';
-    setError(null);
+  // ─── ③ 단일 섹션 씬 편집 ──────────────────────────────────────────────────
+  async function handleSceneEdit(
+    section: DetailSection,
+    opts: { instruction: string; referenceImageUrls: string[] },
+  ) {
+    setEditingSectionId(section.id);
+    setSceneEditError(null);
+    sceneEditIdRef.current += 1;
+    const editId = sceneEditIdRef.current;
+
+    // 편집 전 이전 URL 보관 (undo용)
+    const prevUrl = section.attachedImages[0]?.url;
+    if (prevUrl) prevSceneUrls.current.set(section.id, prevUrl);
+
+    const FAIL_MSG = '씬 이미지 생성에 실패했습니다. 잠시 후 다시 시도해주세요.';
 
     try {
-      const sceneRes = await fetch('/api/ai/generate-scene-image', {
+      const headline = (() => {
+        const c = section.content;
+        if (c.type === 'hero' || c.type === 'point') return c.headline;
+        return undefined;
+      })();
+
+      const res = await fetch('/api/ai/generate-scene-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sectionType,
-          productImageUrls: uploadedUrls.slice(0, 3),
+          sectionType: section.type === 'hero' ? 'hero' : 'lifestyle',
+          productImageUrls: opts.referenceImageUrls.length > 0 ? opts.referenceImageUrls : uploadedUrls.slice(0, 2),
+          baseImageUrl: section.attachedImages[0]?.url,
+          instruction: opts.instruction || undefined,
           productInfo: headline ? { headline } : undefined,
-          sceneHint: creativeBrief?.sceneHint,
         }),
       });
-      if (!sceneRes.ok) { setError(REGEN_FAIL_MSG); return; }
-      const sceneData = await sceneRes.json() as {
-        success: boolean; data?: { imageBase64: string; mimeType: string };
+
+      if (sceneEditIdRef.current !== editId) return;
+
+      const json = await res.json() as {
+        success: boolean;
+        data?: { imageBase64: string; mimeType: string };
+        error?: string;
       };
-      if (!sceneData.success || !sceneData.data) { setError(REGEN_FAIL_MSG); return; }
+      if (!res.ok || !json.success) throw new Error(json.error ?? FAIL_MSG);
 
       const uploadRes = await fetch('/api/image/upload-ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          imageBase64: sceneData.data.imageBase64,
-          mimeType: sceneData.data.mimeType,
-          role: sectionType,
+          imageBase64: json.data!.imageBase64,
+          mimeType: json.data!.mimeType,
+          role: section.type === 'hero' ? 'hero' : 'lifestyle',
         }),
       });
-      if (!uploadRes.ok) { setError(REGEN_FAIL_MSG); return; }
+
+      if (sceneEditIdRef.current !== editId) return;
+
       const uploadData = await uploadRes.json() as { success: boolean; url?: string };
-      if (!uploadData.success || !uploadData.url) { setError(REGEN_FAIL_MSG); return; }
+      if (!uploadData.success || !uploadData.url) throw new Error(FAIL_MSG);
 
       const newUrl = uploadData.url;
       setSections(prev => {
@@ -351,9 +375,32 @@ export default function DetailMakerClient() {
         void refreshRenderedHtml(updated, theme);
         return updated;
       });
-    } catch {
-      setError(REGEN_FAIL_MSG); // 버튼은 SectionCard에서 다시 활성화됨
+      setEditingSectionId(null);
+    } catch (e) {
+      if (sceneEditIdRef.current !== editId) return;
+      setSceneEditError({
+        sectionId: section.id,
+        message: e instanceof Error ? e.message : FAIL_MSG,
+      });
+      setEditingSectionId(null);
+      throw e; // re-throw → SectionCard에서 catch해 패널 유지
     }
+  }
+
+  function handleSceneUndo(sectionId: string) {
+    const prevUrl = prevSceneUrls.current.get(sectionId);
+    if (!prevUrl) return;
+    setSections(prev => {
+      const updated = prev.map(s =>
+        s.id === sectionId
+          ? { ...s, attachedImages: [{ url: prevUrl, order: 0, processingMode: 'original' as const }] }
+          : s,
+      );
+      void refreshRenderedHtml(updated, theme);
+      return updated;
+    });
+    prevSceneUrls.current.delete(sectionId);
+    setSceneEditError(prev => (prev?.sectionId === sectionId ? null : prev));
   }
 
   // ─── AI 생성 ────────────────────────────────────────────────────────────────
@@ -528,10 +575,15 @@ export default function DetailMakerClient() {
               onSectionsChange={handleSectionsChange}
               onThemeChange={handleThemeChange}
               onSectionAiEdit={handleSectionAiEdit}
-              onSceneRegenerate={handleSceneRegenerate}
               onHtmlCopy={handleHtmlCopy}
               onDownload={handleDownload}
               generatedHtml={generatedHtml}
+              uploadedUrls={uploadedUrls}
+              onSceneEdit={handleSceneEdit}
+              editingSectionId={editingSectionId}
+              sceneEditError={sceneEditError}
+              prevSceneUrlMap={prevSceneUrls.current}
+              onSceneUndo={handleSceneUndo}
             />
             {/* Gemini 씬 이미지 생성 중 배너 */}
             {isGeneratingScenes && (
