@@ -237,7 +237,7 @@ export default function DetailMakerClient() {
     if (targets.length === 0 || refUrls.length === 0) return;
 
     const results = await Promise.allSettled(
-      targets.map(async (section) => {
+      targets.map(async (section, idx) => {
         try {
           const sectionType = section.type === 'hero' ? 'hero' : 'lifestyle';
           const headline =
@@ -245,14 +245,21 @@ export default function DetailMakerClient() {
               ? section.content.headline
               : undefined;
 
+          // 섹션마다 다른 이미지 조합으로 씬 다양성 확보 (최대 3장, 인덱스 로테이션)
+          const startIdx = refUrls.length > 3 ? idx % (refUrls.length - 2) : 0;
+          const sectionRefUrls = refUrls.slice(startIdx, startIdx + 3);
+
+          // 섹션 헤드라인을 sceneHint에 결합해 Claude가 맥락에 맞는 씬 생성하도록 유도
+          const combinedHint = [headline?.trim(), sceneHint?.trim()].filter(Boolean).join(' — ') || undefined;
+
           const sceneRes = await fetch('/api/ai/generate-scene-image', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               sectionType,
-              productImageUrls: refUrls.slice(0, 3),
+              productImageUrls: sectionRefUrls,
               productInfo: headline ? { headline } : undefined,
-              sceneHint,
+              sceneHint: combinedHint,
             }),
           });
           if (!sceneRes.ok) return null;
