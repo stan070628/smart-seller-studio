@@ -27,3 +27,47 @@ describe('buildSceneUserPrompt', () => {
     expect(withWhitespace).toBe(withUndefined);
   });
 });
+
+describe('buildSceneUserPrompt — 편집 모드 (editOpts.isEditMode)', () => {
+  it('isEditMode=true이면 첫 번째 이미지가 편집 대상임을 프롬프트에 명시한다', () => {
+    const out = buildSceneUserPrompt('hero', { headline: '텀블러' }, undefined, {
+      isEditMode: true,
+      instruction: '배경을 야외로 바꿔줘',
+    });
+    expect(out).toContain('FIRST image');
+    expect(out).toContain('existing scene');
+    expect(out).toContain('배경을 야외로 바꿔줘');
+  });
+
+  it('isEditMode=true + instruction 없으면 instruction 라인이 없다', () => {
+    const out = buildSceneUserPrompt('lifestyle', undefined, undefined, { isEditMode: true });
+    expect(out).toContain('FIRST image');
+    expect(out).not.toContain('Edit instruction');
+  });
+
+  it('isEditMode=false + instruction이면 Art direction으로 취급한다', () => {
+    const out = buildSceneUserPrompt('hero', undefined, undefined, {
+      isEditMode: false,
+      instruction: '밝고 화사하게',
+    });
+    expect(out).toContain('Art direction');
+    expect(out).toContain('밝고 화사하게');
+    expect(out).not.toContain('FIRST image');
+  });
+
+  it('isEditMode=false이면 sceneHint와 instruction 모두 Art direction에 포함된다', () => {
+    const out = buildSceneUserPrompt('hero', undefined, '골드 톤', {
+      isEditMode: false,
+      instruction: '밝게',
+    });
+    expect(out).toContain('골드 톤');
+    expect(out).toContain('밝게');
+  });
+
+  it('기존 시그니처(editOpts 없음)는 하위호환 유지', () => {
+    const out = buildSceneUserPrompt('hero', { headline: '향수' }, 'moody gold');
+    expect(out).toContain('Art direction');
+    expect(out).toContain('moody gold');
+    expect(out).not.toContain('FIRST image');
+  });
+});
