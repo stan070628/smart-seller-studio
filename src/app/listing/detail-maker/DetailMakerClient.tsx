@@ -524,9 +524,10 @@ export default function DetailMakerClient() {
             <DetailPageEditor
               sections={sections}
               theme={theme}
-              isGenerating={isRendering}
+              isGenerating={isRendering || isGenerating}
               onSectionsChange={handleSectionsChange}
               onThemeChange={handleThemeChange}
+              onRegenerateAll={handleGenerate}
               onSectionAiEdit={handleSectionAiEdit}
               onSceneRegenerate={handleSceneRegenerate}
               onHtmlCopy={handleHtmlCopy}
