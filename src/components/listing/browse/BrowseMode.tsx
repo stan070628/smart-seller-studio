@@ -301,9 +301,12 @@ function SourcingBadge({ platform, productId, productName }: SourcingBadgeProps)
     if (!sourcing?.value || checkingRef.current.has(key)) return;
     checkingRef.current.add(key);
     setChecking(true);
-    await checkCostcoStock(platform, productId, sourcing.value);
-    setChecking(false);
-    checkingRef.current.delete(key);
+    try {
+      await checkCostcoStock(platform, productId, sourcing.value);
+    } finally {
+      setChecking(false);
+      checkingRef.current.delete(key);
+    }
   };
 
   const badgeStyle: React.CSSProperties = sourcing
