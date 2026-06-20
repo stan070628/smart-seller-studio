@@ -1,5 +1,5 @@
 // ProductRow의 핵심 필드만 의존 (CostManagementTab.tsx:13-39 참조)
-interface GroupableProduct {
+export interface GroupableProduct {
   id: string;
   product_name: string;
   seller_product_id: number | null;

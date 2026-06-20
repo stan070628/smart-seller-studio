@@ -69,6 +69,8 @@ describe('buildTableItems', () => {
     const p1 = makeProduct({ id: 'p1', seller_product_id: 222, current_stock: 0, stock_value: 0 });
     const p2 = makeProduct({ id: 'p2', seller_product_id: 222, current_stock: 0, stock_value: 0 });
     const result = buildTableItems([p1, p2] as never[]);
+    expect(result).toHaveLength(1);
+    expect(result[0].kind).toBe('group');  // silent-pass 방어
     if (result[0].kind === 'group') {
       expect(result[0].avgCost).toBe(0);
     }
@@ -78,6 +80,8 @@ describe('buildTableItems', () => {
     const p1 = makeProduct({ id: 'p1', seller_product_id: 333, total_sales_amount: 0 });
     const p2 = makeProduct({ id: 'p2', seller_product_id: 333, total_sales_amount: 0 });
     const result = buildTableItems([p1, p2] as never[]);
+    expect(result).toHaveLength(1);
+    expect(result[0].kind).toBe('group');  // silent-pass 방어
     if (result[0].kind === 'group') {
       expect(result[0].groupMarginRate).toBe(0);
     }
