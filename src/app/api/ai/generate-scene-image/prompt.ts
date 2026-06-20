@@ -5,16 +5,36 @@ export interface SceneProductInfo {
   features?: Array<{ title: string }>;
 }
 
-/**
- * Claude에 줄 유저 프롬프트를 만든다.
- * sceneHint(브리프 art direction)가 있으면 한 줄로 합류시킨다.
- * 제품 픽셀 보존 등 핵심 규칙은 SYSTEM 프롬프트(route.ts)에 그대로 있다.
- */
+export interface SceneEditOpts {
+  /** true: 첫 번째 reference 이미지가 수정할 기존 씬 이미지 */
+  isEditMode?: boolean;
+  /** 편집 지시어 (편집 모드) 또는 art direction (새 생성 모드) */
+  instruction?: string;
+}
+
 export function buildSceneUserPrompt(
   sectionType: string,
   productInfo: SceneProductInfo | undefined,
   sceneHint: string | undefined,
+  editOpts?: SceneEditOpts,
 ): string {
+  if (editOpts?.isEditMode) {
+    const lines: string[] = [
+      'The FIRST image is the existing scene image to be modified (previously AI-generated).',
+      'The remaining image(s) are the original product reference photos — use them to ensure product accuracy.',
+    ];
+    if (editOpts.instruction?.trim()) {
+      lines.push(`Edit instruction: ${editOpts.instruction.trim()}`);
+    }
+    lines.push('');
+    lines.push(`Section type: ${sectionType}`);
+    lines.push(
+      'Generate a Gemini image editing prompt that modifies the existing scene per the edit instruction while keeping the product appearance unchanged. Return only JSON: {"prompt": "..."}',
+    );
+    return lines.join('\n');
+  }
+
+  // 새 생성 모드
   const lines: string[] = ['Product reference image(s) are attached above.'];
 
   if (productInfo) {
@@ -28,9 +48,11 @@ export function buildSceneUserPrompt(
     }
   }
 
-  if (sceneHint && sceneHint.trim()) {
+  // instruction + sceneHint 합산 (둘 다 있으면 '. '으로 이음)
+  const hints = [sceneHint?.trim(), editOpts?.instruction?.trim()].filter(Boolean).join('. ');
+  if (hints) {
     lines.push('');
-    lines.push(`Art direction (apply this mood/style to the scene): ${sceneHint.trim()}`);
+    lines.push(`Art direction (apply this mood/style to the scene): ${hints}`);
   }
 
   lines.push('');

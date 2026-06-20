@@ -1597,7 +1597,7 @@ export const useListingStore = create<ListingStore>()(
                 const s = sectionMap.get(id);
                 return s ? { ...s, order: index } : null;
               })
-              .filter((s): s is DetailSection => s !== null);
+              .filter((s): s is DetailSection & { order: number } => s !== null);
             return {
               sharedDraft: { ...state.sharedDraft, detailPageSections: reordered },
             };

@@ -428,7 +428,7 @@ export function renderSection(section: DetailSection, theme: DetailPageTheme): s
 
 export function renderAllSections(sections: DetailSection[], theme: DetailPageTheme): string {
   return [...sections]
-    .sort((a, b) => a.order - b.order)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
     .map((s) => renderSection(s, theme))
     .join('\n');
 }

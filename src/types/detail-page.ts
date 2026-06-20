@@ -83,9 +83,9 @@ export interface BrandHeaderContent {
 
 export interface PointContent {
   type: 'point';
-  pointLabel: string;    // "Point 1" — 빈 문자열이면 라벨 줄 숨김
-  headline: string;      // 예: "펼치면 바로 '보이는' 필통"
-  subheadline: string;   // 예: "180도 완전 오픈형 구조"
+  pointLabel: string | null;  // "Point 1" — null 또는 빈 문자열이면 라벨 줄 숨김
+  headline: string;            // 예: "펼치면 바로 '보이는' 필통"
+  subheadline: string;         // 예: "180도 완전 오픈형 구조"
 }
 
 export interface ImageGridContent {
@@ -110,7 +110,7 @@ export type SectionContent =
 export interface DetailSection {
   id: string;
   type: SectionType;
-  order: number;
+  order?: number;
   content: SectionContent;
   attachedImages: AttachedImage[];
   aiInstruction?: string;
