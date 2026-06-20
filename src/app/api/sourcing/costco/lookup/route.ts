@@ -76,7 +76,7 @@ function rowToResult(row: CostcoProductRow): LookupResult {
     unitType: row.unit_type ?? null,
     totalQuantity: row.total_quantity ?? null,
     baseUnit: null,
-    stockStatus: row.stock_status ?? 'inStock',
+    stockStatus: row.stock_status,
   };
 }
 
