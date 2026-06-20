@@ -9,10 +9,10 @@ interface CoupangProduct {
 }
 
 interface CoupangOption {
-  vendorItemId: string;   // Task 2에서 string으로 변경됨
+  vendorItemId: string;
   itemName: string;
   salePrice: number;
-  alreadyAdded: boolean;  // 이미 추가된 옵션 여부
+  alreadyAdded: boolean;
 }
 
 interface RgProduct {
@@ -77,7 +77,6 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
   const [selectedCoupang, setSelectedCoupang] = useState<CoupangProduct | null>(null);
   const [coupangOptions, setCoupangOptions] = useState<CoupangOption[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(false);
-  // 다중 선택: vendorItemId(string) Set
   const [selectedOptions, setSelectedOptions] = useState<Set<string>>(new Set());
   const [coupangProductName, setCoupangProductName] = useState('');
 
@@ -160,12 +159,10 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
   }
 
   async function add() {
-    // 쿠팡 다중 선택 처리
     if (mode === 'coupang') {
       if (!selectedCoupang || selectedOptions.size === 0) return;
       setSaving(true);
       try {
-        // 이미 추가된 옵션은 제외하고 선택된 것만 POST
         const optionsToAdd = coupangOptions.filter(
           (opt) => selectedOptions.has(opt.vendorItemId) && !opt.alreadyAdded,
         );
@@ -189,18 +186,17 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
         const succeeded = results.filter((r) => r.status === 'fulfilled').length;
         const failed = results.filter((r) => r.status === 'rejected').length;
 
-        onAdded();
+        if (succeeded > 0) onAdded();
         if (failed > 0) {
           alert(`${succeeded}개 추가 완료, ${failed}개 실패`);
         }
-        onClose();
+        if (succeeded > 0 || failed === 0) onClose();
       } finally {
         setSaving(false);
       }
       return;
     }
 
-    // 나머지 탭(rg, naver, manual) — 기존 로직 그대로 유지
     if (mode === 'rg' && !selectedRg) return;
     if (mode === 'naver' && !selectedNaver) return;
     if (mode === 'manual' && !manualName.trim()) return;
