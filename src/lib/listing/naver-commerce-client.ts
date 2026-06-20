@@ -347,6 +347,15 @@ export class NaverCommerceClient {
     );
   }
 
+  // channelProductNo → originProductNo + 옵션 조회
+  // 네이버 API: GET /external/v2/products/channel-products/{channelProductNo}
+  async getChannelProductDetail(channelProductNo: number): Promise<unknown> {
+    return this.request<unknown>(
+      'GET',
+      `/external/v2/products/channel-products/${channelProductNo}`,
+    );
+  }
+
   // ─── 상품 등록 ────────────────────────────────────────────
 
   async registerProduct(

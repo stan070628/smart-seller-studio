@@ -27,7 +27,9 @@ export async function GET(request: NextRequest) {
     const pool = getSourcingPool();
 
     const { rows: products } = await pool.query(
-      `SELECT id, product_name, seller_product_id, vendor_item_id, naver_channel_product_no, platform, platform_fee_rate,
+      `SELECT id, product_name, seller_product_id, vendor_item_id, naver_channel_product_no,
+              variants, naver_variants, naver_origin_product_no,
+              platform, platform_fee_rate,
               subdivision_unit, subdivision_carryover, subdivision_carryover_unit_cost, created_at
        FROM product_costs
        WHERE user_id = $1
@@ -194,6 +196,9 @@ export async function GET(request: NextRequest) {
         seller_product_id: p.seller_product_id,
         vendor_item_id: p.vendor_item_id,
         naver_channel_product_no: p.naver_channel_product_no,
+        variants: (p.variants as Record<string, string> | null) ?? null,
+        naver_variants: (p.naver_variants as Record<string, string> | null) ?? null,
+        naver_origin_product_no: p.naver_origin_product_no ?? null,
         platform: p.platform,
         platform_fee_rate: feeRate,
         entry_count: pEntries.length,
