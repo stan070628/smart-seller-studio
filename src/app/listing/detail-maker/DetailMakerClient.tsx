@@ -3,7 +3,7 @@
 import React, { useState, useRef } from 'react';
 import { C } from '@/lib/design-tokens';
 import { DEFAULT_THEME } from '@/lib/detail-page/palette-config';
-import { contentToSections, mobileContentToSections } from '@/lib/detail-page/section-parser';
+import { contentToSections, mobileContentToSections, distributeImagesToSections } from '@/lib/detail-page/section-parser';
 import DetailPageEditor from '@/components/listing/detail-editor/DetailPageEditor';
 import DetailMakerInputPanel from '@/components/listing/detail-maker/DetailMakerInputPanel';
 import DetailMakerThumbnailGallery from '@/components/listing/detail-maker/DetailMakerThumbnailGallery';
@@ -75,9 +75,9 @@ export default function DetailMakerClient() {
     setUploading(true);
     setError(null);
     try {
-      const arr = Array.from(files).slice(0, 6 - uploadedUrls.length);
+      const arr = Array.from(files).slice(0, 10 - uploadedUrls.length);
       const urls = await Promise.all(arr.map(uploadOne));
-      const nextUrls = [...uploadedUrls, ...urls].slice(0, 6);
+      const nextUrls = [...uploadedUrls, ...urls].slice(0, 10);
       setUploadedUrls(nextUrls);
       void suggestMood(nextUrls);
     } catch (e) {
@@ -452,7 +452,8 @@ export default function DetailMakerClient() {
       // 구버전 서버(mobileMode 미지원)가 desktop content를 반환하는 롤링 배포 케이스 대비 fallback
       } else if (json.content) {
         try {
-          parsed = contentToSections(json.content as DetailPageContent);
+          const rawSections = contentToSections(json.content as DetailPageContent);
+          parsed = distributeImagesToSections(rawSections, uploadedUrls);
           setSections(parsed);
           await refreshRenderedHtml(parsed, theme);
         } catch (e) {
@@ -461,13 +462,7 @@ export default function DetailMakerClient() {
         }
       }
 
-      // Claude 생성 완료 → 즉시 페이지 표시 후 Gemini 씬 이미지 교체
-      if (parsed && parsed.length > 0) {
-        setIsGeneratingScenes(true);
-        void generateSceneImages(parsed, uploadedUrls, currentGenId, theme, creativeBrief?.sceneHint).finally(() => {
-          if (sceneGenIdRef.current === currentGenId) setIsGeneratingScenes(false);
-        });
-      }
+
     } catch (e) {
       setError(e instanceof Error ? e.message : 'AI 생성 중 오류가 발생했습니다.');
     } finally {
@@ -631,7 +626,7 @@ export default function DetailMakerClient() {
               <>
                 <div style={{ fontSize: '32px' }}>✨</div>
                 <div style={{ fontSize: '15px', fontWeight: 600, color: C.text }}>AI가 상세페이지를 생성하고 있어요</div>
-                <div style={{ fontSize: '13px' }}>잠시만 기다려주세요 (30~60초 소요)</div>
+                <div style={{ fontSize: '13px' }}>AI 상세페이지 생성 중... (약 30초 소요)</div>
               </>
             ) : (
               <>
