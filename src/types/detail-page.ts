@@ -11,7 +11,13 @@ export type SectionType =
   | 'cta'
   | 'brand_header'
   | 'point'
-  | 'image_grid';
+  | 'image_grid'
+  | 'point_section'
+  | 'stat_callout'
+  | 'bar_chart'
+  | 'why_icons'
+  | 'certifications'
+  | 'infographic_steps';
 
 export type PaletteName =
   | 'warm_cream'
@@ -94,6 +100,60 @@ export interface ImageGridContent {
   items: Array<{ label: string; swatchColor?: string }>;  // 이미지는 attachedImages와 index 매칭
 }
 
+export interface PointSectionContent {
+  type: 'point_section';
+  items: Array<{
+    number: number;
+    title: string;
+    description: string;
+  }>;
+}
+
+export interface StatCalloutContent {
+  type: 'stat_callout';
+  items: Array<{
+    value: string;
+    label: string;
+    description: string;
+  }>;
+}
+
+export interface BarChartContent {
+  type: 'bar_chart';
+  items: Array<{
+    label: string;
+    percentage: number;
+    displayValue: string;
+  }>;
+}
+
+export interface WhyIconsContent {
+  type: 'why_icons';
+  items: Array<{
+    icon: string;
+    title: string;
+    description: string;
+  }>;
+}
+
+export interface CertificationsContent {
+  type: 'certifications';
+  items: Array<{
+    name: string;
+    description: string;
+  }>;
+}
+
+export interface InfographicStepsContent {
+  type: 'infographic_steps';
+  items: Array<{
+    step: number;
+    icon: string;
+    title: string;
+    description: string;
+  }>;
+}
+
 export type SectionContent =
   | HeroContent
   | SellingPointsContent
@@ -105,7 +165,13 @@ export type SectionContent =
   | CtaContent
   | BrandHeaderContent
   | PointContent
-  | ImageGridContent;
+  | ImageGridContent
+  | PointSectionContent
+  | StatCalloutContent
+  | BarChartContent
+  | WhyIconsContent
+  | CertificationsContent
+  | InfographicStepsContent;
 
 export interface DetailSection {
   id: string;
@@ -166,6 +232,34 @@ export function isPointContent(c: SectionContent): c is PointContent {
 }
 export function isImageGridContent(c: SectionContent): c is ImageGridContent {
   return c.type === 'image_grid';
+}
+export function isPointSectionContent(c: SectionContent): c is PointSectionContent {
+  return c.type === 'point_section';
+}
+export function isStatCalloutContent(c: SectionContent): c is StatCalloutContent {
+  return c.type === 'stat_callout';
+}
+export function isBarChartContent(c: SectionContent): c is BarChartContent {
+  return c.type === 'bar_chart';
+}
+export function isWhyIconsContent(c: SectionContent): c is WhyIconsContent {
+  return c.type === 'why_icons';
+}
+export function isCertificationsContent(c: SectionContent): c is CertificationsContent {
+  return c.type === 'certifications';
+}
+export function isInfographicStepsContent(c: SectionContent): c is InfographicStepsContent {
+  return c.type === 'infographic_steps';
+}
+
+export interface RichSections {
+  selectedSections: ('point' | 'stat' | 'bar_chart' | 'why' | 'cert' | 'steps')[];
+  pointSections?: Array<{ number: number; title: string; description: string }>;
+  statCallouts?: Array<{ value: string; label: string; description: string }>;
+  barChartItems?: Array<{ label: string; percentage: number; displayValue: string }>;
+  whyIcons?: Array<{ icon: string; title: string; description: string }>;
+  certifications?: Array<{ name: string; description: string }>;
+  infographicSteps?: Array<{ step: number; icon: string; title: string; description: string }>;
 }
 
 /** 무드 프리셋 — 정적 카탈로그 항목. AI 추천과 갤러리가 모두 이 id를 가리킨다. */
