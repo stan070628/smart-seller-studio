@@ -1227,9 +1227,15 @@ export default function CostManagementTab() {
           product={channelEditTarget.product}
           anchorEl={channelEditTarget.anchorEl}
           onClose={() => setChannelEditTarget(null)}
-          onSaved={(updates) => {
-            handleProductUpdate(channelEditTarget.product.id, updates as Partial<ProductRow>);
-            setChannelEditTarget(null);
+          onChannelAdded={(entry) => {
+            const target = channelEditTarget.product;
+            handleProductUpdate(target.id, { channels: [...(target.channels ?? []), entry] });
+          }}
+          onChannelRemoved={(channelId) => {
+            const target = channelEditTarget.product;
+            handleProductUpdate(target.id, {
+              channels: (target.channels ?? []).filter((ch) => ch.id !== channelId),
+            });
           }}
         />
       )}
