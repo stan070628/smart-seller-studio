@@ -13,7 +13,7 @@ export async function PATCH(
 
   const { id } = await params;
   const body = await request.json().catch(() => null);
-  const { seller_product_id, vendor_item_id, naver_channel_product_no, variants } = body ?? {};
+  const { seller_product_id, vendor_item_id, naver_channel_product_no, variants, hidden } = body ?? {};
 
   if (seller_product_id !== undefined && seller_product_id !== null) {
     if (!Number.isInteger(seller_product_id) || seller_product_id <= 0) {
@@ -30,6 +30,9 @@ export async function PATCH(
       return NextResponse.json({ success: false, error: 'naver_channel_product_no must be a positive integer' }, { status: 400 });
     }
   }
+  if (hidden !== undefined && typeof hidden !== 'boolean') {
+    return NextResponse.json({ success: false, error: 'hidden must be a boolean' }, { status: 400 });
+  }
 
   const pool = getSourcingPool();
   try {
@@ -38,10 +41,11 @@ export async function PATCH(
        SET seller_product_id          = COALESCE($3, seller_product_id),
            vendor_item_id             = COALESCE($4, vendor_item_id),
            naver_channel_product_no   = COALESCE($5, naver_channel_product_no),
-           variants                   = COALESCE($6, variants)
+           variants                   = COALESCE($6, variants),
+           hidden                     = COALESCE($7, hidden)
        WHERE id = $1 AND user_id = $2
-       RETURNING id, seller_product_id, vendor_item_id, naver_channel_product_no, variants`,
-      [id, user.userId, seller_product_id ?? null, vendor_item_id ?? null, naver_channel_product_no ?? null, variants ? JSON.stringify(variants) : null],
+       RETURNING id, seller_product_id, vendor_item_id, naver_channel_product_no, variants, hidden`,
+      [id, user.userId, seller_product_id ?? null, vendor_item_id ?? null, naver_channel_product_no ?? null, variants ? JSON.stringify(variants) : null, hidden === undefined ? null : hidden],
     );
     if (rows.length === 0) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
     return NextResponse.json({ success: true, data: rows[0] });
