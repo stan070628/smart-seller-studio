@@ -23,7 +23,7 @@ export async function GET(
     if (check.length === 0) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
 
     const { rows } = await pool.query(
-      `SELECT id, sold_at, quantity, selling_price, channel, coupang_order_item_id, shipping_fee, created_at
+      `SELECT id, sold_at, quantity, selling_price, coupon_discount, channel, coupang_order_item_id, shipping_fee, created_at
        FROM sale_records
        WHERE product_cost_id = $1
        ORDER BY sold_at DESC, created_at DESC`,
