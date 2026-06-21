@@ -97,10 +97,9 @@ export async function POST(
   const sellerProductId = products[0].seller_product_id;
   const storedVendorItemId = products[0].vendor_item_id ? Number(products[0].vendor_item_id) : null;
   const storedProductName = String(products[0].product_name ?? '');
-  const rawPolicy = products[0].download_coupon_policy as {
+  const downloadCouponPolicy = products[0].download_coupon_policy as {
     rate: number; max_discount: number; min_price: number;
   } | null;
-  const downloadCouponPolicy = rawPolicy ?? null;
   const naverChannelProductNo = products[0].naver_channel_product_no ? Number(products[0].naver_channel_product_no) : null;
 
   if (!sellerProductId && !storedVendorItemId && !naverChannelProductNo) {
@@ -338,7 +337,7 @@ export async function POST(
       item.coupon_discount = immediateDiscount + downloadDiscount;
     }
 
-    // 중복 방지: ON CONFLICT DO NOTHING으로 재임포트 시 스킵
+    // coupon_discount = 0인 기존 행만 갱신, 이미 계산된 행은 보호
     let imported = 0;
     let skipped = 0;
     for (const item of allItems) {
