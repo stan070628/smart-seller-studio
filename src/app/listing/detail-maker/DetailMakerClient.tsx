@@ -417,7 +417,7 @@ export default function DetailMakerClient() {
     setIsGenerating(true);
     setIsGeneratingScenes(false);
     setError(null);
-    // 이전 씬 생성 결과 무시
+    // 수동 씬 편집(generateSceneImages) 경쟁 방지 — 새 생성 시작 시 이전 결과 폐기
     sceneGenIdRef.current += 1;
 
     try {
@@ -460,7 +460,6 @@ export default function DetailMakerClient() {
           setError('생성 결과를 편집기로 불러오지 못했습니다. 다시 시도해주세요.');
         }
       }
-
 
     } catch (e) {
       setError(e instanceof Error ? e.message : 'AI 생성 중 오류가 발생했습니다.');
