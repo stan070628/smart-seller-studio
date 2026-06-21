@@ -223,6 +223,9 @@ export default function CostManagementTab() {
   const [editingAdSpendValue, setEditingAdSpendValue] = useState('');
   const [showHidden, setShowHidden] = useState(false);
   const [hiddenCount, setHiddenCount] = useState(0);
+  interface UndoToast { message: string; productsToRestore: ProductRow[]; }
+  const [undoToast, setUndoToast] = useState<UndoToast | null>(null);
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleCloseRgHistory = useCallback(() => setShowRgHistory(false), []);
 
@@ -370,6 +373,7 @@ export default function CostManagementTab() {
   }, [preset, customFrom, customTo]);
 
   useEffect(() => { load(); fetchApiRevenue(); }, [load, fetchApiRevenue]);
+  useEffect(() => () => { if (undoTimerRef.current) clearTimeout(undoTimerRef.current); }, []);
 
   // channelFilter가 'rg'일 때 RG 실재고 조회
   useEffect(() => {
@@ -389,9 +393,50 @@ export default function CostManagementTab() {
       .finally(() => setRgInventoryLoading(false));
   }, [channelFilter]);
 
+  function showUndoToast(message: string, productsToRestore: ProductRow[]) {
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    setUndoToast({ message, productsToRestore });
+    undoTimerRef.current = setTimeout(() => setUndoToast(null), 5000);
+  }
+
+  async function undoHide(productsToRestore: ProductRow[]) {
+    setUndoToast(null);
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    if (!showHidden) {
+      setProducts((prev) => {
+        const existingIds = new Set(prev.map((x) => x.id));
+        const toAdd = productsToRestore
+          .filter((p) => !existingIds.has(p.id))
+          .map((p) => ({ ...p, hidden: false }));
+        return [...prev, ...toAdd];
+      });
+    } else {
+      setProducts((prev) =>
+        prev.map((x) => {
+          const match = productsToRestore.find((r) => r.id === x.id);
+          return match ? { ...x, hidden: false } : x;
+        })
+      );
+    }
+    try {
+      await Promise.all(
+        productsToRestore.map((p) =>
+          fetch(`/api/cost-management/products/${p.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ hidden: false }),
+          }).then((r) => r.json())
+        )
+      );
+      setHiddenCount((c) => Math.max(0, c - productsToRestore.length));
+    } catch {
+      load();
+    }
+  }
+
   async function toggleHide(p: ProductRow) {
+    const savedProduct = { ...p };
     const newHidden = !p.hidden;
-    // Optimistic update: remove from view (if not showing hidden) or update opacity
     if (!showHidden) {
       setProducts((prev) => prev.filter((x) => x.id !== p.id));
     } else {
@@ -406,14 +451,15 @@ export default function CostManagementTab() {
       const json = await res.json();
       if (!json.success) throw new Error(json.error ?? '실패');
       setHiddenCount((c) => newHidden ? c + 1 : Math.max(0, c - 1));
+      if (newHidden) showUndoToast('숨겼어요. 데이터는 삭제되지 않았어요.', [savedProduct]);
     } catch (e) {
-      // Rollback on failure
       load();
       alert(`숨김 처리 실패: ${e instanceof Error ? e.message : '오류'}`);
     }
   }
 
   async function toggleGroupHide(group: GroupRow<ProductRow>) {
+    const savedChildren = [...group.children];
     const allHidden = group.children.every((c) => c.hidden);
     const newHidden = !allHidden;
     const childIds = new Set(group.children.map((c) => c.id));
@@ -442,6 +488,7 @@ export default function CostManagementTab() {
       );
       const delta = group.children.filter((c) => c.hidden !== newHidden).length;
       setHiddenCount((c) => (newHidden ? c + delta : Math.max(0, c - delta)));
+      if (newHidden) showUndoToast(`옵션 ${savedChildren.length}개를 숨겼어요. 데이터는 삭제되지 않았어요.`, savedChildren);
     } catch (e) {
       load();
       alert(`그룹 숨김 처리 실패: ${e instanceof Error ? e.message : '오류'}`);
@@ -618,13 +665,14 @@ export default function CostManagementTab() {
           <td style={{ padding: '10px 4px', textAlign: 'right' }}>
             <button
               onClick={() => toggleGroupHide(group)}
-              title={group.children.every((c) => c.hidden) ? '그룹 숨김 해제' : '그룹 전체 숨기기'}
+              title={group.children.every((c) => c.hidden) ? '그룹 복원 (전체 보이기)' : '그룹 전체 숨기기'}
+              aria-label={group.children.every((c) => c.hidden) ? '그룹 복원' : '그룹 전체 숨기기'}
               style={{
                 border: 'none', background: 'none', cursor: 'pointer',
-                padding: '4px', borderRadius: '4px', opacity: 0.25,
+                padding: '4px', borderRadius: '4px', opacity: 0.4,
               }}
               onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
-              onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.25')}
+              onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.4')}
             >
               {group.children.every((c) => c.hidden)
                 ? <EyeOff size={13} color="#71717a" />
@@ -650,8 +698,8 @@ export default function CostManagementTab() {
   // ─── 공통 상품 행 렌더 (standalone 및 그룹 자식 모두 사용) ────────────────
   function renderProductRow(p: ProductRow, isChild = false) {
     const rowStyle: React.CSSProperties = isChild
-      ? { borderBottom: '1px solid #f4f4f5', background: '#fafafa', borderLeft: '3px solid #fca5a5', opacity: p.hidden ? 0.5 : 1 }
-      : { borderBottom: '1px solid #f0f0f0', background: '#fff', opacity: p.hidden ? 0.5 : 1 };
+      ? { borderBottom: '1px solid #f4f4f5', background: p.hidden ? '#f4f4f5' : '#fafafa', borderLeft: '3px solid #fca5a5', opacity: p.hidden ? 0.55 : 1 }
+      : { borderBottom: '1px solid #f0f0f0', background: p.hidden ? '#f9fafb' : '#fff', opacity: p.hidden ? 0.55 : 1 };
     const firstTdPaddingLeft = isChild ? '22px' : '12px';
 
     return (
@@ -775,13 +823,14 @@ export default function CostManagementTab() {
         <td style={{ padding: '10px 4px', textAlign: 'right' }}>
           <button
             onClick={() => toggleHide(p)}
-            title={p.hidden ? '숨김 해제' : '이 행 숨기기'}
+            title={p.hidden ? '숨김 해제' : '이 상품 숨기기'}
+            aria-label={p.hidden ? '숨김 해제' : '상품 숨기기'}
             style={{
               border: 'none', background: 'none', cursor: 'pointer',
-              padding: '4px', borderRadius: '4px', opacity: 0.25,
+              padding: '4px', borderRadius: '4px', opacity: 0.4,
             }}
             onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.25')}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.4')}
           >
             {p.hidden ? <EyeOff size={13} color="#71717a" /> : <Eye size={13} color="#71717a" />}
           </button>
@@ -793,6 +842,7 @@ export default function CostManagementTab() {
             onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
             onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.25')}
             title="상품 삭제"
+            aria-label="상품 삭제"
           >
             <Trash2 size={13} color="#ef4444" />
           </button>
@@ -1052,7 +1102,7 @@ export default function CostManagementTab() {
             }}
           >
             {showHidden ? <EyeOff size={12} /> : <Eye size={12} />}
-            {showHidden ? `숨김 ${hiddenCount}개 숨기기` : `숨김 ${hiddenCount}개 표시하기`}
+            {showHidden ? '숨긴 항목 숨기기' : '숨긴 항목 표시하기'}
           </button>
         </div>
       )}
@@ -1071,7 +1121,7 @@ export default function CostManagementTab() {
             {search
               ? '검색 결과가 없습니다.'
               : hiddenCount > 0 && !showHidden
-                ? `모든 상품이 숨겨져 있습니다. 위의 "숨김 ${hiddenCount}개 표시하기" 버튼으로 복원할 수 있습니다.`
+                ? `모든 상품을 숨겼어요. 위의 '숨긴 항목 표시하기' 버튼으로 복원할 수 있고, 데이터는 삭제되지 않았어요.`
                 : '상품을 추가해주세요.'
             }
           </div>
@@ -1144,6 +1194,26 @@ export default function CostManagementTab() {
           onClose={() => setShowRgModal(false)}
           onCreated={load}
         />
+      )}
+      {undoToast && (
+        <div style={{
+          position: 'fixed', bottom: 24, right: 24,
+          background: '#18181b', color: '#fff',
+          borderRadius: 10, padding: '12px 16px', fontSize: 13,
+          zIndex: 9999, display: 'flex', alignItems: 'center', gap: 12,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+        }}>
+          <span>{undoToast.message}</span>
+          <button
+            onClick={() => undoHide(undoToast.productsToRestore)}
+            style={{
+              color: '#34d399', fontWeight: 600, border: 'none',
+              background: 'none', cursor: 'pointer', fontSize: 13, padding: 0,
+            }}
+          >
+            실행 취소
+          </button>
+        </div>
       )}
       {channelEditTarget && (
         <ChannelEditPopover
