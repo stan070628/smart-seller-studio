@@ -49,7 +49,19 @@ export async function POST(
   const { id } = await params;
   const body = await request.json().catch(() => null);
   const { sold_at, quantity, selling_price, shipping_fee: rawShipping } = body ?? {};
-  const shipping_fee = rawShipping != null ? Math.max(0, Math.round(Number(rawShipping))) : 0;
+
+  // shipping_fee: 제공된 경우 정수·비음수 검증, 없으면 0
+  let shipping_fee = 0;
+  if (rawShipping != null) {
+    const parsed = Number(rawShipping);
+    if (!Number.isInteger(parsed) || parsed < 0) {
+      return NextResponse.json(
+        { success: false, error: 'shipping_fee must be non-negative integer' },
+        { status: 400 },
+      );
+    }
+    shipping_fee = parsed;
+  }
 
   // 입력값 유효성 검증: sold_at 필수, quantity 양의 정수, selling_price 0 이상 정수
   if (
@@ -59,13 +71,6 @@ export async function POST(
   ) {
     return NextResponse.json(
       { success: false, error: 'sold_at, quantity(>0), selling_price(>=0) required' },
-      { status: 400 },
-    );
-  }
-
-  if (!Number.isInteger(shipping_fee) || shipping_fee < 0) {
-    return NextResponse.json(
-      { success: false, error: 'shipping_fee must be non-negative integer' },
       { status: 400 },
     );
   }
