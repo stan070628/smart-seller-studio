@@ -3,11 +3,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Pencil, Trash2, CloudDownload } from 'lucide-react';
 
+interface DownloadCouponPolicy {
+  rate: number;
+  max_discount: number;
+  min_price: number;
+}
+
 interface SaleRecord {
   id: string;
   sold_at: string;
   quantity: number;
   selling_price: number;
+  coupon_discount: number;
   channel: string;
   coupang_order_item_id: string | null;
   variant_name?: string | null;
@@ -42,10 +49,11 @@ interface Props {
   sellerProductId: number | null;
   vendorItemId?: number | null;
   naverChannelProductNo?: number | null;
+  downloadCouponPolicy?: DownloadCouponPolicy | null;
   onChanged: () => void;
 }
 
-export default function SaleEntryPanel({ productId, sellerProductId, vendorItemId, naverChannelProductNo, onChanged }: Props) {
+export default function SaleEntryPanel({ productId, sellerProductId, vendorItemId, naverChannelProductNo, downloadCouponPolicy, onChanged }: Props) {
   const [sales, setSales] = useState<SaleRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -59,6 +67,16 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
     from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
     to: new Date().toISOString().slice(0, 10),
   });
+  const [couponPolicy, setCouponPolicy] = useState<DownloadCouponPolicy | null>(
+    downloadCouponPolicy ?? null
+  );
+  const [couponPolicyForm, setCouponPolicyForm] = useState({
+    rate: String(Math.round((downloadCouponPolicy?.rate ?? 0.10) * 100)),
+    max_discount: String(downloadCouponPolicy?.max_discount ?? 1000),
+    min_price: String(downloadCouponPolicy?.min_price ?? 30000),
+  });
+  const [showCouponPolicyForm, setShowCouponPolicyForm] = useState(false);
+  const [savingCouponPolicy, setSavingCouponPolicy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -127,6 +145,34 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
     });
   }
 
+  async function saveCouponPolicy() {
+    const rate = Number(couponPolicyForm.rate) / 100;
+    const max_discount = Math.round(Number(couponPolicyForm.max_discount));
+    const min_price = Math.round(Number(couponPolicyForm.min_price));
+    if (rate <= 0 || rate > 1 || max_discount <= 0 || min_price < 0) {
+      alert('다운로드쿠폰 정책 값이 올바르지 않습니다.');
+      return;
+    }
+    setSavingCouponPolicy(true);
+    try {
+      const res = await fetch(`/api/cost-management/products/${productId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ download_coupon_policy: { rate, max_discount, min_price } }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setCouponPolicy({ rate, max_discount, min_price });
+        setShowCouponPolicyForm(false);
+        alert('다운로드쿠폰 정책이 저장되었습니다. 재임포트 시 적용됩니다.');
+      } else {
+        alert(json.error ?? '저장 실패');
+      }
+    } finally {
+      setSavingCouponPolicy(false);
+    }
+  }
+
   async function runImport() {
     setImporting(true);
     try {
@@ -184,19 +230,48 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
         </div>
       )}
 
+      {/* 다운로드쿠폰 정책 설정 */}
+      {(sellerProductId || vendorItemId) && (
+        <div style={{ marginBottom: '8px' }}>
+          <button
+            onClick={() => setShowCouponPolicyForm((v) => !v)}
+            style={{ fontSize: '10px', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0' }}
+          >
+            🏷️ 다운로드쿠폰 정책 {couponPolicy ? `(${Math.round(couponPolicy.rate * 100)}%, 최대 ${fmt(couponPolicy.max_discount)}원)` : '(미설정)'}
+          </button>
+          {showCouponPolicyForm && (
+            <div style={{ background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '6px', padding: '8px', fontSize: '11px', marginTop: '4px' }}>
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <label>할인율(%)<input type="number" value={couponPolicyForm.rate} onChange={(e) => setCouponPolicyForm((f) => ({ ...f, rate: e.target.value }))}
+                  style={{ width: '50px', marginLeft: '4px', padding: '2px 4px', borderRadius: '4px', border: '1px solid #fcd34d', fontSize: '11px', color: '#18181b' }} /></label>
+                <label>최대할인(원)<input type="number" value={couponPolicyForm.max_discount} onChange={(e) => setCouponPolicyForm((f) => ({ ...f, max_discount: e.target.value }))}
+                  style={{ width: '70px', marginLeft: '4px', padding: '2px 4px', borderRadius: '4px', border: '1px solid #fcd34d', fontSize: '11px', color: '#18181b' }} /></label>
+                <label>최소구매(원)<input type="number" value={couponPolicyForm.min_price} onChange={(e) => setCouponPolicyForm((f) => ({ ...f, min_price: e.target.value }))}
+                  style={{ width: '70px', marginLeft: '4px', padding: '2px 4px', borderRadius: '4px', border: '1px solid #fcd34d', fontSize: '11px', color: '#18181b' }} /></label>
+                <button onClick={saveCouponPolicy} disabled={savingCouponPolicy}
+                  style={{ padding: '3px 10px', borderRadius: '4px', background: '#d97706', color: '#fff', border: 'none', fontSize: '11px', cursor: 'pointer' }}>
+                  {savingCouponPolicy ? '저장중...' : '저장'}
+                </button>
+              </div>
+              <p style={{ margin: '4px 0 0', color: '#92400e', fontSize: '10px' }}>저장 후 재임포트 시 적용됩니다.</p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* 판매 목록 테이블 */}
       <div style={{ overflowY: 'auto', flex: 1 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
           <thead>
             <tr style={{ background: '#f9f9f9', borderBottom: '1px solid #e5e5e5' }}>
-              {['판매일', '수량', '판매가', '채널', '사이즈', '택배비', ''].map((h, i) => (
+              {['판매일', '수량', '판매가', '쿠폰할인', '채널', '사이즈', '택배비', ''].map((h, i) => (
                 <th key={`${h}-${i}`} style={{ padding: '6px 8px', textAlign: h === '판매일' ? 'left' : 'right', fontWeight: 600, color: '#27272a' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} style={{ padding: '20px', textAlign: 'center', color: '#52525b' }}>불러오는 중...</td></tr>
+              <tr><td colSpan={8} style={{ padding: '20px', textAlign: 'center', color: '#52525b' }}>불러오는 중...</td></tr>
             ) : sales.map((s) => (
               editingId === s.id ? (
                 // 인라인 편집 행
@@ -213,8 +288,8 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
                     <input type="number" value={form.selling_price} onChange={(e) => setForm((f) => ({ ...f, selling_price: e.target.value }))}
                       style={{ width: '80px', padding: '3px 5px', borderRadius: '4px', border: '1px solid #86efac', fontSize: '11px', color: '#18181b' }} />
                   </td>
-                  <td colSpan={2} style={{ padding: '4px 6px' }}>
-                    {/* 채널/사이즈는 편집 불가 — 빈 셀 */}
+                  <td colSpan={3} style={{ padding: '4px 6px' }}>
+                    {/* 쿠폰할인/채널/사이즈는 편집 불가 — 빈 셀 */}
                   </td>
                   <td style={{ padding: '4px 6px' }}>
                     <input
@@ -243,6 +318,10 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
                   <td style={{ padding: '6px 8px', color: '#27272a' }}>{s.sold_at.slice(0, 10)}</td>
                   <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, color: '#18181b' }}>{fmt(s.quantity)}개</td>
                   <td style={{ padding: '6px 8px', textAlign: 'right', color: '#2563eb' }}>{fmt(s.selling_price)}</td>
+                  {/* 쿠폰할인 */}
+                  <td style={{ padding: '6px 8px', textAlign: 'right', color: (s.coupon_discount ?? 0) > 0 ? '#dc2626' : '#e5e5e5', fontSize: '11px' }}>
+                    {(s.coupon_discount ?? 0) > 0 ? `-${fmt(s.coupon_discount)}` : '—'}
+                  </td>
                   <td style={{ padding: '6px 8px', textAlign: 'right' }}>
                     {s.channel === 'coupang'
                       ? <span style={{ background: '#dbeafe', color: '#1d4ed8', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>쿠팡</span>
@@ -286,8 +365,8 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
                   <input type="number" value={form.selling_price} onChange={(e) => setForm((f) => ({ ...f, selling_price: e.target.value }))}
                     style={{ width: '80px', padding: '3px 5px', borderRadius: '4px', border: '1px solid #86efac', fontSize: '11px', color: '#18181b' }} />
                 </td>
-                <td colSpan={2} style={{ padding: '4px 6px' }}>
-                  {/* 채널/사이즈는 새 추가 시 자동 지정 — 빈 셀 */}
+                <td colSpan={3} style={{ padding: '4px 6px' }}>
+                  {/* 쿠폰할인/채널/사이즈는 새 추가 시 자동 지정 — 빈 셀 */}
                 </td>
                 <td style={{ padding: '4px 6px' }}>
                   <input
