@@ -48,6 +48,22 @@ export async function GET(request: NextRequest) {
     );
     const hiddenCount: number = hiddenCountRows[0]?.hidden_count ?? 0;
 
+    // product_cost_channels: product별 채널 ID 목록
+    const { rows: channelRows } = await pool.query(
+      `SELECT product_cost_id, id, channel_type, external_id
+       FROM product_cost_channels
+       WHERE user_id = $1
+       ORDER BY created_at ASC`,
+      [user.userId],
+    );
+
+    const channelsByProduct = new Map<string, { id: string; channel_type: string; external_id: number }[]>();
+    for (const ch of channelRows) {
+      const list = channelsByProduct.get(ch.product_cost_id) ?? [];
+      list.push({ id: ch.id, channel_type: ch.channel_type, external_id: Number(ch.external_id) });
+      channelsByProduct.set(ch.product_cost_id, list);
+    }
+
     // 입고 전체 조회 (기간 필터 없음 — 재고는 전체 입고 기준)
     const { rows: allEntries } = await pool.query(
       `SELECT id, product_cost_id, received_at, quantity, unit_cost, unit_shipping_fee, unit_rg_shipping_fee, shipping_group_id, channel
@@ -130,12 +146,19 @@ export async function GET(request: NextRequest) {
     }
 
     // 채널 필터에 따라 상품 목록 필터링
+    const rgProductIds = new Set(channelRows.filter((ch) => ch.channel_type === 'coupang_rg').map((ch) => ch.product_cost_id));
+    const wingProductIds = new Set(channelRows.filter((ch) => ch.channel_type === 'coupang_wing').map((ch) => ch.product_cost_id));
+    const naverProductIds = new Set(channelRows.filter((ch) => ch.channel_type === 'naver').map((ch) => ch.product_cost_id));
+
     const filteredProducts = channelFilter === 'rg'
-      ? products.filter((p: { vendor_item_id: string | null }) => p.vendor_item_id != null)
+      ? products.filter((p: { id: string; vendor_item_id: string | null }) =>
+          rgProductIds.has(p.id) || p.vendor_item_id != null)
       : channelFilter === 'wing'
-        ? products.filter((p: { seller_product_id: string | null }) => p.seller_product_id != null)
+        ? products.filter((p: { id: string; seller_product_id: string | null }) =>
+            wingProductIds.has(p.id) || p.seller_product_id != null)
         : channelFilter === 'naver'
-          ? products.filter((p: { naver_channel_product_no: string | null }) => p.naver_channel_product_no != null)
+          ? products.filter((p: { id: string; naver_channel_product_no: string | null }) =>
+              naverProductIds.has(p.id) || p.naver_channel_product_no != null)
           : products;
 
     const data = filteredProducts.map((p) => {
@@ -233,6 +256,7 @@ export async function GET(request: NextRequest) {
         subdivision_carryover: Number(p.subdivision_carryover ?? 0),
         subdivision_carryover_unit_cost: Number(p.subdivision_carryover_unit_cost ?? 0),
         hidden: Boolean(p.hidden),
+        channels: channelsByProduct.get(p.id) ?? [],
       };
     });
 
