@@ -24,7 +24,7 @@ interface ChannelEditPopoverProps {
 
 const CHANNEL_LABELS: Record<string, { label: string; color: string; bg: string; placeholder: string }> = {
   coupang_rg: { label: 'RG', color: '#0369a1', bg: '#e0f2fe', placeholder: '예: 95401822935 (vendorItemId)' },
-  coupang_wing: { label: '쿠팡 윙', color: '#be0014', bg: '#fef2f2', placeholder: '예: 16182237839 (sellerProductId)' },
+  coupang_wing: { label: '쿠팡 윙', color: '#be0014', bg: '#fef2f2', placeholder: '예: 95401822935 (판배 옵션ID)' },
   naver: { label: '네이버', color: '#03c75a', bg: '#f0fff8', placeholder: '예: 5012345678 (채널상품번호)' },
 };
 

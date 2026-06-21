@@ -38,45 +38,46 @@ export async function POST(request: NextRequest) {
 
   const pool = getSourcingPool();
 
-  // revenue-history는 vendorItemId를 포함 → vendor_item_id 기준 1차 매칭
-  // sellerProductId 기준 2차 매칭 (wing-only 상품 대응)
+  // revenue-history는 vendorItemId(옵션ID)를 포함 → 1차 매칭
+  // sellerProductId(등록상품ID) 기준 2차 매칭 (레거시 wing junction table 대응)
   const { rows: productRows } = await pool.query(
-    `SELECT id, seller_product_id, vendor_item_id FROM product_costs
-     WHERE user_id = $1 AND (seller_product_id IS NOT NULL OR vendor_item_id IS NOT NULL)`,
+    `SELECT id, seller_product_id, vendor_item_id FROM product_costs WHERE user_id = $1`,
     [user.userId],
   );
+  // 레거시 wing junction table — sellerProductId 기반 fallback
   const { rows: junctionRows } = await pool.query(
     `SELECT product_cost_id AS id, seller_product_id FROM product_wing_seller_ids WHERE user_id = $1`,
     [user.userId],
   );
-  // product_cost_channels에서 coupang_wing 매핑 조회 (새 방식)
+  // product_cost_channels wing 채널: external_id = 판배 옵션ID → vendorItemId로 1차 매칭
   const { rows: wingChannels } = await pool.query(
-    `SELECT product_cost_id, external_id AS seller_product_id
+    `SELECT product_cost_id, external_id
      FROM product_cost_channels
      WHERE user_id = $1 AND channel_type = 'coupang_wing'`,
     [user.userId],
   );
 
-  if (productRows.length === 0 && junctionRows.length === 0) {
+  if (productRows.length === 0 && junctionRows.length === 0 && wingChannels.length === 0) {
     return NextResponse.json({ success: true, data: { imported: 0, skipped: 0, total: 0 } });
   }
 
-  // vendorItemId → product_cost_id (우선)
+  // vendorItemId(옵션ID) → product_cost_id
+  // RG: product_costs.vendor_item_id
+  // Wing: product_cost_channels.external_id (판배 옵션ID)
   const vendorItemMap = new Map<number, string>();
   for (const row of productRows) {
     if (row.vendor_item_id) vendorItemMap.set(Number(row.vendor_item_id), row.id);
   }
-  // sellerProductId → product_cost_id (junction table 포함, fallback)
+  for (const ch of wingChannels) {
+    vendorItemMap.set(Number(ch.external_id), ch.product_cost_id);
+  }
+  // sellerProductId(등록상품ID) → product_cost_id (fallback)
   const sellerProductMap = new Map<number, string>();
   for (const row of productRows) {
-    if (row.seller_product_id) sellerProductMap.set(Number(row.seller_product_id), row.id);
+    if (row.seller_product_id > 0) sellerProductMap.set(Number(row.seller_product_id), row.id);
   }
   for (const row of junctionRows) {
     sellerProductMap.set(Number(row.seller_product_id), row.id);
-  }
-  // product_cost_channels coupang_wing 항목도 sellerProductMap에 반영 (최우선)
-  for (const ch of wingChannels) {
-    sellerProductMap.set(Number(ch.seller_product_id), ch.product_cost_id);
   }
 
   try {
