@@ -311,6 +311,7 @@ export default function ChannelEditPopover({
             <input
               type="number"
               min={1}
+              step={1}
               value={newUnitMultiplier}
               onChange={(e) => { setNewUnitMultiplier(e.target.value); setAddError(null); }}
               onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); }}
