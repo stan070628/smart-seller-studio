@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
   }
   // product_cost_channels 우선 (덮어씌움)
   for (const ch of rgChannels) {
-    vendorItemMap.set(Number(ch.external_id), { id: ch.product_cost_id, multiplier: ch.unit_multiplier ?? 1 });
+    vendorItemMap.set(Number(ch.external_id), { id: ch.product_cost_id, multiplier: ch.unit_multiplier >= 1 ? ch.unit_multiplier : 1 });
   }
 
   if (vendorItemMap.size === 0) {
