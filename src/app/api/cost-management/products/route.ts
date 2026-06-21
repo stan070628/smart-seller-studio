@@ -50,17 +50,17 @@ export async function GET(request: NextRequest) {
 
     // product_cost_channels: product별 채널 ID 목록
     const { rows: channelRows } = await pool.query(
-      `SELECT product_cost_id, id, channel_type, external_id
+      `SELECT product_cost_id, id, channel_type, external_id, unit_multiplier
        FROM product_cost_channels
        WHERE user_id = $1
        ORDER BY created_at ASC`,
       [user.userId],
     );
 
-    const channelsByProduct = new Map<string, { id: string; channel_type: string; external_id: number }[]>();
+    const channelsByProduct = new Map<string, { id: string; channel_type: string; external_id: number; unit_multiplier: number }[]>();
     for (const ch of channelRows) {
       const list = channelsByProduct.get(ch.product_cost_id) ?? [];
-      list.push({ id: ch.id, channel_type: ch.channel_type, external_id: Number(ch.external_id) });
+      list.push({ id: ch.id, channel_type: ch.channel_type, external_id: Number(ch.external_id), unit_multiplier: ch.unit_multiplier ?? 1 });
       channelsByProduct.set(ch.product_cost_id, list);
     }
 
