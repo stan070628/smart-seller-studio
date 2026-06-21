@@ -35,6 +35,7 @@
 | `src/app/api/ai/generate-detail-html/route.ts` | 모델 `claude-opus-4-8`, max_tokens 4096으로 변경 |
 | `src/lib/detail-page/section-parser.ts` | `contentToSections()`에 richSections 파싱 로직 추가 |
 | `src/lib/detail-page/section-renderer.ts` | 6개 새 섹션 타입 렌더러 추가 |
+| `src/app/listing/detail-maker/DetailMakerClient.tsx` | 로딩 안내 문구 업데이트 |
 
 ### 데이터 흐름
 
@@ -141,7 +142,8 @@ max_tokens: 4096,  // 기존 2048 → 4096
 
 ### 시스템 프롬프트 추가 (`detail-page.ts`)
 
-기존 `DETAIL_PAGE_SYSTEM_PROMPT` 끝에 아래 섹션 추가:
+기존 `DETAIL_PAGE_SYSTEM_PROMPT` (카테고리 무관 공통 베이스) 끝에 아래 섹션 추가.  
+`FASHION_SYSTEM_PROMPT`, `LIVING_SYSTEM_PROMPT` 등 카테고리별 변형 프롬프트에는 추가하지 않음 — 베이스 프롬프트가 카테고리 분기 전에 항상 주입되기 때문이다.
 
 ```
 ## richSections 생성 규칙
@@ -272,7 +274,18 @@ selectedSections 배열에 선택한 섹션 key를 렌더링 순서대로 명시
 1. `content.richSections?.selectedSections`를 순서대로 순회
 2. 각 key에 해당하는 데이터 배열 확인 (없으면 skip)
 3. 해당 `DetailSection` 타입으로 변환하여 기존 섹션 배열에 append
-4. 기존 섹션 순서: hero → rich 섹션들 → cta → warning
+4. 최종 섹션 순서: hero → selling_points → rich 섹션들 → features → spec_table → cta → warning
+
+`selectedSections` 단축키 → `SectionType` 매핑:
+
+| selectedSections key | SectionType |
+|----------------------|-------------|
+| `'point'` | `'point_section'` |
+| `'stat'` | `'stat_callout'` |
+| `'bar_chart'` | `'bar_chart'` |
+| `'why'` | `'why_icons'` |
+| `'cert'` | `'certifications'` |
+| `'steps'` | `'infographic_steps'` |
 
 ---
 
