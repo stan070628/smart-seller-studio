@@ -75,6 +75,8 @@ function getCandidatePalettes(categoryKeyword: string): PaletteName[] {
 }
 
 // 유효한 SectionType 집합 (런타임 검증용)
+// 주의: rich 섹션 6종(point_section, stat_callout, bar_chart, why_icons, certifications,
+// infographic_steps)은 이 API에서 제안하지 않으므로 제외 (AI가 richSections JSON으로 직접 생성)
 const VALID_SECTION_TYPES = new Set<string>([
   'hero',
   'selling_points',

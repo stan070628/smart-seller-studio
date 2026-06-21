@@ -52,7 +52,10 @@ export function contentToSections(content: DetailPageContent): DetailSection[] {
   // richSections — AI가 selectedSections 순서대로 지정한 rich 섹션들
   if (content.richSections?.selectedSections?.length) {
     const rich = content.richSections;
+    const seenKeys = new Set<string>();
     for (const key of rich.selectedSections) {
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
       switch (key) {
         case 'point':
           if (rich.pointSections && rich.pointSections.length > 0) {
