@@ -46,6 +46,8 @@ export interface SaleRow {
   channel?: string;
   /** 건당 택배비 (원) — 실현손익에서 차감 */
   shipping_fee?: number;
+  /** 쿠폰 할인 합계 (원) — effective_price = selling_price - coupon_discount */
+  coupon_discount?: number;
 }
 
 /** 판매 건별 FIFO 상세 결과 */
@@ -122,15 +124,18 @@ export function calculateFifo(
     const fifo_cost_per_unit =
       sale.quantity > 0 ? Math.round(totalCost / sale.quantity) : 0;
 
-    // 플랫폼 수수료: 판매가 × 수수료율 (반올림)
-    const fee_per_unit = Math.round(sale.selling_price * platformFeeRate);
+    // 실효 판매가: 쿠폰 할인 차감 (없으면 selling_price 그대로)
+    const effective_price = sale.selling_price - (sale.coupon_discount ?? 0);
+
+    // 플랫폼 수수료: 실효 판매가 × 수수료율 (반올림)
+    const fee_per_unit = Math.round(effective_price * platformFeeRate);
 
     // 택배비: 건당 고정 (없으면 0)
     const shipping_fee_per_unit = sale.shipping_fee ?? 0;
 
     // 단위 실현손익
     const realized_profit_per_unit =
-      sale.selling_price - fifo_cost_per_unit - fee_per_unit - shipping_fee_per_unit;
+      effective_price - fifo_cost_per_unit - fee_per_unit - shipping_fee_per_unit;
 
     sale_details.push({ saleId: sale.id, fifo_cost_per_unit, realized_profit_per_unit });
     total_realized_profit += realized_profit_per_unit * sale.quantity;

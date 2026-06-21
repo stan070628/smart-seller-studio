@@ -119,4 +119,30 @@ describe('calculateFifo', () => {
     // stock_value = unit_cost × qty 만 (배송비·RG배송비 제외)
     expect(result.stock_value).toBe(10 * 15000);
   });
+
+  it('coupon_discount → effective_price 기준 수수료·손익 계산', () => {
+    const batches = [
+      { id: 'b1', received_at: '2026-04-01', quantity: 10, unit_cost: 10000, unit_shipping_fee: 0, unit_rg_shipping_fee: 0 },
+    ];
+    const sales = [
+      { id: 's1', sold_at: '2026-05-01', quantity: 1, selling_price: 35800, coupon_discount: 6000 },
+    ];
+    // effective_price = 35800 - 6000 = 29800
+    // fee = round(29800 * 0.108) = round(3218.4) = 3218
+    // profit = 29800 - 10000 - 3218 = 16582
+    const result = calculateFifo(batches, sales, 0.108);
+    expect(result.sale_details[0].realized_profit_per_unit).toBe(16582);
+  });
+
+  it('coupon_discount 없으면 기존 동작 유지', () => {
+    const batches = [
+      { id: 'b1', received_at: '2026-04-01', quantity: 10, unit_cost: 10000, unit_shipping_fee: 0, unit_rg_shipping_fee: 0 },
+    ];
+    const sales = [
+      { id: 's1', sold_at: '2026-05-01', quantity: 1, selling_price: 20000 },
+    ];
+    // coupon_discount undefined → effective_price = 20000, fee = 2000, profit = 8000
+    const result = calculateFifo(batches, sales, 0.1);
+    expect(result.sale_details[0].realized_profit_per_unit).toBe(8000);
+  });
 });
