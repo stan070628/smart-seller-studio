@@ -397,6 +397,10 @@ export function createEmptySection(type: SectionType, order: number): DetailSect
       return { ...base, type: 'certifications', content: { type: 'certifications', items: [] } };
     case 'infographic_steps':
       return { ...base, type: 'infographic_steps', content: { type: 'infographic_steps', items: [] } };
+    default: {
+      const _exhaustive: never = type;
+      throw new Error(`createEmptySection: unhandled type "${_exhaustive}"`);
+    }
   }
 }
 
@@ -409,11 +413,11 @@ export function distributeImagesToSections(
   sections: DetailSection[],
   imageUrls: string[],
 ): DetailSection[] {
-  const IMAGE_TARGETS: SectionType[] = ['hero', 'selling_points', 'features'];
+  const IMAGE_TARGETS = new Set<SectionType>(['hero', 'selling_points', 'features']);
   let imgIdx = 0;
   return sections.map(s => {
     if (imgIdx >= imageUrls.length) return s;
-    if (!IMAGE_TARGETS.includes(s.type)) return s;
+    if (!IMAGE_TARGETS.has(s.type)) return s;
     const url = imageUrls[imgIdx++];
     return {
       ...s,
