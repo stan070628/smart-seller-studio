@@ -240,7 +240,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex' }}>
       <div onClick={onClose} style={{ flex: 1, background: 'rgba(0,0,0,0.3)' }} />
-      <div style={{ width: '900px', height: '100vh', background: '#fff', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ width: '1100px', height: '100vh', background: '#fff', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column' }}>
         {/* 헤더 */}
         <div style={{ padding: '16px 24px 12px', borderBottom: '1px solid #e5e5e5', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
           <div style={{ flex: 1, fontSize: '14px', fontWeight: 700, color: '#18181b' }}>{productName}</div>
@@ -272,7 +272,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
         </div>
 
         {/* 좌우 분할 패널 */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0', flex: 1, overflow: 'hidden', borderTop: '1px solid #e5e5e5' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '420px 1fr', gap: '0', flex: 1, overflow: 'hidden', borderTop: '1px solid #e5e5e5' }}>
           {/* 좌: 입고 내역 */}
           <div style={{ padding: '14px 16px 14px 24px', borderRight: '1px solid #e5e5e5', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: '12px', fontWeight: 700, color: '#18181b', marginBottom: '8px' }}>📦 입고 내역</div>
