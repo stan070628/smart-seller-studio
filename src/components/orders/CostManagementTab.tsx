@@ -1161,7 +1161,7 @@ export default function CostManagementTab() {
       </div>
 
       <div style={{ marginTop: '10px', fontSize: '11px', color: '#999' }}>
-        실현손익 = FIFO 원가 기준 (판매가 − 입고원가 − 배송비 − RG배송비 − 수수료)
+        실현손익 = FIFO 원가 기준 ((판매가−쿠폰할인) − 입고원가 − 배송비 − RG배송비 − 수수료)
       </div>
 
       {drawerProductId && (() => {
