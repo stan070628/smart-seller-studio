@@ -31,18 +31,32 @@ export async function POST(request: NextRequest) {
   const pool = getSourcingPool();
 
   // 사용자의 RG 상품 전체 조회 → vendorItemId → product_cost_id 맵 구성
+  // product_cost_channels에서 coupang_rg 매핑 조회 (새 방식)
+  const { rows: rgChannels } = await pool.query(
+    `SELECT product_cost_id, external_id
+     FROM product_cost_channels
+     WHERE user_id = $1 AND channel_type = 'coupang_rg'`,
+    [user.userId],
+  );
+  // 기존 product_costs.vendor_item_id fallback (migration 전 데이터 대비)
   const { rows: rgProducts } = await pool.query(
     `SELECT id, vendor_item_id FROM product_costs
      WHERE user_id = $1 AND vendor_item_id IS NOT NULL`,
     [user.userId],
   );
-  if (rgProducts.length === 0) {
-    return NextResponse.json({ success: true, data: { imported: 0, skipped: 0, total: 0 } });
-  }
 
   const vendorItemMap = new Map<number, string>(); // vendorItemId → product_cost_id
+  // fallback 먼저 (낮은 우선순위)
   for (const row of rgProducts) {
     vendorItemMap.set(Number(row.vendor_item_id), row.id);
+  }
+  // product_cost_channels 우선 (덮어씌움)
+  for (const ch of rgChannels) {
+    vendorItemMap.set(Number(ch.external_id), ch.product_cost_id);
+  }
+
+  if (vendorItemMap.size === 0) {
+    return NextResponse.json({ success: true, data: { imported: 0, skipped: 0, total: 0 } });
   }
 
   try {

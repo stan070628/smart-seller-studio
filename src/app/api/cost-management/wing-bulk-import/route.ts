@@ -49,6 +49,13 @@ export async function POST(request: NextRequest) {
     `SELECT product_cost_id AS id, seller_product_id FROM product_wing_seller_ids WHERE user_id = $1`,
     [user.userId],
   );
+  // product_cost_channels에서 coupang_wing 매핑 조회 (새 방식)
+  const { rows: wingChannels } = await pool.query(
+    `SELECT product_cost_id, external_id AS seller_product_id
+     FROM product_cost_channels
+     WHERE user_id = $1 AND channel_type = 'coupang_wing'`,
+    [user.userId],
+  );
 
   if (productRows.length === 0 && junctionRows.length === 0) {
     return NextResponse.json({ success: true, data: { imported: 0, skipped: 0, total: 0 } });
@@ -66,6 +73,10 @@ export async function POST(request: NextRequest) {
   }
   for (const row of junctionRows) {
     sellerProductMap.set(Number(row.seller_product_id), row.id);
+  }
+  // product_cost_channels coupang_wing 항목도 sellerProductMap에 반영 (최우선)
+  for (const ch of wingChannels) {
+    sellerProductMap.set(Number(ch.seller_product_id), ch.product_cost_id);
   }
 
   try {
