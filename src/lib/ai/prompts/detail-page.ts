@@ -1,4 +1,5 @@
 import type { DetailSection } from '@/types/detail-page';
+import type { RichSections } from '@/types/detail-page';
 
 // ─────────────────────────────────────────
 // 이미지 분석 입력 타입 (schemas.ts 의존성 제거, visualPrompt 불필요)
@@ -34,6 +35,7 @@ export interface DetailPageContent {
   usageSteps: string[];
   warnings: string[];
   ctaText: string;
+  richSections?: RichSections;
 }
 
 export interface MobileDetailPageContent {
@@ -138,7 +140,16 @@ export const DETAIL_PAGE_SYSTEM_PROMPT = `당신은 한국 이커머스 상세 �
   ],
   "usageSteps": ["string (단계별 사용법)"],
   "warnings": ["string (주의사항)"],
-  "ctaText": "string (20자 이내, 구매를 직접 유도하는 행동 촉구 문구)"
+  "ctaText": "string (20자 이내, 구매를 직접 유도하는 행동 촉구 문구)",
+  "richSections": {
+    "selectedSections": ["string — point|stat|bar_chart|why|cert|steps 중 이 상품에 적합한 것만"],
+    "pointSections": [{"number": "number (1,2,3)", "title": "string (20자 이내)", "description": "string (60자 이내)"}],
+    "statCallouts": [{"value": "string (예: '단백질 20g', '93.5%')", "label": "string (예: '1회 제공량당')", "description": "string (40자 이내)"}],
+    "barChartItems": [{"label": "string", "percentage": "number (0~200)", "displayValue": "string (예: '150%', '20g')"}],
+    "whyIcons": [{"icon": "string (BMP 이모지)", "title": "string (15자 이내)", "description": "string (40자 이내)"}],
+    "certifications": [{"name": "string (예: 'GMP 인증')", "description": "string (40자 이내)"}],
+    "infographicSteps": [{"step": "number", "icon": "string (이모지)", "title": "string (15자 이내)", "description": "string (30자 이내)"}]
+  }
 }
 
 ## 수량 제약
@@ -146,7 +157,17 @@ export const DETAIL_PAGE_SYSTEM_PROMPT = `당신은 한국 이커머스 상세 �
 - features: 3개 이상 5개 이하
 - specs: 2개 이상 6개 이하
 - usageSteps: 2개 이상 4개 이하
-- warnings: 2개 이상 3개 이하`;
+- warnings: 2개 이상 3개 이하
+
+## richSections 생성 규칙
+상품 카테고리와 이미지를 분석하여 selectedSections에 적합한 섹션 key만 포함하라.
+- 건강기능식품·보충제: ["point","stat","why","bar_chart","cert","steps"]
+- 뷰티·스킨케어: ["point","stat","why","cert","steps"]
+- 패션·라이프스타일: ["point","why"]
+- 가전·생활용품: ["why","steps","point"]
+- 식품·음료: ["point","why","stat","steps"]
+- 기타: ["point","why"]
+⚠️ stat·bar_chart·certifications 수치는 이미지·텍스트에서 실제 확인된 것만. 추론·창작 금지.`;
 
 // ─────────────────────────────────────────
 // 스튜디오 전용 시스템 프롬프트 (절제된 프리미엄 톤)
