@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
   // 사용자의 RG 상품 전체 조회 → vendorItemId → product_cost_id 맵 구성
   // product_cost_channels에서 coupang_rg 매핑 조회 (새 방식)
   const { rows: rgChannels } = await pool.query(
-    `SELECT product_cost_id, external_id
+    `SELECT product_cost_id, external_id, unit_multiplier
      FROM product_cost_channels
      WHERE user_id = $1 AND channel_type = 'coupang_rg'`,
     [user.userId],
@@ -45,14 +45,14 @@ export async function POST(request: NextRequest) {
     [user.userId],
   );
 
-  const vendorItemMap = new Map<number, string>(); // vendorItemId → product_cost_id
+  const vendorItemMap = new Map<number, { id: string; multiplier: number }>(); // vendorItemId → { id, multiplier }
   // fallback 먼저 (낮은 우선순위)
   for (const row of rgProducts) {
-    vendorItemMap.set(Number(row.vendor_item_id), row.id);
+    vendorItemMap.set(Number(row.vendor_item_id), { id: row.id, multiplier: 1 });
   }
   // product_cost_channels 우선 (덮어씌움)
   for (const ch of rgChannels) {
-    vendorItemMap.set(Number(ch.external_id), ch.product_cost_id);
+    vendorItemMap.set(Number(ch.external_id), { id: ch.product_cost_id, multiplier: ch.unit_multiplier ?? 1 });
   }
 
   if (vendorItemMap.size === 0) {
@@ -84,18 +84,18 @@ export async function POST(request: NextRequest) {
           // 동일 orderId+vendorItemId가 여러 orderItems로 분리 반환될 때 수량 합산
           const orderItemMap = new Map<string, (typeof items)[number]>();
           for (const item of order.orderItems) {
-            const productCostId = vendorItemMap.get(item.vendorItemId);
-            if (!productCostId) continue;
+            const match = vendorItemMap.get(item.vendorItemId);
+            if (!match) continue;
             if (item.salesQuantity <= 0) continue;
             const key = `rg-${order.orderId}-${item.vendorItemId}`;
             const existing = orderItemMap.get(key);
             if (existing) {
-              existing.quantity += item.salesQuantity;
+              existing.quantity += item.salesQuantity * match.multiplier;
             } else {
               orderItemMap.set(key, {
-                product_cost_id: productCostId,
+                product_cost_id: match.id,
                 sold_at: soldAt,
-                quantity: item.salesQuantity,
+                quantity: item.salesQuantity * match.multiplier,
                 selling_price: item.unitSalesPrice,
                 coupang_order_item_id: key,
               });
