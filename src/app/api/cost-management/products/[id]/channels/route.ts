@@ -17,7 +17,7 @@ export async function GET(
   const pool = getSourcingPool();
 
   const { rows } = await pool.query(
-    `SELECT id, channel_type, external_id, created_at
+    `SELECT id, channel_type, external_id, unit_multiplier, created_at
      FROM product_cost_channels
      WHERE product_cost_id = $1 AND user_id = $2
      ORDER BY created_at ASC`,
@@ -37,7 +37,7 @@ export async function POST(
 
   const { id } = await params;
   const body = await request.json().catch(() => null);
-  const { channel_type, external_id } = body ?? {};
+  const { channel_type, external_id, unit_multiplier = 1 } = body ?? {};
 
   if (!VALID_CHANNEL_TYPES.includes(channel_type as ChannelType)) {
     return NextResponse.json(
@@ -48,6 +48,12 @@ export async function POST(
   if (!Number.isInteger(external_id) || external_id <= 0) {
     return NextResponse.json(
       { success: false, error: 'external_id must be a positive integer' },
+      { status: 400 },
+    );
+  }
+  if (!Number.isInteger(unit_multiplier) || unit_multiplier < 1) {
+    return NextResponse.json(
+      { success: false, error: 'unit_multiplier must be a positive integer >= 1' },
       { status: 400 },
     );
   }
@@ -64,12 +70,13 @@ export async function POST(
     }
 
     const { rows } = await pool.query(
-      `INSERT INTO product_cost_channels (user_id, product_cost_id, channel_type, external_id)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO product_cost_channels (user_id, product_cost_id, channel_type, external_id, unit_multiplier)
+       VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (user_id, channel_type, external_id) DO UPDATE
-         SET product_cost_id = EXCLUDED.product_cost_id
-       RETURNING id, channel_type, external_id, created_at`,
-      [user.userId, id, channel_type, external_id],
+         SET product_cost_id = EXCLUDED.product_cost_id,
+             unit_multiplier = EXCLUDED.unit_multiplier
+       RETURNING id, channel_type, external_id, unit_multiplier, created_at`,
+      [user.userId, id, channel_type, external_id, unit_multiplier],
     );
 
     return NextResponse.json({ success: true, data: rows[0] }, { status: 201 });
