@@ -20,6 +20,39 @@ function splitInto30DayChunks(from: string, to: string): Array<{ from: string; t
   return chunks;
 }
 
+/**
+ * coupang_order_item_id 형식별 orderId 추출
+ * - Wing: "{orderId}-{vendorItemId}" → parts.slice(0, -1).join('-')
+ * - RG:   "rg-{orderId}-{vendorItemId}" → parts[1]
+ * - Naver/Manual: null 반환 (fms 호출 불필요)
+ */
+function extractOrderId(coupangOrderItemId: string): string | null {
+  const parts = coupangOrderItemId.split('-');
+  if (parts[0] === 'rg') {
+    return parts[1] ?? null;
+  }
+  if (parts[0] === 'naver') {
+    return null;
+  }
+  if (parts.length >= 2) {
+    return parts.slice(0, -1).join('-');
+  }
+  return null;
+}
+
+/**
+ * 다운로드쿠폰 정책 기반 할인액 계산
+ * 실제 고객 사용 여부 확인 불가 — 조건 충족 시 최악 시나리오(100% 사용) 가정
+ */
+function calcDownloadDiscount(
+  sellingPrice: number,
+  policy: { rate: number; max_discount: number; min_price: number } | null,
+): number {
+  if (!policy) return 0;
+  if (sellingPrice < policy.min_price) return 0;
+  return Math.min(Math.round(sellingPrice * policy.rate), policy.max_discount);
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -41,7 +74,7 @@ export async function POST(
 
   // RLS 대체: user_id 조건으로 타 유저 데이터 접근 차단
   const { rows: products } = await pool.query(
-    `SELECT id, seller_product_id, vendor_item_id, product_name, naver_channel_product_no, variants FROM product_costs WHERE id = $1 AND user_id = $2`,
+    `SELECT id, seller_product_id, vendor_item_id, product_name, naver_channel_product_no, variants, download_coupon_policy FROM product_costs WHERE id = $1 AND user_id = $2`,
     [id, user.userId],
   );
   if (products.length === 0) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
@@ -49,6 +82,10 @@ export async function POST(
   const sellerProductId = products[0].seller_product_id;
   const storedVendorItemId = products[0].vendor_item_id ? Number(products[0].vendor_item_id) : null;
   const storedProductName = String(products[0].product_name ?? '');
+  const rawPolicy = products[0].download_coupon_policy as {
+    rate: number; max_discount: number; min_price: number;
+  } | null;
+  const downloadCouponPolicy = rawPolicy ?? null;
   const naverChannelProductNo = products[0].naver_channel_product_no ? Number(products[0].naver_channel_product_no) : null;
 
   if (!sellerProductId && !storedVendorItemId && !naverChannelProductNo) {
@@ -99,7 +136,7 @@ export async function POST(
     const generalItems: Array<{
       sold_at: string; quantity: number; selling_price: number;
       coupang_order_item_id: string; channel: string; variant_name: string | null;
-      shipping_fee: number;
+      shipping_fee: number; coupon_discount: number;
     }> = [];
 
     if (sellerProductId) {
@@ -133,6 +170,7 @@ export async function POST(
             channel: 'coupang',
             variant_name: variantsCache[String(item.vendorItemId)] ?? null,
             shipping_fee: 3500,
+            coupon_discount: 0,
           })),
       ));
     }
@@ -170,6 +208,7 @@ export async function POST(
       channel: string;
       variant_name: string | null;
       shipping_fee: number;
+      coupon_discount: number;
     }> = [];
 
     // RG API: paidDateTo exclusive → 하루 추가해야 to 날짜 포함
@@ -214,6 +253,7 @@ export async function POST(
                 channel: 'rocket_growth',
                 variant_name: variantsCache[String(item.vendorItemId)] ?? null,
                 shipping_fee: 0,
+                coupon_discount: 0,
               });
             }
           }
@@ -233,7 +273,7 @@ export async function POST(
     const naverItems: Array<{
       sold_at: string; quantity: number; selling_price: number;
       coupang_order_item_id: string; channel: string; variant_name: string | null;
-      shipping_fee: number;
+      shipping_fee: number; coupon_discount: number;
     }> = [];
 
     if (naverChannelProductNo) {
@@ -257,6 +297,7 @@ export async function POST(
             channel: 'naver',
             variant_name: null,
             shipping_fee: 3500,
+            coupon_discount: 0,
           });
         }
         console.log(`[import] 네이버 items: ${naverItems.length} (channelProductNo=${naverChannelProductNo})`);
@@ -268,16 +309,28 @@ export async function POST(
     // ── 합산 후 DB 저장 ──────────────────────────────────────────────────────
     const allItems = [...generalItems, ...rgItems, ...naverItems];
 
+    // coupon_discount 계산: Wing/RG는 fms API + 다운로드쿠폰 정책 합산, Naver/Manual은 0
+    for (const item of allItems) {
+      if (item.channel === 'naver' || item.channel === 'manual') continue;
+      const orderId = extractOrderId(item.coupang_order_item_id);
+      if (!orderId) continue;
+      const immediateDiscount = await client.getOrderImmediateDiscount(orderId);
+      const downloadDiscount = calcDownloadDiscount(item.selling_price, downloadCouponPolicy);
+      item.coupon_discount = immediateDiscount + downloadDiscount;
+    }
+
     // 중복 방지: ON CONFLICT DO NOTHING으로 재임포트 시 스킵
     let imported = 0;
     let skipped = 0;
     for (const item of allItems) {
       const result = await pool.query(
         `INSERT INTO sale_records
-           (user_id, product_cost_id, sold_at, quantity, selling_price, channel, coupang_order_item_id, variant_name, shipping_fee)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-         ON CONFLICT (coupang_order_item_id) DO NOTHING`,
-        [user.userId, id, item.sold_at, item.quantity, item.selling_price, item.channel, item.coupang_order_item_id, item.variant_name ?? null, item.shipping_fee],
+           (user_id, product_cost_id, sold_at, quantity, selling_price, coupon_discount, channel, coupang_order_item_id, variant_name, shipping_fee)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (coupang_order_item_id) DO UPDATE
+           SET coupon_discount = EXCLUDED.coupon_discount
+           WHERE sale_records.coupon_discount = 0`,
+        [user.userId, id, item.sold_at, item.quantity, item.selling_price, item.coupon_discount, item.channel, item.coupang_order_item_id, item.variant_name ?? null, item.shipping_fee],
       );
       if ((result.rowCount ?? 0) > 0) imported++;
       else skipped++;
