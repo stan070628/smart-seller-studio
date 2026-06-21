@@ -20,6 +20,7 @@ interface ChannelEditPopoverProps {
   onClose: () => void;
   onChannelAdded: (entry: ChannelEntry) => void;
   onChannelRemoved: (channelId: string) => void;
+  onSellerProductIdSaved: (newId: number) => void;
 }
 
 const CHANNEL_LABELS: Record<string, { label: string; color: string; bg: string; placeholder: string }> = {
@@ -34,8 +35,12 @@ export default function ChannelEditPopover({
   onClose,
   onChannelAdded,
   onChannelRemoved,
+  onSellerProductIdSaved,
 }: ChannelEditPopoverProps) {
   const popoverRef = useRef<HTMLDivElement>(null);
+  // 저장 중 팝오버 닫힘 방지용 ref (이벤트 핸들러가 클로저를 캡처하므로 ref 사용)
+  const savingSpidRef = useRef(false);
+
   const [channels, setChannels] = useState<ChannelEntry[]>(product.channels ?? []);
   const [newChannelType, setNewChannelType] = useState<string>('coupang_rg');
   const [newExternalId, setNewExternalId] = useState('');
@@ -43,6 +48,15 @@ export default function ChannelEditPopover({
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
   const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+
+  // 등록상품ID 편집 상태
+  const initialSpid = product.seller_product_id != null && product.seller_product_id > 0
+    ? String(product.seller_product_id)
+    : '';
+  const [spidInput, setSpidInput] = useState(initialSpid);
+  const [savingSpid, setSavingSpid] = useState(false);
+  const [spidError, setSpidError] = useState<string | null>(null);
+  const [spidSaved, setSpidSaved] = useState(false);
 
   useEffect(() => {
     const rect = anchorEl.getBoundingClientRect();
@@ -55,14 +69,19 @@ export default function ChannelEditPopover({
 
   useEffect(() => {
     function handleMouseDown(e: MouseEvent) {
+      if (savingSpidRef.current) return;
       if (popoverRef.current?.contains(e.target as Node)) return;
       if (anchorEl.contains(e.target as Node)) return;
       onClose();
     }
     function handleKeyDown(e: KeyboardEvent) {
+      if (savingSpidRef.current) return;
       if (e.key === 'Escape') onClose();
     }
-    function handleClose() { onClose(); }
+    function handleClose() {
+      if (savingSpidRef.current) return;
+      onClose();
+    }
 
     document.addEventListener('mousedown', handleMouseDown);
     document.addEventListener('keydown', handleKeyDown);
@@ -75,6 +94,39 @@ export default function ChannelEditPopover({
       window.removeEventListener('resize', handleClose);
     };
   }, [anchorEl, onClose]);
+
+  async function handleSaveSpid() {
+    const parsed = parseInt(spidInput.replace(/[^0-9]/g, ''), 10);
+    if (isNaN(parsed) || parsed <= 0) {
+      setSpidError('양수 등록상품ID를 입력하세요.');
+      return;
+    }
+    setSpidError(null);
+    setSpidSaved(false);
+    setSavingSpid(true);
+    savingSpidRef.current = true;
+    try {
+      const res = await fetch(`/api/cost-management/products/${product.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ seller_product_id: parsed }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setSpidSaved(true);
+        setSpidInput(String(parsed));
+        onSellerProductIdSaved(parsed);
+        setTimeout(() => setSpidSaved(false), 2000);
+      } else {
+        setSpidError(json.error ?? '저장 실패');
+      }
+    } catch {
+      setSpidError('네트워크 오류');
+    } finally {
+      setSavingSpid(false);
+      savingSpidRef.current = false;
+    }
+  }
 
   async function handleAdd() {
     const extId = parseInt(newExternalId.replace(/[^0-9]/g, ''), 10);
@@ -149,7 +201,38 @@ export default function ChannelEditPopover({
     >
       <div style={{ fontSize: 12, fontWeight: 600, color: '#18181b', marginBottom: 10 }}>채널 관리</div>
 
+      {/* 등록상품ID (primary key) */}
+      <div style={{ marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid #f4f4f5' }}>
+        <div style={{ fontSize: 10, fontWeight: 600, color: '#52525b', marginBottom: 4 }}>
+          등록상품ID <span style={{ fontWeight: 400, color: '#a1a1aa' }}>(그룹 키)</span>
+        </div>
+        <div style={{ display: 'flex', gap: 4 }}>
+          <input
+            style={{ ...inputStyle, fontFamily: 'monospace' }}
+            placeholder="예: 16182237839"
+            value={spidInput}
+            onChange={(e) => { setSpidInput(e.target.value); setSpidError(null); setSpidSaved(false); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleSaveSpid(); }}
+          />
+          <button
+            onClick={handleSaveSpid}
+            disabled={savingSpid || spidInput === initialSpid}
+            style={{
+              padding: '4px 10px', fontSize: 11, fontWeight: 600,
+              background: spidInput !== initialSpid ? '#18181b' : '#e5e5e5',
+              color: spidInput !== initialSpid ? '#fff' : '#a1a1aa',
+              border: 'none', borderRadius: 5,
+              cursor: (savingSpid || spidInput === initialSpid) ? 'not-allowed' : 'pointer',
+              flexShrink: 0,
+            }}
+          >{savingSpid ? '...' : '저장'}</button>
+        </div>
+        {spidError && <div style={{ fontSize: 10, color: '#ef4444', marginTop: 3 }}>{spidError}</div>}
+        {spidSaved && <div style={{ fontSize: 10, color: '#16a34a', marginTop: 3 }}>저장됐습니다. 같은 ID를 가진 상품 2개 이상이면 그룹으로 묶입니다.</div>}
+      </div>
+
       {/* 현재 채널 목록 */}
+      <div style={{ fontSize: 10, fontWeight: 600, color: '#52525b', marginBottom: 6 }}>채널 (서브키)</div>
       {channels.length === 0 && (
         <div style={{ fontSize: 11, color: '#a1a1aa', marginBottom: 10 }}>연결된 채널 없음</div>
       )}

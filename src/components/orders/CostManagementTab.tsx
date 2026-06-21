@@ -1237,6 +1237,12 @@ export default function CostManagementTab() {
               channels: (target.channels ?? []).filter((ch) => ch.id !== channelId),
             });
           }}
+          onSellerProductIdSaved={(newId) => {
+            const target = channelEditTarget.product;
+            handleProductUpdate(target.id, { seller_product_id: newId });
+            // channelEditTarget도 갱신해서 재오픈 시 최신 값 반영
+            setChannelEditTarget((prev) => prev ? { ...prev, product: { ...prev.product, seller_product_id: newId } } : null);
+          }}
         />
       )}
     </div>
