@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
   );
   // product_cost_channels wing 채널: external_id = 판배 옵션ID → vendorItemId로 1차 매칭
   const { rows: wingChannels } = await pool.query(
-    `SELECT product_cost_id, external_id
+    `SELECT product_cost_id, external_id, unit_multiplier
      FROM product_cost_channels
      WHERE user_id = $1 AND channel_type = 'coupang_wing'`,
     [user.userId],
@@ -61,15 +61,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, data: { imported: 0, skipped: 0, total: 0 } });
   }
 
-  // vendorItemId(옵션ID) → product_cost_id
+  // vendorItemId(옵션ID) → { id: product_cost_id, multiplier: unit_multiplier }
   // RG: product_costs.vendor_item_id
   // Wing: product_cost_channels.external_id (판배 옵션ID)
-  const vendorItemMap = new Map<number, string>();
+  const vendorItemMap = new Map<number, { id: string; multiplier: number }>();
   for (const row of productRows) {
-    if (row.vendor_item_id) vendorItemMap.set(Number(row.vendor_item_id), row.id);
+    if (row.vendor_item_id) vendorItemMap.set(Number(row.vendor_item_id), { id: row.id, multiplier: 1 });
   }
   for (const ch of wingChannels) {
-    vendorItemMap.set(Number(ch.external_id), ch.product_cost_id);
+    vendorItemMap.set(Number(ch.external_id), {
+      id: ch.product_cost_id,
+      multiplier: ch.unit_multiplier >= 1 ? ch.unit_multiplier : 1,
+    });
   }
   // sellerProductId(등록상품ID) → product_cost_id (fallback)
   const sellerProductMap = new Map<number, string>();
@@ -105,15 +108,18 @@ export async function POST(request: NextRequest) {
           if (order.saleType !== 'SALE') continue;
           for (const item of order.items) {
             // vendorItemId 우선 매칭 (Wing+RG 공통 키), fallback: sellerProductId
-            const productCostId = vendorItemMap.get(item.vendorItemId) ?? sellerProductMap.get(item.sellerProductId);
-            if (!productCostId) continue;
+            const wingMatch = vendorItemMap.get(item.vendorItemId);
+            const fallbackId = sellerProductMap.get(item.sellerProductId);
+            if (!wingMatch && !fallbackId) continue;
             if (item.quantity <= 0) continue;
             const soldAt = order.saleDate?.slice(0, 10);
             if (!soldAt) continue;  // saleDate 없으면 스킵
+            const productCostId = wingMatch ? wingMatch.id : fallbackId!;
+            const multiplier = wingMatch ? wingMatch.multiplier : 1;
             records.push({
               product_cost_id: productCostId,
               sold_at: soldAt,
-              quantity: item.quantity,
+              quantity: item.quantity * multiplier,
               selling_price: item.salePrice,
               coupang_order_item_id: `wing-${order.orderId}-${item.vendorItemId}`,
             });
