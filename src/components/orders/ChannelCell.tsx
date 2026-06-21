@@ -15,7 +15,7 @@ interface ProductData {
 
 interface ChannelCellProps {
   product: ProductData;
-  onEditChannel: () => void;
+  onEditChannel: (anchorEl: HTMLElement) => void;
   onProductUpdate: (updates: Partial<ProductData>) => void;
 }
 
@@ -286,7 +286,7 @@ export default function ChannelCell({ product: p, onEditChannel, onProductUpdate
       )}
 
       <button
-        onClick={onEditChannel}
+        onClick={(e) => onEditChannel(e.currentTarget as HTMLElement)}
         title="채널 ID 편집"
         style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '1px 2px', color: '#d4d4d4', lineHeight: 1, display: 'flex', alignItems: 'center', alignSelf: 'flex-start' }}
       >
