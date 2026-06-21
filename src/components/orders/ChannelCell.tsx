@@ -11,7 +11,7 @@ interface ChannelEntry {
 
 interface ProductData {
   id: string;
-  seller_product_id: number | null;
+  seller_product_id: number;
   vendor_item_id: number | null;
   naver_channel_product_no: number | null;
   variants: Record<string, string> | null;
@@ -193,7 +193,7 @@ export default function ChannelCell({ product: p, onEditChannel, onProductUpdate
     );
   }
 
-  const hasCoupang = !!p.seller_product_id;
+  const hasCoupang = p.seller_product_id > 0;
   const hasRg = p.channels.some((ch) => ch.channel_type === 'coupang_rg') || !!p.vendor_item_id;
   const hasNaver = p.channels.some((ch) => ch.channel_type === 'naver') || !!p.naver_channel_product_no;
 
