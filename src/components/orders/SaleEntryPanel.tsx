@@ -93,6 +93,16 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
 
   useEffect(() => { load(); }, [load]);
 
+  // downloadCouponPolicy prop이 변경될 때 내부 상태 동기화
+  useEffect(() => {
+    setCouponPolicy(downloadCouponPolicy ?? null);
+    setCouponPolicyForm({
+      rate: String(Math.round((downloadCouponPolicy?.rate ?? 0.10) * 100)),
+      max_discount: String(downloadCouponPolicy?.max_discount ?? 1000),
+      min_price: String(downloadCouponPolicy?.min_price ?? 30000),
+    });
+  }, [downloadCouponPolicy]);
+
   async function save() {
     const qty = Math.round(Number(form.quantity));
     const price = Math.round(Number(form.selling_price));
@@ -249,7 +259,7 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
                 <label>최소구매(원)<input type="number" value={couponPolicyForm.min_price} onChange={(e) => setCouponPolicyForm((f) => ({ ...f, min_price: e.target.value }))}
                   style={{ width: '70px', marginLeft: '4px', padding: '2px 4px', borderRadius: '4px', border: '1px solid #fcd34d', fontSize: '11px', color: '#18181b' }} /></label>
                 <button onClick={saveCouponPolicy} disabled={savingCouponPolicy}
-                  style={{ padding: '3px 10px', borderRadius: '4px', background: '#d97706', color: '#fff', border: 'none', fontSize: '11px', cursor: 'pointer' }}>
+                  style={{ padding: '3px 10px', borderRadius: '4px', background: '#d97706', color: '#fff', border: 'none', fontSize: '11px', cursor: savingCouponPolicy ? 'not-allowed' : 'pointer' }}>
                   {savingCouponPolicy ? '저장중...' : '저장'}
                 </button>
               </div>

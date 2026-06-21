@@ -47,11 +47,12 @@ interface Props {
   naverChannelProductNo?: number | null;
   subdivisionUnit?: number | null;   // 소분 단위 (>0 이면 소분 상품)
   variants?: Record<string, string> | null;
+  downloadCouponPolicy?: { rate: number; max_discount: number; min_price: number; } | null;
   onClose: () => void;
   onChanged: () => void;
 }
 
-export default function CostEntryDrawer({ productId, productName, sellerProductId, vendorItemId, naverChannelProductNo, subdivisionUnit, variants, onClose, onChanged }: Props) {
+export default function CostEntryDrawer({ productId, productName, sellerProductId, vendorItemId, naverChannelProductNo, subdivisionUnit, variants, downloadCouponPolicy, onClose, onChanged }: Props) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -486,6 +487,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
               sellerProductId={sellerProductId}
               vendorItemId={vendorItemId}
               naverChannelProductNo={naverChannelProductNo}
+              downloadCouponPolicy={downloadCouponPolicy ?? null}
               onChanged={() => { setFifoVersion((v) => v + 1); onChanged(); }}
             />
           </div>

@@ -46,6 +46,7 @@ interface ProductRow {
   breakeven_roas: number;
   winner_status: 'winner' | 'watch' | 'normal';
   hidden: boolean;
+  download_coupon_policy: { rate: number; max_discount: number; min_price: number; } | null;
   channels: ChannelEntry[];
   [key: string]: unknown;
 }
@@ -1174,6 +1175,7 @@ export default function CostManagementTab() {
             naverChannelProductNo={dp?.naver_channel_product_no ?? null}
             subdivisionUnit={dp?.subdivision_unit ?? null}
             variants={products.find((p) => p.id === drawerProductId)?.variants ?? null}
+            downloadCouponPolicy={dp?.download_coupon_policy ?? null}
             onClose={() => setDrawerProductId(null)}
             onChanged={load}
           />

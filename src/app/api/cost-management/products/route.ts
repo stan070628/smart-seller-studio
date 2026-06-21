@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
               variants, naver_variants, naver_origin_product_no,
               platform, platform_fee_rate,
               subdivision_unit, subdivision_carryover, subdivision_carryover_unit_cost, created_at,
-              hidden
+              hidden, download_coupon_policy
        FROM product_costs
        WHERE user_id = $1
          ${showHidden ? '' : 'AND hidden = false'}
@@ -258,6 +258,7 @@ export async function GET(request: NextRequest) {
         subdivision_carryover: Number(p.subdivision_carryover ?? 0),
         subdivision_carryover_unit_cost: Number(p.subdivision_carryover_unit_cost ?? 0),
         hidden: Boolean(p.hidden),
+        download_coupon_policy: (p.download_coupon_policy as { rate: number; max_discount: number; min_price: number; } | null) ?? null,
         channels: channelsByProduct.get(p.id) ?? [],
       };
     });
