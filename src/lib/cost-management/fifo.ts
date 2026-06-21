@@ -44,6 +44,8 @@ export interface SaleRow {
   selling_price: number;
   /** 채널 ('rocket_growth' | 'coupang' | 'manual' 등) — 채널별 FIFO 분리 시 필터링에 사용 */
   channel?: string;
+  /** 건당 택배비 (원) — 실현손익에서 차감 */
+  shipping_fee?: number;
 }
 
 /** 판매 건별 FIFO 상세 결과 */
@@ -123,9 +125,12 @@ export function calculateFifo(
     // 플랫폼 수수료: 판매가 × 수수료율 (반올림)
     const fee_per_unit = Math.round(sale.selling_price * platformFeeRate);
 
+    // 택배비: 건당 고정 (없으면 0)
+    const shipping_fee_per_unit = sale.shipping_fee ?? 0;
+
     // 단위 실현손익
     const realized_profit_per_unit =
-      sale.selling_price - fifo_cost_per_unit - fee_per_unit;
+      sale.selling_price - fifo_cost_per_unit - fee_per_unit - shipping_fee_per_unit;
 
     sale_details.push({ saleId: sale.id, fifo_cost_per_unit, realized_profit_per_unit });
     total_realized_profit += realized_profit_per_unit * sale.quantity;

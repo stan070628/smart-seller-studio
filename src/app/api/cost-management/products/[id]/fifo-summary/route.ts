@@ -29,7 +29,7 @@ export async function GET(
         [id],
       ),
       pool.query(
-        `SELECT id, sold_at, quantity, selling_price FROM sale_records WHERE product_cost_id = $1`,
+        `SELECT id, sold_at, quantity, selling_price, shipping_fee FROM sale_records WHERE product_cost_id = $1`,
         [id],
       ),
     ]);
@@ -48,6 +48,7 @@ export async function GET(
       sold_at: s.sold_at instanceof Date ? s.sold_at.toISOString().slice(0, 10) : String(s.sold_at).slice(0, 10),
       quantity: Number(s.quantity),
       selling_price: Number(s.selling_price),
+      shipping_fee: Number(s.shipping_fee ?? 0),
     }));
 
     const result = calculateFifo(batches, sales, feeRate);
