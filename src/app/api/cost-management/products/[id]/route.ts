@@ -13,7 +13,7 @@ export async function PATCH(
 
   const { id } = await params;
   const body = await request.json().catch(() => null);
-  const { seller_product_id, vendor_item_id, naver_channel_product_no, variants, hidden } = body ?? {};
+  const { seller_product_id, vendor_item_id, naver_channel_product_no, variants, hidden, channel_type, external_id } = body ?? {};
 
   if (seller_product_id !== undefined && seller_product_id !== null) {
     if (!Number.isInteger(seller_product_id) || seller_product_id <= 0) {
@@ -33,6 +33,21 @@ export async function PATCH(
   if (hidden !== undefined && typeof hidden !== 'boolean') {
     return NextResponse.json({ success: false, error: 'hidden must be a boolean' }, { status: 400 });
   }
+  if (channel_type !== undefined) {
+    const VALID_CHANNEL_TYPES = ['coupang_rg', 'coupang_wing', 'naver'];
+    if (!VALID_CHANNEL_TYPES.includes(channel_type)) {
+      return NextResponse.json(
+        { success: false, error: `channel_type must be one of: ${VALID_CHANNEL_TYPES.join(', ')}` },
+        { status: 400 },
+      );
+    }
+    if (external_id !== undefined && (!Number.isInteger(external_id) || external_id <= 0)) {
+      return NextResponse.json(
+        { success: false, error: 'external_id must be a positive integer' },
+        { status: 400 },
+      );
+    }
+  }
 
   const pool = getSourcingPool();
   try {
@@ -48,6 +63,18 @@ export async function PATCH(
       [id, user.userId, seller_product_id ?? null, vendor_item_id ?? null, naver_channel_product_no ?? null, variants ? JSON.stringify(variants) : null, hidden === undefined ? null : hidden],
     );
     if (rows.length === 0) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
+
+    // channel_type + external_id 있으면 product_cost_channels upsert
+    if (channel_type !== undefined && external_id !== undefined) {
+      await pool.query(
+        `INSERT INTO product_cost_channels (user_id, product_cost_id, channel_type, external_id)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (user_id, channel_type, external_id) DO UPDATE
+           SET product_cost_id = EXCLUDED.product_cost_id`,
+        [user.userId, id, channel_type, external_id],
+      );
+    }
+
     return NextResponse.json({ success: true, data: rows[0] });
   } catch (err) {
     const msg = err instanceof Error ? err.message : '서버 오류';
