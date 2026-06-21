@@ -11,16 +11,23 @@ interface SaleRecord {
   channel: string;
   coupang_order_item_id: string | null;
   variant_name?: string | null;
+  shipping_fee: number;
 }
 
 interface SaleForm {
   sold_at: string;
   quantity: string;
   selling_price: string;
+  shipping_fee: string;
 }
 
 function emptyForm(): SaleForm {
-  return { sold_at: new Date().toISOString().slice(0, 10), quantity: '', selling_price: '' };
+  return {
+    sold_at: new Date().toISOString().slice(0, 10),
+    quantity: '',
+    selling_price: '',
+    shipping_fee: '0',
+  };
 }
 
 function fmt(n: number) { return n.toLocaleString('ko-KR'); }
@@ -71,10 +78,11 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
   async function save() {
     const qty = Math.round(Number(form.quantity));
     const price = Math.round(Number(form.selling_price));
+    const shippingFee = Math.max(0, Math.round(Number(form.shipping_fee)));
     if (!form.sold_at || qty <= 0) { alert('판매일과 수량을 입력해 주세요.'); return; }
     setSaving(true);
     try {
-      const payload = { sold_at: form.sold_at, quantity: qty, selling_price: price };
+      const payload = { sold_at: form.sold_at, quantity: qty, selling_price: price, shipping_fee: shippingFee };
       const url = editingId
         ? `/api/cost-management/sales/${editingId}`
         : `/api/cost-management/products/${productId}/sales`;
@@ -111,7 +119,12 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
   function startEdit(s: SaleRecord) {
     setEditingId(s.id);
     setAddingNew(false);
-    setForm({ sold_at: s.sold_at.slice(0, 10), quantity: String(s.quantity), selling_price: String(s.selling_price) });
+    setForm({
+      sold_at: s.sold_at.slice(0, 10),
+      quantity: String(s.quantity),
+      selling_price: String(s.selling_price),
+      shipping_fee: String(s.shipping_fee),
+    });
   }
 
   async function runImport() {
@@ -176,14 +189,14 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
           <thead>
             <tr style={{ background: '#f9f9f9', borderBottom: '1px solid #e5e5e5' }}>
-              {['판매일', '수량', '판매가', '채널', '사이즈', ''].map((h, i) => (
+              {['판매일', '수량', '판매가', '채널', '사이즈', '택배비', ''].map((h, i) => (
                 <th key={`${h}-${i}`} style={{ padding: '6px 8px', textAlign: h === '판매일' ? 'left' : 'right', fontWeight: 600, color: '#27272a' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} style={{ padding: '20px', textAlign: 'center', color: '#52525b' }}>불러오는 중...</td></tr>
+              <tr><td colSpan={7} style={{ padding: '20px', textAlign: 'center', color: '#52525b' }}>불러오는 중...</td></tr>
             ) : sales.map((s) => (
               editingId === s.id ? (
                 // 인라인 편집 행
@@ -200,7 +213,18 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
                     <input type="number" value={form.selling_price} onChange={(e) => setForm((f) => ({ ...f, selling_price: e.target.value }))}
                       style={{ width: '80px', padding: '3px 5px', borderRadius: '4px', border: '1px solid #86efac', fontSize: '11px', color: '#18181b' }} />
                   </td>
-                  <td colSpan={3} style={{ padding: '4px 6px' }}>
+                  <td colSpan={2} style={{ padding: '4px 6px' }}>
+                    {/* 채널/사이즈는 편집 불가 — 빈 셀 */}
+                  </td>
+                  <td style={{ padding: '4px 6px' }}>
+                    <input
+                      type="number"
+                      value={form.shipping_fee}
+                      onChange={(e) => setForm((f) => ({ ...f, shipping_fee: e.target.value }))}
+                      style={{ width: '70px', padding: '3px 5px', borderRadius: '4px', border: '1px solid #86efac', fontSize: '11px', color: '#18181b' }}
+                    />
+                  </td>
+                  <td style={{ padding: '4px 6px' }}>
                     <div style={{ display: 'flex', gap: '4px' }}>
                       <button onClick={save} disabled={saving || !canSave}
                         style={{ padding: '3px 8px', borderRadius: '4px', background: canSave ? '#16a34a' : '#d4d4d4', color: canSave ? '#fff' : '#71717a', border: 'none', fontSize: '11px', cursor: canSave ? 'pointer' : 'not-allowed' }}>
@@ -234,6 +258,10 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
                       ? <span style={{ background: '#f0fdf4', color: '#16a34a', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>{s.variant_name}</span>
                       : <span style={{ color: '#e5e5e5', fontSize: '10px' }}>—</span>}
                   </td>
+                  {/* 택배비 */}
+                  <td style={{ padding: '6px 8px', textAlign: 'right', color: s.shipping_fee > 0 ? '#27272a' : '#e5e5e5', fontSize: '11px' }}>
+                    {s.shipping_fee > 0 ? fmt(s.shipping_fee) : '—'}
+                  </td>
                   <td style={{ padding: '6px 8px', textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end' }}>
                       <button onClick={() => startEdit(s)} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '2px' }}><Pencil size={12} color="#6b7280" /></button>
@@ -258,7 +286,18 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
                   <input type="number" value={form.selling_price} onChange={(e) => setForm((f) => ({ ...f, selling_price: e.target.value }))}
                     style={{ width: '80px', padding: '3px 5px', borderRadius: '4px', border: '1px solid #86efac', fontSize: '11px', color: '#18181b' }} />
                 </td>
-                <td colSpan={3} style={{ padding: '4px 6px' }}>
+                <td colSpan={2} style={{ padding: '4px 6px' }}>
+                  {/* 채널/사이즈는 새 추가 시 자동 지정 — 빈 셀 */}
+                </td>
+                <td style={{ padding: '4px 6px' }}>
+                  <input
+                    type="number"
+                    value={form.shipping_fee}
+                    onChange={(e) => setForm((f) => ({ ...f, shipping_fee: e.target.value }))}
+                    style={{ width: '70px', padding: '3px 5px', borderRadius: '4px', border: '1px solid #86efac', fontSize: '11px', color: '#18181b' }}
+                  />
+                </td>
+                <td style={{ padding: '4px 6px' }}>
                   <div style={{ display: 'flex', gap: '4px' }}>
                     <button onClick={save} disabled={saving || !canSave}
                       style={{ padding: '3px 8px', borderRadius: '4px', background: canSave ? '#16a34a' : '#d4d4d4', color: canSave ? '#fff' : '#71717a', border: 'none', fontSize: '11px', cursor: canSave ? 'pointer' : 'not-allowed' }}>
