@@ -3,6 +3,12 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { Pencil } from 'lucide-react';
 
+interface ChannelEntry {
+  id: string;
+  channel_type: 'coupang_rg' | 'coupang_wing' | 'naver';
+  external_id: number;
+}
+
 interface ProductData {
   id: string;
   seller_product_id: number | null;
@@ -11,6 +17,7 @@ interface ProductData {
   variants: Record<string, string> | null;
   naver_variants: Record<string, string> | null;
   naver_origin_product_no: number | null;
+  channels: ChannelEntry[];
 }
 
 interface ChannelCellProps {
@@ -187,8 +194,8 @@ export default function ChannelCell({ product: p, onEditChannel, onProductUpdate
   }
 
   const hasCoupang = !!p.seller_product_id;
-  const hasRg = !!p.vendor_item_id;
-  const hasNaver = !!p.naver_channel_product_no;
+  const hasRg = p.channels.some((ch) => ch.channel_type === 'coupang_rg') || !!p.vendor_item_id;
+  const hasNaver = p.channels.some((ch) => ch.channel_type === 'naver') || !!p.naver_channel_product_no;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '180px' }}>
@@ -230,18 +237,37 @@ export default function ChannelCell({ product: p, onEditChannel, onProductUpdate
         </div>
       )}
 
-      {/* 쿠팡 RG */}
-      {hasRg && (
-        <div style={{ fontSize: '10px', display: 'flex', alignItems: 'center', gap: '3px' }}>
-          <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '1px 5px', borderRadius: '3px', fontSize: '9px', fontWeight: 600 }}>RG</span>
-          <span style={{ color: '#0369a1', fontFamily: 'monospace' }}>{p.vendor_item_id}</span>
-          <button
-            onClick={() => navigator.clipboard.writeText(String(p.vendor_item_id))}
-            title="복사"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0', fontSize: '9px', color: '#a1a1aa', lineHeight: 1 }}
-          >📋</button>
-        </div>
-      )}
+      {/* 쿠팡 RG — channels에서 coupang_rg 항목 (없으면 기존 vendor_item_id fallback) */}
+      {(() => {
+        const rgEntries = p.channels.filter((ch) => ch.channel_type === 'coupang_rg');
+        if (rgEntries.length > 0) {
+          return rgEntries.map((ch) => (
+            <div key={ch.id} style={{ fontSize: '10px', display: 'flex', alignItems: 'center', gap: '3px' }}>
+              <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '1px 5px', borderRadius: '3px', fontSize: '9px', fontWeight: 600 }}>RG</span>
+              <span style={{ color: '#0369a1', fontFamily: 'monospace' }}>{ch.external_id}</span>
+              <button
+                onClick={() => navigator.clipboard.writeText(String(ch.external_id))}
+                title="복사"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0', fontSize: '9px', color: '#a1a1aa', lineHeight: 1 }}
+              >📋</button>
+            </div>
+          ));
+        }
+        if (p.vendor_item_id) {
+          return (
+            <div style={{ fontSize: '10px', display: 'flex', alignItems: 'center', gap: '3px' }}>
+              <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '1px 5px', borderRadius: '3px', fontSize: '9px', fontWeight: 600 }}>RG</span>
+              <span style={{ color: '#0369a1', fontFamily: 'monospace' }}>{p.vendor_item_id}</span>
+              <button
+                onClick={() => navigator.clipboard.writeText(String(p.vendor_item_id))}
+                title="복사"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0', fontSize: '9px', color: '#a1a1aa', lineHeight: 1 }}
+              >📋</button>
+            </div>
+          );
+        }
+        return null;
+      })()}
 
       {/* 네이버 */}
       {hasNaver && (

@@ -12,6 +12,12 @@ import { WinnerBadge } from '@/components/ui';
 import ChannelCell from './ChannelCell';
 import ChannelEditPopover from './ChannelEditPopover';
 
+interface ChannelEntry {
+  id: string;
+  channel_type: 'coupang_rg' | 'coupang_wing' | 'naver';
+  external_id: number;
+}
+
 interface ProductRow {
   id: string;
   product_name: string;
@@ -39,6 +45,7 @@ interface ProductRow {
   breakeven_roas: number;
   winner_status: 'winner' | 'watch' | 'normal';
   hidden: boolean;
+  channels: ChannelEntry[];
   [key: string]: unknown;
 }
 
