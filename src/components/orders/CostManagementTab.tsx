@@ -10,6 +10,7 @@ import RocketGrowthShipmentModal from './RocketGrowthShipmentModal';
 import RgShipmentHistoryPopover from './RgShipmentHistoryPopover';
 import { WinnerBadge } from '@/components/ui';
 import ChannelCell from './ChannelCell';
+import ChannelEditPopover from './ChannelEditPopover';
 
 interface ProductRow {
   id: string;
@@ -202,10 +203,10 @@ export default function CostManagementTab() {
   const [showRgHistory, setShowRgHistory] = useState(false);
   const [importingAll, setImportingAll] = useState(false);
   const [settingUpVariants, setSettingUpVariants] = useState(false);
-  const [editChannelId, setEditChannelId] = useState<string | null>(null);
-  const [editSellerProductId, setEditSellerProductId] = useState('');
-  const [editVendorItemId, setEditVendorItemId] = useState('');
-  const [editNaverChannelProductNo, setEditNaverChannelProductNo] = useState('');
+  const [channelEditTarget, setChannelEditTarget] = useState<{
+    product: ProductRow;
+    anchorEl: HTMLElement;
+  } | null>(null);
   const [preset, setPreset] = useState<Preset>('this_month');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
@@ -223,6 +224,7 @@ export default function CostManagementTab() {
   const handleCloseRgHistory = useCallback(() => setShowRgHistory(false), []);
 
   const load = useCallback(async () => {
+    setChannelEditTarget(null);
     setLoading(true);
     setLoadError(null);
     try {
@@ -306,46 +308,6 @@ export default function CostManagementTab() {
       }
     } finally {
       setSettingUpVariants(false);
-    }
-  }
-
-  function openEditChannel(p: ProductRow) {
-    setEditChannelId(p.id);
-    setEditSellerProductId(p.seller_product_id ? String(p.seller_product_id) : '');
-    setEditVendorItemId(p.vendor_item_id ? String(p.vendor_item_id) : '');
-    setEditNaverChannelProductNo(p.naver_channel_product_no ? String(p.naver_channel_product_no) : '');
-  }
-
-  async function saveEditChannel(id: string) {
-    const body: Record<string, unknown> = {};
-    const sid = parseInt(editSellerProductId, 10);
-    const vid = parseInt(editVendorItemId, 10);
-    const nid = parseInt(editNaverChannelProductNo, 10);
-    if (editSellerProductId && sid > 0) body.seller_product_id = sid;
-    if (editVendorItemId && vid > 0) body.vendor_item_id = vid;
-    if (editNaverChannelProductNo && nid > 0) body.naver_channel_product_no = nid;
-    if (Object.keys(body).length === 0) { setEditChannelId(null); return; }
-    const res = await fetch(`/api/cost-management/products/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const json = await res.json();
-    if (json.success) { setEditChannelId(null); load(); }
-    else alert(json.error ?? '저장 실패');
-  }
-
-  async function fetchVariants(productId: string) {
-    const res = await fetch(`/api/cost-management/products/${productId}/fetch-variants`, {
-      method: 'POST',
-    });
-    const json = await res.json();
-    if (json.success) {
-      const count = Object.keys(json.data.variants as Record<string, string>).length;
-      alert(`사이즈 ${count}개 매핑 저장 완료`);
-      load();
-    } else {
-      alert(json.error ?? 'variants 조회 실패');
     }
   }
 
@@ -613,66 +575,11 @@ export default function CostManagementTab() {
     return (
       <tr key={p.id} style={rowStyle}>
         <td style={{ padding: `10px ${firstTdPaddingLeft}`, textAlign: 'center', whiteSpace: 'nowrap' }}>
-          {editChannelId === p.id ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start', minWidth: '180px' }}>
-              <div style={{ width: '100%' }}>
-                <div style={{ fontSize: '9px', color: '#be0014', marginBottom: '2px', fontWeight: 500 }}>윙 판매자상품ID</div>
-                <div style={{ fontSize: '9px', color: '#52525b', marginBottom: '3px' }}>Wing 셀러센터 → 상품관리 → 판매자상품ID</div>
-                <input
-                  placeholder="예: 12345678"
-                  value={editSellerProductId}
-                  onChange={(e) => setEditSellerProductId(e.target.value)}
-                  style={{ width: '100%', padding: '2px 6px', fontSize: '11px', border: '1px solid #fca5a5', borderRadius: '4px', outline: 'none', boxSizing: 'border-box', color: '#18181b' }}
-                />
-              </div>
-              <div style={{ width: '100%' }}>
-                <div style={{ fontSize: '9px', color: '#0369a1', marginBottom: '2px', fontWeight: 500 }}>RG vendorItemId</div>
-                <div style={{ fontSize: '9px', color: '#52525b', marginBottom: '3px' }}>쿠팡 URL의 vendorItemId= 값 (URL 붙여넣기 가능)</div>
-                <input
-                  placeholder="예: 95346957211"
-                  value={editVendorItemId}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    const match = v.match(/[?&]vendorItemId=(\d+)/);
-                    setEditVendorItemId(match ? match[1] : v);
-                  }}
-                  style={{ width: '100%', padding: '2px 6px', fontSize: '11px', border: '1px solid #7dd3fc', borderRadius: '4px', outline: 'none', boxSizing: 'border-box', color: '#18181b' }}
-                />
-              </div>
-              <div style={{ width: '100%' }}>
-                <div style={{ fontSize: '9px', color: '#03c75a', marginBottom: '2px', fontWeight: 500 }}>네이버 채널상품번호</div>
-                <div style={{ fontSize: '9px', color: '#52525b', marginBottom: '3px' }}>스마트스토어 URL의 /products/숫자 (URL 붙여넣기 가능)</div>
-                <input
-                  placeholder="예: 5012345678"
-                  value={editNaverChannelProductNo}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    const match = v.match(/\/products\/(\d+)/);
-                    setEditNaverChannelProductNo(match ? match[1] : v);
-                  }}
-                  style={{ width: '100%', padding: '2px 6px', fontSize: '11px', border: '1px solid #86efac', borderRadius: '4px', outline: 'none', boxSizing: 'border-box', color: '#18181b' }}
-                />
-              </div>
-              <div style={{ display: 'flex', gap: '4px' }}>
-                <button onClick={() => saveEditChannel(p.id)} style={{ padding: '2px 8px', fontSize: '10px', background: '#18181b', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>저장</button>
-                <button onClick={() => setEditChannelId(null)} style={{ padding: '2px 8px', fontSize: '10px', background: '#f4f4f5', color: '#71717a', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>취소</button>
-                {p.seller_product_id && (
-                  <button
-                    onClick={() => fetchVariants(p.id)}
-                    style={{ padding: '2px 8px', fontSize: '10px', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: '4px', cursor: 'pointer' }}
-                  >
-                    variants 불러오기
-                  </button>
-                )}
-              </div>
-            </div>
-          ) : (
-            <ChannelCell
-              product={p}
-              onEditChannel={() => openEditChannel(p)}
-              onProductUpdate={(updates) => handleProductUpdate(p.id, updates as Partial<ProductRow>)}
-            />
-          )}
+          <ChannelCell
+            product={p}
+            onEditChannel={(anchorEl) => setChannelEditTarget({ product: p, anchorEl })}
+            onProductUpdate={(updates) => handleProductUpdate(p.id, updates as Partial<ProductRow>)}
+          />
         </td>
         <td style={{ padding: '10px 12px', fontWeight: 500, color: p.entry_count === 0 ? '#999' : '#18181b' }}>{p.product_name}</td>
         <td style={{ padding: '10px 12px', textAlign: 'right', color: p.entry_count === 0 ? '#ccc' : '#ef4444' }}>
@@ -1114,6 +1021,17 @@ export default function CostManagementTab() {
           }))}
           onClose={() => setShowRgModal(false)}
           onCreated={load}
+        />
+      )}
+      {channelEditTarget && (
+        <ChannelEditPopover
+          product={channelEditTarget.product}
+          anchorEl={channelEditTarget.anchorEl}
+          onClose={() => setChannelEditTarget(null)}
+          onSaved={(updates) => {
+            handleProductUpdate(channelEditTarget.product.id, updates as Partial<ProductRow>);
+            setChannelEditTarget(null);
+          }}
         />
       )}
     </div>
