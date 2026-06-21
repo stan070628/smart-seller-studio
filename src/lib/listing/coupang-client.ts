@@ -752,6 +752,31 @@ export class CoupangClient {
     };
   }
 
+  // ─── fms 주문별 즉시할인쿠폰 조회 ──────────────────────────
+
+  /**
+   * 주문번호로 적용된 즉시할인쿠폰 목록 조회 (fms API)
+   * Wing/RG 모두 지원. 다운로드쿠폰은 미반환.
+   * @returns PRICE 타입 쿠폰의 discount 합계 (원)
+   */
+  async getOrderImmediateDiscount(orderId: string): Promise<number> {
+    const url = `/v2/providers/fms/apis/api/v2/vendors/${this.vendorId}/${orderId}/coupons`;
+    await sleep(API_DELAY);
+    try {
+      const res = await this.request<{
+        success: boolean;
+        content: Array<{ type: string; discount: number; status: string }>;
+      }>('GET', url);
+      const content = (res.data as { content?: Array<{ type: string; discount: number; status: string }> })?.content ?? [];
+      return content
+        .filter((c) => c.type === 'PRICE' && c.status === 'APPLIED')
+        .reduce((sum, c) => sum + (c.discount > 0 ? c.discount : 0), 0);
+    } catch {
+      // 쿠폰 조회 실패 시 0으로 처리 (임포트 중단 방지)
+      return 0;
+    }
+  }
+
   async getRocketGrowthProductNames(): Promise<Map<number, string>> {
     const map = new Map<number, string>();
     let nextToken = '';
