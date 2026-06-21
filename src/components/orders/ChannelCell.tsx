@@ -7,6 +7,7 @@ interface ChannelEntry {
   id: string;
   channel_type: 'coupang_rg' | 'coupang_wing' | 'naver';
   external_id: number;
+  unit_multiplier: number;
 }
 
 interface ProductData {

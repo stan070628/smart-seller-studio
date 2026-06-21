@@ -6,6 +6,7 @@ interface ChannelEntry {
   id: string;
   channel_type: 'coupang_rg' | 'coupang_wing' | 'naver';
   external_id: number;
+  unit_multiplier: number;
 }
 
 interface ProductSnapshot {
@@ -44,6 +45,7 @@ export default function ChannelEditPopover({
   const [channels, setChannels] = useState<ChannelEntry[]>(product.channels ?? []);
   const [newChannelType, setNewChannelType] = useState<string>('coupang_rg');
   const [newExternalId, setNewExternalId] = useState('');
+  const [newUnitMultiplier, setNewUnitMultiplier] = useState('1');
   const [adding, setAdding] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
@@ -130,8 +132,13 @@ export default function ChannelEditPopover({
 
   async function handleAdd() {
     const extId = parseInt(newExternalId.replace(/[^0-9]/g, ''), 10);
+    const multiplier = parseInt(newUnitMultiplier, 10);
     if (!newChannelType || isNaN(extId) || extId <= 0) {
       setAddError('유효한 ID를 입력하세요.');
+      return;
+    }
+    if (isNaN(multiplier) || multiplier < 1) {
+      setAddError('판매 단위는 1 이상 정수여야 합니다.');
       return;
     }
     setAddError(null);
@@ -140,7 +147,7 @@ export default function ChannelEditPopover({
       const res = await fetch(`/api/cost-management/products/${product.id}/channels`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channel_type: newChannelType, external_id: extId }),
+        body: JSON.stringify({ channel_type: newChannelType, external_id: extId, unit_multiplier: multiplier }),
       });
       const json = await res.json();
       if (json.success) {
@@ -148,6 +155,7 @@ export default function ChannelEditPopover({
         setChannels((prev) => [...prev, entry]);
         onChannelAdded(entry);
         setNewExternalId('');
+        setNewUnitMultiplier('1');
       } else {
         setAddError(json.error ?? '추가 실패');
       }
@@ -252,6 +260,11 @@ export default function ChannelEditPopover({
               {meta.label}
             </span>
             <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#18181b', flex: 1 }}>{ch.external_id}</span>
+            {ch.unit_multiplier > 1 && (
+              <span style={{ fontSize: 9, color: '#0369a1', background: '#e0f2fe', padding: '1px 4px', borderRadius: 3, flexShrink: 0 }}>
+                ×{ch.unit_multiplier}
+              </span>
+            )}
             <button
               onClick={() => navigator.clipboard.writeText(String(ch.external_id))}
               title="복사"
@@ -293,6 +306,17 @@ export default function ChannelEditPopover({
             onChange={(e) => { setNewExternalId(e.target.value); setAddError(null); }}
             onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); }}
           />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+            <span style={{ fontSize: 11, color: '#52525b' }}>×</span>
+            <input
+              type="number"
+              min={1}
+              value={newUnitMultiplier}
+              onChange={(e) => { setNewUnitMultiplier(e.target.value); setAddError(null); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); }}
+              style={{ width: 36, padding: '4px 4px', fontSize: 11, border: '1px solid #d4d4d8', borderRadius: 5, color: '#18181b', outline: 'none', textAlign: 'center' }}
+            />
+          </div>
         </div>
         {addError && (
           <div style={{ fontSize: 10, color: '#ef4444', marginBottom: 4 }}>{addError}</div>
