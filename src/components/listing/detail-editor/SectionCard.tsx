@@ -56,6 +56,12 @@ const SECTION_TYPE_LABELS: Record<SectionType, string> = {
   brand_header: '브랜드 헤더',
   point: '포인트',
   image_grid: '이미지 그리드',
+  point_section: 'POINT 섹션',
+  stat_callout: '수치 강조',
+  bar_chart: '바 차트',
+  why_icons: 'WHY 아이콘',
+  certifications: '인증 배지',
+  infographic_steps: '사용법 인포그래픽',
 };
 
 // 섹션 콘텐츠를 한 줄 요약 텍스트로 변환

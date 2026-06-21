@@ -17,6 +17,12 @@ import type {
   BrandHeaderContent,
   PointContent,
   ImageGridContent,
+  PointSectionContent,
+  StatCalloutContent,
+  BarChartContent,
+  WhyIconsContent,
+  CertificationsContent,
+  InfographicStepsContent,
 } from '@/types/detail-page';
 import type { PaletteColors } from '@/lib/detail-page/palette-config';
 import { PALETTES } from '@/lib/detail-page/palette-config';
@@ -56,6 +62,12 @@ const SECTION_LABELS: Record<DetailSection['type'], string> = {
   brand_header: '브랜드 헤더',
   point: '포인트',
   image_grid: '이미지 그리드',
+  point_section: 'POINT 섹션',
+  stat_callout: '수치 강조',
+  bar_chart: '바 차트',
+  why_icons: 'WHY 아이콘',
+  certifications: '인증 배지',
+  infographic_steps: '사용법 인포그래픽',
 };
 
 function sectionAttrs(section: DetailSection): string {
@@ -398,6 +410,90 @@ function renderImageGrid(content: ImageGridContent, section: DetailSection, colo
 </div>`;
 }
 
+// ─────────────────────────────────────────
+// Rich 섹션 렌더러 (6종)
+// ─────────────────────────────────────────
+
+function renderPointSection(content: PointSectionContent, section: DetailSection, colors: PaletteColors): string {
+  const itemsHtml = content.items.map((item, i) =>
+    `<div style="background:#f8fafc;border-radius:12px;padding:24px;margin-bottom:12px;display:flex;gap:20px;align-items:flex-start;">
+      <div style="flex-shrink:0;"><div style="background:#1e293b;color:#ffffff;font-size:10px;font-weight:800;padding:4px 10px;border-radius:20px;white-space:nowrap;letter-spacing:1px;">POINT ${escapeHtml(String(item.number))}</div></div>
+      <div>
+        <div style="font-size:18px;font-weight:800;color:${colors.text};margin-bottom:6px;">${editableText(`content.items[${i}].title`, item.title)}</div>
+        <div style="font-size:13px;color:${colors.textSub};line-height:1.6;">${editableText(`content.items[${i}].description`, item.description)}</div>
+      </div>
+    </div>`
+  ).join('');
+  return `<div ${sectionAttrs(section)} style="background-color:${colors.bg};padding:40px 24px;width:100%;box-sizing:border-box;">${itemsHtml}</div>`;
+}
+
+function renderStatCallout(content: StatCalloutContent, section: DetailSection): string {
+  const cols = Math.min(content.items.length, 3);
+  const itemsHtml = content.items.map((item, i) =>
+    `<div style="background:linear-gradient(135deg,#1e293b,#334155);border-radius:12px;padding:20px 16px;text-align:center;">
+      <div style="font-size:28px;font-weight:900;color:#f8fafc;line-height:1.2;">${editableText(`content.items[${i}].value`, item.value)}</div>
+      <div style="font-size:11px;color:#94a3b8;margin-top:4px;">${editableText(`content.items[${i}].label`, item.label)}</div>
+      <div style="font-size:11px;color:#64748b;margin-top:6px;">${editableText(`content.items[${i}].description`, item.description)}</div>
+    </div>`
+  ).join('');
+  return `<div ${sectionAttrs(section)} style="padding:40px 24px;width:100%;box-sizing:border-box;"><div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:12px;">${itemsHtml}</div></div>`;
+}
+
+function renderBarChart(content: BarChartContent, section: DetailSection, colors: PaletteColors): string {
+  const maxPct = Math.max(...content.items.map(i => i.percentage), 1);
+  const itemsHtml = content.items.map((item, i) => {
+    const barWidth = Math.min(Math.round((item.percentage / maxPct) * 100), 100);
+    return `<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+      <span style="font-size:13px;color:#334155;width:100px;flex-shrink:0;">${editableText(`content.items[${i}].label`, item.label)}</span>
+      <div style="flex:1;height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;">
+        <div style="height:100%;width:${barWidth}%;background:linear-gradient(90deg,#6366f1,#818cf8);border-radius:4px;"></div>
+      </div>
+      <span style="font-size:12px;font-weight:700;color:#6366f1;width:50px;text-align:right;flex-shrink:0;">${editableText(`content.items[${i}].displayValue`, item.displayValue)}</span>
+    </div>`;
+  }).join('');
+  return `<div ${sectionAttrs(section)} style="background-color:${colors.bg};padding:40px 24px;width:100%;box-sizing:border-box;"><div style="background:#f8fafc;border-radius:12px;padding:20px;">${itemsHtml}</div></div>`;
+}
+
+function renderWhyIcons(content: WhyIconsContent, section: DetailSection, colors: PaletteColors): string {
+  const cols = Math.min(content.items.length, 4);
+  const itemsHtml = content.items.map((item, i) =>
+    `<div style="text-align:center;padding:16px 8px;">
+      <div style="font-size:28px;margin-bottom:8px;">${escapeHtml(item.icon)}</div>
+      <div style="font-size:13px;font-weight:700;color:${colors.text};margin-bottom:4px;">${editableText(`content.items[${i}].title`, item.title)}</div>
+      <div style="font-size:11px;color:${colors.textSub};line-height:1.4;">${editableText(`content.items[${i}].description`, item.description)}</div>
+    </div>`
+  ).join('');
+  return `<div ${sectionAttrs(section)} style="background-color:${colors.cardBg};padding:40px 24px;width:100%;box-sizing:border-box;"><div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:12px;">${itemsHtml}</div></div>`;
+}
+
+function renderCertifications(content: CertificationsContent, section: DetailSection, colors: PaletteColors): string {
+  const itemsHtml = content.items.map((item, i) =>
+    `<div style="border:2px solid #e2e8f0;border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:10px;">
+      <div style="font-size:24px;">✅</div>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:${colors.text};">${editableText(`content.items[${i}].name`, item.name)}</div>
+        <div style="font-size:11px;color:${colors.textSub};margin-top:2px;">${editableText(`content.items[${i}].description`, item.description)}</div>
+      </div>
+    </div>`
+  ).join('');
+  return `<div ${sectionAttrs(section)} style="background-color:${colors.cardBg};padding:40px 24px;width:100%;box-sizing:border-box;"><div style="display:flex;gap:12px;flex-wrap:wrap;">${itemsHtml}</div></div>`;
+}
+
+function renderInfographicSteps(content: InfographicStepsContent, section: DetailSection, colors: PaletteColors): string {
+  const itemsHtml = content.items.map((item, i) => {
+    const isLast = i === content.items.length - 1;
+    const arrow = isLast ? '' : `<div style="position:absolute;right:-10px;top:18px;color:#94a3b8;font-size:18px;z-index:1;">→</div>`;
+    return `<div style="flex:1;text-align:center;position:relative;">
+      ${arrow}
+      <div style="width:36px;height:36px;background:#6366f1;color:#ffffff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;margin:0 auto 8px;">${escapeHtml(String(item.step))}</div>
+      <div style="font-size:24px;margin-bottom:6px;">${escapeHtml(item.icon)}</div>
+      <div style="font-size:12px;font-weight:700;color:${colors.text};margin-bottom:3px;">${editableText(`content.items[${i}].title`, item.title)}</div>
+      <div style="font-size:11px;color:${colors.textSub};">${editableText(`content.items[${i}].description`, item.description)}</div>
+    </div>`;
+  }).join('');
+  return `<div ${sectionAttrs(section)} style="background-color:${colors.cardBg};padding:40px 24px;width:100%;box-sizing:border-box;"><div style="display:flex;align-items:flex-start;gap:0;">${itemsHtml}</div></div>`;
+}
+
 export function renderSection(section: DetailSection, theme: DetailPageTheme): string {
   const colors = PALETTES[theme.palette];
   switch (section.type) {
@@ -423,6 +519,18 @@ export function renderSection(section: DetailSection, theme: DetailPageTheme): s
       return renderPoint(section.content as PointContent, section, colors, theme);
     case 'image_grid':
       return renderImageGrid(section.content as ImageGridContent, section, colors);
+    case 'point_section':
+      return renderPointSection(section.content as PointSectionContent, section, colors);
+    case 'stat_callout':
+      return renderStatCallout(section.content as StatCalloutContent, section);
+    case 'bar_chart':
+      return renderBarChart(section.content as BarChartContent, section, colors);
+    case 'why_icons':
+      return renderWhyIcons(section.content as WhyIconsContent, section, colors);
+    case 'certifications':
+      return renderCertifications(section.content as CertificationsContent, section, colors);
+    case 'infographic_steps':
+      return renderInfographicSteps(section.content as InfographicStepsContent, section, colors);
   }
 }
 
