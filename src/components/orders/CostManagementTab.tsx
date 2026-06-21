@@ -413,6 +413,41 @@ export default function CostManagementTab() {
     }
   }
 
+  async function toggleGroupHide(group: GroupRow<ProductRow>) {
+    const allHidden = group.children.every((c) => c.hidden);
+    const newHidden = !allHidden;
+    const childIds = new Set(group.children.map((c) => c.id));
+
+    if (!showHidden && newHidden) {
+      setProducts((prev) => prev.filter((x) => !childIds.has(x.id)));
+    } else {
+      setProducts((prev) =>
+        prev.map((x) => (childIds.has(x.id) ? { ...x, hidden: newHidden } : x))
+      );
+    }
+
+    try {
+      await Promise.all(
+        group.children.map((child) =>
+          fetch(`/api/cost-management/products/${child.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ hidden: newHidden }),
+          })
+            .then((r) => r.json())
+            .then((json) => {
+              if (!json.success) throw new Error(json.error ?? '실패');
+            })
+        )
+      );
+      const delta = group.children.filter((c) => c.hidden !== newHidden).length;
+      setHiddenCount((c) => (newHidden ? c + delta : Math.max(0, c - delta)));
+    } catch (e) {
+      load();
+      alert(`그룹 숨김 처리 실패: ${e instanceof Error ? e.message : '오류'}`);
+    }
+  }
+
   async function deleteProduct(id: string, name: string) {
     if (!confirm(`"${name}" 상품을 삭제할까요?\n입고 내역도 모두 함께 삭제됩니다.`)) return;
     const res = await fetch(`/api/cost-management/products/${id}`, { method: 'DELETE' });
@@ -579,8 +614,24 @@ export default function CostManagementTab() {
           <td style={{ padding: '8px 12px' }} />
           {/* RG 실재고 (조건부) — 빈 칸 */}
           {channelFilter === 'rg' && <td style={{ padding: '8px 12px' }} />}
-          {/* 숨김 버튼 열 — 빈 칸 */}
-          <td style={{ padding: '8px 12px' }} />
+          {/* 숨김 버튼 열 */}
+          <td style={{ padding: '10px 4px', textAlign: 'right' }}>
+            <button
+              onClick={() => toggleGroupHide(group)}
+              title={group.children.every((c) => c.hidden) ? '그룹 숨김 해제' : '그룹 전체 숨기기'}
+              style={{
+                border: 'none', background: 'none', cursor: 'pointer',
+                padding: '4px', borderRadius: '4px', opacity: 0.25,
+              }}
+              onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
+              onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.25')}
+            >
+              {group.children.every((c) => c.hidden)
+                ? <EyeOff size={13} color="#71717a" />
+                : <Eye size={13} color="#71717a" />
+              }
+            </button>
+          </td>
           {/* 삭제 버튼 열 — 빈 칸 */}
           <td style={{ padding: '8px 12px' }} />
         </tr>
