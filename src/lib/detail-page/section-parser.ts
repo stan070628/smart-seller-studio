@@ -49,6 +49,93 @@ export function contentToSections(content: DetailPageContent): DetailSection[] {
     });
   }
 
+  // richSections — AI가 selectedSections 순서대로 지정한 rich 섹션들
+  if (content.richSections?.selectedSections?.length) {
+    const rich = content.richSections;
+    for (const key of rich.selectedSections) {
+      switch (key) {
+        case 'point':
+          if (rich.pointSections && rich.pointSections.length > 0) {
+            sections.push({
+              id: uuidv4(),
+              type: 'point_section',
+              order: order++,
+              content: { type: 'point_section', items: rich.pointSections },
+              attachedImages: [],
+              aiInstruction: undefined,
+              eyebrow: undefined,
+            });
+          }
+          break;
+        case 'stat':
+          if (rich.statCallouts && rich.statCallouts.length > 0) {
+            sections.push({
+              id: uuidv4(),
+              type: 'stat_callout',
+              order: order++,
+              content: { type: 'stat_callout', items: rich.statCallouts },
+              attachedImages: [],
+              aiInstruction: undefined,
+              eyebrow: undefined,
+            });
+          }
+          break;
+        case 'bar_chart':
+          if (rich.barChartItems && rich.barChartItems.length > 0) {
+            sections.push({
+              id: uuidv4(),
+              type: 'bar_chart',
+              order: order++,
+              content: { type: 'bar_chart', items: rich.barChartItems },
+              attachedImages: [],
+              aiInstruction: undefined,
+              eyebrow: undefined,
+            });
+          }
+          break;
+        case 'why':
+          if (rich.whyIcons && rich.whyIcons.length > 0) {
+            sections.push({
+              id: uuidv4(),
+              type: 'why_icons',
+              order: order++,
+              content: { type: 'why_icons', items: rich.whyIcons },
+              attachedImages: [],
+              aiInstruction: undefined,
+              eyebrow: undefined,
+            });
+          }
+          break;
+        case 'cert':
+          if (rich.certifications && rich.certifications.length > 0) {
+            sections.push({
+              id: uuidv4(),
+              type: 'certifications',
+              order: order++,
+              content: { type: 'certifications', items: rich.certifications },
+              attachedImages: [],
+              aiInstruction: undefined,
+              eyebrow: undefined,
+            });
+          }
+          break;
+        case 'steps':
+          if (rich.infographicSteps && rich.infographicSteps.length > 0) {
+            sections.push({
+              id: uuidv4(),
+              type: 'infographic_steps',
+              order: order++,
+              content: { type: 'infographic_steps', items: rich.infographicSteps },
+              attachedImages: [],
+              aiInstruction: undefined,
+              eyebrow: undefined,
+            });
+          }
+          break;
+      }
+    }
+  }
+
   // features — 빈 배열이면 섹션 생략
   if (content.features.length > 0) {
     sections.push({
@@ -298,7 +385,41 @@ export function createEmptySection(type: SectionType, order: number): DetailSect
       return { ...base, type: 'point', content: { type: 'point', pointLabel: '', headline: '', subheadline: '' } };
     case 'image_grid':
       return { ...base, type: 'image_grid', content: { type: 'image_grid', title: '', items: [] } };
+    case 'point_section':
+      return { ...base, type: 'point_section', content: { type: 'point_section', items: [] } };
+    case 'stat_callout':
+      return { ...base, type: 'stat_callout', content: { type: 'stat_callout', items: [] } };
+    case 'bar_chart':
+      return { ...base, type: 'bar_chart', content: { type: 'bar_chart', items: [] } };
+    case 'why_icons':
+      return { ...base, type: 'why_icons', content: { type: 'why_icons', items: [] } };
+    case 'certifications':
+      return { ...base, type: 'certifications', content: { type: 'certifications', items: [] } };
+    case 'infographic_steps':
+      return { ...base, type: 'infographic_steps', content: { type: 'infographic_steps', items: [] } };
   }
+}
+
+/**
+ * 생성된 섹션에 업로드된 원본 이미지를 순서대로 배분한다.
+ * hero → img[0], selling_points → img[1], features → img[2]  순으로 할당.
+ * 이미지가 섹션보다 적으면 나머지 이미지 대상 섹션은 attachedImages 빈 채로 유지.
+ */
+export function distributeImagesToSections(
+  sections: DetailSection[],
+  imageUrls: string[],
+): DetailSection[] {
+  const IMAGE_TARGETS: SectionType[] = ['hero', 'selling_points', 'features'];
+  let imgIdx = 0;
+  return sections.map(s => {
+    if (imgIdx >= imageUrls.length) return s;
+    if (!IMAGE_TARGETS.includes(s.type)) return s;
+    const url = imageUrls[imgIdx++];
+    return {
+      ...s,
+      attachedImages: [{ url, order: 0, processingMode: 'original' as const }],
+    };
+  });
 }
 
 /**
