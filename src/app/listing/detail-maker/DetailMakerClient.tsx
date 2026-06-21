@@ -419,7 +419,6 @@ export default function DetailMakerClient() {
     setError(null);
     // 이전 씬 생성 결과 무시
     sceneGenIdRef.current += 1;
-    const currentGenId = sceneGenIdRef.current;
 
     try {
       const fullProductName = [brandName.trim(), productName.trim()].filter(Boolean).join(' ');
