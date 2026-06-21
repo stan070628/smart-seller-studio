@@ -13,7 +13,7 @@ export async function PATCH(
 
   const { id } = await params;
   const body = await request.json().catch(() => null);
-  const { seller_product_id, vendor_item_id, naver_channel_product_no, variants, hidden, channel_type, external_id } = body ?? {};
+  const { seller_product_id, vendor_item_id, naver_channel_product_no, variants, hidden, channel_type, external_id, download_coupon_policy } = body ?? {};
 
   if (seller_product_id !== undefined && seller_product_id !== null) {
     if (!Number.isInteger(seller_product_id) || seller_product_id <= 0) {
@@ -32,6 +32,19 @@ export async function PATCH(
   }
   if (hidden !== undefined && typeof hidden !== 'boolean') {
     return NextResponse.json({ success: false, error: 'hidden must be a boolean' }, { status: 400 });
+  }
+  if (download_coupon_policy !== undefined && download_coupon_policy !== null) {
+    const p = download_coupon_policy as Record<string, unknown>;
+    if (
+      typeof p.rate !== 'number' || p.rate <= 0 || p.rate > 1 ||
+      typeof p.max_discount !== 'number' || p.max_discount <= 0 ||
+      typeof p.min_price !== 'number' || p.min_price < 0
+    ) {
+      return NextResponse.json(
+        { success: false, error: 'download_coupon_policy: {rate(0<r≤1), max_discount(>0), min_price(≥0)} 필요' },
+        { status: 400 },
+      );
+    }
   }
   if (channel_type !== undefined) {
     const VALID_CHANNEL_TYPES = ['coupang_rg', 'coupang_wing', 'naver'];
@@ -57,10 +70,19 @@ export async function PATCH(
            vendor_item_id             = COALESCE($4, vendor_item_id),
            naver_channel_product_no   = COALESCE($5, naver_channel_product_no),
            variants                   = COALESCE($6, variants),
-           hidden                     = COALESCE($7, hidden)
+           hidden                     = COALESCE($7, hidden),
+           download_coupon_policy     = CASE WHEN $8::jsonb IS NOT NULL THEN $8::jsonb ELSE download_coupon_policy END
        WHERE id = $1 AND user_id = $2
-       RETURNING id, seller_product_id, vendor_item_id, naver_channel_product_no, variants, hidden`,
-      [id, user.userId, seller_product_id ?? null, vendor_item_id ?? null, naver_channel_product_no ?? null, variants ? JSON.stringify(variants) : null, hidden === undefined ? null : hidden],
+       RETURNING id, seller_product_id, vendor_item_id, naver_channel_product_no, variants, hidden, download_coupon_policy`,
+      [
+        id, user.userId,
+        seller_product_id ?? null,
+        vendor_item_id ?? null,
+        naver_channel_product_no ?? null,
+        variants ? JSON.stringify(variants) : null,
+        hidden === undefined ? null : hidden,
+        download_coupon_policy !== undefined ? JSON.stringify(download_coupon_policy) : null,
+      ],
     );
     if (rows.length === 0) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
 
