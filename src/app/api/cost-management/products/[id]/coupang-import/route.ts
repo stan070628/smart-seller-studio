@@ -66,18 +66,19 @@ export async function POST(
   const { from, to } = body ?? {};
 
   // 날짜 파라미터 필수 검증
-  if (!from || !to) {
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  if (!from || !to || !DATE_RE.test(String(from)) || !DATE_RE.test(String(to))) {
     return NextResponse.json({ success: false, error: 'from, to (YYYY-MM-DD) required' }, { status: 400 });
   }
 
   const pool = getSourcingPool();
 
-  // 채널별 unit_multiplier 조회
+  // 채널별 unit_multiplier 조회 (user_id 포함 — 소유권 확인 전에 타인 데이터 노출 방지)
   const { rows: chRows } = await pool.query(
     `SELECT channel_type, external_id, unit_multiplier
      FROM product_cost_channels
-     WHERE product_cost_id = $1`,
-    [id],
+     WHERE product_cost_id = $1 AND user_id = $2`,
+    [id, user.userId],
   );
   const wingMultiplierMap = new Map<number, number>();
   const rgMultiplierMap = new Map<number, number>();

@@ -1,3 +1,5 @@
+BEGIN;
+
 ALTER TABLE sale_records
   ADD COLUMN coupon_discount INTEGER NOT NULL DEFAULT 0;
 
@@ -9,3 +11,5 @@ COMMENT ON COLUMN sale_records.coupon_discount IS
 
 COMMENT ON COLUMN product_costs.download_coupon_policy IS
   '다운로드쿠폰 정책: {"rate": 0.10, "max_discount": 1000, "min_price": 30000}. null이면 쿠폰 없음.';
+
+COMMIT;

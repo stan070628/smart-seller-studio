@@ -125,6 +125,7 @@ export function calculateFifo(
       sale.quantity > 0 ? Math.round(totalCost / sale.quantity) : 0;
 
     // 실효 판매가: 쿠폰 할인 차감 (없으면 selling_price 그대로)
+    // 쿠팡 정책상 coupon_discount > selling_price는 발생하지 않으나, 데이터 오류 시 음수가 될 수 있음
     const effective_price = sale.selling_price - (sale.coupon_discount ?? 0);
 
     // 플랫폼 수수료: 실효 판매가 × 수수료율 (반올림)

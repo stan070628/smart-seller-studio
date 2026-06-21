@@ -764,7 +764,6 @@ export class CoupangClient {
     await sleep(API_DELAY);
     try {
       const res = await this.request<{
-        success: boolean;
         content?: Array<{ type: string; discount: number; status: string }>;
       }>('GET', url);
       const content = Array.isArray(res.data?.content) ? res.data.content : [];

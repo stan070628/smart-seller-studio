@@ -33,6 +33,11 @@ export async function PATCH(
   if (hidden !== undefined && typeof hidden !== 'boolean') {
     return NextResponse.json({ success: false, error: 'hidden must be a boolean' }, { status: 400 });
   }
+  if (variants !== undefined && variants !== null) {
+    if (typeof variants !== 'object' || Array.isArray(variants)) {
+      return NextResponse.json({ success: false, error: 'variants must be an object' }, { status: 400 });
+    }
+  }
   if (download_coupon_policy !== undefined && download_coupon_policy !== null) {
     const p = download_coupon_policy as Record<string, unknown>;
     if (
