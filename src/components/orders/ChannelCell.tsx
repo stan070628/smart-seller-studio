@@ -237,6 +237,23 @@ export default function ChannelCell({ product: p, onEditChannel, onProductUpdate
         </div>
       )}
 
+      {/* 쿠팡 윙 — channels에서 coupang_wing 항목 (판배 옵션ID) */}
+      {(() => {
+        const wingEntries = p.channels.filter((ch) => ch.channel_type === 'coupang_wing');
+        if (wingEntries.length === 0) return null;
+        return wingEntries.map((ch) => (
+          <div key={ch.id} style={{ fontSize: '10px', display: 'flex', alignItems: 'center', gap: '3px' }}>
+            <span style={{ background: '#fef2f2', color: '#be0014', padding: '1px 5px', borderRadius: '3px', fontSize: '9px', fontWeight: 600 }}>윙</span>
+            <span style={{ color: '#be0014', fontFamily: 'monospace' }}>{ch.external_id}</span>
+            <button
+              onClick={() => navigator.clipboard.writeText(String(ch.external_id))}
+              title="복사"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0', fontSize: '9px', color: '#a1a1aa', lineHeight: 1 }}
+            >📋</button>
+          </div>
+        ));
+      })()}
+
       {/* 쿠팡 RG — channels에서 coupang_rg 항목 (없으면 기존 vendor_item_id fallback) */}
       {(() => {
         const rgEntries = p.channels.filter((ch) => ch.channel_type === 'coupang_rg');
