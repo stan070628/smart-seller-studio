@@ -99,6 +99,7 @@ export async function POST(
     const generalItems: Array<{
       sold_at: string; quantity: number; selling_price: number;
       coupang_order_item_id: string; channel: string; variant_name: string | null;
+      shipping_fee: number;
     }> = [];
 
     if (sellerProductId) {
@@ -131,6 +132,7 @@ export async function POST(
             coupang_order_item_id: `${order.orderId}-${item.vendorItemId}`,
             channel: 'coupang',
             variant_name: variantsCache[String(item.vendorItemId)] ?? null,
+            shipping_fee: 3500,
           })),
       ));
     }
@@ -167,6 +169,7 @@ export async function POST(
       coupang_order_item_id: string;
       channel: string;
       variant_name: string | null;
+      shipping_fee: number;
     }> = [];
 
     // RG API: paidDateTo exclusive → 하루 추가해야 to 날짜 포함
@@ -210,6 +213,7 @@ export async function POST(
                 coupang_order_item_id: key,
                 channel: 'rocket_growth',
                 variant_name: variantsCache[String(item.vendorItemId)] ?? null,
+                shipping_fee: 0,
               });
             }
           }
@@ -229,6 +233,7 @@ export async function POST(
     const naverItems: Array<{
       sold_at: string; quantity: number; selling_price: number;
       coupang_order_item_id: string; channel: string; variant_name: string | null;
+      shipping_fee: number;
     }> = [];
 
     if (naverChannelProductNo) {
@@ -251,6 +256,7 @@ export async function POST(
             coupang_order_item_id: `naver-${order.productOrderId}`,
             channel: 'naver',
             variant_name: null,
+            shipping_fee: 3500,
           });
         }
         console.log(`[import] 네이버 items: ${naverItems.length} (channelProductNo=${naverChannelProductNo})`);
@@ -268,10 +274,10 @@ export async function POST(
     for (const item of allItems) {
       const result = await pool.query(
         `INSERT INTO sale_records
-           (user_id, product_cost_id, sold_at, quantity, selling_price, channel, coupang_order_item_id, variant_name)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           (user_id, product_cost_id, sold_at, quantity, selling_price, channel, coupang_order_item_id, variant_name, shipping_fee)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          ON CONFLICT (coupang_order_item_id) DO NOTHING`,
-        [user.userId, id, item.sold_at, item.quantity, item.selling_price, item.channel, item.coupang_order_item_id, item.variant_name ?? null],
+        [user.userId, id, item.sold_at, item.quantity, item.selling_price, item.channel, item.coupang_order_item_id, item.variant_name ?? null, item.shipping_fee],
       );
       if ((result.rowCount ?? 0) > 0) imported++;
       else skipped++;
