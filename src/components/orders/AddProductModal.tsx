@@ -6,6 +6,7 @@ import { X, Package, ChevronLeft } from 'lucide-react';
 interface CoupangProduct {
   seller_product_id: number;
   seller_product_name: string;
+  already_registered?: boolean;
 }
 
 interface Props {
@@ -145,12 +146,18 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
                         background: isSelected ? '#fef2f2' : '#fff',
                         color: isSelected ? '#be0014' : '#18181b',
                         fontWeight: isSelected ? 600 : 400,
+                        display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap',
                       }}
                     >
-                      {p.seller_product_name}
-                      <span style={{ fontSize: '10px', color: '#71717a', marginLeft: '8px' }}>
+                      <span style={{ flex: 1, minWidth: 0 }}>{p.seller_product_name}</span>
+                      <span style={{ fontSize: '10px', color: '#71717a', flexShrink: 0 }}>
                         #{p.seller_product_id}
                       </span>
+                      {p.already_registered && (
+                        <span style={{ fontSize: '9px', color: '#f59e0b', background: '#fef3c7', padding: '1px 4px', borderRadius: 2, flexShrink: 0 }}>
+                          추가 등록
+                        </span>
+                      )}
                     </div>
                   );
                 })}

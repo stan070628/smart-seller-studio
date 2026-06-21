@@ -54,13 +54,14 @@ export async function GET() {
       return true;
     });
 
-    // 3) 이미 원가관리에 등록된 상품 제외
+    // 3) 전체 목록 반환 — seller_product_id는 그룹 키이므로 이미 등록된 상품도 선택 가능해야 함
+    // already_registered 플래그로 UI에서 시각적으로 구분
     const filtered = unique
-      .filter((p) => !registeredIds.has(p.sellerProductId))
       .map((p) => ({
         seller_product_id: p.sellerProductId,
         seller_product_name: p.sellerProductName,
         status_name: p.statusName,
+        already_registered: registeredIds.has(p.sellerProductId),
       }))
       .sort((a, b) => a.seller_product_name.localeCompare(b.seller_product_name, 'ko'));
 
