@@ -72,6 +72,21 @@ export async function POST(
 
   const pool = getSourcingPool();
 
+  // 채널별 unit_multiplier 조회
+  const { rows: chRows } = await pool.query(
+    `SELECT channel_type, external_id, unit_multiplier
+     FROM product_cost_channels
+     WHERE product_cost_id = $1`,
+    [id],
+  );
+  const wingMultiplierMap = new Map<number, number>();
+  const rgMultiplierMap = new Map<number, number>();
+  for (const ch of chRows) {
+    const m = ch.unit_multiplier >= 1 ? ch.unit_multiplier : 1;
+    if (ch.channel_type === 'coupang_wing') wingMultiplierMap.set(Number(ch.external_id), m);
+    if (ch.channel_type === 'coupang_rg') rgMultiplierMap.set(Number(ch.external_id), m);
+  }
+
   // RLS 대체: user_id 조건으로 타 유저 데이터 접근 차단
   const { rows: products } = await pool.query(
     `SELECT id, seller_product_id, vendor_item_id, product_name, naver_channel_product_no, variants, download_coupon_policy FROM product_costs WHERE id = $1 AND user_id = $2`,
@@ -160,18 +175,21 @@ export async function POST(
             Number(item.sellerProductId) === Number(sellerProductId) ||
             Number(item.vendorItemId) === Number(sellerProductId)
           ) && !item.canceled)
-          .map((item) => ({
-            sold_at: order.paidAt?.slice(0, 10) ?? order.orderedAt.slice(0, 10),
-            quantity: item.shippingCount,
-            selling_price: item.shippingCount > 0
-              ? Math.round(item.orderPrice / item.shippingCount)
-              : item.salesPrice,
-            coupang_order_item_id: `${order.orderId}-${item.vendorItemId}`,
-            channel: 'coupang',
-            variant_name: variantsCache[String(item.vendorItemId)] ?? null,
-            shipping_fee: 3500,
-            coupon_discount: 0,
-          })),
+          .map((item) => {
+            const wm = wingMultiplierMap.get(Number(item.vendorItemId)) ?? 1;
+            return {
+              sold_at: order.paidAt?.slice(0, 10) ?? order.orderedAt.slice(0, 10),
+              quantity: item.shippingCount * wm,
+              selling_price: item.shippingCount > 0
+                ? Math.round(item.orderPrice / item.shippingCount)
+                : item.salesPrice,
+              coupang_order_item_id: `${order.orderId}-${item.vendorItemId}`,
+              channel: 'coupang',
+              variant_name: variantsCache[String(item.vendorItemId)] ?? null,
+              shipping_fee: 3500,
+              coupon_discount: 0,
+            };
+          }),
       ));
     }
 
@@ -242,12 +260,13 @@ export async function POST(
             if (item.salesQuantity <= 0) continue;
             const key = `rg-${order.orderId}-${item.vendorItemId}`;
             const existing = orderItemMap.get(key);
+            const rm = rgMultiplierMap.get(item.vendorItemId) ?? 1;
             if (existing) {
-              existing.quantity += item.salesQuantity;
+              existing.quantity += item.salesQuantity * rm;
             } else {
               orderItemMap.set(key, {
                 sold_at: paidDate,
-                quantity: item.salesQuantity,
+                quantity: item.salesQuantity * rm,
                 selling_price: item.unitSalesPrice,
                 coupang_order_item_id: key,
                 channel: 'rocket_growth',
