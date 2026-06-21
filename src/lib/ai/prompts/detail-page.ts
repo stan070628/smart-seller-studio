@@ -1,5 +1,4 @@
-import type { DetailSection } from '@/types/detail-page';
-import type { RichSections } from '@/types/detail-page';
+import type { DetailSection, RichSections } from '@/types/detail-page';
 
 // ─────────────────────────────────────────
 // 이미지 분석 입력 타입 (schemas.ts 의존성 제거, visualPrompt 불필요)
