@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
     const from = searchParams.get('from');
     const to = searchParams.get('to');
     const channelFilter = (searchParams.get('channel') ?? 'all') as 'all' | 'rg' | 'wing' | 'naver';
+    const showHidden = searchParams.get('show_hidden') === 'true';
 
     const pool = getSourcingPool();
 
@@ -30,12 +31,22 @@ export async function GET(request: NextRequest) {
       `SELECT id, product_name, seller_product_id, vendor_item_id, naver_channel_product_no,
               variants, naver_variants, naver_origin_product_no,
               platform, platform_fee_rate,
-              subdivision_unit, subdivision_carryover, subdivision_carryover_unit_cost, created_at
+              subdivision_unit, subdivision_carryover, subdivision_carryover_unit_cost, created_at,
+              hidden
        FROM product_costs
        WHERE user_id = $1
+         ${showHidden ? '' : 'AND hidden = false'}
        ORDER BY created_at DESC`,
       [user.userId],
     );
+
+    const { rows: hiddenCountRows } = await pool.query(
+      `SELECT COUNT(*)::int AS hidden_count
+       FROM product_costs
+       WHERE user_id = $1 AND hidden = true`,
+      [user.userId],
+    );
+    const hiddenCount: number = hiddenCountRows[0]?.hidden_count ?? 0;
 
     // 입고 전체 조회 (기간 필터 없음 — 재고는 전체 입고 기준)
     const { rows: allEntries } = await pool.query(
@@ -221,6 +232,7 @@ export async function GET(request: NextRequest) {
         subdivision_unit: p.subdivision_unit ? Number(p.subdivision_unit) : null,
         subdivision_carryover: Number(p.subdivision_carryover ?? 0),
         subdivision_carryover_unit_cost: Number(p.subdivision_carryover_unit_cost ?? 0),
+        hidden: Boolean(p.hidden),
       };
     });
 
@@ -228,6 +240,7 @@ export async function GET(request: NextRequest) {
       total_purchase_amount: data.reduce((s, p) => s + p.total_purchase_amount, 0),
       total_sales_amount: data.reduce((s, p) => s + p.total_sales_amount, 0),
       total_realized_profit: data.reduce((s, p) => s + p.total_realized_profit, 0),
+      hidden_count: hiddenCount,
     };
 
     return NextResponse.json({ success: true, data, summary });
