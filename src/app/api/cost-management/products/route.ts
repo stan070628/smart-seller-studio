@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
 
     // 판매는 전체 조회 (재고/FIFO 계산 기준)
     const { rows: allSales } = await pool.query(
-      `SELECT id, product_cost_id, sold_at, quantity, selling_price, channel, shipping_fee FROM sale_records WHERE user_id = $1`,
+      `SELECT id, product_cost_id, sold_at, quantity, selling_price, coupon_discount, channel, shipping_fee FROM sale_records WHERE user_id = $1`,
       [user.userId],
     );
 
@@ -124,6 +124,7 @@ export async function GET(request: NextRequest) {
         sold_at: s.sold_at instanceof Date ? s.sold_at.toISOString().slice(0, 10) : String(s.sold_at).slice(0, 10),
         quantity: Number(s.quantity),
         selling_price: Number(s.selling_price),
+        coupon_discount: Number(s.coupon_discount ?? 0),
         channel: s.channel ?? SALE_CHANNEL.MANUAL,
         shipping_fee: Number(s.shipping_fee ?? 0),
       });
