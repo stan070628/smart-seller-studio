@@ -765,14 +765,14 @@ export class CoupangClient {
     try {
       const res = await this.request<{
         success: boolean;
-        content: Array<{ type: string; discount: number; status: string }>;
+        content?: Array<{ type: string; discount: number; status: string }>;
       }>('GET', url);
-      const content = (res.data as { content?: Array<{ type: string; discount: number; status: string }> })?.content ?? [];
+      const content = Array.isArray(res.data?.content) ? res.data.content : [];
       return content
         .filter((c) => c.type === 'PRICE' && c.status === 'APPLIED')
         .reduce((sum, c) => sum + (c.discount > 0 ? c.discount : 0), 0);
-    } catch {
-      // 쿠폰 조회 실패 시 0으로 처리 (임포트 중단 방지)
+    } catch (e) {
+      console.warn(`[coupang-fms] 쿠폰 조회 실패 (orderId=${orderId}):`, e instanceof Error ? e.message : e);
       return 0;
     }
   }
