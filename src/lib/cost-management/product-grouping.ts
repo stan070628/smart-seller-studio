@@ -2,7 +2,7 @@
 export interface GroupableProduct {
   id: string;
   product_name: string;
-  seller_product_id: number | null;
+  seller_product_id: number;
   current_stock: number;
   stock_value: number;
   total_realized_profit: number;
@@ -39,7 +39,7 @@ export function buildTableItems<T extends GroupableProduct>(
   const standalone: T[] = [];
 
   for (const p of products) {
-    if (p.seller_product_id != null) {
+    if (p.seller_product_id > 0) {
       const key = String(p.seller_product_id);
       if (!grouped.has(key)) grouped.set(key, []);
       grouped.get(key)!.push(p);

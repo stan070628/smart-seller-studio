@@ -97,3 +97,25 @@ describe('buildTableItems', () => {
     expect(result.every((r) => r.kind === 'group')).toBe(true);
   });
 });
+
+describe('buildTableItems — 가상 ID (음수)', () => {
+  it('seller_product_id < 0 인 상품은 항상 standalone으로 처리', () => {
+    const products = [
+      makeProduct({ id: 'va', seller_product_id: -1, product_name: '가상상품A' }),
+      makeProduct({ id: 'vb', seller_product_id: -2, product_name: '가상상품B' }),
+    ];
+    const result = buildTableItems(products as never[]);
+    expect(result).toHaveLength(2);
+    expect(result.every((r) => r.kind === 'standalone')).toBe(true);
+  });
+
+  it('양수 seller_product_id 2개↑이면 GroupRow로 그룹화', () => {
+    const products = [
+      makeProduct({ id: 'ca', seller_product_id: 100, product_name: '쿠팡 옵션A' }),
+      makeProduct({ id: 'cb', seller_product_id: 100, product_name: '쿠팡 옵션B' }),
+    ];
+    const result = buildTableItems(products as never[]);
+    expect(result).toHaveLength(1);
+    expect(result[0].kind).toBe('group');
+  });
+});

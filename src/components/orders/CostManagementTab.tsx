@@ -21,7 +21,7 @@ interface ChannelEntry {
 interface ProductRow {
   id: string;
   product_name: string;
-  seller_product_id: number | null;
+  seller_product_id: number;
   vendor_item_id: number | null;
   naver_channel_product_no: number | null;
   variants: Record<string, string> | null;
