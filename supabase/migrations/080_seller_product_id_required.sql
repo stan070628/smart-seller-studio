@@ -21,9 +21,10 @@ WHERE seller_product_id IS NULL;
 ALTER TABLE product_costs
   ALTER COLUMN seller_product_id SET NOT NULL;
 
--- 기존 partial (non-unique) index 교체 → full unique index
+-- 기존 partial index 교체 → full non-unique index
+-- (seller_product_id는 그룹 키: 여러 원가 단위가 같은 값을 가질 수 있으므로 UNIQUE 불가)
 DROP INDEX IF EXISTS idx_product_costs_seller_product;
-CREATE UNIQUE INDEX product_costs_user_seller_product_id_uidx
+CREATE INDEX product_costs_user_seller_product_id_idx
   ON product_costs (user_id, seller_product_id);
 
 COMMENT ON COLUMN product_costs.seller_product_id IS
