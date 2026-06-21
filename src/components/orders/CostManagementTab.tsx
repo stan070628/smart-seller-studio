@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { buildTableItems, type TableItem, type GroupRow } from '@/lib/cost-management/product-grouping';
-import { Plus, Truck, Package, Search, Trash2, TrendingUp, TrendingDown, AlertCircle, CloudDownload } from 'lucide-react';
+import { Plus, Truck, Package, Search, Trash2, TrendingUp, TrendingDown, AlertCircle, CloudDownload, Eye, EyeOff } from 'lucide-react';
 import CostEntryDrawer from './CostEntryDrawer';
 import ShippingGroupModal from './ShippingGroupModal';
 import AddProductModal from './AddProductModal';
@@ -38,6 +38,7 @@ interface ProductRow {
   margin_rate: number;
   breakeven_roas: number;
   winner_status: 'winner' | 'watch' | 'normal';
+  hidden: boolean;
   [key: string]: unknown;
 }
 
@@ -220,6 +221,8 @@ export default function CostManagementTab() {
   const [rgInventoryLoading, setRgInventoryLoading] = useState(false);
   const [editingAdSpendId, setEditingAdSpendId] = useState<string | null>(null);
   const [editingAdSpendValue, setEditingAdSpendValue] = useState('');
+  const [showHidden, setShowHidden] = useState(false);
+  const [hiddenCount, setHiddenCount] = useState(0);
 
   const handleCloseRgHistory = useCallback(() => setShowRgHistory(false), []);
 
@@ -232,12 +235,14 @@ export default function CostManagementTab() {
       const params = new URLSearchParams();
       if (range) { params.set('from', range.from); params.set('to', range.to); }
       if (channelFilter !== 'all') params.set('channel', channelFilter);
+      if (showHidden) params.set('show_hidden', 'true');
       const qs = params.toString() ? `?${params.toString()}` : '';
       const res = await fetch(`/api/cost-management/products${qs}`);
       const json = await res.json();
       if (json.success) {
         setProducts(json.data);
         setSummary(json.summary ?? { total_purchase_amount: 0, total_sales_amount: 0, total_realized_profit: 0 });
+        setHiddenCount(json.summary?.hidden_count ?? 0);
       } else {
         setLoadError(json.error ?? '상품 목록 조회에 실패했습니다.');
         console.error('[products API error]', json.error);
@@ -249,7 +254,7 @@ export default function CostManagementTab() {
     } finally {
       setLoading(false);
     }
-  }, [preset, customFrom, customTo, channelFilter]);
+  }, [preset, customFrom, customTo, channelFilter, showHidden]);
 
   async function runAllBulkImport() {
     setImportingAll(true);
@@ -383,6 +388,30 @@ export default function CostManagementTab() {
       })
       .finally(() => setRgInventoryLoading(false));
   }, [channelFilter]);
+
+  async function toggleHide(p: ProductRow) {
+    const newHidden = !p.hidden;
+    // Optimistic update: remove from view (if not showing hidden) or update opacity
+    if (!showHidden) {
+      setProducts((prev) => prev.filter((x) => x.id !== p.id));
+    } else {
+      setProducts((prev) => prev.map((x) => x.id === p.id ? { ...x, hidden: newHidden } : x));
+    }
+    try {
+      const res = await fetch(`/api/cost-management/products/${p.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hidden: newHidden }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error ?? '실패');
+      setHiddenCount((c) => newHidden ? c + 1 : Math.max(0, c - 1));
+    } catch (e) {
+      // Rollback on failure
+      load();
+      alert(`숨김 처리 실패: ${e instanceof Error ? e.message : '오류'}`);
+    }
+  }
 
   async function deleteProduct(id: string, name: string) {
     if (!confirm(`"${name}" 상품을 삭제할까요?\n입고 내역도 모두 함께 삭제됩니다.`)) return;
@@ -550,6 +579,8 @@ export default function CostManagementTab() {
           <td style={{ padding: '8px 12px' }} />
           {/* RG 실재고 (조건부) — 빈 칸 */}
           {channelFilter === 'rg' && <td style={{ padding: '8px 12px' }} />}
+          {/* 숨김 버튼 열 — 빈 칸 */}
+          <td style={{ padding: '8px 12px' }} />
           {/* 삭제 버튼 열 — 빈 칸 */}
           <td style={{ padding: '8px 12px' }} />
         </tr>
@@ -568,8 +599,8 @@ export default function CostManagementTab() {
   // ─── 공통 상품 행 렌더 (standalone 및 그룹 자식 모두 사용) ────────────────
   function renderProductRow(p: ProductRow, isChild = false) {
     const rowStyle: React.CSSProperties = isChild
-      ? { borderBottom: '1px solid #f4f4f5', background: '#fafafa', borderLeft: '3px solid #fca5a5' }
-      : { borderBottom: '1px solid #f0f0f0', background: '#fff' };
+      ? { borderBottom: '1px solid #f4f4f5', background: '#fafafa', borderLeft: '3px solid #fca5a5', opacity: p.hidden ? 0.5 : 1 }
+      : { borderBottom: '1px solid #f0f0f0', background: '#fff', opacity: p.hidden ? 0.5 : 1 };
     const firstTdPaddingLeft = isChild ? '22px' : '12px';
 
     return (
@@ -690,6 +721,20 @@ export default function CostManagementTab() {
             })()}
           </td>
         )}
+        <td style={{ padding: '10px 4px', textAlign: 'right' }}>
+          <button
+            onClick={() => toggleHide(p)}
+            title={p.hidden ? '숨김 해제' : '이 행 숨기기'}
+            style={{
+              border: 'none', background: 'none', cursor: 'pointer',
+              padding: '4px', borderRadius: '4px', opacity: 0.25,
+            }}
+            onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.25')}
+          >
+            {p.hidden ? <EyeOff size={13} color="#71717a" /> : <Eye size={13} color="#71717a" />}
+          </button>
+        </td>
         <td style={{ padding: '10px 8px', textAlign: 'right' }}>
           <button
             onClick={() => deleteProduct(p.id, p.product_name)}
@@ -941,6 +986,26 @@ export default function CostManagementTab() {
         </div>
       </div>
 
+      {/* 숨김 행 표시 토글 */}
+      {hiddenCount > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+          <button
+            onClick={() => setShowHidden((prev) => !prev)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '5px',
+              padding: '5px 12px', borderRadius: '20px', fontSize: '12px',
+              cursor: 'pointer',
+              border: `1px solid ${showHidden ? '#71717a' : '#e5e5e5'}`,
+              background: showHidden ? '#f4f4f5' : '#fff',
+              color: '#52525b',
+            }}
+          >
+            {showHidden ? <EyeOff size={12} /> : <Eye size={12} />}
+            {showHidden ? `숨김 ${hiddenCount}개 숨기기` : `숨김 ${hiddenCount}개 표시하기`}
+          </button>
+        </div>
+      )}
+
       {/* 테이블 */}
       {loadError && (
         <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', padding: '10px 14px', marginBottom: '10px', fontSize: '12px', color: '#be0014', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -952,7 +1017,12 @@ export default function CostManagementTab() {
           <div style={{ padding: '40px', textAlign: 'center', color: '#71717a', fontSize: '13px' }}>불러오는 중...</div>
         ) : tableItems.length === 0 ? (
           <div style={{ padding: '40px', textAlign: 'center', color: '#71717a', fontSize: '13px' }}>
-            {search ? '검색 결과가 없습니다.' : '상품을 추가해주세요.'}
+            {search
+              ? '검색 결과가 없습니다.'
+              : hiddenCount > 0 && !showHidden
+                ? `모든 상품이 숨겨져 있습니다. 위의 "숨김 ${hiddenCount}개 표시하기" 버튼으로 복원할 수 있습니다.`
+                : '상품을 추가해주세요.'
+            }
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
@@ -966,6 +1036,7 @@ export default function CostManagementTab() {
                     RG 실재고
                   </th>
                 )}
+                <th style={{ padding: '10px 4px' }}></th>
                 <th style={{ padding: '10px 12px' }}></th>
               </tr>
             </thead>
