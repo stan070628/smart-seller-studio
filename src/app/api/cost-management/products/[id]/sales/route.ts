@@ -23,7 +23,7 @@ export async function GET(
     if (check.length === 0) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
 
     const { rows } = await pool.query(
-      `SELECT id, sold_at, quantity, selling_price, channel, coupang_order_item_id, created_at
+      `SELECT id, sold_at, quantity, selling_price, channel, coupang_order_item_id, shipping_fee, created_at
        FROM sale_records
        WHERE product_cost_id = $1
        ORDER BY sold_at DESC, created_at DESC`,
@@ -48,7 +48,8 @@ export async function POST(
 
   const { id } = await params;
   const body = await request.json().catch(() => null);
-  const { sold_at, quantity, selling_price } = body ?? {};
+  const { sold_at, quantity, selling_price, shipping_fee: rawShipping } = body ?? {};
+  const shipping_fee = rawShipping != null ? Math.max(0, Math.round(Number(rawShipping))) : 0;
 
   // 입력값 유효성 검증: sold_at 필수, quantity 양의 정수, selling_price 0 이상 정수
   if (
@@ -58,6 +59,13 @@ export async function POST(
   ) {
     return NextResponse.json(
       { success: false, error: 'sold_at, quantity(>0), selling_price(>=0) required' },
+      { status: 400 },
+    );
+  }
+
+  if (!Number.isInteger(shipping_fee) || shipping_fee < 0) {
+    return NextResponse.json(
+      { success: false, error: 'shipping_fee must be non-negative integer' },
       { status: 400 },
     );
   }
@@ -81,10 +89,10 @@ export async function POST(
     if (check.length === 0) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
 
     const { rows } = await pool.query(
-      `INSERT INTO sale_records (user_id, product_cost_id, sold_at, quantity, selling_price, channel)
-       VALUES ($1, $2, $3, $4, $5, 'manual')
+      `INSERT INTO sale_records (user_id, product_cost_id, sold_at, quantity, selling_price, channel, shipping_fee)
+       VALUES ($1, $2, $3, $4, $5, 'manual', $6)
        RETURNING *`,
-      [user.userId, id, sold_at, quantity, selling_price],
+      [user.userId, id, sold_at, quantity, selling_price, shipping_fee],
     );
 
     return NextResponse.json({ success: true, data: rows[0] }, { status: 201 });

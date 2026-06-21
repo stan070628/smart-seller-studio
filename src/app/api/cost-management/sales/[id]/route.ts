@@ -13,7 +13,7 @@ export async function PATCH(
 
   const { id } = await params;
   const body = await request.json().catch(() => null);
-  const { sold_at, quantity, selling_price } = body ?? {};
+  const { sold_at, quantity, selling_price, shipping_fee } = body ?? {};
 
   // 제공된 필드만 개별 검증 (부분 업데이트 허용)
   if (sold_at !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(sold_at)) {
@@ -34,8 +34,14 @@ export async function PATCH(
       { status: 400 },
     );
   }
+  if (shipping_fee !== undefined && (!Number.isInteger(shipping_fee) || shipping_fee < 0)) {
+    return NextResponse.json(
+      { success: false, error: 'shipping_fee must be non-negative integer' },
+      { status: 400 },
+    );
+  }
   // 최소 한 필드 이상 필요
-  if (sold_at === undefined && quantity === undefined && selling_price === undefined) {
+  if (sold_at === undefined && quantity === undefined && selling_price === undefined && shipping_fee === undefined) {
     return NextResponse.json(
       { success: false, error: 'at least one field required' },
       { status: 400 },
@@ -48,12 +54,13 @@ export async function PATCH(
     // user_id 조건으로 타 유저 데이터 수정 차단, COALESCE로 미제공 필드는 기존 값 유지
     const { rows } = await pool.query(
       `UPDATE sale_records
-       SET sold_at = COALESCE($1, sold_at),
-           quantity = COALESCE($2, quantity),
-           selling_price = COALESCE($3, selling_price)
-       WHERE id = $4 AND user_id = $5
+       SET sold_at        = COALESCE($1, sold_at),
+           quantity       = COALESCE($2, quantity),
+           selling_price  = COALESCE($3, selling_price),
+           shipping_fee   = COALESCE($4, shipping_fee)
+       WHERE id = $5 AND user_id = $6
        RETURNING *`,
-      [sold_at ?? null, quantity ?? null, selling_price ?? null, id, user.userId],
+      [sold_at ?? null, quantity ?? null, selling_price ?? null, shipping_fee ?? null, id, user.userId],
     );
 
     if (rows.length === 0) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
