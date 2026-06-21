@@ -115,6 +115,7 @@ export async function POST(request: NextRequest) {
             const soldAt = order.saleDate?.slice(0, 10);
             if (!soldAt) continue;  // saleDate 없으면 스킵
             const productCostId = wingMatch ? wingMatch.id : fallbackId!;
+            // sellerProductId fallback 경로는 unit_multiplier 미지원 → multiplier=1 고정
             const multiplier = wingMatch ? wingMatch.multiplier : 1;
             records.push({
               product_cost_id: productCostId,
