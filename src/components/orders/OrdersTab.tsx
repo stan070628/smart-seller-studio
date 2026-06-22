@@ -30,6 +30,31 @@ const NAVER_STATUS_MAP: Record<string, { label: string; color: string; bg: strin
   RETURNED:         { label: '반품완료',   color: '#9ca3af', bg: 'rgba(156,163,175,0.08)' },
 };
 
+// ─── 토스쇼핑 주문 상태 → 내부 레이블 매핑 ─────────────────────────
+
+const TOSS_STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
+  BEFORE_PAYMENT:          { label: '결제대기',   color: '#9ca3af', bg: 'rgba(156,163,175,0.08)' },
+  PAID:                    { label: '결제완료',   color: '#2563eb', bg: 'rgba(37,99,235,0.08)' },
+  PREPARING_PRODUCT:       { label: '상품준비중', color: '#d97706', bg: 'rgba(217,119,6,0.08)' },
+  DELIVERING:              { label: '배송중',     color: '#0891b2', bg: 'rgba(8,145,178,0.08)' },
+  DELIVERED:               { label: '배송완료',   color: '#16a34a', bg: 'rgba(22,163,74,0.08)' },
+  CONFIRMED_ORDER:         { label: '구매확정',   color: '#15803d', bg: 'rgba(21,128,61,0.08)' },
+  CLAIM_REQUESTED_CANCEL:  { label: '취소요청',   color: '#dc2626', bg: 'rgba(220,38,38,0.08)' },
+  CANCELED_PAYMENT:        { label: '결제취소',   color: '#9ca3af', bg: 'rgba(156,163,175,0.08)' },
+  CLAIM_REJECTED_CANCEL:   { label: '취소거부',   color: '#f59e0b', bg: 'rgba(245,158,11,0.08)' },
+  REQUESTED_EXCHANGE:      { label: '교환요청',   color: '#7c3aed', bg: 'rgba(124,58,237,0.08)' },
+  ONGOING_EXCHANGE:        { label: '교환중',     color: '#7c3aed', bg: 'rgba(124,58,237,0.08)' },
+  COMPLETED_EXCHANGE:      { label: '교환완료',   color: '#7c3aed', bg: 'rgba(124,58,237,0.08)' },
+  CLAIM_REJECTED_EXCHANGE: { label: '교환거부',   color: '#f59e0b', bg: 'rgba(245,158,11,0.08)' },
+  REQUESTED_RETURN:        { label: '반품요청',   color: '#9ca3af', bg: 'rgba(156,163,175,0.08)' },
+  ONGOING_RETURN:          { label: '반품중',     color: '#9ca3af', bg: 'rgba(156,163,175,0.08)' },
+  COMPLETED_RETURN:        { label: '반품완료',   color: '#9ca3af', bg: 'rgba(156,163,175,0.08)' },
+  CLAIM_REJECTED_RETURN:   { label: '반품거부',   color: '#f59e0b', bg: 'rgba(245,158,11,0.08)' },
+  CLAIM_COLLECTING:        { label: '회수중',     color: '#9ca3af', bg: 'rgba(156,163,175,0.08)' },
+  CLAIM_COLLECTED:         { label: '회수완료',   color: '#9ca3af', bg: 'rgba(156,163,175,0.08)' },
+  CLAIM_DELIVERING:        { label: '재배송중',   color: '#0891b2', bg: 'rgba(8,145,178,0.08)' },
+};
+
 const STATUS_FILTER_OPTIONS = [
   { value: '', label: '전체 상태' },
   { value: 'ACCEPT', label: '신규' },
@@ -89,7 +114,7 @@ interface CoupangOrder {
 interface UnifiedOrder {
   /** 화면 표시용 고유 키 (platform + orderId 조합) */
   key: string;
-  platform: 'coupang' | 'naver' | 'rocket_growth';
+  platform: 'coupang' | 'naver' | 'rocket_growth' | 'toss';
   orderId: string;
   status: string;
   orderedAt: string;
@@ -115,8 +140,10 @@ function formatDate(iso: string | null) {
 
 // ─── 상태 뱃지 ────────────────────────────────────────────────
 
-function StatusBadge({ status, platform }: { status: string; platform: 'coupang' | 'naver' | 'rocket_growth' }) {
-  const map = platform === 'naver' ? NAVER_STATUS_MAP : COUPANG_STATUS_MAP;
+function StatusBadge({ status, platform }: { status: string; platform: 'coupang' | 'naver' | 'rocket_growth' | 'toss' }) {
+  const map = platform === 'naver' ? NAVER_STATUS_MAP
+    : platform === 'toss' ? TOSS_STATUS_MAP
+    : COUPANG_STATUS_MAP;
   const info = map[status] ?? { label: status, color: '#71717a', bg: 'rgba(113,113,122,0.08)' };
   return (
     <span style={{ fontSize: '11px', fontWeight: 600, padding: '3px 10px', borderRadius: '100px', color: info.color, backgroundColor: info.bg }}>
@@ -234,6 +261,53 @@ function toRgUnified(item: RgOrderApiItem): UnifiedOrder {
   };
 }
 
+// ─── 토스쇼핑 API 응답 아이템 타입 ────────────────────────────────
+
+interface TossOrderApiItem {
+  orderId: number;
+  orderProductId: number;
+  orderedAt: string;
+  ordererName: string;
+  productName: string;
+  optionName: string;
+  quantity: number;
+  price: number;
+  receiverName: string;
+  receiverPhone: string;
+  address: string;
+  detailAddress: string;
+  shippingTrackingNumber: string;
+  deliveryCompanyCode: string;
+  orderProductStatus: string;
+}
+
+function toTossUnified(item: TossOrderApiItem): UnifiedOrder {
+  return {
+    key: `toss-${item.orderProductId}`,
+    platform: 'toss',
+    orderId: String(item.orderProductId),
+    status: item.orderProductStatus,
+    orderedAt: item.orderedAt,
+    receiverName: item.receiverName,
+    receiverAddr: item.address ? `${item.address} ${item.detailAddress ?? ''}`.trim() : null,
+    receiverTel: item.receiverPhone ?? null,
+    invoiceInfo: item.shippingTrackingNumber
+      ? `${item.deliveryCompanyCode} ${item.shippingTrackingNumber}`
+      : null,
+    parcelMessage: null,
+    orderItems: [
+      {
+        sellerProductName: item.productName + (item.optionName ? ` (${item.optionName})` : ''),
+        sellerProductItemName: item.optionName ?? '',
+        shippingCount: item.quantity,
+        salesPrice: item.quantity > 0 ? Math.round(item.price / item.quantity) : item.price,
+        orderPrice: item.price,
+        canceled: ['CANCELED_PAYMENT', 'COMPLETED_RETURN'].includes(item.orderProductStatus),
+      },
+    ],
+  };
+}
+
 // ─── 컴포넌트 ─────────────────────────────────────────────────
 
 export default function OrdersTab() {
@@ -250,6 +324,7 @@ export default function OrdersTab() {
   const [coupangError, setCoupangError] = useState<string | null>(null);
   const [naverError, setNaverError] = useState<string | null>(null);
   const [rgError, setRgError] = useState<string | null>(null);
+  const [tossError, setTossError] = useState<string | null>(null);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 20;
@@ -259,13 +334,14 @@ export default function OrdersTab() {
     setCoupangError(null);
     setNaverError(null);
     setRgError(null);
+    setTossError(null);
 
     const params = new URLSearchParams({ from, to });
     if (statusFilter) params.set('status', statusFilter);
     const rgParams = new URLSearchParams({ from, to });
 
-    // 쿠팡 + 네이버 + 로켓그로스 병렬 조회 — 한 쪽 실패해도 나머지 표시
-    const [coupangResult, naverResult, rgResult] = await Promise.allSettled([
+    // 쿠팡 + 네이버 + 로켓그로스 + 토스쇼핑 병렬 조회 — 한 쪽 실패해도 나머지 표시
+    const [coupangResult, naverResult, rgResult, tossResult] = await Promise.allSettled([
       fetch(`/api/orders/coupang?${params.toString()}`).then(async (res) => {
         const json = await res.json();
         if (!res.ok || !json.success) throw new Error(json.error ?? '쿠팡 주문 조회 실패');
@@ -280,6 +356,11 @@ export default function OrdersTab() {
       fetch(`/api/orders/coupang-rg?${rgParams.toString()}`).then(async (res) => {
         const json = await res.json();
         if (!res.ok || !json.success) throw new Error(json.error ?? '로켓그로스 조회 실패');
+        return json;
+      }),
+      fetch(`/api/orders/toss?${params.toString()}`).then(async (res) => {
+        const json = await res.json();
+        if (!res.ok || !json.success) throw new Error(json.error ?? '토스쇼핑 주문 조회 실패');
         return json;
       }),
     ]);
@@ -309,6 +390,13 @@ export default function OrdersTab() {
       setRgError(rgResult.reason instanceof Error ? rgResult.reason.message : '로켓그로스 오류');
     }
 
+    if (tossResult.status === 'fulfilled') {
+      const tossItems: TossOrderApiItem[] = tossResult.value.data?.items ?? [];
+      unified.push(...tossItems.map(toTossUnified));
+    } else {
+      setTossError(tossResult.reason instanceof Error ? tossResult.reason.message : '토스쇼핑 오류');
+    }
+
     // 주문일시 내림차순 정렬
     unified.sort((a, b) => new Date(b.orderedAt).getTime() - new Date(a.orderedAt).getTime());
 
@@ -333,6 +421,7 @@ export default function OrdersTab() {
   const coupangCount = orders.filter((o) => o.platform === 'coupang').length;
   const naverCount = orders.filter((o) => o.platform === 'naver').length;
   const rgCount = orders.filter((o) => o.platform === 'rocket_growth').length;
+  const tossCount = orders.filter((o) => o.platform === 'toss').length;
 
   // 현재 페이지 슬라이싱
   const totalPages = Math.max(1, Math.ceil(orders.length / PAGE_SIZE));
@@ -367,7 +456,7 @@ export default function OrdersTab() {
           조회
         </button>
         <span style={{ marginLeft: 'auto', fontSize: '12px', color: '#71717a' }}>
-          전체 주문 {orders.length}건 (쿠팡 {coupangCount}건 · 로켓그로스 {rgCount}건 · 네이버 {naverCount}건) · 총 {totalRevenue.toLocaleString()}원
+          전체 주문 {orders.length}건 (쿠팡 {coupangCount}건 · 로켓그로스 {rgCount}건 · 네이버 {naverCount}건 · 토스 {tossCount}건) · 총 {totalRevenue.toLocaleString()}원
         </span>
       </div>
 
@@ -388,6 +477,12 @@ export default function OrdersTab() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px 16px', marginBottom: '8px' }}>
           <AlertCircle size={15} color="#dc2626" />
           <span style={{ fontSize: '13px', color: '#dc2626' }}>로켓그로스: {rgError}</span>
+        </div>
+      )}
+      {tossError && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px 16px', marginBottom: '8px' }}>
+          <AlertCircle size={15} color="#dc2626" />
+          <span style={{ fontSize: '13px', color: '#dc2626' }}>토스쇼핑: {tossError}</span>
         </div>
       )}
 
