@@ -1,3 +1,9 @@
+/**
+ * 토스쇼핑 Open API 클라이언트
+ *
+ * 인증: Bearer JWT (TOSS_SHOPPING_ACCESS_TOKEN)
+ * 문서: https://shopping-docs.toss.im/dev/api-2/order
+ */
 import { proxyFetch } from '@/lib/proxy-fetch';
 
 const API_HOST = 'https://shopping-fep.toss.im';
@@ -56,7 +62,6 @@ export class TossShoppingClient {
 
     const res = await proxyFetch(url.toString(), {
       headers: {
-        'Content-Type': 'application/json',
         'Authorization': `Bearer ${this.accessToken}`,
       },
       signal: AbortSignal.timeout(30_000),
