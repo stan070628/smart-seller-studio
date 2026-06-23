@@ -48,6 +48,7 @@ export default function ChannelEditPopover({
   const [newUnitMultiplier, setNewUnitMultiplier] = useState('1');
   const [adding, setAdding] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
   const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
 
@@ -168,18 +169,22 @@ export default function ChannelEditPopover({
 
   async function handleRemove(channelId: string) {
     setRemovingId(channelId);
+    setRemoveError(null);
     try {
       const res = await fetch(
         `/api/cost-management/products/${product.id}/channels/${channelId}`,
         { method: 'DELETE' },
       );
-      const json = await res.json();
-      if (json.success) {
+      if (res.ok || res.status === 404) {
+        // 404 = DB에 이미 없음 → UI에서도 제거
         setChannels((prev) => prev.filter((ch) => ch.id !== channelId));
         onChannelRemoved(channelId);
+      } else {
+        const json = await res.json().catch(() => null);
+        setRemoveError(json?.error ?? '삭제 실패');
       }
     } catch {
-      // silent — channel stays visible
+      setRemoveError('네트워크 오류');
     } finally {
       setRemovingId(null);
     }
@@ -241,6 +246,7 @@ export default function ChannelEditPopover({
 
       {/* 현재 채널 목록 */}
       <div style={{ fontSize: 10, fontWeight: 600, color: '#52525b', marginBottom: 6 }}>채널 (서브키)</div>
+      {removeError && <div style={{ fontSize: 10, color: '#ef4444', marginBottom: 6 }}>{removeError}</div>}
       {channels.length === 0 && (
         <div style={{ fontSize: 11, color: '#a1a1aa', marginBottom: 10 }}>연결된 채널 없음</div>
       )}
