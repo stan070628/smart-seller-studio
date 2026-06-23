@@ -11,6 +11,23 @@ function toDateStr(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+// 쿠팡 API 최대 조회 범위는 32일 — 초과 시 32일 단위 청크로 분할
+function splitDateRange(from: string, to: string, maxDays = 31): Array<{ from: string; to: string }> {
+  const start = new Date(from);
+  const end = new Date(to);
+  const chunks: Array<{ from: string; to: string }> = [];
+  let cursor = new Date(start);
+  while (cursor <= end) {
+    const chunkEnd = new Date(cursor);
+    chunkEnd.setDate(chunkEnd.getDate() + maxDays);
+    if (chunkEnd > end) chunkEnd.setTime(end.getTime());
+    chunks.push({ from: toDateStr(cursor), to: toDateStr(chunkEnd) });
+    cursor = new Date(chunkEnd);
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return chunks;
+}
+
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
 
@@ -28,10 +45,18 @@ export async function GET(request: NextRequest) {
   try {
     const client = getCoupangClient();
 
+    // 쿠팡 API 32일 제한 — 초과 시 분할
+    const dateChunks = splitDateRange(from, to);
+
     if (status) {
       // 특정 status 단일 조회 — 캐시 미적용 (호출 빈도 낮음)
-      const result = await client.getOrders({ createdAtFrom: from, createdAtTo: to, status, nextToken, maxPerPage: 50 });
-      return Response.json({ success: true, data: result });
+      const chunkResults = await Promise.all(
+        dateChunks.map((chunk) =>
+          client.getOrders({ createdAtFrom: chunk.from, createdAtTo: chunk.to, status, nextToken, maxPerPage: 50 })
+        )
+      );
+      const items = chunkResults.flatMap((r) => r.items);
+      return Response.json({ success: true, data: { items, nextToken: null } });
     }
 
     // 캐시 확인
@@ -41,34 +66,36 @@ export async function GET(request: NextRequest) {
       return Response.json({ success: true, data: { items: cached, nextToken: null } });
     }
 
-    // 캐시 미스 → 2개씩 chunk로 조회 (429 방지)
+    // 캐시 미스 → status × dateChunk 조합을 2개씩 청킹 (429 방지)
     const CHUNK_SIZE = 2;
+    const allCombinations = ALL_STATUSES.flatMap((s) => dateChunks.map((dc) => ({ status: s, ...dc })));
     const results: PromiseSettledResult<Awaited<ReturnType<typeof client.getOrders>>>[] = [];
-    for (let i = 0; i < ALL_STATUSES.length; i += CHUNK_SIZE) {
-      const chunk = ALL_STATUSES.slice(i, i + CHUNK_SIZE);
-      const chunkResults = await Promise.allSettled(
-        chunk.map((s) => client.getOrders({ createdAtFrom: from, createdAtTo: to, status: s, maxPerPage: 50 }))
+    for (let i = 0; i < allCombinations.length; i += CHUNK_SIZE) {
+      const batch = allCombinations.slice(i, i + CHUNK_SIZE);
+      const batchResults = await Promise.allSettled(
+        batch.map((combo) => client.getOrders({ createdAtFrom: combo.from, createdAtTo: combo.to, status: combo.status, maxPerPage: 50 }))
       );
-      results.push(...chunkResults);
+      results.push(...batchResults);
     }
 
-    const failedStatuses: string[] = [];
+    const failedKeys: string[] = [];
     const items = results.flatMap((r, i) => {
       if (r.status === 'rejected') {
-        failedStatuses.push(ALL_STATUSES[i]);
-        console.warn(`[GET /api/orders/coupang] status=${ALL_STATUSES[i]} 조회 실패:`, r.reason instanceof Error ? r.reason.message : r.reason);
+        const combo = allCombinations[i];
+        failedKeys.push(`${combo.status}(${combo.from}~${combo.to})`);
+        console.warn(`[GET /api/orders/coupang] ${combo.status} ${combo.from}~${combo.to} 조회 실패:`, r.reason instanceof Error ? r.reason.message : r.reason);
         return [];
       }
       return r.value.items;
     });
 
-    if (failedStatuses.length === ALL_STATUSES.length) {
-      console.error(`[GET /api/orders/coupang] 전체 status 조회 실패 (${from}~${to}). 첫 번째 오류:`, (results[0] as PromiseRejectedResult).reason);
+    if (failedKeys.length === allCombinations.length) {
+      console.error(`[GET /api/orders/coupang] 전체 조회 실패 (${from}~${to}). 첫 번째 오류:`, (results[0] as PromiseRejectedResult).reason);
       return Response.json({ success: false, error: '쿠팡 주문 조회에 실패했습니다. 서버 로그를 확인하세요.' }, { status: 502 });
     }
 
-    if (failedStatuses.length > 0) {
-      console.warn(`[GET /api/orders/coupang] 일부 status 조회 실패: [${failedStatuses.join(', ')}] — 나머지 데이터로 집계`);
+    if (failedKeys.length > 0) {
+      console.warn(`[GET /api/orders/coupang] 일부 조회 실패: [${failedKeys.join(', ')}] — 나머지 데이터로 집계`);
     }
 
     // 주문일시 내림차순 정렬
