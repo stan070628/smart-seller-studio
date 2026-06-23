@@ -86,11 +86,11 @@ const RequestSchema = z.object({
   images: z
     .array(ImageItemSchema)
     .min(1, '이미지는 최소 1장 이상이어야 합니다.')
-    .max(6, '이미지는 최대 6장까지 허용됩니다.')
+    .max(10, '이미지는 최대 10장까지 허용됩니다.')
     .optional(),
   imageUrls: z
     .array(z.string().url('유효한 이미지 URL이 아닙니다.'))
-    .max(6, '이미지 URL은 최대 6개까지 허용됩니다.')
+    .max(10, '이미지 URL은 최대 10개까지 허용됩니다.')
     .optional(),
   productName: z.string().max(100).optional(),
   price: z.number().int().positive().optional(),
@@ -360,7 +360,7 @@ export async function POST(
   if (imageUrls && imageUrls.length > 0) {
     try {
       const fetched = await fetchImagesFromUrls(imageUrls);
-      images = [...(rawImages ?? []), ...fetched].slice(0, 6) as Array<{ imageBase64: string; mimeType: AllowedMimeType }>;
+      images = [...(rawImages ?? []), ...fetched].slice(0, 10) as Array<{ imageBase64: string; mimeType: AllowedMimeType }>;
     } catch (error) {
       console.error('[/api/ai/generate-detail-html] URL 이미지 다운로드 실패:', error);
       return NextResponse.json(
@@ -607,8 +607,8 @@ export async function POST(
     const copyResponse = await withRetry(
       () =>
         client.messages.create({
-          model: "claude-sonnet-4-6",
-          max_tokens: 2048,
+          model: "claude-opus-4-8",
+          max_tokens: 4096,
           system: buildCategorySystemPrompt(
         (category ?? 'basic') as DetailPageCategory,
         studioMode ?? false,

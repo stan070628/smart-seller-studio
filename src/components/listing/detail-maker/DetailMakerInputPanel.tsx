@@ -226,11 +226,11 @@ export default function DetailMakerInputPanel({
               <label style={{ fontSize: '12px', fontWeight: 600, color: C.text, display: 'block', marginBottom: '6px' }}>
                 참고 이미지 <span style={{ color: '#ef4444' }}>*</span>{' '}
                 <span style={{ fontSize: '11px', color: C.textSub, fontWeight: 400 }}>
-                  ({uploadedUrls.length}/6, 권장 3장)
+                  ({uploadedUrls.length}/10, 권장 3장)
                 </span>
               </label>
 
-              {uploadedUrls.length < 6 && (
+              {uploadedUrls.length < 10 && (
                 <div
                   onClick={() => fileInputRef.current?.click()}
                   style={{
