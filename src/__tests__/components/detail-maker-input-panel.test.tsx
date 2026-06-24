@@ -30,6 +30,13 @@ const baseProps = {
   onRemoveThumbnailRef: vi.fn(),
   referenceText: '',
   setReferenceText: vi.fn(),
+  url1688: '',
+  setUrl1688: vi.fn(),
+  specs1688: [],
+  onToggleSpec: vi.fn(),
+  isFetching1688: false,
+  onFetch1688: vi.fn(),
+  fetch1688Error: null,
 };
 
 describe('DetailMakerInputPanel — 탭', () => {
@@ -103,5 +110,59 @@ describe('DetailMakerInputPanel — 참고 텍스트', () => {
     fireEvent.click(screen.getByRole('button', { name: '참고 텍스트 초기화' }));
     expect(setReferenceText).toHaveBeenCalledWith('');
     expect(screen.queryByPlaceholderText(/경쟁사 상세페이지/)).not.toBeInTheDocument();
+  });
+});
+
+describe('DetailMakerInputPanel — 1688 스펙 가져오기', () => {
+  it('기본 상태에서 URL 입력 필드가 보이지 않는다', () => {
+    render(<DetailMakerInputPanel {...baseProps} />);
+    expect(screen.queryByPlaceholderText(/1688\.com/)).not.toBeInTheDocument();
+  });
+
+  it('헤더 클릭 시 URL 입력 필드가 나타난다', () => {
+    render(<DetailMakerInputPanel {...baseProps} />);
+    fireEvent.click(screen.getByText(/1688에서 스펙 가져오기/));
+    expect(screen.getByPlaceholderText(/1688\.com/)).toBeInTheDocument();
+  });
+
+  it('가져오기 버튼 클릭 시 onFetch1688이 호출된다', () => {
+    render(<DetailMakerInputPanel {...baseProps} />);
+    fireEvent.click(screen.getByText(/1688에서 스펙 가져오기/));
+    fireEvent.click(screen.getByRole('button', { name: /가져오기/ }));
+    expect(baseProps.onFetch1688).toHaveBeenCalledTimes(1);
+  });
+
+  it('isFetching1688=true일 때 가져오기 버튼이 비활성화된다', () => {
+    render(<DetailMakerInputPanel {...baseProps} isFetching1688={true} />);
+    fireEvent.click(screen.getByText(/1688에서 스펙 가져오기/));
+    expect(screen.getByRole('button', { name: /가져오기/ })).toBeDisabled();
+  });
+
+  it('specs1688가 있으면 체크박스 목록이 렌더된다', () => {
+    const specs1688 = [
+      { label: '소재', value: '면 100%', checked: true },
+      { label: '색상', value: '블랙/화이트', checked: false },
+    ];
+    render(<DetailMakerInputPanel {...baseProps} specs1688={specs1688} />);
+    fireEvent.click(screen.getByText(/1688에서 스펙 가져오기/));
+    expect(screen.getByText('소재')).toBeInTheDocument();
+    expect(screen.getByText('면 100%')).toBeInTheDocument();
+    expect(screen.getAllByRole('checkbox')).toHaveLength(2);
+  });
+
+  it('체크박스 클릭 시 onToggleSpec(idx)이 호출된다', () => {
+    const specs1688 = [
+      { label: '소재', value: '면 100%', checked: true },
+    ];
+    render(<DetailMakerInputPanel {...baseProps} specs1688={specs1688} />);
+    fireEvent.click(screen.getByText(/1688에서 스펙 가져오기/));
+    fireEvent.click(screen.getByRole('checkbox'));
+    expect(baseProps.onToggleSpec).toHaveBeenCalledWith(0);
+  });
+
+  it('fetch1688Error가 있으면 에러 메시지가 표시된다', () => {
+    render(<DetailMakerInputPanel {...baseProps} fetch1688Error="캡차 감지됐습니다" />);
+    fireEvent.click(screen.getByText(/1688에서 스펙 가져오기/));
+    expect(screen.getByText(/캡차 감지됐습니다/)).toBeInTheDocument();
   });
 });
