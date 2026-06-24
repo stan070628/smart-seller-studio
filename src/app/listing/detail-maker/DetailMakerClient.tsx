@@ -34,6 +34,7 @@ export default function DetailMakerClient() {
   const [error, setError] = useState<string | null>(null);
   // 씬 생성 취소용 — 새 생성 요청 시 이전 결과 무시
   const sceneGenIdRef = useRef(0);
+
   // 무드 추천 취소용 — 새 추천 요청 시 이전(느린) 응답 무시
   const suggestMoodIdRef = useRef(0);
 
@@ -419,6 +420,7 @@ export default function DetailMakerClient() {
     setError(null);
     // 수동 씬 편집(generateSceneImages) 경쟁 방지 — 새 생성 시작 시 이전 결과 폐기
     sceneGenIdRef.current += 1;
+    const currentGenId = sceneGenIdRef.current;
 
     try {
       const fullProductName = [brandName.trim(), productName.trim()].filter(Boolean).join(' ');
@@ -461,8 +463,17 @@ export default function DetailMakerClient() {
         }
       }
 
+      // HTML 생성 완료 → 즉시 페이지 표시 후 씬 이미지 교체 (논블로킹)
+      if (parsed && parsed.length > 0) {
+        setIsGeneratingScenes(true);
+        void generateSceneImages(parsed, uploadedUrls, currentGenId, theme, creativeBrief?.sceneHint).finally(() => {
+          if (sceneGenIdRef.current === currentGenId) setIsGeneratingScenes(false);
+        });
+      }
+
     } catch (e) {
       setError(e instanceof Error ? e.message : 'AI 생성 중 오류가 발생했습니다.');
+      setIsGeneratingScenes(false);
     } finally {
       setIsGenerating(false);
     }

@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import sharp from "sharp";
 import { getAnthropicClient } from "@/lib/ai/claude";
+import { callClaude } from "@/lib/ai/claude-cli";
 import {
   buildDetailPageUserPrompt,
   buildCategorySystemPrompt,
@@ -434,21 +435,12 @@ export async function POST(
 
     let rawText: string;
     try {
-      const client = getAnthropicClient();
-      const resp = await withRetry(
-        () =>
-          client.messages.create({
-            model: "claude-sonnet-4-6",
-            max_tokens: 16384,
-            system: supplementSystemPrompt,
-            messages: [{ role: "user", content: supplementUserPrompt }],
-          }),
-        { label: "Claude supplementDetailHtml" }
+      rawText = await callClaude(
+        supplementSystemPrompt,
+        supplementUserPrompt,
+        'sonnet',
+        16384,
       );
-      rawText = resp.content
-        .filter((b) => b.type === "text")
-        .map((b) => (b as { type: "text"; text: string }).text)
-        .join("");
     } catch (error) {
       console.error("[/api/ai/generate-detail-html] 보충 모드 Claude 호출 실패:", error);
       return NextResponse.json(
@@ -495,27 +487,17 @@ export async function POST(
     );
   }
 
-  const client = getAnthropicClient();
-
   // ── 모바일 모드: MobileDetailPageContent 생성 → 섹션 렌더링 ──
   if (mobileMode) {
     const mobileUserMessage = buildDetailPageUserPrompt(imageAnalysis, productName, productSpecs, conversationContext, referenceText);
     let rawMobileText: string;
     try {
-      const resp = await withRetry(
-        () =>
-          client.messages.create({
-            model: "claude-sonnet-4-6",
-            max_tokens: 2048,
-            system: buildMobileCategorySystemPrompt((category ?? 'basic') as DetailPageCategory),
-            messages: [{ role: "user", content: mobileUserMessage }],
-          }),
-        { label: "Claude generateMobileDetailPageContent" }
+      rawMobileText = await callClaude(
+        buildMobileCategorySystemPrompt((category ?? 'basic') as DetailPageCategory),
+        mobileUserMessage,
+        'sonnet',
+        2048,
       );
-      rawMobileText = resp.content
-        .filter((b) => b.type === "text")
-        .map((b) => (b as { type: "text"; text: string }).text)
-        .join("");
     } catch (error) {
       console.error("[/api/ai/generate-detail-html] 모바일 카피 생성 실패:", error);
 
@@ -604,24 +586,12 @@ export async function POST(
 
   let rawCopyText: string;
   try {
-    const copyResponse = await withRetry(
-      () =>
-        client.messages.create({
-          model: "claude-opus-4-8",
-          max_tokens: 4096,
-          system: buildCategorySystemPrompt(
-        (category ?? 'basic') as DetailPageCategory,
-        studioMode ?? false,
-      ),
-          messages: [{ role: "user", content: userMessage }],
-        }),
-      { label: "Claude generateDetailPageContent" }
+    rawCopyText = await callClaude(
+      buildCategorySystemPrompt((category ?? 'basic') as DetailPageCategory, studioMode ?? false),
+      userMessage,
+      'opus',
+      4096,
     );
-
-    rawCopyText = copyResponse.content
-      .filter((b) => b.type === "text")
-      .map((b) => (b as { type: "text"; text: string }).text)
-      .join("");
   } catch (error) {
     console.error("[/api/ai/generate-detail-html] 카피 생성 실패:", error);
 
@@ -719,20 +689,12 @@ export async function POST(
   if (includeImagePrompts) {
     try {
       const promptsUserMsg = buildImagePromptsUserPrompt(imageAnalysis, content, productName);
-      const promptsResp = await withRetry(
-        () =>
-          client.messages.create({
-            model: 'claude-haiku-4-5-20251001',
-            max_tokens: 1024,
-            system: IMAGE_PROMPTS_SYSTEM_PROMPT,
-            messages: [{ role: 'user', content: promptsUserMsg }],
-          }),
-        { label: 'Claude generateImagePrompts' },
+      const promptsRaw = await callClaude(
+        IMAGE_PROMPTS_SYSTEM_PROMPT,
+        promptsUserMsg,
+        'haiku',
+        1024,
       );
-      const promptsRaw = promptsResp.content
-        .filter(b => b.type === 'text')
-        .map(b => (b as { type: 'text'; text: string }).text)
-        .join('');
       const parsedPrompts = parseImagePromptsResponse(promptsRaw);
       imagePromptsResult = {
         ...parsedPrompts,
