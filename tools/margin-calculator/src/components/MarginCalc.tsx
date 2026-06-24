@@ -88,7 +88,7 @@ export default function MarginCalc() {
     setResult(r);
 
     if (form.wholesaleMarginPerUnitKrw > 0 && form.monthlySalesQty > 0) {
-      const buyCapital = (r.purchaseCostKrw + form.shippingPerUnitKrw) * form.monthlySalesQty;
+      const buyCapital = r.purchaseCostKrw * form.monthlySalesQty;
       const c = compareWholesaleVsBuy({
         wholesaleMarginPerUnitKrw: form.wholesaleMarginPerUnitKrw,
         buyMarginPerUnitKrw: r.netProfit,
