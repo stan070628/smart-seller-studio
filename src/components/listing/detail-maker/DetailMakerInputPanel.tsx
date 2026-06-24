@@ -45,14 +45,6 @@ interface Props {
   onRemoveThumbnailRef: (idx: number) => void;
   referenceText: string;
   setReferenceText: (v: string) => void;
-  // 1688 스펙 가져오기
-  url1688: string;
-  setUrl1688: (v: string) => void;
-  specs1688: Array<{ label: string; value: string; checked: boolean }>;
-  onToggleSpec: (idx: number) => void;
-  isFetching1688: boolean;
-  onFetch1688: () => void;
-  fetch1688Error: string | null;
 }
 
 export default function DetailMakerInputPanel({
@@ -83,18 +75,10 @@ export default function DetailMakerInputPanel({
   onRemoveThumbnailRef,
   referenceText,
   setReferenceText,
-  url1688,
-  setUrl1688,
-  specs1688,
-  onToggleSpec,
-  isFetching1688,
-  onFetch1688,
-  fetch1688Error,
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<Tab>('detail');
   const [showReferenceText, setShowReferenceText] = useState(false);
-  const [isOpen1688, setIsOpen1688] = useState(false);
 
   const canGenerate = !isGenerating && productName.trim().length > 0 && uploadedUrls.length > 0;
 
@@ -417,134 +401,6 @@ export default function DetailMakerInputPanel({
                 }}
               >
                 {error}
-              </div>
-            )}
-          </div>
-
-          {/* ─── 1688 스펙 가져오기 ───────────────────────────── */}
-          <div style={{ padding: '0 16px', marginBottom: 12 }}>
-            <button
-              type="button"
-              aria-label="1688 스펙 섹션 열기닫기"
-              onClick={() => setIsOpen1688(v => !v)}
-              style={{
-                width: '100%',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '9px 12px',
-                background: isOpen1688 ? '#eef2ff' : '#f9fafb',
-                border: `1px solid ${isOpen1688 ? '#a5b4fc' : '#e5e7eb'}`,
-                borderRadius: isOpen1688 ? '8px 8px 0 0' : 8,
-                cursor: 'pointer',
-                fontSize: 13,
-                fontWeight: 500,
-                color: isOpen1688 ? '#3730a3' : '#374151',
-              }}
-            >
-              <span>🔗 1688에서 스펙 가져오기</span>
-              <span style={{ fontSize: 11, color: '#9ca3af' }}>{isOpen1688 ? '▲' : '▼'}</span>
-            </button>
-
-            {isOpen1688 && (
-              <div
-                style={{
-                  border: '1px solid #a5b4fc',
-                  borderTop: 'none',
-                  borderRadius: '0 0 8px 8px',
-                  padding: 12,
-                  background: '#fff',
-                }}
-              >
-                <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 5 }}>
-                  1688 상품 URL 붙여넣기
-                </div>
-                <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-                  <input
-                    type="url"
-                    value={url1688}
-                    onChange={e => setUrl1688(e.target.value)}
-                    placeholder="https://detail.1688.com/..."
-                    style={{
-                      flex: 1,
-                      padding: '6px 8px',
-                      border: '1px solid #d1d5db',
-                      borderRadius: 6,
-                      fontSize: 12,
-                      color: '#111',
-                      outline: 'none',
-                    }}
-                    onKeyDown={e => { if (e.key === 'Enter' && !isFetching1688) onFetch1688(); }}
-                  />
-                  <button
-                    type="button"
-                    aria-label="가져오기"
-                    onClick={onFetch1688}
-                    disabled={isFetching1688 || !url1688.trim()}
-                    style={{
-                      padding: '6px 12px',
-                      background: isFetching1688 ? '#e0e7ff' : '#6366f1',
-                      color: isFetching1688 ? '#6366f1' : '#fff',
-                      border: 'none',
-                      borderRadius: 6,
-                      fontSize: 12,
-                      cursor: isFetching1688 ? 'not-allowed' : 'pointer',
-                      whiteSpace: 'nowrap',
-                      fontWeight: 500,
-                    }}
-                  >
-                    {isFetching1688 ? '가져오는 중...' : '가져오기'}
-                  </button>
-                </div>
-
-                {fetch1688Error && (
-                  <div style={{ fontSize: 12, color: '#dc2626', marginBottom: 8, lineHeight: 1.5 }}>
-                    {fetch1688Error}
-                  </div>
-                )}
-
-                {specs1688.length > 0 && (
-                  <>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: '#374151', marginBottom: 6 }}>
-                      스펙 선택 ({specs1688.filter(s => s.checked).length}/{specs1688.length}개 선택)
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      {specs1688.map((spec, idx) => (
-                        <label
-                          key={idx}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'flex-start',
-                            gap: 7,
-                            padding: '5px 6px',
-                            background: spec.checked ? '#f0fdf4' : '#f9fafb',
-                            borderRadius: 5,
-                            cursor: 'pointer',
-                            fontSize: 12,
-                            opacity: spec.checked ? 1 : 0.6,
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={spec.checked}
-                            onChange={() => onToggleSpec(idx)}
-                            style={{ marginTop: 2, cursor: 'pointer' }}
-                          />
-                          <div>
-                            <span style={{ color: '#6b7280', fontSize: 11 }}>{spec.label}</span>
-                            <br />
-                            <span style={{ color: '#111', fontWeight: spec.checked ? 500 : 400 }}>
-                              {spec.value}
-                            </span>
-                          </div>
-                        </label>
-                      ))}
-                    </div>
-                    <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 6 }}>
-                      체크된 항목만 상세페이지에 반영됩니다
-                    </div>
-                  </>
-                )}
               </div>
             )}
           </div>

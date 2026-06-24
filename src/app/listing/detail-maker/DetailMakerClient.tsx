@@ -35,13 +35,6 @@ export default function DetailMakerClient() {
   // 씬 생성 취소용 — 새 생성 요청 시 이전 결과 무시
   const sceneGenIdRef = useRef(0);
 
-  // ─── 1688 스펙 가져오기 상태 ─────────────────────────────────────────────────
-  const [url1688, setUrl1688] = useState('');
-  const [specs1688, setSpecs1688] = useState<Array<{ label: string; value: string; checked: boolean }>>([]);
-  const [isFetching1688, setIsFetching1688] = useState(false);
-  const [fetch1688Error, setFetch1688Error] = useState<string | null>(null);
-  const fetch1688AbortRef = useRef<AbortController | null>(null);
-
   // 무드 추천 취소용 — 새 추천 요청 시 이전(느린) 응답 무시
   const suggestMoodIdRef = useRef(0);
 
@@ -77,37 +70,6 @@ export default function DetailMakerClient() {
     const json = await res.json();
     if (!res.ok || !json.success) throw new Error(json.error ?? `업로드 실패 (${res.status})`);
     return json.data.url as string;
-  }
-
-  async function handleFetch1688() {
-    if (isFetching1688) return;
-    fetch1688AbortRef.current?.abort();
-    const abortController = new AbortController();
-    fetch1688AbortRef.current = abortController;
-
-    setIsFetching1688(true);
-    setFetch1688Error(null);
-    try {
-      const res = await fetch('/api/listing/1688-scrape', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: url1688 }),
-        signal: abortController.signal,
-      });
-      const json = await res.json() as { success: boolean; productName?: string; specs?: Array<{ label: string; value: string }>; error?: string };
-      if (!json.success) throw new Error(json.error ?? '가져오기 실패');
-      setSpecs1688((json.specs ?? []).map(s => ({ ...s, checked: true })));
-      if (!productName.trim() && json.productName) setProductName(json.productName);
-    } catch (e) {
-      if ((e as Error).name === 'AbortError') return;
-      setFetch1688Error(e instanceof Error ? e.message : '가져오기 실패');
-    } finally {
-      setIsFetching1688(false);
-    }
-  }
-
-  function handleToggleSpec(idx: number) {
-    setSpecs1688(prev => prev.map((s, i) => i === idx ? { ...s, checked: !s.checked } : s));
   }
 
   async function handleUploadFiles(files: FileList | File[]) {
@@ -461,10 +423,6 @@ export default function DetailMakerClient() {
     const currentGenId = sceneGenIdRef.current;
 
     try {
-      const selectedSpecs = specs1688
-        .filter(s => s.checked)
-        .map(({ label, value }) => ({ label, value }))
-        .slice(0, 20);
       const fullProductName = [brandName.trim(), productName.trim()].filter(Boolean).join(' ');
       const res = await fetch('/api/ai/generate-detail-html', {
         method: 'POST',
@@ -475,7 +433,6 @@ export default function DetailMakerClient() {
           category,
           mobileMode: true,
           referenceText: referenceText.trim() || undefined,
-          productSpecs: selectedSpecs.length > 0 ? selectedSpecs : undefined,
         }),
       });
       const json = await res.json();
@@ -606,13 +563,6 @@ export default function DetailMakerClient() {
         onRemoveThumbnailRef={handleRemoveThumbnailRefImage}
         referenceText={referenceText}
         setReferenceText={setReferenceText}
-        url1688={url1688}
-        setUrl1688={setUrl1688}
-        specs1688={specs1688}
-        onToggleSpec={handleToggleSpec}
-        isFetching1688={isFetching1688}
-        onFetch1688={handleFetch1688}
-        fetch1688Error={fetch1688Error}
       />
 
       {/* 우측 — DetailPageEditor 또는 EmptyState */}
