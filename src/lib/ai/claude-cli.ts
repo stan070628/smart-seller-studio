@@ -15,7 +15,7 @@ const execFileAsync = promisify(execFile);
 // 모델 별칭 → 전체 모델 ID (API 폴백용)
 const MODEL_IDS: Record<string, string> = {
   sonnet: 'claude-sonnet-4-6',
-  opus:   'claude-opus-4-6',
+  opus:   'claude-opus-4-8',
   haiku:  'claude-haiku-4-5-20251001',
 };
 
@@ -81,8 +81,9 @@ export async function callClaude(
 ): Promise<string> {
   try {
     return await callViaCLI(systemPrompt, userPrompt, model);
-  } catch {
+  } catch (err) {
     // CLI 없음(Vercel 등) → API key 폴백
+    console.warn('[claude-cli] CLI 실패, SDK로 폴백:', err instanceof Error ? err.message : err);
     return callViaSDK(systemPrompt, userPrompt, model, maxTokens);
   }
 }

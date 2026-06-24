@@ -473,6 +473,7 @@ export default function DetailMakerClient() {
 
     } catch (e) {
       setError(e instanceof Error ? e.message : 'AI 생성 중 오류가 발생했습니다.');
+      setIsGeneratingScenes(false);
     } finally {
       setIsGenerating(false);
     }
