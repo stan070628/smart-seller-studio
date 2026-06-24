@@ -126,7 +126,7 @@ describe('DetailMakerInputPanel — 1688 스펙 가져오기', () => {
   });
 
   it('가져오기 버튼 클릭 시 onFetch1688이 호출된다', () => {
-    render(<DetailMakerInputPanel {...baseProps} />);
+    render(<DetailMakerInputPanel {...baseProps} url1688="https://detail.1688.com/offer/123.html" />);
     fireEvent.click(screen.getByText(/1688에서 스펙 가져오기/));
     fireEvent.click(screen.getByRole('button', { name: /가져오기/ }));
     expect(baseProps.onFetch1688).toHaveBeenCalledTimes(1);

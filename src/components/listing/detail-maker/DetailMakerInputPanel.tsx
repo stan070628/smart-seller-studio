@@ -480,7 +480,7 @@ export default function DetailMakerInputPanel({
                     type="button"
                     aria-label="가져오기"
                     onClick={onFetch1688}
-                    disabled={isFetching1688}
+                    disabled={isFetching1688 || !url1688.trim()}
                     style={{
                       padding: '6px 12px',
                       background: isFetching1688 ? '#e0e7ff' : '#6366f1',
