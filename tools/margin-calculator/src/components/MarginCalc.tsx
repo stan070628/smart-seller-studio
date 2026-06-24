@@ -171,7 +171,7 @@ function NumField({
         step={step}
         value={value || ''}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+        className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm text-gray-900"
       />
       {hint && <span className="mt-0.5 block text-[10px] text-gray-500">{hint}</span>}
     </label>
@@ -192,7 +192,7 @@ function SelectField<T extends string>({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value as T)}
-        className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+        className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm text-gray-900"
       >
         {options.map((o) => (
           <option key={o.value} value={o.value}>{o.label}</option>
