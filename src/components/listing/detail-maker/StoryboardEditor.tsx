@@ -125,7 +125,7 @@ function SceneCard({ scene, uploadedUrls, onUpdate, onDelete }: SceneCardProps) 
           <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
             {uploadedUrls.map((url, i) => (
               <button
-                key={i}
+                key={url}
                 onClick={() => onUpdate({ ...scene, sourceImageIndex: i })}
                 aria-label={`이미지 ${i + 1} 선택`}
                 style={{
@@ -136,7 +136,7 @@ function SceneCard({ scene, uploadedUrls, onUpdate, onDelete }: SceneCardProps) 
                   padding: 0,
                   cursor: 'pointer',
                   overflow: 'hidden',
-                  background: '#374151',
+                  background: scene.sourceImageIndex === i ? '#6366f1' : '#374151',
                 }}
               >
                 <img
