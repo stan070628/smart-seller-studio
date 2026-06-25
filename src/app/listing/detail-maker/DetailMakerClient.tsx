@@ -440,6 +440,7 @@ export default function DetailMakerClient() {
     setIsGenerating(true);
     setError(null);
     sceneGenIdRef.current += 1;
+    const planGenId = sceneGenIdRef.current;
 
     const fullProductName = [brandName.trim(), productName.trim()].filter(Boolean).join(' ');
 
@@ -512,7 +513,7 @@ export default function DetailMakerClient() {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'HTML 생성 중 오류가 발생했습니다.');
     } finally {
-      setIsGenerating(false);
+      if (sceneGenIdRef.current === planGenId) setIsGenerating(false);
     }
   }
 
@@ -768,6 +769,11 @@ export default function DetailMakerClient() {
             color: C.textSub,
             gap: '12px',
           }}>
+            {storyboardError && (
+              <div style={{ padding: '12px 16px', background: '#450a0a', color: '#fca5a5', fontSize: '13px', borderRadius: '8px', marginBottom: '12px' }}>
+                {storyboardError}
+              </div>
+            )}
             {isGenerating || isGeneratingStoryboard ? (
               <>
                 <div style={{ fontSize: '32px' }}>✨</div>
