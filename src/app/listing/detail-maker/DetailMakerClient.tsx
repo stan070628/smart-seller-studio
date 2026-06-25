@@ -7,9 +7,10 @@ import { contentToSections, mobileContentToSections, distributeImagesToSections 
 import DetailPageEditor from '@/components/listing/detail-editor/DetailPageEditor';
 import DetailMakerInputPanel from '@/components/listing/detail-maker/DetailMakerInputPanel';
 import DetailMakerThumbnailGallery from '@/components/listing/detail-maker/DetailMakerThumbnailGallery';
+import StoryboardEditor from '@/components/listing/detail-maker/StoryboardEditor';
 import { generateCoupangThumbnail, editThumbnail } from '@/lib/detail-page/thumbnail-flow';
 import { getMoodPreset } from '@/lib/detail-page/mood-presets';
-import type { DetailSection, DetailPageTheme, CreativeBrief } from '@/types/detail-page';
+import type { DetailSection, DetailPageTheme, CreativeBrief, SceneStoryboardItem } from '@/types/detail-page';
 import type { DetailPageContent, MobileDetailPageContent } from '@/lib/ai/prompts/detail-page';
 
 type Category = 'basic' | 'fashion' | 'living' | 'food';
@@ -51,6 +52,11 @@ export default function DetailMakerClient() {
 
   // 참고 텍스트
   const [referenceText, setReferenceText] = useState('');
+
+  // 스토리보드 (2단계 흐름)
+  const [storyboard, setStoryboard] = useState<SceneStoryboardItem[] | null>(null);
+  const [isGeneratingStoryboard, setIsGeneratingStoryboard] = useState(false);
+  const [storyboardError, setStoryboardError] = useState<string | null>(null);
 
   // 썸네일
   const [generatedThumbnails, setGeneratedThumbnails] = useState<string[]>([]);
@@ -233,6 +239,7 @@ export default function DetailMakerClient() {
     genId: number,
     currentTheme: DetailPageTheme,
     sceneHint?: string,
+    storyboardItems?: SceneStoryboardItem[] | null,
   ) {
     const targets = sectionsSnapshot.filter(s => s.type === 'hero' || s.type === 'point');
     if (targets.length === 0 || refUrls.length === 0) return;
@@ -246,12 +253,24 @@ export default function DetailMakerClient() {
               ? section.content.headline
               : undefined;
 
-          // 섹션마다 다른 이미지 조합으로 씬 다양성 확보 (최대 3장, 인덱스 로테이션)
-          const startIdx = refUrls.length > 3 ? idx % (refUrls.length - 2) : 0;
-          const sectionRefUrls = refUrls.slice(startIdx, startIdx + 3);
+          // storyboard 있으면 씬별 소스 이미지 + 프롬프트 사용, 없으면 기존 로테이션 로직
+          let sectionRefUrls: string[];
+          let combinedHint: string | undefined;
 
-          // 섹션 헤드라인을 sceneHint에 결합해 Claude가 맥락에 맞는 씬 생성하도록 유도
-          const combinedHint = [headline?.trim(), sceneHint?.trim()].filter(Boolean).join(' — ') || undefined;
+          const storyboardScene = storyboardItems?.[idx];
+          if (storyboardScene) {
+            const srcIdx = Math.min(storyboardScene.sourceImageIndex, refUrls.length - 1);
+            sectionRefUrls = [refUrls[srcIdx]];
+            const promptBase = storyboardScene.prompt.trim() || undefined;
+            const headlineBase = headline?.trim() || undefined;
+            combinedHint = promptBase ?? headlineBase ?? sceneHint;
+          } else {
+            // 섹션마다 다른 이미지 조합으로 씬 다양성 확보 (최대 3장, 인덱스 로테이션)
+            const startIdx = refUrls.length > 3 ? idx % (refUrls.length - 2) : 0;
+            sectionRefUrls = refUrls.slice(startIdx, startIdx + 3);
+            // 섹션 헤드라인을 sceneHint에 결합해 AI가 맥락에 맞는 씬 생성하도록 유도
+            combinedHint = [headline?.trim(), sceneHint?.trim()].filter(Boolean).join(' — ') || undefined;
+          }
 
           const sceneRes = await fetch('/api/ai/generate-scene-image', {
             method: 'POST',
@@ -411,6 +430,110 @@ export default function DetailMakerClient() {
     setSceneEditError(prev => (prev?.sectionId === sectionId ? null : prev));
   }
 
+  // ─── 2단계 흐름: ① 스토리라인 기획 + HTML 병렬 생성 ──────────────────────────
+  async function handlePlanStoryboard() {
+    if (!productName.trim()) { setError('상품명을 입력하세요.'); return; }
+    if (uploadedUrls.length === 0) { setError('이미지를 1장 이상 업로드하세요.'); return; }
+
+    setIsGeneratingStoryboard(true);
+    setStoryboardError(null);
+    setIsGenerating(true);
+    setError(null);
+    sceneGenIdRef.current += 1;
+
+    const fullProductName = [brandName.trim(), productName.trim()].filter(Boolean).join(' ');
+
+    // HTML 생성과 스토리라인 기획을 병렬로 시작
+    const htmlPromise = fetch('/api/ai/generate-detail-html', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        imageUrls: uploadedUrls,
+        productName: fullProductName,
+        category,
+        mobileMode: true,
+        referenceText: referenceText.trim() || undefined,
+      }),
+    }).then(r => r.json());
+
+    const storyboardPromise = fetch('/api/ai/plan-scene-images', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        productName: productName.trim(),
+        brandName: brandName.trim() || undefined,
+        category,
+        imageCount: uploadedUrls.length,
+        referenceText: referenceText.trim() || undefined,
+        sceneCount: 4,
+      }),
+    }).then(async r => {
+      if (!r.ok) throw new Error(`스토리라인 생성 실패 (${r.status})`);
+      return r.json();
+    });
+
+    // 스토리라인 완료 즉시 에디터 표시 (HTML 기다리지 않음)
+    storyboardPromise
+      .then(data => {
+        if (!data.scenes) throw new Error(data.error ?? '스토리라인 생성 실패');
+        setStoryboard(
+          (data.scenes as Array<Record<string, unknown>>).map(s => ({
+            ...s,
+            id: crypto.randomUUID(),
+            mode: 'ai' as const,
+          } as SceneStoryboardItem)),
+        );
+      })
+      .catch(e => {
+        setStoryboardError(e instanceof Error ? e.message : '스토리라인 생성 중 오류가 발생했습니다.');
+      })
+      .finally(() => {
+        setIsGeneratingStoryboard(false);
+      });
+
+    // HTML 완료 시 sections 파싱
+    try {
+      const json = await htmlPromise;
+      if (!json.success) throw new Error(json.error ?? '생성 실패');
+      setGeneratedHtml(json.html);
+      if (json.mobileContent) {
+        try {
+          const parsed = mobileContentToSections(
+            json.mobileContent as import('@/lib/ai/prompts/detail-page').MobileDetailPageContent,
+            uploadedUrls,
+          );
+          setSections(parsed);
+          await refreshRenderedHtml(parsed, theme);
+        } catch (e) {
+          console.warn('[detail-maker] mobileContentToSections 실패:', e);
+          setError('생성 결과를 편집기로 불러오지 못했습니다. 다시 시도해주세요.');
+        }
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'HTML 생성 중 오류가 발생했습니다.');
+    } finally {
+      setIsGenerating(false);
+    }
+  }
+
+  // ─── 2단계 흐름: ② 스토리보드 확정 후 씬 이미지 생성 ──────────────────────
+  function handleGenerateScenesFromStoryboard() {
+    if (sections.length === 0) return;
+    sceneGenIdRef.current += 1;
+    const currentGenId = sceneGenIdRef.current;
+    setIsGeneratingScenes(true);
+    void generateSceneImages(
+      sections,
+      uploadedUrls,
+      currentGenId,
+      theme,
+      creativeBrief?.sceneHint,
+      storyboard,
+    ).finally(() => {
+      if (sceneGenIdRef.current === currentGenId) setIsGeneratingScenes(false);
+    });
+  }
+
   // ─── AI 생성 ────────────────────────────────────────────────────────────────
   async function handleGenerate() {
     if (!productName.trim()) { setError('상품명을 입력하세요.'); return; }
@@ -549,7 +672,7 @@ export default function DetailMakerClient() {
         error={error}
         onUploadFiles={handleUploadFiles}
         onRemoveImage={handleRemoveImage}
-        onGenerate={handleGenerate}
+        onGenerate={handlePlanStoryboard}
         suggestedMoodIds={suggestedMoodIds}
         selectedMoodId={creativeBrief?.moodId ?? null}
         isSuggestingMood={isSuggestingMood}
@@ -585,7 +708,7 @@ export default function DetailMakerClient() {
               isGenerating={isRendering || isGenerating}
               onSectionsChange={handleSectionsChange}
               onThemeChange={handleThemeChange}
-              onRegenerateAll={handleGenerate}
+              onRegenerateAll={handlePlanStoryboard}
               onSectionAiEdit={handleSectionAiEdit}
               onHtmlCopy={handleHtmlCopy}
               onDownload={handleDownload}
@@ -597,7 +720,7 @@ export default function DetailMakerClient() {
               prevSceneUrlMap={prevSceneUrls.current}
               onSceneUndo={handleSceneUndo}
             />
-            {/* Gemini 씬 이미지 생성 중 배너 */}
+            {/* AI 씬 이미지 생성 중 배너 */}
             {isGeneratingScenes && (
               <div style={{
                 position: 'absolute',
@@ -619,23 +742,39 @@ export default function DetailMakerClient() {
               </div>
             )}
           </>
+        ) : storyboard !== null ? (
+          <>
+            {storyboardError && (
+              <div style={{ padding: '12px 16px', background: '#450a0a', color: '#fca5a5', fontSize: '13px' }}>
+                {storyboardError}
+              </div>
+            )}
+            <StoryboardEditor
+              scenes={storyboard}
+              uploadedUrls={uploadedUrls}
+              isHtmlReady={!isGenerating && generatedHtml !== ''}
+              isGeneratingScenes={isGeneratingScenes}
+              onScenesChange={setStoryboard}
+              onGenerate={handleGenerateScenesFromStoryboard}
+            />
+          </>
         ) : (
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: '100%',
-              color: C.textSub,
-              gap: '12px',
-            }}
-          >
-            {isGenerating ? (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100%',
+            color: C.textSub,
+            gap: '12px',
+          }}>
+            {isGenerating || isGeneratingStoryboard ? (
               <>
                 <div style={{ fontSize: '32px' }}>✨</div>
-                <div style={{ fontSize: '15px', fontWeight: 600, color: C.text }}>AI가 상세페이지를 생성하고 있어요</div>
-                <div style={{ fontSize: '13px' }}>AI 상세페이지 생성 중... (약 30초 소요)</div>
+                <div style={{ fontSize: '15px', fontWeight: 600, color: C.text }}>
+                  {isGeneratingStoryboard ? '스토리라인을 구성하고 있어요' : 'AI가 상세페이지를 생성하고 있어요'}
+                </div>
+                <div style={{ fontSize: '13px' }}>잠시만 기다려주세요...</div>
               </>
             ) : (
               <>
@@ -644,7 +783,7 @@ export default function DetailMakerClient() {
                 <div style={{ fontSize: '13px', textAlign: 'center', lineHeight: 1.6 }}>
                   왼쪽에서 상품명과 이미지를 입력하고
                   <br />
-                  AI 생성 버튼을 눌러보세요
+                  스토리라인 구성 버튼을 눌러보세요
                 </div>
               </>
             )}
