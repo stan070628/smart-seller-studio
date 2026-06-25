@@ -17,7 +17,7 @@ export const maxDuration = 60;
 const RATE_LIMIT = { windowMs: 60_000, maxRequests: 6 };
 
 // SSRF 방어: Supabase Storage URL만 허용
-const SUPABASE_URL_PATTERN = /^https:\/\/[a-z0-9]+\.supabase\.co\/storage\/v1\//;
+const SUPABASE_URL_PATTERN = /^https:\/\/[a-z0-9-]+\.supabase\.co\/storage\/v1\//;
 
 const CLEANUP_PROMPT = `Remove all Chinese characters, Chinese text, watermarks, brand logos, price tags, promotional text, and any text overlays from this product image.
 
@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
     const ai = getGeminiGenAI();
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-preview-05-20',
-      config: { responseModalities: ['IMAGE', 'TEXT'] },
+      config: { responseModalities: ['Text', 'Image'] },
       contents: [{
         role: 'user',
         parts: [
