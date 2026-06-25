@@ -272,30 +272,55 @@ export default function DetailMakerClient() {
             combinedHint = [headline?.trim(), sceneHint?.trim()].filter(Boolean).join(' — ') || undefined;
           }
 
-          const sceneRes = await fetch('/api/ai/generate-scene-image', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              sectionType,
-              productImageUrls: sectionRefUrls,
-              productInfo: headline ? { headline } : undefined,
-              sceneHint: combinedHint,
-            }),
-          });
-          if (!sceneRes.ok) return null;
+          // cleanup 모드: 배경 제거 API 사용, 일반 씬 생성 API 우회
+          let imageBase64: string;
+          let mimeType: string;
 
-          const sceneData = await sceneRes.json() as {
-            success: boolean;
-            data?: { imageBase64: string; mimeType: string };
-          };
-          if (!sceneData.success || !sceneData.data) return null;
+          if (storyboardScene?.mode === 'cleanup') {
+            const srcIdx = Math.min(storyboardScene.sourceImageIndex, refUrls.length - 1);
+            const sourceUrl = refUrls[srcIdx] ?? refUrls[0];
+            const cleanupRes = await fetch('/api/ai/cleanup-product-image', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ imageUrl: sourceUrl }),
+            });
+            if (!cleanupRes.ok) return null;
+            const cleanupData = await cleanupRes.json() as {
+              imageBase64?: string;
+              mimeType?: string;
+              error?: string;
+            };
+            if (cleanupData.error || !cleanupData.imageBase64 || !cleanupData.mimeType) return null;
+            imageBase64 = cleanupData.imageBase64;
+            mimeType = cleanupData.mimeType;
+          } else {
+            const sceneRes = await fetch('/api/ai/generate-scene-image', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                sectionType,
+                productImageUrls: sectionRefUrls,
+                productInfo: headline ? { headline } : undefined,
+                sceneHint: combinedHint,
+              }),
+            });
+            if (!sceneRes.ok) return null;
+
+            const sceneData = await sceneRes.json() as {
+              success: boolean;
+              data?: { imageBase64: string; mimeType: string };
+            };
+            if (!sceneData.success || !sceneData.data) return null;
+            imageBase64 = sceneData.data.imageBase64;
+            mimeType = sceneData.data.mimeType;
+          }
 
           const uploadRes = await fetch('/api/image/upload-ai', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              imageBase64: sceneData.data.imageBase64,
-              mimeType: sceneData.data.mimeType,
+              imageBase64,
+              mimeType,
               role: sectionType,
             }),
           });
