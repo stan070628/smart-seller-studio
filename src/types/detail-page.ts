@@ -278,3 +278,12 @@ export interface CreativeBrief {
   sceneHint: string;
   paletteOverride?: PaletteName;
 }
+
+export interface SceneStoryboardItem {
+  id: string;                 // crypto.randomUUID()
+  title: string;
+  description: string;
+  prompt: string;
+  sourceImageIndex: number;   // uploadedUrls[sourceImageIndex]
+  mode: 'ai' | 'cleanup';
+}
