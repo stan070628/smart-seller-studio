@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/supabase/auth';
 import { checkRateLimit, getRateLimitKey } from '@/lib/rate-limit';
 import { getGeminiGenAI } from '@/lib/ai/gemini';
+import type { Part } from '@google/genai';
 
 export const maxDuration = 60;
 
@@ -80,10 +81,8 @@ export async function POST(req: NextRequest) {
     });
 
     // 결과 이미지 부분 추출
-    const parts: Array<Record<string, unknown>> = response?.candidates?.[0]?.content?.parts ?? [];
-    const imagePart = parts.find((p) => p.inlineData != null) as
-      | { inlineData: { data: string; mimeType?: string } }
-      | undefined;
+    const parts: Part[] = response?.candidates?.[0]?.content?.parts ?? [];
+    const imagePart = parts.find((p) => p.inlineData != null);
 
     if (!imagePart?.inlineData?.data) {
       throw new Error('Gemini 응답에 이미지 데이터가 없습니다.');
