@@ -70,6 +70,25 @@ function SceneCard({ scene, uploadedUrls, onUpdate, onDelete }: SceneCardProps) 
             fontSize: '13px',
           }}
         />
+        {/* 모드 토글 뱃지 — ai ↔ cleanup 전환 */}
+        <button
+          onClick={() => onUpdate({ ...scene, mode: scene.mode === 'ai' ? 'cleanup' : 'ai' })}
+          disabled={uploadedUrls.length === 0}
+          aria-label={scene.mode === 'ai' ? '⚡ AI 모드 (클릭하여 클린업으로 전환)' : '✨ 클린업 모드 (클릭하여 AI로 전환)'}
+          style={{
+            background: scene.mode === 'ai' ? '#6366f1' : '#059669',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '10px',
+            padding: '2px 8px',
+            fontSize: '11px',
+            cursor: uploadedUrls.length === 0 ? 'not-allowed' : 'pointer',
+            opacity: uploadedUrls.length === 0 ? 0.5 : 1,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {scene.mode === 'ai' ? '⚡ AI' : '✨ 클린업'}
+        </button>
         {/* 삭제 버튼 — aria-label에 이모지 포함하여 getByRole({ name: /🗑/ }) 쿼리 지원 */}
         <button
           onClick={onDelete}

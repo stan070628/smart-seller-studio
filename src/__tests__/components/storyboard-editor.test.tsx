@@ -104,4 +104,35 @@ describe('StoryboardEditor', () => {
     render(<StoryboardEditor {...baseProps} isHtmlReady={false} />);
     expect(screen.getByText(/상세페이지 HTML 생성 중/)).toBeInTheDocument();
   });
+
+  it('mode="ai"일 때 "⚡ AI" 뱃지 버튼이 렌더링된다', () => {
+    render(<StoryboardEditor {...baseProps} />);
+    expect(screen.getByRole('button', { name: /⚡ AI/ })).toBeInTheDocument();
+  });
+
+  it('뱃지 클릭 시 onScenesChange에 mode가 "cleanup"으로 토글된 씬 전달', () => {
+    const onScenesChange = vi.fn();
+    render(<StoryboardEditor {...baseProps} onScenesChange={onScenesChange} />);
+    fireEvent.click(screen.getByRole('button', { name: /⚡ AI/ }));
+    expect(onScenesChange).toHaveBeenCalledWith([
+      expect.objectContaining({ mode: 'cleanup' }),
+    ]);
+  });
+
+  it('mode="cleanup"일 때 "✨ 클린업" 뱃지 버튼이 렌더링된다', () => {
+    render(<StoryboardEditor {...baseProps} scenes={[makeScene({ mode: 'cleanup' })]} />);
+    expect(screen.getByRole('button', { name: /✨ 클린업/ })).toBeInTheDocument();
+  });
+
+  it('mode="cleanup"일 때 prompt textarea가 숨겨진다', () => {
+    render(<StoryboardEditor {...baseProps} scenes={[makeScene({ mode: 'cleanup' })]} />);
+    expect(screen.queryByPlaceholderText(/IMAGE PROMPT|prompt/i)).not.toBeInTheDocument();
+    // 또는 textarea가 DOM에 없는지 확인
+    expect(screen.queryByRole('textbox', { name: /prompt/i })).not.toBeInTheDocument();
+  });
+
+  it('uploadedUrls가 빈 배열이면 뱃지 버튼이 disabled', () => {
+    render(<StoryboardEditor {...baseProps} uploadedUrls={[]} />);
+    expect(screen.getByRole('button', { name: /⚡ AI/ })).toBeDisabled();
+  });
 });
