@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
   if (authResult instanceof Response) return authResult as NextResponse;
 
   // Rate Limit 검사
-  const ip = req.headers.get('x-forwarded-for') ?? 'unknown';
+  const ip = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? 'unknown';
   const rl = checkRateLimit(getRateLimitKey(ip, 'plan-scene-images'), RATE_LIMIT);
   if (!rl.allowed) {
     return NextResponse.json(
@@ -95,7 +95,8 @@ Create ${sceneCount} diverse scene storyboard items for the product detail page.
     }));
 
     return NextResponse.json({ scenes });
-  } catch {
+  } catch (err) {
+    console.error('[plan-scene-images] 오류:', err);
     return NextResponse.json(
       { error: '스토리라인 생성 중 오류가 발생했습니다.' },
       { status: 500 },
