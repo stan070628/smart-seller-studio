@@ -5,7 +5,7 @@
  * 테스트 환경에서 실제 API 호출 없이 응답을 모킹합니다.
  */
 
-import { http, HttpResponse } from 'msw';
+import { http, HttpResponse, passthrough } from 'msw';
 
 // ---------------------------------------------------------------------------
 // 공통 픽스처
@@ -202,6 +202,19 @@ const resendEmailHandler = http.post('https://api.resend.com/emails', () => {
 });
 
 // ---------------------------------------------------------------------------
+// GET https://*.supabase.co/storage/v1/** 핸들러
+// cleanup-product-image 등에서 Supabase Storage URL을 직접 fetch할 때,
+// MSW가 unhandled passthrough를 시도하는 과정에서 mock 객체의 .clone()이 없어
+// 충돌하는 것을 방지합니다.
+// passthrough()로 반환하면 MSW가 stub된 globalThis.fetch를 직접 호출합니다.
+// ---------------------------------------------------------------------------
+
+const supabaseStorageHandler = http.get(
+  /^https:\/\/[a-z0-9]+\.supabase\.co\/storage\/v1\//,
+  () => passthrough(),
+);
+
+// ---------------------------------------------------------------------------
 // 핸들러 배열 export
 // ---------------------------------------------------------------------------
 
@@ -216,4 +229,5 @@ export const handlers = [
   saveCanvasHandler,
   labelUploadHandler,
   resendEmailHandler,
+  supabaseStorageHandler,
 ];
