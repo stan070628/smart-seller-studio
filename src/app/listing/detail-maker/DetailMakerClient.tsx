@@ -11,7 +11,7 @@ import DetailPlanReview from '@/components/listing/detail-maker/DetailPlanReview
 import { buildStoryboardWithSectionIds } from '@/lib/detail-page/storyboard-mapping';
 import { generateCoupangThumbnail, editThumbnail, type TextBadgeOptions } from '@/lib/detail-page/thumbnail-flow';
 import { getMoodPreset } from '@/lib/detail-page/mood-presets';
-import type { DetailSection, DetailPageTheme, CreativeBrief, SceneStoryboardItem } from '@/types/detail-page';
+import { isPointContent, type DetailSection, type DetailPageTheme, type CreativeBrief, type SceneStoryboardItem } from '@/types/detail-page';
 import type { DetailPageContent, MobileDetailPageContent } from '@/lib/ai/prompts/detail-page';
 
 type Category = 'basic' | 'fashion' | 'living' | 'food';
@@ -294,7 +294,8 @@ export default function DetailMakerClient() {
           const storyboardScene = storyboardItems?.find(s => s.sectionId === section.id);
           if (storyboardScene) {
             const srcIdx = Math.min(storyboardScene.sourceImageIndex, refUrls.length - 1);
-            sectionRefUrls = [refUrls[srcIdx]];
+            const others = refUrls.filter((_, i) => i !== srcIdx);
+            sectionRefUrls = [refUrls[srcIdx], ...others].slice(0, 3);
             const promptBase = storyboardScene.prompt.trim() || undefined;
             const headlineBase = headline?.trim() || undefined;
             combinedHint = promptBase ?? headlineBase ?? sceneHint;
@@ -448,7 +449,16 @@ export default function DetailMakerClient() {
         const updated = prev.map(s => {
           const hit = urlUpdates.find(u => u.sectionId === s.id);
           if (!hit) return s;
-          return { ...s, attachedImages: [{ url: hit.url, order: 0, processingMode: 'original' as const }] };
+          const matchedScene = storyboardItems?.find(sc => sc.id === hit.sceneId);
+          const newContent =
+            isPointContent(s.content) && matchedScene?.textPosition
+              ? { ...s.content, textPosition: matchedScene.textPosition }
+              : s.content;
+          return {
+            ...s,
+            content: newContent,
+            attachedImages: [{ url: hit.url, order: 0, processingMode: 'original' as const }],
+          };
         });
         void refreshRenderedHtml(updated, currentTheme);
         return updated;
