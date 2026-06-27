@@ -11,7 +11,7 @@ import DetailPlanReview from '@/components/listing/detail-maker/DetailPlanReview
 import { buildStoryboardWithSectionIds } from '@/lib/detail-page/storyboard-mapping';
 import { generateCoupangThumbnail, editThumbnail, type TextBadgeOptions } from '@/lib/detail-page/thumbnail-flow';
 import { getMoodPreset } from '@/lib/detail-page/mood-presets';
-import { isPointContent, isImageGridContent, type ImageGridContent, type DetailSection, type DetailPageTheme, type CreativeBrief, type SceneStoryboardItem } from '@/types/detail-page';
+import { isPointContent, isImageGridContent, isClaudeLayoutContent, type ImageGridContent, type ClaudeLayoutContent, type LayoutBlock, type DetailSection, type DetailPageTheme, type CreativeBrief, type SceneStoryboardItem } from '@/types/detail-page';
 import type { DetailPageContent, MobileDetailPageContent } from '@/lib/ai/prompts/detail-page';
 
 type Category = 'basic' | 'fashion' | 'living' | 'food';
@@ -276,7 +276,7 @@ export default function DetailMakerClient() {
     storyboardItems?: SceneStoryboardItem[] | null,
   ) {
     const targets = sectionsSnapshot.filter(
-      s => s.type === 'hero' || s.type === 'point' || s.type === 'image_grid'
+      s => s.type === 'hero' || s.type === 'point' || s.type === 'image_grid' || s.type === 'claude_layout'
     );
     if (targets.length === 0 || refUrls.length === 0) return;
 
@@ -313,6 +313,47 @@ export default function DetailMakerClient() {
           let imageBase64: string;
           let mimeType: string;
           let extractedPoints: string[] | undefined;
+
+          if (section.type === 'claude_layout') {
+            const content = section.content as ClaudeLayoutContent;
+            const imageSlots = section.attachedImages.map(img =>
+              img.source === 'gemini'
+                ? { source: 'gemini' as const, generationHint: img.generationHint ?? content.title }
+                : { source: 'upload' as const, url: img.url }
+            );
+
+            const layoutRes = await fetch('/api/ai/generate-claude-layout-section', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                title: content.title,
+                points: content.points ?? [],
+                imageSlots,
+              }),
+            });
+            if (!layoutRes.ok) return null;
+
+            const layoutData = await layoutRes.json() as {
+              success: boolean;
+              data?: {
+                blocks: LayoutBlock[];
+                bgStyle: ClaudeLayoutContent['bgStyle'];
+                padding: ClaudeLayoutContent['padding'];
+                imageUrls: (string | null)[];
+              };
+            };
+            if (!layoutData.success || !layoutData.data) return null;
+
+            return {
+              sectionId: section.id,
+              url: layoutData.data.imageUrls[0] ?? '',
+              sceneId: undefined,
+              claudeBlocks: layoutData.data.blocks,
+              claudeBgStyle: layoutData.data.bgStyle,
+              claudePadding: layoutData.data.padding,
+              claudeImageUrls: layoutData.data.imageUrls,
+            };
+          }
 
           if (section.type === 'image_grid') {
             const gridImageUrls = section.attachedImages.map(img => img.url).filter(Boolean);
@@ -445,6 +486,10 @@ export default function DetailMakerClient() {
       url: string;
       sceneId: string | undefined;
       points?: string[];
+      claudeBlocks?: LayoutBlock[];
+      claudeBgStyle?: ClaudeLayoutContent['bgStyle'];
+      claudePadding?: ClaudeLayoutContent['padding'];
+      claudeImageUrls?: (string | null)[];
     };
 
     const urlUpdates = (
@@ -461,15 +506,29 @@ export default function DetailMakerClient() {
           if (!hit) return s;
           const matchedScene = storyboardItems?.find(sc => sc.id === hit.sceneId);
           const newContent =
-            isImageGridContent(s.content) && hit.points
-              ? { ...s.content, points: hit.points }
-              : isPointContent(s.content) && matchedScene?.textPosition
-                ? { ...s.content, textPosition: matchedScene.textPosition }
-                : s.content;
+            isClaudeLayoutContent(s.content) && hit.claudeBlocks
+              ? {
+                  ...s.content,
+                  blocks: hit.claudeBlocks,
+                  bgStyle: hit.claudeBgStyle ?? s.content.bgStyle,
+                  padding: hit.claudePadding ?? s.content.padding,
+                }
+              : isImageGridContent(s.content) && hit.points
+                ? { ...s.content, points: hit.points }
+                : isPointContent(s.content) && matchedScene?.textPosition
+                  ? { ...s.content, textPosition: matchedScene.textPosition }
+                  : s.content;
           return {
             ...s,
             content: newContent,
-            attachedImages: [{ url: hit.url, order: 0, processingMode: 'original' as const }],
+            attachedImages: isClaudeLayoutContent(s.content) && hit.claudeImageUrls
+              ? hit.claudeImageUrls
+                  .map((url, i) => url
+                    ? { ...s.attachedImages[i], url, order: i, processingMode: 'bg_removed' as const }
+                    : s.attachedImages[i]
+                  )
+                  .filter((img): img is NonNullable<typeof img> => img !== undefined)
+              : [{ url: hit.url, order: 0, processingMode: 'original' as const }],
           };
         });
         void refreshRenderedHtml(updated, currentTheme);
