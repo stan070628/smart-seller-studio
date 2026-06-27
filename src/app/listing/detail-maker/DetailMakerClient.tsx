@@ -11,7 +11,7 @@ import DetailPlanReview from '@/components/listing/detail-maker/DetailPlanReview
 import { buildStoryboardWithSectionIds } from '@/lib/detail-page/storyboard-mapping';
 import { generateCoupangThumbnail, editThumbnail, type TextBadgeOptions } from '@/lib/detail-page/thumbnail-flow';
 import { getMoodPreset } from '@/lib/detail-page/mood-presets';
-import { isPointContent, type DetailSection, type DetailPageTheme, type CreativeBrief, type SceneStoryboardItem } from '@/types/detail-page';
+import { isPointContent, isImageGridContent, type ImageGridContent, type DetailSection, type DetailPageTheme, type CreativeBrief, type SceneStoryboardItem } from '@/types/detail-page';
 import type { DetailPageContent, MobileDetailPageContent } from '@/lib/ai/prompts/detail-page';
 
 type Category = 'basic' | 'fashion' | 'living' | 'food';
@@ -275,7 +275,9 @@ export default function DetailMakerClient() {
     sceneHint?: string,
     storyboardItems?: SceneStoryboardItem[] | null,
   ) {
-    const targets = sectionsSnapshot.filter(s => s.type === 'hero' || s.type === 'point');
+    const targets = sectionsSnapshot.filter(
+      s => s.type === 'hero' || s.type === 'point' || s.type === 'image_grid'
+    );
     if (targets.length === 0 || refUrls.length === 0) return;
 
     const results = await Promise.allSettled(
@@ -310,8 +312,30 @@ export default function DetailMakerClient() {
           // ─── 분기: Hero 2-pass / cleanup / AI ───────────────────────────
           let imageBase64: string;
           let mimeType: string;
+          let extractedPoints: string[] | undefined;
 
-          if (section.type === 'hero' && storyboardScene?.mode !== 'cleanup') {
+          if (section.type === 'image_grid') {
+            const gridImageUrls = section.attachedImages.map(img => img.url).filter(Boolean);
+            if (gridImageUrls.length === 0) return null;
+
+            const gridTitle = (section.content as ImageGridContent).title;
+            const gridRes = await fetch('/api/ai/generate-image-grid-scene', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ imageUrls: gridImageUrls, title: gridTitle }),
+            });
+            if (!gridRes.ok) return null;
+
+            const gridData = await gridRes.json() as {
+              success: boolean;
+              data?: { imageBase64: string; mimeType: string; points: string[] };
+            };
+            if (!gridData.success || !gridData.data) return null;
+
+            imageBase64 = gridData.data.imageBase64;
+            mimeType = gridData.data.mimeType;
+            extractedPoints = gridData.data.points;
+          } else if (section.type === 'hero' && storyboardScene?.mode !== 'cleanup') {
             // Hero: Gemini edit 모드 — 원본 이미지를 base로 배경만 교체
             // cleanup-product-image는 텍스트 제거 전용이므로 배경 합성에 부적합.
             // baseImageUrl로 원본을 넘기면 Gemini가 제품 형태를 보존하면서 배경만 새로 생성한다.
@@ -406,7 +430,7 @@ export default function DetailMakerClient() {
           const uploadData = await uploadRes.json() as { success: boolean; url?: string };
           if (!uploadData.success || !uploadData.url) return null;
 
-          return { sectionId: section.id, url: uploadData.url, sceneId: storyboardScene?.id };
+          return { sectionId: section.id, url: uploadData.url, sceneId: storyboardScene?.id, points: extractedPoints };
         } catch {
           return null;
         }
@@ -416,11 +440,19 @@ export default function DetailMakerClient() {
     // 새 생성이 시작됐으면 결과 폐기
     if (sceneGenIdRef.current !== genId) return;
 
-    const urlUpdates = results
-      .filter((r): r is PromiseFulfilledResult<{ sectionId: string; url: string; sceneId: string | undefined } | null> =>
-        r.status === 'fulfilled')
-      .map(r => r.value)
-      .filter((v): v is { sectionId: string; url: string; sceneId: string | undefined } => v !== null);
+    type UrlUpdate = {
+      sectionId: string;
+      url: string;
+      sceneId: string | undefined;
+      points?: string[];
+    };
+
+    const urlUpdates = (
+      results
+        .filter(r => r.status === 'fulfilled')
+        .map(r => (r as PromiseFulfilledResult<UrlUpdate | null>).value)
+        .filter((v): v is UrlUpdate => v !== null)
+    );
 
     if (urlUpdates.length > 0) {
       setSections(prev => {
@@ -429,9 +461,11 @@ export default function DetailMakerClient() {
           if (!hit) return s;
           const matchedScene = storyboardItems?.find(sc => sc.id === hit.sceneId);
           const newContent =
-            isPointContent(s.content) && matchedScene?.textPosition
-              ? { ...s.content, textPosition: matchedScene.textPosition }
-              : s.content;
+            isImageGridContent(s.content) && hit.points
+              ? { ...s.content, points: hit.points }
+              : isPointContent(s.content) && matchedScene?.textPosition
+                ? { ...s.content, textPosition: matchedScene.textPosition }
+                : s.content;
           return {
             ...s,
             content: newContent,
