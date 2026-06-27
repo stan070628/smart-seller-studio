@@ -6,6 +6,7 @@ import { getAnthropicClient } from '@/lib/ai/claude';
 import { generateFrameImage } from '@/lib/ai/imagen';
 import { loadReferenceImages, type ReferenceImage } from '@/lib/ai/reference-images';
 import { buildSceneUserPrompt } from './prompt';
+import { removeImageBackgrounds } from '@/lib/ai/remove-background';
 
 export const maxDuration = 90;
 
@@ -62,6 +63,14 @@ Return ONLY valid JSON: {"prompt": "your detailed English prompt here"}`;
 
 const PRODUCT_FIDELITY_INSTRUCTION = `Using the attached product image(s) as a visual reference, study the product's overall shape, proportions, color palette, material texture, and key design details, then render it as a new photorealistic image naturally integrated in the scene. The product rendition should faithfully capture the reference's essential visual characteristics (form, color scheme, distinctive features) as an independent creative work — not a direct reproduction of the original photograph. IMPORTANT: Use EXACTLY the same quantity of items as shown in the reference image — do not add more items, do not duplicate products. SINGLE FRAME ONLY: Generate exactly one single continuous photograph — no split panels, diptychs, multi-view layouts, before/after comparisons, or composite image compositions.`;
 
+const BACKGROUND_REMOVAL_SECTIONS = new Set<string>(['lifestyle', 'detail', 'feature']);
+
+const BG_REMOVED_PREFIX =
+  'The reference image(s) provided have had their backgrounds removed — only the product itself is visible with a clean white background. ';
+
+const BG_REMOVED_STRICT =
+  ' STRICT FIDELITY CONSTRAINT: The reference shows the exact product to reproduce. Do NOT redesign, recolor, or reinterpret the product in any way — same shape, same color palette, same material texture, same proportions, same number of items. Treat it as a pixel-accurate reference for the product only.';
+
 export async function POST(req: NextRequest) {
   const authResult = await requireAuth(req);
   if (authResult instanceof Response) return authResult as NextResponse;
@@ -114,15 +123,26 @@ export async function POST(req: NextRequest) {
       productImageUrl: parsed.data.productImageUrl,
     });
 
+    // Point 씬(lifestyle/detail/feature): productRefs 배경 제거 후 전달
+    let cleanRefs = productRefs;
+    let bgRemoved = false;
+    if (BACKGROUND_REMOVAL_SECTIONS.has(sectionType) && productRefs.length > 0) {
+      const bgResult = await removeImageBackgrounds(productRefs);
+      cleanRefs = bgResult.refs;
+      bgRemoved = bgResult.anyRemoved;
+    }
+
     // base 먼저, 그다음 product refs (합산 최대 3장)
-    const allImages = [...baseImages, ...productRefs].slice(0, 3);
+    const allImages = [...baseImages, ...cleanRefs].slice(0, 3);
 
     // Step 1: 씬 프롬프트 결정 (스토리보드 직접 전달 시 Claude 우회)
     let finalScenePrompt: string;
 
     if (directPrompt) {
       // storyboard.prompt를 직접 사용 — Claude API 호출 없음 (로컬 환경 호환, edit 모드에서도 동일)
-      finalScenePrompt = `${directPrompt} ${PRODUCT_FIDELITY_INSTRUCTION}`;
+      const bgPrefix = bgRemoved ? BG_REMOVED_PREFIX : '';
+      const bgSuffix = bgRemoved ? BG_REMOVED_STRICT : '';
+      finalScenePrompt = `${directPrompt} ${bgPrefix}${PRODUCT_FIDELITY_INSTRUCTION}${bgSuffix}`;
     } else {
       // Claude Sonnet으로 섹션별 씬 프롬프트 생성
       const client = getAnthropicClient();
@@ -163,7 +183,9 @@ export async function POST(req: NextRequest) {
       const promptData = JSON.parse(jsonMatch[0]) as { prompt?: string };
       const claudePrompt = promptData.prompt;
       if (!claudePrompt) throw new Error('Claude가 프롬프트를 생성하지 못했습니다.');
-      finalScenePrompt = claudePrompt;
+      finalScenePrompt = bgRemoved
+        ? `${BG_REMOVED_PREFIX}${claudePrompt}${BG_REMOVED_STRICT}`
+        : claudePrompt;
     }
 
     // Step 2: Gemini로 완성된 씬 이미지 생성
