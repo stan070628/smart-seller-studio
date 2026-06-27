@@ -50,8 +50,8 @@ async function removeBackground(ref: ReferenceImage): Promise<ReferenceImage> {
     throw new Error(prediction.error ?? 'Replicate prediction failed');
   }
 
-  // 결과 PNG 다운로드
-  const pngRes = await fetch(prediction.output);
+  // 결과 PNG 다운로드 (15초 timeout — Replicate CDN stall 방어)
+  const pngRes = await fetch(prediction.output, { signal: AbortSignal.timeout(15_000) });
   if (!pngRes.ok) throw new Error(`rembg output download error: ${pngRes.status}`);
   const pngBuffer = Buffer.from(await pngRes.arrayBuffer());
 

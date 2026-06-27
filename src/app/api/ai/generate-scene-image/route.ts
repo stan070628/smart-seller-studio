@@ -8,7 +8,7 @@ import { loadReferenceImages, type ReferenceImage } from '@/lib/ai/reference-ima
 import { buildSceneUserPrompt } from './prompt';
 import { removeImageBackgrounds } from '@/lib/ai/remove-background';
 
-export const maxDuration = 90;
+export const maxDuration = 120;
 
 const RATE_LIMIT = { windowMs: 60_000, maxRequests: 8 };
 const EDIT_RATE_LIMIT = { windowMs: 60_000, maxRequests: 6 };
