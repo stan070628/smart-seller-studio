@@ -395,6 +395,25 @@ function renderPoint(content: PointContent, section: DetailSection, colors: Pale
 }
 
 function renderImageGrid(content: ImageGridContent, section: DetailSection, colors: PaletteColors): string {
+  // points가 있으면 배경 이미지 + Point 스타일 오버레이 렌더링
+  if (content.points && content.points.length > 0) {
+    const bgUrl = section.attachedImages[0]?.url ?? '';
+    const safeUrl = bgUrl ? sanitizeUrl(bgUrl) : '';
+    const escapedTitle = escapeHtml(content.title);
+    const bulletItems = content.points
+      .map(p => `<li style="margin-bottom:6px;font-size:14px;line-height:1.4;">${escapeHtml(p)}</li>`)
+      .join('');
+
+    return `<div ${sectionAttrs(section)} style="position:relative;width:100%;aspect-ratio:3/4;overflow:hidden;">
+  ${safeUrl ? `<img src="${escapeHtml(safeUrl)}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;" />` : ''}
+  <div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 100%);padding:24px 20px 20px;color:#fff;">
+    ${escapedTitle ? `<p style="margin:0 0 10px;font-size:18px;font-weight:700;letter-spacing:-0.3px;">${escapedTitle}</p>` : ''}
+    <ul style="margin:0;padding-left:16px;">${bulletItems}</ul>
+  </div>
+</div>`;
+  }
+
+  // fallback: 기존 그리드 렌더링 (points 없는 경우)
   const titleHtml = content.title
     ? `<h2 style="margin:0 0 24px;font-family:Georgia,serif;font-size:26px;font-weight:400;color:${colors.textSub};text-align:center;">${editableText('content.title', content.title)}</h2>`
     : '';
