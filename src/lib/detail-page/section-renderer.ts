@@ -23,6 +23,9 @@ import type {
   WhyIconsContent,
   CertificationsContent,
   InfographicStepsContent,
+  ClaudeLayoutContent,
+  LayoutBlock,
+  AttachedImage,
 } from '@/types/detail-page';
 import type { PaletteColors } from '@/lib/detail-page/palette-config';
 import { PALETTES } from '@/lib/detail-page/palette-config';
@@ -522,6 +525,130 @@ function renderInfographicSteps(content: InfographicStepsContent, section: Detai
   return `<div ${sectionAttrs(section)} style="background-color:${colors.cardBg};padding:40px 24px;width:100%;box-sizing:border-box;"><div style="display:flex;align-items:flex-start;gap:0;">${itemsHtml}</div></div>`;
 }
 
+// ─────────────────────────────────────────
+// claude_layout 블록 렌더러
+// ─────────────────────────────────────────
+
+function resolveBgColor(bgStyle: ClaudeLayoutContent['bgStyle'], colors: PaletteColors): string {
+  switch (bgStyle) {
+    case 'light':   return colors.cardBg;
+    case 'dark':    return '#1e293b';
+    case 'primary': return colors.accent;
+    default:        return colors.bg;   // 'white' 또는 미지정 → 기본 배경
+  }
+}
+
+function resolvePad(padding: ClaudeLayoutContent['padding']): string {
+  switch (padding) {
+    case 'compact': return '24px 16px';
+    case 'wide':    return '56px 28px';
+    default:        return '40px 24px';
+  }
+}
+
+function renderLayoutBlock(
+  block: LayoutBlock,
+  images: AttachedImage[],
+  colors: PaletteColors,
+): string {
+  switch (block.type) {
+    case 'badge': {
+      const bg =
+        block.color === 'accent'
+          ? colors.accent
+          : block.color === 'neutral'
+          ? '#e2e8f0'
+          : colors.accent;
+      const fg = block.color === 'neutral' ? '#334155' : '#fff';
+      return `<div style="display:inline-block;background:${bg};color:${fg};font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px;margin-bottom:10px;">${escapeHtml(block.text)}</div>`;
+    }
+    case 'heading': {
+      const sz = block.size === 'xl' ? '28px' : block.size === 'lg' ? '22px' : '18px';
+      const fw = block.bold !== false ? '800' : '600';
+      const color =
+        block.color === 'accent'
+          ? colors.accent
+          : block.color === 'primary'
+          ? colors.accent
+          : colors.text;
+      return `<div style="font-size:${sz};font-weight:${fw};color:${color};line-height:1.25;margin-bottom:8px;">${escapeHtml(block.text)}</div>`;
+    }
+    case 'subtext': {
+      const align = block.align === 'center' ? 'center' : 'left';
+      return `<div style="font-size:14px;color:${colors.textSub};line-height:1.6;text-align:${align};margin-bottom:8px;">${escapeHtml(block.text)}</div>`;
+    }
+    case 'image': {
+      const img = images[block.attachedIndex];
+      if (!img?.url) return '';
+      const safeUrl = sanitizeUrl(img.url);
+      if (!safeUrl) return '';
+      const width = block.width ?? '100%';
+      const align =
+        block.align === 'left'
+          ? 'flex-start'
+          : block.align === 'right'
+          ? 'flex-end'
+          : 'center';
+      const radius = block.rounded ? 'border-radius:12px;' : '';
+      return `<div style="display:flex;justify-content:${align};margin-bottom:12px;"><img src="${escapeHtml(safeUrl)}" alt="" style="width:${escapeHtml(width)};max-width:100%;object-fit:contain;${radius}" /></div>`;
+    }
+    case 'stat_row': {
+      const items = block.items
+        .map(
+          (item) =>
+            `<div style="text-align:center;flex:1;">
+              <div style="font-size:22px;font-weight:900;color:${colors.accent};line-height:1.1;">${escapeHtml(item.value)}${item.unit ? `<span style="font-size:13px;font-weight:600;">${escapeHtml(item.unit)}</span>` : ''}</div>
+              <div style="font-size:11px;color:${colors.textSub};margin-top:2px;">${escapeHtml(item.label)}</div>
+            </div>`,
+        )
+        .join('');
+      return `<div style="display:flex;gap:8px;padding:16px 0;margin-bottom:8px;">${items}</div>`;
+    }
+    case 'bullet_list': {
+      const icon = block.icon === 'check' ? '✓' : block.icon === 'arrow' ? '→' : '•';
+      const items = block.items
+        .map(
+          (item) =>
+            `<li style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px;font-size:14px;color:${colors.text};line-height:1.5;">
+              <span style="color:${colors.accent};flex-shrink:0;font-weight:700;">${icon}</span>
+              <span>${escapeHtml(item)}</span>
+            </li>`,
+        )
+        .join('');
+      return `<ul style="list-style:none;margin:0 0 12px;padding:0;">${items}</ul>`;
+    }
+    case 'columns': {
+      const gap = block.gap ?? 12;
+      const cols = block.cols
+        .map((col) => {
+          const inner = col.map((b) => renderLayoutBlock(b, images, colors)).join('');
+          return `<div style="flex:1;min-width:0;">${inner}</div>`;
+        })
+        .join('');
+      return `<div style="display:flex;gap:${gap}px;align-items:flex-start;margin-bottom:8px;">${cols}</div>`;
+    }
+    case 'divider':
+      return `<hr style="border:none;border-top:1px solid ${colors.border};margin:12px 0;" />`;
+    case 'spacer':
+      return `<div style="height:${Math.min(block.height, 120)}px;"></div>`;
+    default:
+      return '';
+  }
+}
+
+function renderClaudeLayout(
+  content: ClaudeLayoutContent,
+  section: DetailSection,
+  colors: PaletteColors,
+): string {
+  const bg = resolveBgColor(content.bgStyle, colors);
+  const pad = resolvePad(content.padding);
+  const blocksHtml = content.blocks
+    .map((b) => renderLayoutBlock(b, section.attachedImages, colors))
+    .join('');
+  return `<div ${sectionAttrs(section)} style="background-color:${bg};padding:${pad};width:100%;box-sizing:border-box;">${blocksHtml}</div>`;
+}
+
 export function renderSection(section: DetailSection, theme: DetailPageTheme): string {
   const colors = PALETTES[theme.palette];
   switch (section.type) {
@@ -560,8 +687,7 @@ export function renderSection(section: DetailSection, theme: DetailPageTheme): s
     case 'infographic_steps':
       return renderInfographicSteps(section.content as InfographicStepsContent, section, colors);
     case 'claude_layout':
-      // claude_layout 섹션은 클라이언트 렌더러에서 처리 — 서버사이드 HTML 미지원
-      return `<div ${sectionAttrs(section)} style="padding:24px;text-align:center;color:#999;">[AI 레이아웃 섹션]</div>`;
+      return renderClaudeLayout(section.content as ClaudeLayoutContent, section, colors);
   }
 }
 
