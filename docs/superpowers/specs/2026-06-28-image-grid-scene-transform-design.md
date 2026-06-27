@@ -65,28 +65,50 @@ const RequestSchema = z.object({
 ```
 
 **Step 1 — Claude OCR (각 이미지에서 핵심 포인트 추출):**
+
+OCR은 try/catch로 감싸고, JSON.parse 실패 시 `points = []` fallback 적용.
+이미지는 최대 4장으로 제한 (비용/지연 최소화).
+
 ```typescript
-const ocrRes = await anthropic.messages.create({
-  model: 'claude-sonnet-4-6',
-  max_tokens: 400,
-  system: `You are a product detail page analyst.
+let points: string[] = [];
+try {
+  const imageBlocks: Anthropic.ImageBlockParam[] = imageUrls.slice(0, 4).map(url => ({
+    type: 'image' as const,
+    source: { type: 'url' as const, url },
+  }));
+
+  const ocrRes = await anthropic.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 400,
+    system: `You are a product detail page analyst.
 Extract the key selling points or product information visible in the image(s).
 Return JSON: { "points": ["point1", "point2", ...] }
 - Extract 3-6 concise Korean or English bullet points
 - Focus on product features, specifications, or benefits visible in the image
 - If no readable text: infer key features from the visual content
 - Each point: max 25 characters`,
-  messages: [{
-    role: 'user',
-    content: [
-      ...imageUrls.map(url => ({
-        type: 'image' as const,
-        source: { type: 'url' as const, url },
-      })),
-      { type: 'text', text: `Section title: "${title}". Extract key points.` },
-    ],
-  }],
-});
+    messages: [{
+      role: 'user',
+      content: [
+        ...imageBlocks,
+        { type: 'text', text: `Section title: "${title}". Extract key points.` },
+      ],
+    }],
+  });
+
+  const rawText = ocrRes.content
+    .filter(b => b.type === 'text')
+    .map(b => (b as { type: 'text'; text: string }).text)
+    .join('');
+  const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    const parsed = JSON.parse(jsonMatch[0]) as { points?: string[] };
+    points = Array.isArray(parsed.points) ? parsed.points : [];
+  }
+} catch (e) {
+  console.warn('[generate-image-grid-scene] OCR 실패, points=[]:', e);
+  // Gemini 배경 생성은 계속 진행
+}
 ```
 
 **Step 2 — Gemini 배경 이미지 생성:**
@@ -112,7 +134,7 @@ return NextResponse.json({
 });
 ```
 
-**maxDuration:** 60 (Claude + Gemini 직렬 처리)
+**maxDuration:** 90 (기존 `generate-scene-image` 기준에 맞춤 — Claude + Gemini 직렬)
 **Rate limit:** 분당 4회
 
 ---
@@ -143,10 +165,19 @@ const targets = sectionsSnapshot.filter(
 );
 ```
 
-**image_grid 분기 추가 (line 310 이후, hero/cleanup/AI 분기 전에 삽입):**
+**변수 선언부 수정 (line 311 `let imageBase64`와 같은 위치에 추가):**
+```typescript
+let imageBase64: string;
+let mimeType: string;
+let extractedPoints: string[] | undefined;  // ← 추가
+```
+
+**image_grid 분기 추가 (hero/cleanup/AI 분기 전, early return으로 빠져나옴):**
+
+`isImageGridContent`는 `src/types/detail-page.ts:234`에 이미 존재 — import에 추가 필요.
+
 ```typescript
 if (section.type === 'image_grid') {
-  // attachedImages에서 URL 추출
   const gridImageUrls = section.attachedImages.map(img => img.url).filter(Boolean);
   if (gridImageUrls.length === 0) return null;
 
@@ -166,15 +197,28 @@ if (section.type === 'image_grid') {
 
   imageBase64 = gridData.data.imageBase64;
   mimeType = gridData.data.mimeType;
-
-  // points를 content에 반영 (setSections에서 처리)
   extractedPoints = gridData.data.points;
+} else if (section.type === 'hero' && ...) {
+  // 기존 hero 분기
+} else if (...cleanup...) {
+  // 기존 cleanup 분기
+} else {
+  // 기존 AI 분기
 }
 ```
 
-**setSections 결과 반영 수정:**
+**return 문 수정 (line 409):**
 ```typescript
-// urlUpdates 타입 확장
+// 변경 전
+return { sectionId: section.id, url: uploadData.url, sceneId: storyboardScene?.id };
+
+// 변경 후
+return { sectionId: section.id, url: uploadData.url, sceneId: storyboardScene?.id, points: extractedPoints };
+```
+
+**setSections 결과 반영 수정 (line 419-423 인라인 타입 가드 포함):**
+```typescript
+// UrlUpdate 타입 정의 (함수 내부 또는 상단)
 type UrlUpdate = {
   sectionId: string;
   url: string;
@@ -182,7 +226,13 @@ type UrlUpdate = {
   points?: string[];  // image_grid용
 };
 
-// content 업데이트 시 points 반영
+// line 419-423 필터 타입 가드 수정
+const urlUpdates = results
+  .filter((r): r is PromiseFulfilledResult<UrlUpdate | null> => r.status === 'fulfilled')
+  .map(r => r.value)
+  .filter((v): v is UrlUpdate => v !== null);
+
+// content 업데이트 시 points 반영 (line 432)
 const newContent =
   isImageGridContent(s.content) && hit.points
     ? { ...s.content, points: hit.points }
@@ -209,6 +259,12 @@ function renderImageGrid(content: ImageGridContent, section: DetailSection, colo
       .map(p => `<li style="margin-bottom:6px;font-size:14px;line-height:1.4;">${p}</li>`)
       .join('');
 
+    // XSS 방어: URL은 sanitizeUrl(), 텍스트는 escapeHtml() — 기존 renderer 패턴 동일
+    const escapedTitle = escapeHtml(title);
+    const bulletItems = content.points
+      .map(p => `<li style="margin-bottom:6px;font-size:14px;line-height:1.4;">${escapeHtml(p)}</li>`)
+      .join('');
+
     return `
 <div style="position:relative;width:100%;aspect-ratio:3/4;overflow:hidden;">
   ${safeUrl ? `<img src="${safeUrl}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;" />` : ''}
@@ -218,9 +274,9 @@ function renderImageGrid(content: ImageGridContent, section: DetailSection, colo
     padding:24px 20px 20px;
     color:#fff;
   ">
-    ${title ? `<p style="margin:0 0 10px;font-size:18px;font-weight:700;letter-spacing:-0.3px;">${title}</p>` : ''}
+    ${escapedTitle ? `<p style="margin:0 0 10px;font-size:18px;font-weight:700;letter-spacing:-0.3px;">${escapedTitle}</p>` : ''}
     <ul style="margin:0;padding-left:16px;">
-      ${bullets}
+      ${bulletItems}
     </ul>
   </div>
 </div>`;
