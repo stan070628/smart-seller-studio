@@ -144,7 +144,10 @@ export async function POST(req: NextRequest) {
       }
       geminiBuffer = Buffer.from(imagePart.inlineData.data, 'base64');
     } catch (e) {
-      if ((e as Error).name === 'AbortError') {
+      // AbortError: 표준 fetch AbortError(.name) 또는 @google/genai APIUserAbortError(.constructor.name) 모두 처리
+      const eName = (e as Error)?.name;
+      const eCtorName = (e as Error)?.constructor?.name;
+      if (eName === 'AbortError' || eCtorName === 'APIUserAbortError') {
         return NextResponse.json(
           { error: '시간이 초과됐습니다. 다시 실행해주세요.' },
           { status: 500 },
@@ -189,6 +192,7 @@ export async function POST(req: NextRequest) {
     })
       .composite([{ input: maskSvg, blend: 'over' }])
       .blur(12)
+      .png()
       .toBuffer();
 
     // 마스크를 Gemini 결과에 적용 (테두리 투명 처리)
