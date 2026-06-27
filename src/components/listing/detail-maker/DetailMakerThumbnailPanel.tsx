@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useRef, useState } from 'react';
+import ImageCleanupModal from '@/components/common/ImageCleanupModal';
 import { Wand2, Loader2 } from 'lucide-react';
 import { C } from '@/lib/design-tokens';
 import type { TextBadgeOptions } from '@/lib/detail-page/thumbnail-flow';
@@ -49,8 +50,11 @@ export default function DetailMakerThumbnailPanel({
   uploadingExtraRef = false,
   onUploadExtraRef,
   onRemoveExtraRef,
+  onReplaceExtraRef,
+  onAddExtraRef,
 }: Props) {
   const [direction, setDirection] = useState('');
+  const [cleanupExtraIdx, setCleanupExtraIdx] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 텍스트 뱃지 상태 (localStorage 영속화)
@@ -175,6 +179,40 @@ export default function DetailMakerThumbnailPanel({
                   >
                     ×
                   </button>
+                )}
+                <button
+                  onClick={() => setCleanupExtraIdx(idx)}
+                  aria-label="한자 제거"
+                  style={{
+                    position: 'absolute',
+                    bottom: '2px',
+                    left: '2px',
+                    background: 'rgba(0,0,0,0.6)',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '4px',
+                    fontSize: '10px',
+                    padding: '2px 4px',
+                    cursor: 'pointer',
+                    lineHeight: 1,
+                  }}
+                >
+                  한자
+                </button>
+                {cleanupExtraIdx === idx && (
+                  <ImageCleanupModal
+                    imageUrl={url}
+                    onReplace={newUrl => {
+                      onReplaceExtraRef?.(idx, newUrl);
+                      setCleanupExtraIdx(null);
+                    }}
+                    onAdd={newUrl => {
+                      onAddExtraRef?.(newUrl);
+                      setCleanupExtraIdx(null);
+                    }}
+                    onClose={() => setCleanupExtraIdx(null)}
+                    canAdd={true}
+                  />
                 )}
               </div>
             ))}
