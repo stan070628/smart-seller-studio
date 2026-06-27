@@ -468,7 +468,7 @@ export default function DetailMakerInputPanel({
                 transition: 'background 0.15s',
               }}
             >
-              {isGenerating ? '✨ 생성 중...' : '✨ AI 상세페이지 생성'}
+              {isGenerating ? '✨ 기획 생성 중...' : '① 기획 생성'}
             </button>
             {!productName.trim() && (
               <div style={{ fontSize: '11px', color: C.textSub, textAlign: 'center', marginTop: '6px' }}>

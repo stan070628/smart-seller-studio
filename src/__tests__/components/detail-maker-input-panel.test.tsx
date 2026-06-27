@@ -15,6 +15,8 @@ const baseProps = {
   error: null,
   onUploadFiles: vi.fn(),
   onRemoveImage: vi.fn(),
+  onReplaceImage: vi.fn(),
+  onAddImage: vi.fn(),
   onGenerate: vi.fn(),
   suggestedMoodIds: [],
   selectedMoodId: null,
