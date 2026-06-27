@@ -2,6 +2,7 @@ import sharp from 'sharp';
 import type { ReferenceImage } from './reference-images';
 
 const REPLICATE_API_BASE = 'https://api.replicate.com/v1';
+const REMBG_VERSION = 'fb8af171cfa1616ddcf1242c093f9c46bcada5ad4cf6f2fbe8b81b330ec5c003';
 const POLLING_INTERVAL_MS = 500;
 const POLLING_TIMEOUT_MS = 60_000;
 
@@ -18,15 +19,15 @@ async function removeBackground(ref: ReferenceImage): Promise<ReferenceImage> {
 
   const dataUrl = `data:${ref.mimeType};base64,${ref.base64}`;
 
-  // 예측 시작 (Prefer: wait 로 동기 응답 시도)
-  const startRes = await fetch(`${REPLICATE_API_BASE}/models/cjwbw/rembg/predictions`, {
+  // 예측 시작 — version hash 방식 (모델 deployment 미지원 시 404 방어)
+  const startRes = await fetch(`${REPLICATE_API_BASE}/predictions`, {
     method: 'POST',
     headers: {
       Authorization: `Token ${token}`,
       'Content-Type': 'application/json',
       Prefer: 'wait',
     },
-    body: JSON.stringify({ input: { image: dataUrl } }),
+    body: JSON.stringify({ version: REMBG_VERSION, input: { image: dataUrl } }),
   });
 
   if (!startRes.ok) throw new Error(`Replicate start error: ${startRes.status}`);
@@ -71,7 +72,12 @@ export async function removeImageBackgrounds(
     return { refs, anyRemoved: false };
   }
 
-  const results = await Promise.allSettled(refs.map((ref) => removeBackground(ref)));
+  // 순차 처리 — Replicate 무료 플랜 rate limit(429) 방지
+  const results: PromiseSettledResult<ReferenceImage>[] = [];
+  for (const ref of refs) {
+    const [result] = await Promise.allSettled([removeBackground(ref)]);
+    results.push(result!);
+  }
 
   let anyRemoved = false;
   const newRefs = results.map((result, i) => {

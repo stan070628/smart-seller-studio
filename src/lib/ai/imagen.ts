@@ -105,6 +105,9 @@ export async function generateFrameImage(
   );
 
   if (!imagePart || !imagePart.inlineData) {
+    const textParts = contentParts.filter(p => p.text);
+    console.error('[generateFrameImage] 이미지 파트 없음. 텍스트 응답:', textParts.map(p => p.text?.substring(0, 300)));
+    console.error('[generateFrameImage] finishReason:', candidates[0]?.finishReason);
     throw new Error("이미지 생성에 실패했습니다.");
   }
 
