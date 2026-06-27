@@ -92,6 +92,7 @@ export interface PointContent {
   pointLabel: string | null;  // "Point 1" — null 또는 빈 문자열이면 라벨 줄 숨김
   headline: string;            // 예: "펼치면 바로 '보이는' 필통"
   subheadline: string;         // 예: "180도 완전 오픈형 구조"
+  textPosition?: 'top' | 'center' | 'bottom'; // 이미지 위 텍스트 오버레이 수직 위치
 }
 
 export interface ImageGridContent {
@@ -283,7 +284,9 @@ export interface SceneStoryboardItem {
   id: string;                 // crypto.randomUUID()
   title: string;
   description: string;
-  prompt: string;
+  prompt: string;             // Gemini용 영어 원문
+  promptKo?: string;          // 사용자 표시용 한국어 요약
+  textPosition?: 'top' | 'center' | 'bottom'; // 씬 이미지 위 텍스트 오버레이 수직 위치
   sourceImageIndex: number;   // uploadedUrls[sourceImageIndex]
   mode: 'ai' | 'cleanup';
   resultUrl?: string;         // 생성 완료된 씬 이미지 URL (스토리보드 카드 미리보기용)
