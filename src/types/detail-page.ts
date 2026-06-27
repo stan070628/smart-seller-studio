@@ -99,6 +99,7 @@ export interface ImageGridContent {
   type: 'image_grid';
   title: string;                                          // "Product Info." (빈 값이면 생략)
   items: Array<{ label: string; swatchColor?: string }>;  // 이미지는 attachedImages와 index 매칭
+  points?: string[];                                       // Claude OCR 추출 포인트 (있으면 오버레이 렌더링)
 }
 
 export interface PointSectionContent {
