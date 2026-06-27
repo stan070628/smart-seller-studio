@@ -286,4 +286,6 @@ export interface SceneStoryboardItem {
   prompt: string;
   sourceImageIndex: number;   // uploadedUrls[sourceImageIndex]
   mode: 'ai' | 'cleanup';
+  resultUrl?: string;         // 생성 완료된 씬 이미지 URL (스토리보드 카드 미리보기용)
+  sectionId: string | null;   // 연결된 DetailSection.id, null이면 매핑 없음
 }
