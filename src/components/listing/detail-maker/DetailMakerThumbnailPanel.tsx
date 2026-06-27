@@ -3,6 +3,9 @@
 import React, { useRef, useState } from 'react';
 import { Wand2, Loader2 } from 'lucide-react';
 import { C } from '@/lib/design-tokens';
+import type { TextBadgeOptions } from '@/lib/detail-page/thumbnail-flow';
+
+type BadgePosition = 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left';
 
 const DIRECTION_EXAMPLES = [
   '화이트 스튜디오 배경, 조명 강조',
@@ -11,16 +14,30 @@ const DIRECTION_EXAMPLES = [
   '그라데이션 배경, 제품 클로즈업',
 ];
 
+const BADGE_POSITIONS: { label: string; value: BadgePosition }[] = [
+  { label: '우상단', value: 'top-right' },
+  { label: '좌상단', value: 'top-left' },
+  { label: '우하단', value: 'bottom-right' },
+  { label: '좌하단', value: 'bottom-left' },
+];
+
+function loadStorage(key: string, fallback: string): string {
+  if (typeof window === 'undefined') return fallback;
+  return localStorage.getItem(key) ?? fallback;
+}
+
 interface Props {
   refImageUrls: string[];
   isGenerating: boolean;
   error: string | null;
-  onGenerate: (direction: string) => void;
+  onGenerate: (direction: string, textBadge?: TextBadgeOptions) => void;
   // 썸네일 탭 전용 참조 이미지
   extraRefUrls?: string[];
   uploadingExtraRef?: boolean;
   onUploadExtraRef?: (files: FileList | File[]) => void;
   onRemoveExtraRef?: (idx: number) => void;
+  onReplaceExtraRef?: (idx: number, newUrl: string) => void;
+  onAddExtraRef?: (newUrl: string) => void;
 }
 
 export default function DetailMakerThumbnailPanel({
@@ -35,6 +52,31 @@ export default function DetailMakerThumbnailPanel({
 }: Props) {
   const [direction, setDirection] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 텍스트 뱃지 상태 (localStorage 영속화)
+  const [badgeEnabled, setBadgeEnabled] = useState(false);
+  const [badgeText, setBadgeText] = useState(() => loadStorage('thumbnailBadgeText', ''));
+  const [badgePosition, setBadgePosition] = useState<BadgePosition>(
+    () => loadStorage('thumbnailBadgePosition', 'top-right') as BadgePosition,
+  );
+
+  function handleBadgeTextChange(v: string) {
+    setBadgeText(v);
+    if (typeof window !== 'undefined') localStorage.setItem('thumbnailBadgeText', v);
+  }
+
+  function handleBadgePositionChange(v: BadgePosition) {
+    setBadgePosition(v);
+    if (typeof window !== 'undefined') localStorage.setItem('thumbnailBadgePosition', v);
+  }
+
+  function handleGenerate() {
+    const badge: TextBadgeOptions | undefined =
+      badgeEnabled && badgeText.trim()
+        ? { text: badgeText.trim(), position: badgePosition }
+        : undefined;
+    onGenerate(direction.trim(), badge);
+  }
 
   const effectiveCount = extraRefUrls.length > 0 ? extraRefUrls.length : Math.min(refImageUrls.length, 3);
   const hasRef = extraRefUrls.length > 0 || refImageUrls.length > 0;
@@ -197,10 +239,63 @@ export default function DetailMakerThumbnailPanel({
         </div>
       )}
 
+      {/* 텍스트 뱃지 토글 */}
+      <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden' }}>
+        <label
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
+            cursor: 'pointer', background: badgeEnabled ? 'rgba(190,0,20,0.04)' : 'transparent',
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={badgeEnabled}
+            onChange={e => setBadgeEnabled(e.target.checked)}
+            style={{ accentColor: '#be0014', width: 14, height: 14, flexShrink: 0 }}
+          />
+          <span style={{ fontSize: 12, fontWeight: 600, color: C.text }}>텍스트 뱃지 삽입</span>
+          <span style={{ fontSize: 11, color: C.textSub, marginLeft: 'auto' }}>둥근 흰색 박스</span>
+        </label>
+        {badgeEnabled && (
+          <div style={{ padding: '0 10px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <input
+              type="text"
+              value={badgeText}
+              onChange={e => handleBadgeTextChange(e.target.value)}
+              placeholder="예: 32매 세트"
+              maxLength={20}
+              style={{
+                width: '100%', padding: '6px 8px', fontSize: 12, color: '#111827',
+                border: `1px solid ${C.border}`, borderRadius: 6, outline: 'none',
+                boxSizing: 'border-box', fontFamily: 'inherit',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 4 }}>
+              {BADGE_POSITIONS.map(p => (
+                <button
+                  key={p.value}
+                  type="button"
+                  onClick={() => handleBadgePositionChange(p.value)}
+                  style={{
+                    flex: 1, padding: '4px 0', fontSize: 11, borderRadius: 4,
+                    border: `1px solid ${badgePosition === p.value ? '#be0014' : C.border}`,
+                    background: badgePosition === p.value ? 'rgba(190,0,20,0.06)' : 'none',
+                    color: badgePosition === p.value ? '#be0014' : C.textSub,
+                    cursor: 'pointer', fontWeight: badgePosition === p.value ? 600 : 400,
+                  }}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* 생성 버튼 */}
       <button
         type="button"
-        onClick={() => onGenerate(direction.trim())}
+        onClick={handleGenerate}
         disabled={!canGenerate}
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,

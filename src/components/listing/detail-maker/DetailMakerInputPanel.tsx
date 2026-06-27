@@ -4,6 +4,8 @@ import React, { useRef, useState } from 'react';
 import { C } from '@/lib/design-tokens';
 import CreativeBriefPanel from './CreativeBriefPanel';
 import DetailMakerThumbnailPanel from './DetailMakerThumbnailPanel';
+import type { TextBadgeOptions } from '@/lib/detail-page/thumbnail-flow';
+import ImageCleanupModal from '@/components/common/ImageCleanupModal';
 
 type Category = 'basic' | 'fashion' | 'living' | 'food';
 type Tab = 'detail' | 'thumbnail';
@@ -30,6 +32,10 @@ interface Props {
   error: string | null;
   onUploadFiles: (files: FileList | File[]) => void;
   onRemoveImage: (idx: number) => void;
+  onReplaceImage: (idx: number, newUrl: string) => void;
+  onAddImage: (newUrl: string) => void;
+  onReplaceExtraRef?: (idx: number, newUrl: string) => void;
+  onAddExtraRef?: (newUrl: string) => void;
   onGenerate: () => void;
   suggestedMoodIds: string[];
   selectedMoodId: string | null;
@@ -38,7 +44,7 @@ interface Props {
   thumbnailRefUrls: string[];
   isGeneratingThumbnail: boolean;
   thumbnailError: string | null;
-  onGenerateThumbnail: (direction: string) => void;
+  onGenerateThumbnail: (direction: string, textBadge?: TextBadgeOptions) => void;
   thumbnailExtraUrls: string[];
   uploadingThumbnailRef: boolean;
   onUploadThumbnailRef: (files: FileList | File[]) => void;
@@ -60,6 +66,10 @@ export default function DetailMakerInputPanel({
   error,
   onUploadFiles,
   onRemoveImage,
+  onReplaceImage,
+  onAddImage,
+  onReplaceExtraRef,
+  onAddExtraRef,
   onGenerate,
   suggestedMoodIds,
   selectedMoodId,
@@ -79,6 +89,7 @@ export default function DetailMakerInputPanel({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<Tab>('detail');
   const [showReferenceText, setShowReferenceText] = useState(false);
+  const [cleanupTargetIdx, setCleanupTargetIdx] = useState<number | null>(null);
 
   const canGenerate = !isGenerating && productName.trim().length > 0 && uploadedUrls.length > 0;
 
@@ -308,6 +319,40 @@ export default function DetailMakerInputPanel({
                       >
                         ×
                       </button>
+                      <button
+                        onClick={() => setCleanupTargetIdx(idx)}
+                        aria-label="한자 제거"
+                        style={{
+                          position: 'absolute',
+                          bottom: '2px',
+                          left: '2px',
+                          background: 'rgba(0,0,0,0.6)',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '4px',
+                          fontSize: '10px',
+                          padding: '2px 4px',
+                          cursor: 'pointer',
+                          lineHeight: 1,
+                        }}
+                      >
+                        한자
+                      </button>
+                      {cleanupTargetIdx === idx && (
+                        <ImageCleanupModal
+                          imageUrl={url}
+                          onReplace={newUrl => {
+                            onReplaceImage(idx, newUrl);
+                            setCleanupTargetIdx(null);
+                          }}
+                          onAdd={newUrl => {
+                            onAddImage(newUrl);
+                            setCleanupTargetIdx(null);
+                          }}
+                          onClose={() => setCleanupTargetIdx(null)}
+                          canAdd={uploadedUrls.length < 10}
+                        />
+                      )}
                     </div>
                   ))}
                 </div>
@@ -451,6 +496,8 @@ export default function DetailMakerInputPanel({
             uploadingExtraRef={uploadingThumbnailRef}
             onUploadExtraRef={onUploadThumbnailRef}
             onRemoveExtraRef={onRemoveThumbnailRef}
+            onReplaceExtraRef={onReplaceExtraRef}
+            onAddExtraRef={onAddExtraRef}
           />
         </div>
       )}
