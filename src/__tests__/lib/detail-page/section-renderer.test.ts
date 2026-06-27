@@ -792,3 +792,60 @@ describe('renderSection — attachedImages 2장', () => {
     expect(html).not.toContain('width:50%');
   });
 });
+
+// ---------------------------------------------------------------------------
+// renderSection — point (textPosition)
+// ---------------------------------------------------------------------------
+
+describe('renderSection — point (textPosition)', () => {
+  const pointSection = (textPosition?: 'top' | 'center' | 'bottom') =>
+    baseSection({
+      type: 'point',
+      content: {
+        type: 'point',
+        pointLabel: 'Point 1',
+        headline: '헤드라인',
+        subheadline: '서브',
+        ...(textPosition !== undefined && { textPosition }),
+      },
+      attachedImages: [{ url: 'https://example.com/img.jpg', order: 0, processingMode: 'original' }],
+    });
+
+  it('textPosition 미지정 시 오버레이가 하단(bottom:0)에 위치한다', () => {
+    const html = renderSection(pointSection(), WARM_CREAM_THEME);
+    expect(html).toContain('bottom:0');
+    expect(html).not.toContain('top:0');
+    expect(html).not.toContain('translateY(-50%)');
+  });
+
+  it("textPosition: 'bottom' 시 오버레이가 하단(bottom:0)에 위치한다", () => {
+    const html = renderSection(pointSection('bottom'), WARM_CREAM_THEME);
+    expect(html).toContain('bottom:0');
+    expect(html).not.toContain('top:0');
+  });
+
+  it("textPosition: 'top' 시 오버레이가 상단(top:0)에 위치하고 bottom:0은 없다", () => {
+    const html = renderSection(pointSection('top'), WARM_CREAM_THEME);
+    expect(html).toContain('top:0');
+    expect(html).not.toContain('bottom:0');
+    expect(html).toContain('rgba(0,0,0,0.82) 0%');
+  });
+
+  it("textPosition: 'center' 시 오버레이가 중앙(translateY(-50%))에 위치한다", () => {
+    const html = renderSection(pointSection('center'), WARM_CREAM_THEME);
+    expect(html).toContain('translateY(-50%)');
+    expect(html).not.toContain('bottom:0');
+    expect(html).not.toContain('top:0');
+  });
+
+  it('이미지 없는 point 섹션은 textPosition 무관하게 텍스트만 출력한다', () => {
+    const section = baseSection({
+      type: 'point',
+      content: { type: 'point', pointLabel: null, headline: '헤드라인', subheadline: '서브', textPosition: 'top' },
+      attachedImages: [],
+    });
+    const html = renderSection(section, WARM_CREAM_THEME);
+    expect(html).toContain('헤드라인');
+    expect(html).not.toContain('position:absolute');
+  });
+});

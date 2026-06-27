@@ -372,13 +372,21 @@ function renderPoint(content: PointContent, section: DetailSection, colors: Pale
 </div>`;
   }
 
-  // 이미지가 있으면 이미지 위에 텍스트 오버레이
+  // textPosition에 따라 오버레이 위치 결정 (기본값: bottom)
+  const tp = content.textPosition ?? 'bottom';
+  const overlayStyle =
+    tp === 'top'
+      ? 'position:absolute;top:0;left:0;right:0;background:linear-gradient(rgba(0,0,0,0.82) 0%,rgba(0,0,0,0.60) 65%,transparent 100%);padding:28px 20px 24px;text-align:center;line-height:1.4;box-sizing:border-box;'
+      : tp === 'center'
+      ? 'position:absolute;top:50%;left:0;right:0;transform:translateY(-50%);background:rgba(0,0,0,0.70);padding:20px;text-align:center;line-height:1.4;box-sizing:border-box;'
+      : 'position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent 0%,rgba(0,0,0,0.60) 35%,rgba(0,0,0,0.82) 100%);padding:24px 20px 28px;text-align:center;line-height:1.4;box-sizing:border-box;';
+
   const labelHtml = content.pointLabel
     ? `<div style="margin-bottom:8px;"><span style="font-family:Georgia,serif;font-style:italic;font-size:20px;color:rgba(255,255,255,0.92);">${editableText('content.pointLabel', content.pointLabel)}</span></div>`
     : '';
   return `<div ${sectionAttrs(section)} style="position:relative;width:100%;overflow:hidden;line-height:0;box-sizing:border-box;">
   <img src="${escapeHtml(safeUrl)}" alt="" style="width:100%;display:block;" />
-  <div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent 0%,rgba(0,0,0,0.60) 35%,rgba(0,0,0,0.82) 100%);padding:24px 20px 28px;text-align:center;line-height:1.4;box-sizing:border-box;">
+  <div style="${overlayStyle}">
     ${labelHtml}
     <h2 style="margin:0 0 8px;font-size:26px;font-weight:800;color:#fff;line-height:1.3;letter-spacing:-0.5px;text-shadow:0 2px 8px rgba(0,0,0,0.8),0 0 20px rgba(0,0,0,0.5)${headingFont};">${editableText('content.headline', content.headline)}</h2>
     <p style="margin:0;font-size:16px;color:rgba(255,255,255,0.88);line-height:1.5;">${editableMarkupText('content.subheadline', content.subheadline, 'rgba(255,255,255,0.7)')}</p>
