@@ -31,6 +31,8 @@ const RequestBodySchema = z.object({
     features: z.array(z.object({ title: z.string() })).optional(),
   }).optional(),
   sceneHint: z.string().max(600).optional(),
+  // 스토리보드 직접 프롬프트: 있으면 Claude 단계 건너뛰고 Gemini에 바로 전달
+  scenePrompt: z.string().max(2000).optional(),
   // 편집 모드: 기존 씬 이미지 URL (있으면 편집, 없으면 새 생성)
   baseImageUrl: z.string().url().optional(),
   // 편집 지시어 또는 새 생성 art direction
@@ -48,7 +50,7 @@ Rules:
 - Do NOT include any text, logos, watermarks, or price tags in the scene description
 - The output must be a photorealistic commercial photography scene
 - CRITICAL PRODUCT COUNT: The multiple reference images show the SAME single product from different angles — they do NOT represent multiple products. Carefully count the EXACT number of each item type that makes up ONE product unit (e.g., "1 spoon and 1 chopstick set" or "3 bottles sold together"). Your prompt MUST specify this EXACT count. NEVER duplicate or multiply items based on the number of reference images provided. State the count explicitly: "exactly 1 [item]" etc.
-- CRITICAL: The generated prompt MUST end with this exact instruction: "The attached product image must be placed in this scene exactly as it appears — do not transform, distort, modify, or reimagine the product's shape, color, material, or appearance in any way. Minor cleanup only (background removal, sharpening, white balance correction) is acceptable. Create an entirely new scene/background/environment around the unchanged product. IMPORTANT: Use EXACTLY the same quantity of items as shown in the reference image — do not add more items, do not duplicate products. SINGLE FRAME ONLY: Generate exactly one single continuous photograph — no split panels, diptychs, multi-view layouts, before/after comparisons, or composite image compositions."
+- CRITICAL: The generated prompt MUST end with this exact instruction: "Using the attached product image(s) as a visual reference, study the product's overall shape, proportions, color palette, material texture, and key design details, then render it as a new photorealistic image naturally integrated in the scene. The product rendition should faithfully capture the reference's essential visual characteristics (form, color scheme, distinctive features) as an independent creative work — not a direct reproduction of the original photograph. IMPORTANT: Use EXACTLY the same quantity of items as shown in the reference image — do not add more items, do not duplicate products. SINGLE FRAME ONLY: Generate exactly one single continuous photograph — no split panels, diptychs, multi-view layouts, before/after comparisons, or composite image compositions."
 
 Section type directions:
 - hero: Clean studio shot with the product as the clear hero. Dramatic professional lighting, minimal elegant background, product centered.
@@ -57,6 +59,8 @@ Section type directions:
 - feature: Aspirational scene that visually communicates the product's key function or benefit. Creative and conceptual but still photorealistic.
 
 Return ONLY valid JSON: {"prompt": "your detailed English prompt here"}`;
+
+const PRODUCT_FIDELITY_INSTRUCTION = `Using the attached product image(s) as a visual reference, study the product's overall shape, proportions, color palette, material texture, and key design details, then render it as a new photorealistic image naturally integrated in the scene. The product rendition should faithfully capture the reference's essential visual characteristics (form, color scheme, distinctive features) as an independent creative work — not a direct reproduction of the original photograph. IMPORTANT: Use EXACTLY the same quantity of items as shown in the reference image — do not add more items, do not duplicate products. SINGLE FRAME ONLY: Generate exactly one single continuous photograph — no split panels, diptychs, multi-view layouts, before/after comparisons, or composite image compositions.`;
 
 export async function POST(req: NextRequest) {
   const authResult = await requireAuth(req);
@@ -85,7 +89,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { sectionType, productInfo, sceneHint, baseImageUrl, instruction } = parsed.data;
+  const { sectionType, productInfo, sceneHint, scenePrompt: directPrompt, baseImageUrl, instruction } = parsed.data;
   isEditMode = !!baseImageUrl; // Zod 검증된 값으로 덮어쓰기
 
   try {
@@ -113,50 +117,58 @@ export async function POST(req: NextRequest) {
     // base 먼저, 그다음 product refs (합산 최대 3장)
     const allImages = [...baseImages, ...productRefs].slice(0, 3);
 
-    // Step 1: Claude Sonnet으로 섹션별 씬 프롬프트 생성
-    const client = getAnthropicClient();
+    // Step 1: 씬 프롬프트 결정 (스토리보드 직접 전달 시 Claude 우회)
+    let finalScenePrompt: string;
 
-    // Claude 유저 콘텐츠 구성
-    type ContentBlock =
-      | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
-      | { type: 'text'; text: string };
+    if (directPrompt) {
+      // storyboard.prompt를 직접 사용 — Claude API 호출 없음 (로컬 환경 호환, edit 모드에서도 동일)
+      finalScenePrompt = `${directPrompt} ${PRODUCT_FIDELITY_INSTRUCTION}`;
+    } else {
+      // Claude Sonnet으로 섹션별 씬 프롬프트 생성
+      const client = getAnthropicClient();
 
-    const userContent: ContentBlock[] = [];
+      type ContentBlock =
+        | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
+        | { type: 'text'; text: string };
 
-    for (const ref of allImages) {
+      const userContent: ContentBlock[] = [];
+
+      for (const ref of allImages) {
+        userContent.push({
+          type: 'image',
+          source: { type: 'base64', media_type: ref.mimeType, data: ref.base64 },
+        });
+      }
+
       userContent.push({
-        type: 'image',
-        source: { type: 'base64', media_type: ref.mimeType, data: ref.base64 },
+        type: 'text',
+        text: buildSceneUserPrompt(sectionType, productInfo, sceneHint, { isEditMode, instruction }),
       });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const claudeRes = await client.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 600,
+        system: SCENE_PROMPT_SYSTEM,
+        messages: [{ role: 'user', content: userContent as any }],
+      });
+
+      const rawText = claudeRes.content
+        .filter((b) => b.type === 'text')
+        .map((b) => (b as { type: 'text'; text: string }).text)
+        .join('');
+
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error('Claude 응답에서 JSON을 찾을 수 없습니다.');
+      const promptData = JSON.parse(jsonMatch[0]) as { prompt?: string };
+      const claudePrompt = promptData.prompt;
+      if (!claudePrompt) throw new Error('Claude가 프롬프트를 생성하지 못했습니다.');
+      finalScenePrompt = claudePrompt;
     }
-
-    userContent.push({
-      type: 'text',
-      text: buildSceneUserPrompt(sectionType, productInfo, sceneHint, { isEditMode, instruction }),
-    });
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const claudeRes = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 600,
-      system: SCENE_PROMPT_SYSTEM,
-      messages: [{ role: 'user', content: userContent as any }],
-    });
-
-    const rawText = claudeRes.content
-      .filter((b) => b.type === 'text')
-      .map((b) => (b as { type: 'text'; text: string }).text)
-      .join('');
-
-    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('Claude 응답에서 JSON을 찾을 수 없습니다.');
-    const promptData = JSON.parse(jsonMatch[0]) as { prompt?: string };
-    const scenePrompt = promptData.prompt;
-    if (!scenePrompt) throw new Error('Claude가 프롬프트를 생성하지 못했습니다.');
 
     // Step 2: Gemini로 완성된 씬 이미지 생성
     const imageResult = await generateFrameImage({
-      imagePrompt: scenePrompt,
+      imagePrompt: finalScenePrompt,
       referenceImages: allImages,
     });
 
@@ -165,7 +177,7 @@ export async function POST(req: NextRequest) {
       data: {
         imageBase64: imageResult.imageBase64,
         mimeType: imageResult.mimeType,
-        prompt: scenePrompt,
+        prompt: finalScenePrompt,
       },
     });
   } catch (error) {

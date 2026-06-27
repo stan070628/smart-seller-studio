@@ -312,58 +312,36 @@ export default function DetailMakerClient() {
           let mimeType: string;
 
           if (section.type === 'hero' && storyboardScene?.mode !== 'cleanup') {
-            // Hero: Step 1 cleanup → Step 2 Gemini 배경 합성
+            // Hero: Gemini edit 모드 — 원본 이미지를 base로 배경만 교체
+            // cleanup-product-image는 텍스트 제거 전용이므로 배경 합성에 부적합.
+            // baseImageUrl로 원본을 넘기면 Gemini가 제품 형태를 보존하면서 배경만 새로 생성한다.
             const heroSrcIdx = Math.min(
               storyboardScene?.sourceImageIndex ?? 0,
               refUrls.length - 1,
             );
             const heroSourceUrl = refUrls[heroSrcIdx] ?? refUrls[0];
+            if (!heroSourceUrl) return null;
 
-            // Step 1: 배경 제거
-            const cleanupRes = await fetch('/api/ai/cleanup-product-image', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ imageUrl: heroSourceUrl }),
-            });
-            if (!cleanupRes.ok) return null;
-            const cleanupData = await cleanupRes.json() as {
-              imageBase64?: string;
-              mimeType?: string;
-              error?: string;
-            };
-            if (cleanupData.error || !cleanupData.imageBase64 || !cleanupData.mimeType) return null;
-
-            // Step 2: Gemini 배경 합성 (cleanup 결과를 레퍼런스로)
             const heroSceneRes = await fetch('/api/ai/generate-scene-image', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 sectionType: 'hero' as const,
-                productImageBase64: cleanupData.imageBase64,
-                productImageMimeType: cleanupData.mimeType,
+                baseImageUrl: heroSourceUrl,
                 ...(storyboardScene
                   ? { scenePrompt: storyboardScene.prompt }
                   : { sceneHint: combinedHint }),
               }),
             });
 
-            if (!heroSceneRes.ok) {
-              // Step 2 실패 → cleanup 결과로 fallback
-              imageBase64 = cleanupData.imageBase64;
-              mimeType = cleanupData.mimeType;
-            } else {
-              const heroSceneData = await heroSceneRes.json() as {
-                success: boolean;
-                data?: { imageBase64: string; mimeType: string };
-              };
-              if (!heroSceneData.success || !heroSceneData.data) {
-                imageBase64 = cleanupData.imageBase64;
-                mimeType = cleanupData.mimeType;
-              } else {
-                imageBase64 = heroSceneData.data.imageBase64;
-                mimeType = heroSceneData.data.mimeType;
-              }
-            }
+            if (!heroSceneRes.ok) return null;
+            const heroSceneData = await heroSceneRes.json() as {
+              success: boolean;
+              data?: { imageBase64: string; mimeType: string };
+            };
+            if (!heroSceneData.success || !heroSceneData.data) return null;
+            imageBase64 = heroSceneData.data.imageBase64;
+            mimeType = heroSceneData.data.mimeType;
           } else if (storyboardScene?.mode === 'cleanup') {
             // 기존 cleanup 단일 패스 (hero가 아닌 섹션의 cleanup 모드)
             const srcIdx = Math.min(storyboardScene.sourceImageIndex, refUrls.length - 1);
