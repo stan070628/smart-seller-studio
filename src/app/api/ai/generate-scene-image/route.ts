@@ -142,7 +142,7 @@ export async function POST(req: NextRequest) {
       // storyboard.prompt를 직접 사용 — Claude API 호출 없음 (로컬 환경 호환, edit 모드에서도 동일)
       const bgPrefix = bgRemoved ? BG_REMOVED_PREFIX : '';
       const bgSuffix = bgRemoved ? BG_REMOVED_STRICT : '';
-      finalScenePrompt = `${directPrompt} ${bgPrefix}${PRODUCT_FIDELITY_INSTRUCTION}${bgSuffix}`;
+      finalScenePrompt = `${directPrompt}\n\n${bgPrefix}${PRODUCT_FIDELITY_INSTRUCTION}${bgSuffix}`;
     } else {
       // Claude Sonnet으로 섹션별 씬 프롬프트 생성
       const client = getAnthropicClient();
@@ -183,6 +183,7 @@ export async function POST(req: NextRequest) {
       const promptData = JSON.parse(jsonMatch[0]) as { prompt?: string };
       const claudePrompt = promptData.prompt;
       if (!claudePrompt) throw new Error('Claude가 프롬프트를 생성하지 못했습니다.');
+      // Claude는 SCENE_PROMPT_SYSTEM 지시에 따라 PRODUCT_FIDELITY_INSTRUCTION을 이미 포함함
       finalScenePrompt = bgRemoved
         ? `${BG_REMOVED_PREFIX}${claudePrompt}${BG_REMOVED_STRICT}`
         : claudePrompt;
