@@ -68,6 +68,7 @@ const SECTION_LABELS: Record<DetailSection['type'], string> = {
   why_icons: 'WHY 아이콘',
   certifications: '인증 배지',
   infographic_steps: '사용법 인포그래픽',
+  claude_layout: 'AI 레이아웃',
 };
 
 function sectionAttrs(section: DetailSection): string {
@@ -558,6 +559,9 @@ export function renderSection(section: DetailSection, theme: DetailPageTheme): s
       return renderCertifications(section.content as CertificationsContent, section, colors);
     case 'infographic_steps':
       return renderInfographicSteps(section.content as InfographicStepsContent, section, colors);
+    case 'claude_layout':
+      // claude_layout 섹션은 클라이언트 렌더러에서 처리 — 서버사이드 HTML 미지원
+      return `<div ${sectionAttrs(section)} style="padding:24px;text-align:center;color:#999;">[AI 레이아웃 섹션]</div>`;
   }
 }
 

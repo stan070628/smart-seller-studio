@@ -62,6 +62,7 @@ const SECTION_TYPE_LABELS: Record<SectionType, string> = {
   why_icons: 'WHY 아이콘',
   certifications: '인증 배지',
   infographic_steps: '사용법 인포그래픽',
+  claude_layout: 'AI 레이아웃',
 };
 
 // 섹션 콘텐츠를 한 줄 요약 텍스트로 변환

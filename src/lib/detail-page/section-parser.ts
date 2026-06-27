@@ -400,6 +400,8 @@ export function createEmptySection(type: SectionType, order: number): DetailSect
       return { ...base, type: 'certifications', content: { type: 'certifications', items: [] } };
     case 'infographic_steps':
       return { ...base, type: 'infographic_steps', content: { type: 'infographic_steps', items: [] } };
+    case 'claude_layout':
+      return { ...base, type: 'claude_layout', content: { type: 'claude_layout', title: '', blocks: [] } };
     default: {
       const _exhaustive: never = type;
       throw new Error(`createEmptySection: unhandled type "${_exhaustive}"`);

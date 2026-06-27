@@ -17,7 +17,8 @@ export type SectionType =
   | 'bar_chart'
   | 'why_icons'
   | 'certifications'
-  | 'infographic_steps';
+  | 'infographic_steps'
+  | 'claude_layout';
 
 export type PaletteName =
   | 'warm_cream'
@@ -38,6 +39,8 @@ export interface AttachedImage {
   url: string;           // Supabase Storage 절대 URL
   order: number;
   processingMode: ImageProcessingMode;
+  source?: 'upload' | 'gemini';
+  generationHint?: string;
 }
 
 export interface HeroContent {
@@ -156,6 +159,26 @@ export interface InfographicStepsContent {
   }>;
 }
 
+export type LayoutBlock =
+  | { type: 'badge'; text: string; color?: 'primary' | 'accent' | 'neutral' }
+  | { type: 'heading'; text: string; size: 'xl' | 'lg' | 'md'; bold?: boolean; color?: 'primary' | 'text' | 'accent' }
+  | { type: 'subtext'; text: string; align?: 'left' | 'center' }
+  | { type: 'image'; attachedIndex: number; width?: string; align?: 'center' | 'left' | 'right'; rounded?: boolean }
+  | { type: 'stat_row'; items: Array<{ label: string; value: string; unit?: string }> }
+  | { type: 'bullet_list'; items: string[]; icon?: 'dot' | 'check' | 'arrow' }
+  | { type: 'columns'; cols: LayoutBlock[][]; gap?: number }
+  | { type: 'divider' }
+  | { type: 'spacer'; height: number }
+
+export interface ClaudeLayoutContent {
+  type: 'claude_layout';
+  title: string;
+  points?: string[];
+  blocks: LayoutBlock[];
+  bgStyle?: 'white' | 'light' | 'dark' | 'primary';
+  padding?: 'normal' | 'compact' | 'wide';
+}
+
 export type SectionContent =
   | HeroContent
   | SellingPointsContent
@@ -173,7 +196,8 @@ export type SectionContent =
   | BarChartContent
   | WhyIconsContent
   | CertificationsContent
-  | InfographicStepsContent;
+  | InfographicStepsContent
+  | ClaudeLayoutContent;
 
 export interface DetailSection {
   id: string;
@@ -252,6 +276,9 @@ export function isCertificationsContent(c: SectionContent): c is CertificationsC
 }
 export function isInfographicStepsContent(c: SectionContent): c is InfographicStepsContent {
   return c.type === 'infographic_steps';
+}
+export function isClaudeLayoutContent(c: SectionContent): c is ClaudeLayoutContent {
+  return c.type === 'claude_layout';
 }
 
 export interface RichSections {
