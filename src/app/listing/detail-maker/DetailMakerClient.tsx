@@ -8,7 +8,7 @@ import DetailPageEditor from '@/components/listing/detail-editor/DetailPageEdito
 import DetailMakerInputPanel from '@/components/listing/detail-maker/DetailMakerInputPanel';
 import DetailMakerThumbnailGallery from '@/components/listing/detail-maker/DetailMakerThumbnailGallery';
 import StoryboardEditor from '@/components/listing/detail-maker/StoryboardEditor';
-import { generateCoupangThumbnail, editThumbnail } from '@/lib/detail-page/thumbnail-flow';
+import { generateCoupangThumbnail, editThumbnail, type TextBadgeOptions } from '@/lib/detail-page/thumbnail-flow';
 import { getMoodPreset } from '@/lib/detail-page/mood-presets';
 import type { DetailSection, DetailPageTheme, CreativeBrief, SceneStoryboardItem } from '@/types/detail-page';
 import type { DetailPageContent, MobileDetailPageContent } from '@/lib/ai/prompts/detail-page';
@@ -94,6 +94,22 @@ export default function DetailMakerClient() {
     }
   }
 
+  function handleReplaceImage(idx: number, newUrl: string) {
+    setUploadedUrls(prev => prev.map((u, i) => (i === idx ? newUrl : u)));
+  }
+
+  function handleAddImage(newUrl: string) {
+    setUploadedUrls(prev => (prev.length < 10 ? [...prev, newUrl] : prev));
+  }
+
+  function handleReplaceThumbnailRef(idx: number, newUrl: string) {
+    setThumbnailExtraUrls(prev => prev.map((u, i) => (i === idx ? newUrl : u)));
+  }
+
+  function handleAddThumbnailRef(newUrl: string) {
+    setThumbnailExtraUrls(prev => [...prev, newUrl]);
+  }
+
   // 무드 추천 (논블로킹) — 실패해도 조용히 무시
   async function suggestMood(urls: string[]) {
     if (urls.length === 0) return;
@@ -146,13 +162,13 @@ export default function DetailMakerClient() {
   }
 
   // ─── 썸네일 생성/수정/관리 ────────────────────────────────────────────────────
-  async function handleGenerateThumbnail(direction: string) {
+  async function handleGenerateThumbnail(direction: string, textBadge?: TextBadgeOptions) {
     const refImgs = thumbnailExtraUrls.length > 0 ? thumbnailExtraUrls : uploadedUrls;
     if (refImgs.length === 0) { setThumbnailError('참고 이미지를 먼저 업로드하세요.'); return; }
     setIsGeneratingThumbnail(true);
     setThumbnailError(null);
     try {
-      const url = await generateCoupangThumbnail(refImgs.slice(0, 3), direction);
+      const url = await generateCoupangThumbnail(refImgs.slice(0, 3), direction, textBadge);
       setGeneratedThumbnails(prev => [...prev, url]);
     } catch (e) {
       setThumbnailError(e instanceof Error ? e.message : '썸네일 생성 중 오류가 발생했습니다.');
@@ -329,7 +345,7 @@ export default function DetailMakerClient() {
           const uploadData = await uploadRes.json() as { success: boolean; url?: string };
           if (!uploadData.success || !uploadData.url) return null;
 
-          return { sectionId: section.id, url: uploadData.url };
+          return { sectionId: section.id, url: uploadData.url, sceneId: storyboardScene?.id };
         } catch {
           return null;
         }
@@ -340,10 +356,10 @@ export default function DetailMakerClient() {
     if (sceneGenIdRef.current !== genId) return;
 
     const urlUpdates = results
-      .filter((r): r is PromiseFulfilledResult<{ sectionId: string; url: string } | null> =>
+      .filter((r): r is PromiseFulfilledResult<{ sectionId: string; url: string; sceneId: string | undefined } | null> =>
         r.status === 'fulfilled')
       .map(r => r.value)
-      .filter((v): v is { sectionId: string; url: string } => v !== null);
+      .filter((v): v is { sectionId: string; url: string; sceneId: string | undefined } => v !== null);
 
     if (urlUpdates.length > 0) {
       setSections(prev => {
@@ -355,6 +371,18 @@ export default function DetailMakerClient() {
         void refreshRenderedHtml(updated, currentTheme);
         return updated;
       });
+
+      // storyboard resultUrl 업데이트
+      const storyboardUpdates = urlUpdates.filter(u => u.sceneId != null);
+      if (storyboardUpdates.length > 0) {
+        setStoryboard(prev => {
+          if (!prev) return prev;
+          return prev.map(scene => {
+            const hit = storyboardUpdates.find(u => u.sceneId === scene.id);
+            return hit ? { ...scene, resultUrl: hit.url } : scene;
+          });
+        });
+      }
     }
   }
 
@@ -560,6 +588,120 @@ export default function DetailMakerClient() {
     });
   }
 
+  // ─── 단일 씬 재생성 (다시 클린업 / AI로 전환) ──────────────────────────────
+  async function handleRegenerateScene(sceneId: string, forceMode?: 'ai' | 'cleanup') {
+    if (!storyboard) return;
+    const scene = storyboard.find(s => s.id === sceneId);
+    if (!scene || uploadedUrls.length === 0) return;
+
+    const effectiveMode = forceMode ?? scene.mode;
+    const targets = sections.filter(s => s.type === 'hero' || s.type === 'point');
+    const sceneIdx = storyboard.findIndex(s => s.id === sceneId);
+    const section = targets[sceneIdx];
+    if (!section) return;
+
+    // 모드 변경 + resultUrl 클리어
+    setStoryboard(prev =>
+      prev?.map(s =>
+        s.id === sceneId ? { ...s, mode: effectiveMode, resultUrl: undefined } : s,
+      ) ?? null,
+    );
+
+    sceneGenIdRef.current += 1;
+    const genId = sceneGenIdRef.current;
+    setIsGeneratingScenes(true);
+
+    try {
+      let imageBase64: string;
+      let mimeType: string;
+      const sectionType = section.type === 'hero' ? 'hero' : 'lifestyle';
+
+      if (effectiveMode === 'cleanup') {
+        const srcIdx = Math.min(scene.sourceImageIndex, uploadedUrls.length - 1);
+        const sourceUrl = uploadedUrls[srcIdx] ?? uploadedUrls[0];
+        const res = await fetch('/api/ai/cleanup-product-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageUrl: sourceUrl }),
+        });
+        if (!res.ok) {
+          console.warn('[handleRegenerateScene] cleanup API 실패:', res.status);
+          return;
+        }
+        const data = await res.json() as { imageBase64?: string; mimeType?: string; error?: string };
+        if (!data.imageBase64 || !data.mimeType) {
+          console.warn('[handleRegenerateScene] cleanup 응답 데이터 없음');
+          return;
+        }
+        imageBase64 = data.imageBase64;
+        mimeType = data.mimeType;
+      } else {
+        const headline =
+          (section.content.type === 'hero' || section.content.type === 'point')
+            ? section.content.headline
+            : undefined;
+        const srcIdx = Math.min(scene.sourceImageIndex, uploadedUrls.length - 1);
+        const res = await fetch('/api/ai/generate-scene-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sectionType,
+            productImageUrls: [uploadedUrls[srcIdx]],
+            productInfo: headline ? { headline } : undefined,
+            sceneHint: scene.prompt.trim() || headline,
+          }),
+        });
+        if (!res.ok) {
+          console.warn('[handleRegenerateScene] generate-scene-image 실패:', res.status);
+          return;
+        }
+        const data = await res.json() as { success: boolean; data?: { imageBase64: string; mimeType: string } };
+        if (!data.success || !data.data) {
+          console.warn('[handleRegenerateScene] generate-scene-image 응답 없음');
+          return;
+        }
+        imageBase64 = data.data.imageBase64;
+        mimeType = data.data.mimeType;
+      }
+
+      const uploadRes = await fetch('/api/image/upload-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64, mimeType, role: sectionType }),
+      });
+      if (!uploadRes.ok) {
+        console.warn('[handleRegenerateScene] upload 실패:', uploadRes.status);
+        return;
+      }
+      const uploadData = await uploadRes.json() as { success: boolean; url?: string };
+      if (!uploadData.success || !uploadData.url) {
+        console.warn('[handleRegenerateScene] upload 응답 없음');
+        return;
+      }
+
+      if (sceneGenIdRef.current !== genId) return;
+
+      const url = uploadData.url;
+      setStoryboard(prev =>
+        prev?.map(s => s.id === sceneId ? { ...s, resultUrl: url } : s) ?? null,
+      );
+      setSections(prev => {
+        const updated = prev.map(s => {
+          if (s.id !== section.id) return s;
+          return { ...s, attachedImages: [{ url, order: 0, processingMode: 'original' as const }] };
+        });
+        void refreshRenderedHtml(updated, theme);
+        return updated;
+      });
+    } catch (e) {
+      if (sceneGenIdRef.current === genId) {
+        console.warn('[handleRegenerateScene] 씬 생성 실패:', e);
+      }
+    } finally {
+      if (sceneGenIdRef.current === genId) setIsGeneratingScenes(false);
+    }
+  }
+
   // ─── AI 생성 ────────────────────────────────────────────────────────────────
   async function handleGenerate() {
     if (!productName.trim()) { setError('상품명을 입력하세요.'); return; }
@@ -713,6 +855,10 @@ export default function DetailMakerClient() {
         onRemoveThumbnailRef={handleRemoveThumbnailRefImage}
         referenceText={referenceText}
         setReferenceText={setReferenceText}
+        onReplaceImage={handleReplaceImage}
+        onAddImage={handleAddImage}
+        onReplaceExtraRef={handleReplaceThumbnailRef}
+        onAddExtraRef={handleAddThumbnailRef}
       />
 
       {/* 우측 — DetailPageEditor 또는 EmptyState */}
@@ -782,6 +928,7 @@ export default function DetailMakerClient() {
               isGeneratingScenes={isGeneratingScenes}
               onScenesChange={setStoryboard}
               onGenerate={handleGenerateScenesFromStoryboard}
+              onRegenerateScene={handleRegenerateScene}
             />
           </>
         ) : (
