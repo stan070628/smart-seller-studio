@@ -64,9 +64,12 @@ export default function DetailMakerClient() {
 
   // sections와 storyboard가 모두 준비되면 sectionId 매핑 수행
   // (HTML이 먼저 오거나 storyboard가 먼저 오는 레이스 컨디션 대응)
+  // 주의: every(null 아님) 가드는 scene > section 수일 때 영원히 false → 무한 루프.
+  // 대신 "이미 매핑이 시작됐으면" 가드(hasAnyMapped)로 교체.
   useEffect(() => {
     if (sections.length === 0 || !storyboard || storyboard.length === 0) return;
-    if (storyboard.every(s => s.sectionId !== null)) return;
+    const hasAnyMapped = storyboard.some(s => s.sectionId !== null);
+    if (hasAnyMapped) return;
     setStoryboard(prev => {
       if (!prev) return prev;
       return buildStoryboardWithSectionIds(prev, sections);
@@ -303,11 +306,65 @@ export default function DetailMakerClient() {
             combinedHint = [headline?.trim(), sceneHint?.trim()].filter(Boolean).join(' — ') || undefined;
           }
 
-          // cleanup 모드: 배경 제거 API 사용, 일반 씬 생성 API 우회
+          // ─── 분기: Hero 2-pass / cleanup / AI ───────────────────────────
           let imageBase64: string;
           let mimeType: string;
 
-          if (storyboardScene?.mode === 'cleanup') {
+          if (section.type === 'hero' && storyboardScene?.mode !== 'cleanup') {
+            // Hero: Step 1 cleanup → Step 2 Gemini 배경 합성
+            const heroSrcIdx = Math.min(
+              storyboardScene?.sourceImageIndex ?? 0,
+              refUrls.length - 1,
+            );
+            const heroSourceUrl = refUrls[heroSrcIdx] ?? refUrls[0];
+
+            // Step 1: 배경 제거
+            const cleanupRes = await fetch('/api/ai/cleanup-product-image', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ imageUrl: heroSourceUrl }),
+            });
+            if (!cleanupRes.ok) return null;
+            const cleanupData = await cleanupRes.json() as {
+              imageBase64?: string;
+              mimeType?: string;
+              error?: string;
+            };
+            if (cleanupData.error || !cleanupData.imageBase64 || !cleanupData.mimeType) return null;
+
+            // Step 2: Gemini 배경 합성 (cleanup 결과를 레퍼런스로)
+            const heroSceneRes = await fetch('/api/ai/generate-scene-image', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                sectionType: 'hero' as const,
+                productImageBase64: cleanupData.imageBase64,
+                productImageMimeType: cleanupData.mimeType,
+                ...(storyboardScene
+                  ? { scenePrompt: storyboardScene.prompt }
+                  : { sceneHint: combinedHint }),
+              }),
+            });
+
+            if (!heroSceneRes.ok) {
+              // Step 2 실패 → cleanup 결과로 fallback
+              imageBase64 = cleanupData.imageBase64;
+              mimeType = cleanupData.mimeType;
+            } else {
+              const heroSceneData = await heroSceneRes.json() as {
+                success: boolean;
+                data?: { imageBase64: string; mimeType: string };
+              };
+              if (!heroSceneData.success || !heroSceneData.data) {
+                imageBase64 = cleanupData.imageBase64;
+                mimeType = cleanupData.mimeType;
+              } else {
+                imageBase64 = heroSceneData.data.imageBase64;
+                mimeType = heroSceneData.data.mimeType;
+              }
+            }
+          } else if (storyboardScene?.mode === 'cleanup') {
+            // 기존 cleanup 단일 패스 (hero가 아닌 섹션의 cleanup 모드)
             const srcIdx = Math.min(storyboardScene.sourceImageIndex, refUrls.length - 1);
             const sourceUrl = refUrls[srcIdx] ?? refUrls[0];
             const cleanupRes = await fetch('/api/ai/cleanup-product-image', {
@@ -325,15 +382,25 @@ export default function DetailMakerClient() {
             imageBase64 = cleanupData.imageBase64;
             mimeType = cleanupData.mimeType;
           } else {
+            // 기존 AI 단일 패스 (point 섹션 AI 모드)
+            const sceneBody = storyboardScene
+              ? {
+                  sectionType,
+                  productImageUrls: sectionRefUrls,
+                  productInfo: headline ? { headline } : undefined,
+                  scenePrompt: storyboardScene.prompt,
+                }
+              : {
+                  sectionType,
+                  productImageUrls: sectionRefUrls,
+                  productInfo: headline ? { headline } : undefined,
+                  sceneHint: combinedHint,
+                };
+
             const sceneRes = await fetch('/api/ai/generate-scene-image', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                sectionType,
-                productImageUrls: sectionRefUrls,
-                productInfo: headline ? { headline } : undefined,
-                sceneHint: combinedHint,
-              }),
+              body: JSON.stringify(sceneBody),
             });
             if (!sceneRes.ok) return null;
 
@@ -512,6 +579,7 @@ export default function DetailMakerClient() {
     setError(null);
     setIsGenerating(true);
     setIsGeneratingStoryboard(true);
+    setIsGeneratingScenes(false); // editing 상태에서 재생성 시 씬 로딩 플래그 초기화
     sceneGenIdRef.current += 1;
     const planGenId = sceneGenIdRef.current;
 
@@ -554,6 +622,8 @@ export default function DetailMakerClient() {
           id: crypto.randomUUID(),
           mode: 'ai' as const,
           sectionId: null,
+          // API는 suggestedImageIndex를 반환하지만 타입 필드명은 sourceImageIndex — 명시적 매핑 필수
+          sourceImageIndex: typeof s.suggestedImageIndex === 'number' ? s.suggestedImageIndex : 0,
         } as SceneStoryboardItem));
         setStoryboard(rawScenes);
         setDetailStep('planning');
