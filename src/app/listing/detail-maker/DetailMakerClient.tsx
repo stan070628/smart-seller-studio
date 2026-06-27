@@ -288,7 +288,7 @@ export default function DetailMakerClient() {
           let sectionRefUrls: string[];
           let combinedHint: string | undefined;
 
-          const storyboardScene = storyboardItems?.[idx];
+          const storyboardScene = storyboardItems?.find(s => s.sectionId === section.id);
           if (storyboardScene) {
             const srcIdx = Math.min(storyboardScene.sourceImageIndex, refUrls.length - 1);
             sectionRefUrls = [refUrls[srcIdx]];
@@ -617,9 +617,9 @@ export default function DetailMakerClient() {
     if (!scene || uploadedUrls.length === 0) return;
 
     const effectiveMode = forceMode ?? scene.mode;
-    const targets = sections.filter(s => s.type === 'hero' || s.type === 'point');
-    const sceneIdx = storyboard.findIndex(s => s.id === sceneId);
-    const section = targets[sceneIdx];
+    const section = scene?.sectionId
+      ? sections.find(s => s.id === scene.sectionId)
+      : undefined;
     if (!section) return;
 
     // 모드 변경 + resultUrl 클리어
