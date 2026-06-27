@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
     try {
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash-preview-05-20',
-        config: { responseModalities: ['Image', 'Text'] },
+        config: { responseModalities: ['Image', 'Text'], abortSignal: controller.signal },
         contents: [{
           role: 'user',
           parts: [
