@@ -559,7 +559,7 @@ function renderLayoutBlock(
           : block.color === 'neutral'
           ? '#e2e8f0'
           : colors.accent;
-      const fg = block.color === 'neutral' ? '#334155' : '#fff';
+      const fg = block.color === 'neutral' ? '#334155' : colors.accentTextColor;
       return `<div style="display:inline-block;background:${bg};color:${fg};font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px;margin-bottom:10px;">${escapeHtml(block.text)}</div>`;
     }
     case 'heading': {
