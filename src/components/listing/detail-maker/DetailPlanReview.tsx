@@ -300,6 +300,7 @@ interface ImageSectionCardProps {
   uploadedUrls: string[];
   onPromptChange: (sceneId: string, prompt: string) => void;
   onHeadlineChange: (sectionId: string, headline: string) => void;
+  onUpdateScene: (updated: SceneStoryboardItem) => void;
 }
 
 function ImageSectionCard({
@@ -308,15 +309,11 @@ function ImageSectionCard({
   uploadedUrls,
   onPromptChange,
   onHeadlineChange,
+  onUpdateScene,
 }: ImageSectionCardProps) {
   const content = section.content;
   // hero / point 공통: headline 필드
-  const headline =
-    content.type === 'hero'
-      ? content.headline
-      : content.type === 'point'
-        ? content.headline
-        : '';
+  const headline = (content.type === 'hero' || content.type === 'point') ? content.headline : '';
 
   const sourceUrl =
     scene !== undefined ? uploadedUrls[scene.sourceImageIndex] ?? null : null;
@@ -342,6 +339,32 @@ function ImageSectionCard({
         }}
       />
 
+      {/* 소스 이미지 선택 버튼 목록 */}
+      {scene && uploadedUrls.length > 0 && (
+        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+          {uploadedUrls.map((url, i) => (
+            <button
+              key={url}
+              onClick={() => onUpdateScene({ ...scene, sourceImageIndex: i })}
+              aria-label={`이미지 ${i + 1} 선택`}
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '4px',
+                border: scene.sourceImageIndex === i ? `2px solid ${BRAND_PURPLE}` : '2px solid transparent',
+                padding: 0,
+                cursor: 'pointer',
+                overflow: 'hidden',
+                background: '#374151',
+              }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* 소스 이미지 미리보기 */}
       {sourceUrl && (
         // eslint-disable-next-line @next/next/no-img-element
@@ -358,8 +381,28 @@ function ImageSectionCard({
         />
       )}
 
-      {/* 씬 프롬프트 편집 */}
+      {/* 모드 토글 (ai ↔ cleanup) */}
       {scene && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <button
+            onClick={() => onUpdateScene({ ...scene, mode: scene.mode === 'ai' ? 'cleanup' : 'ai' })}
+            style={{
+              background: scene.mode === 'ai' ? BRAND_PURPLE : '#059669',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '10px',
+              padding: '3px 10px',
+              fontSize: '11px',
+              cursor: 'pointer',
+            }}
+          >
+            {scene.mode === 'ai' ? '⚡ AI' : '✨ 클린업'}
+          </button>
+        </div>
+      )}
+
+      {/* 씬 프롬프트 편집 — ai 모드일 때만 표시 */}
+      {scene && scene.mode === 'ai' && (
         <textarea
           value={scene.prompt}
           onChange={(e) => onPromptChange(scene.id, e.target.value)}
@@ -386,7 +429,15 @@ function ImageSectionCard({
 // ── 텍스트 섹션 카드 ────────────────────────────────────────────────────────
 
 function TextSectionCard({ section }: { section: DetailSection }) {
-  return renderTextPreview(section.content);
+  return (
+    <>
+      {renderTextPreview(section.content)}
+      {/* 텍스트 전용 섹션 안내 */}
+      <div style={{ marginTop: '6px', fontSize: '10px', color: '#6b7280' }}>
+        상세 편집은 다음 단계(상세페이지 에디터)에서 가능합니다
+      </div>
+    </>
+  );
 }
 
 // ── 정렬 가능한 섹션 카드 래퍼 ─────────────────────────────────────────────
@@ -397,6 +448,7 @@ interface SortableCardProps {
   uploadedUrls: string[];
   onPromptChange: (sceneId: string, prompt: string) => void;
   onHeadlineChange: (sectionId: string, headline: string) => void;
+  onUpdateScene: (updated: SceneStoryboardItem) => void;
 }
 
 function SortableCard({
@@ -405,6 +457,7 @@ function SortableCard({
   uploadedUrls,
   onPromptChange,
   onHeadlineChange,
+  onUpdateScene,
 }: SortableCardProps) {
   const {
     attributes,
@@ -476,6 +529,7 @@ function SortableCard({
           uploadedUrls={uploadedUrls}
           onPromptChange={onPromptChange}
           onHeadlineChange={onHeadlineChange}
+          onUpdateScene={onUpdateScene}
         />
       ) : (
         <TextSectionCard section={section} />
@@ -526,17 +580,40 @@ export default function DetailPlanReview({
     [sections, onSectionsChange],
   );
 
-  // DnD 드래그 완료 — 섹션 순서 변경
+  // 씬 전체 업데이트 핸들러 (sourceImageIndex, mode 변경 등)
+  const handleUpdateScene = useCallback(
+    (updated: SceneStoryboardItem) => {
+      onScenesChange(
+        storyboard.map((s) => (s.id === updated.id ? updated : s)),
+      );
+    },
+    [storyboard, onScenesChange],
+  );
+
+  // DnD 드래그 완료 — 섹션 순서 변경 + storyboard sectionId 기준 재정렬
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event;
       if (!over || active.id === over.id) return;
-      const oldIndex = sections.findIndex((s) => s.id === active.id);
-      const newIndex = sections.findIndex((s) => s.id === over.id);
-      if (oldIndex === -1 || newIndex === -1) return;
-      onSectionsChange(arrayMove(sections, oldIndex, newIndex));
+
+      const oldIdx = sections.findIndex((s) => s.id === active.id);
+      const newIdx = sections.findIndex((s) => s.id === over.id);
+      if (oldIdx === -1 || newIdx === -1) return;
+
+      const reorderedSections = arrayMove(sections, oldIdx, newIdx);
+      onSectionsChange(reorderedSections);
+
+      // storyboard도 sectionId 기준으로 이미지 섹션 순서에 맞게 재정렬
+      const imageSections = reorderedSections.filter((s) =>
+        IMAGE_SECTION_TYPES.has(s.content.type),
+      );
+      const reorderedStoryboard = imageSections
+        .map((s) => storyboard.find((sc) => sc.sectionId === s.id))
+        .filter((sc): sc is SceneStoryboardItem => sc != null);
+      const unmapped = storyboard.filter((sc) => sc.sectionId === null);
+      onScenesChange([...reorderedStoryboard, ...unmapped]);
     },
-    [sections, onSectionsChange],
+    [sections, storyboard, onSectionsChange, onScenesChange],
   );
 
   // ── 로딩 상태 ────────────────────────────────────────────────────────────
@@ -637,6 +714,7 @@ export default function DetailPlanReview({
                   uploadedUrls={uploadedUrls}
                   onPromptChange={handlePromptChange}
                   onHeadlineChange={handleHeadlineChange}
+                  onUpdateScene={handleUpdateScene}
                 />
               );
             })}
@@ -656,6 +734,7 @@ export default function DetailPlanReview({
           type="button"
           onClick={onGenerate}
           disabled={isGeneratingScenes || storyboardEmpty}
+          aria-label={isGeneratingScenes ? 'Gemini로 이미지 생성 중...' : '② Gemini로 이미지 생성 →'}
           style={{
             width: '100%',
             padding: '10px',
@@ -673,7 +752,7 @@ export default function DetailPlanReview({
             transition: 'background 0.15s',
           }}
         >
-          {isGeneratingScenes ? '생성 중...' : 'Gemini로 이미지 생성'}
+          {isGeneratingScenes ? '생성 중...' : '② Gemini로 이미지 생성 →'}
         </button>
       </div>
     </div>

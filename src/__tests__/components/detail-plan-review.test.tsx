@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import DetailPlanReview from '@/components/listing/detail-maker/DetailPlanReview';
 import type { DetailSection, SceneStoryboardItem } from '@/types/detail-page';
@@ -39,6 +39,8 @@ const baseProps = {
 };
 
 describe('DetailPlanReview', () => {
+  beforeEach(() => vi.clearAllMocks());
+
   it('위저드 헤더에 두 스텝이 표시된다', () => {
     render(<DetailPlanReview {...baseProps} />);
     expect(screen.getByText('기획 확인')).toBeInTheDocument();
@@ -74,5 +76,10 @@ describe('DetailPlanReview', () => {
   it('storyboard가 빈 배열이면 이미지 기획 실패 안내가 표시된다', () => {
     render(<DetailPlanReview {...baseProps} storyboard={[]} />);
     expect(screen.getByText(/이미지 기획 생성 실패/)).toBeInTheDocument();
+  });
+
+  it('isGeneratingScenes=true면 생성 버튼이 비활성화된다', () => {
+    render(<DetailPlanReview {...baseProps} isGeneratingScenes={true} />);
+    expect(screen.getByRole('button', { name: /Gemini로 이미지 생성/ })).toBeDisabled();
   });
 });
