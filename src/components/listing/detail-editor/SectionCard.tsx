@@ -17,6 +17,7 @@ import {
   isBrandHeaderContent,
   isPointContent,
   isImageGridContent,
+  isClaudeLayoutContent,
 } from '@/types/detail-page';
 import SectionInstructionPanel from './SectionInstructionPanel';
 import SectionImageAttachment from './SectionImageAttachment';
@@ -101,6 +102,9 @@ function getSectionSummary(content: SectionContent): string {
   }
   if (isImageGridContent(content)) {
     return `${content.items.length}개 이미지`;
+  }
+  if (isClaudeLayoutContent(content)) {
+    return content.title || `${content.blocks.length}개 블록`;
   }
   return '';
 }
