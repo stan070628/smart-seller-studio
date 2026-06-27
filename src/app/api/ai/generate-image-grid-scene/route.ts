@@ -114,6 +114,11 @@ Return JSON: { "points": ["point1", "point2", ...] }
     });
   } catch (error) {
     console.error('[/api/ai/generate-image-grid-scene] 오류:', error);
+
+    if (error instanceof Error && (error.message.includes('overloaded') || error.message.includes('quota') || error.message.includes('RESOURCE_EXHAUSTED'))) {
+      return NextResponse.json({ success: false, error: 'AI 서비스가 일시적으로 과부하 상태입니다.' }, { status: 503 });
+    }
+
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : '이미지 생성에 실패했습니다.' },
       { status: 500 },
