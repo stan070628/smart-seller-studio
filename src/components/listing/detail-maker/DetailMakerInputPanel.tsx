@@ -90,6 +90,31 @@ export default function DetailMakerInputPanel({
   const [activeTab, setActiveTab] = useState<Tab>('detail');
   const [showReferenceText, setShowReferenceText] = useState(false);
   const [cleanupTargetIdx, setCleanupTargetIdx] = useState<number | null>(null);
+  const [isMerging, setIsMerging] = useState(false);
+  const [mergeError, setMergeError] = useState<string | null>(null);
+
+  async function handleMergeVertical() {
+    if (uploadedUrls.length < 2 || isMerging) return;
+    setIsMerging(true);
+    setMergeError(null);
+    try {
+      const res = await fetch('/api/image/merge-vertical', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrls: uploadedUrls }),
+      });
+      const json = await res.json() as { url?: string; error?: string };
+      if (!res.ok || !json.url) {
+        setMergeError(json.error ?? '합치기 실패');
+        return;
+      }
+      onAddImage(json.url);
+    } catch {
+      setMergeError('이미지 합치기 중 오류가 발생했습니다.');
+    } finally {
+      setIsMerging(false);
+    }
+  }
 
   const canGenerate = !isGenerating && productName.trim().length > 0 && uploadedUrls.length > 0;
 
@@ -282,80 +307,111 @@ export default function DetailMakerInputPanel({
               />
 
               {uploadedUrls.length > 0 && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
-                  {uploadedUrls.map((url, idx) => (
-                    <div key={url} style={{ position: 'relative' }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={url}
-                        alt={`참고 이미지 ${idx + 1}`}
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+                    {uploadedUrls.map((url, idx) => (
+                      <div key={url} style={{ position: 'relative' }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={url}
+                          alt={`참고 이미지 ${idx + 1}`}
+                          style={{
+                            width: '100%',
+                            aspectRatio: '1',
+                            objectFit: 'cover',
+                            borderRadius: '6px',
+                            border: `1px solid ${C.border}`,
+                          }}
+                        />
+                        <button
+                          onClick={() => onRemoveImage(idx)}
+                          style={{
+                            position: 'absolute',
+                            top: '2px',
+                            right: '2px',
+                            width: '18px',
+                            height: '18px',
+                            borderRadius: '50%',
+                            background: 'rgba(0,0,0,0.6)',
+                            color: '#fff',
+                            border: 'none',
+                            cursor: 'pointer',
+                            fontSize: '10px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            lineHeight: 1,
+                          }}
+                        >
+                          ×
+                        </button>
+                        <button
+                          onClick={() => setCleanupTargetIdx(idx)}
+                          aria-label="한자 제거"
+                          style={{
+                            position: 'absolute',
+                            bottom: '2px',
+                            left: '2px',
+                            background: 'rgba(0,0,0,0.6)',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: '4px',
+                            fontSize: '10px',
+                            padding: '2px 4px',
+                            cursor: 'pointer',
+                            lineHeight: 1,
+                          }}
+                        >
+                          한자
+                        </button>
+                        {cleanupTargetIdx === idx && (
+                          <ImageCleanupModal
+                            imageUrl={url}
+                            onReplace={newUrl => {
+                              onReplaceImage(idx, newUrl);
+                              setCleanupTargetIdx(null);
+                            }}
+                            onAdd={newUrl => {
+                              onAddImage(newUrl);
+                              setCleanupTargetIdx(null);
+                            }}
+                            onClose={() => setCleanupTargetIdx(null)}
+                            canAdd={uploadedUrls.length < 10}
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* 세로 합치기 — 2장 이상일 때 노출 */}
+                  {uploadedUrls.length >= 2 && uploadedUrls.length < 10 && (
+                    <div style={{ marginTop: '8px' }}>
+                      <button
+                        onClick={handleMergeVertical}
+                        disabled={isMerging}
                         style={{
                           width: '100%',
-                          aspectRatio: '1',
-                          objectFit: 'cover',
+                          padding: '7px 0',
+                          background: isMerging ? '#f3f4f6' : '#eff6ff',
+                          color: isMerging ? '#9ca3af' : '#2563eb',
+                          border: `1px solid ${isMerging ? '#e5e7eb' : '#bfdbfe'}`,
                           borderRadius: '6px',
-                          border: `1px solid ${C.border}`,
-                        }}
-                      />
-                      <button
-                        onClick={() => onRemoveImage(idx)}
-                        style={{
-                          position: 'absolute',
-                          top: '2px',
-                          right: '2px',
-                          width: '18px',
-                          height: '18px',
-                          borderRadius: '50%',
-                          background: 'rgba(0,0,0,0.6)',
-                          color: '#fff',
-                          border: 'none',
-                          cursor: 'pointer',
-                          fontSize: '10px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          lineHeight: 1,
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          cursor: isMerging ? 'not-allowed' : 'pointer',
+                          fontFamily: 'system-ui, -apple-system, sans-serif',
                         }}
                       >
-                        ×
+                        {isMerging ? '합치는 중…' : `↕ 세로 합치기 (${uploadedUrls.length}장)`}
                       </button>
-                      <button
-                        onClick={() => setCleanupTargetIdx(idx)}
-                        aria-label="한자 제거"
-                        style={{
-                          position: 'absolute',
-                          bottom: '2px',
-                          left: '2px',
-                          background: 'rgba(0,0,0,0.6)',
-                          color: '#fff',
-                          border: 'none',
-                          borderRadius: '4px',
-                          fontSize: '10px',
-                          padding: '2px 4px',
-                          cursor: 'pointer',
-                          lineHeight: 1,
-                        }}
-                      >
-                        한자
-                      </button>
-                      {cleanupTargetIdx === idx && (
-                        <ImageCleanupModal
-                          imageUrl={url}
-                          onReplace={newUrl => {
-                            onReplaceImage(idx, newUrl);
-                            setCleanupTargetIdx(null);
-                          }}
-                          onAdd={newUrl => {
-                            onAddImage(newUrl);
-                            setCleanupTargetIdx(null);
-                          }}
-                          onClose={() => setCleanupTargetIdx(null)}
-                          canAdd={uploadedUrls.length < 10}
-                        />
+                      {mergeError && (
+                        <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#e53e3e', fontFamily: 'system-ui, sans-serif' }}>
+                          {mergeError}
+                        </p>
                       )}
                     </div>
-                  ))}
-                </div>
+                  )}
+                </>
               )}
             </div>
 
