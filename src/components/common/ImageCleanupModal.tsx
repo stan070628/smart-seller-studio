@@ -98,7 +98,7 @@ export default function ImageCleanupModal({
     const res = await fetch('/api/image/upload-ai', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ imageBase64: resultBase64, mimeType: resultMime, role: 'cleanup' }),
+      body: JSON.stringify({ imageBase64: resultBase64, mimeType: resultMime }),
     });
     const data = await res.json() as { success: boolean; url?: string };
     if (!data.success || !data.url) throw new Error('업로드 실패');

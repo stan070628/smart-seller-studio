@@ -22,9 +22,9 @@ const MAX_DIM = 2000;
 
 // Gemini 프롬프트: 중앙 영역 한자/워터마크 제거, 테두리 보존
 const CLEANUP_PROMPT =
-  'Remove all Chinese text, watermarks, and price tags in the CENTRAL area of this image crop. ' +
-  'DO NOT modify the outer border region — keep its colors and textures identical to the input. ' +
-  'Fill removed areas by blending with the surrounding background.';
+  'Remove ALL text, Chinese characters, watermarks, price tags, and dimension labels from this image. ' +
+  'Fill all removed areas seamlessly by blending with the surrounding background colors and textures. ' +
+  'Preserve the overall structure and colors of non-text areas.';
 
 export async function POST(req: NextRequest) {
   // 인증 검증
@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
     const px = { x: x * W, y: y * H, w: width * W, h: height * H };
 
     // 패딩: region 크기의 35% 또는 최소 40px
-    const pad = Math.max(40, Math.round(Math.min(px.w, px.h) * 0.35));
+    const pad = Math.max(80, Math.round(Math.min(px.w, px.h) * 0.5));
 
     // 크롭 영역 계산 (이미지 경계 clamp)
     const cx = Math.max(0, Math.floor(px.x - pad));
@@ -179,11 +179,12 @@ export async function POST(req: NextRequest) {
       .png()
       .toBuffer();
 
-    // 페더링 마스크: 내부 영역(패드 절반 여백)을 흰색으로, 테두리는 블러 페이드
-    const innerX = Math.round(pad / 2);
-    const innerY = Math.round(pad / 2);
-    const innerW = Math.max(1, cw - pad);
-    const innerH = Math.max(1, ch - pad);
+    // 페더링 마스크: 내부 영역(패드 1/4 여백)을 흰색으로, 테두리는 블러 페이드
+    // 내부 사각형을 크게 유지해 Gemini 처리 영역 대부분이 합성에 반영되도록 함
+    const innerX = Math.round(pad * 0.25);
+    const innerY = Math.round(pad * 0.25);
+    const innerW = Math.max(1, cw - Math.round(pad * 0.5));
+    const innerH = Math.max(1, ch - Math.round(pad * 0.5));
 
     const maskSvg = Buffer.from(
       `<svg width="${cw}" height="${ch}">` +
@@ -196,7 +197,7 @@ export async function POST(req: NextRequest) {
       create: { width: cw, height: ch, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
     })
       .composite([{ input: maskSvg, blend: 'over' }])
-      .blur(12)
+      .blur(20)
       .png()
       .toBuffer();
 
