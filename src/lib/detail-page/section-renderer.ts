@@ -613,6 +613,87 @@ function buildBarChartSvg(
   </svg>`;
 }
 
+// radar_chart 전용 극좌표계 SVG 생성 헬퍼 (쿠팡 SVG 미지원 대응 → base64 img embed)
+function buildRadarChartSvg(
+  block: Extract<LayoutBlock, { type: 'radar_chart' }>
+): string {
+  const axes = block.axes;
+  if (axes.length === 0) return '';
+
+  const W = 400;
+  const H = 380;
+  const CX = W / 2;
+  const CY = H / 2 - 10;  // 레이블 공간 확보를 위해 살짝 위로
+  const R = 130;           // 최대 반지름
+  const N = axes.length;
+  const color = block.color ?? '#6366f1';
+
+  // 각 축의 각도 (맨 위에서 시작, 시계방향)
+  const angleOf = (i: number) => -Math.PI / 2 + (2 * Math.PI * i) / N;
+
+  // 값 → 반지름 변환 (max 기본값 100)
+  const toRadius = (value: number, max: number) =>
+    R * Math.min(1, Math.max(0, value / (max || 100)));
+
+  // 배경 거미줄 (5단계)
+  const RINGS = 5;
+  const rings = Array.from({ length: RINGS }, (_, k) => {
+    const r = (R * (k + 1)) / RINGS;
+    const pts = Array.from({ length: N }, (__, i) => {
+      const a = angleOf(i);
+      return `${(CX + r * Math.cos(a)).toFixed(1)},${(CY + r * Math.sin(a)).toFixed(1)}`;
+    }).join(' ');
+    return `<polygon points="${pts}" fill="none" stroke="#e5e7eb" stroke-width="${k === RINGS - 1 ? 1.5 : 0.8}"/>`;
+  });
+
+  // 축 선
+  const axisLines = axes.map((_, i) => {
+    const a = angleOf(i);
+    const x2 = (CX + R * Math.cos(a)).toFixed(1);
+    const y2 = (CY + R * Math.sin(a)).toFixed(1);
+    return `<line x1="${CX}" y1="${CY}" x2="${x2}" y2="${y2}" stroke="#d1d5db" stroke-width="1"/>`;
+  });
+
+  // 데이터 폴리곤
+  const dataPoints = axes.map((axis, i) => {
+    const a = angleOf(i);
+    const r = toRadius(axis.value, axis.max ?? 100);
+    return `${(CX + r * Math.cos(a)).toFixed(1)},${(CY + r * Math.sin(a)).toFixed(1)}`;
+  });
+  const polygon = `<polygon points="${dataPoints.join(' ')}" fill="${escapeHtml(color)}33" stroke="${escapeHtml(color)}" stroke-width="2"/>`;
+
+  // 데이터 점
+  const dots = axes.map((axis, i) => {
+    const a = angleOf(i);
+    const r = toRadius(axis.value, axis.max ?? 100);
+    const cx = (CX + r * Math.cos(a)).toFixed(1);
+    const cy = (CY + r * Math.sin(a)).toFixed(1);
+    return `<circle cx="${cx}" cy="${cy}" r="4" fill="${escapeHtml(color)}" stroke="white" stroke-width="1.5"/>`;
+  });
+
+  // 축 레이블
+  const LABEL_OFFSET = 18;
+  const labels = axes.map((axis, i) => {
+    const a = angleOf(i);
+    const lx = CX + (R + LABEL_OFFSET) * Math.cos(a);
+    const ly = CY + (R + LABEL_OFFSET) * Math.sin(a);
+    const anchor = Math.cos(a) > 0.1 ? 'start' : Math.cos(a) < -0.1 ? 'end' : 'middle';
+    // 값 표시
+    const valPct = Math.round((axis.value / (axis.max ?? 100)) * 100);
+    return `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" font-size="11" fill="#374151" text-anchor="${anchor}" dominant-baseline="middle">${escapeHtml(axis.label)}</text>
+      <text x="${lx.toFixed(1)}" y="${(ly + 14).toFixed(1)}" font-size="10" fill="${escapeHtml(color)}" text-anchor="${anchor}" font-weight="700">${valPct}%</text>`;
+  });
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+    <rect width="${W}" height="${H}" fill="white"/>
+    ${rings.join('')}
+    ${axisLines.join('')}
+    ${polygon}
+    ${dots.join('')}
+    ${labels.join('')}
+  </svg>`;
+}
+
 function renderLayoutBlock(
   block: LayoutBlock,
   images: AttachedImage[],
@@ -753,7 +834,12 @@ function renderLayoutBlock(
         : '';
       return `<div style="margin-bottom:16px;">${titleHtml}<img src="data:image/svg+xml;base64,${b64}" alt="${escapeHtml(block.title ?? '차트')}" style="width:100%;max-width:100%;display:block;" /></div>`;
     }
-    case 'radar_chart':
+    case 'radar_chart': {
+      if (block.axes.length === 0) return '';
+      const svg = buildRadarChartSvg(block);
+      const b64 = Buffer.from(svg).toString('base64');
+      return `<div style="margin-bottom:16px;text-align:center;"><img src="data:image/svg+xml;base64,${b64}" alt="레이더 차트" style="width:100%;max-width:400px;display:inline-block;" /></div>`;
+    }
     case 'timeline':
       return '';
     default:

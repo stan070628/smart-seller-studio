@@ -89,3 +89,53 @@ describe('renderLayoutBlock — 신규 4개 블록', () => {
     expect(html).toContain('&lt;script&gt;');
   });
 });
+
+describe('renderLayoutBlock — Phase 2 블록', () => {
+  it('radar_chart — SVG base64 img 반환, 모든 축 레이블 포함', () => {
+    const html = renderSection(makeSection([{
+      type: 'radar_chart',
+      axes: [
+        { label: 'NMN 함량', value: 90 },
+        { label: '흡수율', value: 75 },
+        { label: '안전성', value: 95 },
+        { label: '가성비', value: 70 },
+        { label: '원료 품질', value: 85 },
+      ],
+      color: '#6366f1',
+    }]), THEME);
+    // HTML에 img 태그와 base64 data URI 포함 확인
+    expect(html).toContain('<img');
+    expect(html).toContain('data:image/svg+xml;base64,');
+    // SVG 내부 레이블 확인 (base64 디코딩)
+    const base64Match = html.match(/data:image\/svg\+xml;base64,([A-Za-z0-9+/=]+)/);
+    expect(base64Match).not.toBeNull();
+    const svgContent = Buffer.from(base64Match![1], 'base64').toString('utf-8');
+    expect(svgContent).toContain('NMN 함량');
+    expect(svgContent).toContain('흡수율');
+  });
+
+  it('radar_chart — XSS 방어: 축 레이블 escape (SVG base64 embed로 스크립트 미노출)', () => {
+    const html = renderSection(makeSection([{
+      type: 'radar_chart',
+      axes: [{ label: '<script>xss</script>', value: 50 }],
+    }]), THEME);
+    // base64 img embed이므로 <script> 태그가 최종 HTML에 직접 노출되지 않아야 함
+    expect(html).not.toContain('<script>');
+    // SVG 내부에서 escapeHtml이 적용됐는지 base64 디코딩으로 검증
+    const base64Match = html.match(/data:image\/svg\+xml;base64,([A-Za-z0-9+/=]+)/);
+    expect(base64Match).not.toBeNull();
+    const svgContent = Buffer.from(base64Match![1], 'base64').toString('utf-8');
+    expect(svgContent).toContain('&lt;script&gt;');
+    expect(svgContent).not.toContain('<script>xss</script>');
+  });
+
+  it('radar_chart — 빈 axes 배열도 크래시 없이 img 미포함 반환', () => {
+    const html = renderSection(makeSection([{
+      type: 'radar_chart',
+      axes: [],
+    }]), THEME);
+    // axes가 없으면 SVG/img를 렌더링하지 않음
+    expect(html).not.toContain('<img');
+    expect(html).not.toContain('data:image/svg+xml;base64,');
+  });
+});
