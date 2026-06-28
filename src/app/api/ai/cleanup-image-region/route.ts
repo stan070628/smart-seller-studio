@@ -135,9 +135,16 @@ export async function POST(req: NextRequest) {
 
     const cleanedCropBuffer = Buffer.from(imagePart.inlineData.data, 'base64');
 
+    // Gemini는 임의 해상도로 반환 → crop 원본 크기(mw×mh)로 정확히 맞춤
+    // Sharp composite 제약: input이 base보다 크거나 bounds 초과하면 오류
+    const resizedCleanedBuffer = await sharp(cleanedCropBuffer)
+      .resize(mw, mh, { fit: 'fill' })
+      .png()
+      .toBuffer();
+
     // 정제된 crop을 원본 이미지 위에 합성 (페더링 없음 → 왜곡 없음)
     const resultBuffer = await img.clone()
-      .composite([{ input: cleanedCropBuffer, left: mx, top: my }])
+      .composite([{ input: resizedCleanedBuffer, left: mx, top: my }])
       .jpeg({ quality: 92 })
       .toBuffer();
 
