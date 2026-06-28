@@ -546,6 +546,73 @@ function resolvePad(padding: ClaudeLayoutContent['padding']): string {
   }
 }
 
+// layout_bar_chart 전용 SVG 생성 헬퍼 (쿠팡 SVG 미지원 대응 → base64 img embed)
+function buildBarChartSvg(
+  block: Extract<LayoutBlock, { type: 'layout_bar_chart' }>
+): string {
+  const W = 700;
+  const LEGEND_H = block.showLegend !== false ? 28 : 0;
+  const PAD = { top: 24, right: 20, bottom: 44, left: 52 };
+  const chartH = 220;
+  const H = chartH + PAD.top + PAD.bottom + LEGEND_H;
+  const innerW = W - PAD.left - PAD.right;
+  const innerH = chartH;
+
+  const allValues = block.items.flatMap(i => i.values);
+  const maxVal = Math.max(...allValues, 1);
+  const groups = block.groups;
+  const colors = block.groupColors;
+  const groupCount = groups.length;
+  const itemCount = block.items.length;
+  const groupW = innerW / (itemCount || 1);
+  const barW = Math.min(24, (groupW - 8) / (groupCount || 1));
+
+  // Y축 눈금 5개
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map(t => {
+    const yVal = Math.round(maxVal * t);
+    const y = PAD.top + innerH - innerH * t;
+    return `<line x1="${PAD.left}" y1="${y.toFixed(1)}" x2="${PAD.left + innerW}" y2="${y.toFixed(1)}" stroke="#e5e7eb" stroke-width="1"/>
+      <text x="${PAD.left - 6}" y="${(y + 4).toFixed(1)}" font-size="10" fill="#9ca3af" text-anchor="end">${yVal}</text>`;
+  });
+
+  // 막대 + x 레이블
+  const bars = block.items.map((item, i) => {
+    const centerX = PAD.left + i * groupW + groupW / 2;
+    const groupBars = groups.map((_, gi) => {
+      const val = item.values[gi] ?? 0;
+      const barH = Math.max(2, (val / maxVal) * innerH);
+      const x = centerX - (groupCount * barW) / 2 + gi * barW;
+      const y = PAD.top + innerH - barH;
+      return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1, barW - 2).toFixed(1)}" height="${barH.toFixed(1)}" fill="${escapeHtml(colors[gi] ?? '#6b7280')}" rx="2"/>`;
+    });
+    const labelY = PAD.top + innerH + 14;
+    return [...groupBars, `<text x="${centerX.toFixed(1)}" y="${labelY}" font-size="10" fill="#6b7280" text-anchor="middle">${escapeHtml(item.label)}</text>`].join('');
+  });
+
+  // Y축 단위
+  const unitLabel = block.unit
+    ? `<text x="${PAD.left - 36}" y="${PAD.top - 8}" font-size="10" fill="#9ca3af">${escapeHtml(block.unit)}</text>`
+    : '';
+
+  // 범례
+  const legend = block.showLegend !== false
+    ? groups.map((g, gi) => {
+        const lx = PAD.left + gi * 90;
+        return `<rect x="${lx}" y="${H - LEGEND_H + 6}" width="10" height="10" fill="${escapeHtml(colors[gi] ?? '#6b7280')}" rx="2"/>
+      <text x="${lx + 14}" y="${H - LEGEND_H + 15}" font-size="11" fill="#6b7280">${escapeHtml(g)}</text>`;
+      }).join('')
+    : '';
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+    <rect width="${W}" height="${H}" fill="white"/>
+    ${ticks.join('')}
+    <line x1="${PAD.left}" y1="${PAD.top}" x2="${PAD.left}" y2="${PAD.top + innerH}" stroke="#d1d5db" stroke-width="1.5"/>
+    ${bars.join('')}
+    ${unitLabel}
+    ${legend}
+  </svg>`;
+}
+
 function renderLayoutBlock(
   block: LayoutBlock,
   images: AttachedImage[],
@@ -677,6 +744,14 @@ function renderLayoutBlock(
         </div>`
       ).join('');
       return `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:8px;margin-bottom:16px;">${items}</div>`;
+    }
+    case 'layout_bar_chart': {
+      const svg = buildBarChartSvg(block);
+      const b64 = Buffer.from(svg).toString('base64');
+      const titleHtml = block.title
+        ? `<div style="font-size:13px;font-weight:700;margin-bottom:10px;text-align:center;">${escapeHtml(block.title)}</div>`
+        : '';
+      return `<div style="margin-bottom:16px;">${titleHtml}<img src="data:image/svg+xml;base64,${b64}" alt="${escapeHtml(block.title ?? '차트')}" style="width:100%;max-width:100%;display:block;" /></div>`;
     }
     case 'radar_chart':
     case 'timeline':
