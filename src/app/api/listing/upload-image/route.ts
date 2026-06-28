@@ -16,6 +16,7 @@ import {
   uploadToStorage,
   getSupabaseServerClient,
 } from "@/lib/supabase/server"
+import { removeGeminiWatermark } from "@/lib/image/watermark-removal"
 
 // ─────────────────────────────────────────
 // 상수
@@ -279,6 +280,10 @@ export async function POST(
       const result = await processImage(Buffer.from(arrayBuffer))
       processedBuffer = result.buffer
       processedSize = result.fileSize
+
+      // Gemini 워터마크 제거 (감지된 경우에만 API 호출)
+      processedBuffer = await removeGeminiWatermark(processedBuffer)
+      processedSize = processedBuffer.length
     } catch (err) {
       console.error("[POST /api/listing/upload-image] Sharp 처리 오류:", err)
       return Response.json(

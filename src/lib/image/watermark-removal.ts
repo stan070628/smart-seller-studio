@@ -1,4 +1,6 @@
 import sharp from 'sharp';
+import type { Part } from '@google/genai';
+import { getGeminiGenAI } from '@/lib/ai/gemini';
 
 // Gemini G 로고 실측 기준: 너비 12%, 높이 8% (우측 하단 고정)
 const WATERMARK_WIDTH_RATIO = 0.12;
@@ -9,6 +11,11 @@ const MIN_HEIGHT_PX = 40;
 const BRIGHTNESS_DIFF_THRESHOLD = 30;
 // 코너 내부 분산이 위 영역 분산보다 이 값 이상 높으면 혼합 패턴(스파클) 감지
 const VARIANCE_DELTA_THRESHOLD = 200;
+
+const WATERMARK_PROMPT =
+  'Remove the watermark logo from the bottom-right corner of this image crop. ' +
+  'Fill the removed area seamlessly by blending with the surrounding background colors and textures. ' +
+  'Preserve all other areas exactly as they are.';
 
 /**
  * 픽셀 배열의 평균 밝기를 계산합니다.
@@ -72,75 +79,70 @@ export async function hasWatermarkCandidate(buffer: Buffer): Promise<boolean> {
 
 /**
  * 이미지 우측 하단의 Gemini 워터마크를 제거합니다.
- * STABILITY_API_KEY가 설정된 경우 항상 Stability AI를 호출합니다.
- * API 키 미설정 또는 호출 실패 시 원본 버퍼를 그대로 반환합니다.
+ * 워터마크가 감지된 경우에만 Gemini API를 호출합니다.
+ * 제거 실패 시 원본 버퍼를 그대로 반환합니다.
  */
 export async function removeGeminiWatermark(buffer: Buffer): Promise<Buffer> {
-  const apiKey = process.env.STABILITY_API_KEY;
-  if (!apiKey) return buffer;
+  const hasWatermark = await hasWatermarkCandidate(buffer);
+  if (!hasWatermark) return buffer;
 
   try {
-    return await inpaintWithStabilityAI(buffer, apiKey);
+    return await removeWithGemini(buffer);
   } catch (err) {
-    console.warn('[removeGeminiWatermark] Stability AI 실패, 원본 반환:', err);
+    console.warn('[removeGeminiWatermark] Gemini 실패, 원본 반환:', err);
     return buffer;
   }
 }
 
-/** Stability AI Stable Image Edit - Erase 엔드포인트로 워터마크 영역 제거 */
-async function inpaintWithStabilityAI(buffer: Buffer, apiKey: string): Promise<Buffer> {
-  const meta = await sharp(buffer).metadata();
-  const width = meta.width ?? 0;
-  const height = meta.height ?? 0;
-  if (!width || !height || height < MIN_HEIGHT_PX) return buffer;
+/** Gemini 2.5 Flash Image로 워터마크 영역 crop → 제거 → composite */
+async function removeWithGemini(buffer: Buffer): Promise<Buffer> {
+  const img = sharp(buffer).rotate();
+  const meta = await img.metadata();
+  const W = meta.width ?? 0;
+  const H = meta.height ?? 0;
+  if (!W || !H || H < MIN_HEIGHT_PX) return buffer;
 
-  const wmWidth = Math.floor(width * WATERMARK_WIDTH_RATIO);
-  const wmHeight = Math.floor(height * WATERMARK_HEIGHT_RATIO);
-  if (wmWidth < 1 || wmHeight < 1) return buffer;
+  const wmW = Math.floor(W * WATERMARK_WIDTH_RATIO);
+  const wmH = Math.floor(H * WATERMARK_HEIGHT_RATIO);
+  const pad = Math.max(40, Math.round(Math.min(wmW, wmH) * 0.5));
 
-  const wmLeft = width - wmWidth;
-  const wmTop = height - wmHeight;
+  // 패딩 포함 크롭 영역 (우측 하단 끝까지)
+  const mx = Math.max(0, W - wmW - pad);
+  const my = Math.max(0, H - wmH - pad);
+  const mw = W - mx;
+  const mh = H - my;
 
-  // 마스크: 전체 검정 배경 + 워터마크 영역 흰색 PNG (white = erase)
-  const whiteRectPng = await sharp({
-    create: { width: wmWidth, height: wmHeight, channels: 3, background: { r: 255, g: 255, b: 255 } },
-  }).png().toBuffer();
-
-  const maskBuffer = await sharp({
-    create: { width, height, channels: 3, background: { r: 0, g: 0, b: 0 } },
-  })
-    .composite([{ input: whiteRectPng, left: wmLeft, top: wmTop }])
+  const cropBuffer = await img.clone()
+    .extract({ left: mx, top: my, width: mw, height: mh })
     .png()
     .toBuffer();
 
-  const form = new FormData();
-  form.append('image', new Blob([new Uint8Array(buffer)], { type: 'image/jpeg' }), 'image.jpg');
-  form.append('mask', new Blob([new Uint8Array(maskBuffer)], { type: 'image/png' }), 'mask.png');
-  form.append('output_format', 'jpeg');
-
-  const signal =
-    typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
-      ? AbortSignal.timeout(30_000)
-      : undefined;
-
-  const res = await fetch('https://api.stability.ai/v2beta/stable-image/edit/erase', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      Accept: 'image/*',
-    },
-    body: form,
-    ...(signal ? { signal } : {}),
+  const ai = getGeminiGenAI();
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash-image',
+    config: { responseModalities: ['Text', 'Image'] },
+    contents: [{
+      role: 'user',
+      parts: [
+        { inlineData: { data: cropBuffer.toString('base64'), mimeType: 'image/png' } },
+        { text: WATERMARK_PROMPT },
+      ] as Part[],
+    }],
   });
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Stability AI erase 실패 (${res.status}): ${text.slice(0, 120)}`);
-  }
+  const parts: Part[] = response?.candidates?.[0]?.content?.parts ?? [];
+  const imagePart = parts.find((p) => p.inlineData != null);
+  if (!imagePart?.inlineData?.data) throw new Error('Gemini 응답에 이미지 데이터가 없습니다.');
 
-  const resultBuffer = Buffer.from(await res.arrayBuffer());
-  if (resultBuffer.length === 0) {
-    throw new Error('Stability AI erase 응답 바디가 비어 있습니다.');
-  }
-  return resultBuffer;
+  // Gemini는 임의 해상도로 반환 → crop 원본 크기(mw×mh)로 정확히 맞춤
+  const cleanedBuffer = Buffer.from(imagePart.inlineData.data, 'base64');
+  const resized = await sharp(cleanedBuffer)
+    .resize(mw, mh, { fit: 'fill' })
+    .png()
+    .toBuffer();
+
+  return img.clone()
+    .composite([{ input: resized, left: mx, top: my }])
+    .jpeg({ quality: 92 })
+    .toBuffer();
 }
