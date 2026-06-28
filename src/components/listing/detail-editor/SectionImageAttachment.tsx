@@ -32,7 +32,6 @@ interface SectionImageAttachmentProps {
 
 const DEFAULT_MAX_IMAGES = 2;
 const IMAGE_GRID_MAX_IMAGES = 6; // 렌더 API Zod .max(6)과 동기화
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
 const MODE_LABELS: Record<ImageProcessingMode, string> = {
   bg_composed: '배경 합성',
@@ -40,24 +39,6 @@ const MODE_LABELS: Record<ImageProcessingMode, string> = {
   original: '원본',
 };
 
-// ─────────────────────────────────────────
-// 헬퍼
-// ─────────────────────────────────────────
-
-/**
- * File 객체를 base64 문자열(data URL prefix 제거)로 변환합니다.
- */
-const toBase64 = (file: File): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      const base64 = result.includes(',') ? result.split(',')[1] : result;
-      resolve(base64);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
 
 // ─────────────────────────────────────────
 // 컴포넌트
@@ -123,34 +104,30 @@ export default function SectionImageAttachment({
           throw new Error(`지원하지 않는 이미지 형식입니다: ${file.type}`);
         }
 
-        // 파일 크기 검증 (클라이언트 단 사전 차단)
-        if (file.size > MAX_FILE_SIZE) {
-          throw new Error(`이미지 파일이 너무 큽니다 (최대 5MB 이하 권장). 현재 파일: ${(file.size / 1024 / 1024).toFixed(1)}MB`);
+        // Step 1: FormData로 /api/listing/upload-image 업로드 (서버에서 2000px 리사이즈 + JPEG 변환, 최대 10MB)
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('usageContext', 'listing_detail');
+        const uploadRes = await fetch('/api/listing/upload-image', { method: 'POST', body: fd });
+        if (!uploadRes.ok) {
+          if (uploadRes.status === 413) throw new Error('이미지 파일이 너무 큽니다 (최대 10MB).');
+          const err = await uploadRes.json().catch(() => ({ error: '업로드 실패' }));
+          throw new Error((err as { error?: string }).error ?? `업로드 실패 (${uploadRes.status})`);
         }
+        const { data: uploadData } = await uploadRes.json() as { data: { url: string } };
 
-        // base64 변환
-        const imageBase64 = await toBase64(file);
-
-        // API 호출 — storagePath는 서버에서 고정 경로 사용, 클라이언트에서 전달하지 않음
-        const res = await fetch('/api/detail-page/process-image', {
+        // Step 2: 업로드된 URL로 process-image 호출 (처리 모드 적용)
+        const processRes = await fetch('/api/detail-page/process-image', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            imageBase64,
-            processingMode,
-            palette,
-          }),
+          body: JSON.stringify({ imageUrl: uploadData.url, processingMode, palette }),
         });
-
-        if (!res.ok) {
-          if (res.status === 413) {
-            throw new Error('이미지 파일이 너무 큽니다 (최대 5MB 이하 권장).');
-          }
-          const errJson = await res.json().catch(() => ({ error: '알 수 없는 오류' }));
-          throw new Error((errJson as { error?: string }).error ?? `업로드 실패 (${res.status})`);
+        if (!processRes.ok) {
+          if (processRes.status === 413) throw new Error('이미지 파일이 너무 큽니다 (최대 10MB).');
+          const errJson = await processRes.json().catch(() => ({ error: '알 수 없는 오류' }));
+          throw new Error((errJson as { error?: string }).error ?? `처리 실패 (${processRes.status})`);
         }
-
-        const data = (await res.json()) as { url: string; processingMode: ImageProcessingMode };
+        const data = await processRes.json() as { url: string; processingMode: ImageProcessingMode };
 
         uploaded.push({
           url: data.url,
