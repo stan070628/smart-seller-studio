@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useRef, useState } from 'react';
+import Link from 'next/link';
 import { C } from '@/lib/design-tokens';
 import CreativeBriefPanel from './CreativeBriefPanel';
 import DetailMakerThumbnailPanel from './DetailMakerThumbnailPanel';
@@ -90,31 +91,7 @@ export default function DetailMakerInputPanel({
   const [activeTab, setActiveTab] = useState<Tab>('detail');
   const [showReferenceText, setShowReferenceText] = useState(false);
   const [cleanupTargetIdx, setCleanupTargetIdx] = useState<number | null>(null);
-  const [isMerging, setIsMerging] = useState(false);
-  const [mergeError, setMergeError] = useState<string | null>(null);
-
-  async function handleMergeVertical() {
-    if (uploadedUrls.length < 2 || isMerging) return;
-    setIsMerging(true);
-    setMergeError(null);
-    try {
-      const res = await fetch('/api/image/merge-vertical', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageUrls: uploadedUrls }),
-      });
-      const json = await res.json() as { url?: string; error?: string };
-      if (!res.ok || !json.url) {
-        setMergeError(json.error ?? '합치기 실패');
-        return;
-      }
-      onAddImage(json.url);
-    } catch {
-      setMergeError('이미지 합치기 중 오류가 발생했습니다.');
-    } finally {
-      setIsMerging(false);
-    }
-  }
+  const [watermarkTargetIdx, setWatermarkTargetIdx] = useState<number | null>(null);
 
   const canGenerate = !isGenerating && productName.trim().length > 0 && uploadedUrls.length > 0;
 
@@ -138,8 +115,28 @@ export default function DetailMakerInputPanel({
           borderBottom: `1px solid ${C.border}`,
         }}
       >
-        <div style={{ fontSize: '15px', fontWeight: 700, color: C.text }}>
-          상품상세 자동만들기
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ fontSize: '15px', fontWeight: 700, color: C.text }}>
+            상품상세 자동만들기
+          </div>
+          <Link
+            href="/listing/new/detail-maker-pro"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+              padding: '6px 12px',
+              background: '#6366f1',
+              borderRadius: '8px',
+              color: '#fff',
+              fontSize: '12px',
+              fontWeight: 700,
+              textDecoration: 'none',
+              flexShrink: 0,
+            }}
+          >
+            ⚡ PRO 모드
+          </Link>
         </div>
         <div style={{ fontSize: '12px', color: C.textSub, marginTop: '4px' }}>
           상품명 + 이미지로 1분 만에 상세페이지 생성
@@ -305,7 +302,6 @@ export default function DetailMakerInputPanel({
                   e.target.value = '';
                 }}
               />
-
               {uploadedUrls.length > 0 && (
                 <>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
@@ -364,6 +360,25 @@ export default function DetailMakerInputPanel({
                         >
                           한자
                         </button>
+                        <button
+                          onClick={() => setWatermarkTargetIdx(idx)}
+                          aria-label="워터마크 제거"
+                          style={{
+                            position: 'absolute',
+                            bottom: '2px',
+                            right: '2px',
+                            background: 'rgba(0,0,0,0.6)',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: '4px',
+                            fontSize: '10px',
+                            padding: '2px 4px',
+                            cursor: 'pointer',
+                            lineHeight: 1,
+                          }}
+                        >
+                          WM
+                        </button>
                         {cleanupTargetIdx === idx && (
                           <ImageCleanupModal
                             imageUrl={url}
@@ -379,38 +394,26 @@ export default function DetailMakerInputPanel({
                             canAdd={uploadedUrls.length < 10}
                           />
                         )}
+                        {watermarkTargetIdx === idx && (
+                          <ImageCleanupModal
+                            imageUrl={url}
+                            mode="watermark"
+                            onReplace={newUrl => {
+                              onReplaceImage(idx, newUrl);
+                              setWatermarkTargetIdx(null);
+                            }}
+                            onAdd={newUrl => {
+                              onAddImage(newUrl);
+                              setWatermarkTargetIdx(null);
+                            }}
+                            onClose={() => setWatermarkTargetIdx(null)}
+                            canAdd={uploadedUrls.length < 10}
+                          />
+                        )}
                       </div>
                     ))}
                   </div>
 
-                  {/* 세로 합치기 — 2장 이상일 때 노출 */}
-                  {uploadedUrls.length >= 2 && uploadedUrls.length < 10 && (
-                    <div style={{ marginTop: '8px' }}>
-                      <button
-                        onClick={handleMergeVertical}
-                        disabled={isMerging}
-                        style={{
-                          width: '100%',
-                          padding: '7px 0',
-                          background: isMerging ? '#f3f4f6' : '#eff6ff',
-                          color: isMerging ? '#9ca3af' : '#2563eb',
-                          border: `1px solid ${isMerging ? '#e5e7eb' : '#bfdbfe'}`,
-                          borderRadius: '6px',
-                          fontSize: '12px',
-                          fontWeight: 600,
-                          cursor: isMerging ? 'not-allowed' : 'pointer',
-                          fontFamily: 'system-ui, -apple-system, sans-serif',
-                        }}
-                      >
-                        {isMerging ? '합치는 중…' : `↕ 세로 합치기 (${uploadedUrls.length}장)`}
-                      </button>
-                      {mergeError && (
-                        <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#e53e3e', fontFamily: 'system-ui, sans-serif' }}>
-                          {mergeError}
-                        </p>
-                      )}
-                    </div>
-                  )}
                 </>
               )}
             </div>
