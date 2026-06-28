@@ -8,6 +8,7 @@ interface ImageCleanupModalProps {
   onAdd: (newUrl: string) => void;
   onClose: () => void;
   canAdd: boolean;
+  mode?: 'chinese' | 'watermark';
 }
 
 type Phase = 'select' | 'processing' | 'preview';
@@ -25,7 +26,20 @@ export default function ImageCleanupModal({
   onAdd,
   onClose,
   canAdd,
+  mode = 'chinese',
 }: ImageCleanupModalProps) {
+  const isWatermark = mode === 'watermark';
+  const modalTitle = isWatermark ? '워터마크 제거' : '한자 제거';
+  const hintText = isWatermark
+    ? '워터마크 영역을 드래그해서 선택하세요. AI가 자동으로 지워드립니다.'
+    : '한자 영역을 드래그해서 선택하세요. 주변 한자까지 자동으로 커버됩니다.';
+  const apiEndpoint = isWatermark
+    ? '/api/ai/remove-watermark-region'
+    : '/api/ai/cleanup-image-region';
+  const processingText = isWatermark ? '워터마크 제거 중…' : '한자 제거 중…';
+  const selectHintText = isWatermark
+    ? '워터마크 영역을 더 크게 선택해주세요.'
+    : '한자 영역을 더 크게 선택해주세요.';
   const [phase, setPhase] = useState<Phase>('select');
   const [selection, setSelection] = useState<Selection | null>(null);
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
@@ -74,7 +88,7 @@ export default function ImageCleanupModal({
     setPhase('processing');
     setError(null);
     try {
-      const res = await fetch('/api/ai/cleanup-image-region', {
+      const res = await fetch(apiEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageUrl, region: selection }),
@@ -167,7 +181,7 @@ export default function ImageCleanupModal({
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
-          <span style={{ color: '#fff', fontWeight: 600 }}>한자 제거</span>
+          <span style={{ color: '#fff', fontWeight: 600 }}>{modalTitle}</span>
           <button
             onClick={onClose}
             style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: '18px' }}
@@ -179,7 +193,7 @@ export default function ImageCleanupModal({
         {phase === 'select' && (
           <>
             <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '10px' }}>
-              한자 영역을 드래그해서 선택하세요. 주변 한자까지 자동으로 커버됩니다.
+              {hintText}
             </div>
             <div style={{ position: 'relative', userSelect: 'none' }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -218,7 +232,7 @@ export default function ImageCleanupModal({
             </div>
             {selection && !isSelectionValid && (
               <div style={{ color: '#f87171', fontSize: '11px', marginTop: '6px' }}>
-                한자 영역을 더 크게 선택해주세요.
+                {selectHintText}
               </div>
             )}
             {error && (
@@ -247,7 +261,7 @@ export default function ImageCleanupModal({
 
         {phase === 'processing' && (
           <div style={{ textAlign: 'center', padding: '40px 0', color: '#9ca3af' }}>
-            한자 제거 중…
+            {processingText}
           </div>
         )}
 
