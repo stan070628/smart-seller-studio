@@ -1,14 +1,17 @@
 /**
  * POST /api/ai/cleanup-image-region
  *
- * Replicate FLUX Fill Dev 인페인팅 모델로 선택 영역의 한자/워터마크를 제거합니다.
- * 주변 배경 텍스처를 분석해 자연스럽게 채워줌 — Gemini 방식 대비 왜곡 없음.
+ * Gemini 2.5 Flash Image 모델로 선택 영역의 한자/워터마크를 제거합니다.
+ * 영역을 crop → Gemini로 텍스트 제거 → Sharp로 원본에 합성
+ * 페더링 파이프라인 없음 → 왜곡 최소화
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import sharp from 'sharp';
+import type { Part } from '@google/genai';
 import { requireAuth } from '@/lib/supabase/auth';
 import { checkRateLimit, getRateLimitKey } from '@/lib/rate-limit';
+import { getGeminiGenAI } from '@/lib/ai/gemini';
 
 export const maxDuration = 90;
 
@@ -16,17 +19,11 @@ export const maxDuration = 90;
 const SUPABASE_PATTERN = /^https:\/\/[a-z0-9-]+\.supabase\.co\/storage\/v1\//;
 
 const MAX_DIM = 2000;
-const REPLICATE_API = 'https://api.replicate.com/v1';
-const FLUX_FILL_MODEL = 'black-forest-labs/flux-fill-dev';
-const POLLING_INTERVAL_MS = 500;
-const POLLING_TIMEOUT_MS = 70_000;
 
-type ReplicatePrediction = {
-  id: string;
-  status: 'starting' | 'processing' | 'succeeded' | 'failed';
-  output?: string | string[];
-  error?: string;
-};
+const CLEANUP_PROMPT =
+  'Remove ALL Chinese characters, text overlays, watermarks, price tags, and dimension labels from this image crop. ' +
+  'Fill every removed area seamlessly by blending with the surrounding background colors and textures. ' +
+  'Preserve the overall structure and colors of all non-text areas exactly as they are.';
 
 export async function POST(req: NextRequest) {
   // 인증 검증
@@ -72,11 +69,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'region 값이 유효하지 않습니다.' }, { status: 400 });
   }
 
-  const token = process.env.REPLICATE_API_TOKEN;
-  if (!token) {
-    return NextResponse.json({ error: 'Replicate API가 설정되지 않았습니다.' }, { status: 500 });
-  }
-
   try {
     // 원본 이미지 fetch (15초 타임아웃)
     const imgRes = await fetch(imageUrl, { signal: AbortSignal.timeout(15_000) });
@@ -104,98 +96,53 @@ export async function POST(req: NextRequest) {
       img = img.resize(W, H);
     }
 
-    const origBuffer = await img.clone().png().toBuffer();
-
     // 선택 영역 → 픽셀 좌표 + 패딩
     const px = { x: x * W, y: y * H, w: width * W, h: height * H };
-    const pad = Math.max(30, Math.round(Math.min(px.w, px.h) * 0.3));
+    const pad = Math.max(80, Math.round(Math.min(px.w, px.h) * 0.5));
     const mx = Math.max(0, Math.floor(px.x - pad));
     const my = Math.max(0, Math.floor(px.y - pad));
     const mw = Math.min(W - mx, Math.ceil(px.w + pad * 2));
     const mh = Math.min(H - my, Math.ceil(px.h + pad * 2));
 
-    // 마스크 생성: 검은 배경 + 제거할 영역 흰색
-    // LaMa 규약: 흰색 = 채우기(inpaint), 검은색 = 보존
-    const maskSvg = Buffer.from(
-      `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">` +
-      `<rect width="${W}" height="${H}" fill="black"/>` +
-      `<rect x="${mx}" y="${my}" width="${mw}" height="${mh}" fill="white"/>` +
-      `</svg>`,
-    );
-    const maskBuffer = await sharp({
-      create: { width: W, height: H, channels: 3, background: { r: 0, g: 0, b: 0 } },
-    })
-      .composite([{ input: maskSvg, blend: 'over' }])
+    // 선택 영역 crop → Gemini로 전송
+    const cropBuffer = await img.clone()
+      .extract({ left: mx, top: my, width: mw, height: mh })
       .png()
       .toBuffer();
 
-    const imageDataUrl = `data:image/png;base64,${origBuffer.toString('base64')}`;
-    const maskDataUrl = `data:image/png;base64,${maskBuffer.toString('base64')}`;
+    const cropBase64 = cropBuffer.toString('base64');
 
-    // Replicate FLUX Fill Dev 예측 시작
-    // guidance 낮게 설정 → 창의적 생성 최소화, 주변 컨텍스트 기반으로 채움
-    const startRes = await fetch(`${REPLICATE_API}/models/${FLUX_FILL_MODEL}/predictions`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Token ${token}`,
-        'Content-Type': 'application/json',
-        Prefer: 'wait',
-      },
-      body: JSON.stringify({
-        input: {
-          image: imageDataUrl,
-          mask: maskDataUrl,
-          prompt: 'seamless background texture, clean surface',
-          guidance: 3,
-          megapixels: 'match_input',
-          output_format: 'png',
-          output_quality: 100,
-          disable_safety_checker: true,
-        },
-      }),
-      signal: AbortSignal.timeout(80_000),
+    // Gemini 이미지 편집으로 텍스트 제거
+    const ai = getGeminiGenAI();
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash-image',
+      config: { responseModalities: ['Text', 'Image'] },
+      contents: [{
+        role: 'user',
+        parts: [
+          { inlineData: { data: cropBase64, mimeType: 'image/png' } },
+          { text: CLEANUP_PROMPT },
+        ] as Part[],
+      }],
     });
 
-    if (!startRes.ok) {
-      const errText = await startRes.text().catch(() => '');
-      throw new Error(`Replicate 시작 오류: ${startRes.status} ${errText.slice(0, 200)}`);
+    const parts: Part[] = response?.candidates?.[0]?.content?.parts ?? [];
+    const imagePart = parts.find((p) => p.inlineData != null);
+
+    if (!imagePart?.inlineData?.data) {
+      throw new Error('Gemini 응답에 이미지 데이터가 없습니다.');
     }
 
-    let prediction = (await startRes.json()) as ReplicatePrediction;
+    const cleanedCropBuffer = Buffer.from(imagePart.inlineData.data, 'base64');
 
-    // 폴링 (Prefer: wait에서 즉시 완료되지 않은 경우)
-    const deadline = Date.now() + POLLING_TIMEOUT_MS;
-    while (prediction.status !== 'succeeded' && prediction.status !== 'failed') {
-      if (Date.now() > deadline) {
-        return NextResponse.json({ error: '시간이 초과됐습니다. 다시 시도해주세요.' }, { status: 500 });
-      }
-      await new Promise<void>(r => setTimeout(r, POLLING_INTERVAL_MS));
-
-      const pollRes = await fetch(`${REPLICATE_API}/predictions/${prediction.id}`, {
-        headers: { Authorization: `Token ${token}` },
-        signal: AbortSignal.timeout(10_000),
-      });
-      if (!pollRes.ok) throw new Error(`Replicate 폴링 오류: ${pollRes.status}`);
-      prediction = (await pollRes.json()) as ReplicatePrediction;
-    }
-
-    if (prediction.status === 'failed' || !prediction.output) {
-      throw new Error(prediction.error ?? 'FLUX Fill 처리에 실패했습니다.');
-    }
-
-    // 결과 URL 추출 (단일 문자열 또는 배열 모두 처리)
-    const outputUrl = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
-    if (!outputUrl) throw new Error('결과 이미지 URL이 없습니다.');
-
-    // 결과 이미지 다운로드 → JPEG 변환
-    const outRes = await fetch(outputUrl, { signal: AbortSignal.timeout(15_000) });
-    if (!outRes.ok) throw new Error(`결과 다운로드 실패: ${outRes.status}`);
-    const outBuffer = Buffer.from(await outRes.arrayBuffer());
-
-    const resultJpeg = await sharp(outBuffer).jpeg({ quality: 92 }).toBuffer();
+    // 정제된 crop을 원본 이미지 위에 합성 (페더링 없음 → 왜곡 없음)
+    const resultBuffer = await img.clone()
+      .composite([{ input: cleanedCropBuffer, left: mx, top: my }])
+      .jpeg({ quality: 92 })
+      .toBuffer();
 
     return NextResponse.json({
-      imageBase64: resultJpeg.toString('base64'),
+      imageBase64: resultBuffer.toString('base64'),
       mimeType: 'image/jpeg',
     });
   } catch (err) {
