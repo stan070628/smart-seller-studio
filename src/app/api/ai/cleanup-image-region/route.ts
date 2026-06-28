@@ -1,7 +1,7 @@
 /**
  * POST /api/ai/cleanup-image-region
  *
- * Replicate LaMa (Large Mask inpainting) 모델로 선택 영역의 한자/워터마크를 제거합니다.
+ * Replicate FLUX Fill Dev 인페인팅 모델로 선택 영역의 한자/워터마크를 제거합니다.
  * 주변 배경 텍스처를 분석해 자연스럽게 채워줌 — Gemini 방식 대비 왜곡 없음.
  */
 
@@ -17,7 +17,7 @@ const SUPABASE_PATTERN = /^https:\/\/[a-z0-9-]+\.supabase\.co\/storage\/v1\//;
 
 const MAX_DIM = 2000;
 const REPLICATE_API = 'https://api.replicate.com/v1';
-const LAMA_MODEL = 'fewjative/lama-cleaner-lama';
+const FLUX_FILL_MODEL = 'black-forest-labs/flux-fill-dev';
 const POLLING_INTERVAL_MS = 500;
 const POLLING_TIMEOUT_MS = 70_000;
 
@@ -132,8 +132,9 @@ export async function POST(req: NextRequest) {
     const imageDataUrl = `data:image/png;base64,${origBuffer.toString('base64')}`;
     const maskDataUrl = `data:image/png;base64,${maskBuffer.toString('base64')}`;
 
-    // Replicate LaMa 예측 시작
-    const startRes = await fetch(`${REPLICATE_API}/models/${LAMA_MODEL}/predictions`, {
+    // Replicate FLUX Fill Dev 예측 시작
+    // guidance 낮게 설정 → 창의적 생성 최소화, 주변 컨텍스트 기반으로 채움
+    const startRes = await fetch(`${REPLICATE_API}/models/${FLUX_FILL_MODEL}/predictions`, {
       method: 'POST',
       headers: {
         Authorization: `Token ${token}`,
@@ -141,7 +142,16 @@ export async function POST(req: NextRequest) {
         Prefer: 'wait',
       },
       body: JSON.stringify({
-        input: { image: imageDataUrl, mask: maskDataUrl },
+        input: {
+          image: imageDataUrl,
+          mask: maskDataUrl,
+          prompt: 'seamless background texture, clean surface',
+          guidance: 3,
+          megapixels: 'match_input',
+          output_format: 'png',
+          output_quality: 100,
+          disable_safety_checker: true,
+        },
       }),
       signal: AbortSignal.timeout(80_000),
     });
@@ -170,7 +180,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (prediction.status === 'failed' || !prediction.output) {
-      throw new Error(prediction.error ?? 'LaMa 처리에 실패했습니다.');
+      throw new Error(prediction.error ?? 'FLUX Fill 처리에 실패했습니다.');
     }
 
     // 결과 URL 추출 (단일 문자열 또는 배열 모두 처리)
