@@ -71,12 +71,17 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // 원본 이미지 fetch
-    const imgRes = await fetch(imageUrl);
+    // 원본 이미지 fetch (15초 타임아웃)
+    const imgRes = await fetch(imageUrl, { signal: AbortSignal.timeout(15_000) });
     if (!imgRes.ok) {
       return NextResponse.json({ error: '이미지를 불러오지 못했습니다.' }, { status: 422 });
     }
     const arrayBuffer = await imgRes.arrayBuffer();
+
+    // 크기 상한: 20MB 초과 시 거부 (디코딩 전 메모리 폭발 방지)
+    if (arrayBuffer.byteLength > 20 * 1024 * 1024) {
+      return NextResponse.json({ error: '이미지 크기가 너무 큽니다.' }, { status: 413 });
+    }
 
     // EXIF 회전 보정 후 크기 파악
     let img = sharp(Buffer.from(arrayBuffer)).rotate();
@@ -122,7 +127,7 @@ export async function POST(req: NextRequest) {
     let geminiBuffer: Buffer;
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-preview-05-20',
+        model: 'gemini-2.5-flash-image',
         config: { responseModalities: ['Image', 'Text'], abortSignal: controller.signal },
         contents: [{
           role: 'user',

@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
     // Gemini 이미지 편집 모델로 한자·워터마크 제거
     const ai = getGeminiGenAI();
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-preview-05-20',
+      model: 'gemini-2.5-flash-image',
       config: { responseModalities: ['Text', 'Image'] },
       contents: [{
         role: 'user',
