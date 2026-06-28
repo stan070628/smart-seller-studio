@@ -840,8 +840,30 @@ function renderLayoutBlock(
       const b64 = Buffer.from(svg).toString('base64');
       return `<div style="margin-bottom:16px;text-align:center;"><img src="data:image/svg+xml;base64,${b64}" alt="레이더 차트" style="width:100%;max-width:400px;display:inline-block;" /></div>`;
     }
-    case 'timeline':
-      return '';
+    case 'timeline': {
+      if (block.items.length === 0) return '';
+      const N = block.items.length;
+
+      const dots = block.items.map((item, i) => {
+        const isHighlight = item.highlight ?? false;
+        const dotBg = isHighlight ? colors.accent : '#d1d5db';
+        const labelColor = isHighlight ? colors.accent : colors.text;
+        const isLast = i === N - 1;
+
+        return `<div style="display:flex;flex-direction:column;align-items:center;flex:1;position:relative;">
+          ${!isLast ? `<div style="position:absolute;top:12px;left:50%;width:100%;height:2px;background:#e5e7eb;z-index:0;"></div>` : ''}
+          <div style="width:24px;height:24px;border-radius:50%;background-color:${dotBg};display:flex;align-items:center;justify-content:center;z-index:1;flex-shrink:0;">
+            ${item.icon ? `<span style="font-size:12px;">${escapeHtml(item.icon)}</span>` : `<div style="width:8px;height:8px;border-radius:50%;background:white;"></div>`}
+          </div>
+          <div style="margin-top:8px;font-size:12px;font-weight:700;color:${labelColor};text-align:center;">${escapeHtml(item.stage)}</div>
+          ${item.value ? `<div style="margin-top:2px;font-size:11px;color:${colors.textSub};text-align:center;">${escapeHtml(item.value)}</div>` : ''}
+        </div>`;
+      });
+
+      return `<div style="display:flex;flex-direction:row;align-items:flex-start;width:100%;padding:16px 0;position:relative;">
+        ${dots.join('')}
+      </div>`;
+    }
     default:
       return '';
   }

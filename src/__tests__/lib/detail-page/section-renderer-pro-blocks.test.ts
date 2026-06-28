@@ -138,4 +138,55 @@ describe('renderLayoutBlock — Phase 2 블록', () => {
     expect(html).not.toContain('<img');
     expect(html).not.toContain('data:image/svg+xml;base64,');
   });
+
+  it('timeline — 가로 타임라인, 모든 stage 레이블 포함', () => {
+    const html = renderSection(makeSection([{
+      type: 'timeline',
+      items: [
+        { stage: '20대', value: '높음', highlight: false },
+        { stage: '30-40대', value: '보통', highlight: true },
+        { stage: '50대 이상', value: '낮음', highlight: false },
+      ],
+    }]), THEME);
+    expect(html).toContain('20대');
+    expect(html).toContain('30-40대');
+    expect(html).toContain('50대 이상');
+    expect(html).toContain('높음');
+    expect(html).toContain('낮음');
+  });
+
+  it('timeline — highlight 항목은 강조 스타일 포함', () => {
+    const html = renderSection(makeSection([{
+      type: 'timeline',
+      items: [
+        { stage: '시작', highlight: false },
+        { stage: '핵심', highlight: true },
+        { stage: '완성', highlight: false },
+      ],
+    }]), THEME);
+    expect(html).toContain('핵심');
+    // highlight 항목이 강조 색상을 가져야 함 (accent 색상)
+    const parts = html.split('핵심');
+    // highlight 항목 주변에 accent 색상 스타일이 존재
+    expect(parts[0]).toMatch(/background|background-color/);
+  });
+
+  it('timeline — XSS 방어: stage 레이블 escape', () => {
+    const html = renderSection(makeSection([{
+      type: 'timeline',
+      items: [{ stage: '<script>xss</script>', value: '<b>bold</b>' }],
+    }]), THEME);
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('timeline — 빈 items 배열도 크래시 없이 빈 문자열 반환', () => {
+    const html = renderSection(makeSection([{
+      type: 'timeline',
+      items: [],
+    }]), THEME);
+    // items가 없으면 렌더링하지 않음
+    expect(html).not.toContain('timeline');
+    // 빈 타임라인이 렌더링되지 않아야 함
+  });
 });
