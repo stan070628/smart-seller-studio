@@ -563,7 +563,7 @@ function renderLayoutBlock(
       return `<div style="display:inline-block;background:${bg};color:${fg};font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px;margin-bottom:10px;">${escapeHtml(block.text)}</div>`;
     }
     case 'heading': {
-      const sz = block.size === 'xl' ? '28px' : block.size === 'lg' ? '22px' : '18px';
+      const sz = block.size === 'xl' ? '38px' : block.size === 'lg' ? '26px' : '19px';
       const fw = block.bold !== false ? '800' : '600';
       const color =
         block.color === 'accent'
@@ -571,11 +571,11 @@ function renderLayoutBlock(
           : block.color === 'primary'
           ? colors.accent
           : colors.text;
-      return `<div style="font-size:${sz};font-weight:${fw};color:${color};line-height:1.25;margin-bottom:8px;">${escapeHtml(block.text)}</div>`;
+      return `<div style="font-size:${sz};font-weight:${fw};color:${color};line-height:1.2;letter-spacing:-0.5px;margin-bottom:10px;">${escapeHtml(block.text)}</div>`;
     }
     case 'subtext': {
       const align = block.align === 'center' ? 'center' : 'left';
-      return `<div style="font-size:14px;color:${colors.textSub};line-height:1.6;text-align:${align};margin-bottom:8px;">${escapeHtml(block.text)}</div>`;
+      return `<div style="font-size:15px;color:${colors.textSub};line-height:1.65;text-align:${align};margin-bottom:10px;">${escapeHtml(block.text)}</div>`;
     }
     case 'image': {
       const img = images[block.attachedIndex];
@@ -597,12 +597,12 @@ function renderLayoutBlock(
         .map(
           (item) =>
             `<div style="text-align:center;flex:1;">
-              <div style="font-size:22px;font-weight:900;color:${colors.accent};line-height:1.1;">${escapeHtml(item.value)}${item.unit ? `<span style="font-size:13px;font-weight:600;">${escapeHtml(item.unit)}</span>` : ''}</div>
-              <div style="font-size:11px;color:${colors.textSub};margin-top:2px;">${escapeHtml(item.label)}</div>
+              <div style="font-size:44px;font-weight:900;color:${colors.accent};line-height:1.05;letter-spacing:-1px;">${escapeHtml(item.value)}${item.unit ? `<span style="font-size:18px;font-weight:700;margin-left:2px;">${escapeHtml(item.unit)}</span>` : ''}</div>
+              <div style="font-size:12px;color:${colors.textSub};margin-top:6px;line-height:1.4;">${escapeHtml(item.label)}</div>
             </div>`,
         )
         .join('');
-      return `<div style="display:flex;gap:8px;padding:16px 0;margin-bottom:8px;">${items}</div>`;
+      return `<div style="display:flex;gap:8px;padding:20px 0;margin-bottom:8px;">${items}</div>`;
     }
     case 'bullet_list': {
       const icon = block.icon === 'check' ? '✓' : block.icon === 'arrow' ? '→' : '•';
@@ -631,6 +631,56 @@ function renderLayoutBlock(
       return `<hr style="border:none;border-top:1px solid ${colors.border};margin:12px 0;" />`;
     case 'spacer':
       return `<div style="height:${Math.min(block.height, 120)}px;"></div>`;
+    case 'progress_bar': {
+      const items = block.items.map(item => {
+        const pct = Math.min(100, Math.max(0, item.value));
+        const barColor = item.highlight ? colors.accent : '#9ca3af';
+        const trackColor = item.highlight ? `${colors.accent}22` : '#e5e7eb';
+        return `<div style="margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:${colors.text};margin-bottom:4px;">
+            <span>${escapeHtml(item.label)}</span>
+            <span style="font-weight:700;color:${barColor};">${escapeHtml(item.displayValue ?? `${pct}%`)}</span>
+          </div>
+          <div style="background:${trackColor};border-radius:8px;height:12px;overflow:hidden;">
+            <div style="background:${barColor};height:100%;width:${pct}%;border-radius:8px;"></div>
+          </div>
+        </div>`;
+      }).join('');
+      return `<div style="margin-bottom:16px;">${items}</div>`;
+    }
+    case 'process_flow': {
+      const isVertical = block.direction === 'vertical';
+      const items = block.items.map((item, i) => {
+        const isLast = i === block.items.length - 1;
+        const boxBg = item.highlight ? `${colors.accent}15` : '#f9fafb';
+        const boxBorder = item.highlight ? colors.accent : '#e5e7eb';
+        const textColor = item.highlight ? colors.accent : colors.text;
+        const arrow = isLast ? '' : (isVertical
+          ? `<div style="text-align:center;color:${colors.accent};font-size:14px;line-height:1;padding:2px 0;">↓</div>`
+          : `<div style="color:${colors.accent};font-size:16px;flex-shrink:0;align-self:center;">→</div>`);
+        const box = `<div style="background:${boxBg};border:1.5px solid ${boxBorder};border-radius:8px;padding:8px 12px;text-align:center;">
+          <div style="font-size:12px;font-weight:700;color:${textColor};">${escapeHtml(item.label)}</div>
+          ${item.sublabel ? `<div style="font-size:10px;color:${colors.textSub};margin-top:2px;">${escapeHtml(item.sublabel)}</div>` : ''}
+        </div>`;
+        return box + (isLast ? '' : arrow);
+      });
+      const flexDir = isVertical ? 'column' : 'row';
+      return `<div style="display:flex;flex-direction:${flexDir};gap:6px;align-items:${isVertical ? 'stretch' : 'center'};flex-wrap:wrap;margin-bottom:16px;">${items.join('')}</div>`;
+    }
+    case 'icon_grid': {
+      const cols = block.cols ?? 3;
+      const items = block.items.map(item =>
+        `<div style="text-align:center;padding:10px 6px;background:#f9fafb;border-radius:10px;">
+          <div style="font-size:24px;margin-bottom:6px;">${escapeHtml(item.icon)}</div>
+          <div style="font-size:11px;font-weight:700;color:${colors.text};line-height:1.3;">${escapeHtml(item.title)}</div>
+          ${item.subtitle ? `<div style="font-size:10px;color:${colors.textSub};margin-top:2px;">${escapeHtml(item.subtitle)}</div>` : ''}
+        </div>`
+      ).join('');
+      return `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:8px;margin-bottom:16px;">${items}</div>`;
+    }
+    case 'radar_chart':
+    case 'timeline':
+      return '';
     default:
       return '';
   }
@@ -643,8 +693,13 @@ function renderClaudeLayout(
 ): string {
   const bg = resolveBgColor(content.bgStyle, colors);
   const pad = resolvePad(content.padding);
+  // dark/primary 배경에서는 텍스트 색을 밝게 강제 (팔레트 기본값이 어두운 색이므로)
+  const effectiveColors: PaletteColors =
+    content.bgStyle === 'dark' || content.bgStyle === 'primary'
+      ? { ...colors, text: '#ffffff', textSub: 'rgba(255,255,255,0.72)' }
+      : colors;
   const blocksHtml = content.blocks
-    .map((b) => renderLayoutBlock(b, section.attachedImages, colors))
+    .map((b) => renderLayoutBlock(b, section.attachedImages, effectiveColors))
     .join('');
   return `<div ${sectionAttrs(section)} style="background-color:${bg};padding:${pad};width:100%;box-sizing:border-box;">${blocksHtml}</div>`;
 }
