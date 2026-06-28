@@ -851,7 +851,7 @@ function renderLayoutBlock(
         const isLast = i === N - 1;
 
         return `<div style="display:flex;flex-direction:column;align-items:center;flex:1;position:relative;">
-          ${!isLast ? `<div style="position:absolute;top:12px;left:50%;width:100%;height:2px;background:#e5e7eb;z-index:0;"></div>` : ''}
+          ${!isLast ? `<div style="position:absolute;top:12px;left:calc(50% + 12px);width:calc(50% - 12px);height:2px;background:#e5e7eb;z-index:0;"></div>` : ''}
           <div style="width:24px;height:24px;border-radius:50%;background-color:${dotBg};display:flex;align-items:center;justify-content:center;z-index:1;flex-shrink:0;">
             ${item.icon ? `<span style="font-size:12px;">${escapeHtml(item.icon)}</span>` : `<div style="width:8px;height:8px;border-radius:50%;background:white;"></div>`}
           </div>

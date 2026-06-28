@@ -12,10 +12,12 @@ const BRIGHTNESS_DIFF_THRESHOLD = 30;
 // 코너 내부 분산이 위 영역 분산보다 이 값 이상 높으면 혼합 패턴(스파클) 감지
 const VARIANCE_DELTA_THRESHOLD = 200;
 
+// "Remove watermark" 표현 대신 inpainting 관점으로 표현 (Gemini 콘텐츠 정책 대응)
 const WATERMARK_PROMPT =
-  'Remove the watermark logo from the bottom-right corner of this image crop. ' +
-  'Fill the removed area seamlessly by blending with the surrounding background colors and textures. ' +
-  'Preserve all other areas exactly as they are.';
+  'This is a crop from the bottom-right corner of a product image. ' +
+  'Restore this area to look like a clean natural background without any overlay elements. ' +
+  'Seamlessly fill the area by blending with the surrounding colors, textures, and patterns. ' +
+  'Preserve all other parts exactly as they are.';
 
 /**
  * 픽셀 배열의 평균 밝기를 계산합니다.

@@ -87,9 +87,11 @@ Create ${sceneCount} diverse scene storyboard items for the product detail page.
   try {
     const raw = await callClaude(SYSTEM_PROMPT, userPrompt, 'sonnet', 2048);
 
-    // Claude가 ```json 코드블록으로 감쌀 경우 제거
-    const jsonStr = raw.replace(/^```json\s*/m, '').replace(/```\s*$/m, '').trim();
-    const data = JSON.parse(jsonStr) as { scenes: Array<Record<string, unknown>> };
+    // Claude가 ```json 코드블록으로 감쌀 경우 제거 후, JSON 객체 부분만 추출
+    const stripped = raw.replace(/^```json\s*/m, '').replace(/```\s*$/m, '').trim();
+    const jsonMatch = stripped.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error(`JSON 형식 응답 없음 (raw: ${raw.slice(0, 200)})`);
+    const data = JSON.parse(jsonMatch[0]) as { scenes: Array<Record<string, unknown>> };
     if (!Array.isArray(data.scenes)) throw new Error('invalid response shape');
 
     // scene 필드 검증: prompt 없으면 하류에서 TypeError 발생하므로 필터링
