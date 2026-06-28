@@ -6,6 +6,12 @@ import type { AnalyzedSection } from '@/app/api/ai/analyze-detail-page/route';
 
 type ScreenState = 'upload' | 'review' | 'generating' | 'result';
 
+interface GeneratedSection {
+  title?: string;
+  type?: string;
+  imageSlots?: Array<{ slotType: string; promptHint?: string }>;
+}
+
 interface ProgressEvent {
   step: string;
   message: string;
@@ -45,19 +51,16 @@ export default function DetailMakerProPage() {
   const [screen, setScreen] = useState<ScreenState>('upload');
   const [referenceImages, setReferenceImages] = useState<File[]>([]);
   const [productImages, setProductImages] = useState<File[]>([]);
-  const [analyzedSections, setAnalyzedSections] = useState<AnalyzedSection[]>([]);
   const [editedSections, setEditedSections] = useState<AnalyzedSection[]>([]);
   const [productName, setProductName] = useState('');
   const [productPoints, setProductPoints] = useState('');
   const [progress, setProgress] = useState<ProgressEvent | null>(null);
-  const [generatedSections, setGeneratedSections] = useState<unknown[]>([]);
+  const [generatedSections, setGeneratedSections] = useState<GeneratedSection[]>([]);
   const [fluxResults, setFluxResults] = useState<Record<number, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [isRegenerating, setIsRegenerating] = useState<number | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-
-  // analyzedSections는 현재 editedSections 초기화에만 쓰이므로 setter만 사용
-  void analyzedSections;
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const refFileRef = useRef<HTMLInputElement>(null);
   const prodFileRef = useRef<HTMLInputElement>(null);
@@ -106,7 +109,6 @@ export default function DetailMakerProPage() {
         setError(data.error ?? '분석 실패');
         return;
       }
-      setAnalyzedSections(data.sections);
       setEditedSections(data.sections);
       setScreen('review');
     } catch {
@@ -118,6 +120,8 @@ export default function DetailMakerProPage() {
 
   // Step 1.5 → Step 2: DSL 생성 (SSE)
   const handleGenerate = useCallback(async () => {
+    if (isGenerating) return;
+    setIsGenerating(true);
     setScreen('generating');
     setError(null);
     setProgress({ step: 'start', message: '시작 중...' });
@@ -166,7 +170,7 @@ export default function DetailMakerProPage() {
           if (eventType === 'progress') {
             setProgress(eventData as unknown as ProgressEvent);
           } else if (eventType === 'complete') {
-            setGeneratedSections(eventData.sections as unknown[]);
+            setGeneratedSections(eventData.sections as GeneratedSection[]);
             setScreen('result');
           } else if (eventType === 'error') {
             setError((eventData.message as string) ?? '오류 발생');
@@ -177,8 +181,10 @@ export default function DetailMakerProPage() {
     } catch {
       setError('생성 중 오류가 발생했습니다.');
       setScreen('review');
+    } finally {
+      setIsGenerating(false);
     }
-  }, [productName, productPoints, editedSections, productImages.length]);
+  }, [isGenerating, productName, productPoints, editedSections, productImages.length]);
 
   // FLUX 이미지 재생성
   const handleFluxRegenerate = useCallback(
@@ -193,7 +199,7 @@ export default function DetailMakerProPage() {
         // 제품 이미지를 먼저 Supabase에 업로드해야 하지만
         // 간소화를 위해 FLUX API가 base64를 지원하지 않으므로
         // 여기서는 기능적 미완성을 알리고 스킵합니다
-        setError('FLUX 이미지 재생성은 제품 이미지가 이미 업로드된 경우에만 가능합니다.');
+        setError('FLUX 이미지 재생성 기능은 현재 준비 중입니다.');
       } finally {
         setIsRegenerating(null);
       }
@@ -458,6 +464,7 @@ export default function DetailMakerProPage() {
           </button>
           <button
             onClick={handleGenerate}
+            disabled={isGenerating}
             style={{
               flex: 2,
               padding: '12px',
@@ -468,6 +475,7 @@ export default function DetailMakerProPage() {
               cursor: 'pointer',
               fontSize: '14px',
               fontWeight: 700,
+              opacity: isGenerating ? 0.5 : 1,
             }}
           >
             생성 시작 →
@@ -532,10 +540,7 @@ export default function DetailMakerProPage() {
       {errorBanner}
 
       {generatedSections.map((section, i) => {
-        const s = section as {
-          title?: string;
-          imageSlots?: Array<{ slotType: string; promptHint?: string }>;
-        };
+        const s = section as GeneratedSection;
         const hasFluxSlot =
           s.imageSlots?.some(slot => slot.slotType === 'flux_lifestyle') ?? false;
         return (
