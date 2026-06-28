@@ -31,5 +31,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "node_modules.nosync", "proxy-server"]
+  "exclude": ["node_modules", "node_modules.nosync", "proxy-server", "tools"]
 }
