@@ -169,6 +169,14 @@ export type LayoutBlock =
   | { type: 'columns'; cols: LayoutBlock[][]; gap?: number }
   | { type: 'divider' }
   | { type: 'spacer'; height: number }
+  // Phase 1 신규
+  | { type: 'progress_bar'; items: Array<{ label: string; value: number; displayValue?: string; highlight?: boolean }> }
+  | { type: 'process_flow'; direction?: 'horizontal' | 'vertical'; items: Array<{ label: string; sublabel?: string; highlight?: boolean }> }
+  | { type: 'icon_grid'; cols?: 2 | 3; items: Array<{ icon: string; title: string; subtitle?: string }> }
+  | { type: 'layout_bar_chart'; title?: string; unit?: string; groups: string[]; groupColors: string[]; items: Array<{ label: string; values: number[] }>; showLegend?: boolean }
+  // Phase 2 — 타입 정의만, 렌더러 미구현
+  | { type: 'radar_chart'; axes: Array<{ label: string; value: number; max?: number }>; color?: string }
+  | { type: 'timeline'; items: Array<{ stage: string; icon?: string; value?: string; highlight?: boolean }> }
 
 export interface ClaudeLayoutContent {
   type: 'claude_layout';
