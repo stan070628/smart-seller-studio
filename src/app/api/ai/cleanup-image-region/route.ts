@@ -1,30 +1,32 @@
 /**
  * POST /api/ai/cleanup-image-region
  *
- * 이미지의 특정 영역(region)을 Gemini 2.5 Flash로 클린업합니다.
- * 한자, 워터마크, 가격 태그 등을 제거하고 Sharp로 페더링 합성 처리합니다.
+ * Replicate LaMa (Large Mask inpainting) 모델로 선택 영역의 한자/워터마크를 제거합니다.
+ * 주변 배경 텍스처를 분석해 자연스럽게 채워줌 — Gemini 방식 대비 왜곡 없음.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import sharp from 'sharp';
-import type { Part } from '@google/genai';
 import { requireAuth } from '@/lib/supabase/auth';
 import { checkRateLimit, getRateLimitKey } from '@/lib/rate-limit';
-import { getGeminiGenAI } from '@/lib/ai/gemini';
 
 export const maxDuration = 90;
 
 // SSRF 방어: Supabase Storage URL만 허용
 const SUPABASE_PATTERN = /^https:\/\/[a-z0-9-]+\.supabase\.co\/storage\/v1\//;
 
-// 리사이즈 최대 크기 (픽셀)
 const MAX_DIM = 2000;
+const REPLICATE_API = 'https://api.replicate.com/v1';
+const LAMA_MODEL = 'fewjative/lama-cleaner-lama';
+const POLLING_INTERVAL_MS = 500;
+const POLLING_TIMEOUT_MS = 70_000;
 
-// Gemini 프롬프트: 중앙 영역 한자/워터마크 제거, 테두리 보존
-const CLEANUP_PROMPT =
-  'Remove ALL text, Chinese characters, watermarks, price tags, and dimension labels from this image. ' +
-  'Fill all removed areas seamlessly by blending with the surrounding background colors and textures. ' +
-  'Preserve the overall structure and colors of non-text areas.';
+type ReplicatePrediction = {
+  id: string;
+  status: 'starting' | 'processing' | 'succeeded' | 'failed';
+  output?: string | string[];
+  error?: string;
+};
 
 export async function POST(req: NextRequest) {
   // 인증 검증
@@ -70,6 +72,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'region 값이 유효하지 않습니다.' }, { status: 400 });
   }
 
+  const token = process.env.REPLICATE_API_TOKEN;
+  if (!token) {
+    return NextResponse.json({ error: 'Replicate API가 설정되지 않았습니다.' }, { status: 500 });
+  }
+
   try {
     // 원본 이미지 fetch (15초 타임아웃)
     const imgRes = await fetch(imageUrl, { signal: AbortSignal.timeout(15_000) });
@@ -78,7 +85,7 @@ export async function POST(req: NextRequest) {
     }
     const arrayBuffer = await imgRes.arrayBuffer();
 
-    // 크기 상한: 20MB 초과 시 거부 (디코딩 전 메모리 폭발 방지)
+    // 크기 상한: 20MB 초과 시 거부
     if (arrayBuffer.byteLength > 20 * 1024 * 1024) {
       return NextResponse.json({ error: '이미지 크기가 너무 큽니다.' }, { status: 413 });
     }
@@ -97,129 +104,93 @@ export async function POST(req: NextRequest) {
       img = img.resize(W, H);
     }
 
-    // 전처리된 원본 버퍼 (PNG, 무손실)
     const origBuffer = await img.clone().png().toBuffer();
 
-    // region → 픽셀 좌표 변환
+    // 선택 영역 → 픽셀 좌표 + 패딩
     const px = { x: x * W, y: y * H, w: width * W, h: height * H };
+    const pad = Math.max(30, Math.round(Math.min(px.w, px.h) * 0.3));
+    const mx = Math.max(0, Math.floor(px.x - pad));
+    const my = Math.max(0, Math.floor(px.y - pad));
+    const mw = Math.min(W - mx, Math.ceil(px.w + pad * 2));
+    const mh = Math.min(H - my, Math.ceil(px.h + pad * 2));
 
-    // 패딩: region 크기의 35% 또는 최소 40px
-    const pad = Math.max(80, Math.round(Math.min(px.w, px.h) * 0.5));
-
-    // 크롭 영역 계산 (이미지 경계 clamp)
-    const cx = Math.max(0, Math.floor(px.x - pad));
-    const cy = Math.max(0, Math.floor(px.y - pad));
-    const cw = Math.min(W - cx, Math.ceil(px.w + pad * 2));
-    const ch = Math.min(H - cy, Math.ceil(px.h + pad * 2));
-
-    // 크롭 추출 → base64 인코딩
-    const cropBuffer = await sharp(origBuffer)
-      .extract({ left: cx, top: cy, width: cw, height: ch })
-      .png()
-      .toBuffer();
-    const cropBase64 = cropBuffer.toString('base64');
-
-    // Gemini 이미지 편집 호출 (70초 타임아웃)
-    const ai = getGeminiGenAI();
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 70_000);
-
-    let geminiBuffer: Buffer;
-    try {
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image',
-        config: { responseModalities: ['Image', 'Text'], abortSignal: controller.signal },
-        contents: [{
-          role: 'user',
-          parts: [
-            { inlineData: { data: cropBase64, mimeType: 'image/png' } } as Part,
-            { text: CLEANUP_PROMPT } as Part,
-          ],
-        }],
-      });
-
-      // 응답에서 이미지 파트 추출
-      const parts: Part[] = response?.candidates?.[0]?.content?.parts ?? [];
-      const imagePart = parts.find(p => p.inlineData != null);
-      if (!imagePart?.inlineData?.data) {
-        return NextResponse.json(
-          { error: '결과가 없습니다. 다시 실행해주세요.' },
-          { status: 500 },
-        );
-      }
-      geminiBuffer = Buffer.from(imagePart.inlineData.data, 'base64');
-    } catch (e) {
-      // AbortError: 표준 fetch AbortError(.name) 또는 @google/genai APIUserAbortError(.constructor.name) 모두 처리
-      const eName = (e as Error)?.name;
-      const eCtorName = (e as Error)?.constructor?.name;
-      if (eName === 'AbortError' || eCtorName === 'APIUserAbortError') {
-        return NextResponse.json(
-          { error: '시간이 초과됐습니다. 다시 실행해주세요.' },
-          { status: 500 },
-        );
-      }
-      throw e;
-    } finally {
-      clearTimeout(timeoutId);
-    }
-
-    // Gemini 결과를 크롭 크기에 맞게 리사이즈
-    const resizedGemini = await sharp(geminiBuffer).resize(cw, ch).png().toBuffer();
-
-    // 밝기 보정: 원본과 Gemini 결과의 채널별 평균 차이를 linear 보정
-    const origStats = await sharp(origBuffer)
-      .extract({ left: cx, top: cy, width: cw, height: ch })
-      .stats();
-    const geminiStats = await sharp(resizedGemini).stats();
-    const offsets = origStats.channels.map(
-      (c, i) => c.mean - (geminiStats.channels[i]?.mean ?? c.mean),
-    );
-    const tonedGemini = await sharp(resizedGemini)
-      .linear([1, 1, 1], offsets.slice(0, 3))
-      .png()
-      .toBuffer();
-
-    // 페더링 마스크: 내부 영역(패드 1/4 여백)을 흰색으로, 테두리는 블러 페이드
-    // 내부 사각형을 크게 유지해 Gemini 처리 영역 대부분이 합성에 반영되도록 함
-    const innerX = Math.round(pad * 0.25);
-    const innerY = Math.round(pad * 0.25);
-    const innerW = Math.max(1, cw - Math.round(pad * 0.5));
-    const innerH = Math.max(1, ch - Math.round(pad * 0.5));
-
+    // 마스크 생성: 검은 배경 + 제거할 영역 흰색
+    // LaMa 규약: 흰색 = 채우기(inpaint), 검은색 = 보존
     const maskSvg = Buffer.from(
-      `<svg width="${cw}" height="${ch}">` +
-      `<rect x="${innerX}" y="${innerY}" width="${innerW}" height="${innerH}" fill="white"/>` +
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">` +
+      `<rect width="${W}" height="${H}" fill="black"/>` +
+      `<rect x="${mx}" y="${my}" width="${mw}" height="${mh}" fill="white"/>` +
       `</svg>`,
     );
-
-    // 투명 배경 위에 SVG 마스크 합성 후 블러 → 부드러운 페더 경계
-    const mask = await sharp({
-      create: { width: cw, height: ch, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+    const maskBuffer = await sharp({
+      create: { width: W, height: H, channels: 3, background: { r: 0, g: 0, b: 0 } },
     })
       .composite([{ input: maskSvg, blend: 'over' }])
-      .blur(20)
       .png()
       .toBuffer();
 
-    // 마스크를 Gemini 결과에 적용 (테두리 투명 처리)
-    const maskedPatch = await sharp(tonedGemini)
-      .ensureAlpha()
-      .composite([{ input: mask, blend: 'dest-in' }])
-      .png()
-      .toBuffer();
+    const imageDataUrl = `data:image/png;base64,${origBuffer.toString('base64')}`;
+    const maskDataUrl = `data:image/png;base64,${maskBuffer.toString('base64')}`;
 
-    // 원본에 패치 합성 → JPEG 출력
-    const result = await sharp(origBuffer)
-      .composite([{ input: maskedPatch, left: cx, top: cy }])
-      .jpeg({ quality: 92 })
-      .toBuffer();
+    // Replicate LaMa 예측 시작
+    const startRes = await fetch(`${REPLICATE_API}/models/${LAMA_MODEL}/predictions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Token ${token}`,
+        'Content-Type': 'application/json',
+        Prefer: 'wait',
+      },
+      body: JSON.stringify({
+        input: { image: imageDataUrl, mask: maskDataUrl },
+      }),
+      signal: AbortSignal.timeout(80_000),
+    });
+
+    if (!startRes.ok) {
+      const errText = await startRes.text().catch(() => '');
+      throw new Error(`Replicate 시작 오류: ${startRes.status} ${errText.slice(0, 200)}`);
+    }
+
+    let prediction = (await startRes.json()) as ReplicatePrediction;
+
+    // 폴링 (Prefer: wait에서 즉시 완료되지 않은 경우)
+    const deadline = Date.now() + POLLING_TIMEOUT_MS;
+    while (prediction.status !== 'succeeded' && prediction.status !== 'failed') {
+      if (Date.now() > deadline) {
+        return NextResponse.json({ error: '시간이 초과됐습니다. 다시 시도해주세요.' }, { status: 500 });
+      }
+      await new Promise<void>(r => setTimeout(r, POLLING_INTERVAL_MS));
+
+      const pollRes = await fetch(`${REPLICATE_API}/predictions/${prediction.id}`, {
+        headers: { Authorization: `Token ${token}` },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!pollRes.ok) throw new Error(`Replicate 폴링 오류: ${pollRes.status}`);
+      prediction = (await pollRes.json()) as ReplicatePrediction;
+    }
+
+    if (prediction.status === 'failed' || !prediction.output) {
+      throw new Error(prediction.error ?? 'LaMa 처리에 실패했습니다.');
+    }
+
+    // 결과 URL 추출 (단일 문자열 또는 배열 모두 처리)
+    const outputUrl = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
+    if (!outputUrl) throw new Error('결과 이미지 URL이 없습니다.');
+
+    // 결과 이미지 다운로드 → JPEG 변환
+    const outRes = await fetch(outputUrl, { signal: AbortSignal.timeout(15_000) });
+    if (!outRes.ok) throw new Error(`결과 다운로드 실패: ${outRes.status}`);
+    const outBuffer = Buffer.from(await outRes.arrayBuffer());
+
+    const resultJpeg = await sharp(outBuffer).jpeg({ quality: 92 }).toBuffer();
 
     return NextResponse.json({
-      imageBase64: result.toString('base64'),
+      imageBase64: resultJpeg.toString('base64'),
       mimeType: 'image/jpeg',
     });
   } catch (err) {
     console.error('[cleanup-image-region]', err);
-    return NextResponse.json({ error: '처리 중 오류가 발생했습니다.' }, { status: 500 });
+    const message = err instanceof Error ? err.message : '처리 중 오류가 발생했습니다.';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
