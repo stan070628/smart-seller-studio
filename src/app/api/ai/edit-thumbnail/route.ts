@@ -10,11 +10,12 @@
 
 import { NextRequest } from "next/server"
 import { createClient } from "@supabase/supabase-js"
-import sharp from "sharp"
 import { z } from "zod"
 import { getGeminiGenAI } from "@/lib/ai/gemini"
 import { requireAuth } from "@/lib/supabase/auth"
 import { COUPANG_IMAGE_GUIDE_EN } from "@/lib/ai/prompts/coupang-image-guide"
+import { addTextBadge, type BadgePosition } from "@/lib/ai/text-badge"
+import { enforceCoupangPolicy } from "@/lib/image/coupang-policy"
 
 // ─────────────────────────────────────────
 // 상수
@@ -40,74 +41,6 @@ const LISTING_IMAGES_BUCKET = "smart-seller-studio"
 /** 결과 이미지 저장 경로 prefix */
 const STORAGE_PATH_PREFIX = "ai-edited"
 
-// ─────────────────────────────────────────
-// 결정적 후처리 (쿠팡 가이드라인 강제)
-// ─────────────────────────────────────────
-
-/** 후처리 결과 캔버스 한 변 (정사각형) */
-const POSTPROCESS_CANVAS_SIZE = 1200
-/** 상품이 캔버스에서 차지할 비율. 가이드라인은 85%, 안전 마진 두고 92% 적용 */
-const POSTPROCESS_FILL_RATIO = 0.92
-/** trim 임계값: 흰 배경 판단 시 채널당 허용 차이 */
-const POSTPROCESS_TRIM_THRESHOLD = 12
-
-/**
- * Gemini가 어떤 구도로 그리든 항상 쿠팡 정책을 만족하도록 강제하는 결정적 후처리:
- * 1) 흰 배경을 자동 trim 하여 상품 윤곽만 추출
- * 2) 1200×1200 흰 캔버스 중앙에 92% 크기로 재배치 (긴 변 기준)
- * 3) JPEG q92로 인코딩
- *
- * trim에 실패하면(예: 배경이 흰색이 아닌 경우) 원본 그대로 반환한다.
- */
-async function enforceCoupangPolicy(
-  inputBuffer: Buffer,
-): Promise<{ buffer: Buffer; mimeType: string }> {
-  try {
-    const trimmed = await sharp(inputBuffer)
-      .trim({
-        background: { r: 255, g: 255, b: 255 },
-        threshold: POSTPROCESS_TRIM_THRESHOLD,
-      })
-      .toBuffer()
-
-    const meta = await sharp(trimmed).metadata()
-    const w = meta.width ?? 0
-    const h = meta.height ?? 0
-    if (!w || !h) {
-      return { buffer: inputBuffer, mimeType: "image/jpeg" }
-    }
-
-    const longEdge = Math.max(w, h)
-    const targetLongEdge = Math.round(POSTPROCESS_CANVAS_SIZE * POSTPROCESS_FILL_RATIO)
-    const scale = targetLongEdge / longEdge
-    const newW = Math.max(1, Math.round(w * scale))
-    const newH = Math.max(1, Math.round(h * scale))
-
-    const resized = await sharp(trimmed)
-      .resize(newW, newH, { fit: "fill" })
-      .toBuffer()
-
-    const result = await sharp({
-      create: {
-        width: POSTPROCESS_CANVAS_SIZE,
-        height: POSTPROCESS_CANVAS_SIZE,
-        channels: 3,
-        background: { r: 255, g: 255, b: 255 },
-      },
-    })
-      .composite([{ input: resized, gravity: "center" }])
-      .jpeg({ quality: 92, progressive: true })
-      .toBuffer()
-
-    return { buffer: result, mimeType: "image/jpeg" }
-  } catch (err) {
-    console.warn(
-      "[edit-thumbnail] enforceCoupangPolicy 실패, 원본 유지:",
-      err instanceof Error ? err.message : err,
-    )
-    return { buffer: inputBuffer, mimeType: "image/jpeg" }
-  }
-}
 
 /** 썸네일용 시스템 프롬프트 — Coupang Ads 가이드라인을 강제 */
 const SYSTEM_PROMPT_COUPANG = [
@@ -141,6 +74,15 @@ const requestSchema = z.object({
   prompt: z.string().min(1, "prompt는 비어 있을 수 없습니다."),
   // 쿠팡 이미지 가이드(흰 배경·85%·텍스트 금지 등) 강제 여부. 썸네일은 true, 상세페이지 이미지는 false.
   applyCoupangPolicy: z.boolean().optional().default(true),
+  // 텍스트 뱃지 오버레이 (선택 — applyCoupangPolicy=true일 때만 적용)
+  textBadge: z
+    .object({
+      text: z.string().min(1).max(20),
+      position: z
+        .enum(["top-right", "top-left", "bottom-right", "bottom-left"])
+        .default("top-right"),
+    })
+    .optional(),
 })
 
 // ─────────────────────────────────────────
@@ -361,7 +303,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     )
   }
 
-  const { imageUrl, imageUrl2, prompt, applyCoupangPolicy } = parsed.data
+  const { imageUrl, imageUrl2, prompt, applyCoupangPolicy, textBadge } = parsed.data
 
   // 3. 원본 이미지(1장, 필수) 해석 — URL 또는 data://
   let img1Base64: string
@@ -549,9 +491,15 @@ export async function POST(request: NextRequest): Promise<Response> {
   try {
     const supabase = createSupabaseServiceClient()
     const rawBuffer = Buffer.from(editedImageBase64, "base64")
-    const { buffer: editedBuffer, mimeType: finalMimeType } = applyCoupangPolicy
+    const { buffer: policyBuffer, mimeType: finalMimeType } = applyCoupangPolicy
       ? await enforceCoupangPolicy(rawBuffer)
       : { buffer: rawBuffer, mimeType: editedMimeType || "image/jpeg" }
+
+    // 텍스트 뱃지 오버레이 (쿠팡 정책 적용 이미지에만, 텍스트가 있을 때만)
+    const editedBuffer =
+      applyCoupangPolicy && textBadge?.text
+        ? await addTextBadge(policyBuffer, textBadge.text, textBadge.position)
+        : policyBuffer
 
     const { error: uploadError } = await supabase.storage
       .from(LISTING_IMAGES_BUCKET)
