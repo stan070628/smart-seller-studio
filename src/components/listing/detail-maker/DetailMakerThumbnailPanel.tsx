@@ -55,6 +55,9 @@ export default function DetailMakerThumbnailPanel({
 }: Props) {
   const [direction, setDirection] = useState('');
   const [cleanupExtraIdx, setCleanupExtraIdx] = useState<number | null>(null);
+  const [watermarkExtraIdx, setWatermarkExtraIdx] = useState<number | null>(null);
+  const [coupangConvertIdx, setCoupangConvertIdx] = useState<number | null>(null);
+  const [coupangPreview, setCoupangPreview] = useState<{ idx: number; blobUrl: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 텍스트 뱃지 상태 (localStorage 영속화)
@@ -72,6 +75,29 @@ export default function DetailMakerThumbnailPanel({
   function handleBadgePositionChange(v: BadgePosition) {
     setBadgePosition(v);
     if (typeof window !== 'undefined') localStorage.setItem('thumbnailBadgePosition', v);
+  }
+
+  async function handleCoupangConvert(url: string, idx: number) {
+    setCoupangConvertIdx(idx);
+    try {
+      const res = await fetch('/api/image/coupang-convert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl: url }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: '변환 실패' })) as { error?: string };
+        alert(err.error ?? '쿠팡 변환에 실패했습니다.');
+        return;
+      }
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      setCoupangPreview({ idx, blobUrl });
+    } catch {
+      alert('쿠팡 변환 중 오류가 발생했습니다.');
+    } finally {
+      setCoupangConvertIdx(null);
+    }
   }
 
   function handleGenerate() {
@@ -180,25 +206,68 @@ export default function DetailMakerThumbnailPanel({
                     ×
                   </button>
                 )}
+                {/* 쿠팡 변환 버튼 */}
                 <button
-                  onClick={() => setCleanupExtraIdx(idx)}
-                  aria-label="한자 제거"
+                  onClick={() => handleCoupangConvert(url, idx)}
+                  disabled={coupangConvertIdx === idx}
+                  aria-label="쿠팡 규격 변환"
                   style={{
                     position: 'absolute',
-                    bottom: '2px',
-                    left: '2px',
-                    background: 'rgba(0,0,0,0.6)',
+                    top: 2,
+                    left: 2,
+                    background: coupangConvertIdx === idx ? 'rgba(0,0,0,0.4)' : 'rgba(190,0,20,0.85)',
                     color: '#fff',
                     border: 'none',
                     borderRadius: '4px',
-                    fontSize: '10px',
+                    fontSize: '9px',
                     padding: '2px 4px',
-                    cursor: 'pointer',
+                    cursor: coupangConvertIdx === idx ? 'wait' : 'pointer',
                     lineHeight: 1,
+                    fontWeight: 700,
                   }}
                 >
-                  한자
+                  {coupangConvertIdx === idx ? '...' : '쿠팡'}
                 </button>
+
+                {/* 하단 버튼 행: 한자 | WM */}
+                <div style={{ position: 'absolute', bottom: 2, left: 2, right: 2, display: 'flex', gap: 2 }}>
+                  <button
+                    onClick={() => setCleanupExtraIdx(idx)}
+                    aria-label="한자 제거"
+                    style={{
+                      flex: 1,
+                      background: 'rgba(0,0,0,0.6)',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '4px',
+                      fontSize: '10px',
+                      padding: '2px 0',
+                      cursor: 'pointer',
+                      lineHeight: 1,
+                    }}
+                  >
+                    한자
+                  </button>
+                  <button
+                    onClick={() => setWatermarkExtraIdx(idx)}
+                    aria-label="워터마크 제거"
+                    style={{
+                      flex: 1,
+                      background: 'rgba(0,0,0,0.6)',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '4px',
+                      fontSize: '10px',
+                      padding: '2px 0',
+                      cursor: 'pointer',
+                      lineHeight: 1,
+                    }}
+                  >
+                    WM
+                  </button>
+                </div>
+
+                {/* 한자 모달 */}
                 {cleanupExtraIdx === idx && (
                   <ImageCleanupModal
                     imageUrl={url}
@@ -211,6 +280,24 @@ export default function DetailMakerThumbnailPanel({
                       setCleanupExtraIdx(null);
                     }}
                     onClose={() => setCleanupExtraIdx(null)}
+                    canAdd={true}
+                  />
+                )}
+
+                {/* WM 모달 */}
+                {watermarkExtraIdx === idx && (
+                  <ImageCleanupModal
+                    imageUrl={url}
+                    mode="watermark"
+                    onReplace={newUrl => {
+                      onReplaceExtraRef?.(idx, newUrl);
+                      setWatermarkExtraIdx(null);
+                    }}
+                    onAdd={newUrl => {
+                      onAddExtraRef?.(newUrl);
+                      setWatermarkExtraIdx(null);
+                    }}
+                    onClose={() => setWatermarkExtraIdx(null)}
                     canAdd={true}
                   />
                 )}
@@ -349,6 +436,78 @@ export default function DetailMakerThumbnailPanel({
       </button>
 
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+
+      {/* 쿠팡 변환 미리보기 모달 */}
+      {coupangPreview && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            background: 'rgba(0,0,0,0.7)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+          onClick={() => {
+            URL.revokeObjectURL(coupangPreview.blobUrl);
+            setCoupangPreview(null);
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: '#fff', borderRadius: 12, padding: 20,
+              maxWidth: 320, width: '90vw',
+              display: 'flex', flexDirection: 'column', gap: 12,
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#111' }}>쿠팡 썸네일 변환 결과</div>
+              <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>
+                1200 × 1200px · 흰 배경 · 상품 92% fill
+              </div>
+            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={coupangPreview.blobUrl}
+              alt="쿠팡 변환 결과"
+              style={{
+                width: '100%', aspectRatio: '1', objectFit: 'contain',
+                border: '1px solid #e5e7eb', borderRadius: 8,
+              }}
+            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <a
+                href={coupangPreview.blobUrl}
+                download="thumbnail-coupang.jpg"
+                style={{ flex: 1, textDecoration: 'none' }}
+              >
+                <button
+                  style={{
+                    width: '100%', padding: '8px 0',
+                    background: '#be0014', color: '#fff',
+                    border: 'none', borderRadius: 8,
+                    fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                  }}
+                >
+                  다운로드
+                </button>
+              </a>
+              <button
+                onClick={() => {
+                  URL.revokeObjectURL(coupangPreview.blobUrl);
+                  setCoupangPreview(null);
+                }}
+                style={{
+                  flex: 1, padding: '8px 0',
+                  background: '#f3f4f6', color: '#374151',
+                  border: 'none', borderRadius: 8,
+                  fontSize: 13, cursor: 'pointer',
+                }}
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
