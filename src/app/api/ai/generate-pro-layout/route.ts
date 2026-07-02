@@ -2,26 +2,21 @@
  * POST /api/ai/generate-pro-layout
  *
  * OCR 결과 + 상품 정보 → Claude Sonnet으로 전체 페이지 DSL 생성
- * SSE로 진행률을 실시간 스트리밍합니다.
  */
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAuth } from '@/lib/supabase/auth';
 import { checkRateLimit, getRateLimitKey } from '@/lib/rate-limit';
+import { callClaude } from '@/lib/ai/claude-cli';
 
 export const maxDuration = 180;
 
-/** 분당 최대 요청 수 */
 const RATE_LIMIT = { windowMs: 60_000, maxRequests: 2 };
-
-// ─────────────────────────────────────────
-// Zod 스키마
-// ─────────────────────────────────────────
 
 const RequestSchema = z.object({
   productInfo: z.object({
     name: z.string().min(1).max(200),
-    points: z.array(z.string().max(200)).max(10).default([]),
+    points: z.array(z.string().max(200)).max(30).default([]),
     category: z.string().max(100).default(''),
   }),
   analyzedSections: z
@@ -38,10 +33,6 @@ const RequestSchema = z.object({
     .default([]),
   productImageCount: z.number().min(0).max(4).default(0),
 });
-
-// ─────────────────────────────────────────
-// Claude 시스템 프롬프트
-// ─────────────────────────────────────────
 
 const CLAUDE_SYSTEM = `You are a Korean e-commerce product detail page designer.
 Generate a complete page layout as a JSON array of sections for mobile (390px width).
@@ -78,143 +69,124 @@ DESIGN RULES:
 4. imageSlots map to section images
 5. For lifestyle images use slotType "flux_lifestyle" with descriptive promptHint in Korean
 6. Generate 6-10 sections for a complete detail page
+7. NEVER use Chinese characters (한자/漢字). Use Korean (한글) or English ONLY. This applies to ALL text: titles, labels, sublabels, stat values, promptHints, badge text, etc. Examples of FORBIDDEN characters: 適當 → write "적당", 溫度 → write "온도", 品質 → write "품질".
+8. Design for 390px mobile width — avoid wide horizontal layouts or tables that overflow narrow screens. Use vertical or wrapped layouts.
 
 Return ONLY valid JSON array — no explanation, no code fences:
 [section1, section2, ...]`;
 
-// ─────────────────────────────────────────
-// SSE 유틸
-// ─────────────────────────────────────────
+/** CJK 문자 감지 정규식 (한자, 한중일 통합 한자 등) */
+const CJK_REGEX = /[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF]/g;
 
-function sseChunk(event: string, data: Record<string, unknown>): Uint8Array {
-  return new TextEncoder().encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+/** JSON 값 트리를 재귀 순회하며 문자열에서 CJK 문자를 제거 */
+function stripCjk(value: unknown): unknown {
+  if (typeof value === 'string') return value.replace(CJK_REGEX, '').trim();
+  if (Array.isArray(value)) return value.map(stripCjk);
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, stripCjk(v)]));
+  }
+  return value;
 }
 
-// ─────────────────────────────────────────
-// POST 핸들러
-// ─────────────────────────────────────────
+/** 첫 번째 완전한 JSON 배열을 추출 (코드펜스 무관) */
+function extractJsonArray(text: string): string | null {
+  // 코드펜스 안에 있어도 첫 [ 부터 매칭하면 충분
+  const start = text.indexOf('[');
+  if (start === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i]!;
+    if (escape) { escape = false; continue; }
+    if (ch === '\\' && inString) { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === '[' || ch === '{') depth++;
+    else if (ch === ']' || ch === '}') {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  return null;
+}
 
 export async function POST(req: NextRequest): Promise<Response> {
-  // 1. 인증 검증
   const auth = await requireAuth(req);
   if (auth instanceof Response) return auth;
 
-  // 2. Rate Limit 검사
   const ip = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? 'unknown';
   const rl = checkRateLimit(getRateLimitKey(ip, 'generate-pro-layout'), RATE_LIMIT);
   if (!rl.allowed) {
-    const stream = new ReadableStream({
-      start(ctrl) {
-        ctrl.enqueue(sseChunk('error', { message: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' }));
-        ctrl.close();
-      },
-    });
-    return new Response(stream, {
-      status: 429,
-      headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
-    });
+    return NextResponse.json(
+      { success: false, error: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' },
+      { status: 429 }
+    );
   }
 
-  // 3. 요청 바디 검증
   const body = await req.json().catch(() => null);
   const parsed = RequestSchema.safeParse(body);
   if (!parsed.success) {
-    const stream = new ReadableStream({
-      start(ctrl) {
-        ctrl.enqueue(
-          sseChunk('error', { message: parsed.error.issues[0]?.message ?? '잘못된 요청입니다.' })
-        );
-        ctrl.close();
-      },
-    });
-    return new Response(stream, {
-      status: 400,
-      headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
-    });
+    return NextResponse.json(
+      { success: false, error: parsed.error.issues[0]?.message ?? '잘못된 요청입니다.' },
+      { status: 400 }
+    );
   }
 
   const { productInfo, analyzedSections, productImageCount } = parsed.data;
 
-  // 4. SSE 스트림 생성
-  const stream = new ReadableStream({
-    async start(ctrl) {
-      const send = (event: string, data: Record<string, unknown>) => {
-        ctrl.enqueue(sseChunk(event, data));
-      };
+  const userPrompt = [
+    `Product: "${productInfo.name}"`,
+    productInfo.category ? `Category: ${productInfo.category}` : '',
+    productInfo.points.length > 0
+      ? `Key points:\n${productInfo.points.map(p => `- ${p}`).join('\n')}`
+      : '',
+    productImageCount > 0 ? `Product images available: ${productImageCount}` : '',
+    analyzedSections.length > 0
+      ? `Extracted data from reference pages:\n${analyzedSections
+          .map((s, i) => `Section ${i + 1} (${s.blockType}): ${JSON.stringify(s.extractedData)}`)
+          .join('\n')}`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
 
-      try {
-        send('progress', { step: 'generating', message: 'Claude가 레이아웃을 설계하는 중...' });
+  try {
+    const text = await callClaude(CLAUDE_SYSTEM, userPrompt, 'opus', 16000);
 
-        // 사용자 프롬프트 조립
-        const userPrompt = [
-          `Product: "${productInfo.name}"`,
-          productInfo.category ? `Category: ${productInfo.category}` : '',
-          productInfo.points.length > 0
-            ? `Key points:\n${productInfo.points.map(p => `- ${p}`).join('\n')}`
-            : '',
-          productImageCount > 0 ? `Product images available: ${productImageCount}` : '',
-          analyzedSections.length > 0
-            ? `Extracted data from reference pages:\n${analyzedSections
-                .map(
-                  (s, i) =>
-                    `Section ${i + 1} (${s.blockType}): ${JSON.stringify(s.extractedData)}`
-                )
-                .join('\n')}`
-            : '',
-        ]
-          .filter(Boolean)
-          .join('\n');
+    console.log('[generate-pro-layout] text 길이:', text.length, '앞100자:', JSON.stringify(text.slice(0, 100)));
 
-        // Claude API 호출
-        const { getAnthropicClient } = await import('@/lib/ai/claude');
-        const client = getAnthropicClient();
-        const res = await client.messages.create({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 4096,
-          system: CLAUDE_SYSTEM,
-          messages: [{ role: 'user', content: userPrompt }],
-        });
+    const jsonStr = extractJsonArray(text);
+    if (!jsonStr) {
+      console.error('[generate-pro-layout] JSON 배열 없음. 앞500자:', JSON.stringify(text.slice(0, 500)));
+      return NextResponse.json(
+        { success: false, error: 'Claude 응답에서 JSON 배열을 찾을 수 없습니다.', _debug: text.slice(0, 300) },
+        { status: 500 }
+      );
+    }
 
-        // 텍스트 블록 추출
-        const text = res.content
-          .filter(b => b.type === 'text')
-          .map(b => (b as { type: 'text'; text: string }).text)
-          .join('');
+    let sections: unknown[];
+    try {
+      sections = JSON.parse(jsonStr) as unknown[];
+    } catch (e) {
+      console.error('[generate-pro-layout] JSON 파싱 실패. 추출된 문자열:', jsonStr.slice(0, 500));
+      return NextResponse.json(
+        { success: false, error: 'Claude 응답 JSON 파싱 실패' },
+        { status: 500 }
+      );
+    }
 
-        send('progress', { step: 'parsing', message: '레이아웃을 구성하는 중...' });
+    sections = stripCjk(sections) as unknown[];
 
-        // JSON 배열 파싱 (첫 번째 [...] 블록 추출)
-        const match = text.match(/\[[\s\S]*\]/);
-        if (!match) {
-          send('error', { message: 'Claude 응답 파싱 실패: JSON 배열을 찾을 수 없습니다.' });
-          ctrl.close();
-          return;
-        }
-
-        let sections: unknown[];
-        try {
-          sections = JSON.parse(match[0]) as unknown[];
-        } catch {
-          send('error', { message: 'Claude 응답 파싱 실패: 유효하지 않은 JSON입니다.' });
-          ctrl.close();
-          return;
-        }
-
-        send('complete', { sections });
-      } catch (error) {
-        console.error('[generate-pro-layout] 오류:', error);
-        send('error', { message: '레이아웃 생성 중 오류가 발생했습니다.' });
-      } finally {
-        ctrl.close();
-      }
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
-    },
-  });
+    return NextResponse.json({ success: true, sections });
+  } catch (error) {
+    console.error('[generate-pro-layout] 오류:', error);
+    const msg = error instanceof Error ? error.message : String(error);
+    return NextResponse.json(
+      { success: false, error: `레이아웃 생성 실패: ${msg}` },
+      { status: 500 }
+    );
+  }
 }

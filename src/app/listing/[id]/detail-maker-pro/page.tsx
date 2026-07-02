@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import type { AnalyzedSection } from '@/app/api/ai/analyze-detail-page/route';
 
@@ -62,8 +62,33 @@ export default function DetailMakerProPage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const refFileRef = useRef<HTMLInputElement>(null);
-  const prodFileRef = useRef<HTMLInputElement>(null);
+  const [refPreviews, setRefPreviews] = useState<string[]>([]);
+  const [prodPreviews, setProdPreviews] = useState<string[]>([]);
+  const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null);
+
+
+  useEffect(() => {
+    const urls = referenceImages.map(f => URL.createObjectURL(f));
+    setRefPreviews(urls);
+    return () => urls.forEach(url => URL.revokeObjectURL(url));
+  }, [referenceImages]);
+
+  useEffect(() => {
+    const urls = productImages.map(f => URL.createObjectURL(f));
+    setProdPreviews(urls);
+    return () => urls.forEach(url => URL.revokeObjectURL(url));
+  }, [productImages]);
+
+  useEffect(() => {
+    if (!lightbox) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight') setLightbox(p => p ? { ...p, index: (p.index + 1) % p.images.length } : null);
+      else if (e.key === 'ArrowLeft') setLightbox(p => p ? { ...p, index: (p.index - 1 + p.images.length) % p.images.length } : null);
+      else if (e.key === 'Escape') setLightbox(null);
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [lightbox]);
 
   const containerStyle: React.CSSProperties = {
     minHeight: '100vh',
@@ -76,9 +101,10 @@ export default function DetailMakerProPage() {
   };
 
   const fileToBase64 = (file: File): Promise<string> =>
-    new Promise(resolve => {
+    new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = e => resolve((e.target?.result as string).split(',')[1] ?? '');
+      reader.onerror = () => reject(new Error(`파일을 읽을 수 없습니다: ${file.name}`));
       reader.readAsDataURL(file);
     });
 
@@ -111,20 +137,21 @@ export default function DetailMakerProPage() {
       }
       setEditedSections(data.sections);
       setScreen('review');
-    } catch {
-      setError('분석 중 오류가 발생했습니다.');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '분석 중 오류가 발생했습니다.';
+      setError(message);
     } finally {
       setIsAnalyzing(false);
     }
   }, [referenceImages, productName]);
 
-  // Step 1.5 → Step 2: DSL 생성 (SSE)
+  // Step 1.5 → Step 2: DSL 생성
   const handleGenerate = useCallback(async () => {
     if (isGenerating) return;
     setIsGenerating(true);
     setScreen('generating');
     setError(null);
-    setProgress({ step: 'start', message: '시작 중...' });
+    setProgress({ step: 'start', message: 'Claude가 레이아웃을 설계하는 중...' });
 
     try {
       const res = await fetch('/api/ai/generate-pro-layout', {
@@ -136,7 +163,8 @@ export default function DetailMakerProPage() {
             points: productPoints
               .split('\n')
               .map(p => p.trim())
-              .filter(Boolean),
+              .filter(Boolean)
+              .slice(0, 30),
             category: '',
           },
           analyzedSections: editedSections,
@@ -144,42 +172,20 @@ export default function DetailMakerProPage() {
         }),
       });
 
-      if (!res.body) {
-        setError('스트리밍 응답 없음');
+      const data = await res.json() as { success: boolean; sections?: GeneratedSection[]; error?: string; _debug?: string };
+      if (!data.success || !data.sections) {
+        const debugInfo = data._debug ? `\n[debug] ${data._debug}` : '';
+        setError((data.error ?? '레이아웃 생성 실패') + debugInfo);
         setScreen('review');
         return;
       }
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const chunks = buffer.split('\n\n');
-        buffer = chunks.pop() ?? '';
-
-        for (const chunk of chunks) {
-          const eventMatch = chunk.match(/^event: (\w+)/m);
-          const dataMatch = chunk.match(/^data: (.+)/m);
-          if (!eventMatch || !dataMatch) continue;
-          const eventType = eventMatch[1];
-          const eventData = JSON.parse(dataMatch[1]) as Record<string, unknown>;
-          if (eventType === 'progress') {
-            setProgress(eventData as unknown as ProgressEvent);
-          } else if (eventType === 'complete') {
-            setGeneratedSections(eventData.sections as GeneratedSection[]);
-            setScreen('result');
-          } else if (eventType === 'error') {
-            setError((eventData.message as string) ?? '오류 발생');
-            setScreen('review');
-          }
-        }
-      }
-    } catch {
-      setError('생성 중 오류가 발생했습니다.');
+      setGeneratedSections(data.sections);
+      setScreen('result');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('[handleGenerate] 오류:', e);
+      setError(`생성 중 오류: ${msg}`);
       setScreen('review');
     } finally {
       setIsGenerating(false);
@@ -303,16 +309,34 @@ export default function DetailMakerProPage() {
             참고 상세페이지 스크린샷 (최대 8장) *
           </label>
           <input
-            ref={refFileRef}
+            id="ref-file-input"
             type="file"
             accept="image/png,image/jpeg,image/webp"
             multiple
             style={{ display: 'none' }}
-            onChange={e => setReferenceImages(Array.from(e.target.files ?? []).slice(0, 8))}
+            onChange={e => { setReferenceImages(Array.from(e.target.files ?? []).slice(0, 8)); e.target.value = ''; }}
           />
-          <button onClick={() => refFileRef.current?.click()} style={uploadBtnStyle}>
-            {referenceImages.length > 0 ? `${referenceImages.length}장 선택됨` : '클릭해서 이미지 선택'}
-          </button>
+          {refPreviews.length > 0 ? (
+            <div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', marginBottom: '8px' }}>
+                {refPreviews.map((url, idx) => (
+                  <div key={idx} onClick={() => setLightbox({ images: refPreviews, index: idx })}
+                    style={{ aspectRatio: '1', borderRadius: '6px', overflow: 'hidden', cursor: 'zoom-in', background: '#1e1e2e' }}>
+                    <img src={url} alt={`참고 ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  </div>
+                ))}
+              </div>
+              <label htmlFor="ref-file-input"
+                style={{ ...uploadBtnStyle, display: 'block', textAlign: 'center', cursor: 'pointer', fontSize: '12px', padding: '8px' }}>
+                이미지 교체 / 추가 ({refPreviews.length}/8장)
+              </label>
+            </div>
+          ) : (
+            <label htmlFor="ref-file-input"
+              style={{ ...uploadBtnStyle, display: 'block', textAlign: 'center', cursor: 'pointer' }}>
+              클릭해서 이미지 선택 (최대 8장)
+            </label>
+          )}
         </div>
 
         <div style={{ marginBottom: '28px' }}>
@@ -322,24 +346,91 @@ export default function DetailMakerProPage() {
               fontWeight: 700,
               color: '#a0a0b0',
               display: 'block',
-              marginBottom: '8px',
+              marginBottom: '4px',
             }}
           >
-            제품 이미지 (누끼 — 선택사항)
+            제품 이미지 <span style={{ color: BRAND_PURPLE }}>★ 상세페이지에 삽입됩니다</span>
           </label>
+          <p style={{ fontSize: '11px', color: '#6b7280', marginBottom: '8px', marginTop: 0 }}>
+            누끼 또는 제품 사진을 올리면 각 섹션에 자동으로 들어갑니다 (최대 4장)
+          </p>
+          {/* 추가 전용 input — 기존 이미지에 합산 (최대 4장) */}
           <input
-            ref={prodFileRef}
+            id="prod-add-input"
             type="file"
             accept="image/png,image/jpeg,image/webp"
             multiple
             style={{ display: 'none' }}
-            onChange={e => setProductImages(Array.from(e.target.files ?? []).slice(0, 4))}
+            onChange={e => {
+              const newFiles = Array.from(e.target.files ?? []);
+              setProductImages(prev => [...prev, ...newFiles].slice(0, 4));
+              e.target.value = '';
+            }}
           />
-          <button onClick={() => prodFileRef.current?.click()} style={uploadBtnStyle}>
-            {productImages.length > 0
-              ? `${productImages.length}장 선택됨`
-              : '제품 이미지 선택 (선택사항)'}
-          </button>
+          {/* 교체 전용 input — 전체 교체 */}
+          <input
+            id="prod-replace-input"
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            multiple
+            style={{ display: 'none' }}
+            onChange={e => { setProductImages(Array.from(e.target.files ?? []).slice(0, 4)); e.target.value = ''; }}
+          />
+          {prodPreviews.length > 0 ? (
+            <div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', marginBottom: '8px' }}>
+                {prodPreviews.map((url, idx) => (
+                  <div key={idx} onClick={() => setLightbox({ images: prodPreviews, index: idx })}
+                    style={{ aspectRatio: '1', borderRadius: '6px', overflow: 'hidden', cursor: 'zoom-in', background: '#1e1e2e', position: 'relative' }}>
+                    <img src={url} alt={`제품 ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); setProductImages(prev => prev.filter((_, i) => i !== idx)); }}
+                      style={{
+                        position: 'absolute', top: 3, right: 3,
+                        width: 18, height: 18, borderRadius: '50%',
+                        background: 'rgba(0,0,0,0.65)', border: 'none',
+                        color: '#fff', fontSize: 11, cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        lineHeight: 1,
+                      }}
+                    >×</button>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {prodPreviews.length < 4 && (
+                  <label
+                    htmlFor="prod-add-input"
+                    style={{
+                      flex: 1, textAlign: 'center', cursor: 'pointer',
+                      padding: '9px 0', borderRadius: '8px', fontSize: '12px', fontWeight: 700,
+                      border: '1.5px solid #6366f1', color: '#6366f1', background: 'rgba(99,102,241,0.08)',
+                      display: 'block',
+                    }}
+                  >
+                    + 추가 ({prodPreviews.length}/4장)
+                  </label>
+                )}
+                <label
+                  htmlFor="prod-replace-input"
+                  style={{
+                    flex: 1, textAlign: 'center', cursor: 'pointer',
+                    padding: '9px 0', borderRadius: '8px', fontSize: '12px', fontWeight: 700,
+                    border: '1.5px solid #374151', color: '#9ca3af', background: 'transparent',
+                    display: 'block',
+                  }}
+                >
+                  ↺ 교체
+                </label>
+              </div>
+            </div>
+          ) : (
+            <label htmlFor="prod-add-input"
+              style={{ ...uploadBtnStyle, display: 'block', textAlign: 'center', cursor: 'pointer', borderColor: '#6366f1' }}>
+              📷 제품 이미지 선택 (최대 4장)
+            </label>
+          )}
         </div>
 
         <button
@@ -360,6 +451,35 @@ export default function DetailMakerProPage() {
         >
           {isAnalyzing ? '분석 중...' : '분석 시작 →'}
         </button>
+
+        {lightbox && (
+          <div onClick={() => setLightbox(null)}
+            style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.9)',
+                     display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div onClick={e => e.stopPropagation()} style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>
+              <img src={lightbox.images[lightbox.index]} alt=""
+                style={{ maxWidth: '90vw', maxHeight: '85vh', objectFit: 'contain', borderRadius: '8px' }} />
+              <button onClick={() => setLightbox(null)}
+                style={{ position: 'absolute', top: '-12px', right: '-12px', background: '#374151',
+                         border: 'none', borderRadius: '50%', width: '32px', height: '32px',
+                         color: '#e2e8f0', cursor: 'pointer', fontSize: '16px', lineHeight: '32px' }}>✕</button>
+              {lightbox.images.length > 1 && (<>
+                <button onClick={e => { e.stopPropagation(); setLightbox(p => p ? { ...p, index: (p.index - 1 + p.images.length) % p.images.length } : null); }}
+                  style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)',
+                           background: 'rgba(55,65,81,0.8)', border: 'none', borderRadius: '50%',
+                           width: '36px', height: '36px', color: '#e2e8f0', cursor: 'pointer', fontSize: '22px', lineHeight: '36px' }}>‹</button>
+                <button onClick={e => { e.stopPropagation(); setLightbox(p => p ? { ...p, index: (p.index + 1) % p.images.length } : null); }}
+                  style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)',
+                           background: 'rgba(55,65,81,0.8)', border: 'none', borderRadius: '50%',
+                           width: '36px', height: '36px', color: '#e2e8f0', cursor: 'pointer', fontSize: '22px', lineHeight: '36px' }}>›</button>
+                <div style={{ position: 'absolute', bottom: '-28px', left: '50%', transform: 'translateX(-50%)',
+                              color: '#9ca3af', fontSize: '13px', whiteSpace: 'nowrap' }}>
+                  {lightbox.index + 1} / {lightbox.images.length}
+                </div>
+              </>)}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -423,7 +543,7 @@ export default function DetailMakerProPage() {
                 try {
                   const parsed = JSON.parse(e.target.value) as AnalyzedSection['extractedData'];
                   setEditedSections(prev =>
-                    prev.map((s, j) => (j === i ? { ...s, extractedData: parsed } : s))
+                    prev.map((s, j) => (j === i ? { ...s, extractedData: parsed, needsReview: false } : s))
                   );
                 } catch {
                   // 유효하지 않은 JSON은 무시
@@ -537,6 +657,26 @@ export default function DetailMakerProPage() {
         {generatedSections.length}개 섹션이 생성됐습니다.
       </p>
 
+      {productImages.length === 0 && (
+        <div style={{
+          background: '#2a1f10',
+          border: '1px solid #f59e0b',
+          borderRadius: '8px',
+          padding: '12px 14px',
+          marginBottom: '16px',
+          fontSize: '13px',
+          color: '#fbbf24',
+        }}>
+          ⚠️ 제품 이미지를 업로드하지 않았습니다. 에디터로 이동하면 섹션에 이미지가 없습니다.{' '}
+          <button
+            onClick={() => setScreen('upload')}
+            style={{ background: 'none', border: 'none', color: '#f59e0b', textDecoration: 'underline', cursor: 'pointer', fontSize: '13px', padding: 0 }}
+          >
+            돌아가서 이미지 추가 →
+          </button>
+        </div>
+      )}
+
       {errorBanner}
 
       {generatedSections.map((section, i) => {
@@ -613,7 +753,111 @@ export default function DetailMakerProPage() {
           처음부터
         </button>
         <button
-          onClick={() => router.push(`/listing/${listingId}/detail-maker`)}
+          onClick={async () => {
+            const editBtn = document.getElementById('edit-btn') as HTMLButtonElement | null;
+
+            // Step 1: 제품 이미지 업로드 → Supabase URL 확보
+            let uploadedImageUrls: string[] = [];
+            if (productImages.length > 0) {
+              uploadedImageUrls = (
+                await Promise.allSettled(
+                  productImages.map(async (file) => {
+                    const fd = new FormData();
+                    fd.append('file', file);
+                    fd.append('usageContext', 'listing_detail');
+                    const res = await fetch('/api/listing/upload-image', { method: 'POST', body: fd });
+                    const json = await res.json() as { success: boolean; data?: { url: string } };
+                    if (!json.success || !json.data?.url) throw new Error('upload failed');
+                    return json.data.url;
+                  })
+                )
+              )
+                .filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled')
+                .map((r) => r.value);
+            }
+
+            // Step 2: flux_lifestyle 슬롯 섹션마다 Gemini 씬 생성
+            // generate-scene-image: 누끼 제거(Replicate) → 배경 생성(Gemini) → 합성(Sharp) 자동 처리
+            const geminiUrlMap: Record<number, string> = {};
+            if (uploadedImageUrls.length > 0) {
+              if (editBtn) editBtn.textContent = 'AI 이미지 생성 중...';
+
+              const fluxItems = generatedSections
+                .map((s, i) => ({ s, i }))
+                .filter(({ s }) => s.imageSlots?.some(slot => slot.slotType === 'flux_lifestyle'));
+
+              await Promise.allSettled(
+                fluxItems.map(async ({ s, i }) => {
+                  try {
+                    const slot = s.imageSlots?.find(sl => sl.slotType === 'flux_lifestyle');
+                    const sceneRes = await fetch('/api/ai/generate-scene-image', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        sectionType: 'lifestyle',
+                        productImageUrls: uploadedImageUrls.slice(0, 2),
+                        scenePrompt: slot?.promptHint,
+                      }),
+                    });
+                    const sceneJson = await sceneRes.json() as {
+                      success: boolean;
+                      data?: { imageBase64: string; mimeType: string };
+                    };
+                    if (!sceneJson.success || !sceneJson.data) return;
+
+                    const uploadRes = await fetch('/api/image/upload-ai', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        imageBase64: sceneJson.data.imageBase64,
+                        mimeType: sceneJson.data.mimeType,
+                        role: 'lifestyle',
+                      }),
+                    });
+                    const uploadJson = await uploadRes.json() as { success: boolean; url?: string };
+                    if (uploadJson.success && uploadJson.url) {
+                      geminiUrlMap[i] = uploadJson.url;
+                    }
+                  } catch {
+                    // 실패 시 제품 이미지 원본으로 fallback
+                  }
+                })
+              );
+            }
+
+            // Step 3: 섹션 조립 (Gemini 씬 → 원본 제품 이미지 순으로 fallback)
+            const detailSections = generatedSections.map((s, i) => {
+              const geminiUrl = geminiUrlMap[i];
+              const imageUrl = geminiUrl ?? fluxResults[i] ?? uploadedImageUrls[i] ?? uploadedImageUrls[0];
+              return {
+                id: crypto.randomUUID(),
+                type: 'claude_layout' as const,
+                order: i,
+                content: {
+                  type: 'claude_layout' as const,
+                  title: s.title ?? `섹션 ${i + 1}`,
+                  blocks: (s as Record<string, unknown>).blocks ?? [],
+                  bgStyle: (s as Record<string, unknown>).bgStyle,
+                  padding: (s as Record<string, unknown>).padding,
+                  imageSlots: s.imageSlots,
+                },
+                attachedImages: (() => {
+                  const slotCount = Math.max(s.imageSlots?.length ?? 0, imageUrl ? 1 : 0);
+                  if (slotCount === 0) return [];
+                  return Array.from({ length: slotCount }, (_, idx) => ({
+                    url: idx === 0 && geminiUrl ? geminiUrl : (uploadedImageUrls[idx] ?? imageUrl ?? ''),
+                    order: idx,
+                    processingMode: 'original' as const,
+                  })).filter(item => item.url);
+                })(),
+              };
+            });
+
+            sessionStorage.setItem('pro_sections', JSON.stringify(detailSections));
+            sessionStorage.setItem('pro_meta', JSON.stringify({ productName, uploadedImageUrls }));
+            router.push('/listing/detail-maker');
+          }}
+          id="edit-btn"
           style={{
             flex: 2,
             padding: '12px',
@@ -624,6 +868,11 @@ export default function DetailMakerProPage() {
             cursor: 'pointer',
             fontSize: '14px',
             fontWeight: 700,
+          }}
+          onClickCapture={(e) => {
+            const btn = e.currentTarget as HTMLButtonElement;
+            btn.disabled = true;
+            btn.textContent = productImages.length > 0 ? '이미지 업로드 중...' : '이동 중...';
           }}
         >
           에디터에서 편집 →
