@@ -1,0 +1,111 @@
+/**
+ * /api/detail-page/draft
+ * POST — 상세페이지 드래프트 upsert (id 있으면 update, 없으면 insert)
+ * GET  — ?id= 또는 ?listingId= 로 본인 드래프트 로드
+ */
+import { NextRequest } from 'next/server';
+import { z } from 'zod';
+import { getSupabaseServerClient } from '@/lib/supabase/server';
+import { requireAuth } from '@/lib/supabase/auth';
+import { sanitizeProLayout } from '@/lib/detail-page/layout-validator';
+
+export const DraftUpsertSchema = z.object({
+  id: z.string().uuid().optional(),
+  listingId: z.string().uuid().optional(),
+  productName: z.string().max(200).optional(),
+  sections: z.array(z.record(z.string(), z.unknown())),
+  theme: z.record(z.string(), z.unknown()),
+  thumbnailUrl: z.string().url().optional(),
+});
+
+export async function POST(request: NextRequest) {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof Response) return authResult;
+  const { userId } = authResult;
+
+  let rawBody: unknown;
+  try {
+    rawBody = await request.json();
+  } catch {
+    return Response.json({ success: false, error: '유효한 JSON이 아닙니다.' }, { status: 400 });
+  }
+
+  const parsed = DraftUpsertSchema.safeParse(rawBody);
+  if (!parsed.success) {
+    return Response.json({ success: false, error: '입력값 검증 실패' }, { status: 400 });
+  }
+  const { id, listingId, productName, sections, theme, thumbnailUrl } = parsed.data;
+
+  // claude_layout 섹션은 저장 전 정화(오염 저장 방지). sanitizeProLayout는 { sections, warnings } 반환.
+  const safeSections = sections.map((s) =>
+    (s as { type?: string }).type === 'claude_layout'
+      ? { ...s, content: sanitizeProLayout([(s as { content?: unknown }).content]).sections[0] ?? (s as { content?: unknown }).content }
+      : s,
+  );
+
+  const row = {
+    user_id: userId,
+    listing_id: listingId ?? null,
+    product_name: productName ?? null,
+    sections: safeSections,
+    theme,
+    thumbnail_url: thumbnailUrl ?? null,
+    updated_at: new Date().toISOString(),
+  };
+
+  try {
+    const supabase = getSupabaseServerClient();
+    if (id) {
+      const { data, error } = await supabase
+        .from('detail_page_drafts').update(row).eq('id', id).eq('user_id', userId).select('id').single();
+      if (error || !data) {
+        return Response.json({ success: false, error: '드래프트를 찾을 수 없거나 권한이 없습니다.' }, { status: 404 });
+      }
+      return Response.json({ id: (data as { id: string }).id });
+    }
+    const { data, error } = await supabase
+      .from('detail_page_drafts').insert(row).select('id').single();
+    if (error) throw error;
+    return Response.json({ id: (data as { id: string }).id }, { status: 201 });
+  } catch (err) {
+    console.error('[POST /api/detail-page/draft]', err);
+    return Response.json({ success: false, error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+  }
+}
+
+export async function GET(request: NextRequest) {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof Response) return authResult;
+  const { userId } = authResult;
+
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get('id');
+  const listingId = searchParams.get('listingId');
+  if (!id && !listingId) {
+    return Response.json({ success: false, error: 'id 또는 listingId가 필요합니다.' }, { status: 400 });
+  }
+
+  try {
+    const supabase = getSupabaseServerClient();
+    let query = supabase
+      .from('detail_page_drafts')
+      .select('id, listing_id, product_name, sections, theme, thumbnail_url, updated_at')
+      .eq('user_id', userId);
+    query = id ? query.eq('id', id) : query.eq('listing_id', listingId as string);
+
+    const { data, error } = await query.order('updated_at', { ascending: false }).limit(1).maybeSingle();
+    if (error) throw error;
+    if (!data) return Response.json({ draft: null });
+
+    const d = data as Record<string, unknown>;
+    return Response.json({
+      draft: {
+        id: d.id, listingId: d.listing_id, productName: d.product_name,
+        sections: d.sections, theme: d.theme, thumbnailUrl: d.thumbnail_url, updatedAt: d.updated_at,
+      },
+    });
+  } catch (err) {
+    console.error('[GET /api/detail-page/draft]', err);
+    return Response.json({ success: false, error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+  }
+}
