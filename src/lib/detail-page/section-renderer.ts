@@ -698,6 +698,7 @@ function renderLayoutBlock(
   block: LayoutBlock,
   images: AttachedImage[],
   colors: PaletteColors,
+  basePath: string = '',
 ): string {
   switch (block.type) {
     case 'badge': {
@@ -708,7 +709,7 @@ function renderLayoutBlock(
           ? '#e2e8f0'
           : colors.accent;
       const fg = block.color === 'neutral' ? '#334155' : colors.accentTextColor;
-      return `<div style="display:inline-block;background:${bg};color:${fg};font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px;margin-bottom:10px;">${escapeHtml(block.text)}</div>`;
+      return `<div style="display:inline-block;background:${bg};color:${fg};font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px;margin-bottom:10px;">${editableText(`${basePath}.text`, block.text)}</div>`;
     }
     case 'heading': {
       const sz = block.size === 'xl' ? '38px' : block.size === 'lg' ? '26px' : '19px';
@@ -719,11 +720,11 @@ function renderLayoutBlock(
           : block.color === 'primary'
           ? colors.accent
           : colors.text;
-      return `<div style="font-size:${sz};font-weight:${fw};color:${color};line-height:1.2;letter-spacing:-0.5px;margin-bottom:10px;">${escapeHtml(block.text)}</div>`;
+      return `<div style="font-size:${sz};font-weight:${fw};color:${color};line-height:1.2;letter-spacing:-0.5px;margin-bottom:10px;">${editableText(`${basePath}.text`, block.text)}</div>`;
     }
     case 'subtext': {
       const align = block.align === 'center' ? 'center' : 'left';
-      return `<div style="font-size:15px;color:${colors.textSub};line-height:1.65;text-align:${align};margin-bottom:10px;">${escapeHtml(block.text)}</div>`;
+      return `<div style="font-size:15px;color:${colors.textSub};line-height:1.65;text-align:${align};margin-bottom:10px;">${editableText(`${basePath}.text`, block.text)}</div>`;
     }
     case 'image': {
       const img = images[block.attachedIndex];
@@ -741,35 +742,38 @@ function renderLayoutBlock(
       return `<div style="display:flex;justify-content:${align};margin-bottom:12px;"><img src="${escapeHtml(safeUrl)}" alt="" style="width:${escapeHtml(width)};max-width:100%;object-fit:contain;${radius}" /></div>`;
     }
     case 'stat_row': {
+      if (!Array.isArray(block.items)) return '';
       const items = block.items
         .map(
-          (item) =>
+          (item, i) =>
             `<div style="text-align:center;flex:1;">
-              <div style="font-size:44px;font-weight:900;color:${colors.accent};line-height:1.05;letter-spacing:-1px;">${escapeHtml(item.value)}${item.unit ? `<span style="font-size:18px;font-weight:700;margin-left:2px;">${escapeHtml(item.unit)}</span>` : ''}</div>
-              <div style="font-size:12px;color:${colors.textSub};margin-top:6px;line-height:1.4;">${escapeHtml(item.label)}</div>
+              <div style="font-size:44px;font-weight:900;color:${colors.accent};line-height:1.05;letter-spacing:-1px;">${editableText(`${basePath}.items.${i}.value`, item.value)}${item.unit ? `<span style="font-size:18px;font-weight:700;margin-left:2px;">${editableText(`${basePath}.items.${i}.unit`, item.unit)}</span>` : ''}</div>
+              <div style="font-size:12px;color:${colors.textSub};margin-top:6px;line-height:1.4;">${editableText(`${basePath}.items.${i}.label`, item.label)}</div>
             </div>`,
         )
         .join('');
       return `<div style="display:flex;gap:8px;padding:20px 0;margin-bottom:8px;">${items}</div>`;
     }
     case 'bullet_list': {
+      if (!Array.isArray(block.items)) return '';
       const icon = block.icon === 'check' ? '✓' : block.icon === 'arrow' ? '→' : '•';
       const items = block.items
         .map(
-          (item) =>
+          (item, i) =>
             `<li style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px;font-size:14px;color:${colors.text};line-height:1.5;">
               <span style="color:${colors.accent};flex-shrink:0;font-weight:700;">${icon}</span>
-              <span>${escapeHtml(item)}</span>
+              <span>${editableText(`${basePath}.items.${i}`, item)}</span>
             </li>`,
         )
         .join('');
       return `<ul style="list-style:none;margin:0 0 12px;padding:0;">${items}</ul>`;
     }
     case 'columns': {
+      if (!Array.isArray(block.cols)) return '';
       const gap = block.gap ?? 12;
       const cols = block.cols
-        .map((col) => {
-          const inner = col.map((b) => renderLayoutBlock(b, images, colors)).join('');
+        .map((col, c) => {
+          const inner = col.map((b, r) => renderLayoutBlock(b, images, colors, `${basePath}.cols.${c}.${r}`)).join('');
           return `<div style="flex:1;min-width:0;">${inner}</div>`;
         })
         .join('');
@@ -780,14 +784,15 @@ function renderLayoutBlock(
     case 'spacer':
       return `<div style="height:${Math.min(block.height, 120)}px;"></div>`;
     case 'progress_bar': {
-      const items = block.items.map(item => {
+      if (!Array.isArray(block.items)) return '';
+      const items = block.items.map((item, i) => {
         const pct = Math.min(100, Math.max(0, item.value));
         const barColor = item.highlight ? colors.accent : '#9ca3af';
         const trackColor = item.highlight ? `${colors.accent}22` : '#e5e7eb';
         return `<div style="margin-bottom:10px;">
           <div style="display:flex;justify-content:space-between;font-size:12px;color:${colors.text};margin-bottom:4px;">
-            <span>${escapeHtml(item.label)}</span>
-            <span style="font-weight:700;color:${barColor};">${escapeHtml(item.displayValue ?? `${pct}%`)}</span>
+            <span>${editableText(`${basePath}.items.${i}.label`, item.label)}</span>
+            <span style="font-weight:700;color:${barColor};">${editableText(`${basePath}.items.${i}.displayValue`, item.displayValue ?? `${pct}%`)}</span>
           </div>
           <div style="background:${trackColor};border-radius:8px;height:12px;overflow:hidden;">
             <div style="background:${barColor};height:100%;width:${pct}%;border-radius:8px;"></div>
@@ -797,6 +802,7 @@ function renderLayoutBlock(
       return `<div style="margin-bottom:16px;">${items}</div>`;
     }
     case 'process_flow': {
+      if (!Array.isArray(block.items)) return '';
       const isVertical = block.direction === 'vertical';
       // dark/primary 배경에서는 흰 글씨가 되므로 하드코딩된 밝은 박스 배경을 반투명 흰색으로 교체
       const isDark = colors.text === '#ffffff';
@@ -815,8 +821,8 @@ function renderLayoutBlock(
           ? `<div style="text-align:center;color:${isDark ? 'rgba(255,255,255,0.6)' : colors.accent};font-size:14px;line-height:1;padding:2px 0;">↓</div>`
           : `<div style="color:${isDark ? 'rgba(255,255,255,0.6)' : colors.accent};font-size:16px;flex-shrink:0;align-self:center;">→</div>`);
         const box = `<div style="background:${boxBg};border:1.5px solid ${boxBorder};border-radius:8px;padding:8px 12px;text-align:center;">
-          <div style="font-size:12px;font-weight:700;color:${textColor};">${escapeHtml(item.label)}</div>
-          ${item.sublabel ? `<div style="font-size:12px;color:${colors.textSub};margin-top:2px;">${escapeHtml(item.sublabel)}</div>` : ''}
+          <div style="font-size:12px;font-weight:700;color:${textColor};">${editableText(`${basePath}.items.${i}.label`, item.label)}</div>
+          ${item.sublabel ? `<div style="font-size:12px;color:${colors.textSub};margin-top:2px;">${editableText(`${basePath}.items.${i}.sublabel`, item.sublabel)}</div>` : ''}
         </div>`;
         return box + (isLast ? '' : arrow);
       });
@@ -824,23 +830,25 @@ function renderLayoutBlock(
       return `<div style="display:flex;flex-direction:${flexDir};gap:6px;align-items:${isVertical ? 'stretch' : 'center'};flex-wrap:wrap;margin-bottom:16px;">${items.join('')}</div>`;
     }
     case 'icon_grid': {
+      if (!Array.isArray(block.items)) return '';
       const isDark = colors.text === '#ffffff';
       const itemBg = isDark ? 'rgba(255,255,255,0.12)' : '#f9fafb';
       const cols = block.cols ?? 3;
-      const items = block.items.map(item =>
+      const items = block.items.map((item, i) =>
         `<div style="text-align:center;padding:10px 6px;background:${itemBg};border-radius:10px;">
           <div style="font-size:24px;margin-bottom:6px;">${escapeHtml(item.icon)}</div>
-          <div style="font-size:13px;font-weight:700;color:${colors.text};line-height:1.3;">${escapeHtml(item.title)}</div>
-          ${item.subtitle ? `<div style="font-size:12px;color:${colors.textSub};margin-top:2px;">${escapeHtml(item.subtitle)}</div>` : ''}
+          <div style="font-size:13px;font-weight:700;color:${colors.text};line-height:1.3;">${editableText(`${basePath}.items.${i}.title`, item.title)}</div>
+          ${item.subtitle ? `<div style="font-size:12px;color:${colors.textSub};margin-top:2px;">${editableText(`${basePath}.items.${i}.subtitle`, item.subtitle)}</div>` : ''}
         </div>`
       ).join('');
       return `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:8px;margin-bottom:16px;">${items}</div>`;
     }
     case 'option_grid': {
+      if (!Array.isArray(block.items)) return '';
       // 사이즈·색상·용량 등 순서 없는 병렬 선택 옵션 — 화살표 없이 카드 그리드로 나열
       const isDark = colors.text === '#ffffff';
       const cols = block.cols ?? (block.items.length >= 3 ? 3 : 2);
-      const items = block.items.map((item) => {
+      const items = block.items.map((item, i) => {
         const boxBg = item.highlight
           ? (isDark ? 'rgba(255,255,255,0.25)' : `${colors.accent}15`)
           : (isDark ? 'rgba(255,255,255,0.12)' : '#f9fafb');
@@ -851,8 +859,8 @@ function renderLayoutBlock(
           ? (isDark ? '#ffffff' : colors.accent)
           : colors.text;
         return `<div style="background:${boxBg};border:1.5px solid ${boxBorder};border-radius:12px;padding:14px 8px;text-align:center;">
-          <div style="font-size:14px;font-weight:800;color:${textColor};line-height:1.3;">${escapeHtml(item.label)}</div>
-          ${item.sublabel ? `<div style="font-size:12px;color:${colors.textSub};margin-top:4px;line-height:1.4;">${escapeHtml(item.sublabel)}</div>` : ''}
+          <div style="font-size:14px;font-weight:800;color:${textColor};line-height:1.3;">${editableText(`${basePath}.items.${i}.label`, item.label)}</div>
+          ${item.sublabel ? `<div style="font-size:12px;color:${colors.textSub};margin-top:4px;line-height:1.4;">${editableText(`${basePath}.items.${i}.sublabel`, item.sublabel)}</div>` : ''}
         </div>`;
       }).join('');
       return `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:8px;margin-bottom:16px;">${items}</div>`;
@@ -913,7 +921,7 @@ function renderClaudeLayout(
       ? { ...colors, text: '#ffffff', textSub: 'rgba(255,255,255,0.72)' }
       : colors;
   const blocksHtml = (content.blocks ?? [])
-    .map((b) => renderLayoutBlock(b, section.attachedImages, effectiveColors))
+    .map((b, i) => renderLayoutBlock(b, section.attachedImages, effectiveColors, `content.blocks.${i}`))
     .join('');
   return `<div ${sectionAttrs(section)} style="background-color:${bg};padding:${pad};width:100%;box-sizing:border-box;">${blocksHtml}</div>`;
 }

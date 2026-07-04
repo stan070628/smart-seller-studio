@@ -194,4 +194,21 @@ describe('renderSection — claude_layout', () => {
     expect(html).toContain('왼쪽');
     expect(html).toContain('오른쪽');
   });
+
+  it('claude_layout 텍스트에 data-edit-path가 배선된다', () => {
+    const section = makeSection({
+      type: 'claude_layout',
+      title: '편집 배선',
+      blocks: [
+        { type: 'badge', text: 'Point 1' },
+        { type: 'heading', text: '핵심 제목', size: 'xl' },
+        { type: 'option_grid', items: [{ label: 'S', sublabel: '40cm' }, { label: 'M', sublabel: '55cm', highlight: true }] },
+      ],
+    });
+    const html = renderSection(section, DEFAULT_THEME);
+    expect(html).toContain('data-edit-path="content.blocks.0.text"');
+    expect(html).toContain('data-edit-path="content.blocks.1.text"');
+    expect(html).toContain('data-edit-path="content.blocks.2.items.0.label"');
+    expect(html).toContain('data-edit-path="content.blocks.2.items.1.sublabel"');
+  });
 });
