@@ -481,17 +481,20 @@ git commit -m "feat(detail-page): claude_layout 블록 인라인 편집(editable
 ### Task 5: detail_page_drafts 마이그레이션
 
 **Files:**
-- Create: `supabase/migrations/063_detail_page_drafts.sql`
+- Create: `supabase/migrations/070_detail_page_drafts.sql`
+
+> **⚠️ 정정 (실행 중 발견):** 이 앱은 Supabase Auth가 아니라 **Render PostgreSQL 자체 `auth_users`**를 쓴다. `references auth.users(id)` FK는 삽입을 막으므로 마이그레이션 061·063이 그 FK를 제거했다. 따라서 이 테이블은 **FK를 넣지 않는다.** 또한 063은 이미 사용됐으므로 파일 번호는 **070**.
 
 - [ ] **Step 1: 마이그레이션 파일 작성**
 
-Create `supabase/migrations/063_detail_page_drafts.sql`:
+Create `supabase/migrations/070_detail_page_drafts.sql`:
 
 ```sql
 -- 상세페이지 편집 드래프트 (자동저장)
+-- user_id FK 없음: 앱이 Render 자체 auth_users를 사용하므로 auth.users 참조 FK는 삽입을 막음 (061/063 패턴)
 create table if not exists detail_page_drafts (
   id            uuid primary key default gen_random_uuid(),
-  user_id       uuid not null references auth.users(id) on delete cascade,
+  user_id       uuid not null,
   listing_id    uuid,
   product_name  text,
   sections      jsonb not null default '[]',
@@ -504,11 +507,11 @@ create table if not exists detail_page_drafts (
 create index if not exists detail_page_drafts_user_updated
   on detail_page_drafts (user_id, updated_at desc);
 
+-- 앱은 service-role 클라이언트로 접근하고 실제 통제는 라우트의 .eq('user_id', userId)가 담당.
+-- RLS는 비-service-role 접근 차단용 방어선 (listing_drafts 033 패턴).
 alter table detail_page_drafts enable row level security;
-create policy "본인 데이터만" on detail_page_drafts for all using (auth.uid() = user_id);
+create policy "service role full access" on detail_page_drafts using (true) with check (true);
 ```
-
-> 앱은 자체 JWT + service-role 클라이언트를 쓰므로 실제 접근 통제는 라우트의 `.eq('user_id', userId)`가 담당한다. RLS 정책은 기존 `assets_drafts`(062)와 동일한 방어선으로 유지한다.
 
 - [ ] **Step 2: 마이그레이션 적용**
 
