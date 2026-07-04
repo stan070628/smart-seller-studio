@@ -12,7 +12,7 @@ PRO 모드는 참고 상세페이지 스크린샷을 Gemini Vision으로 OCR 분
 
 1. **한자/CJK·깨진 텍스트** — 결과에 한자가 남거나, 한자만 삭제되어 문장이 깨짐(예: "无线충전" → "충전")
 2. **블록 타입 ↔ 내용 부적합(의미 오류)** — 사이즈(S/M/L)를 `process_flow`(순서 흐름)로 만들거나, 단순 병렬 나열을 차트로 만드는 등
-3. **스키마 위반·미지원 타입** — 필수 필드 누락, 렌더러 미구현 타입(`radar_chart`, `timeline`) 사용
+3. **스키마 위반·알 수 없는 타입** — 필수 필드 누락, `LayoutBlock` union에 없는 타입, 잘못된 enum(bgStyle 등)
 4. **빈·중복·이상 구조** — 빈 텍스트 블록, 연속 중복 섹션, 섹션 수 범위 이탈, 쿠팡 금지어
 
 ### 현재 상태 (기존 코드 근거)
@@ -86,7 +86,6 @@ BLOCK TYPE SELECTION RULES:
 - 비교 수치(2개 이상 그룹의 값 비교) → layout_bar_chart
 - 단일 임팩트 숫자 → stat_row
 - 단순 특징 나열 → bullet_list / icon_grid (차트로 만들지 말 것)
-- 렌더러 미구현: radar_chart, timeline 사용 금지
 TEXT RULES:
 - 모든 텍스트는 한글 또는 영어만. 한자(漢字) 절대 금지. 한자가 필요하면 한글 음차로 재작성.
 `;
@@ -119,10 +118,9 @@ export function validateProLayout(sections: unknown): ValidationResult;
 
 | code | 검사 내용 | severity |
 |------|----------|----------|
-| `schema` | Zod로 각 섹션/블록 union 검증. 필수 필드 누락·잘못된 enum(bgStyle 등) | error |
-| `unsupported_type` | `radar_chart`, `timeline` 사용 | error |
+| `schema` | Zod로 각 섹션/블록 union 검증. 필수 필드 누락·잘못된 enum(bgStyle 등)·union에 없는 알 수 없는 타입. `radar_chart`/`timeline`은 렌더러 구현돼 있어 유효로 허용 | error |
 | `cjk` | CJK 정규식(`一-鿿`, `㐀-䶿`, `豈-﫿`) 매칭 | error |
-| `broken_text` | U+FFFD(치환문자), 고립 결합 자모, 빈 문자열로 깨진 흔적 | warning |
+| `broken_text` | U+FFFD(치환문자) 포함 — 명확한 모지바케 마커만(ㅋㅋ 등 정상 자모 오탐 방지) | warning |
 | `empty_block` | heading/subtext/badge의 text가 공백, items 빈 배열 | warning |
 | `duplicate` | 연속 동일 섹션/블록 | warning |
 | `section_count` | 섹션 수 6~10 범위 밖 | warning |
@@ -157,7 +155,7 @@ export function sanitizeProLayout(sections: unknown[]): {
 };
 ```
 
-- `autoFixable` 위반을 코드로 강제 교정: 잔여 CJK 삭제(`stripCjk` 재사용), 빈 블록 제거, 미지원 타입 블록 제거(또는 근접 타입 변환), 섹션 수 정보는 경고로만.
+- `autoFixable` 위반을 코드로 강제 교정: 잔여 CJK 삭제(`stripCjk` 재사용), 빈 블록 제거, 스키마 무효(union에 없는 알 수 없는 타입) 블록 제거, 섹션 수 정보는 경고로만.
 - 교정 불가능하거나 정보성인 잔여 항목을 `warnings`로 수집해 반환.
 
 ### 4.5 오케스트레이션 (수정) — `generate-pro-layout/route.ts`
