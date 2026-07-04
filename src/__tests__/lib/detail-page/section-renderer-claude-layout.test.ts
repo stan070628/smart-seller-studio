@@ -211,4 +211,37 @@ describe('renderSection — claude_layout', () => {
     expect(html).toContain('data-edit-path="content.blocks.2.items.0.label"');
     expect(html).toContain('data-edit-path="content.blocks.2.items.1.sublabel"');
   });
+
+  it('stat_row 항목의 value/unit/label에 data-edit-path가 배선된다', () => {
+    const section = makeSection({
+      type: 'claude_layout',
+      title: '',
+      blocks: [
+        { type: 'stat_row', items: [{ value: '99', unit: '%', label: '효능' }] },
+      ],
+    });
+    const html = renderSection(section, DEFAULT_THEME);
+    expect(html).toContain('data-edit-path="content.blocks.0.items.0.value"');
+    expect(html).toContain('data-edit-path="content.blocks.0.items.0.unit"');
+    expect(html).toContain('data-edit-path="content.blocks.0.items.0.label"');
+  });
+
+  it('columns 재귀가 cols.${c}.${r} 경로를 내부 블록에 전달한다', () => {
+    const section = makeSection({
+      type: 'claude_layout',
+      title: '',
+      blocks: [
+        {
+          type: 'columns',
+          cols: [
+            [{ type: 'badge', text: '왼' }],
+            [{ type: 'subtext', text: '오' }],
+          ],
+        },
+      ],
+    });
+    const html = renderSection(section, DEFAULT_THEME);
+    expect(html).toContain('data-edit-path="content.blocks.0.cols.0.0.text"');
+    expect(html).toContain('data-edit-path="content.blocks.0.cols.1.0.text"');
+  });
 });
