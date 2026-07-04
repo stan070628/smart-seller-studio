@@ -33,7 +33,60 @@
 
 ## WS1 — LayoutBlock 검증 + 수리
 
-### Task 1: LayoutBlock Zod 스키마 + sanitizeProLayout
+> **⚠️ 계획 정정 (2026-07-04, 실행 중 발견):** 탐색에서 놓친 기존 모듈이 있다.
+> `src/lib/detail-page/layout-validator.ts`에 `zLayoutBlock`·`zClaudeSection`·`validateProLayout()`·`sanitizeProLayout(sections)→{sections,warnings}`·`stripCjk`·`pruneBlocks`가 **이미 구현·테스트 완료**이며, `src/lib/ai/repair-pro-layout.ts`의 `repairProLayout()`도 존재하고 `detail-page-rubric.ts`를 이미 import한다.
+> 따라서 **아래 Task 1(신규 스키마 파일 생성)은 폐기**하고(중복), WS1은 "기존 모듈을 `generate-pro-layout`에 배선"하는 단일 작업(**Task 1R**)으로 대체한다. 진짜 격차는 `generate-pro-layout`이 검증/수리를 호출하지 않고 인라인 `stripCjk`만 쓴다는 점이다. Task 2·Task 3도 Task 1R에 흡수된다.
+
+### Task 1R: generate-pro-layout에 기존 검증·수리 배선 + render 방어 (WS1 대체)
+
+**Files:**
+- Modify: `src/app/api/ai/generate-pro-layout/route.ts`
+- Modify: `src/app/api/detail-page/render/route.ts`
+
+**Import (generate-pro-layout):**
+```typescript
+import { sanitizeProLayout, validateProLayout } from '@/lib/detail-page/layout-validator';
+import { repairProLayout } from '@/lib/ai/repair-pro-layout';
+```
+
+**인라인 stripCjk 제거:** `CJK_REGEX`(80-81행)와 `stripCjk`(83-91행)를 삭제(더 이상 사용 안 함; sanitize가 내부에서 처리).
+
+**반환부 교체:** `sections = stripCjk(sections) as unknown[];` + `return NextResponse.json({ success: true, sections });`를 아래로 교체:
+```typescript
+    // 결정론적 정화(CJK 제거 + 무효/빈 블록 prune + 중복 제거)
+    let cleaned = sanitizeProLayout(sections).sections;
+    // error-severity 위반이 남으면 Claude로 1-pass 수리 후 재정화 (조건부)
+    const { violations, isClean } = validateProLayout(cleaned);
+    if (!isClean) {
+      console.warn('[generate-pro-layout] 위반 발견, repair 실행:', violations.length);
+      const repaired = await repairProLayout(cleaned, violations, {
+        name: productInfo.name,
+        points: productInfo.points,
+        category: productInfo.category,
+      });
+      cleaned = sanitizeProLayout(repaired).sections;
+    }
+    return NextResponse.json({ success: true, sections: cleaned });
+```
+
+**render 라우트 방어:** `import { sanitizeProLayout } from '@/lib/detail-page/layout-validator';` 추가 후, `const { sections, theme } = parseResult.data;` 다음에 claude_layout content를 정화:
+```typescript
+  const safeSections = sections.map((s) => {
+    if (s.type !== 'claude_layout') return s;
+    const { sections: cleaned } = sanitizeProLayout([s.content]);
+    const content = cleaned[0]
+      ? { ...(s.content as Record<string, unknown>), blocks: (cleaned[0] as { blocks?: unknown }).blocks ?? [] }
+      : { ...(s.content as Record<string, unknown>), blocks: [] };
+    return { ...s, content };
+  });
+```
+그리고 `renderAllSections(sections ...)`를 `renderAllSections(safeSections ...)`로 교체.
+
+**검증:** 기존 `layout-validator.test.ts`·`repair-pro-layout.test.ts`가 통과하는지 확인 + `npx tsc --noEmit`. 배선 자체는 이미 테스트된 함수들의 조합이며, repair 경로는 live Claude 필요(수동 확인).
+
+---
+
+### ~~Task 1: LayoutBlock Zod 스키마 + sanitizeProLayout~~ (폐기 — 위 정정 참조)
 
 **Files:**
 - Create: `src/lib/detail-page/layout-block-schema.ts`
