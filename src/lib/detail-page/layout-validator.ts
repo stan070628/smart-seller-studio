@@ -152,3 +152,35 @@ export function validateProLayout(sections: unknown): ValidationResult {
   const isClean = !violations.some((v) => v.severity === 'error');
   return { violations, isClean };
 }
+
+/** 섹션의 빈/스키마무효 블록을 제거 */
+function pruneBlocks(sec: unknown): unknown {
+  if (!sec || typeof sec !== 'object') return sec;
+  const s = { ...(sec as Record<string, unknown>) };
+  if (Array.isArray(s.blocks)) {
+    s.blocks = (s.blocks as unknown[]).filter(
+      (b) => b !== null && typeof b === 'object'
+        && !isEmptyBlock(b as Record<string, unknown>)
+        && zLayoutBlock.safeParse(b).success
+    );
+  }
+  return s;
+}
+
+/**
+ * 결정적 코드 폴백. autoFixable 문제를 코드로 강제 교정하고,
+ * 교정 후에도 남은 위반을 warnings로 반환한다.
+ */
+export function sanitizeProLayout(sections: unknown[]): { sections: unknown[]; warnings: Violation[] } {
+  if (!Array.isArray(sections)) return { sections: [], warnings: validateProLayout(sections).violations };
+
+  // 1) CJK·U+FFFD 삭제
+  let cleaned = stripCjk(sections) as unknown[];
+  // 2) 빈/무효 블록 제거
+  cleaned = cleaned.map(pruneBlocks);
+  // 3) 연속 중복 섹션 제거
+  cleaned = cleaned.filter((sec, i) => i === 0 || JSON.stringify(sec) !== JSON.stringify(cleaned[i - 1]));
+
+  const { violations } = validateProLayout(cleaned);
+  return { sections: cleaned, warnings: violations };
+}

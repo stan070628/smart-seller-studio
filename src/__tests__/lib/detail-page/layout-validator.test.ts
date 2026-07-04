@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateProLayout } from '@/lib/detail-page/layout-validator';
+import { validateProLayout, sanitizeProLayout } from '@/lib/detail-page/layout-validator';
 
 /** 유효한 최소 섹션(6개) 생성 헬퍼 */
 function validSections(count = 6): unknown[] {
@@ -89,5 +89,41 @@ describe('validateProLayout', () => {
     const res = validateProLayout({ not: 'array' });
     expect(res.isClean).toBe(false);
     expect(res.violations[0]?.code).toBe('schema');
+  });
+});
+
+describe('sanitizeProLayout', () => {
+  it('잔여 한자/U+FFFD를 삭제한다', () => {
+    const secs = [{ type: 'claude_layout', title: '溫도�', blocks: [{ type: 'heading', text: '溫度관리', size: 'xl' }] }];
+    const { sections } = sanitizeProLayout(secs);
+    const s = sections[0] as any;
+    expect(s.title).not.toMatch(/[一-鿿�]/);
+    expect(s.blocks[0].text).toBe('관리');
+  });
+
+  it('빈 블록과 스키마 무효 블록을 제거한다', () => {
+    const secs = [{
+      type: 'claude_layout', title: 'T',
+      blocks: [
+        { type: 'heading', text: '   ', size: 'xl' },     // 빈 → 제거
+        { type: 'made_up' },                               // 무효 → 제거
+        { type: 'heading', text: '유효', size: 'lg' },      // 유지
+      ],
+    }];
+    const { sections } = sanitizeProLayout(secs);
+    const blocks = (sections[0] as any).blocks;
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].text).toBe('유효');
+  });
+
+  it('연속 중복 섹션을 하나로 합친다', () => {
+    const a = { type: 'claude_layout', title: 'A', blocks: [{ type: 'heading', text: 'A', size: 'xl' }] };
+    const { sections } = sanitizeProLayout([a, JSON.parse(JSON.stringify(a))]);
+    expect(sections).toHaveLength(1);
+  });
+
+  it('교정 후 남은 위반을 warnings로 반환한다(예: 섹션 수 부족)', () => {
+    const { warnings } = sanitizeProLayout([{ type: 'claude_layout', title: 'A', blocks: [{ type: 'heading', text: 'A', size: 'xl' }] }]);
+    expect(warnings.some((w) => w.code === 'section_count')).toBe(true);
   });
 });
