@@ -115,14 +115,13 @@ export async function POST(
 
   const { sections, theme } = parseResult.data;
 
-  // claude_layout 섹션의 불량 블록이 렌더를 깨지 않도록 정화
+  // claude_layout 섹션의 불량 블록·CJK가 렌더를 깨거나 오염하지 않도록 정화.
+  // sanitizeProLayout는 CJK를 전체 문자열(title 포함)에서 제거하고 불량/빈 블록을 prune하므로
+  // 정화된 결과 content 전체를 사용한다. (단일 요소라 cleaned[0]는 항상 존재하나 방어적으로 fallback.)
   const safeSections = sections.map((s) => {
     if (s.type !== 'claude_layout') return s;
     const { sections: cleaned } = sanitizeProLayout([s.content]);
-    const content = cleaned[0]
-      ? { ...(s.content as Record<string, unknown>), blocks: (cleaned[0] as { blocks?: unknown }).blocks ?? [] }
-      : { ...(s.content as Record<string, unknown>), blocks: [] };
-    return { ...s, content };
+    return { ...s, content: cleaned[0] ?? { ...(s.content as Record<string, unknown>), blocks: [] } };
   });
 
   // 렌더링
