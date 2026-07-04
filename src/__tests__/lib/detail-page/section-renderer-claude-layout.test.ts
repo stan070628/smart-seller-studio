@@ -63,6 +63,32 @@ describe('renderSection — claude_layout', () => {
     expect(html).toContain('NMN 함유량');
   });
 
+  it('option_grid 블록 — 화살표 없이 옵션 카드 그리드로 렌더링', () => {
+    const section = makeSection({
+      type: 'claude_layout',
+      title: '우리 아이 맞춤 사이즈',
+      blocks: [
+        {
+          type: 'option_grid',
+          items: [
+            { label: 'S', sublabel: '40 x 35cm' },
+            { label: 'M', sublabel: '55 x 45cm', highlight: true },
+            { label: 'L', sublabel: '65 x 50cm' },
+          ],
+        },
+      ],
+    });
+    const html = renderSection(section, DEFAULT_THEME);
+    // 라벨·서브라벨이 모두 렌더링된다
+    expect(html).toContain('55 x 45cm');
+    expect(html).toContain('65 x 50cm');
+    // 3개 항목은 3열 그리드로 배치된다
+    expect(html).toContain('grid-template-columns:repeat(3,1fr)');
+    // process_flow와 달리 흐름 화살표가 없어야 한다
+    expect(html).not.toContain('↓');
+    expect(html).not.toContain('→');
+  });
+
   it('XSS 방어 — 텍스트 값 escapeHtml 적용', () => {
     const section = makeSection({
       type: 'claude_layout',
@@ -85,6 +111,69 @@ describe('renderSection — claude_layout', () => {
     );
     const html = renderSection(section, DEFAULT_THEME);
     expect(html).not.toContain('<img');
+  });
+
+  it('heading xl은 38px 크기로 렌더링된다', () => {
+    const section = makeSection({
+      type: 'claude_layout',
+      title: '크기 검증',
+      blocks: [{ type: 'heading', text: '대형 헤딩', size: 'xl' }],
+    });
+    const html = renderSection(section, DEFAULT_THEME);
+    expect(html).toContain('font-size:38px');
+  });
+
+  it('heading lg는 26px, md는 19px으로 렌더링된다', () => {
+    const section = makeSection({
+      type: 'claude_layout',
+      title: '크기 검증',
+      blocks: [
+        { type: 'heading', text: 'LG 헤딩', size: 'lg' },
+        { type: 'heading', text: 'MD 헤딩', size: 'md' },
+      ],
+    });
+    const html = renderSection(section, DEFAULT_THEME);
+    expect(html).toContain('font-size:26px');
+    expect(html).toContain('font-size:19px');
+  });
+
+  it('stat_row value는 44px 크기로 렌더링된다', () => {
+    const section = makeSection({
+      type: 'claude_layout',
+      title: '통계 크기 검증',
+      blocks: [
+        { type: 'stat_row', items: [{ label: '검색 결과', value: '약 247,000', unit: '건' }] },
+      ],
+    });
+    const html = renderSection(section, DEFAULT_THEME);
+    expect(html).toContain('font-size:44px');
+    expect(html).toContain('약 247,000');
+  });
+
+  it('dark bgStyle에서 텍스트 색상이 #ffffff로 강제된다', () => {
+    const section = makeSection({
+      type: 'claude_layout',
+      title: '다크 배경',
+      blocks: [
+        { type: 'heading', text: '밝은 텍스트', size: 'xl', color: 'text' },
+        { type: 'subtext', text: '부제목', align: 'left' },
+      ],
+      bgStyle: 'dark',
+    });
+    const html = renderSection(section, DEFAULT_THEME);
+    expect(html).toContain('#ffffff');
+    expect(html).toContain('background-color:#1e293b');
+  });
+
+  it('primary bgStyle에서도 텍스트 색상이 #ffffff로 강제된다', () => {
+    const section = makeSection({
+      type: 'claude_layout',
+      title: '브랜드 배경',
+      blocks: [{ type: 'heading', text: '밝은 텍스트', size: 'xl', color: 'text' }],
+      bgStyle: 'primary',
+    });
+    const html = renderSection(section, DEFAULT_THEME);
+    expect(html).toContain('#ffffff');
   });
 
   it('columns 블록 — 2열 렌더링', () => {

@@ -173,6 +173,8 @@ export type LayoutBlock =
   | { type: 'progress_bar'; items: Array<{ label: string; value: number; displayValue?: string; highlight?: boolean }> }
   | { type: 'process_flow'; direction?: 'horizontal' | 'vertical'; items: Array<{ label: string; sublabel?: string; highlight?: boolean }> }
   | { type: 'icon_grid'; cols?: 2 | 3; items: Array<{ icon: string; title: string; subtitle?: string }> }
+  // 사이즈·색상·용량 등 순서 없는 병렬 선택 옵션 (화살표 없는 카드 그리드). process_flow와 달리 흐름을 나타내지 않음.
+  | { type: 'option_grid'; cols?: 2 | 3; items: Array<{ label: string; sublabel?: string; highlight?: boolean }> }
   | { type: 'layout_bar_chart'; title?: string; unit?: string; groups: string[]; groupColors: string[]; items: Array<{ label: string; values: number[] }>; showLegend?: boolean }
   // Phase 2 — 타입 정의만, 렌더러 미구현
   | { type: 'radar_chart'; axes: Array<{ label: string; value: number; max?: number }>; color?: string }

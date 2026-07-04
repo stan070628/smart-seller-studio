@@ -798,17 +798,25 @@ function renderLayoutBlock(
     }
     case 'process_flow': {
       const isVertical = block.direction === 'vertical';
+      // dark/primary 배경에서는 흰 글씨가 되므로 하드코딩된 밝은 박스 배경을 반투명 흰색으로 교체
+      const isDark = colors.text === '#ffffff';
       const items = block.items.map((item, i) => {
         const isLast = i === block.items.length - 1;
-        const boxBg = item.highlight ? `${colors.accent}15` : '#f9fafb';
-        const boxBorder = item.highlight ? colors.accent : '#e5e7eb';
-        const textColor = item.highlight ? colors.accent : colors.text;
+        const boxBg = item.highlight
+          ? (isDark ? 'rgba(255,255,255,0.25)' : `${colors.accent}15`)
+          : (isDark ? 'rgba(255,255,255,0.12)' : '#f9fafb');
+        const boxBorder = item.highlight
+          ? (isDark ? 'rgba(255,255,255,0.6)' : colors.accent)
+          : (isDark ? 'rgba(255,255,255,0.25)' : '#e5e7eb');
+        const textColor = item.highlight
+          ? (isDark ? '#ffffff' : colors.accent)
+          : colors.text;
         const arrow = isLast ? '' : (isVertical
-          ? `<div style="text-align:center;color:${colors.accent};font-size:14px;line-height:1;padding:2px 0;">↓</div>`
-          : `<div style="color:${colors.accent};font-size:16px;flex-shrink:0;align-self:center;">→</div>`);
+          ? `<div style="text-align:center;color:${isDark ? 'rgba(255,255,255,0.6)' : colors.accent};font-size:14px;line-height:1;padding:2px 0;">↓</div>`
+          : `<div style="color:${isDark ? 'rgba(255,255,255,0.6)' : colors.accent};font-size:16px;flex-shrink:0;align-self:center;">→</div>`);
         const box = `<div style="background:${boxBg};border:1.5px solid ${boxBorder};border-radius:8px;padding:8px 12px;text-align:center;">
           <div style="font-size:12px;font-weight:700;color:${textColor};">${escapeHtml(item.label)}</div>
-          ${item.sublabel ? `<div style="font-size:10px;color:${colors.textSub};margin-top:2px;">${escapeHtml(item.sublabel)}</div>` : ''}
+          ${item.sublabel ? `<div style="font-size:12px;color:${colors.textSub};margin-top:2px;">${escapeHtml(item.sublabel)}</div>` : ''}
         </div>`;
         return box + (isLast ? '' : arrow);
       });
@@ -816,14 +824,37 @@ function renderLayoutBlock(
       return `<div style="display:flex;flex-direction:${flexDir};gap:6px;align-items:${isVertical ? 'stretch' : 'center'};flex-wrap:wrap;margin-bottom:16px;">${items.join('')}</div>`;
     }
     case 'icon_grid': {
+      const isDark = colors.text === '#ffffff';
+      const itemBg = isDark ? 'rgba(255,255,255,0.12)' : '#f9fafb';
       const cols = block.cols ?? 3;
       const items = block.items.map(item =>
-        `<div style="text-align:center;padding:10px 6px;background:#f9fafb;border-radius:10px;">
+        `<div style="text-align:center;padding:10px 6px;background:${itemBg};border-radius:10px;">
           <div style="font-size:24px;margin-bottom:6px;">${escapeHtml(item.icon)}</div>
-          <div style="font-size:11px;font-weight:700;color:${colors.text};line-height:1.3;">${escapeHtml(item.title)}</div>
-          ${item.subtitle ? `<div style="font-size:10px;color:${colors.textSub};margin-top:2px;">${escapeHtml(item.subtitle)}</div>` : ''}
+          <div style="font-size:13px;font-weight:700;color:${colors.text};line-height:1.3;">${escapeHtml(item.title)}</div>
+          ${item.subtitle ? `<div style="font-size:12px;color:${colors.textSub};margin-top:2px;">${escapeHtml(item.subtitle)}</div>` : ''}
         </div>`
       ).join('');
+      return `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:8px;margin-bottom:16px;">${items}</div>`;
+    }
+    case 'option_grid': {
+      // 사이즈·색상·용량 등 순서 없는 병렬 선택 옵션 — 화살표 없이 카드 그리드로 나열
+      const isDark = colors.text === '#ffffff';
+      const cols = block.cols ?? (block.items.length >= 3 ? 3 : 2);
+      const items = block.items.map((item) => {
+        const boxBg = item.highlight
+          ? (isDark ? 'rgba(255,255,255,0.25)' : `${colors.accent}15`)
+          : (isDark ? 'rgba(255,255,255,0.12)' : '#f9fafb');
+        const boxBorder = item.highlight
+          ? (isDark ? 'rgba(255,255,255,0.6)' : colors.accent)
+          : (isDark ? 'rgba(255,255,255,0.25)' : '#e5e7eb');
+        const textColor = item.highlight
+          ? (isDark ? '#ffffff' : colors.accent)
+          : colors.text;
+        return `<div style="background:${boxBg};border:1.5px solid ${boxBorder};border-radius:12px;padding:14px 8px;text-align:center;">
+          <div style="font-size:14px;font-weight:800;color:${textColor};line-height:1.3;">${escapeHtml(item.label)}</div>
+          ${item.sublabel ? `<div style="font-size:12px;color:${colors.textSub};margin-top:4px;line-height:1.4;">${escapeHtml(item.sublabel)}</div>` : ''}
+        </div>`;
+      }).join('');
       return `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:8px;margin-bottom:16px;">${items}</div>`;
     }
     case 'layout_bar_chart': {
@@ -881,7 +912,7 @@ function renderClaudeLayout(
     content.bgStyle === 'dark' || content.bgStyle === 'primary'
       ? { ...colors, text: '#ffffff', textSub: 'rgba(255,255,255,0.72)' }
       : colors;
-  const blocksHtml = content.blocks
+  const blocksHtml = (content.blocks ?? [])
     .map((b) => renderLayoutBlock(b, section.attachedImages, effectiveColors))
     .join('');
   return `<div ${sectionAttrs(section)} style="background-color:${bg};padding:${pad};width:100%;box-sizing:border-box;">${blocksHtml}</div>`;
