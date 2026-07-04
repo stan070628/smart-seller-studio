@@ -8,6 +8,8 @@ import { z } from 'zod';
 import { requireAuth } from '@/lib/supabase/auth';
 import { checkRateLimit, getRateLimitKey } from '@/lib/rate-limit';
 import { callClaude } from '@/lib/ai/claude-cli';
+import { sanitizeProLayout, validateProLayout } from '@/lib/detail-page/layout-validator';
+import { repairProLayout } from '@/lib/ai/repair-pro-layout';
 
 export const maxDuration = 180;
 
@@ -58,8 +60,9 @@ Available block types in blocks[]:
 - divider: { type }
 - spacer: { type, height: number }
 - progress_bar: { type, items: [{label, value(0-100), displayValue?, highlight?}] }
-- process_flow: { type, direction?: 'horizontal'|'vertical', items: [{label, sublabel?, highlight?}] }
+- process_flow: { type, direction?: 'horizontal'|'vertical', items: [{label, sublabel?, highlight?}] } — TIME/ORDER 흐름 단계 전용. 화살표로 연결됨.
 - icon_grid: { type, cols?: 2|3, items: [{icon, title, subtitle?}] }
+- option_grid: { type, cols?: 2|3, items: [{label, sublabel?, highlight?}] } — 사이즈/색상/용량/구성 등 순서 없는 병렬 선택 옵션. 화살표 없음.
 - layout_bar_chart: { type, title?, unit?, groups: string[], groupColors: string[], items: [{label, values: number[]}], showLegend? }
 
 DESIGN RULES:
@@ -71,22 +74,10 @@ DESIGN RULES:
 6. Generate 6-10 sections for a complete detail page
 7. NEVER use Chinese characters (한자/漢字). Use Korean (한글) or English ONLY. This applies to ALL text: titles, labels, sublabels, stat values, promptHints, badge text, etc. Examples of FORBIDDEN characters: 適當 → write "적당", 溫度 → write "온도", 品質 → write "품질".
 8. Design for 390px mobile width — avoid wide horizontal layouts or tables that overflow narrow screens. Use vertical or wrapped layouts.
+9. process_flow는 시간/순서가 있는 단계에만 사용 (예: 봄→여름→가을, 세탁→건조→보관). 사이즈·색상·용량·구성처럼 순서가 없는 병렬 선택 옵션은 절대 process_flow로 만들지 말고 반드시 option_grid를 사용하세요. 사이즈 안내(S/M/L 등)는 항상 option_grid입니다.
 
 Return ONLY valid JSON array — no explanation, no code fences:
 [section1, section2, ...]`;
-
-/** CJK 문자 감지 정규식 (한자, 한중일 통합 한자 등) */
-const CJK_REGEX = /[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF]/g;
-
-/** JSON 값 트리를 재귀 순회하며 문자열에서 CJK 문자를 제거 */
-function stripCjk(value: unknown): unknown {
-  if (typeof value === 'string') return value.replace(CJK_REGEX, '').trim();
-  if (Array.isArray(value)) return value.map(stripCjk);
-  if (value !== null && typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, stripCjk(v)]));
-  }
-  return value;
-}
 
 /** 첫 번째 완전한 JSON 배열을 추출 (코드펜스 무관) */
 function extractJsonArray(text: string): string | null {
@@ -178,9 +169,20 @@ export async function POST(req: NextRequest): Promise<Response> {
       );
     }
 
-    sections = stripCjk(sections) as unknown[];
-
-    return NextResponse.json({ success: true, sections });
+    // 결정론적 정화(CJK 제거 + 무효/빈 블록 prune + 중복 제거)
+    let cleaned = sanitizeProLayout(sections).sections;
+    // error-severity 위반이 남으면 Claude로 1-pass 수리 후 재정화 (조건부)
+    const { violations, isClean } = validateProLayout(cleaned);
+    if (!isClean) {
+      console.warn('[generate-pro-layout] 위반 발견, repair 실행:', violations.length);
+      const repaired = await repairProLayout(cleaned, violations, {
+        name: productInfo.name,
+        points: productInfo.points,
+        category: productInfo.category,
+      });
+      cleaned = sanitizeProLayout(repaired).sections;
+    }
+    return NextResponse.json({ success: true, sections: cleaned });
   } catch (error) {
     console.error('[generate-pro-layout] 오류:', error);
     const msg = error instanceof Error ? error.message : String(error);

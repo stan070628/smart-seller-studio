@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAuth } from '@/lib/supabase/auth';
 import { renderAllSections } from '@/lib/detail-page/section-renderer';
+import { sanitizeProLayout } from '@/lib/detail-page/layout-validator';
 import { PALETTE_NAMES } from '@/lib/detail-page/palette-config';
 import { appendPrivacyFooter } from '@/lib/detail-page-privacy';
 import type { DetailSection, DetailPageTheme, FontStyle } from '@/types/detail-page';
@@ -30,13 +31,13 @@ const RequestSchema = z.object({
     .array(
       z.object({
         id: z.string(),
-        type: z.enum(['hero', 'selling_points', 'features', 'stats', 'spec_table', 'usage_steps', 'warning', 'cta', 'brand_header', 'point', 'image_grid']),
+        type: z.enum(['hero', 'selling_points', 'features', 'stats', 'spec_table', 'usage_steps', 'warning', 'cta', 'brand_header', 'point', 'image_grid', 'claude_layout']),
         order: z.number().int().min(0),
         content: z.record(z.string(), z.unknown()),
         attachedImages: z
           .array(
             z.object({
-              url: z.string().url(),
+              url: z.string(),
               order: z.number().int().min(0),
               processingMode: z.enum(['original', 'bg_removed', 'bg_composed'] as const),
             }),
@@ -114,11 +115,21 @@ export async function POST(
 
   const { sections, theme } = parseResult.data;
 
+  // claude_layout 섹션의 불량 블록이 렌더를 깨지 않도록 정화
+  const safeSections = sections.map((s) => {
+    if (s.type !== 'claude_layout') return s;
+    const { sections: cleaned } = sanitizeProLayout([s.content]);
+    const content = cleaned[0]
+      ? { ...(s.content as Record<string, unknown>), blocks: (cleaned[0] as { blocks?: unknown }).blocks ?? [] }
+      : { ...(s.content as Record<string, unknown>), blocks: [] };
+    return { ...s, content };
+  });
+
   // 렌더링
   let renderedSections: string;
   try {
     // Zod에서 content는 z.record(z.unknown())으로 받았으므로 unknown 경유 후 DetailSection으로 캐스팅
-    renderedSections = renderAllSections(sections as unknown as DetailSection[], theme as DetailPageTheme);
+    renderedSections = renderAllSections(safeSections as unknown as DetailSection[], theme as DetailPageTheme);
   } catch (error) {
     console.error('[detail-page/render] 섹션 렌더링 실패:', error);
     return NextResponse.json(
@@ -127,11 +138,12 @@ export async function POST(
     );
   }
 
-  // max-width:780px 컨테이너로 래핑 — snippet은 개인정보 고지 미포함 본문
-  const snippet = `<div style="max-width:780px;margin:0 auto;font-family:${FONT_FAMILY_MAP[theme.fontStyle]};">\n${renderedSections}\n</div>`;
+  // max-width 컨테이너로 래핑 — mobile은 390px, desktop은 780px
+  const maxWidth = theme.layoutMode === 'mobile' ? '390px' : '780px';
+  const snippet = `<div style="max-width:${maxWidth};margin:0 auto;font-family:${FONT_FAMILY_MAP[theme.fontStyle]};">\n${renderedSections}\n</div>`;
 
   // html = snippet + 개인정보 고지 3종
-  const html = appendPrivacyFooter(snippet);
+  const html = appendPrivacyFooter(snippet, theme.layoutMode);
 
   return NextResponse.json({ html, snippet }, { status: 200 });
 }
