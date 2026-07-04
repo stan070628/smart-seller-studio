@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
 
   const parsed = DraftUpsertSchema.safeParse(rawBody);
   if (!parsed.success) {
-    return Response.json({ success: false, error: '입력값 검증 실패' }, { status: 400 });
+    return Response.json({ success: false, error: '입력값 검증 실패', details: parsed.error.flatten().fieldErrors }, { status: 400 });
   }
   const { id, listingId, productName, sections, theme, thumbnailUrl } = parsed.data;
 
@@ -58,7 +58,14 @@ export async function POST(request: NextRequest) {
     if (id) {
       const { data, error } = await supabase
         .from('detail_page_drafts').update(row).eq('id', id).eq('user_id', userId).select('id').single();
-      if (error || !data) {
+      // PGRST116 = 행 없음(미소유/부재) → 404. 그 외 DB 오류는 500으로 escalate(로그 가시성 유지).
+      if (error) {
+        if ((error as { code?: string }).code === 'PGRST116') {
+          return Response.json({ success: false, error: '드래프트를 찾을 수 없거나 권한이 없습니다.' }, { status: 404 });
+        }
+        throw error;
+      }
+      if (!data) {
         return Response.json({ success: false, error: '드래프트를 찾을 수 없거나 권한이 없습니다.' }, { status: 404 });
       }
       return Response.json({ id: (data as { id: string }).id });
@@ -83,6 +90,14 @@ export async function GET(request: NextRequest) {
   const listingId = searchParams.get('listingId');
   if (!id && !listingId) {
     return Response.json({ success: false, error: 'id 또는 listingId가 필요합니다.' }, { status: 400 });
+  }
+  // uuid 컬럼이므로 형식 검증 — 잘못된 값이 DB 타입오류(500)로 새는 것을 방지하고 400으로 응답.
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (id && !UUID_RE.test(id)) {
+    return Response.json({ success: false, error: '유효하지 않은 id 형식입니다.' }, { status: 400 });
+  }
+  if (listingId && !UUID_RE.test(listingId)) {
+    return Response.json({ success: false, error: '유효하지 않은 listingId 형식입니다.' }, { status: 400 });
   }
 
   try {
