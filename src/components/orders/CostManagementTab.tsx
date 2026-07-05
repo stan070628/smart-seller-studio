@@ -1030,7 +1030,7 @@ export default function CostManagementTab() {
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
             <span style={{ fontWeight: 700, fontSize: 13 }}>
-              판매 가져오기 — 신규 {importResult.totalImported}건
+              판매 가져오기 — 신규 {importResult.totalImported}건{importResult.totalVoided > 0 ? ` · 취소 ${importResult.totalVoided}건` : ''}
             </span>
             <button
               onClick={() => setImportResult(null)}
@@ -1046,7 +1046,7 @@ export default function CostManagementTab() {
                 <span style={{ color: '#52525b', fontWeight: 600 }}>{c.channel}</span>
                 {c.success ? (
                   <span style={{ color: '#16a34a' }}>
-                    신규 {c.imported} · 스킵 {c.skipped}
+                    신규 {c.imported} · 스킵 {c.skipped}{c.voided > 0 ? ` · 취소 ${c.voided}` : ''}
                   </span>
                 ) : (
                   <span style={{ color: '#ef4444' }}>실패 — {c.error}</span>
