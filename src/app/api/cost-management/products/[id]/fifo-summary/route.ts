@@ -29,7 +29,7 @@ export async function GET(
         [id],
       ),
       pool.query(
-        `SELECT id, sold_at, quantity, selling_price, shipping_fee FROM sale_records WHERE product_cost_id = $1`,
+        `SELECT id, sold_at, quantity, selling_price, shipping_fee FROM sale_records WHERE product_cost_id = $1 AND voided_at IS NULL`,
         [id],
       ),
     ]);

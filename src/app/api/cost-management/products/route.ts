@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
 
     // 판매는 전체 조회 (재고/FIFO 계산 기준)
     const { rows: allSales } = await pool.query(
-      `SELECT id, product_cost_id, sold_at, quantity, selling_price, coupon_discount, channel, shipping_fee FROM sale_records WHERE user_id = $1`,
+      `SELECT id, product_cost_id, sold_at, quantity, selling_price, coupon_discount, channel, shipping_fee FROM sale_records WHERE user_id = $1 AND voided_at IS NULL`,
       [user.userId],
     );
 

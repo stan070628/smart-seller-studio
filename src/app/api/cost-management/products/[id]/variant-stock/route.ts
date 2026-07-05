@@ -32,7 +32,7 @@ export async function GET(
   const { rows: saleRows } = await pool.query(
     `SELECT variant_name, SUM(quantity)::int AS total
      FROM sale_records
-     WHERE product_cost_id = $1 AND variant_name IS NOT NULL
+     WHERE product_cost_id = $1 AND variant_name IS NOT NULL AND voided_at IS NULL
      GROUP BY variant_name`,
     [id],
   );

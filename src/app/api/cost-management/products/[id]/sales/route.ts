@@ -25,7 +25,7 @@ export async function GET(
     const { rows } = await pool.query(
       `SELECT id, sold_at, quantity, selling_price, coupon_discount, channel, coupang_order_item_id, shipping_fee, created_at
        FROM sale_records
-       WHERE product_cost_id = $1
+       WHERE product_cost_id = $1 AND voided_at IS NULL
        ORDER BY sold_at DESC, created_at DESC`,
       [id],
     );
