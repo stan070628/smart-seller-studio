@@ -11,6 +11,7 @@ import RgShipmentHistoryPopover from './RgShipmentHistoryPopover';
 import { WinnerBadge } from '@/components/ui';
 import ChannelCell from './ChannelCell';
 import ChannelEditPopover from './ChannelEditPopover';
+import { buildImportSummary, type ImportSummary } from './import-summary';
 
 interface ChannelEntry {
   id: string;
@@ -212,6 +213,8 @@ export default function CostManagementTab() {
   const [showRgModal, setShowRgModal] = useState(false);
   const [showRgHistory, setShowRgHistory] = useState(false);
   const [importingAll, setImportingAll] = useState(false);
+  const [importResult, setImportResult] = useState<ImportSummary | null>(null);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [settingUpVariants, setSettingUpVariants] = useState(false);
   const [channelEditTarget, setChannelEditTarget] = useState<{
     product: ProductRow;
@@ -293,18 +296,15 @@ export default function CostManagementTab() {
         rgRes.json(), wingRes.json(), naverRes.json(),
       ]);
 
-      const parts: string[] = [];
-      if (rgJson.success) parts.push(`RG ${rgJson.data.imported}건`);
-      if (wingJson.success) parts.push(`윙 ${wingJson.data.imported}건`);
-      if (naverJson.success) parts.push(`네이버 ${naverJson.data.imported}건`);
-
-      const errors: string[] = [];
-      if (!rgJson.success) errors.push(`RG: ${rgJson.error ?? '실패'}`);
-      if (!wingJson.success) errors.push(`윙: ${wingJson.error ?? '실패'}`);
-      if (!naverJson.success) errors.push(`네이버: ${naverJson.error ?? '실패'}`);
-
-      if (parts.length > 0) alert(`판매 가져오기 완료 — ${parts.join(', ')}`);
-      if (errors.length > 0) alert(`일부 실패:\n${errors.join('\n')}`);
+      const summary = buildImportSummary([
+        { channel: 'RG', json: rgJson },
+        { channel: '윙', json: wingJson },
+        { channel: '네이버', json: naverJson },
+      ]);
+      setImportResult(summary);
+      setLastSyncedAt(
+        new Date().toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+      );
       load();
     } finally {
       setImportingAll(false);
@@ -1078,6 +1078,11 @@ export default function CostManagementTab() {
         >
           <CloudDownload size={13} /> {importingAll ? '가져오는 중...' : '판매 가져오기'}
         </button>
+        {lastSyncedAt && (
+          <span style={{ fontSize: '11px', color: '#a1a1aa', alignSelf: 'center' }}>
+            마지막 동기화 {lastSyncedAt}
+          </span>
+        )}
         <button
           onClick={runBulkSetupVariants}
           disabled={settingUpVariants}
@@ -1204,6 +1209,48 @@ export default function CostManagementTab() {
           onClose={() => setShowRgModal(false)}
           onCreated={load}
         />
+      )}
+      {importResult && (
+        <div style={{
+          position: 'fixed', bottom: 84, right: 24,
+          background: '#fff', color: '#18181b',
+          borderRadius: 12, padding: '14px 18px', fontSize: 13,
+          zIndex: 9999, minWidth: 260, maxWidth: 340,
+          border: '1px solid #e5e5e5',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.14)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <span style={{ fontWeight: 700, fontSize: 13 }}>
+              판매 가져오기 — 신규 {importResult.totalImported}건
+            </span>
+            <button
+              onClick={() => setImportResult(null)}
+              aria-label="닫기"
+              style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#a1a1aa', fontSize: 16, lineHeight: 1, padding: 0 }}
+            >
+              ×
+            </button>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {importResult.channels.map((c) => (
+              <div key={c.channel} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <span style={{ color: '#52525b', fontWeight: 600 }}>{c.channel}</span>
+                {c.success ? (
+                  <span style={{ color: '#16a34a' }}>
+                    신규 {c.imported} · 스킵 {c.skipped}
+                  </span>
+                ) : (
+                  <span style={{ color: '#ef4444' }}>실패 — {c.error}</span>
+                )}
+              </div>
+            ))}
+          </div>
+          {importResult.hasError && (
+            <div style={{ marginTop: 10, fontSize: 11, color: '#d97706' }}>
+              일부 채널 조회에 실패했습니다. 채널 설정/토큰을 확인해 주세요.
+            </div>
+          )}
+        </div>
       )}
       {undoToast && (
         <div style={{
