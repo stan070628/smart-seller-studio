@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { getCurrentUser } from '@/lib/auth';
 import { getCoupangClient } from '@/lib/listing/coupang-client';
+import { resolveSaleShippingFee } from '@/lib/cost-management/sale-shipping';
 
 function splitInto30DayChunks(from: string, to: string): Array<{ from: string; to: string }> {
   const chunks: Array<{ from: string; to: string }> = [];
@@ -113,10 +114,10 @@ export async function POST(request: NextRequest) {
     for (const item of items) {
       const result = await pool.query(
         `INSERT INTO sale_records
-           (user_id, product_cost_id, sold_at, quantity, selling_price, channel, coupang_order_item_id)
-         VALUES ($1, $2, $3, $4, $5, 'rocket_growth', $6)
+           (user_id, product_cost_id, sold_at, quantity, selling_price, channel, coupang_order_item_id, shipping_fee)
+         VALUES ($1, $2, $3, $4, $5, 'rocket_growth', $6, $7)
          ON CONFLICT (coupang_order_item_id) DO NOTHING`,
-        [user.userId, item.product_cost_id, item.sold_at, item.quantity, item.selling_price, item.coupang_order_item_id],
+        [user.userId, item.product_cost_id, item.sold_at, item.quantity, item.selling_price, item.coupang_order_item_id, resolveSaleShippingFee('rg')],
       );
       if ((result.rowCount ?? 0) > 0) imported++;
       else skipped++;

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { getCoupangClient } from '@/lib/listing/coupang-client';
+import { resolveSaleShippingFee } from '@/lib/cost-management/sale-shipping';
 
 // revenue-history는 최대 31일 조회 — 31일 단위로 분할
 function splitInto31DayChunks(from: string, to: string): Array<{ from: string; to: string }> {
@@ -134,18 +135,19 @@ export async function POST(request: NextRequest) {
     let imported = 0;
     if (records.length > 0) {
       // bulk INSERT: VALUES ($1,$2,...), ($7,$8,...) 형태로 구성
-      const CHUNK = 200; // 파라미터 수 한계 고려 (6 params × 200 = 1200)
+      const CHUNK = 200; // 파라미터 수 한계 고려 (7 params × 200 = 1400)
       for (let i = 0; i < records.length; i += CHUNK) {
         const chunk = records.slice(i, i + CHUNK);
         const values: unknown[] = [];
+        const shippingFee = resolveSaleShippingFee('wing');
         const placeholders = chunk.map((rec, idx) => {
-          const base = idx * 6;
-          values.push(user.userId, rec.product_cost_id, rec.sold_at, rec.quantity, rec.selling_price, rec.coupang_order_item_id);
-          return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},'coupang',$${base + 6})`;
+          const base = idx * 7;
+          values.push(user.userId, rec.product_cost_id, rec.sold_at, rec.quantity, rec.selling_price, rec.coupang_order_item_id, shippingFee);
+          return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},'coupang',$${base + 6},$${base + 7})`;
         });
         const result = await pool.query(
           `INSERT INTO sale_records
-             (user_id, product_cost_id, sold_at, quantity, selling_price, channel, coupang_order_item_id)
+             (user_id, product_cost_id, sold_at, quantity, selling_price, channel, coupang_order_item_id, shipping_fee)
            VALUES ${placeholders.join(',')}
            ON CONFLICT (coupang_order_item_id) DO NOTHING`,
           values,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { getNaverCommerceClient } from '@/lib/listing/naver-commerce-client';
+import { resolveSaleShippingFee } from '@/lib/cost-management/sale-shipping';
 
 const CANCELLED_STATUSES = new Set([
   'CANCEL_REQUEST', 'CANCEL_DONE', 'RETURN_REQUEST', 'RETURN_DONE',
@@ -74,14 +75,15 @@ export async function POST(request: NextRequest) {
     for (let i = 0; i < records.length; i += CHUNK) {
       const chunk = records.slice(i, i + CHUNK);
       const values: unknown[] = [];
+      const shippingFee = resolveSaleShippingFee('naver');
       const placeholders = chunk.map((rec, idx) => {
-        const base = idx * 6;
-        values.push(user.userId, rec.product_cost_id, rec.sold_at, rec.quantity, rec.selling_price, rec.naver_order_id);
-        return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},'naver',$${base + 6})`;
+        const base = idx * 7;
+        values.push(user.userId, rec.product_cost_id, rec.sold_at, rec.quantity, rec.selling_price, rec.naver_order_id, shippingFee);
+        return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},'naver',$${base + 6},$${base + 7})`;
       });
       const r = await pool.query(
         `INSERT INTO sale_records
-           (user_id, product_cost_id, sold_at, quantity, selling_price, channel, coupang_order_item_id)
+           (user_id, product_cost_id, sold_at, quantity, selling_price, channel, coupang_order_item_id, shipping_fee)
          VALUES ${placeholders.join(',')}
          ON CONFLICT (coupang_order_item_id) DO NOTHING`,
         values,
