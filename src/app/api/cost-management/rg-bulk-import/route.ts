@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (vendorItemMap.size === 0) {
-    return NextResponse.json({ success: true, data: { imported: 0, skipped: 0, total: 0 } });
+    return NextResponse.json({ success: true, data: { imported: 0, skipped: 0, total: 0, voided: 0 } });
   }
 
   try {
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
       else skipped++;
     }
 
-    return NextResponse.json({ success: true, data: { imported, skipped, total: items.length } });
+    return NextResponse.json({ success: true, data: { imported, skipped, total: items.length, voided: 0 } });
   } catch (err) {
     const msg = err instanceof Error ? err.message : '서버 오류';
     return NextResponse.json({ success: false, error: msg }, { status: 500 });

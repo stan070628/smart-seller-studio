@@ -3,6 +3,7 @@ import { getCurrentUser } from '@/lib/auth';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { getNaverCommerceClient } from '@/lib/listing/naver-commerce-client';
 import { resolveSaleShippingFee } from '@/lib/cost-management/sale-shipping';
+import { naverCancelledKey } from '@/lib/cost-management/cancel-sync';
 
 const CANCELLED_STATUSES = new Set([
   'CANCEL_REQUEST', 'CANCEL_DONE', 'RETURN_REQUEST', 'RETURN_DONE',
@@ -41,6 +42,7 @@ export async function POST(request: NextRequest) {
     const client = getNaverCommerceClient();
     const result = await client.getOrders({ fromDate: from, toDate: to });
 
+    const cancelledKeys = new Set<string>();
     const records: Array<{
       product_cost_id: string;
       sold_at: string;
@@ -50,8 +52,11 @@ export async function POST(request: NextRequest) {
     }> = [];
 
     for (const order of result.contents) {
-      if (CANCELLED_STATUSES.has(order.productOrderStatus)) continue;
-      if (order.claimStatus && CANCELLED_STATUSES.has(order.claimStatus)) continue;
+      if (CANCELLED_STATUSES.has(order.productOrderStatus) || (order.claimStatus && CANCELLED_STATUSES.has(order.claimStatus))) {
+        const k = naverCancelledKey(order, channelProductNoMap);
+        if (k) cancelledKeys.add(k);
+        continue;
+      }
       if (!order.channelProductNo) continue;
       const productCostId = channelProductNoMap.get(order.channelProductNo);
       if (!productCostId) continue;
@@ -92,7 +97,17 @@ export async function POST(request: NextRequest) {
     }
     const skipped = records.length - imported;
 
-    return NextResponse.json({ success: true, data: { imported, skipped, total: records.length } });
+    let voided = 0;
+    if (cancelledKeys.size > 0) {
+      const voidRes = await pool.query(
+        `UPDATE sale_records SET voided_at = now()
+         WHERE user_id = $1 AND coupang_order_item_id = ANY($2::text[]) AND voided_at IS NULL`,
+        [user.userId, Array.from(cancelledKeys)],
+      );
+      voided = voidRes.rowCount ?? 0;
+    }
+
+    return NextResponse.json({ success: true, data: { imported, skipped, total: records.length, voided } });
   } catch (err) {
     const msg = err instanceof Error ? err.message : '서버 오류';
     return NextResponse.json({ success: false, error: msg }, { status: 500 });

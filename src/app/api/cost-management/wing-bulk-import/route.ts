@@ -3,6 +3,7 @@ import { getCurrentUser } from '@/lib/auth';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { getCoupangClient } from '@/lib/listing/coupang-client';
 import { resolveSaleShippingFee } from '@/lib/cost-management/sale-shipping';
+import { wingCancelledKeys } from '@/lib/cost-management/cancel-sync';
 
 // revenue-history는 최대 31일 조회 — 31일 단위로 분할
 function splitInto31DayChunks(from: string, to: string): Array<{ from: string; to: string }> {
@@ -88,6 +89,7 @@ export async function POST(request: NextRequest) {
     const client = getCoupangClient();
 
     // revenue-history 전체 페치 — 31일 chunk 분할
+    const cancelledKeys = new Set<string>();
     const records: Array<{
       product_cost_id: string;
       sold_at: string;
@@ -106,7 +108,10 @@ export async function POST(request: NextRequest) {
           token: token ?? '',
         });
         for (const order of result.items) {
-          if (order.saleType !== 'SALE') continue;
+          if (order.saleType !== 'SALE') {
+            for (const k of wingCancelledKeys(order, vendorItemMap, sellerProductMap)) cancelledKeys.add(k);
+            continue;
+          }
           for (const item of order.items) {
             // vendorItemId 우선 매칭 (Wing+RG 공통 키), fallback: sellerProductId
             const wingMatch = vendorItemMap.get(item.vendorItemId);
@@ -157,7 +162,17 @@ export async function POST(request: NextRequest) {
     }
     const skippedCount = records.length - imported;
 
-    return NextResponse.json({ success: true, data: { imported, skipped: skippedCount, total: records.length } });
+    let voided = 0;
+    if (cancelledKeys.size > 0) {
+      const voidRes = await pool.query(
+        `UPDATE sale_records SET voided_at = now()
+         WHERE user_id = $1 AND coupang_order_item_id = ANY($2::text[]) AND voided_at IS NULL`,
+        [user.userId, Array.from(cancelledKeys)],
+      );
+      voided = voidRes.rowCount ?? 0;
+    }
+
+    return NextResponse.json({ success: true, data: { imported, skipped: skippedCount, total: records.length, voided } });
   } catch (err) {
     const msg = err instanceof Error ? err.message : '서버 오류';
     return NextResponse.json({ success: false, error: msg }, { status: 500 });
