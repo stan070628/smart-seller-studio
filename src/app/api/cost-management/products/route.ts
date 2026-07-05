@@ -6,7 +6,7 @@ import type { CostEntryRow } from '@/lib/cost-management/calculations';
 import { calculateFifo, ENTRY_CHANNEL, SALE_CHANNEL } from '@/lib/cost-management/fifo';
 import type { PurchaseBatch, SaleRow, FifoSummary } from '@/lib/cost-management/fifo';
 import { getYearMonths } from '@/lib/cost-management/ad-spend';
-import { calcBreakevenRoas, isWinner } from '@/lib/roi/calculations';
+import { calcBreakevenRoas, determineWinnerStatus } from '@/lib/roi/calculations';
 
 // ─────────────────────────────────────────
 // GET /api/cost-management/products
@@ -224,7 +224,7 @@ export async function GET(request: NextRequest) {
       const avgSellingPrice = totalQtySold > 0 ? periodSalesAmount / totalQtySold : 0;
       const avgMarginPerUnit = totalQtySold > 0 ? periodRealizedProfit / totalQtySold : 0;
       const breakevenRoas = calcBreakevenRoas(avgSellingPrice, avgMarginPerUnit);
-      const winnerStatus = isWinner(0, 0, adRoas, totalQtySold);
+      const winnerStatus = determineWinnerStatus(totalQtySold, adRoas, breakevenRoas);
 
       return {
         id: p.id,
@@ -239,6 +239,7 @@ export async function GET(request: NextRequest) {
         platform_fee_rate: feeRate,
         entry_count: pEntries.length,
         sale_count: pFilteredSales.length,
+        sale_quantity: totalQtySold,
         weighted_avg_cost: metrics.weighted_avg_cost,
         weighted_avg_shipping: metrics.weighted_avg_shipping,
         weighted_avg_rg_shipping: metrics.weighted_avg_rg_shipping,

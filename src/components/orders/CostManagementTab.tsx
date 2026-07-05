@@ -33,6 +33,7 @@ interface ProductRow {
   platform_fee_rate: number;
   entry_count: number;
   sale_count: number;
+  sale_quantity: number;
   weighted_avg_cost: number;
   weighted_avg_shipping: number;
   weighted_avg_rg_shipping: number;
