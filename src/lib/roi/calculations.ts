@@ -40,6 +40,22 @@ export function isWinner(
   return 'normal';
 }
 
+// 광고 클릭/전환율 데이터 연동 전, 사용 가능한 2축(판매수량 + ROAS vs 손익분기)으로 판정
+const WINNER_MIN_QTY = 5;
+
+export function determineWinnerStatus(
+  qtySold: number,
+  adRoas: number,
+  breakevenRoas: number,
+): 'winner' | 'watch' | 'normal' {
+  const hasAds = adRoas > 0;
+  const adEfficient = !hasAds || adRoas >= breakevenRoas; // 광고 없으면 효율 조건 통과로 간주
+  if (qtySold >= WINNER_MIN_QTY && adEfficient) return 'winner';
+  if (qtySold >= WINNER_MIN_QTY) return 'watch';
+  if (qtySold >= 1 && hasAds && adEfficient) return 'watch';
+  return 'normal';
+}
+
 export function calcStockTurnover(
   stockQty: number,
   avgDailySales: number
