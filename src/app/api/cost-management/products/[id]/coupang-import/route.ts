@@ -3,6 +3,7 @@ import { getSourcingPool } from '@/lib/sourcing/db';
 import { getCurrentUser } from '@/lib/auth';
 import { getCoupangClient } from '@/lib/listing/coupang-client';
 import { getNaverCommerceClient } from '@/lib/listing/naver-commerce-client';
+import { resolveSaleShippingFee } from '@/lib/cost-management/sale-shipping';
 
 /** [from, to] 기간을 최대 30일짜리 chunk 배열로 분할 (RG API 제한) */
 function splitInto30DayChunks(from: string, to: string): Array<{ from: string; to: string }> {
@@ -177,16 +178,19 @@ export async function POST(
           ) && !item.canceled)
           .map((item) => {
             const wm = wingMultiplierMap.get(Number(item.vendorItemId)) ?? 1;
+            // orderPrice = 쿠폰 전 총액, discountPrice = 쿠폰 할인 총액
+            // 고객 실제 결제 단가 = (orderPrice - discountPrice) / shippingCount
+            const paidTotal = item.orderPrice - (item.discountPrice ?? 0);
             return {
               sold_at: order.paidAt?.slice(0, 10) ?? order.orderedAt.slice(0, 10),
               quantity: item.shippingCount * wm,
               selling_price: item.shippingCount > 0
-                ? Math.round(item.orderPrice / item.shippingCount)
+                ? Math.round(paidTotal / item.shippingCount)
                 : item.salesPrice,
               coupang_order_item_id: `${order.orderId}-${item.vendorItemId}`,
               channel: 'coupang',
               variant_name: variantsCache[String(item.vendorItemId)] ?? null,
-              shipping_fee: 3500,
+              shipping_fee: resolveSaleShippingFee('wing'),
               coupon_discount: 0,
             };
           }),
@@ -271,7 +275,7 @@ export async function POST(
                 coupang_order_item_id: key,
                 channel: 'rocket_growth',
                 variant_name: variantsCache[String(item.vendorItemId)] ?? null,
-                shipping_fee: 0,
+                shipping_fee: resolveSaleShippingFee('rg'),
                 coupon_discount: 0,
               });
             }
@@ -315,7 +319,7 @@ export async function POST(
             coupang_order_item_id: `naver-${order.productOrderId}`,
             channel: 'naver',
             variant_name: null,
-            shipping_fee: 3500,
+            shipping_fee: resolveSaleShippingFee('naver'),
             coupon_discount: 0,
           });
         }
@@ -347,7 +351,8 @@ export async function POST(
            (user_id, product_cost_id, sold_at, quantity, selling_price, coupon_discount, channel, coupang_order_item_id, variant_name, shipping_fee)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          ON CONFLICT (coupang_order_item_id) DO UPDATE
-           SET coupon_discount = EXCLUDED.coupon_discount
+           SET coupon_discount = EXCLUDED.coupon_discount,
+               selling_price = EXCLUDED.selling_price
            WHERE sale_records.coupon_discount = 0`,
         [user.userId, id, item.sold_at, item.quantity, item.selling_price, item.coupon_discount, item.channel, item.coupang_order_item_id, item.variant_name ?? null, item.shipping_fee],
       );
