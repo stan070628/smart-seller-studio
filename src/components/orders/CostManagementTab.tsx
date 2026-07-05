@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { buildTableItems, type TableItem, type GroupRow } from '@/lib/cost-management/product-grouping';
-import { Plus, Truck, Package, Search, Trash2, TrendingUp, TrendingDown, AlertCircle, CloudDownload, Eye, EyeOff } from 'lucide-react';
+import { buildTableItems, type TableItem, type GroupRow as GroupRowType } from '@/lib/cost-management/product-grouping';
+import { Plus, Truck, Package, Search, TrendingUp, TrendingDown, AlertCircle, CloudDownload, Eye, EyeOff } from 'lucide-react';
 import CostEntryDrawer from './CostEntryDrawer';
 import ShippingGroupModal from './ShippingGroupModal';
 import AddProductModal from './AddProductModal';
@@ -12,6 +12,9 @@ import { WinnerBadge } from '@/components/ui';
 import ChannelCell from './ChannelCell';
 import ChannelEditPopover from './ChannelEditPopover';
 import { buildImportSummary, type ImportSummary } from './import-summary';
+import GroupRow from './cost-table/GroupRow';
+import ProductRowComponent from './cost-table/ProductRow';
+import ProductDetailPanel from './cost-table/ProductDetailPanel';
 
 interface ChannelEntry {
   id: string;
@@ -208,6 +211,13 @@ export default function CostManagementTab() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [expandedDetailIds, setExpandedDetailIds] = useState<Set<string>>(new Set());
+  const toggleDetail = (id: string) =>
+    setExpandedDetailIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
   const [drawerProductId, setDrawerProductId] = useState<string | null>(null);
   const [showShippingModal, setShowShippingModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -232,8 +242,6 @@ export default function CostManagementTab() {
   const [channelFilter, setChannelFilter] = useState<'all' | 'rg' | 'wing' | 'naver'>('all');
   const [rgInventory, setRgInventory] = useState<Map<string, number | null>>(new Map());
   const [rgInventoryLoading, setRgInventoryLoading] = useState(false);
-  const [editingAdSpendId, setEditingAdSpendId] = useState<string | null>(null);
-  const [editingAdSpendValue, setEditingAdSpendValue] = useState('');
   const [showHidden, setShowHidden] = useState(false);
   const [hiddenCount, setHiddenCount] = useState(0);
   interface UndoToast { message: string; productsToRestore: ProductRow[]; }
@@ -468,7 +476,7 @@ export default function CostManagementTab() {
     }
   }
 
-  async function toggleGroupHide(group: GroupRow<ProductRow>) {
+  async function toggleGroupHide(group: GroupRowType<ProductRow>) {
     const savedChildren = [...group.children];
     const allHidden = group.children.every((c) => c.hidden);
     const newHidden = !allHidden;
@@ -520,6 +528,8 @@ export default function CostManagementTab() {
     return buildTableItems(filtered);
   }, [products, search]);
 
+  const COL_COUNT = 7;
+
   const isEditablePeriod =
     preset === 'this_month' ||
     preset === 'last_month' ||
@@ -541,8 +551,6 @@ export default function CostManagementTab() {
     return customFrom.slice(0, 7);
   }
 
-  const saveTriggeredByKey = useRef(false);
-
   function toggleGroup(sellerProductId: string) {
     setExpandedGroups((prev) => {
       const next = new Set(prev);
@@ -558,10 +566,7 @@ export default function CostManagementTab() {
 
   async function saveAdSpend(productId: string, value: string) {
     const num = parseFloat(value.replace(/,/g, ''));
-    if (isNaN(num) || num < 0) {
-      setEditingAdSpendId(null);
-      return;
-    }
+    if (isNaN(num) || num < 0) return;
     const yearMonth = getCurrentYearMonth();
     const res = await fetch(`/api/cost-management/products/${productId}/ad-spend`, {
       method: 'PATCH',
@@ -582,283 +587,6 @@ export default function CostManagementTab() {
         ),
       );
     }
-    setEditingAdSpendId(null);
-  }
-
-  // ─── 그룹 행 렌더 ──────────────────────────────────────────────────────────
-  // thead 컬럼 순서: 채널(1) | 상품명(2) | 원가(3) | 배송비(4) | RG배송비(5) |
-  //   재고(6) | 재고가치(7) | 실현손익(8) | 마진율(9) | 광고비(10) | ROAS(11) |
-  //   위너(12) | 입고(13) | 판매(14) | 내역(15) | [RG실재고](조건) | 삭제(마지막)
-  function renderGroupRow(group: GroupRow<ProductRow>) {
-    const isExpanded = expandedGroups.has(group.sellerProductId);
-    return (
-      <React.Fragment key={`group-${group.sellerProductId}`}>
-        <tr
-          style={{
-            background: '#fff7f7',
-            cursor: 'pointer',
-            borderLeft: '3px solid #be0014',
-            borderBottom: isExpanded ? 'none' : '2px solid #fca5a5',
-          }}
-          onClick={() => toggleGroup(group.sellerProductId)}
-        >
-          {/* 1: 채널 — 쿠팡 배지 + sellerProductId */}
-          <td style={{ padding: '8px 12px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-            <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-              <span style={{
-                background: '#fef2f2', color: '#be0014',
-                padding: '1px 5px', borderRadius: '3px',
-                fontSize: '8px', fontWeight: 700,
-              }}>쿠팡</span>
-              <span style={{ color: '#a1a1aa', fontSize: '9px', fontFamily: 'monospace' }}>
-                {group.sellerProductId}
-              </span>
-            </div>
-          </td>
-          {/* 2: 상품명 + 옵션 수 표시 */}
-          <td style={{ padding: '8px 12px' }}>
-            <div style={{ fontSize: '12px', fontWeight: 600, color: '#18181b', marginBottom: '2px' }}>
-              {group.productName}
-            </div>
-            <div style={{ fontSize: '10px', color: '#a1a1aa', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span>{isExpanded ? '▴' : '▾'}</span>
-              <span>옵션 {group.children.length}개</span>
-            </div>
-          </td>
-          {/* 3: 원가 — 재고 가중평균 */}
-          <td style={{ padding: '8px 12px', textAlign: 'right', color: '#52525b' }}>
-            <div style={{ fontSize: '11px' }}>{fmt(Math.round(group.avgCost))}</div>
-            <div style={{ fontSize: '8px', color: '#a1a1aa' }}>재고평균</div>
-          </td>
-          {/* 4: 배송비 — 빈 칸 */}
-          <td style={{ padding: '8px 12px' }} />
-          {/* 5: RG배송비 — 빈 칸 */}
-          <td style={{ padding: '8px 12px' }} />
-          {/* 6: 재고 합산 */}
-          <td style={{ padding: '8px 12px', textAlign: 'right' }}>
-            <div style={{ fontSize: '12px', fontWeight: 700, color: '#16a34a' }}>{fmt(group.totalStock)}개</div>
-            <div style={{ fontSize: '8px', color: '#a1a1aa' }}>합계</div>
-          </td>
-          {/* 7: 재고가치 */}
-          <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '11px', color: '#52525b' }}>
-            {group.totalStock > 0 ? `${fmt(Math.round(group.totalStockValue))}원` : '—'}
-          </td>
-          {/* 8: 실현손익 합산 */}
-          <td style={{ padding: '8px 12px', textAlign: 'right' }}>
-            <div style={{
-              fontSize: '11px', fontWeight: 600,
-              color: group.totalProfit >= 0 ? '#16a34a' : '#ef4444',
-            }}>
-              {fmt(Math.round(group.totalProfit))}원
-            </div>
-            <div style={{ fontSize: '8px', color: '#a1a1aa' }}>합계(기간)</div>
-          </td>
-          {/* 9: 마진율 */}
-          <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '11px', color: '#2563eb' }}>
-            {group.groupMarginRate.toFixed(1)}%
-          </td>
-          {/* 10: 광고비 — 빈 칸 */}
-          <td style={{ padding: '8px 12px' }} />
-          {/* 11: ROAS — 빈 칸 */}
-          <td style={{ padding: '8px 12px' }} />
-          {/* 12: 위너 — 빈 칸 */}
-          <td style={{ padding: '8px 12px' }} />
-          {/* 13: 입고 — 빈 칸 */}
-          <td style={{ padding: '8px 12px' }} />
-          {/* 14: 판매 — 빈 칸 */}
-          <td style={{ padding: '8px 12px' }} />
-          {/* 15: 내역 — 빈 칸 */}
-          <td style={{ padding: '8px 12px' }} />
-          {/* RG 실재고 (조건부) — 빈 칸 */}
-          {channelFilter === 'rg' && <td style={{ padding: '8px 12px' }} />}
-          {/* 숨김 버튼 열 */}
-          <td style={{ padding: '10px 4px', textAlign: 'right' }}>
-            <button
-              onClick={() => toggleGroupHide(group)}
-              title={group.children.every((c) => c.hidden) ? '그룹 복원 (전체 보이기)' : '그룹 전체 숨기기'}
-              aria-label={group.children.every((c) => c.hidden) ? '그룹 복원' : '그룹 전체 숨기기'}
-              style={{
-                border: 'none', background: 'none', cursor: 'pointer',
-                padding: '4px', borderRadius: '4px', opacity: 0.4,
-              }}
-              onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
-              onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.4')}
-            >
-              {group.children.every((c) => c.hidden)
-                ? <EyeOff size={13} color="#71717a" />
-                : <Eye size={13} color="#71717a" />
-              }
-            </button>
-          </td>
-          {/* 삭제 버튼 열 — 빈 칸 */}
-          <td style={{ padding: '8px 12px' }} />
-        </tr>
-        {/* 자식 행들 (펼쳐진 경우) */}
-        {isExpanded && group.children.map((p) => renderProductRow(p, true))}
-        {/* 그룹 하단 구분선 */}
-        {isExpanded && (
-          <tr key={`group-sep-${group.sellerProductId}`}>
-            <td colSpan={999} style={{ borderBottom: '2px solid #fca5a5', padding: 0 }} />
-          </tr>
-        )}
-      </React.Fragment>
-    );
-  }
-
-  // ─── 공통 상품 행 렌더 (standalone 및 그룹 자식 모두 사용) ────────────────
-  function renderProductRow(p: ProductRow, isChild = false) {
-    const rowStyle: React.CSSProperties = isChild
-      ? { borderBottom: '1px solid #f4f4f5', background: p.hidden ? '#f4f4f5' : '#fafafa', borderLeft: '3px solid #fca5a5', opacity: p.hidden ? 0.55 : 1 }
-      : { borderBottom: '1px solid #f0f0f0', background: p.hidden ? '#f9fafb' : '#fff', opacity: p.hidden ? 0.55 : 1 };
-    const firstTdPaddingLeft = isChild ? '22px' : '12px';
-
-    return (
-      <tr key={p.id} style={rowStyle}>
-        <td style={{ padding: `10px ${firstTdPaddingLeft}`, textAlign: 'center', whiteSpace: 'nowrap' }}>
-          <ChannelCell
-            product={p}
-            onEditChannel={(anchorEl) => setChannelEditTarget({ product: p, anchorEl })}
-            onProductUpdate={(updates) => handleProductUpdate(p.id, updates as Partial<ProductRow>)}
-          />
-        </td>
-        <td style={{ padding: '10px 12px', fontWeight: 500, color: p.entry_count === 0 ? '#999' : '#18181b' }}>{p.product_name}</td>
-        <td style={{ padding: '10px 12px', textAlign: 'right', color: p.entry_count === 0 ? '#ccc' : '#ef4444' }}>
-          {p.entry_count === 0 ? '—' : fmt(p.weighted_avg_cost)}
-        </td>
-        <td style={{ padding: '10px 12px', textAlign: 'right', color: p.entry_count === 0 ? '#ccc' : '#f97316' }}>
-          {p.entry_count === 0 ? '—' : fmt(p.weighted_avg_shipping)}
-        </td>
-        <td style={{ padding: '10px 12px', textAlign: 'right', color: p.weighted_avg_rg_shipping > 0 ? '#0369a1' : '#ccc' }}>
-          {p.weighted_avg_rg_shipping > 0 ? fmt(p.weighted_avg_rg_shipping) : '—'}
-        </td>
-        <td style={{ padding: '10px 12px', textAlign: 'right', color: '#18181b' }}>
-          {fmt(p.current_stock)}개
-        </td>
-        <td style={{ padding: '10px 12px', textAlign: 'right', color: '#52525b' }}>
-          {p.current_stock > 0 ? `${fmt(p.stock_value)}원` : '—'}
-        </td>
-        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, color: p.total_realized_profit >= 0 ? '#16a34a' : '#ef4444' }}>
-          {p.sale_count === 0 ? <span style={{ color: '#ccc' }}>—</span> : `${fmt(p.total_realized_profit)}원`}
-        </td>
-        <td style={{ padding: '10px 12px', textAlign: 'right', color: p.margin_rate > 0 ? '#2563eb' : '#ccc' }}>
-          {p.margin_rate > 0 ? `${(p.margin_rate * 100).toFixed(1)}%` : '—'}
-        </td>
-        <td
-          style={{
-            padding: editingAdSpendId === p.id ? '6px 12px' : '10px 12px',
-            textAlign: 'right',
-            color: p.ad_spend > 0 ? '#7c3aed' : '#ccc',
-            cursor: isEditablePeriod ? 'pointer' : 'default',
-            position: 'relative',
-          }}
-          onClick={() => {
-            if (!isEditablePeriod || editingAdSpendId === p.id) return;
-            setEditingAdSpendId(p.id);
-            setEditingAdSpendValue(p.ad_spend > 0 ? String(p.ad_spend) : '');
-          }}
-          title={!isEditablePeriod ? '단일 월을 선택하면 편집할 수 있습니다' : undefined}
-        >
-          {editingAdSpendId === p.id ? (
-            <input
-              autoFocus
-              type="number"
-              min="0"
-              value={editingAdSpendValue}
-              onChange={(e) => setEditingAdSpendValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  saveTriggeredByKey.current = true;
-                  saveAdSpend(p.id, editingAdSpendValue);
-                }
-                if (e.key === 'Escape') setEditingAdSpendId(null);
-              }}
-              onBlur={() => {
-                if (!saveTriggeredByKey.current) saveAdSpend(p.id, editingAdSpendValue);
-                saveTriggeredByKey.current = false;
-              }}
-              style={{
-                width: '90px',
-                padding: '3px 6px',
-                fontSize: '12px',
-                border: '1px solid #7c3aed',
-                borderRadius: '4px',
-                textAlign: 'right',
-                outline: 'none',
-              }}
-            />
-          ) : (
-            <span>
-              {p.ad_spend > 0 ? `${fmt(p.ad_spend)}원` : (isEditablePeriod ? <span style={{ color: '#d4b8ff' }}>+ 입력</span> : '—')}
-            </span>
-          )}
-        </td>
-        <td style={{
-          padding: '10px 12px', textAlign: 'right', fontWeight: p.ad_roas > 0 ? 600 : 400,
-          color: p.ad_roas === 0 ? '#ccc'
-            : p.ad_roas >= p.breakeven_roas ? '#16a34a'
-            : '#ef4444',
-        }}>
-          {p.ad_roas > 0 ? `${Math.round(p.ad_roas)}%` : '—'}
-        </td>
-        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-          <WinnerBadge status={p.winner_status} />
-        </td>
-        <td style={{ padding: '10px 12px', textAlign: 'right', color: '#52525b' }}>{p.entry_count}건</td>
-        <td style={{ padding: '10px 12px', textAlign: 'right', color: '#52525b' }}>{p.sale_count}건</td>
-        <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-          <button
-            onClick={() => setDrawerProductId(p.id)}
-            style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid #e5e5e5', background: '#fff', fontSize: '11px', cursor: 'pointer', color: '#555' }}
-          >
-            📋 보기
-          </button>
-        </td>
-        {channelFilter === 'rg' && (
-          <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: 13 }}>
-            {rgInventoryLoading ? '…' : (() => {
-              const actual = rgInventory.get(p.id);
-              if (actual === undefined || actual === null) return '—';
-              const diff = actual - p.current_stock;
-              return (
-                <span>
-                  {actual.toLocaleString()}개
-                  {diff !== 0 && (
-                    <span title={`원가재고 ${p.current_stock}개 / 실재고 ${actual}개`} style={{ marginLeft: 4, cursor: 'help' }}>⚠️</span>
-                  )}
-                </span>
-              );
-            })()}
-          </td>
-        )}
-        <td style={{ padding: '10px 4px', textAlign: 'right' }}>
-          <button
-            onClick={() => toggleHide(p)}
-            title={p.hidden ? '숨김 해제' : '이 상품 숨기기'}
-            aria-label={p.hidden ? '숨김 해제' : '상품 숨기기'}
-            style={{
-              border: 'none', background: 'none', cursor: 'pointer',
-              padding: '4px', borderRadius: '4px', opacity: 0.4,
-            }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.4')}
-          >
-            {p.hidden ? <EyeOff size={13} color="#71717a" /> : <Eye size={13} color="#71717a" />}
-          </button>
-        </td>
-        <td style={{ padding: '10px 8px', textAlign: 'right' }}>
-          <button
-            onClick={() => deleteProduct(p.id, p.product_name)}
-            style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '4px', borderRadius: '4px', opacity: 0.25 }}
-            onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
-            onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.25')}
-            title="상품 삭제"
-            aria-label="상품 삭제"
-          >
-            <Trash2 size={13} color="#ef4444" />
-          </button>
-        </td>
-      </tr>
-    );
   }
 
   return (
@@ -950,7 +678,7 @@ export default function CostManagementTab() {
           {apiRevenue && (
             <>
               <div style={{ fontSize: '11px', fontWeight: 600, color: '#71717a', marginBottom: '6px' }}>
-                실제 매출 <span style={{ fontWeight: 400 }}>(쿠팡 + 네이버 + 로켓그로스 API · 취소/반품 제외)</span>
+                실제 매출 · 플랫폼 확정 <span style={{ fontWeight: 400 }}>(쿠팡 + 네이버 + 로켓그로스 API 집계)</span>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '10px', marginBottom: '10px' }}>
                 <div style={{ background: '#fff', borderRadius: '10px', padding: '14px', border: '1px solid #e5e5e5' }}>
@@ -1008,8 +736,11 @@ export default function CostManagementTab() {
       )}
 
       <div style={{ height: '1px', background: '#e5e5e5', margin: '4px 0 14px' }} />
+      <div style={{ fontSize: 11, color: '#a1a1aa', margin: '0 0 8px' }}>
+        실제 매출은 플랫폼 API 실시간 집계, 관리 손익은 입력한 원가·판매 기반 계산이라 값이 다를 수 있습니다.
+      </div>
       <div style={{ fontSize: '11px', fontWeight: 600, color: '#71717a', marginBottom: '8px' }}>
-        원가·수익 <span style={{ fontWeight: 400 }}>(수동 입력 기반)</span>
+        관리 손익 · 내 입력 기반 <span style={{ fontWeight: 400 }}>(입고·판매 수동 관리)</span>
       </div>
 
       {/* 요약 카드 — 기간 집계 */}
@@ -1143,23 +874,95 @@ export default function CostManagementTab() {
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
             <thead>
-              <tr style={{ background: '#f9f9f9', borderBottom: '1px solid #e5e5e5' }}>
-                {['채널', '상품명', '원가(가중평균)', '배송비(배분)', 'RG배송비', '재고', '재고가치', '실현손익', '마진율', '광고비', 'ROAS', '위너', '입고', '판매', '내역'].map((h) => (
-                  <th key={h} style={{ padding: '10px 12px', textAlign: h === '상품명' ? 'left' : h === '채널' ? 'center' : 'right', fontWeight: 600, color: '#555', whiteSpace: 'nowrap' }}>{h}</th>
-                ))}
-                {channelFilter === 'rg' && (
-                  <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>
-                    RG 실재고
-                  </th>
-                )}
-                <th style={{ padding: '10px 4px' }}></th>
-                <th style={{ padding: '10px 12px' }}></th>
+              <tr style={{ background: '#f9fafb', borderBottom: '2px solid #e5e5e5' }}>
+                <th style={{ padding: '10px 12px', textAlign: 'center', fontSize: 11, color: '#71717a', fontWeight: 600 }}>채널</th>
+                <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11, color: '#71717a', fontWeight: 600 }}>상품명</th>
+                <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: 11, color: '#71717a', fontWeight: 600 }}>매출(수량)</th>
+                <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: 11, color: '#71717a', fontWeight: 600 }}>실현손익</th>
+                <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: 11, color: '#71717a', fontWeight: 600 }}>마진율</th>
+                <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: 11, color: '#71717a', fontWeight: 600 }}>ROAS</th>
+                <th style={{ padding: '10px 8px', textAlign: 'right', fontSize: 11, color: '#71717a', fontWeight: 600 }}></th>
               </tr>
             </thead>
             <tbody>
               {tableItems.map((item) => {
-                if (item.kind === 'group') return renderGroupRow(item);
-                return renderProductRow(item.product, false);
+                if (item.kind === 'group') {
+                  const isGroupExpanded = expandedGroups.has(item.sellerProductId);
+                  return (
+                    <React.Fragment key={`group-${item.sellerProductId}`}>
+                      <GroupRow
+                        group={item}
+                        expanded={isGroupExpanded}
+                        colCount={COL_COUNT}
+                        onToggleGroup={toggleGroup}
+                        onToggleGroupHide={toggleGroupHide}
+                      />
+                      {isGroupExpanded && item.children.map((child) => (
+                        <React.Fragment key={child.id}>
+                          <ProductRowComponent
+                            product={child}
+                            isChild
+                            expanded={expandedDetailIds.has(child.id)}
+                            colCount={COL_COUNT}
+                            onToggleDetail={toggleDetail}
+                            onOpenDrawer={setDrawerProductId}
+                            onSaveAdSpend={saveAdSpend}
+                            onHide={() => toggleHide(child)}
+                            onDelete={(prod) => deleteProduct(prod.id, prod.product_name)}
+                            onEditChannel={(_prod, anchorEl) => setChannelEditTarget({ product: child, anchorEl })}
+                            onProductUpdate={handleProductUpdate}
+                            isEditablePeriod={isEditablePeriod}
+                            channelFilter={channelFilter}
+                            rgInventory={rgInventory}
+                          />
+                          {expandedDetailIds.has(child.id) && (
+                            <ProductDetailPanel
+                              product={child}
+                              colSpan={COL_COUNT}
+                              isEditablePeriod={isEditablePeriod}
+                              onOpenDrawer={setDrawerProductId}
+                              onSaveAdSpend={saveAdSpend}
+                              channelFilter={channelFilter}
+                              rgInventory={rgInventory}
+                            />
+                          )}
+                        </React.Fragment>
+                      ))}
+                    </React.Fragment>
+                  );
+                }
+                const p = item.product;
+                return (
+                  <React.Fragment key={p.id}>
+                    <ProductRowComponent
+                      product={p}
+                      isChild={false}
+                      expanded={expandedDetailIds.has(p.id)}
+                      colCount={COL_COUNT}
+                      onToggleDetail={toggleDetail}
+                      onOpenDrawer={setDrawerProductId}
+                      onSaveAdSpend={saveAdSpend}
+                      onHide={() => toggleHide(p)}
+                      onDelete={(prod) => deleteProduct(prod.id, prod.product_name)}
+                      onEditChannel={(_prod, anchorEl) => setChannelEditTarget({ product: p, anchorEl })}
+                      onProductUpdate={handleProductUpdate}
+                      isEditablePeriod={isEditablePeriod}
+                      channelFilter={channelFilter}
+                      rgInventory={rgInventory}
+                    />
+                    {expandedDetailIds.has(p.id) && (
+                      <ProductDetailPanel
+                        product={p}
+                        colSpan={COL_COUNT}
+                        isEditablePeriod={isEditablePeriod}
+                        onOpenDrawer={setDrawerProductId}
+                        onSaveAdSpend={saveAdSpend}
+                        channelFilter={channelFilter}
+                        rgInventory={rgInventory}
+                      />
+                    )}
+                  </React.Fragment>
+                );
               })}
             </tbody>
           </table>
