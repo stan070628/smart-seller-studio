@@ -137,9 +137,10 @@ export function calculateFifo(
     const realized_profit_per_unit =
       effective_price - fifo_cost_per_unit - fee_per_unit;
 
-    // 건당 택배비는 판매 1건당 한 번만 차감 (없으면 0)
+    // 건당 택배비는 판매 1건당 한 번만 차감 (없으면 0). 수량 0이면 판매·배송 자체가 없으므로 0.
     const shipping_fee = sale.shipping_fee ?? 0;
-    const realized_profit = realized_profit_per_unit * sale.quantity - shipping_fee;
+    const realized_profit =
+      sale.quantity > 0 ? realized_profit_per_unit * sale.quantity - shipping_fee : 0;
 
     sale_details.push({ saleId: sale.id, fifo_cost_per_unit, realized_profit_per_unit, realized_profit });
     total_realized_profit += realized_profit;

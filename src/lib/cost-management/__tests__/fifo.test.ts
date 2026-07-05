@@ -172,4 +172,17 @@ describe('calculateFifo', () => {
     expect(result.sale_details[0].realized_profit).toBe(80000);
     expect(result.total_realized_profit).toBe(80000);
   });
+
+  it('수량 0 판매는 배송비를 차감하지 않고 realized_profit = 0', () => {
+    const batches = [
+      { id: 'b1', received_at: '2026-04-01', quantity: 10, unit_cost: 10000, unit_shipping_fee: 0, unit_rg_shipping_fee: 0 },
+    ];
+    const sales = [
+      { id: 's1', sold_at: '2026-05-01', quantity: 0, selling_price: 20000, shipping_fee: 3500 },
+    ];
+    const result = calculateFifo(batches, sales, 0.1);
+    expect(result.sale_details[0].realized_profit).toBe(0);
+    expect(result.total_realized_profit).toBe(0);
+  });
+
 });
