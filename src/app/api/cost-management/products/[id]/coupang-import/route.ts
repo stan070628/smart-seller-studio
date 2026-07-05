@@ -178,14 +178,12 @@ export async function POST(
           ) && !item.canceled)
           .map((item) => {
             const wm = wingMultiplierMap.get(Number(item.vendorItemId)) ?? 1;
-            // orderPrice = 쿠폰 전 총액, discountPrice = 쿠폰 할인 총액
-            // 고객 실제 결제 단가 = (orderPrice - discountPrice) / shippingCount
-            const paidTotal = item.orderPrice - (item.discountPrice ?? 0);
+            // selling_price는 쿠폰 전 총액 기준(단가). 쿠폰 할인은 coupon_discount에서 단일 차감.
             return {
               sold_at: order.paidAt?.slice(0, 10) ?? order.orderedAt.slice(0, 10),
               quantity: item.shippingCount * wm,
               selling_price: item.shippingCount > 0
-                ? Math.round(paidTotal / item.shippingCount)
+                ? Math.round(item.orderPrice / item.shippingCount)
                 : item.salesPrice,
               coupang_order_item_id: `${order.orderId}-${item.vendorItemId}`,
               channel: 'coupang',
@@ -351,8 +349,7 @@ export async function POST(
            (user_id, product_cost_id, sold_at, quantity, selling_price, coupon_discount, channel, coupang_order_item_id, variant_name, shipping_fee)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          ON CONFLICT (coupang_order_item_id) DO UPDATE
-           SET coupon_discount = EXCLUDED.coupon_discount,
-               selling_price = EXCLUDED.selling_price
+           SET coupon_discount = EXCLUDED.coupon_discount
            WHERE sale_records.coupon_discount = 0`,
         [user.userId, id, item.sold_at, item.quantity, item.selling_price, item.coupon_discount, item.channel, item.coupang_order_item_id, item.variant_name ?? null, item.shipping_fee],
       );
