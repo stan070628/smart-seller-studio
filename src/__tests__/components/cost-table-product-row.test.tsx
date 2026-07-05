@@ -20,7 +20,7 @@ function renderRow(props = {}) {
     product, isChild: false, expanded: false, colCount: 7,
     onToggleDetail: vi.fn(), onOpenDrawer: vi.fn(), onSaveAdSpend: vi.fn(),
     onHide: vi.fn(), onDelete: vi.fn(), onEditChannel: vi.fn(), onProductUpdate: vi.fn(),
-    isEditablePeriod: false, channelFilter: 'all', rgInventory: new Map(),
+    isEditablePeriod: false, channelFilter: 'all' as const, rgInventory: new Map(),
   };
   return render(<table><tbody><ProductRow {...defaults} {...props} /></tbody></table>);
 }
