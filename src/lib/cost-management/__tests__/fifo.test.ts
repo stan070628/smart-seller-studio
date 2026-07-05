@@ -145,4 +145,31 @@ describe('calculateFifo', () => {
     const result = calculateFifo(batches, sales, 0.1);
     expect(result.sale_details[0].realized_profit_per_unit).toBe(8000);
   });
+
+  it('택배비는 건당 1회만 차감 (수량 2개 × 배송비 3500 → 3500 한 번)', () => {
+    const batches = [
+      { id: 'b1', received_at: '2026-04-01', quantity: 10, unit_cost: 10000, unit_shipping_fee: 0, unit_rg_shipping_fee: 0 },
+    ];
+    const sales = [
+      { id: 's1', sold_at: '2026-05-01', quantity: 2, selling_price: 20000, shipping_fee: 3500 },
+    ];
+    const result = calculateFifo(batches, sales, 0.1);
+    // per-unit(배송 제외): 20000 - 10000 - round(20000*0.1)=2000 = 8000
+    expect(result.sale_details[0].realized_profit_per_unit).toBe(8000);
+    // 건당: 8000*2 - 3500 = 12500  (개당 차감이었다면 (8000-3500)*2 = 9000)
+    expect(result.sale_details[0].realized_profit).toBe(12500);
+    expect(result.total_realized_profit).toBe(12500);
+  });
+
+  it('배송비 없는 판매는 realized_profit = per_unit × quantity', () => {
+    const batches = [
+      { id: 'b1', received_at: '2026-04-01', quantity: 10, unit_cost: 10000, unit_shipping_fee: 0, unit_rg_shipping_fee: 0 },
+    ];
+    const sales = [
+      { id: 's1', sold_at: '2026-05-01', quantity: 10, selling_price: 20000 },
+    ];
+    const result = calculateFifo(batches, sales, 0.1);
+    expect(result.sale_details[0].realized_profit).toBe(80000);
+    expect(result.total_realized_profit).toBe(80000);
+  });
 });

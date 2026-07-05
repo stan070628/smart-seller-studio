@@ -55,8 +55,10 @@ export interface SaleFifoDetail {
   saleId: string;
   /** FIFO 적용 단위 원가 (배송비 포함, 반올림) */
   fifo_cost_per_unit: number;
-  /** 단위 실현손익 = 판매가 - FIFO원가 - 플랫폼수수료 */
+  /** 단위 실현손익 (택배비 제외, per-unit) */
   realized_profit_per_unit: number;
+  /** 이 판매 건의 실현손익 총액 (건당 택배비 1회 반영) */
+  realized_profit: number;
 }
 
 /** calculateFifo 반환 요약 */
@@ -131,15 +133,16 @@ export function calculateFifo(
     // 플랫폼 수수료: 실효 판매가 × 수수료율 (반올림)
     const fee_per_unit = Math.round(effective_price * platformFeeRate);
 
-    // 택배비: 건당 고정 (없으면 0)
-    const shipping_fee_per_unit = sale.shipping_fee ?? 0;
-
-    // 단위 실현손익
+    // 단위 실현손익 (택배비 제외)
     const realized_profit_per_unit =
-      effective_price - fifo_cost_per_unit - fee_per_unit - shipping_fee_per_unit;
+      effective_price - fifo_cost_per_unit - fee_per_unit;
 
-    sale_details.push({ saleId: sale.id, fifo_cost_per_unit, realized_profit_per_unit });
-    total_realized_profit += realized_profit_per_unit * sale.quantity;
+    // 건당 택배비는 판매 1건당 한 번만 차감 (없으면 0)
+    const shipping_fee = sale.shipping_fee ?? 0;
+    const realized_profit = realized_profit_per_unit * sale.quantity - shipping_fee;
+
+    sale_details.push({ saleId: sale.id, fifo_cost_per_unit, realized_profit_per_unit, realized_profit });
+    total_realized_profit += realized_profit;
   }
 
   // 잔여 재고 수량 합산

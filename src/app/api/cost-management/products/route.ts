@@ -208,10 +208,9 @@ export async function GET(request: NextRequest) {
       // 기간 필터된 판매만 집계
       const pFilteredSales = salesToUse.filter((s) => filteredSaleIds.has(s.id));
       const periodSaleIds = new Set(pFilteredSales.map((s) => s.id));
-      const pSalesById = new Map(pSales.map((s) => [s.id, s]));
       const periodRealizedProfit = fifoResult.sale_details
         .filter((d) => periodSaleIds.has(d.saleId))
-        .reduce((sum, d) => sum + d.realized_profit_per_unit * (pSalesById.get(d.saleId)?.quantity ?? 0), 0);
+        .reduce((sum, d) => sum + d.realized_profit, 0);
       const periodSalesAmount = pFilteredSales.reduce((s, sale) => s + sale.selling_price * sale.quantity, 0);
 
       // product_ad_spend 에서 광고비 조회 및 ROAS 계산
