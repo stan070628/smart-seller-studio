@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { ShoppingCart, BarChart3, Settings, ClipboardList } from 'lucide-react';
 import OrdersTab from './OrdersTab';
 import ChannelsTab from './ChannelsTab';
@@ -14,8 +15,28 @@ const SUB_TABS: { id: SubTab; label: string; icon: React.ReactNode }[] = [
   { id: 'channels', label: '채널설정', icon: <Settings size={14} /> },
 ];
 
-export default function OrdersClient() {
+function OrdersClientInner() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('orders');
+
+  // URL ?tab= 파라미터에서 초기 탭 동기화
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab === 'cost' || tab === 'channels') setActiveSubTab(tab);
+    else setActiveSubTab('orders');
+  }, [searchParams]);
+
+  // 탭 전환 + URL 동기화 헬퍼 — 기본 탭(orders)은 파라미터를 제거
+  const goTab = (id: SubTab) => {
+    setActiveSubTab(id);
+    const params = new URLSearchParams(Array.from(searchParams.entries()));
+    if (id === 'orders') params.delete('tab');
+    else params.set('tab', id);
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
 
   return (
     <div style={{ backgroundColor: '#f5f5f7', minHeight: '100%' }}>
@@ -34,7 +55,7 @@ export default function OrdersClient() {
           {SUB_TABS.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveSubTab(tab.id)}
+              onClick={() => goTab(tab.id)}
               style={{
                 flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
                 padding: '10px 16px', borderRadius: '8px', border: 'none', cursor: 'pointer',
@@ -54,5 +75,13 @@ export default function OrdersClient() {
         {activeSubTab === 'channels' && <ChannelsTab />}
       </main>
     </div>
+  );
+}
+
+export default function OrdersClient() {
+  return (
+    <Suspense fallback={null}>
+      <OrdersClientInner />
+    </Suspense>
   );
 }
