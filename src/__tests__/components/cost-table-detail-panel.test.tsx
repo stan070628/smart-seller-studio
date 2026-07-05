@@ -16,7 +16,7 @@ describe('ProductDetailPanel', () => {
   it('수치 스트립에 재고·재고가치·원가·수수료율을 표시한다', () => {
     renderInTable(
       <ProductDetailPanel product={base} colSpan={7} isEditablePeriod={false}
-        onOpenDrawer={vi.fn()} onSaveAdSpend={vi.fn()} channelFilter="all" rgInventory={new Map()} />,
+        onOpenDrawer={vi.fn()} onSaveAdSpend={vi.fn()} channelFilter="all" rgInventory={new Map()} rgInventoryLoading={false} />,
     );
     expect(screen.getByText(/12개/)).toBeInTheDocument();
     expect(screen.getByText(/36,000/)).toBeInTheDocument();
@@ -28,7 +28,7 @@ describe('ProductDetailPanel', () => {
     const onOpen = vi.fn();
     renderInTable(
       <ProductDetailPanel product={base} colSpan={7} isEditablePeriod={false}
-        onOpenDrawer={onOpen} onSaveAdSpend={vi.fn()} channelFilter="all" rgInventory={new Map()} />,
+        onOpenDrawer={onOpen} onSaveAdSpend={vi.fn()} channelFilter="all" rgInventory={new Map()} rgInventoryLoading={false} />,
     );
     fireEvent.click(screen.getByRole('button', { name: /입고·판매 관리/ }));
     expect(onOpen).toHaveBeenCalledWith('p1');
@@ -38,12 +38,25 @@ describe('ProductDetailPanel', () => {
     const onSave = vi.fn();
     renderInTable(
       <ProductDetailPanel product={{ ...base, ad_spend: 0 }} colSpan={7} isEditablePeriod={true}
-        onOpenDrawer={vi.fn()} onSaveAdSpend={onSave} channelFilter="all" rgInventory={new Map()} />,
+        onOpenDrawer={vi.fn()} onSaveAdSpend={onSave} channelFilter="all" rgInventory={new Map()} rgInventoryLoading={false} />,
     );
     fireEvent.click(screen.getByRole('button', { name: /광고비/ }));
     const input = screen.getByLabelText('광고비 입력');
     fireEvent.change(input, { target: { value: '50000' } });
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(onSave).toHaveBeenCalledWith('p1', '50000');
+  });
+
+  it('Escape는 저장하지 않고 편집을 닫는다', () => {
+    const onSave = vi.fn();
+    renderInTable(
+      <ProductDetailPanel product={{ ...base, ad_spend: 0 }} colSpan={7} isEditablePeriod={true}
+        onOpenDrawer={vi.fn()} onSaveAdSpend={onSave} channelFilter="all" rgInventory={new Map()} rgInventoryLoading={false} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /광고비/ }));
+    const input = screen.getByLabelText('광고비 입력');
+    fireEvent.change(input, { target: { value: '99999' } });
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(onSave).not.toHaveBeenCalled();
   });
 });

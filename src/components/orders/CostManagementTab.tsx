@@ -1,15 +1,14 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { buildTableItems, type TableItem, type GroupRow as GroupRowType } from '@/lib/cost-management/product-grouping';
+import { buildTableItems, type GroupRow as GroupRowType } from '@/lib/cost-management/product-grouping';
+import { determineWinnerStatus } from '@/lib/roi/calculations';
 import { Plus, Truck, Package, Search, TrendingUp, TrendingDown, AlertCircle, CloudDownload, Eye, EyeOff } from 'lucide-react';
 import CostEntryDrawer from './CostEntryDrawer';
 import ShippingGroupModal from './ShippingGroupModal';
 import AddProductModal from './AddProductModal';
 import RocketGrowthShipmentModal from './RocketGrowthShipmentModal';
 import RgShipmentHistoryPopover from './RgShipmentHistoryPopover';
-import { WinnerBadge } from '@/components/ui';
-import ChannelCell from './ChannelCell';
 import ChannelEditPopover from './ChannelEditPopover';
 import { buildImportSummary, type ImportSummary } from './import-summary';
 import GroupRow from './cost-table/GroupRow';
@@ -578,11 +577,15 @@ export default function CostManagementTab() {
       setProducts((prev) =>
         prev.map((p) =>
           p.id === productId
-            ? {
-                ...p,
-                ad_spend: num,
-                ad_roas: num > 0 ? (p.total_sales_amount / num) * 100 : 0,
-              }
+            ? (() => {
+                const newRoas = num > 0 ? (p.total_sales_amount / num) * 100 : 0;
+                return {
+                  ...p,
+                  ad_spend: num,
+                  ad_roas: newRoas,
+                  winner_status: determineWinnerStatus(p.sale_quantity, newRoas, p.breakeven_roas),
+                };
+              })()
             : p,
         ),
       );
@@ -924,6 +927,7 @@ export default function CostManagementTab() {
                               onSaveAdSpend={saveAdSpend}
                               channelFilter={channelFilter}
                               rgInventory={rgInventory}
+                              rgInventoryLoading={rgInventoryLoading}
                             />
                           )}
                         </React.Fragment>
@@ -959,6 +963,7 @@ export default function CostManagementTab() {
                         onSaveAdSpend={saveAdSpend}
                         channelFilter={channelFilter}
                         rgInventory={rgInventory}
+                        rgInventoryLoading={rgInventoryLoading}
                       />
                     )}
                   </React.Fragment>

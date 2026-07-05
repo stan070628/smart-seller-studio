@@ -49,9 +49,10 @@ export function determineWinnerStatus(
   breakevenRoas: number,
 ): 'winner' | 'watch' | 'normal' {
   const hasAds = adRoas > 0;
-  const adEfficient = !hasAds || adRoas >= breakevenRoas; // 광고 없으면 효율 조건 통과로 간주
+  // 광고가 있으면 ROAS ≥ 손익분기, 광고가 없으면 마진 양수(breakevenRoas 유한)일 때만 효율 통과로 간주
+  const adEfficient = hasAds ? adRoas >= breakevenRoas : Number.isFinite(breakevenRoas);
   if (qtySold >= WINNER_MIN_QTY && adEfficient) return 'winner';
-  if (qtySold >= WINNER_MIN_QTY) return 'watch';
+  if (qtySold >= WINNER_MIN_QTY && hasAds) return 'watch'; // 광고 없고 마진 음수인 경우 watch 제외
   if (qtySold >= 1 && hasAds && adEfficient) return 'watch';
   return 'normal';
 }

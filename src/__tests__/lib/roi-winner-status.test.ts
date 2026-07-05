@@ -20,4 +20,7 @@ describe('determineWinnerStatus', () => {
   it('판매수량 0이면 normal', () => {
     expect(determineWinnerStatus(0, 500, 300)).toBe('normal');
   });
+  it('마진이 음수(breakevenRoas=Infinity)이고 광고가 없으면 판매수량이 많아도 normal', () => {
+    expect(determineWinnerStatus(20, 0, Infinity)).toBe('normal');
+  });
 });

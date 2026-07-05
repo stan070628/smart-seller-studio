@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 
 interface DetailProduct {
   id: string;
@@ -23,15 +23,17 @@ interface Props {
   onSaveAdSpend: (productId: string, value: string) => void;
   channelFilter: 'all' | 'rg' | 'wing' | 'naver';
   rgInventory: Map<string, number | null>;
+  rgInventoryLoading: boolean;
 }
 
 const fmt = (n: number) => n.toLocaleString('ko-KR');
 
 export default function ProductDetailPanel({
-  product, colSpan, isEditablePeriod, onOpenDrawer, onSaveAdSpend, channelFilter, rgInventory,
+  product, colSpan, isEditablePeriod, onOpenDrawer, onSaveAdSpend, channelFilter, rgInventory, rgInventoryLoading,
 }: Props) {
   const [editingAd, setEditingAd] = useState(false);
   const [adValue, setAdValue] = useState('');
+  const committedRef = useRef(false);
 
   const stat = (label: string, value: string) => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -52,6 +54,7 @@ export default function ProductDetailPanel({
           {stat('수수료율', `${(product.platform_fee_rate * 100).toFixed(1)}%`)}
           {channelFilter === 'rg' && stat('RG실재고', (() => {
             const v = rgInventory.get(product.id);
+            if (rgInventoryLoading && (v === null || v === undefined)) return '조회 중…';
             return v === null || v === undefined ? '—' : `${fmt(v)}개`;
           })())}
 
@@ -64,7 +67,7 @@ export default function ProductDetailPanel({
             </button>
             {!editingAd ? (
               <button
-                onClick={() => { if (!isEditablePeriod) return; setEditingAd(true); setAdValue(product.ad_spend > 0 ? String(product.ad_spend) : ''); }}
+                onClick={() => { if (!isEditablePeriod) return; committedRef.current = false; setEditingAd(true); setAdValue(product.ad_spend > 0 ? String(product.ad_spend) : ''); }}
                 title={!isEditablePeriod ? '단일 월을 선택하면 편집할 수 있습니다' : undefined}
                 style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #e4e4e7', background: '#fff', fontSize: 12, cursor: isEditablePeriod ? 'pointer' : 'default', color: product.ad_spend > 0 ? '#7c3aed' : '#a1a1aa' }}
               >
@@ -79,10 +82,10 @@ export default function ProductDetailPanel({
                 value={adValue}
                 onChange={(e) => setAdValue(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') { onSaveAdSpend(product.id, adValue); setEditingAd(false); }
-                  if (e.key === 'Escape') setEditingAd(false);
+                  if (e.key === 'Enter') { committedRef.current = true; onSaveAdSpend(product.id, adValue); setEditingAd(false); }
+                  if (e.key === 'Escape') { committedRef.current = true; setEditingAd(false); }
                 }}
-                onBlur={() => { onSaveAdSpend(product.id, adValue); setEditingAd(false); }}
+                onBlur={() => { if (!committedRef.current) onSaveAdSpend(product.id, adValue); setEditingAd(false); }}
                 style={{ width: 90, padding: '6px 8px', borderRadius: 8, border: '1px solid #7c3aed', fontSize: 12 }}
               />
             )}
