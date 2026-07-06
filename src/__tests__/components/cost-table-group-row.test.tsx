@@ -41,4 +41,15 @@ describe('GroupRow', () => {
     expect(onHide).toHaveBeenCalledWith(group);
     expect(onToggle).not.toHaveBeenCalled();
   });
+
+  it('자식 중 fifo_error가 있으면 재고초과 배지를 렌더한다', () => {
+    const g = { ...group, children: [{ id: 'a', sale_quantity: 5, hidden: false, fifo_error: true }, { id: 'b', sale_quantity: 3, hidden: false }] };
+    renderGroup({ group: g });
+    expect(screen.getByText(/재고초과/)).toBeInTheDocument();
+  });
+
+  it('자식에 fifo_error가 없으면 배지가 없다', () => {
+    renderGroup();
+    expect(screen.queryByText(/재고초과/)).not.toBeInTheDocument();
+  });
 });

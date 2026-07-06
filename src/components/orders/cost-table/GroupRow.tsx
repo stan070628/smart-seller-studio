@@ -3,6 +3,7 @@
 import React from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import type { GroupRow as GroupRowData, GroupableProduct } from '@/lib/cost-management/product-grouping';
+import { OverstockBadge } from './OverstockBadge';
 
 interface Props<T extends GroupableProduct> {
   group: GroupRowData<T>;
@@ -17,6 +18,7 @@ const fmt = (n: number) => n.toLocaleString('ko-KR');
 export default function GroupRow<T extends GroupableProduct>({ group, expanded, colCount, onToggleGroup, onToggleGroupHide }: Props<T>) {
   const allHidden = group.children.every((c) => (c as { hidden?: boolean }).hidden);
   const totalQty = group.children.reduce((s, c) => s + ((c as { sale_quantity?: number }).sale_quantity ?? 0), 0);
+  const hasOverstock = group.children.some((c) => (c as { fifo_error?: boolean }).fifo_error);
 
   return (
     <tr
@@ -29,7 +31,10 @@ export default function GroupRow<T extends GroupableProduct>({ group, expanded, 
       </td>
       {/* 2: 상품명 + 옵션 수 */}
       <td style={{ padding: '8px 12px' }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: '#18181b' }}>{group.productName}</div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: '#18181b', display: 'flex', alignItems: 'center', gap: 6 }}>
+          {group.productName}
+          {hasOverstock && <OverstockBadge />}
+        </div>
         <div style={{ fontSize: 10, color: '#a1a1aa' }}>{expanded ? '▴' : '▾'} 옵션 {group.children.length}개</div>
       </td>
       {/* 3: 매출(수량) */}
