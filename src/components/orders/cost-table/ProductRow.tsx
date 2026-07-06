@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { ChevronRight, ChevronDown, MoreHorizontal } from 'lucide-react';
 import { WinnerBadge } from '@/components/ui';
 import ChannelCell from '../ChannelCell';
+import { OverstockBadge } from './OverstockBadge';
 
 interface RowProduct {
   id: string;
@@ -16,6 +17,7 @@ interface RowProduct {
   ad_roas: number;
   breakeven_roas: number;
   winner_status: 'winner' | 'watch' | 'normal';
+  fifo_error?: boolean;
   hidden: boolean;
   entry_count?: number;
   [key: string]: unknown;
@@ -99,6 +101,7 @@ export default function ProductRow(props: Props) {
             {p.product_name}
           </span>
           <WinnerBadge status={p.winner_status} />
+          {p.fifo_error && <OverstockBadge />}
         </div>
       </td>
       {/* 3: 매출(수량) */}
@@ -119,7 +122,9 @@ export default function ProductRow(props: Props) {
           color: p.total_realized_profit >= 0 ? '#16a34a' : '#ef4444',
         }}
       >
-        {p.sale_count === 0 ? (
+        {p.fifo_error ? (
+          <span style={{ color: '#dc2626' }}>확인 필요</span>
+        ) : p.sale_count === 0 ? (
           <span style={{ color: '#ccc' }}>—</span>
         ) : (
           `${fmt(p.total_realized_profit)}원`

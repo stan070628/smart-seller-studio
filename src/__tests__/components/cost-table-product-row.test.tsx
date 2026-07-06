@@ -57,4 +57,15 @@ describe('ProductRow', () => {
     fireEvent.click(screen.getByRole('button', { name: '삭제' }));
     expect(onDelete).toHaveBeenCalledWith(product);
   });
+
+  it('fifo_error면 재고초과 배지와 실현손익 "확인 필요"를 렌더한다', () => {
+    renderRow({ product: { ...product, fifo_error: true } });
+    expect(screen.getByText(/재고초과/)).toBeInTheDocument();
+    expect(screen.getByText('확인 필요')).toBeInTheDocument();
+  });
+
+  it('fifo_error가 아니면 재고초과 배지가 없다', () => {
+    renderRow({ product: { ...product, fifo_error: false } });
+    expect(screen.queryByText(/재고초과/)).not.toBeInTheDocument();
+  });
 });
