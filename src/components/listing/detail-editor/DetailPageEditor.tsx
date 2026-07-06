@@ -154,6 +154,7 @@ export interface DetailPageEditorProps {
   // 씬 편집 관련 (SectionCard로 전달)
   uploadedUrls?: string[];
   onSceneEdit?: (section: DetailSection, opts: { instruction: string; referenceImageUrls: string[] }) => Promise<void>;
+  onSceneUseAsIs?: (section: DetailSection, url: string) => void;
   editingSectionId?: string | null;
   sceneEditError?: { sectionId: string; message: string } | null;
   prevSceneUrlMap?: Map<string, string>;
@@ -190,6 +191,7 @@ export default function DetailPageEditor({
   onSectionImageAiEdit,
   uploadedUrls,
   onSceneEdit,
+  onSceneUseAsIs,
   editingSectionId,
   sceneEditError,
   prevSceneUrlMap,
@@ -323,6 +325,23 @@ export default function DetailPageEditor({
       const updated = sections.map((s) =>
         s.id === id ? { ...s, attachedImages: images } : s,
       );
+      onSectionsChange(updated);
+    },
+    [sections, onSectionsChange],
+  );
+
+  // claude_layout 섹션 콘텐츠/이미지 업데이트
+  const handleSectionUpdate = useCallback(
+    (id: string, updates: Partial<import('@/types/detail-page').ClaudeLayoutContent> & { attachedImages?: AttachedImage[] }) => {
+      const { attachedImages, ...contentUpdates } = updates;
+      const updated = sections.map((s) => {
+        if (s.id !== id) return s;
+        return {
+          ...s,
+          content: { ...s.content, ...contentUpdates } as import('@/types/detail-page').SectionContent,
+          attachedImages: attachedImages ?? s.attachedImages,
+        };
+      });
       onSectionsChange(updated);
     },
     [sections, onSectionsChange],
@@ -520,11 +539,13 @@ export default function DetailPageEditor({
                       palette={theme.palette}
                       onSectionImageAiEdit={onSectionImageAiEdit}
                       onSceneEdit={onSceneEdit}
+                      onSceneUseAsIs={onSceneUseAsIs}
                       uploadedUrls={uploadedUrls}
                       isSceneEditing={editingSectionId === section.id}
                       sceneEditError={sceneEditError?.sectionId === section.id ? sceneEditError.message : null}
                       prevSceneUrl={prevSceneUrlMap?.get(section.id)}
                       onSceneUndo={onSceneUndo ? () => onSceneUndo(section.id) : undefined}
+                      onSectionUpdate={handleSectionUpdate}
                     />
                   ))
                 )}

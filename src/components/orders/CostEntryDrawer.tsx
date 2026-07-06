@@ -273,7 +273,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
         </div>
 
         {/* 좌우 분할 패널 */}
-        <div style={{ display: 'grid', gridTemplateColumns: '420px 1fr', gap: '0', flex: 1, overflow: 'hidden', borderTop: '1px solid #e5e5e5' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '560px 1fr', gap: '0', flex: 1, overflow: 'hidden', borderTop: '1px solid #e5e5e5' }}>
           {/* 좌: 입고 내역 */}
           <div style={{ padding: '14px 16px 14px 24px', borderRight: '1px solid #e5e5e5', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: '12px', fontWeight: 700, color: '#18181b', marginBottom: '8px' }}>📦 입고 내역</div>

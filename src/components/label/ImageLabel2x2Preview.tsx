@@ -7,10 +7,10 @@ interface Props {
   imagePosition?: { x: number; y: number };
 }
 
-const CELL_WIDTH_MM = 99.1;
-const CELL_HEIGHT_MM = 135;
-const GAP_H_MM = 0.9;
-const GAP_V_MM = 4;
+const CELL_WIDTH_MM = 99;
+const CELL_HEIGHT_MM = 138;
+const GAP_H_MM = 3;
+const GAP_V_MM = 1;
 
 const GRID_STYLE: React.CSSProperties = {
   display: 'grid',
@@ -18,7 +18,7 @@ const GRID_STYLE: React.CSSProperties = {
   gridTemplateRows: `repeat(2, ${CELL_HEIGHT_MM}mm)`,
   columnGap: `${GAP_H_MM}mm`,
   rowGap: `${GAP_V_MM}mm`,
-  padding: '7mm 5mm',
+  padding: '10mm 2mm 10mm 6mm',
   width: '210mm',
   boxSizing: 'border-box' as const,
   background: '#fff',

@@ -49,7 +49,7 @@ describe('renderLayoutBlock — 신규 4개 블록', () => {
     expect(html).toContain('→');
   });
 
-  it('icon_grid — 3열 기본값, 아이콘과 제목 렌더링', () => {
+  it('icon_grid — 3열 기본값, 이모지 대신 번호 배지 + 제목 렌더링', () => {
     const html = renderSection(makeSection([{
       type: 'icon_grid',
       items: [
@@ -58,9 +58,12 @@ describe('renderLayoutBlock — 신규 4개 블록', () => {
         { icon: '🔬', title: '핵심 포뮬러' },
       ],
     }]), THEME);
-    expect(html).toContain('🧬');
+    // 이모지는 저품질로 보여 렌더하지 않고 번호 배지로 대체한다.
+    expect(html).not.toContain('🧬');
+    expect(html).not.toContain('🔬');
     expect(html).toContain('NMN 함유');
     expect(html).toContain('HACCP 인증');
+    expect(html).toContain('>1</div>'); // 번호 배지
   });
 
   it('layout_bar_chart — SVG img 태그 + 데이터 포함', () => {

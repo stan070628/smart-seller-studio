@@ -24,6 +24,8 @@ interface SectionImageAttachmentProps {
   sectionType?: SectionType;
   onChange: (images: AttachedImage[]) => void;
   onAiEdit?: (imageUrl: string, index: number) => void;
+  /** DetailMaker에서 AI 씬 생성에 사용되는 참조(상품) 이미지 URLs */
+  referenceUrls?: string[];
 }
 
 // ─────────────────────────────────────────
@@ -50,6 +52,7 @@ export default function SectionImageAttachment({
   sectionType,
   onChange,
   onAiEdit,
+  referenceUrls = [],
 }: SectionImageAttachmentProps) {
   // 섹션 타입별 최대 첨부 개수 — image_grid는 6장, 그 외 2장
   const maxImages = sectionType === 'image_grid' ? IMAGE_GRID_MAX_IMAGES : DEFAULT_MAX_IMAGES;
@@ -63,6 +66,9 @@ export default function SectionImageAttachment({
   const [showPicker, setShowPicker] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mergeFileInputRef = useRef<HTMLInputElement>(null);
+  const [isMerging, setIsMerging] = useState(false);
+  const [mergeError, setMergeError] = useState<string | null>(null);
 
   const { sharedDraft, assetsDraft } = useListingStore();
   const aiImageSlots: AiImageSlot[] = assetsDraft.aiImageSlots ?? [];
@@ -142,6 +148,33 @@ export default function SectionImageAttachment({
       setErrorMsg(msg);
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  // 파일 선택 → merge-vertical → 섹션 이미지로 추가 (원본 그대로, Gemini 없음)
+  const handleMergeFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (mergeFileInputRef.current) mergeFileInputRef.current.value = '';
+    if (!files || files.length < 2) {
+      setMergeError('2장 이상 선택하세요 (Ctrl/Cmd + 클릭으로 다중 선택)');
+      return;
+    }
+    setIsMerging(true);
+    setMergeError(null);
+    try {
+      const fd = new FormData();
+      Array.from(files).forEach(f => fd.append('files', f));
+      const res = await fetch('/api/image/merge-vertical', { method: 'POST', body: fd });
+      const json = await res.json() as { url?: string; error?: string };
+      if (!res.ok || !json.url) {
+        setMergeError(json.error ?? '합치기 실패');
+        return;
+      }
+      onChange([...images, { url: json.url, order: images.length, processingMode: 'original' }]);
+    } catch {
+      setMergeError('이미지 합치기 중 오류가 발생했습니다.');
+    } finally {
+      setIsMerging(false);
     }
   };
 
@@ -250,10 +283,10 @@ export default function SectionImageAttachment({
 
       {/* 이미지 썸네일 + 업로드 버튼 */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-        {/* 기존 이미지 썸네일 */}
-        {images.map((img, idx) => (
+        {/* 기존 이미지 썸네일 — url 없는 슬롯(ClaudeLayoutEditor gemini 슬롯 등)은 건너뜀 */}
+        {images.map((img, idx) => img.url ? (
           <div
-            key={img.url}
+            key={img.url || idx}
             style={{
               position: 'relative',
               width: 60,
@@ -369,7 +402,7 @@ export default function SectionImageAttachment({
               </button>
             )}
           </div>
-        ))}
+        ) : null)}
 
         {/* 업로드 중 스피너 */}
         {isUploading && (
@@ -440,7 +473,7 @@ export default function SectionImageAttachment({
             </button>
 
             {/* 소스 이미지 불러오기 버튼 */}
-            {(sourceImages.length > 0 || aiImageSlots.length > 0) && (
+            {(referenceUrls.length > 0 || sourceImages.length > 0 || aiImageSlots.length > 0) && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -478,6 +511,49 @@ export default function SectionImageAttachment({
               </button>
             )}
 
+            {/* 세로 합치기 버튼 — 2장 이상 선택해 하나로 합침 */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                mergeFileInputRef.current?.click();
+              }}
+              disabled={isMerging}
+              title="이미지 2장 이상을 세로로 합치기"
+              style={{
+                width: 60,
+                height: 60,
+                borderRadius: 6,
+                border: `1.5px dashed ${isMerging ? '#cccccc' : '#86efac'}`,
+                background: isMerging ? '#f9fafb' : '#f0fdf4',
+                cursor: isMerging ? 'wait' : 'pointer',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 4,
+                flexShrink: 0,
+                transition: 'border-color 0.15s, background 0.15s',
+              }}
+              onMouseEnter={(e) => {
+                if (!isMerging) {
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = '#16a34a';
+                  (e.currentTarget as HTMLButtonElement).style.background = '#dcfce7';
+                }
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.borderColor = '#86efac';
+                (e.currentTarget as HTMLButtonElement).style.background = '#f0fdf4';
+              }}
+            >
+              {isMerging
+                ? <Loader2 size={16} color="#16a34a" style={{ animation: 'siaSpinAnim 1s linear infinite' }} />
+                : <span style={{ fontSize: 18, lineHeight: 1, color: '#16a34a' }}>↕</span>
+              }
+              <span style={{ fontSize: 10, color: '#16a34a', fontFamily: 'system-ui, -apple-system, sans-serif', fontWeight: 600 }}>
+                {isMerging ? '합치는중' : '합치기'}
+              </span>
+            </button>
+
             <input
               ref={fileInputRef}
               type="file"
@@ -485,6 +561,14 @@ export default function SectionImageAttachment({
               multiple
               style={{ display: 'none' }}
               onChange={handleFileChange}
+            />
+            <input
+              ref={mergeFileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              style={{ display: 'none' }}
+              onChange={handleMergeFiles}
             />
           </>
         )}
@@ -548,6 +632,49 @@ export default function SectionImageAttachment({
 
             {/* 이미지 그리드 */}
             <div style={{ padding: 12, overflowY: 'auto' }}>
+              {/* 참조 이미지 섹션 */}
+              {referenceUrls.length > 0 && (
+                <div style={{ marginBottom: 12 }}>
+                  <p style={{ margin: '0 0 6px', fontSize: 11, fontWeight: 700, color: '#059669', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+                    참조 이미지
+                  </p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                    {referenceUrls.map((url) => (
+                      <button
+                        key={url}
+                        onClick={() => handleSourceImageSelect(url)}
+                        style={{
+                          padding: 0,
+                          border: '2px solid #a7f3d0',
+                          borderRadius: 8,
+                          overflow: 'hidden',
+                          cursor: 'pointer',
+                          aspectRatio: '1',
+                          background: '#ecfdf5',
+                          transition: 'border-color 0.15s',
+                        }}
+                        onMouseEnter={(e) => {
+                          (e.currentTarget as HTMLButtonElement).style.borderColor = '#059669';
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.currentTarget as HTMLButtonElement).style.borderColor = '#a7f3d0';
+                        }}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={url || undefined}
+                          alt="참조 이미지"
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                  {(aiImageSlots.length > 0 || sourceImages.length > 0) && (
+                    <hr style={{ margin: '12px 0 0', border: 'none', borderTop: '1px solid #eeeeee' }} />
+                  )}
+                </div>
+              )}
               {/* AI 생성 이미지 섹션 */}
               {aiImageSlots.length > 0 && (
                 <div style={{ marginBottom: 12 }}>
@@ -658,7 +785,7 @@ export default function SectionImageAttachment({
       )}
 
       {/* 에러 메시지 */}
-      {errorMsg && (
+      {(errorMsg || mergeError) && (
         <p
           style={{
             margin: '6px 0 0',
@@ -667,7 +794,7 @@ export default function SectionImageAttachment({
             fontFamily: 'system-ui, -apple-system, sans-serif',
           }}
         >
-          {errorMsg}
+          {errorMsg ?? mergeError}
         </p>
       )}
 

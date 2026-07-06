@@ -161,6 +161,16 @@ export default function AiEditModal({ imageUrl, imageFile, imageUrl2, onClose, o
   const [error, setError] = useState<string | null>(null);
   // 텍스트·표 그룹 칩이 선택됐는지 — 선택되면 신규 합성 라우트(/api/ai/edit-image-text)로 분기
   const [useTextEditRoute, setUseTextEditRoute] = useState(false);
+  // 텍스트 뱃지 오버레이 (thumbnail 컨텍스트 전용)
+  const [badgeEnabled, setBadgeEnabled] = useState(false);
+  const [badgeText, setBadgeText] = useState(() =>
+    typeof window !== 'undefined' ? (localStorage.getItem('aiEditBadgeText') ?? '') : ''
+  );
+  const [badgePosition, setBadgePosition] = useState<'top-right' | 'top-left' | 'bottom-right' | 'bottom-left'>(() =>
+    typeof window !== 'undefined'
+      ? ((localStorage.getItem('aiEditBadgePosition') as 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left') ?? 'top-right')
+      : 'top-right'
+  );
 
   // 사용자 프롬프트가 쿠팡 가이드라인 위반 의도를 포함하는지 실시간 감지 (썸네일 컨텍스트에서만)
   const violations = useMemo(
@@ -210,6 +220,9 @@ export default function AiEditModal({ imageUrl, imageFile, imageUrl2, onClose, o
             ...(imageUrl2 ? { imageUrl2 } : {}),
             prompt,
             applyCoupangPolicy: !isDetailContext,
+            ...(badgeEnabled && badgeText.trim() && !isDetailContext
+              ? { textBadge: { text: badgeText.trim(), position: badgePosition } }
+              : {}),
           };
 
       const res = await fetch(endpoint, {
@@ -495,6 +508,79 @@ export default function AiEditModal({ imageUrl, imageFile, imageUrl2, onClose, o
             )}
           </div>
         </div>
+
+        {/* 텍스트 뱃지 — thumbnail 컨텍스트에서만 표시 */}
+        {!isDetailContext && (
+          <div
+            style={{
+              borderTop: `1px solid ${C.border}`,
+              padding: '10px 24px 12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              flexWrap: 'wrap',
+            }}
+          >
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', flexShrink: 0 }}>
+              <input
+                type="checkbox"
+                checked={badgeEnabled}
+                onChange={e => setBadgeEnabled(e.target.checked)}
+                style={{ cursor: 'pointer' }}
+              />
+              <span style={{ fontSize: '13px', fontWeight: 600, color: C.text }}>텍스트 뱃지</span>
+            </label>
+            {badgeEnabled && (
+              <>
+                <input
+                  type="text"
+                  value={badgeText}
+                  onChange={e => {
+                    setBadgeText(e.target.value);
+                    localStorage.setItem('aiEditBadgeText', e.target.value);
+                  }}
+                  placeholder="32매, 3개입, x2 ..."
+                  maxLength={20}
+                  style={{
+                    flex: 1,
+                    minWidth: '120px',
+                    fontSize: '13px',
+                    padding: '5px 10px',
+                    border: `1px solid ${C.border}`,
+                    borderRadius: '6px',
+                    color: C.text,
+                    outline: 'none',
+                  }}
+                />
+                <select
+                  value={badgePosition}
+                  onChange={e => {
+                    const v = e.target.value as typeof badgePosition;
+                    setBadgePosition(v);
+                    localStorage.setItem('aiEditBadgePosition', v);
+                  }}
+                  style={{
+                    fontSize: '13px',
+                    padding: '5px 8px',
+                    border: `1px solid ${C.border}`,
+                    borderRadius: '6px',
+                    color: C.text,
+                    backgroundColor: '#fff',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <option value="top-right">우상</option>
+                  <option value="top-left">좌상</option>
+                  <option value="bottom-right">우하</option>
+                  <option value="bottom-left">좌하</option>
+                </select>
+                <span style={{ fontSize: '11px', color: '#9ca3af', flexBasis: '100%', marginTop: '-4px' }}>
+                  수량 표현만 허용 (쿠팡 정책): 32매, 3개입, x2, 1set
+                </span>
+              </>
+            )}
+          </div>
+        )}
 
         {/* 하단 버튼 */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', padding: '0 24px 20px' }}>

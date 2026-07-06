@@ -22,6 +22,7 @@ import {
 import SectionInstructionPanel from './SectionInstructionPanel';
 import SectionImageAttachment from './SectionImageAttachment';
 import SceneEditPanel from './SceneEditPanel';
+import ClaudeLayoutEditor from '../detail-maker/ClaudeLayoutEditor';
 
 interface SectionCardProps {
   section: DetailSection;
@@ -37,11 +38,15 @@ interface SectionCardProps {
   onSectionImageAiEdit?: (sectionId: string, imageUrl: string, imageIndex: number) => void;
   /** 씬 이미지 편집/재생성 (hero/point에서만 노출) */
   onSceneEdit?: (section: DetailSection, opts: { instruction: string; referenceImageUrls: string[] }) => Promise<void>;
+  /** 원본 이미지 그대로 씬에 적용 (AI 생성 없음) */
+  onSceneUseAsIs?: (section: DetailSection, url: string) => void;
   uploadedUrls?: string[];
   isSceneEditing?: boolean;
   sceneEditError?: string | null;
   prevSceneUrl?: string;
   onSceneUndo?: () => void;
+  /** claude_layout 섹션 콘텐츠/이미지 업데이트 */
+  onSectionUpdate?: (id: string, updates: Partial<import('@/types/detail-page').ClaudeLayoutContent> & { attachedImages?: AttachedImage[] }) => void;
 }
 
 // 섹션 타입별 한국어 레이블
@@ -119,11 +124,13 @@ export default function SectionCard({
   palette,
   onSectionImageAiEdit,
   onSceneEdit,
+  onSceneUseAsIs,
   uploadedUrls = [],
   isSceneEditing = false,
   sceneEditError = null,
   prevSceneUrl,
   onSceneUndo,
+  onSectionUpdate,
 }: SectionCardProps) {
   // AI 지시어 패널 표시 여부
   const [showPanel, setShowPanel] = useState(false);
@@ -327,6 +334,35 @@ export default function SectionCard({
           />
         )}
 
+        {/* claude_layout 전용 편집 UI */}
+        {isClaudeLayoutContent(section.content) && onSectionUpdate && (
+          <div style={{ padding: '12px 16px', borderTop: `1px solid #f0f0f0` }}>
+            <ClaudeLayoutEditor
+              section={section}
+              referenceUrls={uploadedUrls}
+              onUpdate={(updates) => onSectionUpdate(section.id, updates)}
+              onUploadFile={async (file) => {
+                const reader = new FileReader();
+                return new Promise((resolve, reject) => {
+                  reader.onload = async (e) => {
+                    const base64 = (e.target?.result as string).split(',')[1];
+                    const res = await fetch('/api/image/upload-ai', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ imageBase64: base64, mimeType: file.type }),
+                    });
+                    const data = await res.json() as { success: boolean; url?: string };
+                    if (data.success && data.url) resolve(data.url);
+                    else reject(new Error('업로드 실패'));
+                  };
+                  reader.onerror = reject;
+                  reader.readAsDataURL(file);
+                });
+              }}
+            />
+          </div>
+        )}
+
         {/* 이미지 첨부 패널 */}
         <SectionImageAttachment
           images={section.attachedImages}
@@ -338,6 +374,7 @@ export default function SectionCard({
               ? (url, idx) => onSectionImageAiEdit(section.id, url, idx)
               : undefined
           }
+          referenceUrls={uploadedUrls}
         />
 
         {/* 씬 편집 패널 */}
@@ -356,6 +393,7 @@ export default function SectionCard({
                 // 실패 시 패널 유지 — 에러는 sceneEditError prop으로 표시
               }
             }}
+            onUseAsIs={onSceneUseAsIs ? (url) => { onSceneUseAsIs(section, url); setShowScenePanel(false); } : undefined}
             onUndo={onSceneUndo}
             onClose={() => setShowScenePanel(false)}
           />

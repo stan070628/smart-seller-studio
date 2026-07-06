@@ -489,8 +489,8 @@ function renderWhyIcons(content: WhyIconsContent, section: DetailSection, colors
   const cols = Math.max(1, Math.min(content.items.length, 4));
   const itemsHtml = content.items.map((item, i) =>
     `<div style="text-align:center;padding:16px 8px;">
-      <div style="font-size:28px;margin-bottom:8px;">${escapeHtml(item.icon)}</div>
-      <div style="font-size:13px;font-weight:700;color:${colors.text};margin-bottom:4px;">${editableText(`content.items.${i}.title`, item.title)}</div>
+      ${accentNumberBadge(i + 1, colors)}
+      <div style="font-size:13px;font-weight:700;color:${colors.text};margin-bottom:4px;word-break:keep-all;">${editableText(`content.items.${i}.title`, item.title)}</div>
       <div style="font-size:11px;color:${colors.textSub};line-height:1.4;">${editableText(`content.items.${i}.description`, item.description)}</div>
     </div>`
   ).join('');
@@ -500,7 +500,7 @@ function renderWhyIcons(content: WhyIconsContent, section: DetailSection, colors
 function renderCertifications(content: CertificationsContent, section: DetailSection, colors: PaletteColors): string {
   const itemsHtml = content.items.map((item, i) =>
     `<div style="border:2px solid #e2e8f0;border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:10px;">
-      <div style="font-size:24px;">✅</div>
+      <div style="flex-shrink:0;width:24px;height:24px;border-radius:50%;background:${colors.accent};color:${colors.accentTextColor};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;">✓</div>
       <div>
         <div style="font-size:13px;font-weight:700;color:${colors.text};">${editableText(`content.items.${i}.name`, item.name)}</div>
         <div style="font-size:11px;color:${colors.textSub};margin-top:2px;">${editableText(`content.items.${i}.description`, item.description)}</div>
@@ -516,9 +516,8 @@ function renderInfographicSteps(content: InfographicStepsContent, section: Detai
     const arrow = isLast ? '' : `<div style="position:absolute;right:-10px;top:18px;color:#94a3b8;font-size:18px;z-index:1;">→</div>`;
     return `<div style="flex:1;text-align:center;position:relative;">
       ${arrow}
-      <div style="width:36px;height:36px;background:#6366f1;color:#ffffff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;margin:0 auto 8px;">${escapeHtml(String(item.step))}</div>
-      <div style="font-size:24px;margin-bottom:6px;">${escapeHtml(item.icon)}</div>
-      <div style="font-size:12px;font-weight:700;color:${colors.text};margin-bottom:3px;">${editableText(`content.items.${i}.title`, item.title)}</div>
+      <div style="width:36px;height:36px;background:${colors.accent};color:${colors.accentTextColor};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;margin:0 auto 8px;">${escapeHtml(String(item.step))}</div>
+      <div style="font-size:12px;font-weight:700;color:${colors.text};margin-bottom:3px;word-break:keep-all;">${editableText(`content.items.${i}.title`, item.title)}</div>
       <div style="font-size:11px;color:${colors.textSub};">${editableText(`content.items.${i}.description`, item.description)}</div>
     </div>`;
   }).join('');
@@ -694,6 +693,14 @@ function buildRadarChartSvg(
   </svg>`;
 }
 
+// 이모지 아이콘 대신 쓰는 accent 아웃라인 번호 배지. 이모지는 상업 상세페이지에서
+// "AI 티"·저품질로 읽히므로 렌더 단계에서 통일된 배지로 대체한다(dark 배경 대응).
+function accentNumberBadge(index: number, colors: PaletteColors): string {
+  const isDark = colors.text === '#ffffff';
+  const c = isDark ? '#ffffff' : colors.accent;
+  return `<div style="display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;border:2px solid ${c};color:${c};font-size:14px;font-weight:800;margin:0 auto 8px;">${index}</div>`;
+}
+
 function renderLayoutBlock(
   block: LayoutBlock,
   images: AttachedImage[],
@@ -702,29 +709,37 @@ function renderLayoutBlock(
 ): string {
   switch (block.type) {
     case 'badge': {
+      // dark/primary 배경에서는 accent 배지 배경이 섹션 배경과 같아져 배지가 사라진다.
+      const isDark = colors.text === '#ffffff';
       const bg =
-        block.color === 'accent'
-          ? colors.accent
-          : block.color === 'neutral'
-          ? '#e2e8f0'
-          : colors.accent;
-      const fg = block.color === 'neutral' ? '#334155' : colors.accentTextColor;
+        block.color === 'neutral'
+          ? (isDark ? 'rgba(255,255,255,0.2)' : '#e2e8f0')
+          : (isDark ? 'rgba(255,255,255,0.18)' : colors.accent);
+      const fg =
+        block.color === 'neutral'
+          ? (isDark ? '#ffffff' : '#334155')
+          : (isDark ? '#ffffff' : colors.accentTextColor);
       return `<div style="display:inline-block;background:${bg};color:${fg};font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px;margin-bottom:10px;">${editableText(`${basePath}.text`, block.text)}</div>`;
     }
     case 'heading': {
-      const sz = block.size === 'xl' ? '38px' : block.size === 'lg' ? '26px' : '19px';
+      // xl(38px)은 짧은 임팩트 헤드라인 전용. 문장형(16자 초과)이 xl이면 lg로 자동
+      // 강등해 거대 폰트가 어색하게 줄바꿈되는 것을 막는다.
+      const textLen = (block.text ?? '').length;
+      const effSize = block.size === 'xl' && textLen > 16 ? 'lg' : block.size;
+      const sz = effSize === 'xl' ? '38px' : effSize === 'lg' ? '26px' : '19px';
       const fw = block.bold !== false ? '800' : '600';
+      // accent/primary 색 지정이어도 dark 배경(accent가 배경색)에서는 흰색으로.
+      const isDark = colors.text === '#ffffff';
       const color =
-        block.color === 'accent'
-          ? colors.accent
-          : block.color === 'primary'
-          ? colors.accent
+        block.color === 'accent' || block.color === 'primary'
+          ? (isDark ? '#ffffff' : colors.accent)
           : colors.text;
-      return `<div style="font-size:${sz};font-weight:${fw};color:${color};line-height:1.2;letter-spacing:-0.5px;margin-bottom:10px;">${editableText(`${basePath}.text`, block.text)}</div>`;
+      // word-break:keep-all → 한국어 단어 중간 절단("의 여유") 방지.
+      return `<div style="font-size:${sz};font-weight:${fw};color:${color};line-height:1.25;letter-spacing:-0.5px;margin-bottom:10px;word-break:keep-all;overflow-wrap:break-word;">${editableText(`${basePath}.text`, block.text)}</div>`;
     }
     case 'subtext': {
       const align = block.align === 'center' ? 'center' : 'left';
-      return `<div style="font-size:15px;color:${colors.textSub};line-height:1.65;text-align:${align};margin-bottom:10px;">${editableText(`${basePath}.text`, block.text)}</div>`;
+      return `<div style="font-size:15px;color:${colors.textSub};line-height:1.65;text-align:${align};margin-bottom:10px;word-break:keep-all;overflow-wrap:break-word;">${editableText(`${basePath}.text`, block.text)}</div>`;
     }
     case 'image': {
       const img = images[block.attachedIndex];
@@ -743,11 +758,14 @@ function renderLayoutBlock(
     }
     case 'stat_row': {
       if (!Array.isArray(block.items)) return '';
+      // dark/primary 배경(accent가 배경색)에서는 accent 숫자가 안 보이므로 흰색으로.
+      const isDark = colors.text === '#ffffff';
+      const valueColor = isDark ? '#ffffff' : colors.accent;
       const items = block.items
         .map(
           (item, i) =>
             `<div style="text-align:center;flex:1;">
-              <div style="font-size:44px;font-weight:900;color:${colors.accent};line-height:1.05;letter-spacing:-1px;">${editableText(`${basePath}.items.${i}.value`, item.value)}${item.unit ? `<span style="font-size:18px;font-weight:700;margin-left:2px;">${editableText(`${basePath}.items.${i}.unit`, item.unit)}</span>` : ''}</div>
+              <div style="font-size:44px;font-weight:900;color:${valueColor};line-height:1.05;letter-spacing:-1px;">${editableText(`${basePath}.items.${i}.value`, item.value)}${item.unit ? `<span style="font-size:18px;font-weight:700;margin-left:2px;">${editableText(`${basePath}.items.${i}.unit`, item.unit)}</span>` : ''}</div>
               <div style="font-size:12px;color:${colors.textSub};margin-top:6px;line-height:1.4;">${editableText(`${basePath}.items.${i}.label`, item.label)}</div>
             </div>`,
         )
@@ -756,12 +774,14 @@ function renderLayoutBlock(
     }
     case 'bullet_list': {
       if (!Array.isArray(block.items)) return '';
+      const isDark = colors.text === '#ffffff';
+      const iconColor = isDark ? 'rgba(255,255,255,0.9)' : colors.accent;
       const icon = block.icon === 'check' ? '✓' : block.icon === 'arrow' ? '→' : '•';
       const items = block.items
         .map(
           (item, i) =>
             `<li style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px;font-size:14px;color:${colors.text};line-height:1.5;">
-              <span style="color:${colors.accent};flex-shrink:0;font-weight:700;">${icon}</span>
+              <span style="color:${iconColor};flex-shrink:0;font-weight:700;">${icon}</span>
               <span>${editableText(`${basePath}.items.${i}`, item)}</span>
             </li>`,
         )
@@ -785,10 +805,15 @@ function renderLayoutBlock(
       return `<div style="height:${Math.min(block.height, 120)}px;"></div>`;
     case 'progress_bar': {
       if (!Array.isArray(block.items)) return '';
+      const isDark = colors.text === '#ffffff';
       const items = block.items.map((item, i) => {
         const pct = Math.min(100, Math.max(0, item.value));
-        const barColor = item.highlight ? colors.accent : '#9ca3af';
-        const trackColor = item.highlight ? `${colors.accent}22` : '#e5e7eb';
+        const barColor = item.highlight
+          ? (isDark ? '#ffffff' : colors.accent)
+          : (isDark ? 'rgba(255,255,255,0.5)' : '#9ca3af');
+        const trackColor = item.highlight
+          ? (isDark ? 'rgba(255,255,255,0.25)' : `${colors.accent}22`)
+          : (isDark ? 'rgba(255,255,255,0.15)' : '#e5e7eb');
         return `<div style="margin-bottom:10px;">
           <div style="display:flex;justify-content:space-between;font-size:12px;color:${colors.text};margin-bottom:4px;">
             <span>${editableText(`${basePath}.items.${i}.label`, item.label)}</span>
@@ -806,6 +831,9 @@ function renderLayoutBlock(
       const isVertical = block.direction === 'vertical';
       // dark/primary 배경에서는 흰 글씨가 되므로 하드코딩된 밝은 박스 배경을 반투명 흰색으로 교체
       const isDark = colors.text === '#ffffff';
+      const badgeBg = isDark ? '#ffffff' : colors.accent;
+      const badgeFg = isDark ? '#111111' : colors.accentTextColor;
+      const accentBar = isDark ? 'rgba(255,255,255,0.6)' : colors.accent;
       const items = block.items.map((item, i) => {
         const isLast = i === block.items.length - 1;
         const boxBg = item.highlight
@@ -817,13 +845,24 @@ function renderLayoutBlock(
         const textColor = item.highlight
           ? (isDark ? '#ffffff' : colors.accent)
           : colors.text;
+        // 스텝 번호 배지로 시각적 앵커 추가(빈 회색 박스 → 단계감 부여).
+        const stepBadge = `<div style="flex-shrink:0;width:26px;height:26px;border-radius:50%;background:${badgeBg};color:${badgeFg};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;line-height:1;">${i + 1}</div>`;
+        const label = editableText(`${basePath}.items.${i}.label`, item.label);
+        const sublabel = item.sublabel
+          ? `<div style="font-size:12px;color:${colors.textSub};margin-top:2px;word-break:keep-all;">${editableText(`${basePath}.items.${i}.sublabel`, item.sublabel)}</div>`
+          : '';
         const arrow = isLast ? '' : (isVertical
-          ? `<div style="text-align:center;color:${isDark ? 'rgba(255,255,255,0.6)' : colors.accent};font-size:14px;line-height:1;padding:2px 0;">↓</div>`
-          : `<div style="color:${isDark ? 'rgba(255,255,255,0.6)' : colors.accent};font-size:16px;flex-shrink:0;align-self:center;">→</div>`);
-        const box = `<div style="background:${boxBg};border:1.5px solid ${boxBorder};border-radius:8px;padding:8px 12px;text-align:center;">
-          <div style="font-size:12px;font-weight:700;color:${textColor};">${editableText(`${basePath}.items.${i}.label`, item.label)}</div>
-          ${item.sublabel ? `<div style="font-size:12px;color:${colors.textSub};margin-top:2px;">${editableText(`${basePath}.items.${i}.sublabel`, item.sublabel)}</div>` : ''}
-        </div>`;
+          ? `<div style="text-align:center;color:${accentBar};font-size:14px;line-height:1;padding:2px 0;">↓</div>`
+          : `<div style="color:${accentBar};font-size:16px;flex-shrink:0;align-self:center;">→</div>`);
+        const box = isVertical
+          ? `<div style="display:flex;align-items:center;gap:10px;background:${boxBg};border:1px solid ${boxBorder};border-left:3px solid ${accentBar};border-radius:8px;padding:10px 12px;text-align:left;">
+              ${stepBadge}
+              <div><div style="font-size:13px;font-weight:700;color:${textColor};word-break:keep-all;">${label}</div>${sublabel}</div>
+            </div>`
+          : `<div style="flex:1;background:${boxBg};border:1.5px solid ${boxBorder};border-radius:8px;padding:10px 8px;text-align:center;">
+              <div style="display:flex;justify-content:center;margin-bottom:6px;">${stepBadge}</div>
+              <div style="font-size:12px;font-weight:700;color:${textColor};word-break:keep-all;">${label}</div>${sublabel}
+            </div>`;
         return box + (isLast ? '' : arrow);
       });
       const flexDir = isVertical ? 'column' : 'row';
@@ -835,9 +874,9 @@ function renderLayoutBlock(
       const itemBg = isDark ? 'rgba(255,255,255,0.12)' : '#f9fafb';
       const cols = block.cols ?? 3;
       const items = block.items.map((item, i) =>
-        `<div style="text-align:center;padding:10px 6px;background:${itemBg};border-radius:10px;">
-          <div style="font-size:24px;margin-bottom:6px;">${escapeHtml(item.icon)}</div>
-          <div style="font-size:13px;font-weight:700;color:${colors.text};line-height:1.3;">${editableText(`${basePath}.items.${i}.title`, item.title)}</div>
+        `<div style="text-align:center;padding:14px 6px;background:${itemBg};border-radius:10px;">
+          ${accentNumberBadge(i + 1, colors)}
+          <div style="font-size:13px;font-weight:700;color:${colors.text};line-height:1.3;word-break:keep-all;">${editableText(`${basePath}.items.${i}.title`, item.title)}</div>
           ${item.subtitle ? `<div style="font-size:12px;color:${colors.textSub};margin-top:2px;">${editableText(`${basePath}.items.${i}.subtitle`, item.subtitle)}</div>` : ''}
         </div>`
       ).join('');
@@ -845,7 +884,9 @@ function renderLayoutBlock(
     }
     case 'option_grid': {
       if (!Array.isArray(block.items)) return '';
-      // 사이즈·색상·용량 등 순서 없는 병렬 선택 옵션 — 화살표 없이 카드 그리드로 나열
+      // 사이즈·색상·용량 등 순서 없는 병렬 선택 옵션 — 화살표 없이 카드 그리드로 나열.
+      // 컬러/구성처럼 옵션마다 대응 이미지가 있으면 카드 상단에 각각 표시한다
+      // (attachedImages를 카드 인덱스로 매핑). 사이즈 등 이미지 없는 옵션은 텍스트만.
       const isDark = colors.text === '#ffffff';
       const cols = block.cols ?? (block.items.length >= 3 ? 3 : 2);
       const items = block.items.map((item, i) => {
@@ -858,8 +899,14 @@ function renderLayoutBlock(
         const textColor = item.highlight
           ? (isDark ? '#ffffff' : colors.accent)
           : colors.text;
-        return `<div style="background:${boxBg};border:1.5px solid ${boxBorder};border-radius:12px;padding:14px 8px;text-align:center;">
-          <div style="font-size:14px;font-weight:800;color:${textColor};line-height:1.3;">${editableText(`${basePath}.items.${i}.label`, item.label)}</div>
+        const cardImg = images[i];
+        const cardImgUrl = cardImg?.url ? sanitizeUrl(cardImg.url) : '';
+        const cardImgHtml = cardImgUrl
+          ? `<div style="margin-bottom:8px;"><img src="${escapeHtml(cardImgUrl)}" alt="" style="width:100%;max-width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:8px;display:block;" /></div>`
+          : '';
+        const pad = cardImgUrl ? '8px' : '14px 8px';
+        return `<div style="background:${boxBg};border:1.5px solid ${boxBorder};border-radius:12px;padding:${pad};text-align:center;">
+          ${cardImgHtml}<div style="font-size:14px;font-weight:800;color:${textColor};line-height:1.3;">${editableText(`${basePath}.items.${i}.label`, item.label)}</div>
           ${item.sublabel ? `<div style="font-size:12px;color:${colors.textSub};margin-top:4px;line-height:1.4;">${editableText(`${basePath}.items.${i}.sublabel`, item.sublabel)}</div>` : ''}
         </div>`;
       }).join('');
@@ -892,7 +939,7 @@ function renderLayoutBlock(
         return `<div style="display:flex;flex-direction:column;align-items:center;flex:1;position:relative;">
           ${!isLast ? `<div style="position:absolute;top:12px;left:calc(50% + 12px);width:calc(50% - 12px);height:2px;background:#e5e7eb;z-index:0;"></div>` : ''}
           <div style="width:24px;height:24px;border-radius:50%;background-color:${dotBg};display:flex;align-items:center;justify-content:center;z-index:1;flex-shrink:0;">
-            ${item.icon ? `<span style="font-size:12px;">${escapeHtml(item.icon)}</span>` : `<div style="width:8px;height:8px;border-radius:50%;background:white;"></div>`}
+            <span style="font-size:11px;font-weight:800;color:#ffffff;">${i + 1}</span>
           </div>
           <div style="margin-top:8px;font-size:12px;font-weight:700;color:${labelColor};text-align:center;">${escapeHtml(item.stage)}</div>
           ${item.value ? `<div style="margin-top:2px;font-size:11px;color:${colors.textSub};text-align:center;">${escapeHtml(item.value)}</div>` : ''}

@@ -26,24 +26,97 @@ const RequestSchema = z.object({
   productName: z.string().max(100).default(''),
 });
 
-const AnalyzedSectionSchema = z.object({
-  blockType: z.enum([
-    'layout_bar_chart',
-    'progress_bar',
-    'process_flow',
-    'icon_grid',
-    'stat_row',
-    'text',
-    'unknown',
-  ]),
+const BLOCK_TYPES = [
+  'layout_bar_chart',
+  'progress_bar',
+  'process_flow',
+  'icon_grid',
+  'option_grid',
+  'stat_row',
+  'text',
+  'unknown',
+] as const;
+
+// LLM은 숫자를 문자열("75", "75%")로 반환하는 경우가 잦아 강제 변환한다.
+const numberish = z.preprocess((v) => {
+  if (typeof v === 'number') return v;
+  if (typeof v === 'string') {
+    const n = parseFloat(v.replace(/[^0-9.\-]/g, ''));
+    return Number.isNaN(n) ? v : n;
+  }
+  return v;
+}, z.number());
+
+// confidence/needsReview는 렌더링과 무관한 메타 필드다. LLM이 대소문자·숫자 등
+// 다른 형태로 반환하더라도 섹션 전체를 버리지 않도록 정규화 후 기본값으로 흡수한다.
+const confidenceish = z
+  .preprocess(
+    (v) => (typeof v === 'string' ? v.toLowerCase().trim() : v),
+    z.enum(['high', 'medium', 'low']),
+  )
+  .catch('medium');
+
+const needsReviewish = z
+  .preprocess((v) => {
+    if (typeof v === 'boolean') return v;
+    if (typeof v === 'string') return v.toLowerCase().trim() === 'true';
+    return v;
+  }, z.boolean())
+  .catch(true);
+
+// LLM 출력을 검증 전에 정규화한다:
+//  1) null → 제거 (optional string 필드가 null을 거부하는 문제 방지)
+//  2) extractedData.type 을 검증된 blockType 으로 강제 통일. LLM이 type 을
+//     blockType 과 다른 값(의미형 이름 등)으로 주거나 누락해도 discriminatedUnion
+//     판별이 안정적으로 동작하고, blockType↔type 불일치도 원천 차단된다.
+function sanitizeSection(raw: unknown): unknown {
+  const stripNull = (val: unknown): unknown => {
+    if (val === null) return undefined;
+    if (Array.isArray(val)) return val.map(stripNull);
+    if (val && typeof val === 'object') {
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(val)) {
+        const cleaned = stripNull(v);
+        if (cleaned !== undefined) out[k] = cleaned;
+      }
+      return out;
+    }
+    return val;
+  };
+  const cleaned = stripNull(raw);
+  if (cleaned && typeof cleaned === 'object' && !Array.isArray(cleaned)) {
+    const r = cleaned as Record<string, unknown>;
+    if (
+      r.extractedData &&
+      typeof r.extractedData === 'object' &&
+      !Array.isArray(r.extractedData) &&
+      typeof r.blockType === 'string'
+    ) {
+      const ed: Record<string, unknown> = {
+        ...(r.extractedData as Record<string, unknown>),
+        type: r.blockType,
+      };
+      // Gemini가 분류 못한 unknown 섹션엔 description이 없다. 검증 실패로 버리지 말고
+      // rawText를 description으로 보존해 사용자가 리뷰 화면에서 내용을 볼 수 있게 한다.
+      if (r.blockType === 'unknown' && typeof ed.description !== 'string') {
+        ed.description = typeof r.rawText === 'string' ? r.rawText : '';
+      }
+      r.extractedData = ed;
+    }
+  }
+  return cleaned;
+}
+
+const AnalyzedSectionObject = z.object({
+  blockType: z.enum(BLOCK_TYPES),
   rawText: z.string(),
-  extractedData: z.union([
+  extractedData: z.discriminatedUnion('type', [
     z.object({
       type: z.literal('layout_bar_chart'),
       title: z.string(),
       groups: z.array(z.string()),
       items: z.array(
-        z.object({ label: z.string(), values: z.array(z.number()) }),
+        z.object({ label: z.string(), values: z.array(numberish) }),
       ),
       unit: z.string().optional(),
     }),
@@ -52,7 +125,7 @@ const AnalyzedSectionSchema = z.object({
       items: z.array(
         z.object({
           label: z.string(),
-          value: z.number(),
+          value: numberish,
           displayValue: z.string().optional(),
         }),
       ),
@@ -78,11 +151,21 @@ const AnalyzedSectionSchema = z.object({
       ),
     }),
     z.object({
+      type: z.literal('option_grid'),
+      items: z.array(
+        z.object({
+          label: z.string(),
+          sublabel: z.string().optional(),
+          highlight: z.boolean().optional(),
+        }),
+      ),
+    }),
+    z.object({
       type: z.literal('stat_row'),
       items: z.array(
         z.object({
           label: z.string(),
-          value: z.string(),
+          value: z.coerce.string(),
           unit: z.string().optional(),
         }),
       ),
@@ -94,40 +177,60 @@ const AnalyzedSectionSchema = z.object({
     }),
     z.object({
       type: z.literal('unknown'),
-      description: z.string(),
+      // Gemini가 분류 못한 unknown 섹션은 description이 없을 수 있으므로 기본값 허용.
+      description: z.string().default(''),
     }),
   ]),
-  confidence: z.enum(['high', 'medium', 'low']),
-  needsReview: z.boolean(),
+  confidence: confidenceish,
+  needsReview: needsReviewish,
 });
+
+export const AnalyzedSectionSchema = z.preprocess(
+  sanitizeSection,
+  AnalyzedSectionObject,
+);
 
 export type AnalyzedSection = z.infer<typeof AnalyzedSectionSchema>;
 
 // ─── Gemini 프롬프트 ──────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are a Korean e-commerce detail page analyzer. Analyze the provided screenshot and extract structured data.
+const SYSTEM_PROMPT = `You are a Korean e-commerce detail page analyzer. Analyze the provided screenshot and extract ALL visible text and structured data.
+
+IMPORTANT: One screenshot usually contains MULTIPLE sections stacked vertically. Return a JSON ARRAY with one object per section, in top-to-bottom order. If the image has only one section, return an array with a single element. Never wrap the array in another object.
 
 Identify the section type:
 - layout_bar_chart: vertical grouped bar chart with numeric data
 - progress_bar: horizontal progress bars showing percentages or comparisons
-- process_flow: sequential steps connected with arrows
+- process_flow: sequential/time-ordered steps connected with arrows (e.g. 봄→여름→가을, 세탁→건조)
 - icon_grid: grid of icons with titles
+- option_grid: parallel selectable options WITHOUT arrows (sizes S/M/L, colors, capacities). If cards show sizes/colors side by side with no flow arrows, use option_grid — NOT process_flow.
 - stat_row: large numeric statistics with labels
-- text: heading/body text sections
+- text: any section with headings, body text, descriptions, or product copy
 - unknown: cannot determine
 
-For charts, extract ALL visible numbers and labels accurately.
+For charts/stats, extract ALL visible numbers and labels accurately.
+For layout_bar_chart, progress_bar, process_flow, icon_grid, option_grid and stat_row, extractedData MUST include a non-empty "items" array.
+For text sections, ALWAYS extract the actual text content into heading and body fields.
 Confidence: high = all data clearly readable, medium = some ambiguity, low = data unreliable.
 needsReview: true if confidence is medium or low.
 
-Return ONLY valid JSON matching this schema — no explanation:
+Return ONLY a valid JSON array — no explanation. Each element:
 {
   "blockType": "...",
-  "rawText": "all text visible in image",
+  "rawText": "all text visible in this section — copy every word you can read",
   "extractedData": { "type": "same as blockType", ... },
   "confidence": "high|medium|low",
   "needsReview": true|false
-}`;
+}
+
+extractedData examples by type:
+- text: { "type": "text", "heading": "제목 텍스트", "body": "본문 내용 전체를 여기에 적어주세요" }
+- stat_row: { "type": "stat_row", "items": [{ "label": "라벨", "value": "99", "unit": "%" }] }
+- progress_bar: { "type": "progress_bar", "items": [{ "label": "항목", "value": 75, "displayValue": "75%" }] }
+- process_flow: { "type": "process_flow", "items": [{ "label": "단계1" }, { "label": "단계2", "highlight": true }] }
+- icon_grid: { "type": "icon_grid", "items": [{ "icon": "", "title": "제목", "subtitle": "부제목" }] }  // icon은 빈 문자열 — 이모지 금지
+- option_grid: { "type": "option_grid", "items": [{ "label": "S", "sublabel": "40 x 35cm" }, { "label": "M", "sublabel": "55 x 45cm", "highlight": true }] }
+- layout_bar_chart: { "type": "layout_bar_chart", "title": "차트명", "groups": ["그룹A"], "items": [{ "label": "항목", "values": [42] }], "unit": "%" }`;
 
 // ─── 폴백 섹션 생성 헬퍼 ─────────────────────────────────────────────────────
 
@@ -196,13 +299,16 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   try {
     const ai = getGeminiGenAI();
-    const results: AnalyzedSection[] = [];
 
-    for (const img of images) {
+    // 이미지 1장을 분석해 섹션 배열을 반환. 이미지들은 병렬 처리한다(순차 시
+    // 장당 ~30초 → 8장이면 maxDuration 90초 초과). 실패해도 그 이미지만 폴백.
+    const processImage = async (
+      img: (typeof images)[number],
+    ): Promise<AnalyzedSection[]> => {
+      const out: AnalyzedSection[] = [];
       try {
         const userText =
-          SYSTEM_PROMPT +
-          (productName ? `\nProduct: ${productName}` : '');
+          SYSTEM_PROMPT + (productName ? `\nProduct: ${productName}` : '');
 
         const response = await ai.models.generateContent({
           model: 'gemini-2.5-flash',
@@ -211,60 +317,82 @@ export async function POST(req: NextRequest): Promise<Response> {
               role: 'user',
               parts: [
                 { text: userText },
-                {
-                  inlineData: {
-                    mimeType: img.mimeType,
-                    data: img.base64,
-                  },
-                },
+                { inlineData: { mimeType: img.mimeType, data: img.base64 } },
               ],
             },
           ],
-          config: { temperature: 0.2 },
+          // responseSchema는 쓰지 않는다: Gemini structured output이 속성명
+          // `items`를 JSON-schema 예약어로 오인해 통째로 누락시키는 버그가 있어,
+          // process_flow/stat_row 등 items 기반 섹션이 깨진다. JSON 모드
+          // (responseMimeType)만으로 펜스 제거 + 순수 JSON 배열이 보장된다.
+          config: { temperature: 0.2, responseMimeType: 'application/json' },
         });
 
-        // 텍스트 파트 추출
         const textPart = response.candidates?.[0]?.content?.parts?.find(
           (p) => typeof (p as { text?: string }).text === 'string',
         ) as { text: string } | undefined;
-
         const text = textPart?.text ?? '';
 
         if (!text) {
-          results.push(makeUnknownSection('', 'Gemini 응답이 비어 있습니다.'));
-          continue;
+          out.push(makeUnknownSection('', 'Gemini 응답이 비어 있습니다.'));
+          return out;
         }
 
-        // JSON 블록 추출
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) {
-          results.push(makeUnknownSection(text, 'JSON 파싱 실패'));
-          continue;
-        }
-
-        let raw: unknown;
+        // structured output(JSON mode)이므로 text 전체가 유효한 JSON.
+        let parsed: unknown;
         try {
-          raw = JSON.parse(jsonMatch[0]);
+          parsed = JSON.parse(text);
         } catch {
-          results.push(makeUnknownSection(text, 'JSON.parse 실패'));
-          continue;
+          out.push(makeUnknownSection(text, 'JSON.parse 실패'));
+          return out;
         }
 
-        const validated = AnalyzedSectionSchema.safeParse(raw);
-        if (validated.success) {
-          results.push(validated.data);
-        } else {
+        // 배열 / { sections: [...] } / 단일 객체 모두 배열로 정규화
+        const rawSections: unknown[] = Array.isArray(parsed)
+          ? parsed
+          : Array.isArray((parsed as { sections?: unknown[] })?.sections)
+            ? (parsed as { sections: unknown[] }).sections
+            : [parsed];
+
+        if (rawSections.length === 0) {
+          out.push(makeUnknownSection(text, '섹션을 추출하지 못했습니다.'));
+          return out;
+        }
+
+        // 섹션별 개별 검증 — 하나가 깨져도 나머지는 살린다.
+        for (const rawSection of rawSections) {
+          const validated = AnalyzedSectionSchema.safeParse(rawSection);
+          if (validated.success) {
+            out.push(validated.data);
+            continue;
+          }
+          const first = validated.error.issues[0];
+          const detail = first
+            ? `${first.path.join('.') || '(root)'} — ${first.message}`
+            : '알 수 없는 검증 오류';
           console.warn(
             '[analyze-detail-page] schema 불일치:',
-            validated.error.issues,
+            JSON.stringify(validated.error.issues),
+            '\nsection:',
+            JSON.stringify(rawSection).slice(0, 1000),
           );
-          results.push(makeUnknownSection(text, 'schema 불일치'));
+          // rawText는 살려 사용자가 처음부터 다시 타이핑하지 않도록 한다.
+          const salvagedText =
+            typeof (rawSection as { rawText?: unknown })?.rawText === 'string'
+              ? (rawSection as { rawText: string }).rawText
+              : text;
+          out.push(makeUnknownSection(salvagedText, `schema 불일치: ${detail}`));
         }
       } catch (imgErr) {
         console.error('[analyze-detail-page] 이미지 분석 오류:', imgErr);
-        results.push(makeUnknownSection('', '이미지 분석 중 오류 발생'));
+        out.push(makeUnknownSection('', '이미지 분석 중 오류 발생'));
       }
-    }
+      return out;
+    };
+
+    // 순서 보존 병렬 실행 후 이미지 순서대로 flatten
+    const perImage = await Promise.all(images.map(processImage));
+    const results: AnalyzedSection[] = perImage.flat();
 
     const reviewRequired = results.some((r) => r.needsReview);
     return NextResponse.json({ success: true, sections: results, reviewRequired });

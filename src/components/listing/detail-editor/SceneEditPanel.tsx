@@ -14,6 +14,7 @@ export interface SceneEditPanelProps {
   error: string | null;
   prevSceneUrl?: string;
   onEdit: (opts: { instruction: string; referenceImageUrls: string[] }) => Promise<void>;
+  onUseAsIs?: (url: string) => void;
   onUndo?: () => void;
   onClose: () => void;
 }
@@ -25,6 +26,7 @@ export default function SceneEditPanel({
   error,
   prevSceneUrl,
   onEdit,
+  onUseAsIs,
   onUndo,
   onClose,
 }: SceneEditPanelProps) {
@@ -84,6 +86,7 @@ export default function SceneEditPanel({
   }
 
   const submitLabel = hasCurrentImage ? '✨ 이미지 수정 재생성' : '✨ 씬 이미지 새로 생성';
+  const asIsSourceUrl = allRefUrls[0] ?? uploadedUrls[0] ?? null;
 
   return (
     <div
@@ -281,6 +284,26 @@ export default function SceneEditPanel({
           borderRadius: 6, fontSize: 11, color: '#dc2626', marginBottom: 10,
         }}>
           {error}
+        </div>
+      )}
+
+      {/* 원본 그대로 사용 버튼 */}
+      {onUseAsIs && (
+        <div style={{ marginBottom: 8 }}>
+          <button
+            type="button"
+            onClick={() => asIsSourceUrl && onUseAsIs(asIsSourceUrl)}
+            disabled={!asIsSourceUrl || isEditing}
+            style={{
+              width: '100%', padding: '8px', border: `1px solid ${asIsSourceUrl && !isEditing ? '#16a34a' : C.border}`,
+              borderRadius: 7, background: asIsSourceUrl && !isEditing ? '#f0fdf4' : '#f9fafb',
+              color: asIsSourceUrl && !isEditing ? '#16a34a' : C.textSub,
+              fontSize: 12, fontWeight: 600, cursor: asIsSourceUrl && !isEditing ? 'pointer' : 'not-allowed',
+              fontFamily: 'system-ui, -apple-system, sans-serif',
+            }}
+          >
+            {asIsSourceUrl ? '🖼 원본 이미지 그대로 사용' : '🖼 원본 사용 (이미지를 먼저 선택하세요)'}
+          </button>
         </div>
       )}
 

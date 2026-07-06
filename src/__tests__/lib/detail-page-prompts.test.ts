@@ -170,6 +170,53 @@ describe('buildDetailPageUserPrompt', () => {
     expect(result).toContain('뚜껑');
   });
 
+  describe('ingredients / visibleText (성분 및 이미지 텍스트)', () => {
+    it('ingredients가 있으면 프롬프트에 성분 정보가 포함된다', () => {
+      const analysisWithIngredients: ProductImageAnalysis = {
+        ...validImageAnalysis,
+        ingredients: ['정제수', '글리세린', '나이아신아마이드'],
+      };
+      const result = buildDetailPageUserPrompt(analysisWithIngredients);
+      expect(result).toContain('정제수');
+      expect(result).toContain('글리세린');
+      expect(result).toContain('나이아신아마이드');
+    });
+
+    it('visibleText가 있으면 프롬프트에 이미지 표기 텍스트가 포함된다', () => {
+      const analysisWithText: ProductImageAnalysis = {
+        ...validImageAnalysis,
+        visibleText: ['내용량 50ml', '유통기한 제조일로부터 36개월'],
+      };
+      const result = buildDetailPageUserPrompt(analysisWithText);
+      expect(result).toContain('내용량 50ml');
+      expect(result).toContain('유통기한 제조일로부터 36개월');
+    });
+
+    it('ingredients가 빈 배열이면 성분 섹션이 없다', () => {
+      const analysisEmptyIngredients: ProductImageAnalysis = {
+        ...validImageAnalysis,
+        ingredients: [],
+      };
+      const result = buildDetailPageUserPrompt(analysisEmptyIngredients);
+      expect(result).not.toMatch(/성분\/원재료/);
+    });
+
+    it('visibleText가 빈 배열이면 이미지 텍스트 섹션이 없다', () => {
+      const analysisEmptyText: ProductImageAnalysis = {
+        ...validImageAnalysis,
+        visibleText: [],
+      };
+      const result = buildDetailPageUserPrompt(analysisEmptyText);
+      expect(result).not.toMatch(/이미지 내 표기 텍스트/);
+    });
+
+    it('ingredients, visibleText 모두 undefined면 관련 섹션이 없다', () => {
+      const result = buildDetailPageUserPrompt(validImageAnalysis);
+      expect(result).not.toMatch(/성분\/원재료/);
+      expect(result).not.toMatch(/이미지 내 표기 텍스트/);
+    });
+  });
+
   it('productName이 있으면 포함된다', () => {
     const result = buildDetailPageUserPrompt(validImageAnalysis, '프리미엄 텀블러');
     expect(result).toContain('프리미엄 텀블러');

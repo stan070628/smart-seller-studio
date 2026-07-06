@@ -13,13 +13,12 @@ type ReplicatePrediction = {
   error?: string;
 };
 
-async function removeBackground(ref: ReferenceImage): Promise<ReferenceImage> {
+async function fetchRembgPng(ref: ReferenceImage): Promise<Buffer> {
   const token = process.env.REPLICATE_API_TOKEN;
   if (!token) throw new Error('REPLICATE_API_TOKEN not set');
 
   const dataUrl = `data:${ref.mimeType};base64,${ref.base64}`;
 
-  // 예측 시작 — version hash 방식 (모델 deployment 미지원 시 404 방어)
   const startRes = await fetch(`${REPLICATE_API_BASE}/predictions`, {
     method: 'POST',
     headers: {
@@ -34,7 +33,6 @@ async function removeBackground(ref: ReferenceImage): Promise<ReferenceImage> {
 
   let prediction = (await startRes.json()) as ReplicatePrediction;
 
-  // Prefer: wait 로 즉시 완료되지 않은 경우 polling
   const deadline = Date.now() + POLLING_TIMEOUT_MS;
   while (prediction.status !== 'succeeded' && prediction.status !== 'failed') {
     if (Date.now() > deadline) throw new Error('Replicate polling timeout');
@@ -51,12 +49,28 @@ async function removeBackground(ref: ReferenceImage): Promise<ReferenceImage> {
     throw new Error(prediction.error ?? 'Replicate prediction failed');
   }
 
-  // 결과 PNG 다운로드 (15초 timeout — Replicate CDN stall 방어)
   const pngRes = await fetch(prediction.output, { signal: AbortSignal.timeout(15_000) });
   if (!pngRes.ok) throw new Error(`rembg output download error: ${pngRes.status}`);
-  const pngBuffer = Buffer.from(await pngRes.arrayBuffer());
+  return Buffer.from(await pngRes.arrayBuffer());
+}
 
-  // 흰 배경 합성 → JPEG (투명 채널 제거)
+/**
+ * 합성용: 투명 배경 PNG Buffer 반환. 실패 시 null.
+ */
+export async function removeBackgroundTransparent(
+  ref: ReferenceImage,
+): Promise<Buffer | null> {
+  try {
+    return await fetchRembgPng(ref);
+  } catch (err) {
+    console.warn('[remove-background] transparent removal failed:', err);
+    return null;
+  }
+}
+
+async function removeBackground(ref: ReferenceImage): Promise<ReferenceImage> {
+  const pngBuffer = await fetchRembgPng(ref);
+
   const jpegBuffer = await sharp(pngBuffer)
     .flatten({ background: '#ffffff' })
     .jpeg({ quality: 85 })
@@ -72,7 +86,6 @@ export async function removeImageBackgrounds(
     return { refs, anyRemoved: false };
   }
 
-  // 순차 처리 — Replicate 무료 플랜 rate limit(429) 방지
   const results: PromiseSettledResult<ReferenceImage>[] = [];
   for (const ref of refs) {
     const [result] = await Promise.allSettled([removeBackground(ref)]);

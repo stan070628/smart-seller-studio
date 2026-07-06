@@ -3,7 +3,8 @@ import { getSourcingPool } from '@/lib/sourcing/db';
 import { getCoupangClient } from '@/lib/listing/coupang-client';
 import { getCurrentUser } from '@/lib/auth';
 
-const ALL_STATUSES = ['APPROVED', 'UNDER_REVIEW', 'SUSPENSION', 'REJECTED'];
+// 쿠팡 API 유효 상태값: SAVED SAVING APPROVING APPROVED PARTIAL_APPROVED DENIED TMP_DENIED DELETED DROPPED IN_REVIEW
+const ALL_STATUSES = ['APPROVED', 'PARTIAL_APPROVED', 'IN_REVIEW', 'APPROVING', 'DENIED', 'TMP_DENIED'];
 
 // GET /api/cost-management/coupang-products
 // 쿠팡 윙 등록 상품 중 product_costs에 아직 연동되지 않은 목록 반환
@@ -29,18 +30,23 @@ export async function GET() {
     }
 
     // 2) 쿠팡 윙 API에서 전체 상태 상품 목록 조회 (병렬, 페이지네이션 포함)
+    // rocketGrowth 타입은 기본 목록에서 누락되므로 APPROVED 상태에서 별도 조회 후 합산
     const client = getCoupangClient();
-    const fetchAll = async (status: string) => {
+    const fetchAll = async (status: string, businessType?: string) => {
       const items = [];
       let token = '';
       do {
-        const res = await client.getSellerProducts(status, 100, token);
+        const res = await client.getSellerProducts(status, 100, token, businessType);
         items.push(...res.items);
         token = res.nextToken ?? '';
       } while (token);
       return items;
     };
-    const results = await Promise.allSettled(ALL_STATUSES.map(fetchAll));
+    // rocketGrowth 상품은 businessTypes 파라미터 없이 조회하면 누락됨 — 모든 상태에 대해 병렬 추가 조회
+    const results = await Promise.allSettled([
+      ...ALL_STATUSES.map((s) => fetchAll(s)),
+      ...ALL_STATUSES.map((s) => fetchAll(s, 'rocketGrowth')),
+    ]);
 
     const allProducts = results.flatMap((r) =>
       r.status === 'fulfilled' ? r.value : [],

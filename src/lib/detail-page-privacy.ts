@@ -11,25 +11,33 @@ const FIXED_IMAGES = [
   'https://mvergrjqfjuwndveztts.supabase.co/storage/v1/object/public/smart-seller-studio/fixed/frame-02-custom_privacy.jpg',
 ] as const;
 
-export const PRIVACY_FOOTER_HTML =
-  `<div style="max-width:780px;margin:0 auto;display:flex;gap:0;line-height:0;">` +
-  FIXED_IMAGES.map(
-    (src) =>
-      `<div style="flex:1;min-width:0;"><img src="${src}" alt="" style="width:100%;display:block;" /></div>`,
-  ).join('') +
-  `</div>`;
+function makePrivacyFooterHtml(layoutMode?: string): string {
+  const maxWidth = layoutMode === 'mobile' ? '390px' : '780px';
+  const wrapStyle = `max-width:${maxWidth};margin:0 auto;display:flex;flex-direction:row;gap:0;line-height:0;`;
+  return (
+    `<div style="${wrapStyle}">` +
+    FIXED_IMAGES.map(
+      (src) =>
+        `<div style="flex:1;min-width:0;"><img src="${src}" alt="" style="width:100%;display:block;" /></div>`,
+    ).join('') +
+    `</div>`
+  );
+}
+
+export const PRIVACY_FOOTER_HTML = makePrivacyFooterHtml();
 
 /**
  * 기존 HTML 끝에 고정 이미지 3종을 붙인다.
  * 이미 포함돼 있으면 중복 삽입하지 않는다.
  */
-export function appendPrivacyFooter(html: string): string {
-  if (!html) return PRIVACY_FOOTER_HTML;
+export function appendPrivacyFooter(html: string, layoutMode?: string): string {
+  const footerHtml = makePrivacyFooterHtml(layoutMode);
+  if (!html) return footerHtml;
   // 이미 포함됐는지 첫 번째 이미지 URL로 판단
   if (html.includes(FIXED_IMAGES[0])) return html;
 
   if (html.includes('</body>')) {
-    return html.replace('</body>', `${PRIVACY_FOOTER_HTML}\n</body>`);
+    return html.replace('</body>', `${footerHtml}\n</body>`);
   }
-  return html + '\n' + PRIVACY_FOOTER_HTML;
+  return html + '\n' + footerHtml;
 }

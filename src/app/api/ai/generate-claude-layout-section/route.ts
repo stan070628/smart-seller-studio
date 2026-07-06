@@ -45,28 +45,69 @@ const RequestSchema = z.object({
 // ─────────────────────────────────────────
 
 const CLAUDE_SYSTEM = `You are a Korean e-commerce product detail page layout designer.
-Generate a single section layout as JSON.
+Generate a single section layout as JSON for a mobile page (390px width).
 
 Available block types:
 - badge: { type, text, color?: 'primary'|'accent'|'neutral' }
 - heading: { type, text, size: 'xl'|'lg'|'md', bold?: boolean, color?: 'primary'|'text'|'accent' }
 - subtext: { type, text, align?: 'left'|'center' }
 - image: { type, attachedIndex: 0..N, width?: string, align?: 'center'|'left'|'right', rounded?: boolean }
-- stat_row: { type, items: [{label, value, unit?}] }
+- stat_row: { type, items: [{label: string, value: string, unit?: string}] }
 - bullet_list: { type, items: string[], icon?: 'dot'|'check'|'arrow' }
 - columns: { type, cols: LayoutBlock[][], gap?: number }
 - divider: { type }
 - spacer: { type, height: number }
 
-Rules:
-- image blocks use attachedIndex 0..N (N = imageCount-1)
-- All text values must be plain strings, NO HTML tags
-- Large headlines (size 'xl') for main points
-- Use columns for side-by-side layouts
-- Korean mobile detail page style (390px width)
-- badge block for eyebrow labels like 'Point 1', 'HACCP 인증'
+CRITICAL DESIGN RULES:
+1. stat_row value renders at 44px bold — use it for BIG impact numbers like "약 247,000건", "NMN 250mg", "4,500만권"
+2. heading 'xl' renders at 38px — always use for the main point headline
+3. For dark/primary bgStyle, heading color should be 'text' (will auto-invert to white)
+4. badge always goes FIRST in a section (eyebrow label like "Point 1", "핵심 성분", "HACCP 인증")
+5. Use columns when placing image + text side-by-side OR 2-column data comparison
+6. image blocks reference attachedIndex 0..N only (max = imageCount-1)
 
-Return ONLY valid JSON:
+PROVEN LAYOUT PATTERNS — use these as reference:
+
+Pattern A — "숫자 임팩트" (dark bg, big stats):
+{ "bgStyle": "dark", "padding": "wide", "blocks": [
+  {"type":"badge","text":"글로벌 인정","color":"accent"},
+  {"type":"heading","text":"세계가 주목하는 NMN","size":"xl","color":"text"},
+  {"type":"spacer","height":24},
+  {"type":"stat_row","items":[{"label":"SNS 검색 결과","value":"약 247,000","unit":"건"},{"label":"논문 발표 수","value":"약 1,664","unit":"건"}]},
+  {"type":"divider"},
+  {"type":"stat_row","items":[{"label":"포털 검색 결과","value":"약 24,900,000","unit":"건"}]}
+]}
+
+Pattern B — "이미지 + 텍스트" (누끼 이미지 + 핵심 내용):
+{ "bgStyle": "white", "padding": "normal", "blocks": [
+  {"type":"badge","text":"Point 1","color":"primary"},
+  {"type":"heading","text":"국내 최대 NMN 250mg 함유","size":"xl"},
+  {"type":"subtext","text":"2정 당 NMN 250mg 함유로 하루 권장량 충족"},
+  {"type":"image","attachedIndex":0,"width":"100%","align":"center"}
+]}
+
+Pattern C — "2컬럼 원료/성분 비교":
+{ "bgStyle": "light", "padding": "normal", "blocks": [
+  {"type":"badge","text":"Point 4","color":"primary"},
+  {"type":"heading","text":"프리미엄 글로벌 원료 선별","size":"xl"},
+  {"type":"subtext","text":"전 세계 최고 원료만 엄선"},
+  {"type":"image","attachedIndex":0,"width":"100%"},
+  {"type":"columns","cols":[
+    [{"type":"heading","text":"미국","size":"md"},{"type":"bullet_list","items":["건조효모","나이아신","라임과피추출분말"],"icon":"dot"}],
+    [{"type":"heading","text":"프랑스","size":"md"},{"type":"bullet_list","items":["비타민D 혼합제제","포도주추출분말"],"icon":"dot"}]
+  ],"gap":16}
+]}
+
+Pattern D — "체크리스트 추천 섹션":
+{ "bgStyle": "light", "padding": "wide", "blocks": [
+  {"type":"heading","text":"이런 분께 추천합니다","size":"xl","bold":true},
+  {"type":"spacer","height":16},
+  {"type":"bullet_list","items":["빠르게 호르는 시간 속 활력을 찾고 싶은 분","내일을 천천히 맞이하고 싶으신 분","활력 있는 일상을 보내고 싶은 분"],"icon":"check"},
+  {"type":"image","attachedIndex":0,"width":"80%","align":"center"}
+]}
+
+All text values: plain Korean strings only, NO HTML, NO markdown.
+Return ONLY valid JSON (no explanation, no code fence):
 {
   "blocks": [...],
   "bgStyle": "white"|"light"|"dark"|"primary",
@@ -110,7 +151,7 @@ async function uploadBase64Image(base64: string, mimeType: string): Promise<stri
 async function processUploadSlot(url: string): Promise<string | null> {
   try {
     const response = await fetch(url);
-    if (!response.ok) return null;
+    if (!response.ok) return url;
     const buffer = await response.arrayBuffer();
     const base64 = Buffer.from(buffer).toString('base64');
     const mimeType = response.headers.get('content-type') ?? 'image/jpeg';
@@ -119,11 +160,11 @@ async function processUploadSlot(url: string): Promise<string | null> {
     // ReferenceImage.mimeType은 'image/jpeg' 리터럴이므로 JPEG으로 정규화
     const { refs: cleaned } = await removeImageBackgrounds([{ base64, mimeType: 'image/jpeg' as const }]);
     const ref = cleaned[0];
-    if (!ref) return null;
+    if (!ref) return url;
 
-    return uploadBase64Image(ref.base64, ref.mimeType);
+    return (await uploadBase64Image(ref.base64, ref.mimeType)) ?? url;
   } catch {
-    return null;
+    return url;
   }
 }
 

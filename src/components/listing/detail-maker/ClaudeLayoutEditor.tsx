@@ -3,17 +3,22 @@
 import React from 'react';
 import { C } from '@/lib/design-tokens';
 import type { DetailSection, ClaudeLayoutContent, AttachedImage } from '@/types/detail-page';
+import { ensureImageBlock } from '@/lib/detail-page/layout-image-blocks';
 
 interface Props {
   section: DetailSection;
   onUpdate: (updates: Partial<ClaudeLayoutContent> & { attachedImages?: AttachedImage[] }) => void;
   onUploadFile: (file: File) => Promise<string>;
+  /** 참고 이미지 URL 목록 (왼쪽 패널에서 업로드된 원본 이미지들) */
+  referenceUrls?: string[];
 }
 
 const BRAND_PURPLE = '#7c3aed';
 
-export default function ClaudeLayoutEditor({ section, onUpdate, onUploadFile }: Props) {
+export default function ClaudeLayoutEditor({ section, onUpdate, onUploadFile, referenceUrls = [] }: Props) {
   const content = section.content as ClaudeLayoutContent;
+  // 슬롯별 참고 이미지 피커 표시 인덱스 (null = 닫힘)
+  const [pickerSlotIdx, setPickerSlotIdx] = React.useState<number | null>(null);
 
   // 섹션 제목 변경
   function handleTitleChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -54,13 +59,14 @@ export default function ClaudeLayoutEditor({ section, onUpdate, onUploadFile }: 
     onUpdate({ attachedImages: images });
   }
 
-  // 직접 업로드 처리
+  // 직접 업로드 처리 — URL 설정과 함께 image 블록 자동 주입
   async function handleSlotUpload(idx: number, file: File) {
     const url = await onUploadFile(file);
     const images = section.attachedImages.map((img, i) =>
       i === idx ? { ...img, url, source: 'upload' as const } : img
     );
-    onUpdate({ attachedImages: images });
+    const blocks = ensureImageBlock(content.blocks ?? [], idx);
+    onUpdate({ attachedImages: images, blocks });
   }
 
   // 이미지 슬롯 추가
@@ -246,41 +252,131 @@ export default function ClaudeLayoutEditor({ section, onUpdate, onUploadFile }: 
               /* 직접 업로드 UI */
               <div>
                 {img.url && (
-                  <img
-                    src={img.url}
-                    alt=""
-                    style={{
-                      width: 60,
-                      height: 60,
-                      objectFit: 'cover',
-                      borderRadius: 6,
-                      marginBottom: 6,
-                      display: 'block',
-                    }}
-                  />
+                  <div style={{ position: 'relative', display: 'inline-block', marginBottom: 6 }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={img.url}
+                      alt=""
+                      style={{
+                        width: 60,
+                        height: 60,
+                        objectFit: 'cover',
+                        borderRadius: 6,
+                        display: 'block',
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const images = section.attachedImages.map((im, i) =>
+                          i === idx ? { ...im, url: '' } : im
+                        );
+                        onUpdate({ attachedImages: images });
+                      }}
+                      style={{
+                        position: 'absolute', top: -4, right: -4,
+                        width: 16, height: 16, borderRadius: '50%',
+                        background: 'rgba(0,0,0,0.6)', border: 'none',
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        padding: 0,
+                      }}
+                    >
+                      <span style={{ fontSize: 9, color: '#fff', lineHeight: 1 }}>✕</span>
+                    </button>
+                  </div>
                 )}
-                <label
-                  style={{
-                    display: 'inline-block',
-                    padding: '6px 12px',
-                    background: C.tableHeader,
-                    border: `1px solid ${C.border}`,
-                    borderRadius: 6,
-                    fontSize: 12,
-                    cursor: 'pointer',
-                    color: C.text,
-                  }}
-                >
-                  파일 선택
-                  <input
-                    type="file"
-                    accept="image/*"
-                    style={{ display: 'none' }}
-                    onChange={e => {
-                      if (e.target.files?.[0]) void handleSlotUpload(idx, e.target.files[0]);
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <label
+                    style={{
+                      display: 'inline-block',
+                      padding: '6px 12px',
+                      background: C.tableHeader,
+                      border: `1px solid ${C.border}`,
+                      borderRadius: 6,
+                      fontSize: 12,
+                      cursor: 'pointer',
+                      color: C.text,
                     }}
-                  />
-                </label>
+                  >
+                    파일 선택
+                    <input
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={e => {
+                        if (e.target.files?.[0]) void handleSlotUpload(idx, e.target.files[0]);
+                      }}
+                    />
+                  </label>
+                  {/* 참고 이미지에서 불러오기 버튼 */}
+                  {referenceUrls.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setPickerSlotIdx(pickerSlotIdx === idx ? null : idx)}
+                      style={{
+                        padding: '6px 10px',
+                        background: pickerSlotIdx === idx ? '#ede9fe' : C.tableHeader,
+                        border: `1px solid ${pickerSlotIdx === idx ? BRAND_PURPLE : C.border}`,
+                        borderRadius: 6,
+                        fontSize: 12,
+                        cursor: 'pointer',
+                        color: pickerSlotIdx === idx ? BRAND_PURPLE : C.text,
+                        fontWeight: pickerSlotIdx === idx ? 600 : 400,
+                      }}
+                    >
+                      🖼 참고 이미지에서
+                    </button>
+                  )}
+                </div>
+
+                {/* 참고 이미지 피커 */}
+                {pickerSlotIdx === idx && referenceUrls.length > 0 && (
+                  <div style={{
+                    marginTop: 8,
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(4, 1fr)',
+                    gap: 6,
+                    padding: 8,
+                    background: '#f5f3ff',
+                    border: `1px solid ${BRAND_PURPLE}33`,
+                    borderRadius: 8,
+                  }}>
+                    {referenceUrls.map((refUrl) => (
+                      <button
+                        key={refUrl}
+                        type="button"
+                        onClick={() => {
+                          const images = section.attachedImages.map((im, i) =>
+                            i === idx ? { ...im, url: refUrl, source: 'upload' as const } : im
+                          );
+                          const blocks = ensureImageBlock(content.blocks ?? [], idx);
+                          onUpdate({ attachedImages: images, blocks });
+                          setPickerSlotIdx(null);
+                        }}
+                        style={{
+                          padding: 0,
+                          border: `2px solid ${C.border}`,
+                          borderRadius: 6,
+                          overflow: 'hidden',
+                          cursor: 'pointer',
+                          aspectRatio: '1',
+                          background: C.tableHeader,
+                          transition: 'border-color 0.15s',
+                        }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = BRAND_PURPLE; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = C.border; }}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={refUrl}
+                          alt="참고 이미지"
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                          onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

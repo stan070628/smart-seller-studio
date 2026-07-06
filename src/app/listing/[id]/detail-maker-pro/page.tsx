@@ -3,13 +3,15 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import type { AnalyzedSection } from '@/app/api/ai/analyze-detail-page/route';
+import type { LayoutBlock } from '@/types/detail-page';
+import { normalizeImageBlocks } from '@/lib/detail-page/layout-image-blocks';
 
 type ScreenState = 'upload' | 'review' | 'generating' | 'result';
 
 interface GeneratedSection {
   title?: string;
   type?: string;
-  imageSlots?: Array<{ slotType: string; promptHint?: string }>;
+  imageSlots?: Array<{ slotType: string; promptHint?: string; imageRef?: number }>;
 }
 
 interface ProgressEvent {
@@ -108,8 +110,37 @@ export default function DetailMakerProPage() {
       reader.readAsDataURL(file);
     });
 
+  // Claude 비전 입력용: 제품 이미지를 512px JPEG로 다운스케일 → base64 (토큰 절감).
+  const fileToDownscaledBase64 = async (
+    file: File,
+    max = 512,
+  ): Promise<{ base64: string; mimeType: string }> => {
+    try {
+      const bitmap = await createImageBitmap(file);
+      const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
+      const w = Math.max(1, Math.round(bitmap.width * scale));
+      const h = Math.max(1, Math.round(bitmap.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('canvas 2d 컨텍스트 없음');
+      ctx.drawImage(bitmap, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      return { base64: dataUrl.split(',')[1] ?? '', mimeType: 'image/jpeg' };
+    } catch {
+      // 다운스케일 실패 시 원본 base64로 폴백
+      return { base64: await fileToBase64(file), mimeType: file.type || 'image/jpeg' };
+    }
+  };
+
   // Step 1 → Step 1.5: OCR 분석
   const handleAnalyze = useCallback(async () => {
+    // 무엇이 빠졌는지 알려주는 게 버튼 비활성화보다 낫다.
+    if (!productName.trim()) {
+      setError('상품명을 입력해주세요.');
+      return;
+    }
     if (referenceImages.length === 0) {
       setError('참고 이미지를 1장 이상 업로드해주세요.');
       return;
@@ -154,6 +185,10 @@ export default function DetailMakerProPage() {
     setProgress({ step: 'start', message: 'Claude가 레이아웃을 설계하는 중...' });
 
     try {
+      // Claude가 실물을 보고 색상·디테일·카피를 정하도록 제품 이미지를 다운스케일해 전달.
+      const productImagePayload = await Promise.all(
+        productImages.slice(0, 4).map(f => fileToDownscaledBase64(f)),
+      );
       const res = await fetch('/api/ai/generate-pro-layout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -162,13 +197,14 @@ export default function DetailMakerProPage() {
             name: productName,
             points: productPoints
               .split('\n')
-              .map(p => p.trim())
+              .map(p => p.trim().slice(0, 200)) // 서버 항목 200자 제한 → 초과 시 400 방지
               .filter(Boolean)
               .slice(0, 30),
             category: '',
           },
           analyzedSections: editedSections,
           productImageCount: productImages.length,
+          productImages: productImagePayload,
         }),
       });
 
@@ -177,6 +213,8 @@ export default function DetailMakerProPage() {
         const debugInfo = data._debug ? `\n[debug] ${data._debug}` : '';
         setError((data.error ?? '레이아웃 생성 실패') + debugInfo);
         setScreen('review');
+        // 에러 배너는 리뷰 화면 상단에 있으므로, 하단 버튼에서 실패해도 보이도록 스크롤.
+        if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
 
@@ -187,10 +225,11 @@ export default function DetailMakerProPage() {
       console.error('[handleGenerate] 오류:', e);
       setError(`생성 중 오류: ${msg}`);
       setScreen('review');
+      if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setIsGenerating(false);
     }
-  }, [isGenerating, productName, productPoints, editedSections, productImages.length]);
+  }, [isGenerating, productName, productPoints, editedSections, productImages]);
 
   // FLUX 이미지 재생성
   const handleFluxRegenerate = useCallback(
@@ -433,9 +472,16 @@ export default function DetailMakerProPage() {
           )}
         </div>
 
+        {(!productName.trim() || referenceImages.length === 0) && !isAnalyzing && (
+          <p style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '8px' }}>
+            {!productName.trim() && '상품명을 입력하세요.'}
+            {!productName.trim() && referenceImages.length === 0 && ' '}
+            {referenceImages.length === 0 && '참고 스크린샷을 1장 이상 올리세요.'}
+          </p>
+        )}
         <button
           onClick={handleAnalyze}
-          disabled={!productName || referenceImages.length === 0 || isAnalyzing}
+          disabled={isAnalyzing}
           style={{
             width: '100%',
             padding: '14px',
@@ -446,7 +492,7 @@ export default function DetailMakerProPage() {
             fontSize: '15px',
             fontWeight: 700,
             cursor: 'pointer',
-            opacity: !productName || referenceImages.length === 0 || isAnalyzing ? 0.5 : 1,
+            opacity: isAnalyzing ? 0.5 : 1,
           }}
         >
           {isAnalyzing ? '분석 중...' : '분석 시작 →'}
@@ -755,6 +801,7 @@ export default function DetailMakerProPage() {
         <button
           onClick={async () => {
             const editBtn = document.getElementById('edit-btn') as HTMLButtonElement | null;
+            try {
 
             // Step 1: 제품 이미지 업로드 → Supabase URL 확보
             let uploadedImageUrls: string[] = [];
@@ -776,27 +823,40 @@ export default function DetailMakerProPage() {
                 .map((r) => r.value);
             }
 
-            // Step 2: flux_lifestyle 슬롯 섹션마다 Gemini 씬 생성
-            // generate-scene-image: 누끼 제거(Replicate) → 배경 생성(Gemini) → 합성(Sharp) 자동 처리
+            // Step 2: 생성형 슬롯(flux_lifestyle=라이프스타일, detail_closeup=디테일 접사)
+            // 섹션마다 Gemini 씬 생성. generate-scene-image: 누끼 → 배경 생성 → 합성.
             const geminiUrlMap: Record<number, string> = {};
             if (uploadedImageUrls.length > 0) {
               if (editBtn) editBtn.textContent = 'AI 이미지 생성 중...';
 
-              const fluxItems = generatedSections
+              const isGenSlot = (t?: string) =>
+                t === 'flux_lifestyle' || t === 'detail_closeup';
+              // 슬롯 타입 → 씬 타입: detail_closeup은 매크로 접사('detail'), 그 외 라이프스타일.
+              const sceneTypeFor = (t?: string) =>
+                t === 'detail_closeup' ? 'detail' : 'lifestyle';
+              const genItems = generatedSections
                 .map((s, i) => ({ s, i }))
-                .filter(({ s }) => s.imageSlots?.some(slot => slot.slotType === 'flux_lifestyle'));
+                .filter(({ s }) => s.imageSlots?.some(slot => isGenSlot(slot.slotType)));
 
               await Promise.allSettled(
-                fluxItems.map(async ({ s, i }) => {
+                genItems.map(async ({ s, i }) => {
                   try {
-                    const slot = s.imageSlots?.find(sl => sl.slotType === 'flux_lifestyle');
+                    const slot = s.imageSlots?.find(sl => isGenSlot(sl.slotType));
+                    // Claude가 지정한 imageRef 제품 이미지를 씬 합성의 첫 ref로 → 색상 일치.
+                    const refImages =
+                      typeof slot?.imageRef === 'number' && uploadedImageUrls[slot.imageRef]
+                        ? [uploadedImageUrls[slot.imageRef], ...uploadedImageUrls].slice(0, 2)
+                        : uploadedImageUrls.slice(0, 2);
                     const sceneRes = await fetch('/api/ai/generate-scene-image', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
-                        sectionType: 'lifestyle',
-                        productImageUrls: uploadedImageUrls.slice(0, 2),
-                        scenePrompt: slot?.promptHint,
+                        sectionType: sceneTypeFor(slot?.slotType),
+                        productImageUrls: refImages,
+                        // scenePrompt(직결) 대신 sceneHint로 전달 → Claude 프롬프트 정교화
+                        // (조명·앵글·무드 + anti-AI 규칙) 단계를 경유해 씬 품질을 높인다.
+                        sceneHint: slot?.promptHint,
+                        productInfo: { headline: productName },
                       }),
                     });
                     const sceneJson = await sceneRes.json() as {
@@ -825,10 +885,41 @@ export default function DetailMakerProPage() {
               );
             }
 
-            // Step 3: 섹션 조립 (Gemini 씬 → 원본 제품 이미지 순으로 fallback)
+            // Step 3: 섹션 조립. Claude가 imageSlots로 선언한 섹션에만 이미지를 배치한다.
+            // (텍스트/공지/배송 등 슬롯 없는 섹션에 제품 사진을 강제로 넣지 않는다.)
             const detailSections = generatedSections.map((s, i) => {
               const geminiUrl = geminiUrlMap[i];
-              const imageUrl = geminiUrl ?? fluxResults[i] ?? uploadedImageUrls[i] ?? uploadedImageUrls[0];
+              const slots = s.imageSlots ?? [];
+              // 생성 씬(flux_lifestyle 또는 detail_closeup)을 만든 슬롯 위치에 넣는다.
+              const genSlotIdx = slots.findIndex(
+                sl => sl.slotType === 'flux_lifestyle' || sl.slotType === 'detail_closeup',
+              );
+
+              const attachedImages = slots
+                .map((slot, idx) => {
+                  // Claude가 지정한 imageRef(실물 보고 고른 인덱스)를 우선 사용.
+                  // 없으면 (섹션+슬롯) 로테이션으로 폴백.
+                  const refIdx =
+                    typeof slot.imageRef === 'number' ? slot.imageRef : i + idx;
+                  const chosen =
+                    uploadedImageUrls.length > 0
+                      ? uploadedImageUrls[refIdx % uploadedImageUrls.length]
+                      : undefined;
+                  // 생성 씬 슬롯 → Gemini 씬, 그 외 슬롯 → imageRef/로테이션 제품 이미지.
+                  const url =
+                    idx === genSlotIdx && geminiUrl ? geminiUrl : (chosen ?? '');
+                  return { url, order: idx, processingMode: 'original' as const };
+                })
+                .filter(item => item.url);
+
+              // 렌더러는 attachedImages를 직접 그리지 않고 blocks의 image 블록으로만
+              // 그린다 → 실제 이미지 개수에 맞춰 attachedIndex 리매핑 + image 블록
+              // 부재 시 주입. 이게 없으면 첫 섹션 외 나머지 슬롯 이미지가 누락된다.
+              const blocks = normalizeImageBlocks(
+                (s as Record<string, unknown>).blocks as LayoutBlock[] | undefined,
+                attachedImages.length,
+              );
+
               return {
                 id: crypto.randomUUID(),
                 type: 'claude_layout' as const,
@@ -836,26 +927,30 @@ export default function DetailMakerProPage() {
                 content: {
                   type: 'claude_layout' as const,
                   title: s.title ?? `섹션 ${i + 1}`,
-                  blocks: (s as Record<string, unknown>).blocks ?? [],
+                  blocks,
                   bgStyle: (s as Record<string, unknown>).bgStyle,
                   padding: (s as Record<string, unknown>).padding,
                   imageSlots: s.imageSlots,
                 },
-                attachedImages: (() => {
-                  const slotCount = Math.max(s.imageSlots?.length ?? 0, imageUrl ? 1 : 0);
-                  if (slotCount === 0) return [];
-                  return Array.from({ length: slotCount }, (_, idx) => ({
-                    url: idx === 0 && geminiUrl ? geminiUrl : (uploadedImageUrls[idx] ?? imageUrl ?? ''),
-                    order: idx,
-                    processingMode: 'original' as const,
-                  })).filter(item => item.url);
-                })(),
+                attachedImages,
               };
             });
 
             sessionStorage.setItem('pro_sections', JSON.stringify(detailSections));
             sessionStorage.setItem('pro_meta', JSON.stringify({ productName, uploadedImageUrls }));
             router.push('/listing/detail-maker');
+            } catch (err) {
+              // 업로드/씬 생성/조립 중 실패 시 버튼을 되살리고 원인을 표시한다
+              // (onClickCapture에서 비활성화만 하므로 catch가 없으면 영구 잠긴다).
+              console.error('[pro apply] 오류:', err);
+              if (editBtn) {
+                editBtn.disabled = false;
+                editBtn.textContent = '에디터에서 편집 →';
+              }
+              const msg = err instanceof Error ? err.message : String(err);
+              setError(`적용 중 오류가 발생했습니다: ${msg}`);
+              if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
           }}
           id="edit-btn"
           style={{

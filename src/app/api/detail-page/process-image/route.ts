@@ -15,6 +15,8 @@ import { checkRateLimit, getRateLimitKey } from '@/lib/rate-limit';
 import { uploadToStorage } from '@/lib/supabase/server';
 import { PALETTES, PALETTE_NAMES } from '@/lib/detail-page/palette-config';
 import type { ImageProcessingMode } from '@/types/detail-page';
+import { removeBackgroundTransparent } from '@/lib/ai/remove-background';
+import type { ReferenceImage } from '@/lib/ai/reference-images';
 
 // ─────────────────────────────────────────
 // 상수
@@ -61,32 +63,17 @@ function hexToRgba(hex: string): { r: number; g: number; b: number; alpha: numbe
 }
 
 /**
- * remove.bg API를 호출하여 배경을 제거한 이미지 버퍼를 반환합니다.
- * 실패 시 예외를 던집니다.
+ * imageBase64를 JPEG로 변환 후 Replicate rembg로 배경 제거.
+ * REPLICATE_API_TOKEN 없으면 null 반환.
  */
-async function removeBgViaApi(imageBase64: string): Promise<Buffer> {
-  const apiKey = process.env.REMOVE_BG_API_KEY;
-  if (!apiKey) {
-    throw new Error('REMOVE_BG_API_KEY 환경변수가 설정되지 않았습니다.');
-  }
+async function removeBgViaReplicate(imageBase64: string): Promise<Buffer | null> {
+  if (!process.env.REPLICATE_API_TOKEN) return null;
 
-  const formData = new FormData();
-  formData.append('image_file_b64', imageBase64);
-  formData.append('size', 'auto');
-
-  const res = await fetch('https://api.remove.bg/v1.0/removebg', {
-    method: 'POST',
-    headers: { 'X-Api-Key': apiKey },
-    body: formData,
-  });
-
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '');
-    throw new Error(`배경 제거 실패 (${res.status}): ${errText}`);
-  }
-
-  const arrayBuffer = await res.arrayBuffer();
-  return Buffer.from(arrayBuffer);
+  const jpegBuffer = await sharp(Buffer.from(imageBase64, 'base64'))
+    .jpeg({ quality: 90 })
+    .toBuffer();
+  const ref: ReferenceImage = { base64: jpegBuffer.toString('base64'), mimeType: 'image/jpeg' };
+  return removeBackgroundTransparent(ref);
 }
 
 // ─────────────────────────────────────────
@@ -104,37 +91,28 @@ async function processOriginal(imageBase64: string): Promise<Buffer> {
 }
 
 /**
- * bg_removed 모드: remove.bg 호출 → PNG 반환
- * API 키가 없으면 null 반환 (호출부에서 fallback 처리)
+ * bg_removed 모드: Replicate rembg 호출 → 투명 PNG 반환
+ * REPLICATE_API_TOKEN 없으면 null 반환 (호출부에서 original fallback 처리)
  */
 async function processBgRemoved(
   imageBase64: string,
 ): Promise<{ buffer: Buffer; usedFallback: false } | null> {
-  const apiKey = process.env.REMOVE_BG_API_KEY;
-  if (!apiKey) {
-    return null;
-  }
-
-  const bgRemovedBuffer = await removeBgViaApi(imageBase64);
-  // 배경 제거 결과는 PNG 형식으로 저장
+  const bgRemovedBuffer = await removeBgViaReplicate(imageBase64);
+  if (!bgRemovedBuffer) return null;
   return { buffer: bgRemovedBuffer, usedFallback: false };
 }
 
 /**
  * bg_composed 모드: 배경 제거 후 팔레트 색상 배경 위에 합성
- * API 키가 없으면 null 반환 (호출부에서 original fallback 처리)
+ * REPLICATE_API_TOKEN 없으면 null 반환 (호출부에서 original fallback 처리)
  */
 async function processBgComposed(
   imageBase64: string,
   paletteName: ValidatedRequest['palette'],
 ): Promise<Buffer | null> {
-  const apiKey = process.env.REMOVE_BG_API_KEY;
-  if (!apiKey) {
-    return null;
-  }
-
   // 1단계: 배경 제거
-  const bgRemovedBuffer = await removeBgViaApi(imageBase64);
+  const bgRemovedBuffer = await removeBgViaReplicate(imageBase64);
+  if (!bgRemovedBuffer) return null;
 
   // 2단계: 팔레트 배경 생성
   const colors = PALETTES[paletteName ?? 'cool_white'];
@@ -269,7 +247,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       const result = await processBgRemoved(cleanBase64);
       if (result === null) {
         // remove.bg API 키 없음 → original fallback
-        console.warn('[process-image] REMOVE_BG_API_KEY 없음 — original 모드로 fallback');
+        console.warn('[process-image] REPLICATE_API_TOKEN 없음 또는 배경 제거 실패 — original 모드로 fallback');
         appliedMode = 'original';
         outputBuffer = await processOriginal(cleanBase64);
       } else {
@@ -284,7 +262,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       const composited = await processBgComposed(cleanBase64, palette);
       if (composited === null) {
         // remove.bg API 키 없음 → original fallback
-        console.warn('[process-image] REMOVE_BG_API_KEY 없음 — original 모드로 fallback');
+        console.warn('[process-image] REPLICATE_API_TOKEN 없음 또는 배경 제거 실패 — original 모드로 fallback');
         appliedMode = 'original';
         outputBuffer = await processOriginal(cleanBase64);
       } else {

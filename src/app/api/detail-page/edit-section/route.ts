@@ -41,13 +41,14 @@ const RequestSchema = z.object({
       'brand_header',
       'point',
       'image_grid',
+      'claude_layout',
     ]),
     order: z.number().int().min(0),
     content: z.record(z.string(), z.unknown()),
     attachedImages: z
       .array(
         z.object({
-          url: z.string().url(),
+          url: z.string(),
           order: z.number().int().min(0),
           processingMode: z.enum(['original', 'bg_removed', 'bg_composed']),
         }),

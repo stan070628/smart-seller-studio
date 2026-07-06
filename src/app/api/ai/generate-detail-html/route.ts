@@ -52,15 +52,19 @@ const DETAIL_HTML_RATE_LIMIT = { windowMs: 60_000, maxRequests: 5 };
 const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
 type AllowedMimeType = (typeof ALLOWED_MIME_TYPES)[number];
 
-// Claude Vision이 이미지에서 뽑아낼 구조화 정보 (상세페이지 전용 간략 버전)
+// Claude Vision이 이미지에서 뽑아낼 구조화 정보 (상세페이지 전용)
 const IMAGE_VISION_PROMPT = `당신은 한국 이커머스 상품 분석 전문가입니다.
 제공된 상품 이미지들을 종합 분석하여 아래 JSON만 출력하세요. 코드 블록, 마크다운, 설명 텍스트 금지.
+이미지에 인쇄·표기된 텍스트(성분/원재료명, 스펙, 용량, 인증마크, 주의문구 등)를 해당 필드에 표기 그대로 담으세요. 텍스트가 없으면 빈 배열 []로 두세요.
+배열 항목은 각 필드당 최대 15개로 제한하세요.
 
 {
   "material": "string (주요 소재 및 질감, 한국어 1문장)",
   "shape": "string (형태 및 구조 설명, 한국어 1문장)",
-  "colors": ["string (한국어 색상명)"],
-  "keyComponents": ["string (핵심 부품 또는 디자인 포인트, 한국어, 3~5개)"]
+  "colors": ["string (한국어 색상명, 최대 5개)"],
+  "keyComponents": ["string (핵심 부품 또는 디자인 포인트, 한국어, 3~5개)"],
+  "ingredients": ["string (이미지에 표기된 성분/원재료명, 표기 그대로, 최대 15개. 없으면 [])"],
+  "visibleText": ["string (이미지에 보이는 기타 텍스트: 스펙·용량·인증·주의문구 등, 최대 10개. 없으면 [])"]
 }`;
 
 // ─────────────────────────────────────────
@@ -216,7 +220,8 @@ async function analyzeImages(
     () =>
       client.messages.create({
         model: "claude-sonnet-4-6",
-        max_tokens: 1024,
+        max_tokens: 2048,
+        system: "You are a product image analyzer. Output ONLY valid JSON — no markdown, no code blocks, no explanatory text.",
         messages: [
           {
             role: "user",
@@ -269,6 +274,12 @@ async function analyzeImages(
       : [],
     keyComponents: Array.isArray(data.keyComponents)
       ? (data.keyComponents as string[]).filter((c) => typeof c === "string")
+      : [],
+    ingredients: Array.isArray(data.ingredients)
+      ? (data.ingredients as string[]).filter((c) => typeof c === "string")
+      : [],
+    visibleText: Array.isArray(data.visibleText)
+      ? (data.visibleText as string[]).filter((c) => typeof c === "string")
       : [],
   };
 }

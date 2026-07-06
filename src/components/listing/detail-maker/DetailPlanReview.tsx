@@ -23,6 +23,7 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { GripVertical } from 'lucide-react';
 import { C } from '@/lib/design-tokens';
 import { getSceneForSection } from '@/lib/detail-page/storyboard-mapping';
 import type {
@@ -50,64 +51,83 @@ export interface DetailPlanReviewProps {
 
 // ── 위저드 헤더 ─────────────────────────────────────────────────────────────
 
+const STEP_HINTS: Record<1 | 2, string> = {
+  1: '씬 연출 방향을 확인/수정하고 이미지를 생성하세요.',
+  2: '생성된 이미지를 확인하고 필요하면 재생성하세요.',
+};
+
 function WizardHeader({ step }: { step: 1 | 2 }) {
   const steps = ['기획 확인', '이미지 생성'];
   return (
     <div
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        padding: '10px 16px',
         borderBottom: `1px solid ${C.border}`,
         background: C.bg,
-        gap: '8px',
       }}
     >
-      {steps.map((label, i) => {
-        const s = (i + 1) as 1 | 2;
-        const isActive = s === step;
-        const isDone = s < step;
-        return (
-          <React.Fragment key={label}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '22px',
-                  height: '22px',
-                  borderRadius: '50%',
-                  background: isActive || isDone ? BRAND_PURPLE : '#374151',
-                  color: '#fff',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                }}
-              >
-                {isDone ? '✓' : s}
-              </span>
-              <span
-                style={{
-                  fontSize: '13px',
-                  fontWeight: isActive ? 700 : 400,
-                  color: isActive ? C.text : C.textSub,
-                }}
-              >
-                {label}
-              </span>
-            </div>
-            {i < steps.length - 1 && (
-              <div
-                style={{
-                  flex: 1,
-                  height: '1px',
-                  background: isDone ? BRAND_PURPLE : '#374151',
-                }}
-              />
-            )}
-          </React.Fragment>
-        );
-      })}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          padding: '10px 16px',
+          gap: '8px',
+        }}
+      >
+        {steps.map((label, i) => {
+          const s = (i + 1) as 1 | 2;
+          const isActive = s === step;
+          const isDone = s < step;
+          return (
+            <React.Fragment key={label}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '22px',
+                    height: '22px',
+                    borderRadius: '50%',
+                    background: isActive || isDone ? BRAND_PURPLE : '#374151',
+                    color: '#fff',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                  }}
+                >
+                  {isDone ? '✓' : s}
+                </span>
+                <span
+                  style={{
+                    fontSize: '13px',
+                    fontWeight: isActive ? 700 : 400,
+                    color: isActive ? C.text : C.textSub,
+                  }}
+                >
+                  {label}
+                </span>
+              </div>
+              {i < steps.length - 1 && (
+                <div
+                  style={{
+                    flex: 1,
+                    height: '1px',
+                    background: isDone ? BRAND_PURPLE : '#374151',
+                  }}
+                />
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
+      <div
+        style={{
+          padding: '0 16px 8px',
+          fontSize: '11px',
+          color: C.textMuted,
+        }}
+      >
+        {STEP_HINTS[step]}
+      </div>
     </div>
   );
 }
@@ -139,154 +159,168 @@ function getSectionLabel(type: string): string {
 
 // ── 텍스트 미리보기 렌더러 ──────────────────────────────────────────────────
 
+function PreviewRow({ primary, secondary, count, total }: { primary: string; secondary?: string; count?: number; total?: number }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+      <div style={{ fontSize: '13px', fontWeight: 600, color: C.text, lineHeight: 1.3 }}>{primary}</div>
+      {secondary && (
+        <div style={{ fontSize: '11px', color: C.textSub, lineHeight: 1.3 }}>{secondary}</div>
+      )}
+      {total !== undefined && total > 1 && (
+        <div style={{ fontSize: '10px', color: C.textMuted }}>외 {total - (count ?? 1)}개 항목</div>
+      )}
+    </div>
+  );
+}
+
 function renderTextPreview(content: SectionContent): React.ReactNode {
   const subStyle: React.CSSProperties = { fontSize: '12px', color: C.textSub };
-  const listStyle: React.CSSProperties = {
-    margin: 0,
-    paddingLeft: '16px',
-    color: C.textSub,
-    fontSize: '12px',
-  };
 
   switch (content.type) {
-    case 'selling_points':
-      return (
-        <ul style={listStyle}>
-          {content.points.map((p, i) => (
-            <li key={i}>
-              <strong>{p.title}</strong>
-              {p.description ? ` — ${p.description}` : ''}
-            </li>
-          ))}
-        </ul>
-      );
-    case 'features':
-      return (
-        <ul style={listStyle}>
-          {content.items.map((item, i) => (
-            <li key={i}>
-              <strong>{item.title}</strong>
-              {item.description ? ` — ${item.description}` : ''}
-            </li>
-          ))}
-        </ul>
-      );
-    case 'stats':
-      return (
-        <ul style={listStyle}>
-          {content.stats.map((s, i) => (
-            <li key={i}>
-              {s.value} {s.label}
-            </li>
-          ))}
-        </ul>
-      );
-    case 'spec_table':
-      return (
-        <ul style={listStyle}>
-          {content.specs.map((s, i) => (
-            <li key={i}>
-              {s.label}: {s.value}
-            </li>
-          ))}
-        </ul>
-      );
-    case 'usage_steps':
-      return (
-        <ol style={listStyle}>
-          {content.steps.map((s, i) => (
-            <li key={i}>{s}</li>
-          ))}
-        </ol>
-      );
-    case 'warning':
-      return (
-        <ul style={listStyle}>
-          {content.warnings.map((w, i) => (
-            <li key={i}>{w}</li>
-          ))}
-        </ul>
-      );
+    case 'selling_points': {
+      const first = content.points[0];
+      return first ? (
+        <PreviewRow
+          primary={first.title}
+          secondary={first.description}
+          count={1}
+          total={content.points.length}
+        />
+      ) : <div style={subStyle}>포인트 없음</div>;
+    }
+    case 'features': {
+      const first = content.items[0];
+      return first ? (
+        <PreviewRow
+          primary={first.title}
+          secondary={first.description}
+          count={1}
+          total={content.items.length}
+        />
+      ) : <div style={subStyle}>항목 없음</div>;
+    }
+    case 'stats': {
+      const first = content.stats[0];
+      return first ? (
+        <PreviewRow
+          primary={`${first.value} ${first.label}`}
+          count={1}
+          total={content.stats.length}
+        />
+      ) : <div style={subStyle}>통계 없음</div>;
+    }
+    case 'spec_table': {
+      const first = content.specs[0];
+      return first ? (
+        <PreviewRow
+          primary={first.label}
+          secondary={first.value}
+          count={1}
+          total={content.specs.length}
+        />
+      ) : <div style={subStyle}>사양 없음</div>;
+    }
+    case 'usage_steps': {
+      const first = content.steps[0];
+      return first ? (
+        <PreviewRow
+          primary={`1. ${first}`}
+          count={1}
+          total={content.steps.length}
+        />
+      ) : <div style={subStyle}>단계 없음</div>;
+    }
+    case 'warning': {
+      const first = content.warnings[0];
+      return first ? (
+        <PreviewRow
+          primary={first}
+          count={1}
+          total={content.warnings.length}
+        />
+      ) : <div style={subStyle}>주의사항 없음</div>;
+    }
     case 'cta':
-      return <div style={subStyle}>{content.text}</div>;
+      return <PreviewRow primary={content.text || '(텍스트 없음)'} />;
     case 'brand_header':
       return (
-        <div style={subStyle}>
-          {content.brandName} / {content.rightLabel}
-        </div>
+        <PreviewRow
+          primary={content.brandName || '(브랜드 없음)'}
+          secondary={content.rightLabel}
+        />
       );
     case 'image_grid':
       return (
-        <div style={subStyle}>
-          {content.title} ({content.items.length}개 항목)
-        </div>
+        <PreviewRow
+          primary={content.title || '이미지 그리드'}
+          secondary={`${content.items.length}개 항목`}
+        />
       );
-    case 'point_section':
-      return (
-        <ul style={listStyle}>
-          {content.items.map((item, i) => (
-            <li key={i}>
-              <strong>
-                {item.number}. {item.title}
-              </strong>
-              {item.description ? ` — ${item.description}` : ''}
-            </li>
-          ))}
-        </ul>
-      );
-    case 'stat_callout':
-      return (
-        <ul style={listStyle}>
-          {content.items.map((item, i) => (
-            <li key={i}>
-              {item.value} {item.label}
-            </li>
-          ))}
-        </ul>
-      );
-    case 'bar_chart':
-      return (
-        <ul style={listStyle}>
-          {content.items.map((item, i) => (
-            <li key={i}>
-              {item.label}: {item.displayValue} ({item.percentage}%)
-            </li>
-          ))}
-        </ul>
-      );
-    case 'why_icons':
-      return (
-        <ul style={listStyle}>
-          {content.items.map((item, i) => (
-            <li key={i}>
-              {item.icon} <strong>{item.title}</strong>
-              {item.description ? ` — ${item.description}` : ''}
-            </li>
-          ))}
-        </ul>
-      );
-    case 'certifications':
-      return (
-        <ul style={listStyle}>
-          {content.items.map((item, i) => (
-            <li key={i}>
-              <strong>{item.name}</strong>
-              {item.description ? ` — ${item.description}` : ''}
-            </li>
-          ))}
-        </ul>
-      );
-    case 'infographic_steps':
-      return (
-        <ol style={listStyle}>
-          {content.items.map((item, i) => (
-            <li key={i}>
-              {item.icon} <strong>{item.title}</strong>
-              {item.description ? ` — ${item.description}` : ''}
-            </li>
-          ))}
-        </ol>
-      );
+    case 'point_section': {
+      const first = content.items[0];
+      return first ? (
+        <PreviewRow
+          primary={`${first.number}. ${first.title}`}
+          secondary={first.description}
+          count={1}
+          total={content.items.length}
+        />
+      ) : <div style={subStyle}>항목 없음</div>;
+    }
+    case 'stat_callout': {
+      const first = content.items[0];
+      return first ? (
+        <PreviewRow
+          primary={`${first.value} ${first.label}`}
+          count={1}
+          total={content.items.length}
+        />
+      ) : <div style={subStyle}>항목 없음</div>;
+    }
+    case 'bar_chart': {
+      const first = content.items[0];
+      return first ? (
+        <PreviewRow
+          primary={first.label}
+          secondary={`${first.displayValue} (${first.percentage}%)`}
+          count={1}
+          total={content.items.length}
+        />
+      ) : <div style={subStyle}>항목 없음</div>;
+    }
+    case 'why_icons': {
+      const first = content.items[0];
+      return first ? (
+        <PreviewRow
+          primary={`${first.icon} ${first.title}`}
+          secondary={first.description}
+          count={1}
+          total={content.items.length}
+        />
+      ) : <div style={subStyle}>항목 없음</div>;
+    }
+    case 'certifications': {
+      const first = content.items[0];
+      return first ? (
+        <PreviewRow
+          primary={first.name}
+          secondary={first.description}
+          count={1}
+          total={content.items.length}
+        />
+      ) : <div style={subStyle}>인증 없음</div>;
+    }
+    case 'infographic_steps': {
+      const first = content.items[0];
+      return first ? (
+        <PreviewRow
+          primary={`${first.icon} ${first.title}`}
+          secondary={first.description}
+          count={1}
+          total={content.items.length}
+        />
+      ) : <div style={subStyle}>단계 없음</div>;
+    }
     default:
       return <div style={subStyle}>텍스트 섹션</div>;
   }
@@ -298,7 +332,7 @@ interface ImageSectionCardProps {
   section: DetailSection;
   scene: SceneStoryboardItem | undefined;
   uploadedUrls: string[];
-  onPromptChange: (sceneId: string, prompt: string) => void;
+  onPromptKoChange: (sceneId: string, promptKo: string) => void;
   onHeadlineChange: (sectionId: string, headline: string) => void;
   onUpdateScene: (updated: SceneStoryboardItem) => void;
 }
@@ -307,7 +341,7 @@ function ImageSectionCard({
   section,
   scene,
   uploadedUrls,
-  onPromptChange,
+  onPromptKoChange,
   onHeadlineChange,
   onUpdateScene,
 }: ImageSectionCardProps) {
@@ -348,8 +382,9 @@ function ImageSectionCard({
               onClick={() => onUpdateScene({ ...scene, sourceImageIndex: i })}
               aria-label={`이미지 ${i + 1} 선택`}
               style={{
-                width: '32px',
-                height: '32px',
+                position: 'relative',
+                width: '40px',
+                height: '40px',
                 borderRadius: '4px',
                 border: scene.sourceImageIndex === i ? `2px solid ${BRAND_PURPLE}` : '2px solid transparent',
                 padding: 0,
@@ -360,6 +395,15 @@ function ImageSectionCard({
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              {scene.sourceImageIndex === i && (
+                <div style={{
+                  position: 'absolute', inset: 0,
+                  background: 'rgba(109,40,217,0.4)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 16, color: '#fff', fontWeight: 700,
+                  borderRadius: '3px',
+                }}>✓</div>
+              )}
             </button>
           ))}
         </div>
@@ -367,23 +411,26 @@ function ImageSectionCard({
 
       {/* 소스 이미지 미리보기 */}
       {sourceUrl && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={sourceUrl}
-          alt="소스 이미지"
-          style={{
-            width: '100%',
-            height: '80px',
-            objectFit: 'cover',
-            borderRadius: '6px',
-            border: `1px solid ${C.border}`,
+        <>
+          <div style={{ fontSize: 10, color: '#6b7280' }}>이 씬에 사용할 이미지</div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={sourceUrl}
+            alt="소스 이미지"
+            style={{
+              width: '100%',
+              height: '80px',
+              objectFit: 'cover',
+              borderRadius: '6px',
+              border: `1px solid ${C.border}`,
           }}
         />
+        </>
       )}
 
       {/* 모드 토글 (ai ↔ cleanup) */}
       {scene && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button
             onClick={() => onUpdateScene({ ...scene, mode: scene.mode === 'ai' ? 'cleanup' : 'ai' })}
             style={{
@@ -394,33 +441,46 @@ function ImageSectionCard({
               padding: '3px 10px',
               fontSize: '11px',
               cursor: 'pointer',
+              flexShrink: 0,
             }}
           >
-            {scene.mode === 'ai' ? '⚡ AI' : '✨ 클린업'}
+            {scene.mode === 'ai' ? '⚡ AI 생성' : '✨ 배경 제거'}
           </button>
+          <span style={{ fontSize: '10px', color: '#6b7280', lineHeight: 1.4 }}>
+            {scene.mode === 'ai'
+              ? 'Gemini로 새 씬 이미지 생성'
+              : '원본 이미지 배경만 제거'}
+          </span>
         </div>
       )}
 
-      {/* 씬 프롬프트 편집 — ai 모드일 때만 표시 */}
+      {/* 씬 연출 설명 — ai 모드일 때만 표시, 수정 가능 */}
       {scene && scene.mode === 'ai' && (
-        <textarea
-          value={scene.prompt}
-          onChange={(e) => onPromptChange(scene.id, e.target.value)}
-          placeholder="씬 프롬프트"
-          aria-label="씬 프롬프트"
-          rows={2}
-          style={{
-            width: '100%',
-            padding: '6px 8px',
-            fontSize: '12px',
-            border: `1px solid ${C.border}`,
-            borderRadius: '6px',
-            color: C.text,
-            background: C.card,
-            resize: 'vertical',
-            boxSizing: 'border-box',
-          }}
-        />
+        <div>
+          <div style={{ fontSize: '10px', color: '#6b7280', marginBottom: '3px' }}>
+            씬 연출 설명 (수정 가능)
+          </div>
+          <textarea
+            value={scene.promptKo || scene.prompt}
+            onChange={(e) => onPromptKoChange(scene.id, e.target.value)}
+            rows={3}
+            placeholder="씬 연출 방향을 입력하세요"
+            style={{
+              width: '100%',
+              padding: '6px 8px',
+              fontSize: '12px',
+              color: C.text,
+              background: C.card,
+              border: `1px solid ${C.border}`,
+              borderRadius: '6px',
+              lineHeight: 1.6,
+              resize: 'vertical',
+              outline: 'none',
+              fontFamily: 'inherit',
+              boxSizing: 'border-box',
+            }}
+          />
+        </div>
       )}
     </div>
   );
@@ -446,7 +506,7 @@ interface SortableCardProps {
   section: DetailSection;
   scene: SceneStoryboardItem | undefined;
   uploadedUrls: string[];
-  onPromptChange: (sceneId: string, prompt: string) => void;
+  onPromptKoChange: (sceneId: string, promptKo: string) => void;
   onHeadlineChange: (sectionId: string, headline: string) => void;
   onUpdateScene: (updated: SceneStoryboardItem) => void;
 }
@@ -455,7 +515,7 @@ function SortableCard({
   section,
   scene,
   uploadedUrls,
-  onPromptChange,
+  onPromptKoChange,
   onHeadlineChange,
   onUpdateScene,
 }: SortableCardProps) {
@@ -483,6 +543,7 @@ function SortableCard({
         ...style,
         background: C.card,
         border: `1px solid ${C.border}`,
+        borderLeft: isImageSection ? `3px solid ${BRAND_PURPLE}` : `3px solid transparent`,
         borderRadius: '8px',
         padding: '12px',
         display: 'flex',
@@ -501,9 +562,7 @@ function SortableCard({
         {...attributes}
         {...listeners}
       >
-        <span style={{ color: C.textMuted, fontSize: '14px', lineHeight: 1 }}>
-          ⠿
-        </span>
+        <GripVertical size={14} style={{ color: C.textMuted, flexShrink: 0 }} />
         <span
           style={{
             fontSize: '10px',
@@ -527,7 +586,7 @@ function SortableCard({
           section={section}
           scene={scene}
           uploadedUrls={uploadedUrls}
-          onPromptChange={onPromptChange}
+          onPromptKoChange={onPromptKoChange}
           onHeadlineChange={onHeadlineChange}
           onUpdateScene={onUpdateScene}
         />
@@ -550,11 +609,13 @@ export default function DetailPlanReview({
   onScenesChange,
   onGenerate,
 }: DetailPlanReviewProps) {
-  // 프롬프트 변경 핸들러
-  const handlePromptChange = useCallback(
-    (sceneId: string, prompt: string) => {
+  // 씬 연출 한국어 설명 변경 핸들러 (prompt도 동기화 — Gemini 호출 시 promptKo 우선 사용)
+  const handlePromptKoChange = useCallback(
+    (sceneId: string, promptKo: string) => {
       onScenesChange(
-        storyboard.map((s) => (s.id === sceneId ? { ...s, prompt } : s)),
+        storyboard.map((s) =>
+          s.id === sceneId ? { ...s, promptKo, prompt: promptKo } : s
+        ),
       );
     },
     [storyboard, onScenesChange],
@@ -712,7 +773,7 @@ export default function DetailPlanReview({
                   section={section}
                   scene={scene}
                   uploadedUrls={uploadedUrls}
-                  onPromptChange={handlePromptChange}
+                  onPromptKoChange={handlePromptKoChange}
                   onHeadlineChange={handleHeadlineChange}
                   onUpdateScene={handleUpdateScene}
                 />

@@ -113,6 +113,30 @@ describe('renderSection — claude_layout', () => {
     expect(html).not.toContain('<img');
   });
 
+  it('option_grid — 카드마다 attachedImages를 이미지로 렌더한다', () => {
+    const section = makeSection(
+      {
+        type: 'claude_layout',
+        title: '두 가지 컬러',
+        blocks: [{ type: 'option_grid', items: [{ label: '베이지' }, { label: '로즈' }] }],
+      },
+      ['https://cdn.example.com/beige.jpg', 'https://cdn.example.com/rose.jpg'],
+    );
+    const html = renderSection(section, DEFAULT_THEME);
+    expect(html).toContain('beige.jpg');
+    expect(html).toContain('rose.jpg');
+  });
+
+  it('option_grid — 이미지가 없으면 텍스트 카드만 렌더한다', () => {
+    const section = makeSection({
+      type: 'claude_layout',
+      title: '사이즈',
+      blocks: [{ type: 'option_grid', items: [{ label: 'S' }, { label: 'M' }, { label: 'L' }] }],
+    });
+    const html = renderSection(section, DEFAULT_THEME);
+    expect(html).not.toContain('<img');
+  });
+
   it('heading xl은 38px 크기로 렌더링된다', () => {
     const section = makeSection({
       type: 'claude_layout',

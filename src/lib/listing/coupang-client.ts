@@ -267,10 +267,12 @@ export class CoupangClient {
     status: string = 'APPROVED',
     maxPerPage: number = 20,
     nextToken: string = '',
+    businessType?: string,
   ): Promise<{ items: CoupangSellerProduct[]; nextToken: string | null }> {
+    const btParam = businessType ? `&businessTypes=${businessType}` : '';
     const url =
       `/v2/providers/seller_api/apis/api/v1/marketplace/seller-products` +
-      `?vendorId=${this.vendorId}&nextToken=${nextToken}&maxPerPage=${maxPerPage}&status=${status}`;
+      `?vendorId=${this.vendorId}&nextToken=${nextToken}&maxPerPage=${maxPerPage}&status=${status}${btParam}`;
 
     const res = await this.request<CoupangSellerProduct[]>('GET', url);
 
@@ -752,6 +754,42 @@ export class CoupangClient {
     };
   }
 
+  // ─── 다운로드쿠폰 목록 조회 ─────────────────────────────────
+
+  /**
+   * 벤더 전체 활성 쿠폰 목록 조회 (FMS API).
+   * promotionName으로 상품 식별 — sellerProductId 필드 없음.
+   * PRICE 타입: discount(원) 확정 / RATE 타입: discount=-1 (율 미반환)
+   */
+  async getVendorCoupons(): Promise<Array<{
+    couponId: number;
+    promotionName: string;
+    type: 'PRICE' | 'RATE' | string;
+    discount: number;
+    maxDiscountPrice: number;
+    startAt: string;
+    endAt: string;
+    status: string;
+  }>> {
+    const url = `/v2/providers/fms/apis/api/v2/vendors/${this.vendorId}/coupons`;
+    await sleep(API_DELAY);
+    const res = await this.request<{ success: boolean; content: unknown[] }>('GET', url);
+    const content = Array.isArray(res.data?.content) ? res.data.content : [];
+    return content.map((c) => {
+      const item = c as Record<string, unknown>;
+      return {
+        couponId: Number(item.couponId ?? 0),
+        promotionName: String(item.promotionName ?? ''),
+        type: String(item.type ?? ''),
+        discount: Number(item.discount ?? -1),
+        maxDiscountPrice: Number(item.maxDiscountPrice ?? -1),
+        startAt: String(item.startAt ?? ''),
+        endAt: String(item.endAt ?? ''),
+        status: String(item.status ?? ''),
+      };
+    });
+  }
+
   // ─── fms 주문별 즉시할인쿠폰 조회 ──────────────────────────
 
   /**
@@ -763,10 +801,25 @@ export class CoupangClient {
     const url = `/v2/providers/fms/apis/api/v2/vendors/${this.vendorId}/${orderId}/coupons`;
     await sleep(API_DELAY);
     try {
-      const res = await this.request<{
-        content?: Array<{ type: string; discount: number; status: string }>;
-      }>('GET', url);
-      const content = Array.isArray(res.data?.content) ? res.data.content : [];
+      const res = await this.request<unknown>('GET', url);
+      type CouponEntry = { type: string; discount: number; status: string };
+      // FMS API 응답 구조가 표준 {code,data}와 다를 수 있어 방어적 파싱
+      // 경우 1: data가 배열 → data 자체가 쿠폰 목록
+      // 경우 2: data가 {content:[...]} 객체
+      // 경우 3: 비표준 응답 — content가 최상위에 있음
+      const rawData = res.data as unknown;
+      let content: CouponEntry[] = [];
+      if (Array.isArray(rawData)) {
+        content = rawData as CouponEntry[];
+      } else if (rawData && typeof rawData === 'object') {
+        const obj = rawData as Record<string, unknown>;
+        if (Array.isArray(obj.content)) content = obj.content as CouponEntry[];
+      }
+      if (content.length === 0) {
+        const top = res as unknown as Record<string, unknown>;
+        if (Array.isArray(top.content)) content = top.content as CouponEntry[];
+      }
+      console.log(`[coupang-fms] orderId=${orderId} coupons=${content.length}`, content.slice(0, 3));
       return content
         .filter((c) => c.type === 'PRICE' && c.status === 'APPLIED')
         .reduce((sum, c) => sum + (c.discount > 0 ? c.discount : 0), 0);

@@ -78,6 +78,37 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
   const [showCouponPolicyForm, setShowCouponPolicyForm] = useState(false);
   const [savingCouponPolicy, setSavingCouponPolicy] = useState(false);
 
+  // 쿠폰 자동완성
+  type CouponItem = { couponId: number; promotionName: string; type: string; discount: number; endAt: string };
+  const [loadingCoupons, setLoadingCoupons] = useState(false);
+  const [coupons, setCoupons] = useState<{ matched: CouponItem[]; all: CouponItem[] } | null>(null);
+
+  async function loadCoupons() {
+    if (loadingCoupons) return;
+    setLoadingCoupons(true);
+    try {
+      const res = await fetch(`/api/cost-management/products/${productId}/coupang-coupons`);
+      const json = await res.json();
+      if (json.success) setCoupons(json.data);
+      else alert(json.error ?? '쿠폰 조회 실패');
+    } catch {
+      alert('쿠폰 조회 중 오류가 발생했습니다.');
+    } finally {
+      setLoadingCoupons(false);
+    }
+  }
+
+  function applyCoupon(c: CouponItem) {
+    if (c.type === 'PRICE') {
+      // 정액 쿠폰: rate=100%(=1)로 고정, max_discount=할인금액, min_price는 직접 입력
+      setCouponPolicyForm((f) => ({ ...f, rate: '100', max_discount: String(c.discount) }));
+    } else {
+      // RATE 쿠폰: 이름만 표시, 사용자가 직접 % 입력
+      alert(`"${c.promotionName}" — 정률 쿠폰입니다.\n할인율(%)과 최소구매금액을 직접 입력해 주세요.`);
+    }
+    setCoupons(null);
+  }
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -251,6 +282,56 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
           </button>
           {showCouponPolicyForm && (
             <div style={{ background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '6px', padding: '8px', fontSize: '11px', marginTop: '4px' }}>
+              {/* 쿠폰 불러오기 */}
+              <div style={{ marginBottom: '6px' }}>
+                <button
+                  onClick={loadCoupons}
+                  disabled={loadingCoupons}
+                  style={{ padding: '3px 10px', borderRadius: '4px', background: '#fff', border: '1px solid #fcd34d', fontSize: '10px', cursor: loadingCoupons ? 'not-allowed' : 'pointer', color: '#92400e' }}
+                >
+                  {loadingCoupons ? '조회 중...' : '🔍 쿠팡 쿠폰 불러오기'}
+                </button>
+              </div>
+
+              {/* 쿠폰 목록 */}
+              {coupons && (
+                <div style={{ marginBottom: '8px', maxHeight: '150px', overflowY: 'auto', border: '1px solid #fcd34d', borderRadius: '4px', background: '#fff' }}>
+                  {(coupons.matched.length > 0 ? coupons.matched : coupons.all).length === 0 ? (
+                    <div style={{ padding: '8px', color: '#92400e', fontSize: '10px' }}>활성 쿠폰 없음</div>
+                  ) : (
+                    <>
+                      {coupons.matched.length > 0 && (
+                        <div style={{ padding: '4px 8px', background: '#fef9c3', fontSize: '9px', color: '#713f12' }}>상품명 매칭 쿠폰</div>
+                      )}
+                      {(coupons.matched.length > 0 ? coupons.matched : coupons.all).map((c) => (
+                        <div
+                          key={c.couponId}
+                          onClick={() => applyCoupon(c)}
+                          style={{ padding: '6px 8px', borderBottom: '1px solid #fef9c3', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                        >
+                          <div>
+                            <span style={{ fontWeight: 600, color: '#18181b', fontSize: '10px' }}>{c.promotionName}</span>
+                            <span style={{ marginLeft: '6px', fontSize: '9px', color: c.type === 'PRICE' ? '#16a34a' : '#2563eb', background: c.type === 'PRICE' ? '#dcfce7' : '#dbeafe', padding: '1px 4px', borderRadius: '2px' }}>
+                              {c.type === 'PRICE' ? `${c.discount.toLocaleString()}원 정액` : '정률(%)'}
+                            </span>
+                          </div>
+                          <span style={{ fontSize: '9px', color: '#9ca3af' }}>~{c.endAt.slice(0, 10)}</span>
+                        </div>
+                      ))}
+                      {coupons.matched.length > 0 && coupons.all.length > coupons.matched.length && (
+                        <div
+                          onClick={() => setCoupons((prev) => prev ? { matched: [], all: prev.all } : null)}
+                          style={{ padding: '4px 8px', fontSize: '9px', color: '#6b7280', cursor: 'pointer', textAlign: 'center' }}
+                        >
+                          전체 쿠폰 보기 ({coupons.all.length}개) ▼
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* 입력 필드 */}
               <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
                 <label>할인율(%)<input type="number" value={couponPolicyForm.rate} onChange={(e) => setCouponPolicyForm((f) => ({ ...f, rate: e.target.value }))}
                   style={{ width: '50px', marginLeft: '4px', padding: '2px 4px', borderRadius: '4px', border: '1px solid #fcd34d', fontSize: '11px', color: '#18181b' }} /></label>
@@ -263,7 +344,9 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
                   {savingCouponPolicy ? '저장중...' : '저장'}
                 </button>
               </div>
-              <p style={{ margin: '4px 0 0', color: '#92400e', fontSize: '10px' }}>저장 후 재임포트 시 적용됩니다.</p>
+              <p style={{ margin: '4px 0 0', color: '#92400e', fontSize: '10px' }}>
+                정액 쿠폰 선택 시 할인율 100% 자동설정 · 최소구매금액은 직접 입력 · 저장 후 재임포트 시 적용
+              </p>
             </div>
           )}
         </div>
