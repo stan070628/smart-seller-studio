@@ -52,4 +52,11 @@ describe('GroupRow', () => {
     renderGroup();
     expect(screen.queryByText(/재고초과/)).not.toBeInTheDocument();
   });
+
+  it('재고초과 자식이 있으면 실현손익에 * 마커를 붙인다', () => {
+    const g = { ...group, children: [{ id: 'a', sale_quantity: 5, hidden: false, fifo_error: true }, { id: 'b', sale_quantity: 3, hidden: false }] };
+    renderGroup({ group: g });
+    expect(screen.getByTitle(/낮게 집계/)).toBeInTheDocument();
+  });
+
 });

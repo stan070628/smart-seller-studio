@@ -18,7 +18,7 @@ const fmt = (n: number) => n.toLocaleString('ko-KR');
 export default function GroupRow<T extends GroupableProduct>({ group, expanded, colCount, onToggleGroup, onToggleGroupHide }: Props<T>) {
   const allHidden = group.children.every((c) => (c as { hidden?: boolean }).hidden);
   const totalQty = group.children.reduce((s, c) => s + ((c as { sale_quantity?: number }).sale_quantity ?? 0), 0);
-  const hasOverstock = group.children.some((c) => (c as { fifo_error?: boolean }).fifo_error);
+  const hasOverstock = group.children.some((c) => c.fifo_error);
 
   return (
     <tr
@@ -42,9 +42,9 @@ export default function GroupRow<T extends GroupableProduct>({ group, expanded, 
         <div style={{ fontSize: 12, color: '#18181b' }}>{fmt(Math.round(group.totalSalesAmount))}원</div>
         {totalQty > 0 && <div style={{ fontSize: 8, color: '#a1a1aa' }}>{fmt(totalQty)}개 · 합계</div>}
       </td>
-      {/* 4: 실현손익 */}
+      {/* 4: 실현손익 (재고초과 자식 포함 시 과소집계 → * 마커) */}
       <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600, color: group.totalProfit >= 0 ? '#16a34a' : '#ef4444' }}>
-        {fmt(Math.round(group.totalProfit))}원
+        {fmt(Math.round(group.totalProfit))}원{hasOverstock && <span title="재고초과 옵션이 있어 실제보다 낮게 집계됨" style={{ color: '#dc2626' }}>*</span>}
       </td>
       {/* 5: 마진율 */}
       <td style={{ padding: '8px 12px', textAlign: 'right', color: '#2563eb' }}>{group.groupMarginRate.toFixed(1)}%</td>

@@ -7,6 +7,7 @@ export interface GroupableProduct {
   stock_value: number;
   total_realized_profit: number;
   total_sales_amount: number;
+  fifo_error?: boolean;
   [key: string]: unknown;
 }
 
