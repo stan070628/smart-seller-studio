@@ -61,6 +61,66 @@ export default function DetailMakerClient() {
 
   type DetailStep = 'idle' | 'generating' | 'planning' | 'editing';
   const [detailStep, setDetailStep] = useState<DetailStep>('idle');
+  const [isFromPro, setIsFromPro] = useState(false);
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // PRO 모드에서 넘어온 섹션 + 메타 로드 (sessionStorage)
+  useEffect(() => {
+    const stored = sessionStorage.getItem('pro_sections');
+    const meta = sessionStorage.getItem('pro_meta');
+    sessionStorage.removeItem('pro_sections');
+    sessionStorage.removeItem('pro_meta');
+    try {
+      if (meta) {
+        const { productName: name, uploadedImageUrls: urls } = JSON.parse(meta) as { productName?: string; uploadedImageUrls?: string[] };
+        if (name) setProductName(name);
+        if (urls && urls.length > 0) setUploadedUrls(urls);
+      }
+    } catch {}
+    try {
+      if (stored) {
+        const proSections = JSON.parse(stored) as DetailSection[];
+        if (proSections.length > 0) {
+          setSections(proSections);
+          setDetailStep('editing');
+          setIsFromPro(true);
+          // 미리보기 즉시 생성 (refreshRenderedHtml은 useEffect 의존성 불가 → 직접 fetch)
+          const initialTheme: DetailPageTheme = { ...DEFAULT_THEME, layoutMode: 'mobile' };
+          setIsRendering(true);
+          fetch('/api/detail-page/render', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sections: proSections, theme: initialTheme }),
+          })
+            .then(r => r.json())
+            .then(json => { if (json.html) setGeneratedHtml(json.html); })
+            .catch(() => {})
+            .finally(() => setIsRendering(false));
+        }
+      }
+    } catch {}
+    // URL 파라미터로 임시저장 복원 (draftId 또는 listingId 쿼리)
+    const url = new URL(window.location.href);
+    const qDraftId = url.searchParams.get('draftId');
+    const qListingId = url.searchParams.get('listingId');
+    if (qDraftId || qListingId) {
+      const q = qDraftId ? `id=${qDraftId}` : `listingId=${qListingId}`;
+      fetch(`/api/detail-page/draft?${q}`)
+        .then((r) => r.json())
+        .then((j) => {
+          if (j.draft) {
+            setDraftId(j.draft.id);
+            setSections(j.draft.sections ?? []);
+            if (j.draft.theme && Object.keys(j.draft.theme).length > 0) setTheme(j.draft.theme);
+            if (j.draft.productName) setProductName(j.draft.productName);
+            setDetailStep('editing');
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
 
   // sections와 storyboard가 모두 준비되면 sectionId 매핑 수행
   // (HTML이 먼저 오거나 storyboard가 먼저 오는 레이스 컨디션 대응)
@@ -75,6 +135,27 @@ export default function DetailMakerClient() {
       return buildStoryboardWithSectionIds(prev, sections);
     });
   }, [sections, storyboard]);
+
+  // sections/theme 변경 시 1.5s 디바운스 자동저장
+  useEffect(() => {
+    if (detailStep !== 'editing' || sections.length === 0) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    setSaveState('saving');
+    saveTimerRef.current = setTimeout(() => {
+      fetch('/api/detail-page/draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: draftId ?? undefined, productName: productName || undefined, sections, theme }),
+      })
+        .then((r) => r.json())
+        .then((j) => {
+          if (j.id) { setDraftId((prev) => prev ?? j.id); setSaveState('saved'); }
+          else setSaveState('idle');
+        })
+        .catch(() => setSaveState('idle'));
+    }, 1500);
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+  }, [sections, theme, productName, draftId, detailStep]);
 
   // 썸네일
   const [generatedThumbnails, setGeneratedThumbnails] = useState<string[]>([]);
@@ -316,11 +397,13 @@ export default function DetailMakerClient() {
 
           if (section.type === 'claude_layout') {
             const content = section.content as ClaudeLayoutContent;
-            const imageSlots = section.attachedImages.map(img =>
-              img.source === 'gemini'
-                ? { source: 'gemini' as const, generationHint: img.generationHint ?? content.title }
-                : { source: 'upload' as const, url: img.url }
-            );
+            const imageSlots = section.attachedImages
+              .filter(img => img.source === 'gemini' || !!img.url)
+              .map(img =>
+                img.source === 'gemini'
+                  ? { source: 'gemini' as const, generationHint: img.generationHint ?? content.title }
+                  : { source: 'upload' as const, url: img.url }
+              );
 
             const layoutRes = await fetch('/api/ai/generate-claude-layout-section', {
               method: 'POST',
@@ -577,8 +660,9 @@ export default function DetailMakerClient() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sectionType: section.type === 'hero' ? 'hero' : 'lifestyle',
-          productImageUrls: opts.referenceImageUrls.length > 0 ? opts.referenceImageUrls : uploadedUrls.slice(0, 2),
-          baseImageUrl: section.attachedImages[0]?.url,
+          productImageUrls: (opts.referenceImageUrls.length > 0 ? opts.referenceImageUrls : uploadedUrls.slice(0, 2))
+            .filter((u): u is string => typeof u === 'string' && u.startsWith('http')),
+          baseImageUrl: section.attachedImages[0]?.url || undefined,
           instruction: opts.instruction || undefined,
           productInfo: headline ? { headline } : undefined,
         }),
@@ -646,12 +730,28 @@ export default function DetailMakerClient() {
     setSceneEditError(prev => (prev?.sectionId === sectionId ? null : prev));
   }
 
+  function handleSceneUseAsIs(section: DetailSection, url: string) {
+    const prevUrl = section.attachedImages[0]?.url;
+    if (prevUrl) prevSceneUrls.current.set(section.id, prevUrl);
+    setSections(prev => {
+      const updated = prev.map(s =>
+        s.id === section.id
+          ? { ...s, attachedImages: [{ url, order: 0, processingMode: 'original' as const }] }
+          : s,
+      );
+      void refreshRenderedHtml(updated, theme);
+      return updated;
+    });
+  }
+
   // ─── 2단계 흐름: ① 스토리라인 기획 + HTML 병렬 생성 ──────────────────────────
   async function handlePlanStoryboard() {
     if (!productName.trim()) { setError('상품명을 입력하세요.'); return; }
     if (uploadedUrls.length === 0) { setError('이미지를 1장 이상 업로드하세요.'); return; }
+    if (isFromPro && !window.confirm('PRO 모드에서 생성한 섹션이 모두 삭제됩니다. 계속할까요?')) return;
 
     // 재생성 시 이전 결과 초기화
+    setIsFromPro(false);
     setSections([]);
     setStoryboard(null);
     setGeneratedHtml('');
@@ -980,12 +1080,21 @@ export default function DetailMakerClient() {
   }
 
   // ─── HTML 복사 / 다운로드 ────────────────────────────────────────────────────
+  /** 에디터 전용 data-* 속성을 제거하여 Coupang Wing 등 외부 플랫폼에 붙여넣기 가능한 HTML 반환 */
+  function getCleanHtml(): string {
+    return generatedHtml
+      .replace(/ data-section-id="[^"]*"/g, '')
+      .replace(/ data-section-type="[^"]*"/g, '')
+      .replace(/ data-section-label="[^"]*"/g, '')
+      .replace(/ data-edit-path="[^"]*"/g, '');
+  }
+
   async function handleHtmlCopy() {
-    await navigator.clipboard.writeText(generatedHtml).catch(() => {});
+    await navigator.clipboard.writeText(getCleanHtml()).catch(() => {});
   }
 
   function handleDownload() {
-    const blob = new Blob([generatedHtml], { type: 'text/html;charset=utf-8' });
+    const blob = new Blob([getCleanHtml()], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -1061,6 +1170,7 @@ export default function DetailMakerClient() {
               generatedHtml={generatedHtml}
               uploadedUrls={uploadedUrls}
               onSceneEdit={handleSceneEdit}
+              onSceneUseAsIs={handleSceneUseAsIs}
               editingSectionId={editingSectionId}
               sceneEditError={sceneEditError}
               prevSceneUrlMap={prevSceneUrls.current}
@@ -1086,6 +1196,8 @@ export default function DetailMakerClient() {
                 ✨ AI 씬 이미지 생성 중...
               </div>
             )}
+            {saveState === 'saving' && <span style={{ position: 'absolute', top: '12px', right: '16px', fontSize: 12, color: '#9ca3af', zIndex: 10, pointerEvents: 'none' }}>저장 중…</span>}
+            {saveState === 'saved' && <span style={{ position: 'absolute', top: '12px', right: '16px', fontSize: 12, color: '#16a34a', zIndex: 10, pointerEvents: 'none' }}>저장됨</span>}
           </>
         ) : detailStep === 'planning' ? (
           <>

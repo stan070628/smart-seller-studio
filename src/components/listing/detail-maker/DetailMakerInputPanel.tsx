@@ -309,7 +309,7 @@ export default function DetailMakerInputPanel({
                       <div key={url} style={{ position: 'relative' }}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
-                          src={url}
+                          src={url || undefined}
                           alt={`참고 이미지 ${idx + 1}`}
                           style={{
                             width: '100%',

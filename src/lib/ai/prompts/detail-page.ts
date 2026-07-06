@@ -9,6 +9,8 @@ export interface ProductImageAnalysis {
   shape: string;
   colors: string[];
   keyComponents: string[];
+  ingredients?: string[];
+  visibleText?: string[];
 }
 
 // ─────────────────────────────────────────
@@ -455,6 +457,12 @@ export function buildDetailPageUserPrompt(
   lines.push(`형태: ${imageAnalysis.shape}`);
   lines.push(`색상: ${imageAnalysis.colors.join(", ")}`);
   lines.push(`주요 구성 요소: ${imageAnalysis.keyComponents.join(", ")}`);
+  if (imageAnalysis.ingredients && imageAnalysis.ingredients.length > 0) {
+    lines.push(`성분/원재료(이미지 표기): ${imageAnalysis.ingredients.join(", ")}`);
+  }
+  if (imageAnalysis.visibleText && imageAnalysis.visibleText.length > 0) {
+    lines.push(`이미지 내 표기 텍스트: ${imageAnalysis.visibleText.join(", ")}`);
+  }
 
   if (productSpecs && productSpecs.length > 0) {
     lines.push('\n[소스 URL 실측 스펙 — 이미지 분석보다 절대 우선 적용]');

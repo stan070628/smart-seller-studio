@@ -1,6 +1,8 @@
 // src/lib/detail-page/layout-validator.ts
 import { z } from 'zod';
 import { checkProhibitedPhrases } from '@/lib/ai/prompts/detail-page';
+import { normalizeImageBlocks } from './layout-image-blocks';
+import type { LayoutBlock } from '@/types/detail-page';
 
 export interface Violation {
   code:
@@ -51,7 +53,7 @@ const zClaudeSection = z.object({
   blocks: z.array(zLayoutBlock),
   bgStyle: z.enum(['white', 'light', 'dark', 'primary']).optional(),
   padding: z.enum(['normal', 'compact', 'wide']).optional(),
-  imageSlots: z.array(z.object({ slotType: z.string(), promptHint: z.string().optional() })).optional(),
+  imageSlots: z.array(z.object({ slotType: z.string(), promptHint: z.string().optional(), imageRef: z.number().optional() })).optional(),
 });
 
 // ── 헬퍼 ──
@@ -153,6 +155,20 @@ export function validateProLayout(sections: unknown): ValidationResult {
   return { violations, isClean };
 }
 
+/**
+ * 섹션 blocks의 image 블록을 imageSlots 개수에 맞춰 정규화한다.
+ * (attachedIndex 범위 클램프 + imageSlots가 있는데 image 블록이 없으면 주입)
+ * 렌더러가 blocks의 image 블록으로만 그리므로, 이 보정이 없으면 슬롯 이미지가 무음 드롭된다.
+ */
+function normalizeSectionImages(sec: unknown): unknown {
+  if (!sec || typeof sec !== 'object') return sec;
+  const s = sec as Record<string, unknown>;
+  if (!Array.isArray(s.blocks)) return sec;
+  const slotCount = Array.isArray(s.imageSlots) ? s.imageSlots.length : 0;
+  if (slotCount === 0) return sec;
+  return { ...s, blocks: normalizeImageBlocks(s.blocks as LayoutBlock[], slotCount) };
+}
+
 /** 섹션의 빈/스키마무효 블록을 제거 */
 function pruneBlocks(sec: unknown): unknown {
   if (!sec || typeof sec !== 'object') return sec;
@@ -180,6 +196,8 @@ export function sanitizeProLayout(sections: unknown[]): { sections: unknown[]; w
   cleaned = cleaned.map(pruneBlocks);
   // 3) 연속 중복 섹션 제거
   cleaned = cleaned.filter((sec, i) => i === 0 || JSON.stringify(sec) !== JSON.stringify(cleaned[i - 1]));
+  // 4) image 블록 ↔ imageSlots 정합성 (범위 클램프 + 부재 시 주입)
+  cleaned = cleaned.map(normalizeSectionImages);
 
   const { violations } = validateProLayout(cleaned);
   return { sections: cleaned, warnings: violations };

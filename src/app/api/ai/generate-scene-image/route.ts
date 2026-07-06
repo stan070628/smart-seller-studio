@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import sharp from 'sharp';
 import { requireAuth } from '@/lib/supabase/auth';
 import { checkRateLimit, getRateLimitKey } from '@/lib/rate-limit';
 import { getAnthropicClient } from '@/lib/ai/claude';
 import { generateFrameImage } from '@/lib/ai/imagen';
 import { loadReferenceImages, type ReferenceImage } from '@/lib/ai/reference-images';
 import { buildSceneUserPrompt } from './prompt';
-import { removeImageBackgrounds } from '@/lib/ai/remove-background';
+import { removeBackgroundTransparent } from '@/lib/ai/remove-background';
 
 export const maxDuration = 120;
 
@@ -63,13 +64,97 @@ Return ONLY valid JSON: {"prompt": "your detailed English prompt here"}`;
 
 const PRODUCT_FIDELITY_INSTRUCTION = `Using the attached product image(s) as a visual reference, study the product's overall shape, proportions, color palette, material texture, and key design details, then render it as a new photorealistic image naturally integrated in the scene. The product rendition should faithfully capture the reference's essential visual characteristics (form, color scheme, distinctive features) as an independent creative work — not a direct reproduction of the original photograph. IMPORTANT: Use EXACTLY the same quantity of items as shown in the reference image — do not add more items, do not duplicate products. SINGLE FRAME ONLY: Generate exactly one single continuous photograph — no split panels, diptychs, multi-view layouts, before/after comparisons, or composite image compositions.`;
 
-const BACKGROUND_REMOVAL_SECTIONS = new Set<string>(['lifestyle', 'detail', 'feature']);
+// lifestyle/detail/feature: 제품 합성 방식 (Gemini에 배경만 생성 → Sharp 합성)
+const COMPOSITE_SECTIONS = new Set<string>(['lifestyle', 'detail', 'feature']);
 
-const BG_REMOVED_PREFIX =
-  'The reference image(s) provided have had their backgrounds removed — only the product itself is visible with a clean white background. ';
+// 공통: 제품 제외 지시
+const NO_PRODUCT_BASE =
+  '\n\nCRITICAL: Do NOT include any product, item, bottle, jar, package, container, pill, capsule, or any tangible object in this generated image. ' +
+  'Generate ONLY the background environment — the setting, surface, lighting, and atmosphere. ' +
+  'The product will be composited onto this background separately. ' +
+  // 합성 제품이 바닥에 놓인 것처럼 보이도록 하부 전경에 명확한 지면과 일관된 광원을 확보한다.
+  'Leave a clear, unobstructed, well-lit horizontal surface (ground, floor, table, or counter) across the LOWER-CENTER foreground where a product will naturally rest. ' +
+  'Use a single consistent light source with believable, grounded shadows so a composited product will match the scene lighting and cast direction.';
 
-const BG_REMOVED_STRICT =
-  ' STRICT FIDELITY CONSTRAINT: The reference shows the exact product to reproduce. Do NOT redesign, recolor, or reinterpret the product in any way — same shape, same color palette, same material texture, same proportions, same number of items. Treat it as a pixel-accurate reference for the product only.';
+// 섹션 타입별 배경 분위기 보강 지시
+const SECTION_BG_HINTS: Record<string, string> = {
+  feature:
+    ' Use rich, atmospheric studio lighting with a premium, high-contrast look. ' +
+    'The background should have visual depth — a subtly textured dark surface (matte fabric, brushed metal, stone, deep gradient) ' +
+    'with soft directional light that creates a dramatic, editorial feel. Avoid plain white or empty-looking backgrounds.',
+  detail:
+    ' Use a clean macro-photography backdrop: a softly blurred, slightly warm or cool neutral surface ' +
+    '(marble, linen, concrete) with gentle diffused lighting to highlight material texture.',
+  lifestyle:
+    ' Create an authentic, true-to-life real-world environment appropriate for the product category, ' +
+    'shot like a real editorial/commercial photograph with natural daylight and a grounded, eye-level perspective. ' +
+    'AVOID the typical "AI look": no heavy bokeh/blur haze, no dreamy glow or bloom, no lens flare, no oversaturation, ' +
+    'and NO blurry, faceless, or ghost-like human figures in the background. Keep lighting and shadows physically consistent.',
+};
+
+function buildNoProductSuffix(sectionType: string): string {
+  const hint = SECTION_BG_HINTS[sectionType] ?? '';
+  return NO_PRODUCT_BASE + hint;
+}
+
+async function compositeProductOnBackground(
+  bgBuffer: Buffer,
+  productPng: Buffer,
+): Promise<Buffer> {
+  const bgMeta = await sharp(bgBuffer).metadata();
+  const bgW = bgMeta.width ?? 1024;
+  const bgH = bgMeta.height ?? 1024;
+
+  // 누끼 PNG의 투명 여백을 먼저 제거한다. 여백이 남으면 제품이 접지선/그림자
+  // 위에 떠 보인다(잘라 붙인 듯한 AI 티의 원인). trim 실패 시 원본 사용.
+  let trimmed = productPng;
+  try {
+    trimmed = await sharp(productPng).trim().png().toBuffer();
+  } catch {
+    // 전부 투명/균일 등으로 trim이 실패하면 원본을 쓴다.
+  }
+
+  // 제품 높이: 배경 높이의 58%, 비율 유지
+  const targetH = Math.round(bgH * 0.58);
+  const productResized = await sharp(trimmed)
+    .resize(null, targetH, { fit: 'inside', withoutEnlargement: false })
+    .toBuffer();
+
+  const pMeta = await sharp(productResized).metadata();
+  const pW = pMeta.width ?? 0;
+  const pH = pMeta.height ?? 0;
+
+  // 접지선: 제품 "바닥"이 배경 하단 ~88%에 닿게 배치해 공중에 뜨지 않도록 한다.
+  const groundLine = Math.round(bgH * 0.88);
+  const left = Math.max(0, Math.round((bgW - pW) / 2));
+  const top = Math.max(0, groundLine - pH);
+
+  // 접지 그림자: 제품 실루엣(알파)을 세로로 눌러 블러 + 반투명 검정으로 만들어
+  // 바닥에 깔면 "붙어있는" 느낌이 생겨 잘라 붙인 듯한 AI 티가 줄어든다.
+  const shadowH = Math.max(8, Math.round(pH * 0.16));
+  const shadowMask = await sharp(productResized)
+    .ensureAlpha()
+    .extractChannel('alpha')
+    .resize(pW, shadowH, { fit: 'fill' })
+    .blur(16)
+    .linear(0.5, 0) // 알파 값을 낮춰 반투명 그림자
+    .toBuffer();
+  const shadow = await sharp({
+    create: { width: pW, height: shadowH, channels: 3, background: { r: 15, g: 15, b: 18 } },
+  })
+    .joinChannel(shadowMask)
+    .png()
+    .toBuffer();
+  const shadowTop = Math.min(bgH - shadowH, Math.round(groundLine - shadowH / 2));
+
+  return sharp(bgBuffer)
+    .composite([
+      { input: shadow, left, top: shadowTop },
+      { input: productResized, left, top },
+    ])
+    .jpeg({ quality: 92 })
+    .toBuffer();
+}
 
 export async function POST(req: NextRequest) {
   const authResult = await requireAuth(req);
@@ -123,26 +208,25 @@ export async function POST(req: NextRequest) {
       productImageUrl: parsed.data.productImageUrl,
     });
 
-    // Point 씬(lifestyle/detail/feature): productRefs 배경 제거 후 전달
-    let cleanRefs = productRefs;
-    let bgRemoved = false;
-    if (BACKGROUND_REMOVAL_SECTIONS.has(sectionType) && productRefs.length > 0) {
-      const bgResult = await removeImageBackgrounds(productRefs);
-      cleanRefs = bgResult.refs;
-      bgRemoved = bgResult.anyRemoved;
+    // Point 씬(lifestyle/detail/feature): 누끼 → 배경만 Gemini 생성 → Sharp 합성
+    // 합성 실패 시 기존 방식(product ref 포함해서 Gemini에 전달)으로 자동 fallback
+    let compositeProductPng: Buffer | null = null;
+    if (COMPOSITE_SECTIONS.has(sectionType) && productRefs.length > 0) {
+      compositeProductPng = await removeBackgroundTransparent(productRefs[0]);
     }
 
-    // base 먼저, 그다음 product refs (합산 최대 3장)
-    const allImages = [...baseImages, ...cleanRefs].slice(0, 3);
+    // 합성 성공 시 Gemini에 product ref 미전달 (배경만 생성하도록)
+    // 합성 실패 시 기존 방식: base + productRefs 모두 전달
+    const allImages = [...baseImages, ...(compositeProductPng ? [] : productRefs)].slice(0, 3);
 
     // Step 1: 씬 프롬프트 결정 (스토리보드 직접 전달 시 Claude 우회)
     let finalScenePrompt: string;
 
     if (directPrompt) {
-      // storyboard.prompt를 직접 사용 — Claude API 호출 없음 (로컬 환경 호환, edit 모드에서도 동일)
-      const bgPrefix = bgRemoved ? BG_REMOVED_PREFIX : '';
-      const bgSuffix = bgRemoved ? BG_REMOVED_STRICT : '';
-      finalScenePrompt = `${directPrompt}\n\n${bgPrefix}${PRODUCT_FIDELITY_INSTRUCTION}${bgSuffix}`;
+      // storyboard.prompt를 직접 사용 — Claude API 호출 없음
+      finalScenePrompt = compositeProductPng
+        ? `${directPrompt}${buildNoProductSuffix(sectionType)}` // 합성 모드: 배경만 생성
+        : `${directPrompt}\n\n${PRODUCT_FIDELITY_INSTRUCTION}`; // fallback: 기존 방식
     } else {
       // Claude Sonnet으로 섹션별 씬 프롬프트 생성
       const client = getAnthropicClient();
@@ -153,7 +237,9 @@ export async function POST(req: NextRequest) {
 
       const userContent: ContentBlock[] = [];
 
-      for (const ref of allImages) {
+      // Claude에는 reference 이미지를 그대로 전달 (프롬프트 생성용)
+      const claudeRefImages = [...baseImages, ...productRefs].slice(0, 3);
+      for (const ref of claudeRefImages) {
         userContent.push({
           type: 'image',
           source: { type: 'base64', media_type: ref.mimeType, data: ref.base64 },
@@ -183,23 +269,33 @@ export async function POST(req: NextRequest) {
       const promptData = JSON.parse(jsonMatch[0]) as { prompt?: string };
       const claudePrompt = promptData.prompt;
       if (!claudePrompt) throw new Error('Claude가 프롬프트를 생성하지 못했습니다.');
-      // Claude는 SCENE_PROMPT_SYSTEM 지시에 따라 PRODUCT_FIDELITY_INSTRUCTION을 이미 포함함
-      finalScenePrompt = bgRemoved
-        ? `${BG_REMOVED_PREFIX}${claudePrompt}${BG_REMOVED_STRICT}`
-        : claudePrompt;
+
+      finalScenePrompt = compositeProductPng
+        ? `${claudePrompt}${buildNoProductSuffix(sectionType)}` // 합성 모드: 배경만 생성
+        : claudePrompt; // fallback: Claude 프롬프트 그대로 (PRODUCT_FIDELITY_INSTRUCTION 이미 포함)
     }
 
-    // Step 2: Gemini로 완성된 씬 이미지 생성
+    // Step 2: Gemini로 씬 생성 (합성 모드: 배경만 / fallback: 제품 포함)
     const imageResult = await generateFrameImage({
       imagePrompt: finalScenePrompt,
       referenceImages: allImages,
     });
 
+    // Step 3: 합성 모드 — Gemini 배경 위에 원본 제품(투명 PNG) 합성
+    let finalBase64 = imageResult.imageBase64;
+    let finalMime = imageResult.mimeType;
+    if (compositeProductPng) {
+      const bgBuffer = Buffer.from(imageResult.imageBase64, 'base64');
+      const composited = await compositeProductOnBackground(bgBuffer, compositeProductPng);
+      finalBase64 = composited.toString('base64');
+      finalMime = 'image/jpeg';
+    }
+
     return NextResponse.json({
       success: true,
       data: {
-        imageBase64: imageResult.imageBase64,
-        mimeType: imageResult.mimeType,
+        imageBase64: finalBase64,
+        mimeType: finalMime,
         prompt: finalScenePrompt,
       },
     });
