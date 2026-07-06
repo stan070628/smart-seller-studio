@@ -241,7 +241,7 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
     }
   }
 
-  const canSave = !!form.sold_at && Number(form.quantity) > 0;
+  const canSave = !!form.sold_at && Math.round(Number(form.quantity)) > 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>

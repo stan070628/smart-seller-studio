@@ -20,7 +20,7 @@ export function buildSalePayload(form: SaleFormInput): SalePayload {
   return {
     sold_at: form.sold_at,
     quantity: Math.round(Number(form.quantity)),
-    selling_price: Math.round(Number(form.selling_price)),
+    selling_price: Math.max(0, Math.round(Number(form.selling_price))),
     shipping_fee: Math.max(0, Math.round(Number(form.shipping_fee))),
     coupon_discount: Math.max(0, Math.round(Number(form.coupon_discount))),
     channel: form.channel,

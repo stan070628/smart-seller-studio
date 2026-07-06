@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { getCurrentUser } from '@/lib/auth';
 
+const ALLOWED_SALE_CHANNELS = ['manual', 'coupang', 'rocket_growth', 'naver'];
+
 // GET /api/cost-management/products/[id]/sales
 // 특정 상품에 대한 판매 내역 목록을 반환한다.
 export async function GET(
@@ -48,7 +50,7 @@ export async function POST(
 
   const { id } = await params;
   const body = await request.json().catch(() => null);
-  const { sold_at, quantity, selling_price, shipping_fee: rawShipping } = body ?? {};
+  const { sold_at, quantity, selling_price, shipping_fee: rawShipping, coupon_discount, channel } = body ?? {};
 
   // shipping_fee: 제공된 경우 정수·비음수 검증, 없으면 0
   let shipping_fee = 0;
@@ -61,6 +63,27 @@ export async function POST(
       );
     }
     shipping_fee = parsed;
+  }
+
+  // coupon_discount: 제공된 경우 정수·비음수 검증, 없으면 0
+  let couponDiscount = 0;
+  if (coupon_discount != null) {
+    if (!Number.isInteger(coupon_discount) || coupon_discount < 0) {
+      return NextResponse.json(
+        { success: false, error: 'coupon_discount must be non-negative integer' },
+        { status: 400 },
+      );
+    }
+    couponDiscount = coupon_discount;
+  }
+
+  // channel: 제공된 경우 허용셋 검증, 없으면 manual
+  let saleChannel = 'manual';
+  if (channel != null) {
+    if (!ALLOWED_SALE_CHANNELS.includes(channel)) {
+      return NextResponse.json({ success: false, error: 'invalid channel' }, { status: 400 });
+    }
+    saleChannel = channel;
   }
 
   // 입력값 유효성 검증: sold_at 필수, quantity 양의 정수, selling_price 0 이상 정수
@@ -94,10 +117,10 @@ export async function POST(
     if (check.length === 0) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
 
     const { rows } = await pool.query(
-      `INSERT INTO sale_records (user_id, product_cost_id, sold_at, quantity, selling_price, channel, shipping_fee)
-       VALUES ($1, $2, $3, $4, $5, 'manual', $6)
+      `INSERT INTO sale_records (user_id, product_cost_id, sold_at, quantity, selling_price, channel, shipping_fee, coupon_discount)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [user.userId, id, sold_at, quantity, selling_price, shipping_fee],
+      [user.userId, id, sold_at, quantity, selling_price, saleChannel, shipping_fee, couponDiscount],
     );
 
     return NextResponse.json({ success: true, data: rows[0] }, { status: 201 });

@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { getCurrentUser } from '@/lib/auth';
 
+const ALLOWED_CHANNELS = ['manual', 'coupang', 'rocket_growth', 'naver'];
+
 // PATCH /api/cost-management/sales/[id]
-// 특정 판매 내역의 날짜·수량·판매가를 부분 수정한다 (COALESCE 방식).
+// 특정 판매 내역의 날짜·수량·판매가·배송비·쿠폰할인·채널을 부분 수정한다 (COALESCE 방식).
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -46,7 +48,6 @@ export async function PATCH(
       { status: 400 },
     );
   }
-  const ALLOWED_CHANNELS = ['manual', 'coupang', 'rocket_growth', 'naver'];
   if (channel !== undefined && !ALLOWED_CHANNELS.includes(channel)) {
     return NextResponse.json(
       { success: false, error: 'invalid channel' },
