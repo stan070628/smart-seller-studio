@@ -24,12 +24,13 @@ interface Props {
   channelFilter: 'all' | 'rg' | 'wing' | 'naver';
   rgInventory: Map<string, number | null>;
   rgInventoryLoading: boolean;
+  fifoError?: boolean;
 }
 
 const fmt = (n: number) => n.toLocaleString('ko-KR');
 
 export default function ProductDetailPanel({
-  product, colSpan, isEditablePeriod, onOpenDrawer, onSaveAdSpend, channelFilter, rgInventory, rgInventoryLoading,
+  product, colSpan, isEditablePeriod, onOpenDrawer, onSaveAdSpend, channelFilter, rgInventory, rgInventoryLoading, fifoError,
 }: Props) {
   const [editingAd, setEditingAd] = useState(false);
   const [adValue, setAdValue] = useState('');
@@ -45,6 +46,11 @@ export default function ProductDetailPanel({
   return (
     <tr>
       <td colSpan={colSpan} style={{ background: '#fafafa', padding: '14px 20px', borderBottom: '1px solid #eee' }}>
+        {fifoError && (
+          <div style={{ fontSize: 12, color: '#dc2626', marginBottom: 10, fontWeight: 500 }}>
+            ⚠ 판매 수량이 입고 수량을 초과했습니다. 입고를 추가하거나 판매 내역을 확인하세요. (재고·실현손익이 정확히 계산되지 않습니다.)
+          </div>
+        )}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-end' }}>
           {stat('원가(가중평균)', product.entry_count === 0 ? '—' : `${fmt(product.weighted_avg_cost)}원`)}
           {stat('배송비', product.entry_count === 0 ? '—' : `${fmt(product.weighted_avg_shipping)}원`)}

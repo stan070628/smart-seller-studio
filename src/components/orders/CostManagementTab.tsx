@@ -929,6 +929,7 @@ export default function CostManagementTab() {
                               channelFilter={channelFilter}
                               rgInventory={rgInventory}
                               rgInventoryLoading={rgInventoryLoading}
+                              fifoError={child.fifo_error}
                             />
                           )}
                         </React.Fragment>
@@ -965,6 +966,7 @@ export default function CostManagementTab() {
                         channelFilter={channelFilter}
                         rgInventory={rgInventory}
                         rgInventoryLoading={rgInventoryLoading}
+                        fifoError={p.fifo_error}
                       />
                     )}
                   </React.Fragment>

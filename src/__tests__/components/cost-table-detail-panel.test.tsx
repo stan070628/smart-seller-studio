@@ -59,4 +59,20 @@ describe('ProductDetailPanel', () => {
     fireEvent.keyDown(input, { key: 'Escape' });
     expect(onSave).not.toHaveBeenCalled();
   });
+
+  it('fifoError면 재고초과 안내 줄을 렌더한다', () => {
+    renderInTable(
+      <ProductDetailPanel product={base} colSpan={7} isEditablePeriod={false}
+        onOpenDrawer={vi.fn()} onSaveAdSpend={vi.fn()} channelFilter="all" rgInventory={new Map()} rgInventoryLoading={false} fifoError />,
+    );
+    expect(screen.getByText(/입고 수량을 초과/)).toBeInTheDocument();
+  });
+
+  it('fifoError가 없으면 안내 줄이 없다', () => {
+    renderInTable(
+      <ProductDetailPanel product={base} colSpan={7} isEditablePeriod={false}
+        onOpenDrawer={vi.fn()} onSaveAdSpend={vi.fn()} channelFilter="all" rgInventory={new Map()} rgInventoryLoading={false} />,
+    );
+    expect(screen.queryByText(/입고 수량을 초과/)).not.toBeInTheDocument();
+  });
 });
