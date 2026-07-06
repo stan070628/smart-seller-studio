@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Pencil, Trash2, CloudDownload } from 'lucide-react';
+import { buildSalePayload } from './sale-payload';
 
 interface DownloadCouponPolicy {
   rate: number;
@@ -26,6 +27,8 @@ interface SaleForm {
   quantity: string;
   selling_price: string;
   shipping_fee: string;
+  coupon_discount: string;
+  channel: string;
 }
 
 function emptyForm(): SaleForm {
@@ -34,6 +37,8 @@ function emptyForm(): SaleForm {
     quantity: '',
     selling_price: '',
     shipping_fee: '0',
+    coupon_discount: '0',
+    channel: 'manual',
   };
 }
 
@@ -135,13 +140,10 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
   }, [downloadCouponPolicy]);
 
   async function save() {
-    const qty = Math.round(Number(form.quantity));
-    const price = Math.round(Number(form.selling_price));
-    const shippingFee = Math.max(0, Math.round(Number(form.shipping_fee)));
-    if (!form.sold_at || qty <= 0) { alert('판매일과 수량을 입력해 주세요.'); return; }
+    const payload = buildSalePayload(form);
+    if (!form.sold_at || payload.quantity <= 0) { alert('판매일과 수량을 입력해 주세요.'); return; }
     setSaving(true);
     try {
-      const payload = { sold_at: form.sold_at, quantity: qty, selling_price: price, shipping_fee: shippingFee };
       const url = editingId
         ? `/api/cost-management/sales/${editingId}`
         : `/api/cost-management/products/${productId}/sales`;
@@ -183,6 +185,8 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
       quantity: String(s.quantity),
       selling_price: String(s.selling_price),
       shipping_fee: String(s.shipping_fee),
+      coupon_discount: String(s.coupon_discount ?? 0),
+      channel: s.channel ?? 'manual',
     });
   }
 
@@ -381,9 +385,22 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
                     <input type="number" value={form.selling_price} onChange={(e) => setForm((f) => ({ ...f, selling_price: e.target.value }))}
                       style={{ width: '80px', padding: '3px 5px', borderRadius: '4px', border: '1px solid #86efac', fontSize: '11px', color: '#18181b' }} />
                   </td>
-                  <td colSpan={3} style={{ padding: '4px 6px' }}>
-                    {/* 쿠폰할인/채널/사이즈는 편집 불가 — 빈 셀 */}
+                  <td style={{ padding: '4px 6px' }}>
+                    <input type="number" min="0" value={form.coupon_discount}
+                      onChange={(e) => setForm((f) => ({ ...f, coupon_discount: e.target.value }))}
+                      style={{ width: '70px', padding: '3px 5px', borderRadius: '4px', border: '1px solid #86efac', fontSize: '11px', color: '#18181b' }} />
                   </td>
+                  <td style={{ padding: '4px 6px' }}>
+                    <select value={form.channel}
+                      onChange={(e) => setForm((f) => ({ ...f, channel: e.target.value }))}
+                      style={{ padding: '3px 5px', borderRadius: '4px', border: '1px solid #86efac', fontSize: '11px', color: '#18181b' }}>
+                      <option value="coupang">쿠팡윙</option>
+                      <option value="rocket_growth">로켓그로스</option>
+                      <option value="naver">네이버</option>
+                      <option value="manual">수동</option>
+                    </select>
+                  </td>
+                  <td style={{ padding: '4px 6px' }} />
                   <td style={{ padding: '4px 6px' }}>
                     <input
                       type="number"
