@@ -187,6 +187,7 @@ export async function GET(request: NextRequest) {
 
       // 채널 필터된 입고/판매로 FIFO 실행 → current_stock, stock_value 정확히 계산
       let fifoResult: FifoSummary = { current_stock: 0, stock_value: 0, total_realized_profit: 0, sale_details: [] };
+      let fifoError = false;
       try {
         const batches: PurchaseBatch[] = batchesToUse.map((e) => ({
           id: e.id,
@@ -198,6 +199,7 @@ export async function GET(request: NextRequest) {
         }));
         fifoResult = calculateFifo(batches, salesToUse, feeRate);
       } catch (e) {
+        fifoError = true;
         console.warn(`FIFO 계산 실패 product=${p.id}:`, e instanceof Error ? e.message : e);
       }
 
@@ -253,6 +255,7 @@ export async function GET(request: NextRequest) {
         margin_rate: marginRate,
         breakeven_roas: breakevenRoas,
         winner_status: winnerStatus,
+        fifo_error: fifoError,
         // 소분 판매 필드
         subdivision_unit: p.subdivision_unit ? Number(p.subdivision_unit) : null,
         subdivision_carryover: Number(p.subdivision_carryover ?? 0),

@@ -49,6 +49,7 @@ interface ProductRow {
   margin_rate: number;
   breakeven_roas: number;
   winner_status: 'winner' | 'watch' | 'normal';
+  fifo_error: boolean;
   hidden: boolean;
   download_coupon_policy: { rate: number; max_discount: number; min_price: number; } | null;
   channels: ChannelEntry[];
