@@ -15,6 +15,8 @@ function getSnapshot() { return pending; }
 
 export function confirmDialog(opts: string | ConfirmOptions): Promise<boolean> {
   const options: ConfirmOptions = typeof opts === 'string' ? { message: opts } : opts;
+  // 이전 대기 중인 확인이 있으면 false로 정리(무한 pending 방지)
+  if (pending) pending.resolve(false);
   return new Promise<boolean>((resolve) => {
     pending = { id: nextId++, ...options, resolve };
     emit();

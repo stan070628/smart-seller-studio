@@ -49,7 +49,6 @@ export default function RocketGrowthShipmentModal({ products, onClose, onCreated
       const names = skipped.map((p) => p.product_name).join('\n- ');
       const ok = await confirmDialog({
         message: `다음 ${skipped.length}개 상품은 수량이 입력되지 않아 이번 입고에 포함되지 않습니다:\n\n- ${names}\n\n계속 진행할까요?`,
-        danger: true,
       });
       if (!ok) return;
     }

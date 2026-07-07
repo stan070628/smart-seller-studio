@@ -19,4 +19,15 @@ describe('confirmDialog', () => {
     expect(await p).toBe(false);
     expect(screen.queryByText('지울까요?')).not.toBeInTheDocument();
   });
+
+  it('대기 중 새 confirmDialog 호출 시 이전 것은 false로 정리된다', async () => {
+    render(<ConfirmHost />);
+    const first = confirmDialog('첫번째?');
+    const second = confirmDialog('두번째?');
+    expect(await first).toBe(false);
+    expect(await screen.findByText('두번째?')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '확인' }));
+    expect(await second).toBe(true);
+  });
+
 });
