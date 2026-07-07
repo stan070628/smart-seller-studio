@@ -4,6 +4,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { X, Plus, Pencil, Trash2 } from 'lucide-react';
 import SaleEntryPanel from './SaleEntryPanel';
 import { calculateSubdivision } from '@/lib/cost-management/subdivision';
+import { toast } from '@/components/ui/toast';
+import { confirmDialog } from '@/components/ui/confirm';
 
 interface Entry {
   id: string;
@@ -140,7 +142,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
   async function save() {
     const qty = Math.round(Number(form.quantity) * 10) / 10;
     const cost = Math.round(Number(form.unit_cost));
-    if (!form.received_at || qty <= 0) { alert('입고일과 수량을 입력해 주세요.'); return; }
+    if (!form.received_at || qty <= 0) { toast.error('입고일과 수량을 입력해 주세요.'); return; }
     setSaving(true);
     try {
       const basePayload = {
@@ -165,7 +167,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
         setEntryType('normal');
         setForm(emptyForm());
       } else {
-        alert(json.error ?? '저장에 실패했습니다.');
+        toast.error(json.error ?? '저장에 실패했습니다.');
       }
     } finally {
       setSaving(false);
@@ -178,7 +180,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
     const bq = Number(subForm.boxQuantity) || 1;
     const su = Number(subForm.subUnit);
     if (!subForm.received_at || !subPreview || subPreview.sellablePacks === 0) {
-      alert('입고일, 포장당 가격/개수, 소분 갯수를 올바르게 입력해 주세요.');
+      toast.error('입고일, 포장당 가격/개수, 소분 갯수를 올바르게 입력해 주세요.');
       return;
     }
     setSaving(true);
@@ -211,7 +213,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
           unit_rg_shipping_fee: '0',
         });
       } else {
-        alert(json.error ?? '저장에 실패했습니다.');
+        toast.error(json.error ?? '저장에 실패했습니다.');
       }
     } finally {
       setSaving(false);
@@ -219,14 +221,14 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
   }
 
   async function deleteEntry(id: string) {
-    if (!confirm('이 입고 건을 삭제할까요?')) return;
+    if (!(await confirmDialog({ message: '이 입고 건을 삭제할까요?', danger: true }))) return;
     const res = await fetch(`/api/cost-management/entries/${id}`, { method: 'DELETE' });
     const json = await res.json();
     if (json.success) {
       if (json.warning === 'subdivision_carryover_stale') setCarryoverWarning(true);
       refreshAll();
     } else {
-      alert(json.error ?? '삭제에 실패했습니다.');
+      toast.error(json.error ?? '삭제에 실패했습니다.');
     }
   }
 

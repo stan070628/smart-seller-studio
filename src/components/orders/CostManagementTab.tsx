@@ -4,6 +4,8 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { buildTableItems, type GroupRow as GroupRowType } from '@/lib/cost-management/product-grouping';
 import { determineWinnerStatus } from '@/lib/roi/calculations';
 import { Plus, Truck, Package, Search, TrendingUp, TrendingDown, AlertCircle, CloudDownload, Eye, EyeOff } from 'lucide-react';
+import { toast } from '@/components/ui/toast';
+import { confirmDialog } from '@/components/ui/confirm';
 import CostEntryDrawer from './CostEntryDrawer';
 import ShippingGroupModal from './ShippingGroupModal';
 import AddProductModal from './AddProductModal';
@@ -327,10 +329,10 @@ export default function CostManagementTab() {
       const json = await res.json();
       if (json.success) {
         const { updated, skipped, total } = json.data;
-        alert(`variants 일괄 설정 완료 — 총 ${total}개 상품, ${updated}개 업데이트, ${skipped}개 스킵`);
+        toast.success(`variants 일괄 설정 완료 — 총 ${total}개 상품, ${updated}개 업데이트, ${skipped}개 스킵`);
         load();
       } else {
-        alert(json.error ?? 'variants 설정 실패');
+        toast.error(json.error ?? 'variants 설정 실패');
       }
     } finally {
       setSettingUpVariants(false);
@@ -472,7 +474,7 @@ export default function CostManagementTab() {
       if (newHidden) showUndoToast('숨겼어요. 데이터는 삭제되지 않았어요.', [savedProduct]);
     } catch (e) {
       load();
-      alert(`숨김 처리 실패: ${e instanceof Error ? e.message : '오류'}`);
+      toast.error(`숨김 처리 실패: ${e instanceof Error ? e.message : '오류'}`);
     }
   }
 
@@ -509,16 +511,16 @@ export default function CostManagementTab() {
       if (newHidden) showUndoToast(`옵션 ${savedChildren.length}개를 숨겼어요. 데이터는 삭제되지 않았어요.`, savedChildren);
     } catch (e) {
       load();
-      alert(`그룹 숨김 처리 실패: ${e instanceof Error ? e.message : '오류'}`);
+      toast.error(`그룹 숨김 처리 실패: ${e instanceof Error ? e.message : '오류'}`);
     }
   }
 
   async function deleteProduct(id: string, name: string) {
-    if (!confirm(`"${name}" 상품을 삭제할까요?\n입고 내역도 모두 함께 삭제됩니다.`)) return;
+    if (!(await confirmDialog({ message: `"${name}" 상품을 삭제할까요?\n입고 내역도 모두 함께 삭제됩니다.`, danger: true }))) return;
     const res = await fetch(`/api/cost-management/products/${id}`, { method: 'DELETE' });
     const json = await res.json();
     if (json.success) load();
-    else alert(json.error ?? '삭제에 실패했습니다.');
+    else toast.error(json.error ?? '삭제에 실패했습니다.');
   }
 
   const tableItems = useMemo(() => {

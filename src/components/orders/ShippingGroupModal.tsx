@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Truck } from 'lucide-react';
 import { distributeShippingFee } from '@/lib/cost-management/calculations';
+import { toast } from '@/components/ui/toast';
 
 interface EntryForGroup {
   id: string;
@@ -101,7 +102,7 @@ export default function ShippingGroupModal({ products, onClose, onCreated }: Pro
         onCreated();
         onClose();
       } else {
-        alert(json.error ?? '그룹 생성에 실패했습니다.');
+        toast.error(json.error ?? '그룹 생성에 실패했습니다.');
       }
     } finally {
       setSaving(false);

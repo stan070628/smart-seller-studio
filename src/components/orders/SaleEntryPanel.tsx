@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Pencil, Trash2, CloudDownload } from 'lucide-react';
 import { buildSalePayload } from './sale-payload';
+import { toast } from '@/components/ui/toast';
+import { confirmDialog } from '@/components/ui/confirm';
 
 interface DownloadCouponPolicy {
   rate: number;
@@ -95,9 +97,9 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
       const res = await fetch(`/api/cost-management/products/${productId}/coupang-coupons`);
       const json = await res.json();
       if (json.success) setCoupons(json.data);
-      else alert(json.error ?? '쿠폰 조회 실패');
+      else toast.error(json.error ?? '쿠폰 조회 실패');
     } catch {
-      alert('쿠폰 조회 중 오류가 발생했습니다.');
+      toast.error('쿠폰 조회 중 오류가 발생했습니다.');
     } finally {
       setLoadingCoupons(false);
     }
@@ -109,7 +111,7 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
       setCouponPolicyForm((f) => ({ ...f, rate: '100', max_discount: String(c.discount) }));
     } else {
       // RATE 쿠폰: 이름만 표시, 사용자가 직접 % 입력
-      alert(`"${c.promotionName}" — 정률 쿠폰입니다.\n할인율(%)과 최소구매금액을 직접 입력해 주세요.`);
+      toast.error(`"${c.promotionName}" — 정률 쿠폰입니다.\n할인율(%)과 최소구매금액을 직접 입력해 주세요.`);
     }
     setCoupons(null);
   }
@@ -141,7 +143,7 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
 
   async function save() {
     const payload = buildSalePayload(form);
-    if (!form.sold_at || payload.quantity <= 0) { alert('판매일과 수량을 입력해 주세요.'); return; }
+    if (!form.sold_at || payload.quantity <= 0) { toast.error('판매일과 수량을 입력해 주세요.'); return; }
     setSaving(true);
     try {
       const url = editingId
@@ -157,7 +159,7 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
         setAddingNew(false);
         setForm(emptyForm());
       } else {
-        alert(json.error ?? '저장에 실패했습니다.');
+        toast.error(json.error ?? '저장에 실패했습니다.');
       }
     } finally {
       setSaving(false);
@@ -165,13 +167,13 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
   }
 
   async function deleteSale(id: string) {
-    if (!confirm('이 판매 건을 삭제할까요?')) return;
+    if (!(await confirmDialog({ message: '이 판매 건을 삭제할까요?', danger: true }))) return;
     setDeletingId(id);
     try {
       const res = await fetch(`/api/cost-management/sales/${id}`, { method: 'DELETE' });
       const json = await res.json();
       if (json.success) { await load(); onChanged(); }
-      else alert(json.error ?? '삭제에 실패했습니다.');
+      else toast.error(json.error ?? '삭제에 실패했습니다.');
     } finally {
       setDeletingId(null);
     }
@@ -195,7 +197,7 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
     const max_discount = Math.round(Number(couponPolicyForm.max_discount));
     const min_price = Math.round(Number(couponPolicyForm.min_price));
     if (rate <= 0 || rate > 1 || max_discount <= 0 || min_price < 0) {
-      alert('다운로드쿠폰 정책 값이 올바르지 않습니다.');
+      toast.error('다운로드쿠폰 정책 값이 올바르지 않습니다.');
       return;
     }
     setSavingCouponPolicy(true);
@@ -209,9 +211,9 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
       if (json.success) {
         setCouponPolicy({ rate, max_discount, min_price });
         setShowCouponPolicyForm(false);
-        alert('다운로드쿠폰 정책이 저장되었습니다. 재임포트 시 적용됩니다.');
+        toast.success('다운로드쿠폰 정책이 저장되었습니다. 재임포트 시 적용됩니다.');
       } else {
-        alert(json.error ?? '저장 실패');
+        toast.error(json.error ?? '저장 실패');
       }
     } finally {
       setSavingCouponPolicy(false);
@@ -229,12 +231,12 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
       const json = await res.json();
       if (json.success) {
         const { imported, skipped } = json.data;
-        alert(`${imported}건 가져옴, ${skipped}건 중복 스킵`);
+        toast.success(`${imported}건 가져옴, ${skipped}건 중복 스킵`);
         await load();
         onChanged();
         setShowImportForm(false);
       } else {
-        alert(json.error ?? '가져오기에 실패했습니다.');
+        toast.error(json.error ?? '가져오기에 실패했습니다.');
       }
     } finally {
       setImporting(false);

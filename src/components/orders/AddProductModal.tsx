@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { X, Package, ChevronLeft } from 'lucide-react';
+import { toast } from '@/components/ui/toast';
 
 interface CoupangProduct {
   seller_product_id: number;
@@ -72,7 +73,7 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
         onAdded();
         onClose();
       } else {
-        alert(json.error ?? '상품 추가에 실패했습니다.');
+        toast.error(json.error ?? '상품 추가에 실패했습니다.');
       }
     } finally {
       setSaving(false);

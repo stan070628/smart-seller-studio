@@ -3,6 +3,8 @@
 import React, { useState } from 'react';
 import { X, Package } from 'lucide-react';
 import { distributeRgFee } from '@/lib/cost-management/rg-shipment';
+import { toast } from '@/components/ui/toast';
+import { confirmDialog } from '@/components/ui/confirm';
 
 interface ProductForRg {
   id: string;
@@ -45,9 +47,10 @@ export default function RocketGrowthShipmentModal({ products, onClose, onCreated
     const skipped = products.filter((p) => (parseInt(quantities[p.id] ?? '0') || 0) === 0);
     if (skipped.length > 0) {
       const names = skipped.map((p) => p.product_name).join('\n- ');
-      const ok = window.confirm(
-        `다음 ${skipped.length}개 상품은 수량이 입력되지 않아 이번 입고에 포함되지 않습니다:\n\n- ${names}\n\n계속 진행할까요?`,
-      );
+      const ok = await confirmDialog({
+        message: `다음 ${skipped.length}개 상품은 수량이 입력되지 않아 이번 입고에 포함되지 않습니다:\n\n- ${names}\n\n계속 진행할까요?`,
+        danger: true,
+      });
       if (!ok) return;
     }
 
@@ -69,7 +72,7 @@ export default function RocketGrowthShipmentModal({ products, onClose, onCreated
         onCreated();
         onClose();
       } else {
-        alert(json.error ?? '등록에 실패했습니다.');
+        toast.error(json.error ?? '등록에 실패했습니다.');
       }
     } finally {
       setSaving(false);
