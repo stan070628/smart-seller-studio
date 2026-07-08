@@ -4,7 +4,7 @@ import { requireAuth } from '@/lib/supabase/auth';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 import type { LabelType } from '@/lib/label/label-templates';
 
-const VALID_TYPES: LabelType[] = ['quality', 'quality2x3', 'event', 'image2x2', 'image2x3', 'nutrition2x3', 'cosmetic2x3'];
+const VALID_TYPES: LabelType[] = ['quality', 'quality2x3', 'event', 'image2x2', 'image2x3', 'image3x3', 'nutrition2x3', 'cosmetic2x3'];
 
 export async function GET(request: NextRequest): Promise<Response> {
   const auth = await requireAuth(request);
