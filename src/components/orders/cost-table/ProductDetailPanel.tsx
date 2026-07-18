@@ -50,12 +50,21 @@ export default function ProductDetailPanel({
   const [editingDate, setEditingDate] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
 
+  // 프리미티브 값으로 추출해 객체 레퍼런스 변화에 따른 불필요한 재실행 방지
+  const adFrom = dateRange?.from ?? '';
+  const adTo = dateRange?.to ?? '';
+
   useEffect(() => {
-    if (!dateRange) return;
-    setAdLoading(true);
-    fetch(`/api/cost-management/products/${product.id}/ad-spend?from=${dateRange.from}&to=${dateRange.to}`)
-      .then((r) => r.json())
-      .then((json) => {
+    if (!adFrom || !adTo) return;
+    const id = product.id;
+
+    async function loadAdSpend() {
+      setAdLoading(true);
+      try {
+        const r = await fetch(
+          `/api/cost-management/products/${id}/ad-spend?from=${adFrom}&to=${adTo}`,
+        );
+        const json = await r.json();
         if (json.success) {
           const map: Record<string, number> = {};
           for (const d of json.data as Array<{ ad_date: string; ad_spend: number }>) {
@@ -63,9 +72,13 @@ export default function ProductDetailPanel({
           }
           setAdByDate(map);
         }
-      })
-      .finally(() => setAdLoading(false));
-  }, [product.id, dateRange?.from, dateRange?.to]);
+      } finally {
+        setAdLoading(false);
+      }
+    }
+
+    void loadAdSpend();
+  }, [product.id, adFrom, adTo]);
 
   const commitEdit = async (adDate: string) => {
     const num = parseFloat(editValue.replace(/,/g, ''));

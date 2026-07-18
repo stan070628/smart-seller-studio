@@ -217,7 +217,7 @@ export default function CostManagementTab() {
   const toggleDetail = (id: string) =>
     setExpandedDetailIds((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) { next.delete(id); } else { next.add(id); }
       return next;
     });
   const [drawerProductId, setDrawerProductId] = useState<string | null>(null);
