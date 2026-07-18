@@ -36,7 +36,6 @@ export default function SettlementTab() {
   const [ym, setYm] = useState(`${nowKst.getUTCFullYear()}-${String(nowKst.getUTCMonth() + 1).padStart(2, '0')}`);
   const [data, setData] = useState<DailyResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [edit, setEdit] = useState<{ date: string; field: 'adSpend' | 'boxCost'; value: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -50,21 +49,6 @@ export default function SettlementTab() {
   }, [ym]);
 
   useEffect(() => { load(); }, [load]);
-
-  const saveExpense = async (date: string, field: 'adSpend' | 'boxCost', value: number) => {
-    const existing = data?.rows.find((r) => r.date === date);
-    const body = {
-      adSpend: field === 'adSpend' ? value : existing?.adSpend ?? 0,
-      boxCost: field === 'boxCost' ? value : existing?.boxCost ?? 0,
-      parcelAdjustment: existing?.parcelAdjustment ?? 0,
-    };
-    await fetch(`/api/settlement/expenses/${date}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    await load();
-  };
 
   const rows = data?.rows ?? [];
   const total = data?.monthTotal;
@@ -80,13 +64,14 @@ export default function SettlementTab() {
 
   const th: React.CSSProperties = { padding: '8px 10px', textAlign: 'right', fontWeight: 600, color: '#27272a', fontSize: 12, whiteSpace: 'nowrap' };
   const td: React.CSSProperties = { padding: '6px 10px', textAlign: 'right', fontSize: 12, color: '#3f3f46', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' };
-  const editable: React.CSSProperties = { ...td, background: '#eaf3ff', cursor: 'pointer' };
 
   return (
     <div>
       <div style={{ background: '#fff8f6', border: '1px solid #f3d4cc', borderRadius: 8, padding: '10px 12px', fontSize: 12, color: '#7c2d12', marginBottom: 14 }}>
         현금 기준 — 물건 산 날 비용을 인식합니다. 쿠팡 윙·로켓그로스 판매만 집계하며, 수기 입력분은 제외됩니다.
         일괄 임포트분은 쿠폰이 반영되지 않을 수 있습니다. 상품별 손익은 <b>수익·원가</b> 탭을 보세요.
+        <br />
+        택배·광고·박스비 입력은 <b>비용</b> 탭에서 합니다.
         <br />
         <b>미확정</b> 표시된 최근 며칠은 쿠팡 확정 전이라 실제보다 낮게 보일 수 있습니다.
         며칠 뒤 <b>수익·원가</b> 탭의 &lsquo;판매 가져오기&rsquo;를 다시 누르면 채워집니다.
@@ -126,18 +111,8 @@ export default function SettlementTab() {
                 <td style={td}>{r.platformFee ? `-${won(r.platformFee)}` : '0'}</td>
                 <td style={td}>{r.purchase ? `-${won(r.purchase)}` : '0'}</td>
                 <td style={td}>{r.parcelFee ? `-${won(r.parcelFee)}` : '0'}</td>
-                {(['adSpend', 'boxCost'] as const).map((f) => (
-                  <td key={f} style={editable}
-                      onClick={() => setEdit({ date: r.date, field: f, value: String(r[f]) })}>
-                    {edit && edit.date === r.date && edit.field === f ? (
-                      <input autoFocus type="number" value={edit.value}
-                        onChange={(e) => setEdit({ ...edit, value: e.target.value })}
-                        onBlur={() => { saveExpense(r.date, f, Math.trunc(Number(edit.value) || 0)); setEdit(null); }}
-                        onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                        style={{ width: 72, textAlign: 'right', border: '1px solid #86b7fe', borderRadius: 4, fontSize: 12, color: '#18181b' }} />
-                    ) : (r[f] ? `-${won(r[f])}` : '0')}
-                  </td>
-                ))}
+                <td style={td}>{r.adSpend ? `-${won(r.adSpend)}` : '0'}</td>
+                <td style={td}>{r.boxCost ? `-${won(r.boxCost)}` : '0'}</td>
                 <td style={{ ...td, fontWeight: 700, color: r.netProfit < 0 ? '#b91c1c' : '#14532d' }}>{won(r.netProfit)}</td>
               </tr>
               );

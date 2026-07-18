@@ -2,18 +2,20 @@
 
 import React, { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
-import { ShoppingCart, BarChart3, Settings, ClipboardList, Wallet } from 'lucide-react';
+import { ShoppingCart, BarChart3, Settings, ClipboardList, Wallet, Receipt } from 'lucide-react';
 import OrdersTab from './OrdersTab';
 import ChannelsTab from './ChannelsTab';
 import CostManagementTab from './CostManagementTab';
 import SettlementTab from './SettlementTab';
+import ExpensesTab from './ExpensesTab';
 
-type SubTab = 'orders' | 'channels' | 'cost' | 'settlement';
+type SubTab = 'orders' | 'channels' | 'cost' | 'settlement' | 'expenses';
 
 const SUB_TABS: { id: SubTab; label: string; icon: React.ReactNode }[] = [
   { id: 'orders', label: '주문·배송', icon: <ClipboardList size={14} /> },
   { id: 'cost', label: '수익·원가', icon: <BarChart3 size={14} /> },
   { id: 'settlement', label: '정산', icon: <Wallet size={14} /> },
+  { id: 'expenses', label: '비용', icon: <Receipt size={14} /> },
   { id: 'channels', label: '채널설정', icon: <Settings size={14} /> },
 ];
 
@@ -26,7 +28,7 @@ function OrdersClientInner() {
   // URL ?tab= 파라미터에서 초기 탭 동기화
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab === 'cost' || tab === 'channels' || tab === 'settlement') setActiveSubTab(tab);
+    if (tab === 'cost' || tab === 'channels' || tab === 'settlement' || tab === 'expenses') setActiveSubTab(tab);
     else setActiveSubTab('orders');
   }, [searchParams]);
 
@@ -75,6 +77,7 @@ function OrdersClientInner() {
         {activeSubTab === 'orders' && <OrdersTab />}
         {activeSubTab === 'cost' && <CostManagementTab />}
         {activeSubTab === 'settlement' && <SettlementTab />}
+        {activeSubTab === 'expenses' && <ExpensesTab />}
         {activeSubTab === 'channels' && <ChannelsTab />}
       </main>
     </div>
