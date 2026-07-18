@@ -38,6 +38,8 @@ export default function SettlementTab() {
   const [data, setData] = useState<DailyResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [modal, setModal] = useState<{ date: string; purchase: number; adSpend: number } | null>(null);
+  const [payout, setPayout] = useState<{ finalAmount: number; settlementDate: string; status: string } | null>(null);
+  const [payoutLoading, setPayoutLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -52,8 +54,26 @@ export default function SettlementTab() {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    let alive = true;
+    setPayoutLoading(true);
+    (async () => {
+      try {
+        const res = await fetch(`/api/settlement/payout?month=${ym}`);
+        const json = await res.json();
+        if (alive) setPayout(json.success ? json.payout : null);
+      } finally {
+        if (alive) setPayoutLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [ym]);
+
   const rows = data?.rows ?? [];
   const total = data?.monthTotal;
+
+  // 내 장부 정산예상 = 매출 − 쿠폰 − 수수료 (내 비용은 제외 — 쿠팡이 떼는 게 아님)
+  const expected = total ? total.revenue - total.couponDiscount - total.platformFee : 0;
 
   // 비용 = 매입 + 택배비 + 광고비 + 박스비
   const cost = (r: { purchase: number; parcelFee: number; adSpend: number; boxCost: number }) =>
@@ -90,6 +110,22 @@ export default function SettlementTab() {
         <button onClick={() => setYm((m) => shiftMonth(m, 1))} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #e5e5e5', background: '#fff', color: '#3f3f46', cursor: 'pointer' }}>다음달 ›</button>
         {loading && <span style={{ color: '#a1a1aa', fontSize: 12 }}>불러오는 중…</span>}
       </div>
+
+      {payoutLoading ? (
+        <div style={{ fontSize: 12, color: '#a1a1aa', marginBottom: 12 }}>쿠팡 지급 조회 중…</div>
+      ) : payout && payout.finalAmount > 0 ? (
+        <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '10px 12px', fontSize: 12, color: '#1e3a5f', marginBottom: 12 }}>
+          <b>쿠팡 지급 확정 {won(payout.finalAmount)}원</b>
+          {payout.settlementDate ? ` (지급일 ${payout.settlementDate})` : ''}
+          {' · '}내 장부 정산예상 {won(expected)}원
+          {' · '}차이 <b style={{ color: payout.finalAmount - expected < 0 ? '#b91c1c' : '#14532d' }}>{won(payout.finalAmount - expected)}원</b>
+          <span style={{ color: '#93a3b8' }}> · 월 단위 참고 대조</span>
+        </div>
+      ) : (
+        <div style={{ background: '#f4f4f5', border: '1px solid #e5e5e5', borderRadius: 8, padding: '10px 12px', fontSize: 12, color: '#71717a', marginBottom: 12 }}>
+          쿠팡 지급 미확정 — 정산 완료 후 표시됩니다.
+        </div>
+      )}
 
       <div style={{ overflowX: 'auto', background: '#fff', border: '1px solid #e5e5e5', borderRadius: 10 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
