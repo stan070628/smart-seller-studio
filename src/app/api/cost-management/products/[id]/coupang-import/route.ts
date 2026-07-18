@@ -150,7 +150,7 @@ export async function POST(
     // ── Phase 1: 일반 쿠팡 주문 (ordersheets, FINAL_DELIVERY) ──────────────
     // RG 전용 상품(vendor_item_id만 있는 경우)은 일반 주문 조회 생략
     const generalItems: Array<{
-      sold_at: string; quantity: number; selling_price: number;
+      sold_at: string; quantity: number; selling_price: number; sale_amount: number;
       coupang_order_item_id: string; channel: string; variant_name: string | null;
       shipping_fee: number; coupon_discount: number;
     }> = [];
@@ -185,6 +185,7 @@ export async function POST(
               selling_price: item.shippingCount > 0
                 ? Math.round(item.orderPrice / item.shippingCount)
                 : item.salesPrice,
+              sale_amount: item.orderPrice,
               coupang_order_item_id: `${order.orderId}-${item.vendorItemId}`,
               channel: 'coupang',
               variant_name: variantsCache[String(item.vendorItemId)] ?? null,
@@ -224,6 +225,7 @@ export async function POST(
       sold_at: string;
       quantity: number;
       selling_price: number;
+      sale_amount: number;
       coupang_order_item_id: string;
       channel: string;
       variant_name: string | null;
@@ -263,13 +265,16 @@ export async function POST(
             const key = `rg-${order.orderId}-${item.vendorItemId}`;
             const existing = orderItemMap.get(key);
             const rm = rgMultiplierMap.get(item.vendorItemId) ?? 1;
+            const lineAmount = item.unitSalesPrice * item.salesQuantity;
             if (existing) {
               existing.quantity += item.salesQuantity * rm;
+              existing.sale_amount += lineAmount;
             } else {
               orderItemMap.set(key, {
                 sold_at: paidDate,
                 quantity: item.salesQuantity * rm,
                 selling_price: item.unitSalesPrice,
+                sale_amount: lineAmount,
                 coupang_order_item_id: key,
                 channel: 'rocket_growth',
                 variant_name: variantsCache[String(item.vendorItemId)] ?? null,
@@ -292,7 +297,7 @@ export async function POST(
       'CANCELED', 'RETURNED', 'EXCHANGED',
     ]);
     const naverItems: Array<{
-      sold_at: string; quantity: number; selling_price: number;
+      sold_at: string; quantity: number; selling_price: number; sale_amount: number;
       coupang_order_item_id: string; channel: string; variant_name: string | null;
       shipping_fee: number; coupon_discount: number;
     }> = [];
@@ -314,6 +319,7 @@ export async function POST(
             selling_price: order.quantity > 0
               ? Math.round(order.totalPaymentAmount / order.quantity)
               : order.totalPaymentAmount,
+            sale_amount: order.totalPaymentAmount,
             coupang_order_item_id: `naver-${order.productOrderId}`,
             channel: 'naver',
             variant_name: null,
@@ -346,12 +352,12 @@ export async function POST(
     for (const item of allItems) {
       const result = await pool.query(
         `INSERT INTO sale_records
-           (user_id, product_cost_id, sold_at, quantity, selling_price, coupon_discount, channel, coupang_order_item_id, variant_name, shipping_fee)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           (user_id, product_cost_id, sold_at, quantity, selling_price, sale_amount, coupon_discount, channel, coupang_order_item_id, variant_name, shipping_fee)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          ON CONFLICT (coupang_order_item_id) DO UPDATE
            SET coupon_discount = EXCLUDED.coupon_discount
            WHERE sale_records.coupon_discount = 0`,
-        [user.userId, id, item.sold_at, item.quantity, item.selling_price, item.coupon_discount, item.channel, item.coupang_order_item_id, item.variant_name ?? null, item.shipping_fee],
+        [user.userId, id, item.sold_at, item.quantity, item.selling_price, item.sale_amount, item.coupon_discount, item.channel, item.coupang_order_item_id, item.variant_name ?? null, item.shipping_fee],
       );
       if ((result.rowCount ?? 0) > 0) imported++;
       else skipped++;
