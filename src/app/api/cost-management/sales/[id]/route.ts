@@ -71,6 +71,7 @@ export async function PATCH(
        SET sold_at         = COALESCE($1, sold_at),
            quantity        = COALESCE($2, quantity),
            selling_price   = COALESCE($3, selling_price),
+           sale_amount     = COALESCE($3, selling_price) * COALESCE($2, quantity),
            shipping_fee    = COALESCE($4, shipping_fee),
            coupon_discount = COALESCE($5, coupon_discount),
            channel         = COALESCE($6, channel)

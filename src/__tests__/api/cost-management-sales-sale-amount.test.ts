@@ -49,3 +49,29 @@ describe('POST sales — sale_amount', () => {
     expect(params).toContain(30000);
   });
 });
+
+describe('PATCH sales — sale_amount 재계산', () => {
+  let mockQuery: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetCurrentUser.mockResolvedValue({ userId: 'u1', email: 't@e.com' });
+    mockQuery = vi.fn().mockResolvedValue({ rows: [{ id: 'sale-1' }] }); // UPDATE RETURNING
+    mockGetPool.mockReturnValue({ query: mockQuery });
+  });
+
+  it('수량·판매가 수정 시 sale_amount를 COALESCE 곱으로 재계산', async () => {
+    const { PATCH } = await import('@/app/api/cost-management/sales/[id]/route');
+    const req = new NextRequest('http://localhost/api/cost-management/sales/sale-1', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ quantity: 5 }),
+    });
+    const res = await PATCH(req, { params: Promise.resolve({ id: 'sale-1' }) });
+    expect(res.status).toBe(200);
+    const sql = mockQuery.mock.calls[0][0] as string;
+    // UPDATE에 sale_amount 재계산이 포함돼야 함
+    expect(sql).toContain('sale_amount');
+    expect(sql).toMatch(/sale_amount\s*=\s*COALESCE/);
+  });
+});
