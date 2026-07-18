@@ -662,37 +662,37 @@ export class CoupangClient {
 
   // ─── 지급 내역 (정산) 조회 ─────────────────────────────
   /**
-   * settlement-histories — 월별 지급 확정 내역.
+   * settlement-histories — 월별(주 단위, 인식 기준) 정산 내역.
    * provider가 marketplace_openapi로 revenue-history(openapi)와 다르나 HMAC 서명은 경로 기반이라 동일 request() 사용.
-   * 응답이 지급 주기별 배열이면 finalAmount 합산, 최근 settlementDate를 대표로 반환. 데이터 없으면 null.
-   * 주의: 원본 필드명은 2026-05-21 스펙 학습분 기준 — 실응답과 다르면 매핑 조정.
+   * 응답은 revenueRecognitionYearMonth 내 주(WEEKLY) 단위 배열. 필드(실응답 검증):
+   *   totalSale(정산매출) · serviceFee(수수료) · settlementTargetAmount(정산 대상액=매출-수수료)
+   *   · settlementAmount(1차 지급) · lastAmount(2차 지급) · deductionAmount(차감) · settlementDate(지급일)
+   * 월 대표값으로 각 금액을 합산, 최근 settlementDate를 반환. 데이터 없으면 null.
+   * 주의: "인식(구매확정) 기준"이라 이번 달은 정산된 주까지만 반영(부분).
    */
   async getSettlementHistories(yearMonth: string): Promise<{
-    finalAmount: number;
     settlementTargetAmount: number;
+    totalSale: number;
     serviceFee: number;
     settlementDate: string;
-    status: string;
   } | null> {
     const url = `/v2/providers/marketplace_openapi/apis/api/v1/settlement-histories?vendorId=${this.vendorId}&revenueRecognitionYearMonth=${yearMonth}`;
     await sleep(API_DELAY);
     const res = await this.request<Array<Record<string, unknown>>>('GET', url);
     const rows = Array.isArray(res.data) ? res.data : [];
     if (rows.length === 0) return null;
-    let finalAmount = 0;
     let settlementTargetAmount = 0;
+    let totalSale = 0;
     let serviceFee = 0;
     let settlementDate = '';
-    let status = '';
     for (const r of rows) {
-      finalAmount += Number(r.finalAmount ?? 0);
       settlementTargetAmount += Number(r.settlementTargetAmount ?? 0);
+      totalSale += Number(r.totalSale ?? 0);
       serviceFee += Number(r.serviceFee ?? 0);
       const d = String(r.settlementDate ?? '');
       if (d > settlementDate) settlementDate = d;   // 최근 지급일
-      status = String(r.status ?? status);
     }
-    return { finalAmount, settlementTargetAmount, serviceFee, settlementDate, status };
+    return { settlementTargetAmount, totalSale, serviceFee, settlementDate };
   }
 
   /**

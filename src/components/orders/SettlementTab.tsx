@@ -38,7 +38,7 @@ export default function SettlementTab() {
   const [data, setData] = useState<DailyResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [modal, setModal] = useState<{ date: string; purchase: number; adSpend: number } | null>(null);
-  const [payout, setPayout] = useState<{ finalAmount: number; settlementDate: string; status: string } | null>(null);
+  const [payout, setPayout] = useState<{ settlementTargetAmount: number; totalSale: number; settlementDate: string } | null>(null);
   const [payoutLoading, setPayoutLoading] = useState(false);
 
   const load = useCallback(async () => {
@@ -112,18 +112,19 @@ export default function SettlementTab() {
       </div>
 
       {payoutLoading ? (
-        <div style={{ fontSize: 12, color: '#a1a1aa', marginBottom: 12 }}>쿠팡 지급 조회 중…</div>
-      ) : payout && payout.finalAmount > 0 ? (
+        <div style={{ fontSize: 12, color: '#a1a1aa', marginBottom: 12 }}>쿠팡 정산 조회 중…</div>
+      ) : payout && payout.settlementTargetAmount > 0 ? (
         <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '10px 12px', fontSize: 12, color: '#1e3a5f', marginBottom: 12 }}>
-          <b>쿠팡 지급 확정 {won(payout.finalAmount)}원</b>
+          <b>쿠팡 정산 대상액 {won(payout.settlementTargetAmount)}원</b>
           {payout.settlementDate ? ` (지급일 ${payout.settlementDate})` : ''}
           {' · '}내 장부 정산예상 {won(expected)}원
-          {' · '}차이 <b style={{ color: payout.finalAmount - expected < 0 ? '#b91c1c' : '#14532d' }}>{won(payout.finalAmount - expected)}원</b>
-          <span style={{ color: '#93a3b8' }}> · 월 단위 참고 대조</span>
+          {' · '}차이 <b style={{ color: payout.settlementTargetAmount - expected < 0 ? '#b91c1c' : '#14532d' }}>{won(payout.settlementTargetAmount - expected)}원</b>
+          <br />
+          <span style={{ color: '#93a3b8' }}>쿠팡 정산 기준(인식 완료분) · 이번 달은 정산 진행 중이라 일부만 반영됩니다. 완전 대조는 지난달로 보세요.</span>
         </div>
       ) : (
         <div style={{ background: '#f4f4f5', border: '1px solid #e5e5e5', borderRadius: 8, padding: '10px 12px', fontSize: 12, color: '#71717a', marginBottom: 12 }}>
-          쿠팡 지급 미확정 — 정산 완료 후 표시됩니다.
+          쿠팡 정산 미확정 — 정산(구매확정) 후 표시됩니다.
         </div>
       )}
 

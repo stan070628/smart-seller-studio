@@ -32,8 +32,8 @@ describe('GET settlement/payout', () => {
   it('지급 데이터 있으면 payout 반환', async () => {
     mockClient.mockReturnValue({
       getSettlementHistories: vi.fn().mockResolvedValue({
-        finalAmount: 12450000, settlementTargetAmount: 13500000, serviceFee: 1500000,
-        settlementDate: '2026-08-03', status: 'SUBJECT',
+        settlementTargetAmount: 192492, totalSale: 213460, serviceFee: 20968,
+        settlementDate: '2026-07-27',
       }),
     });
     const { GET } = await import('@/app/api/settlement/payout/route');
@@ -41,8 +41,8 @@ describe('GET settlement/payout', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.success).toBe(true);
-    expect(json.payout.finalAmount).toBe(12450000);
-    expect(json.payout.settlementDate).toBe('2026-08-03');
+    expect(json.payout.settlementTargetAmount).toBe(192492);
+    expect(json.payout.settlementDate).toBe('2026-07-27');
   });
 
   it('데이터 없으면 payout null', async () => {
