@@ -38,7 +38,7 @@ export async function PUT(
              box_cost = EXCLUDED.box_cost,
              parcel_cost = EXCLUDED.parcel_cost,
              box_memo = EXCLUDED.box_memo,
-             memo = EXCLUDED.memo
+             memo = COALESCE(EXCLUDED.memo, daily_expenses.memo)
        RETURNING *`,
       [user.userId, date, 0, boxCost, parcelCost, boxMemo, memo],
     );

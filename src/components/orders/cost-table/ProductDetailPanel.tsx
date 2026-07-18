@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 interface DetailProduct {
   id: string;
@@ -80,21 +80,30 @@ export default function ProductDetailPanel({
     void loadAdSpend();
   }, [product.id, adFrom, adTo]);
 
+  // Enter는 commitEdit → setEditingDate(null)로 input을 언마운트시켜 onBlur가
+  // commitEdit을 재호출한다. 같은 날짜에 대한 이중 커밋(PATCH·재조회 2회)을 막는다.
+  const committingRef = useRef<string | null>(null);
   const commitEdit = async (adDate: string) => {
+    if (committingRef.current === adDate) return;
+    committingRef.current = adDate;
     const num = parseFloat(editValue.replace(/,/g, ''));
     const safe = isNaN(num) || num < 0 ? 0 : num;
     const prev = adByDate[adDate];
     setAdByDate((m) => ({ ...m, [adDate]: safe })); // 낙관적
     setEditingDate(null);
-    const ok = await onSaveAdSpend(product.id, adDate, String(safe));
-    if (!ok) {
-      // 저장 실패 시 롤백
-      setAdByDate((m) => {
-        const next = { ...m };
-        if (prev === undefined) delete next[adDate];
-        else next[adDate] = prev;
-        return next;
-      });
+    try {
+      const ok = await onSaveAdSpend(product.id, adDate, String(safe));
+      if (!ok) {
+        // 저장 실패 시 롤백
+        setAdByDate((m) => {
+          const next = { ...m };
+          if (prev === undefined) delete next[adDate];
+          else next[adDate] = prev;
+          return next;
+        });
+      }
+    } finally {
+      committingRef.current = null;
     }
   };
 
