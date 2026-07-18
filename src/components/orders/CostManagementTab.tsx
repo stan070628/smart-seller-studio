@@ -912,7 +912,6 @@ export default function CostManagementTab() {
                             colCount={COL_COUNT}
                             onToggleDetail={toggleDetail}
                             onOpenDrawer={setDrawerProductId}
-                            onSaveAdSpend={saveAdSpend}
                             onHide={() => toggleHide(child)}
                             onDelete={(prod) => deleteProduct(prod.id, prod.product_name)}
                             onEditChannel={(_prod, anchorEl) => setChannelEditTarget({ product: child, anchorEl })}
@@ -949,7 +948,6 @@ export default function CostManagementTab() {
                       colCount={COL_COUNT}
                       onToggleDetail={toggleDetail}
                       onOpenDrawer={setDrawerProductId}
-                      onSaveAdSpend={saveAdSpend}
                       onHide={() => toggleHide(p)}
                       onDelete={(prod) => deleteProduct(prod.id, prod.product_name)}
                       onEditChannel={(_prod, anchorEl) => setChannelEditTarget({ product: p, anchorEl })}
