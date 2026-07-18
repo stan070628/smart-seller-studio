@@ -19,11 +19,11 @@
 
 ### 현재 실害 상태
 
-**지금은 `unit_multiplier > 1`인 상품이 없다** (사용자 확인, 2026-07-18). 따라서:
-- 기존 모든 `sale_records`가 `multiplier = 1` → `selling_price × quantity`가 현재는 정확.
-- 버그는 **잠복**해 있다. 2개입 상품을 등록하고 multiplier를 2로 설정하는 순간부터 그 상품 매출이 2배로 뜨기 시작한다.
+**정정(2026-07-18, 실제 DB 검증):** 브레인스토밍 중 "배수>1 상품 없음"으로 들었으나 이는 사실이 아니었다. 운영 DB에 배수>1 옵션 판매가 **67건** 존재한다 — 다슈 왁스 2·3개입, LABNOSH 7개입. 따라서:
+- 이 67건은 `selling_price × quantity`가 **현재도 배수배로 부풀려져 있고**, 원가 탭의 해당 상품 매출/실현손익이 이미 틀려 있다.
+- 나머지 1369건(전체 1436건)은 배수 1이라 정확.
 
-**따라서 이 스펙의 목적은 "지금 틀린 데이터 교정"이 아니라 "읽기·쓰기 경로를 축-정합하게 만들어 앞으로 안 터지게 하고, 겸사겸사 `sale_amount`를 무손실로 채워둔다"이다.** 백필이 공짜인 지금 해둔다.
+**따라서 이 스펙의 목적은 두 가지다: (1) 읽기·쓰기 경로를 축-정합하게 만들어 앞으로 안 터지게 하고, (2) `sale_amount`를 채우면서 기존 67건의 부풀린 매출을 바로잡는다.** 백필은 §3처럼 **배수 인지(multiplier-aware)** 여야 한다 — 단순 `selling_price × quantity`는 이 67건을 오염시킨다.
 
 ## 2. 접근 — 매출을 저장하고, 다시는 곱으로 유도하지 않는다
 
@@ -51,17 +51,27 @@
 
 > 번호 주의: 본 스펙이 선행이므로 다음 순번을 먼저 차지한다. `2026-07-17-daily-settlement`의 `daily_expenses` 마이그레이션과 §4.2 `shipping_fee` 복구 마이그레이션은 그 뒤 번호로 밀린다. 최종 번호는 구현 시 확정.
 
+**배수 인지 2단계 백필** (구현된 최종본은 `supabase/migrations/087_sale_records_sale_amount.sql`):
+
 ```sql
 ALTER TABLE sale_records ADD COLUMN IF NOT EXISTS sale_amount int;
 
--- 백필: 현재 전 판매가 multiplier=1이므로 selling_price×quantity가 정확하다.
--- 이 UPDATE가 옳은 것은 "multiplier>1 판매가 존재하지 않는다"는 전제 위에서만 성립한다.
+-- 1단계: 배수 1 가정 백필
 UPDATE sale_records SET sale_amount = selling_price * quantity WHERE sale_amount IS NULL;
+
+-- 2단계: 배수>1 옵션(coupang_order_item_id 끝자리 = vendorItemId) 교정
+UPDATE sale_records sr
+   SET sale_amount = sr.selling_price * sr.quantity / m.unit_multiplier
+  FROM (SELECT external_id::text AS ext, unit_multiplier
+        FROM product_cost_channels WHERE unit_multiplier > 1) m
+ WHERE sr.coupang_order_item_id IS NOT NULL
+   AND split_part(sr.coupang_order_item_id, '-',
+         array_length(string_to_array(sr.coupang_order_item_id, '-'), 1)) = m.ext;
 ```
 
 - **NOT NULL로 하지 않는다.** 백필과 신규 코드 배포 사이의 틈, 레거시 행 안전을 위해 NULL을 허용하고 읽기 경로가 폴백한다(§5).
-- `IF NOT EXISTS` — 운영 DB 재적용 무해.
-- 주석에 전제("multiplier>1 없음")를 명시해 향후 오해 방지.
+- `IF NOT EXISTS` — 운영 DB 재적용 무해. 2단계 UPDATE는 매칭 행을 무조건 덮어 멱등적으로 교정한다.
+- **트랜잭션 롤백 드라이런 검증**: 1436건 백필·67건 교정·NULL 0·67건 전부 배수로 나누어떨어짐 확인.
 
 ## 4. 쓰기 경로 — 임포트가 sale_amount를 채운다
 

@@ -185,4 +185,44 @@ describe('calculateFifo', () => {
     expect(result.total_realized_profit).toBe(0);
   });
 
+  it('sale_amount가 있으면 매출은 sale_amount 기준 (2개입: quantity=2, 팩가 30000)', () => {
+    // 2개입 1건 판매: 재고 2개 차감(quantity=2), 실매출은 팩가 30000.
+    // 버그 코드는 selling_price(30000) × quantity(2) = 60000으로 매출을 2배 계산한다.
+    const batches = [
+      { id: 'b1', received_at: '2026-04-01', quantity: 10, unit_cost: 10000, unit_shipping_fee: 0, unit_rg_shipping_fee: 0 },
+    ];
+    const sales = [
+      { id: 's1', sold_at: '2026-05-01', quantity: 2, selling_price: 30000, sale_amount: 30000 },
+    ];
+    const result = calculateFifo(batches, sales, 0.1);
+    // 매출 30000 - 수수료 round(30000*0.1)=3000 - 원가(10000*2=20000) = 7000
+    expect(result.sale_details[0].realized_profit).toBe(7000);
+    expect(result.total_realized_profit).toBe(7000);
+  });
+
+  it('sale_amount가 null이면 selling_price × quantity로 폴백 (레거시 행)', () => {
+    const batches = [
+      { id: 'b1', received_at: '2026-04-01', quantity: 10, unit_cost: 10000, unit_shipping_fee: 0, unit_rg_shipping_fee: 0 },
+    ];
+    const sales = [
+      { id: 's1', sold_at: '2026-05-01', quantity: 10, selling_price: 20000 }, // sale_amount 없음
+    ];
+    const result = calculateFifo(batches, sales, 0.1);
+    // 폴백 매출 200000 - 수수료 20000 - 원가 100000 = 80000 (기존 동작과 동일)
+    expect(result.total_realized_profit).toBe(80000);
+  });
+
+  it('쿠폰은 총액에서 1회만 차감 (수량 2, 쿠폰 6000 → 과차감 없음)', () => {
+    const batches = [
+      { id: 'b1', received_at: '2026-04-01', quantity: 10, unit_cost: 10000, unit_shipping_fee: 0, unit_rg_shipping_fee: 0 },
+    ];
+    const sales = [
+      { id: 's1', sold_at: '2026-05-01', quantity: 2, selling_price: 40000, sale_amount: 40000, coupon_discount: 6000 },
+    ];
+    const result = calculateFifo(batches, sales, 0.1);
+    // 실효매출 40000-6000=34000, 수수료 round(34000*0.1)=3400, 원가 20000
+    // 손익 34000 - 20000 - 3400 = 10600
+    expect(result.sale_details[0].realized_profit).toBe(10600);
+  });
+
 });

@@ -363,7 +363,7 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
           <thead>
             <tr style={{ background: '#f9f9f9', borderBottom: '1px solid #e5e5e5' }}>
-              {['판매일', '수량', '판매가', '쿠폰할인', '채널', '사이즈', '택배비', ''].map((h, i) => (
+              {['판매일', '수량', '판매가(단품)', '쿠폰할인', '채널', '사이즈', '택배비', ''].map((h, i) => (
                 <th key={`${h}-${i}`} style={{ padding: '6px 8px', textAlign: h === '판매일' ? 'left' : 'right', fontWeight: 600, color: '#27272a' }}>{h}</th>
               ))}
             </tr>

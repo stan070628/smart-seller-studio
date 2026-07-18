@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
 
     // 판매는 전체 조회 (재고/FIFO 계산 기준)
     const { rows: allSales } = await pool.query(
-      `SELECT id, product_cost_id, sold_at, quantity, selling_price, coupon_discount, channel, shipping_fee FROM sale_records WHERE user_id = $1 AND voided_at IS NULL`,
+      `SELECT id, product_cost_id, sold_at, quantity, selling_price, sale_amount, coupon_discount, channel, shipping_fee FROM sale_records WHERE user_id = $1 AND voided_at IS NULL`,
       [user.userId],
     );
 
@@ -124,6 +124,7 @@ export async function GET(request: NextRequest) {
         sold_at: s.sold_at instanceof Date ? s.sold_at.toISOString().slice(0, 10) : String(s.sold_at).slice(0, 10),
         quantity: Number(s.quantity),
         selling_price: Number(s.selling_price),
+        sale_amount: s.sale_amount == null ? null : Number(s.sale_amount),
         coupon_discount: Number(s.coupon_discount ?? 0),
         channel: s.channel ?? SALE_CHANNEL.MANUAL,
         shipping_fee: Number(s.shipping_fee ?? 0),
@@ -213,7 +214,7 @@ export async function GET(request: NextRequest) {
       const periodRealizedProfit = fifoResult.sale_details
         .filter((d) => periodSaleIds.has(d.saleId))
         .reduce((sum, d) => sum + d.realized_profit, 0);
-      const periodSalesAmount = pFilteredSales.reduce((s, sale) => s + sale.selling_price * sale.quantity, 0);
+      const periodSalesAmount = pFilteredSales.reduce((s, sale) => s + (sale.sale_amount ?? sale.selling_price * sale.quantity), 0);
 
       // product_ad_spend 에서 광고비 조회 및 ROAS 계산
       const adSpend = adSpendByProduct.get(p.id) ?? 0;

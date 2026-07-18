@@ -48,6 +48,7 @@ export async function POST(request: NextRequest) {
       sold_at: string;
       quantity: number;
       selling_price: number;
+      sale_amount: number;
       naver_order_id: string;
     }> = [];
 
@@ -71,6 +72,7 @@ export async function POST(request: NextRequest) {
         sold_at: soldAt,
         quantity: order.quantity,
         selling_price: unitPrice,
+        sale_amount: order.totalPaymentAmount,
         naver_order_id: `naver-${order.productOrderId}`,
       });
     }
@@ -82,13 +84,13 @@ export async function POST(request: NextRequest) {
       const values: unknown[] = [];
       const shippingFee = resolveSaleShippingFee('naver');
       const placeholders = chunk.map((rec, idx) => {
-        const base = idx * 7;
-        values.push(user.userId, rec.product_cost_id, rec.sold_at, rec.quantity, rec.selling_price, rec.naver_order_id, shippingFee);
-        return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},'naver',$${base + 6},$${base + 7})`;
+        const base = idx * 8;
+        values.push(user.userId, rec.product_cost_id, rec.sold_at, rec.quantity, rec.selling_price, rec.sale_amount, rec.naver_order_id, shippingFee);
+        return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},$${base + 6},'naver',$${base + 7},$${base + 8})`;
       });
       const r = await pool.query(
         `INSERT INTO sale_records
-           (user_id, product_cost_id, sold_at, quantity, selling_price, channel, coupang_order_item_id, shipping_fee)
+           (user_id, product_cost_id, sold_at, quantity, selling_price, sale_amount, channel, coupang_order_item_id, shipping_fee)
          VALUES ${placeholders.join(',')}
          ON CONFLICT (coupang_order_item_id) DO NOTHING`,
         values,
