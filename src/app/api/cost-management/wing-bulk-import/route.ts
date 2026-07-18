@@ -95,6 +95,7 @@ export async function POST(request: NextRequest) {
       sold_at: string;
       quantity: number;
       selling_price: number;
+      sale_amount: number;
       coupang_order_item_id: string;
     }> = [];
 
@@ -128,6 +129,7 @@ export async function POST(request: NextRequest) {
               sold_at: soldAt,
               quantity: item.quantity * multiplier,
               selling_price: item.salePrice,
+              sale_amount: item.saleAmount,
               coupang_order_item_id: `wing-${order.orderId}-${item.vendorItemId}`,
             });
           }
@@ -140,19 +142,19 @@ export async function POST(request: NextRequest) {
     let imported = 0;
     if (records.length > 0) {
       // bulk INSERT: VALUES ($1,$2,...), ($7,$8,...) 형태로 구성
-      const CHUNK = 200; // 파라미터 수 한계 고려 (7 params × 200 = 1400)
+      const CHUNK = 175; // 파라미터 수 한계 고려 (8 params × 175 = 1400)
       for (let i = 0; i < records.length; i += CHUNK) {
         const chunk = records.slice(i, i + CHUNK);
         const values: unknown[] = [];
         const shippingFee = resolveSaleShippingFee('wing');
         const placeholders = chunk.map((rec, idx) => {
-          const base = idx * 7;
-          values.push(user.userId, rec.product_cost_id, rec.sold_at, rec.quantity, rec.selling_price, rec.coupang_order_item_id, shippingFee);
-          return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},'coupang',$${base + 6},$${base + 7})`;
+          const base = idx * 8;
+          values.push(user.userId, rec.product_cost_id, rec.sold_at, rec.quantity, rec.selling_price, rec.sale_amount, rec.coupang_order_item_id, shippingFee);
+          return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},$${base + 6},'coupang',$${base + 7},$${base + 8})`;
         });
         const result = await pool.query(
           `INSERT INTO sale_records
-             (user_id, product_cost_id, sold_at, quantity, selling_price, channel, coupang_order_item_id, shipping_fee)
+             (user_id, product_cost_id, sold_at, quantity, selling_price, sale_amount, channel, coupang_order_item_id, shipping_fee)
            VALUES ${placeholders.join(',')}
            ON CONFLICT (coupang_order_item_id) DO NOTHING`,
           values,
