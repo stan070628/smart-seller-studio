@@ -14,7 +14,6 @@ export interface SettlementSale {
   selling_price: number;
   quantity: number;
   coupon_discount: number;
-  shipping_fee: number;
   platform_fee_rate: number;
 }
 
@@ -32,7 +31,7 @@ export interface SettlementExpense {
   expense_date: string;
   ad_spend: number;
   box_cost: number;
-  parcel_adjustment: number;
+  parcel_cost: number;
 }
 
 export interface SettlementRow {
@@ -42,7 +41,6 @@ export interface SettlementRow {
   platformFee: number;
   purchase: number;
   parcelFee: number;
-  parcelAdjustment: number;
   adSpend: number;
   boxCost: number;
   netProfit: number;
@@ -57,7 +55,7 @@ export interface SettlementResult {
 function emptyAgg(): Omit<SettlementRow, 'date'> {
   return {
     revenue: 0, couponDiscount: 0, platformFee: 0, purchase: 0,
-    parcelFee: 0, parcelAdjustment: 0, adSpend: 0, boxCost: 0,
+    parcelFee: 0, adSpend: 0, boxCost: 0,
     netProfit: 0, orderCount: 0,
   };
 }
@@ -81,7 +79,6 @@ export function computeDailySettlement(
     row.revenue += revenue;
     row.couponDiscount += s.coupon_discount;
     row.platformFee += Math.round(effective * s.platform_fee_rate);
-    row.parcelFee += s.shipping_fee;
     row.orderCount += 1;
   }
 
@@ -96,7 +93,7 @@ export function computeDailySettlement(
     const row = get(x.expense_date);
     row.adSpend += x.ad_spend;
     row.boxCost += x.box_cost;
-    row.parcelAdjustment += x.parcel_adjustment;
+    row.parcelFee += x.parcel_cost;
   }
 
   const rows: SettlementRow[] = [];
@@ -104,21 +101,20 @@ export function computeDailySettlement(
   for (const [date, a] of byDate) {
     a.netProfit =
       a.revenue - a.couponDiscount - a.platformFee - a.purchase
-      - a.parcelFee - a.adSpend - a.boxCost + a.parcelAdjustment;
+      - a.parcelFee - a.adSpend - a.boxCost;
     rows.push({ date, ...a });
     total.revenue += a.revenue;
     total.couponDiscount += a.couponDiscount;
     total.platformFee += a.platformFee;
     total.purchase += a.purchase;
     total.parcelFee += a.parcelFee;
-    total.parcelAdjustment += a.parcelAdjustment;
     total.adSpend += a.adSpend;
     total.boxCost += a.boxCost;
     total.orderCount += a.orderCount;
   }
   total.netProfit =
     total.revenue - total.couponDiscount - total.platformFee - total.purchase
-    - total.parcelFee - total.adSpend - total.boxCost + total.parcelAdjustment;
+    - total.parcelFee - total.adSpend - total.boxCost;
 
   rows.sort((a, b) => b.date.localeCompare(a.date));
   return { rows, monthTotal: total };

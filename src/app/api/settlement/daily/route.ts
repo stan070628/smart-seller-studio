@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
       pool.query(
         `SELECT to_char(sr.sold_at, 'YYYY-MM-DD') AS sold_at,
                 sr.sale_amount, sr.selling_price, sr.quantity, sr.coupon_discount,
-                sr.shipping_fee, pc.platform_fee_rate
+                pc.platform_fee_rate
            FROM sale_records sr
            JOIN product_costs pc ON pc.id = sr.product_cost_id
           WHERE sr.user_id = $1 AND sr.voided_at IS NULL
@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
       ),
       pool.query(
         `SELECT to_char(expense_date, 'YYYY-MM-DD') AS expense_date,
-                ad_spend, box_cost, parcel_adjustment
+                ad_spend, box_cost, parcel_cost
            FROM daily_expenses
           WHERE user_id = $1 AND expense_date BETWEEN $2 AND $3`,
         [user.userId, from, to],
@@ -52,7 +52,6 @@ export async function GET(req: NextRequest) {
       selling_price: Number(r.selling_price),
       quantity: Number(r.quantity),
       coupon_discount: Number(r.coupon_discount ?? 0),
-      shipping_fee: Number(r.shipping_fee ?? 0),
       platform_fee_rate: Number(r.platform_fee_rate),
     }));
     const entries: SettlementEntry[] = entriesRes.rows.map((r) => ({
@@ -66,7 +65,7 @@ export async function GET(req: NextRequest) {
       expense_date: r.expense_date,
       ad_spend: Number(r.ad_spend ?? 0),
       box_cost: Number(r.box_cost ?? 0),
-      parcel_adjustment: Number(r.parcel_adjustment ?? 0),
+      parcel_cost: Number(r.parcel_cost ?? 0),
     }));
 
     const result = computeDailySettlement(sales, entries, expenses);
