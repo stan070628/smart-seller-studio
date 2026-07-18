@@ -117,10 +117,10 @@ export async function POST(
     if (check.length === 0) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
 
     const { rows } = await pool.query(
-      `INSERT INTO sale_records (user_id, product_cost_id, sold_at, quantity, selling_price, channel, shipping_fee, coupon_discount)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO sale_records (user_id, product_cost_id, sold_at, quantity, selling_price, sale_amount, channel, shipping_fee, coupon_discount)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
-      [user.userId, id, sold_at, quantity, selling_price, saleChannel, shipping_fee, couponDiscount],
+      [user.userId, id, sold_at, quantity, selling_price, selling_price * quantity, saleChannel, shipping_fee, couponDiscount],
     );
 
     return NextResponse.json({ success: true, data: rows[0] }, { status: 201 });
