@@ -100,7 +100,7 @@ export default function ExpenseModal({ date, purchase, onClose, onSaved }: Props
         )}
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #e5e5e5', background: '#fff', cursor: 'pointer', fontSize: 13 }}>취소</button>
+          <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #e5e5e5', background: '#fff', color: '#3f3f46', cursor: 'pointer', fontSize: 13 }}>취소</button>
           <button onClick={save} disabled={saving || loading} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#be0014', color: '#fff', cursor: saving || loading ? 'default' : 'pointer', fontSize: 13, fontWeight: 600, opacity: saving || loading ? 0.6 : 1 }}>{saving ? '저장 중…' : '저장'}</button>
         </div>
       </div>

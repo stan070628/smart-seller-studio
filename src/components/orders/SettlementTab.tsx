@@ -85,9 +85,9 @@ export default function SettlementTab() {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-        <button onClick={() => setYm((m) => shiftMonth(m, -1))} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #e5e5e5', background: '#fff', cursor: 'pointer' }}>‹ 이전달</button>
+        <button onClick={() => setYm((m) => shiftMonth(m, -1))} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #e5e5e5', background: '#fff', color: '#3f3f46', cursor: 'pointer' }}>‹ 이전달</button>
         <span style={{ fontWeight: 700, fontSize: 14 }}>{ym}</span>
-        <button onClick={() => setYm((m) => shiftMonth(m, 1))} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #e5e5e5', background: '#fff', cursor: 'pointer' }}>다음달 ›</button>
+        <button onClick={() => setYm((m) => shiftMonth(m, 1))} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #e5e5e5', background: '#fff', color: '#3f3f46', cursor: 'pointer' }}>다음달 ›</button>
         {loading && <span style={{ color: '#a1a1aa', fontSize: 12 }}>불러오는 중…</span>}
       </div>
 
