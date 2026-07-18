@@ -69,6 +69,7 @@ export async function POST(request: NextRequest) {
       sold_at: string;
       quantity: number;
       selling_price: number;
+      sale_amount: number;
       coupang_order_item_id: string;
     }> = [];
 
@@ -89,15 +90,18 @@ export async function POST(request: NextRequest) {
             if (!match) continue;
             if (item.salesQuantity <= 0) continue;
             const key = `rg-${order.orderId}-${item.vendorItemId}`;
+            const lineAmount = item.unitSalesPrice * item.salesQuantity;
             const existing = orderItemMap.get(key);
             if (existing) {
               existing.quantity += item.salesQuantity * match.multiplier;
+              existing.sale_amount += lineAmount;
             } else {
               orderItemMap.set(key, {
                 product_cost_id: match.id,
                 sold_at: soldAt,
                 quantity: item.salesQuantity * match.multiplier,
                 selling_price: item.unitSalesPrice,
+                sale_amount: lineAmount,
                 coupang_order_item_id: key,
               });
             }
@@ -114,10 +118,10 @@ export async function POST(request: NextRequest) {
     for (const item of items) {
       const result = await pool.query(
         `INSERT INTO sale_records
-           (user_id, product_cost_id, sold_at, quantity, selling_price, channel, coupang_order_item_id, shipping_fee)
-         VALUES ($1, $2, $3, $4, $5, 'rocket_growth', $6, $7)
+           (user_id, product_cost_id, sold_at, quantity, selling_price, sale_amount, channel, coupang_order_item_id, shipping_fee)
+         VALUES ($1, $2, $3, $4, $5, $6, 'rocket_growth', $7, $8)
          ON CONFLICT (coupang_order_item_id) DO NOTHING`,
-        [user.userId, item.product_cost_id, item.sold_at, item.quantity, item.selling_price, item.coupang_order_item_id, resolveSaleShippingFee('rg')],
+        [user.userId, item.product_cost_id, item.sold_at, item.quantity, item.selling_price, item.sale_amount, item.coupang_order_item_id, resolveSaleShippingFee('rg')],
       );
       if ((result.rowCount ?? 0) > 0) imported++;
       else skipped++;
