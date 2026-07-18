@@ -49,3 +49,36 @@ export async function PATCH(
 
   return NextResponse.json({ success: true, data: rows[0] });
 }
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { id } = await params;
+  const { searchParams } = new URL(request.url);
+  const from = searchParams.get('from');
+  const to = searchParams.get('to');
+  if (!from || !to || !DATE_RE.test(from) || !DATE_RE.test(to)) {
+    return NextResponse.json(
+      { success: false, error: 'from, to (YYYY-MM-DD) required' },
+      { status: 400 },
+    );
+  }
+
+  const pool = getSourcingPool();
+  const { rows } = await pool.query(
+    `SELECT to_char(ad_date, 'YYYY-MM-DD') AS ad_date, ad_spend
+       FROM product_ad_spend_daily
+      WHERE user_id = $1 AND product_id = $2 AND ad_date BETWEEN $3 AND $4
+      ORDER BY ad_date`,
+    [user.userId, id, from, to],
+  );
+
+  const data = rows.map((r) => ({ ad_date: r.ad_date, ad_spend: Number(r.ad_spend) }));
+  return NextResponse.json({ success: true, data });
+}

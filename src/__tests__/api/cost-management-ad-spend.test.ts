@@ -86,3 +86,51 @@ describe('PATCH /api/cost-management/products/[id]/ad-spend', () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe('GET /api/cost-management/products/[id]/ad-spend', () => {
+  let mockQuery: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetCurrentUser.mockResolvedValue({ userId: 'user-uuid-123', email: 'test@example.com' });
+    mockQuery = vi.fn().mockResolvedValue({
+      rows: [{ ad_date: '2026-07-17', ad_spend: '15000' }],
+    });
+    mockGetPool.mockReturnValue({ query: mockQuery });
+  });
+
+  function getReq(id: string, qs: string): NextRequest {
+    return new NextRequest(`http://localhost/api/cost-management/products/${id}/ad-spend?${qs}`);
+  }
+
+  it('인증 없으면 401', async () => {
+    mockGetCurrentUser.mockResolvedValue(null);
+    const { GET } = await import('@/app/api/cost-management/products/[id]/ad-spend/route');
+    const res = await GET(getReq('prod-uuid', 'from=2026-07-01&to=2026-07-31'), {
+      params: Promise.resolve({ id: 'prod-uuid' }),
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it('from/to 없으면 400', async () => {
+    const { GET } = await import('@/app/api/cost-management/products/[id]/ad-spend/route');
+    const res = await GET(getReq('prod-uuid', 'from=2026-07-01'), {
+      params: Promise.resolve({ id: 'prod-uuid' }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('정상이면 날짜별 목록 반환', async () => {
+    const { GET } = await import('@/app/api/cost-management/products/[id]/ad-spend/route');
+    const res = await GET(getReq('prod-uuid', 'from=2026-07-01&to=2026-07-31'), {
+      params: Promise.resolve({ id: 'prod-uuid' }),
+    });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.success).toBe(true);
+    expect(json.data).toEqual([{ ad_date: '2026-07-17', ad_spend: 15000 }]);
+    const [sql, args] = mockQuery.mock.calls[0];
+    expect(sql).toMatch(/product_ad_spend_daily/i);
+    expect(args).toEqual(['user-uuid-123', 'prod-uuid', '2026-07-01', '2026-07-31']);
+  });
+});
