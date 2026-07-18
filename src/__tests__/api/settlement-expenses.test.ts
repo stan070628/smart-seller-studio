@@ -39,15 +39,16 @@ describe('PUT settlement/expenses/[date]', () => {
   it('upsert 쿼리에 ON CONFLICT + 값 포함', async () => {
     const { PUT } = await import('@/app/api/settlement/expenses/[date]/route');
     const res = await PUT(
-      makeReq('2026-07-16', { adSpend: 85000, boxCost: 120000, boxMemo: '중박스 500개', parcelAdjustment: -5000, memo: '' }),
+      makeReq('2026-07-16', { adSpend: 85000, boxCost: 120000, boxMemo: '중박스 500개', parcelCost: 42000, memo: '' }),
       { params: Promise.resolve({ date: '2026-07-16' }) },
     );
     expect(res.status).toBe(200);
     const sql = mockQuery.mock.calls[0][0] as string;
     const params = mockQuery.mock.calls[0][1] as unknown[];
     expect(sql).toMatch(/ON CONFLICT/i);
+    expect(sql).toMatch(/parcel_cost/i);
     expect(params).toContain(85000);
     expect(params).toContain(120000);
-    expect(params).toContain(-5000);
+    expect(params).toContain(42000);
   });
 });
