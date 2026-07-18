@@ -42,11 +42,13 @@ export interface SaleRow {
   quantity: number;
   /** 판매 단가 (원) */
   selling_price: number;
+  /** 실매출 총액 (원) — 채널 확정 금액. 없으면 selling_price × quantity로 폴백 */
+  sale_amount?: number | null;
   /** 채널 ('rocket_growth' | 'coupang' | 'manual' 등) — 채널별 FIFO 분리 시 필터링에 사용 */
   channel?: string;
   /** 건당 택배비 (원) — 실현손익에서 차감 */
   shipping_fee?: number;
-  /** 쿠폰 할인 합계 (원) — effective_price = selling_price - coupon_discount */
+  /** 쿠폰 할인 합계 (원) — effective_revenue = revenue - coupon_discount (매출 총액 축에서 1회 차감) */
   coupon_discount?: number;
 }
 
@@ -126,21 +128,29 @@ export function calculateFifo(
     const fifo_cost_per_unit =
       sale.quantity > 0 ? Math.round(totalCost / sale.quantity) : 0;
 
-    // 실효 판매가: 쿠폰 할인 차감 (없으면 selling_price 그대로)
-    // 쿠팡 정책상 coupon_discount > selling_price는 발생하지 않으나, 데이터 오류 시 음수가 될 수 있음
-    const effective_price = sale.selling_price - (sale.coupon_discount ?? 0);
+    // 매출: 채널 확정 총액(sale_amount) 우선, 없으면 selling_price × quantity 폴백.
+    // selling_price × quantity 는 multiplier > 1 에서 실매출을 부풀리므로 폴백 전용.
+    const revenue = sale.sale_amount ?? sale.selling_price * sale.quantity;
 
-    // 플랫폼 수수료: 실효 판매가 × 수수료율 (반올림)
-    const fee_per_unit = Math.round(effective_price * platformFeeRate);
+    // 실효 매출: 쿠폰 할인(건당 총액)을 매출 총액에서 1회 차감.
+    // (기존 코드는 단가에서 차감해 수량 > 1이면 과차감했음 — 총액 축으로 교정)
+    const effective_revenue = revenue - (sale.coupon_discount ?? 0);
 
-    // 단위 실현손익 (택배비 제외)
+    // 플랫폼 수수료: 실효 매출 총액 × 수수료율 (반올림)
+    const fee = Math.round(effective_revenue * platformFeeRate);
+
+    // 원가: FIFO 단위원가 × 수량 (기존과 동일, 이미 정확)
+    const cost = fifo_cost_per_unit * sale.quantity;
+
+    // 택배비 제외 손익 (per-unit 표시용 파생)
+    const profit_before_shipping = effective_revenue - cost - fee;
     const realized_profit_per_unit =
-      effective_price - fifo_cost_per_unit - fee_per_unit;
+      sale.quantity > 0 ? Math.round(profit_before_shipping / sale.quantity) : 0;
 
-    // 건당 택배비는 판매 1건당 한 번만 차감 (없으면 0). 수량 0이면 판매·배송 자체가 없으므로 0.
+    // 건당 택배비는 판매 1건당 한 번만 차감. 수량 0이면 판매·배송 자체가 없으므로 0.
     const shipping_fee = sale.shipping_fee ?? 0;
     const realized_profit =
-      sale.quantity > 0 ? realized_profit_per_unit * sale.quantity - shipping_fee : 0;
+      sale.quantity > 0 ? profit_before_shipping - shipping_fee : 0;
 
     sale_details.push({ saleId: sale.id, fifo_cost_per_unit, realized_profit_per_unit, realized_profit });
     total_realized_profit += realized_profit;
