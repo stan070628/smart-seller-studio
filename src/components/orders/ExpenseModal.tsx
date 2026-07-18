@@ -14,7 +14,6 @@ const won = (n: number) => n.toLocaleString('ko-KR');
 
 export default function ExpenseModal({ date, purchase, onClose, onSaved }: Props) {
   const [parcelCost, setParcelCost] = useState('');
-  const [adSpend, setAdSpend] = useState('');
   const [boxCost, setBoxCost] = useState('');
   const [boxMemo, setBoxMemo] = useState('');
   const [loading, setLoading] = useState(true);
@@ -30,7 +29,6 @@ export default function ExpenseModal({ date, purchase, onClose, onSaved }: Props
         const it = json.success && json.items?.[0];
         if (alive && it) {
           setParcelCost(it.parcelCost ? String(it.parcelCost) : '');
-          setAdSpend(it.adSpend ? String(it.adSpend) : '');
           setBoxCost(it.boxCost ? String(it.boxCost) : '');
           setBoxMemo(it.boxMemo ?? '');
         }
@@ -49,7 +47,7 @@ export default function ExpenseModal({ date, purchase, onClose, onSaved }: Props
       const res = await fetch(`/api/settlement/expenses/${date}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ parcelCost: num(parcelCost), adSpend: num(adSpend), boxCost: num(boxCost), boxMemo }),
+        body: JSON.stringify({ parcelCost: num(parcelCost), boxCost: num(boxCost), boxMemo }),
       });
       const json = await res.json();
       if (json.success) { toast.success('비용 저장됨'); onSaved(); }
@@ -87,9 +85,8 @@ export default function ExpenseModal({ date, purchase, onClose, onSaved }: Props
               <label style={label}>택배비</label>
               <input type="number" value={parcelCost} onChange={(e) => setParcelCost(e.target.value)} placeholder="0" style={input} />
             </div>
-            <div style={{ marginBottom: 12 }}>
-              <label style={label}>광고비</label>
-              <input type="number" value={adSpend} onChange={(e) => setAdSpend(e.target.value)} placeholder="0" style={input} />
+            <div style={{ marginBottom: 12, fontSize: 11, color: '#a1a1aa', lineHeight: 1.5 }}>
+              광고비는 <b>수익·원가</b> 탭에서 상품별·날짜별로 입력합니다.
             </div>
             <div style={{ marginBottom: 12 }}>
               <label style={label}>박스비</label>

@@ -22,7 +22,6 @@ export async function PUT(
   }
 
   const body = await req.json().catch(() => ({}));
-  const adSpend = toInt(body?.adSpend);
   const boxCost = toInt(body?.boxCost);
   const parcelCost = toInt(body?.parcelCost);
   const boxMemo = typeof body?.boxMemo === 'string' ? body.boxMemo : null;
@@ -41,7 +40,7 @@ export async function PUT(
              box_memo = EXCLUDED.box_memo,
              memo = EXCLUDED.memo
        RETURNING *`,
-      [user.userId, date, adSpend, boxCost, parcelCost, boxMemo, memo],
+      [user.userId, date, 0, boxCost, parcelCost, boxMemo, memo],
     );
     return NextResponse.json({ success: true, data: rows[0] });
   } catch (err) {
