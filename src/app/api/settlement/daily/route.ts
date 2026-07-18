@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
 
   const pool = getSourcingPool();
   try {
-    const [salesRes, entriesRes, expensesRes] = await Promise.all([
+    const [salesRes, entriesRes, expensesRes, adRes] = await Promise.all([
       pool.query(
         `SELECT to_char(sr.sold_at, 'YYYY-MM-DD') AS sold_at,
                 sr.sale_amount, sr.selling_price, sr.quantity, sr.coupon_discount,
@@ -44,6 +44,13 @@ export async function GET(req: NextRequest) {
           WHERE user_id = $1 AND expense_date BETWEEN $2 AND $3`,
         [user.userId, from, to],
       ),
+      pool.query(
+        `SELECT to_char(ad_date, 'YYYY-MM-DD') AS ad_date, SUM(ad_spend)::int AS ad_spend
+           FROM product_ad_spend_daily
+          WHERE user_id = $1 AND ad_date BETWEEN $2 AND $3
+          GROUP BY ad_date`,
+        [user.userId, from, to],
+      ),
     ]);
 
     const sales: SettlementSale[] = salesRes.rows.map((r) => ({
@@ -63,10 +70,19 @@ export async function GET(req: NextRequest) {
     }));
     const expenses: SettlementExpense[] = expensesRes.rows.map((r) => ({
       expense_date: r.expense_date,
-      ad_spend: Number(r.ad_spend ?? 0),
+      ad_spend: 0, // 광고비는 product_ad_spend_daily 에서 주입
       box_cost: Number(r.box_cost ?? 0),
       parcel_cost: Number(r.parcel_cost ?? 0),
     }));
+    // 상품별 날짜 광고비 합계를 별도 비용 항목으로 추가 (computeDailySettlement이 날짜별 합산)
+    for (const r of adRes.rows) {
+      expenses.push({
+        expense_date: r.ad_date,
+        ad_spend: Number(r.ad_spend ?? 0),
+        box_cost: 0,
+        parcel_cost: 0,
+      });
+    }
 
     const result = computeDailySettlement(sales, entries, expenses);
     return NextResponse.json({ success: true, ...result });
