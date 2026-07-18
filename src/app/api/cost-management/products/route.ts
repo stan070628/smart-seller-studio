@@ -5,7 +5,6 @@ import { calculateProductMetrics } from '@/lib/cost-management/calculations';
 import type { CostEntryRow } from '@/lib/cost-management/calculations';
 import { calculateFifo, ENTRY_CHANNEL, SALE_CHANNEL } from '@/lib/cost-management/fifo';
 import type { PurchaseBatch, SaleRow, FifoSummary } from '@/lib/cost-management/fifo';
-import { getYearMonths } from '@/lib/cost-management/ad-spend';
 import { calcBreakevenRoas, determineWinnerStatus } from '@/lib/roi/calculations';
 
 // ─────────────────────────────────────────
@@ -132,16 +131,27 @@ export async function GET(request: NextRequest) {
       salesByProduct.set(s.product_cost_id, list);
     }
 
-    // product_ad_spend 테이블에서 기간 내 광고비 합산
-    const yearMonths = getYearMonths(from, to);
+    // product_ad_spend_daily 에서 기간 내 광고비 합산 (날짜 범위)
     const adSpendByProduct = new Map<string, number>();
-    if (yearMonths.length > 0) {
+    if (from && to) {
       const { rows: adRows } = await pool.query(
         `SELECT product_id, SUM(ad_spend)::float AS total_ad_spend
-         FROM product_ad_spend
-         WHERE user_id = $1 AND year_month = ANY($2::text[])
-         GROUP BY product_id`,
-        [user.userId, yearMonths],
+           FROM product_ad_spend_daily
+          WHERE user_id = $1 AND ad_date BETWEEN $2 AND $3
+          GROUP BY product_id`,
+        [user.userId, from, to],
+      );
+      for (const row of adRows) {
+        adSpendByProduct.set(row.product_id, Number(row.total_ad_spend));
+      }
+    } else {
+      // 전체 기간(all): 날짜 필터 없이 합산
+      const { rows: adRows } = await pool.query(
+        `SELECT product_id, SUM(ad_spend)::float AS total_ad_spend
+           FROM product_ad_spend_daily
+          WHERE user_id = $1
+          GROUP BY product_id`,
+        [user.userId],
       );
       for (const row of adRows) {
         adSpendByProduct.set(row.product_id, Number(row.total_ad_spend));
@@ -216,7 +226,7 @@ export async function GET(request: NextRequest) {
         .reduce((sum, d) => sum + d.realized_profit, 0);
       const periodSalesAmount = pFilteredSales.reduce((s, sale) => s + (sale.sale_amount ?? sale.selling_price * sale.quantity), 0);
 
-      // product_ad_spend 에서 광고비 조회 및 ROAS 계산
+      // product_ad_spend_daily 에서 광고비 조회 및 ROAS 계산
       const adSpend = adSpendByProduct.get(p.id) ?? 0;
       const adRoas = adSpend > 0 ? (periodSalesAmount / adSpend) * 100 : 0;
 
