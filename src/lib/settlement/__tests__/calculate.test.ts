@@ -92,6 +92,19 @@ describe('computeDailySettlement', () => {
     expect(monthTotal.netProfit).toBe(30000);
   });
 
+  it('취소분은 cancelled에 합산되고 순이익엔 영향 없음', () => {
+    const sales = [
+      { sold_at: '2026-07-16', sale_amount: 100000, selling_price: 100000, quantity: 1, coupon_discount: 0, platform_fee_rate: 0 },
+    ];
+    const cancellations = [
+      { date: '2026-07-16', amount: 30000 },
+    ];
+    const { rows } = computeDailySettlement(sales, noEntries, noExpenses, cancellations);
+    expect(rows[0].cancelled).toBe(30000);
+    expect(rows[0].revenue).toBe(100000);        // 매출은 유효 판매만(취소 제외됨, 호출부에서)
+    expect(rows[0].netProfit).toBe(100000);       // 취소는 순이익에 영향 없음
+  });
+
   it('빈 입력 → 빈 rows, monthTotal 0', () => {
     const { rows, monthTotal } = computeDailySettlement([], [], []);
     expect(rows).toHaveLength(0);

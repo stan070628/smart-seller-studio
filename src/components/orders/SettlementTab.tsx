@@ -5,7 +5,7 @@ import ExpenseModal from './ExpenseModal';
 
 interface Row {
   date: string;
-  revenue: number; couponDiscount: number; platformFee: number;
+  revenue: number; cancelled: number; couponDiscount: number; platformFee: number;
   purchase: number; parcelFee: number;
   adSpend: number; boxCost: number; netProfit: number; orderCount: number;
 }
@@ -96,13 +96,13 @@ export default function SettlementTab() {
           <thead>
             <tr style={{ background: '#f9f9f9', borderBottom: '1px solid #e5e5e5' }}>
               <th style={{ ...th, textAlign: 'left' }}>날짜</th>
-              <th style={th}>매출</th><th style={th}>쿠폰</th><th style={th}>수수료</th>
+              <th style={th}>매출</th><th style={th}>취소</th><th style={th}>쿠폰</th><th style={th}>수수료</th>
               <th style={th}>비용</th><th style={th}>순이익</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && !loading && (
-              <tr><td colSpan={6} style={{ ...td, textAlign: 'center', color: '#a1a1aa', padding: 20 }}>이 달 데이터가 없습니다</td></tr>
+              <tr><td colSpan={7} style={{ ...td, textAlign: 'center', color: '#a1a1aa', padding: 20 }}>이 달 데이터가 없습니다</td></tr>
             )}
             {rows.map((r) => {
               const prov = isProvisional(r.date);
@@ -113,6 +113,7 @@ export default function SettlementTab() {
                   {prov && <span style={{ marginLeft: 6, fontSize: 10, color: '#c2410c', background: '#ffedd5', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>미확정</span>}
                 </td>
                 <td style={td}>{won(r.revenue)}</td>
+                <td style={{ ...td, color: r.cancelled ? '#b91c1c' : '#a1a1aa' }}>{r.cancelled ? `-${won(r.cancelled)}` : '0'}</td>
                 <td style={td}>{r.couponDiscount ? `-${won(r.couponDiscount)}` : '0'}</td>
                 <td style={td}>{r.platformFee ? `-${won(r.platformFee)}` : '0'}</td>
                 <td style={costTd} onClick={() => setModal({ date: r.date, purchase: r.purchase, adSpend: r.adSpend })} title="클릭해 비용 내역 보기·입력">
@@ -128,6 +129,7 @@ export default function SettlementTab() {
               <tr style={{ background: '#fffbe6', borderTop: '2px solid #e5e5e5', fontWeight: 700 }}>
                 <td style={{ ...td, textAlign: 'left', fontWeight: 700 }}>월 합계</td>
                 <td style={td}>{won(total.revenue)}</td>
+                <td style={{ ...td, fontWeight: 700, color: total.cancelled ? '#b91c1c' : undefined }}>{total.cancelled ? `-${won(total.cancelled)}` : '0'}</td>
                 <td style={td}>-{won(total.couponDiscount)}</td>
                 <td style={td}>-{won(total.platformFee)}</td>
                 <td style={{ ...td, fontWeight: 700 }}>-{won(cost(total))}</td>

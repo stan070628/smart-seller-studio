@@ -25,7 +25,7 @@ describe('GET /api/settlement/daily — 광고비 소스', () => {
   });
 
   it('그날 상품별 광고비 합계가 adSpend로 반영', async () => {
-    // Promise.all 순서: sales, entries, expenses(daily_expenses), adDaily
+    // Promise.all 순서: sales, entries, expenses(daily_expenses), adDaily, cancel(voided)
     const mockQuery = vi.fn()
       .mockResolvedValueOnce({ rows: [
         { sold_at: '2026-07-17', sale_amount: '30000', selling_price: '30000', quantity: '1', coupon_discount: '0', platform_fee_rate: '0.1' },
@@ -36,6 +36,9 @@ describe('GET /api/settlement/daily — 광고비 소스', () => {
       ] })
       .mockResolvedValueOnce({ rows: [
         { ad_date: '2026-07-17', ad_spend: '12000' },
+      ] })
+      .mockResolvedValueOnce({ rows: [
+        { sold_at: '2026-07-17', amount: '5000' },
       ] });
     mockGetPool.mockReturnValue({ query: mockQuery });
 
@@ -47,5 +50,7 @@ describe('GET /api/settlement/daily — 광고비 소스', () => {
     // daily_expenses.ad_spend(99999)은 무시, product_ad_spend_daily 합계(12000)만 반영
     expect(row.adSpend).toBe(12000);
     expect(row.netProfit).toBe(30000 - 3000 - 12000);
+    // 취소분(voided)은 별도 라인, 순이익엔 영향 없음
+    expect(row.cancelled).toBe(5000);
   });
 });

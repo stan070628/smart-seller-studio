@@ -34,9 +34,16 @@ export interface SettlementExpense {
   parcel_cost: number;
 }
 
+/** 날짜별 취소 금액 (voided 판매 합계, 정보용 — 순이익엔 영향 없음) */
+export interface SettlementCancellation {
+  date: string;
+  amount: number;
+}
+
 export interface SettlementRow {
   date: string;
   revenue: number;
+  cancelled: number;
   couponDiscount: number;
   platformFee: number;
   purchase: number;
@@ -54,7 +61,7 @@ export interface SettlementResult {
 
 function emptyAgg(): Omit<SettlementRow, 'date'> {
   return {
-    revenue: 0, couponDiscount: 0, platformFee: 0, purchase: 0,
+    revenue: 0, cancelled: 0, couponDiscount: 0, platformFee: 0, purchase: 0,
     parcelFee: 0, adSpend: 0, boxCost: 0,
     netProfit: 0, orderCount: 0,
   };
@@ -64,6 +71,7 @@ export function computeDailySettlement(
   sales: SettlementSale[],
   entries: SettlementEntry[],
   expenses: SettlementExpense[],
+  cancellations: SettlementCancellation[] = [],
 ): SettlementResult {
   const byDate = new Map<string, Omit<SettlementRow, 'date'>>();
   const get = (d: string) => {
@@ -96,6 +104,11 @@ export function computeDailySettlement(
     row.parcelFee += x.parcel_cost;
   }
 
+  // 취소분(voided 판매)은 정보용 별도 라인. 순이익엔 반영하지 않는다(이미 매출에서 제외됨).
+  for (const c of cancellations) {
+    get(c.date).cancelled += c.amount;
+  }
+
   const rows: SettlementRow[] = [];
   const total = emptyAgg();
   for (const [date, a] of byDate) {
@@ -104,6 +117,7 @@ export function computeDailySettlement(
       - a.parcelFee - a.adSpend - a.boxCost;
     rows.push({ date, ...a });
     total.revenue += a.revenue;
+    total.cancelled += a.cancelled;
     total.couponDiscount += a.couponDiscount;
     total.platformFee += a.platformFee;
     total.purchase += a.purchase;

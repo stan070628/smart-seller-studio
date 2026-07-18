@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { computeDailySettlement } from '@/lib/settlement/calculate';
-import type { SettlementSale, SettlementEntry, SettlementExpense } from '@/lib/settlement/calculate';
+import type { SettlementSale, SettlementEntry, SettlementExpense, SettlementCancellation } from '@/lib/settlement/calculate';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
 
   const pool = getSourcingPool();
   try {
-    const [salesRes, entriesRes, expensesRes, adRes] = await Promise.all([
+    const [salesRes, entriesRes, expensesRes, adRes, cancelRes] = await Promise.all([
       pool.query(
         `SELECT to_char(sr.sold_at, 'YYYY-MM-DD') AS sold_at,
                 sr.sale_amount, sr.selling_price, sr.quantity, sr.coupon_discount,
@@ -49,6 +49,17 @@ export async function GET(req: NextRequest) {
            FROM product_ad_spend_daily
           WHERE user_id = $1 AND ad_date BETWEEN $2 AND $3
           GROUP BY ad_date`,
+        [user.userId, from, to],
+      ),
+      // 취소분(voided): 판매일 기준 합계 — 정보용 별도 라인
+      pool.query(
+        `SELECT to_char(sold_at, 'YYYY-MM-DD') AS sold_at,
+                SUM(COALESCE(sale_amount, selling_price*quantity))::int AS amount
+           FROM sale_records
+          WHERE user_id = $1 AND voided_at IS NOT NULL
+            AND channel IN ('coupang','rocket_growth')
+            AND sold_at BETWEEN $2 AND $3
+          GROUP BY sold_at`,
         [user.userId, from, to],
       ),
     ]);
@@ -84,7 +95,12 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const result = computeDailySettlement(sales, entries, expenses);
+    const cancellations: SettlementCancellation[] = cancelRes.rows.map((r) => ({
+      date: r.sold_at,
+      amount: Number(r.amount ?? 0),
+    }));
+
+    const result = computeDailySettlement(sales, entries, expenses, cancellations);
     return NextResponse.json({ success: true, ...result });
   } catch (err) {
     const msg = err instanceof Error ? err.message : '서버 오류';
