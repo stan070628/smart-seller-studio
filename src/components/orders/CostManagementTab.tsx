@@ -553,27 +553,34 @@ export default function CostManagementTab() {
     setProducts((prev) => prev.map((item) => item.id === productId ? { ...item, ...updates } : item));
   }
 
-  async function saveAdSpend(productId: string, adDate: string, value: string) {
+  // 성공 시 true, 실패 시 false 반환 — 호출부(상세 패널)가 낙관적 업데이트를 롤백할 수 있게 한다.
+  async function saveAdSpend(productId: string, adDate: string, value: string): Promise<boolean> {
     const num = parseFloat(value.replace(/,/g, ''));
-    if (isNaN(num) || num < 0) return;
-    const res = await fetch(`/api/cost-management/products/${productId}/ad-spend`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ad_date: adDate, ad_spend: num }),
-    });
-    const json = await res.json();
+    if (isNaN(num) || num < 0) return false;
+    let json;
+    try {
+      const res = await fetch(`/api/cost-management/products/${productId}/ad-spend`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ad_date: adDate, ad_spend: num }),
+      });
+      json = await res.json();
+    } catch {
+      toast.error('광고비 저장 실패');
+      return false;
+    }
     if (!json.success) {
       toast.error(json.error ?? '광고비 저장 실패');
-      return;
+      return false;
     }
     // 저장 후 해당 상품의 기간 광고비 합계를 재조회해 행 지표 갱신
     const range = getDateRange(preset, customFrom, customTo);
-    if (!range) return;
+    if (!range) return true;
     const listRes = await fetch(
       `/api/cost-management/products/${productId}/ad-spend?from=${range.from}&to=${range.to}`,
     );
     const listJson = await listRes.json();
-    if (!listJson.success) return;
+    if (!listJson.success) return true;
     const total = (listJson.data as Array<{ ad_spend: number }>).reduce((s, d) => s + d.ad_spend, 0);
     setProducts((prev) =>
       prev.map((p) => {
@@ -587,6 +594,7 @@ export default function CostManagementTab() {
         };
       }),
     );
+    return true;
   }
 
   return (

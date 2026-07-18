@@ -21,7 +21,7 @@ interface Props {
   isEditablePeriod: boolean;
   dateRange: { from: string; to: string } | null;
   onOpenDrawer: (productId: string) => void;
-  onSaveAdSpend: (productId: string, adDate: string, value: string) => void;
+  onSaveAdSpend: (productId: string, adDate: string, value: string) => Promise<boolean>;
   channelFilter: 'all' | 'rg' | 'wing' | 'naver';
   rgInventory: Map<string, number | null>;
   rgInventoryLoading: boolean;
@@ -67,12 +67,22 @@ export default function ProductDetailPanel({
       .finally(() => setAdLoading(false));
   }, [product.id, dateRange?.from, dateRange?.to]);
 
-  const commitEdit = (adDate: string) => {
+  const commitEdit = async (adDate: string) => {
     const num = parseFloat(editValue.replace(/,/g, ''));
     const safe = isNaN(num) || num < 0 ? 0 : num;
-    setAdByDate((prev) => ({ ...prev, [adDate]: safe })); // 낙관적
-    onSaveAdSpend(product.id, adDate, String(safe));
+    const prev = adByDate[adDate];
+    setAdByDate((m) => ({ ...m, [adDate]: safe })); // 낙관적
     setEditingDate(null);
+    const ok = await onSaveAdSpend(product.id, adDate, String(safe));
+    if (!ok) {
+      // 저장 실패 시 롤백
+      setAdByDate((m) => {
+        const next = { ...m };
+        if (prev === undefined) delete next[adDate];
+        else next[adDate] = prev;
+        return next;
+      });
+    }
   };
 
   const stat = (label: string, value: string) => (
