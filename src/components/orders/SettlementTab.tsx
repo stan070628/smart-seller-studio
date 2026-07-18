@@ -69,6 +69,15 @@ export default function SettlementTab() {
   const rows = data?.rows ?? [];
   const total = data?.monthTotal;
 
+  // 최근 며칠은 쿠팡 확정(윙 인식 ~3~4일, RG API 반영 ~1~2일) 전이라 실제보다 낮게 잡힌다.
+  // 트레일링 4일(오늘 포함)을 "미확정"으로 표시한다.
+  const todayKst = nowKst.toISOString().slice(0, 10);
+  const PROVISIONAL_DAYS = 4;
+  const isProvisional = (d: string) => {
+    const diff = Math.round((Date.parse(todayKst) - Date.parse(d)) / 86400000);
+    return diff >= 0 && diff < PROVISIONAL_DAYS;
+  };
+
   const th: React.CSSProperties = { padding: '8px 10px', textAlign: 'right', fontWeight: 600, color: '#27272a', fontSize: 12, whiteSpace: 'nowrap' };
   const td: React.CSSProperties = { padding: '6px 10px', textAlign: 'right', fontSize: 12, color: '#3f3f46', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' };
   const editable: React.CSSProperties = { ...td, background: '#eaf3ff', cursor: 'pointer' };
@@ -78,6 +87,9 @@ export default function SettlementTab() {
       <div style={{ background: '#fff8f6', border: '1px solid #f3d4cc', borderRadius: 8, padding: '10px 12px', fontSize: 12, color: '#7c2d12', marginBottom: 14 }}>
         현금 기준 — 물건 산 날 비용을 인식합니다. 쿠팡 윙·로켓그로스 판매만 집계하며, 수기 입력분은 제외됩니다.
         일괄 임포트분은 쿠폰이 반영되지 않을 수 있습니다. 상품별 손익은 <b>수익·원가</b> 탭을 보세요.
+        <br />
+        <b>미확정</b> 표시된 최근 며칠은 쿠팡 확정 전이라 실제보다 낮게 보일 수 있습니다.
+        며칠 뒤 <b>수익·원가</b> 탭의 &lsquo;판매 가져오기&rsquo;를 다시 누르면 채워집니다.
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
@@ -101,9 +113,14 @@ export default function SettlementTab() {
             {rows.length === 0 && !loading && (
               <tr><td colSpan={9} style={{ ...td, textAlign: 'center', color: '#a1a1aa', padding: 20 }}>이 달 데이터가 없습니다</td></tr>
             )}
-            {rows.map((r) => (
-              <tr key={r.date} style={{ borderBottom: '1px solid #f4f4f5' }}>
-                <td style={{ ...td, textAlign: 'left', fontWeight: 600 }}>{r.date.slice(5)}</td>
+            {rows.map((r) => {
+              const prov = isProvisional(r.date);
+              return (
+              <tr key={r.date} style={{ borderBottom: '1px solid #f4f4f5', background: prov ? '#f4f4f5' : undefined }}>
+                <td style={{ ...td, textAlign: 'left', fontWeight: 600 }}>
+                  {r.date.slice(5)}
+                  {prov && <span style={{ marginLeft: 6, fontSize: 10, color: '#c2410c', background: '#ffedd5', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>미확정</span>}
+                </td>
                 <td style={td}>{won(r.revenue)}</td>
                 <td style={td}>{r.couponDiscount ? `-${won(r.couponDiscount)}` : '0'}</td>
                 <td style={td}>{r.platformFee ? `-${won(r.platformFee)}` : '0'}</td>
@@ -123,7 +140,8 @@ export default function SettlementTab() {
                 ))}
                 <td style={{ ...td, fontWeight: 700, color: r.netProfit < 0 ? '#b91c1c' : '#14532d' }}>{won(r.netProfit)}</td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
           {total && rows.length > 0 && (
             <tfoot>
