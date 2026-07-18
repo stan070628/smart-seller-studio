@@ -1,6 +1,6 @@
 /**
- * PATCH /api/cost-management/products/[id]/ad-spend 테스트
- * 월별 광고비 upsert 테스트
+ * PATCH /api/cost-management/products/[id]/ad-spend
+ * 상품별 날짜별 광고비 upsert 테스트
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
@@ -17,11 +17,7 @@ const mockGetPool = getSourcingPool as ReturnType<typeof vi.fn>;
 function makeRequest(id: string, body: unknown): NextRequest {
   return new NextRequest(
     `http://localhost/api/cost-management/products/${id}/ad-spend`,
-    {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }
+    { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
   );
 }
 
@@ -32,7 +28,7 @@ describe('PATCH /api/cost-management/products/[id]/ad-spend', () => {
     vi.clearAllMocks();
     mockGetCurrentUser.mockResolvedValue({ userId: 'user-uuid-123', email: 'test@example.com' });
     mockQuery = vi.fn().mockResolvedValue({
-      rows: [{ id: 'row-uuid', product_id: 'prod-uuid', year_month: '2026-05', ad_spend: '150000' }],
+      rows: [{ id: 'row-uuid', product_id: 'prod-uuid', ad_date: '2026-07-17', ad_spend: '15000' }],
     });
     mockGetPool.mockReturnValue({ query: mockQuery });
   });
@@ -40,25 +36,25 @@ describe('PATCH /api/cost-management/products/[id]/ad-spend', () => {
   it('인증 없으면 401', async () => {
     mockGetCurrentUser.mockResolvedValue(null);
     const { PATCH } = await import('@/app/api/cost-management/products/[id]/ad-spend/route');
-    const res = await PATCH(makeRequest('prod-uuid', { year_month: '2026-05', ad_spend: 150000 }), {
+    const res = await PATCH(makeRequest('prod-uuid', { ad_date: '2026-07-17', ad_spend: 15000 }), {
       params: Promise.resolve({ id: 'prod-uuid' }),
     });
     expect(res.status).toBe(401);
   });
 
-  it('year_month 형식이 잘못되면 400', async () => {
+  it('ad_date 형식이 잘못되면 400', async () => {
     const { PATCH } = await import('@/app/api/cost-management/products/[id]/ad-spend/route');
-    const res = await PATCH(makeRequest('prod-uuid', { year_month: '2026-5', ad_spend: 150000 }), {
+    const res = await PATCH(makeRequest('prod-uuid', { ad_date: '2026-07', ad_spend: 15000 }), {
       params: Promise.resolve({ id: 'prod-uuid' }),
     });
     expect(res.status).toBe(400);
     const json = await res.json();
-    expect(json.error).toMatch(/year_month/i);
+    expect(json.error).toMatch(/ad_date/i);
   });
 
   it('ad_spend 음수이면 400', async () => {
     const { PATCH } = await import('@/app/api/cost-management/products/[id]/ad-spend/route');
-    const res = await PATCH(makeRequest('prod-uuid', { year_month: '2026-05', ad_spend: -1000 }), {
+    const res = await PATCH(makeRequest('prod-uuid', { ad_date: '2026-07-17', ad_spend: -1000 }), {
       params: Promise.resolve({ id: 'prod-uuid' }),
     });
     expect(res.status).toBe(400);
@@ -68,14 +64,25 @@ describe('PATCH /api/cost-management/products/[id]/ad-spend', () => {
 
   it('정상 요청이면 upsert 쿼리 실행 후 200', async () => {
     const { PATCH } = await import('@/app/api/cost-management/products/[id]/ad-spend/route');
-    const res = await PATCH(makeRequest('prod-uuid', { year_month: '2026-05', ad_spend: 150000 }), {
+    const res = await PATCH(makeRequest('prod-uuid', { ad_date: '2026-07-17', ad_spend: 15000 }), {
       params: Promise.resolve({ id: 'prod-uuid' }),
     });
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.success).toBe(true);
     expect(mockQuery).toHaveBeenCalledOnce();
-    const [sql] = mockQuery.mock.calls[0];
+    const [sql, args] = mockQuery.mock.calls[0];
+    expect(sql).toMatch(/product_ad_spend_daily/i);
     expect(sql).toMatch(/ON CONFLICT/i);
+    expect(args).toEqual(['user-uuid-123', 'prod-uuid', '2026-07-17', 15000]);
+  });
+
+  it('상품이 없으면 404', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    const { PATCH } = await import('@/app/api/cost-management/products/[id]/ad-spend/route');
+    const res = await PATCH(makeRequest('prod-uuid', { ad_date: '2026-07-17', ad_spend: 15000 }), {
+      params: Promise.resolve({ id: 'prod-uuid' }),
+    });
+    expect(res.status).toBe(404);
   });
 });
