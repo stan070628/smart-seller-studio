@@ -37,7 +37,7 @@ export default function SettlementTab() {
   const [ym, setYm] = useState(`${nowKst.getUTCFullYear()}-${String(nowKst.getUTCMonth() + 1).padStart(2, '0')}`);
   const [data, setData] = useState<DailyResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [modal, setModal] = useState<{ date: string; purchase: number } | null>(null);
+  const [modal, setModal] = useState<{ date: string; purchase: number; adSpend: number } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -115,7 +115,7 @@ export default function SettlementTab() {
                 <td style={td}>{won(r.revenue)}</td>
                 <td style={td}>{r.couponDiscount ? `-${won(r.couponDiscount)}` : '0'}</td>
                 <td style={td}>{r.platformFee ? `-${won(r.platformFee)}` : '0'}</td>
-                <td style={costTd} onClick={() => setModal({ date: r.date, purchase: r.purchase })} title="클릭해 비용 내역 보기·입력">
+                <td style={costTd} onClick={() => setModal({ date: r.date, purchase: r.purchase, adSpend: r.adSpend })} title="클릭해 비용 내역 보기·입력">
                   {cost(r) ? `-${won(cost(r))}` : '0'}
                 </td>
                 <td style={{ ...td, fontWeight: 700, color: r.netProfit < 0 ? '#b91c1c' : '#14532d' }}>{won(r.netProfit)}</td>
@@ -142,6 +142,7 @@ export default function SettlementTab() {
         <ExpenseModal
           date={modal.date}
           purchase={modal.purchase}
+          adSpend={modal.adSpend}
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); load(); }}
         />

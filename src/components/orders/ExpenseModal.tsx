@@ -6,13 +6,14 @@ import { toast } from '@/components/ui/toast';
 interface Props {
   date: string;      // YYYY-MM-DD
   purchase: number;  // 매입(cost_entries 기준, 읽기전용)
+  adSpend: number;   // 광고비(product_ad_spend_daily 합계, 읽기전용)
   onClose: () => void;
   onSaved: () => void;
 }
 
 const won = (n: number) => n.toLocaleString('ko-KR');
 
-export default function ExpenseModal({ date, purchase, onClose, onSaved }: Props) {
+export default function ExpenseModal({ date, purchase, adSpend, onClose, onSaved }: Props) {
   const [parcelCost, setParcelCost] = useState('');
   const [boxCost, setBoxCost] = useState('');
   const [boxMemo, setBoxMemo] = useState('');
@@ -69,12 +70,21 @@ export default function ExpenseModal({ date, purchase, onClose, onSaved }: Props
       <div style={{ position: 'relative', width: 420, background: '#fff', borderRadius: 16, padding: 24, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
         <h2 style={{ fontSize: 16, fontWeight: 700, color: '#18181b', margin: '0 0 16px' }}>{Number(mm)}월 {Number(dd)}일 비용</h2>
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f4f4f5', borderRadius: 8, padding: '10px 12px', marginBottom: 14 }}>
-          <div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#3f3f46' }}>매입</div>
-            <div style={{ fontSize: 10, color: '#a1a1aa' }}>수익·원가 탭에서 입력</div>
+        <div style={{ background: '#f4f4f5', borderRadius: 8, padding: '10px 12px', marginBottom: 14 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#3f3f46' }}>매입</div>
+              <div style={{ fontSize: 10, color: '#a1a1aa' }}>수익·원가 탭에서 입력</div>
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#3f3f46', fontVariantNumeric: 'tabular-nums' }}>{won(purchase)}원</div>
           </div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: '#3f3f46', fontVariantNumeric: 'tabular-nums' }}>{won(purchase)}원</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 10, borderTop: '1px solid #e5e5e5' }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#3f3f46' }}>광고비</div>
+              <div style={{ fontSize: 10, color: '#a1a1aa' }}>수익·원가 탭에서 상품별·날짜별 입력</div>
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#3f3f46', fontVariantNumeric: 'tabular-nums' }}>{won(adSpend)}원</div>
+          </div>
         </div>
 
         {loading ? (
@@ -84,9 +94,6 @@ export default function ExpenseModal({ date, purchase, onClose, onSaved }: Props
             <div style={{ marginBottom: 12 }}>
               <label style={label}>택배비</label>
               <input type="number" value={parcelCost} onChange={(e) => setParcelCost(e.target.value)} placeholder="0" style={input} />
-            </div>
-            <div style={{ marginBottom: 12, fontSize: 11, color: '#a1a1aa', lineHeight: 1.5 }}>
-              광고비는 <b>수익·원가</b> 탭에서 상품별·날짜별로 입력합니다.
             </div>
             <div style={{ marginBottom: 12 }}>
               <label style={label}>박스비</label>
