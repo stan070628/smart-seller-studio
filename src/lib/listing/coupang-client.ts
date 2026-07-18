@@ -660,6 +660,41 @@ export class CoupangClient {
     };
   }
 
+  // ─── 지급 내역 (정산) 조회 ─────────────────────────────
+  /**
+   * settlement-histories — 월별 지급 확정 내역.
+   * provider가 marketplace_openapi로 revenue-history(openapi)와 다르나 HMAC 서명은 경로 기반이라 동일 request() 사용.
+   * 응답이 지급 주기별 배열이면 finalAmount 합산, 최근 settlementDate를 대표로 반환. 데이터 없으면 null.
+   * 주의: 원본 필드명은 2026-05-21 스펙 학습분 기준 — 실응답과 다르면 매핑 조정.
+   */
+  async getSettlementHistories(yearMonth: string): Promise<{
+    finalAmount: number;
+    settlementTargetAmount: number;
+    serviceFee: number;
+    settlementDate: string;
+    status: string;
+  } | null> {
+    const url = `/v2/providers/marketplace_openapi/apis/api/v1/settlement-histories?vendorId=${this.vendorId}&revenueRecognitionYearMonth=${yearMonth}`;
+    await sleep(API_DELAY);
+    const res = await this.request<Array<Record<string, unknown>>>('GET', url);
+    const rows = Array.isArray(res.data) ? res.data : [];
+    if (rows.length === 0) return null;
+    let finalAmount = 0;
+    let settlementTargetAmount = 0;
+    let serviceFee = 0;
+    let settlementDate = '';
+    let status = '';
+    for (const r of rows) {
+      finalAmount += Number(r.finalAmount ?? 0);
+      settlementTargetAmount += Number(r.settlementTargetAmount ?? 0);
+      serviceFee += Number(r.serviceFee ?? 0);
+      const d = String(r.settlementDate ?? '');
+      if (d > settlementDate) settlementDate = d;   // 최근 지급일
+      status = String(r.status ?? status);
+    }
+    return { finalAmount, settlementTargetAmount, serviceFee, settlementDate, status };
+  }
+
   /**
    * 로켓그로스 주문 목록 조회 (rg_open_api)
    *
