@@ -280,28 +280,30 @@ export default function SectionCard({
             </button>
           )}
 
-          {/* AI 수정 버튼 */}
-          <button
-            onClick={handleAiButtonClick}
-            title="AI로 수정"
-            style={{
-              padding: '4px 8px',
-              borderRadius: 5,
-              border: `1px solid ${showPanel ? C.accent : '#dddddd'}`,
-              background: showPanel ? `${C.accent}10` : 'transparent',
-              color: showPanel ? C.accent : C.textSub,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-              fontSize: 12,
-              flexShrink: 0,
-              transition: 'border-color 0.15s, background 0.15s, color 0.15s',
-            }}
-          >
-            <Sparkles size={13} />
-            <span>AI 수정</span>
-          </button>
+          {/* AI 수정 버튼 — 유튜브 섹션은 영상 임베드라 AI 편집이 의미 없고 content를 손상시킬 수 있어 숨김 */}
+          {section.type !== 'youtube' && (
+            <button
+              onClick={handleAiButtonClick}
+              title="AI로 수정"
+              style={{
+                padding: '4px 8px',
+                borderRadius: 5,
+                border: `1px solid ${showPanel ? C.accent : '#dddddd'}`,
+                background: showPanel ? `${C.accent}10` : 'transparent',
+                color: showPanel ? C.accent : C.textSub,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                fontSize: 12,
+                flexShrink: 0,
+                transition: 'border-color 0.15s, background 0.15s, color 0.15s',
+              }}
+            >
+              <Sparkles size={13} />
+              <span>AI 수정</span>
+            </button>
+          )}
 
           {/* 삭제 버튼 */}
           <button

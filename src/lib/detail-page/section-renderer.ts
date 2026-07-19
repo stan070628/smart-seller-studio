@@ -998,16 +998,25 @@ function renderYoutube(content: YoutubeContent, section: DetailSection, mode: Re
   }
 
   // export — 합성 썸네일 img + 링크
+  // 유튜브는 모든 영상에 16:9 썸네일만 제공하므로, 세로(Shorts) 섹션은 프리뷰의
+  // 9:16 프레이밍과 맞추기 위해 썸네일을 중앙 크롭한다(재생 버튼은 중앙 합성이라 크롭 후에도 보임).
   const rawSrc = content.exportThumbnailUrl ?? `https://img.youtube.com/vi/${content.videoId}/hqdefault.jpg`;
   const rawHref = content.url || `https://www.youtube.com/watch?v=${content.videoId}`;
   const src = escapeHtml(sanitizeUrl(rawSrc));
   const href = escapeHtml(sanitizeUrl(rawHref));
-  return `<section ${sectionAttrs(section)} style="padding:16px 0;">
-    <div style="max-width:${maxW};margin:0 auto;">
+  const thumbnailHtml = content.aspect === 'vertical'
+    ? `<div style="max-width:340px;margin:0 auto;aspect-ratio:9 / 16;overflow:hidden;border-radius:12px;">
+      <a href="${href}" target="_blank" rel="noopener" style="display:block;">
+        <img src="${src}" alt="유튜브 영상" style="width:100%;height:100%;object-fit:cover;display:block;" />
+      </a>
+    </div>`
+    : `<div style="max-width:100%;">
       <a href="${href}" target="_blank" rel="noopener" style="display:block;">
         <img src="${src}" alt="유튜브 영상" style="width:100%;border-radius:12px;display:block;" />
       </a>
-    </div>${caption}
+    </div>`;
+  return `<section ${sectionAttrs(section)} style="padding:16px 0;">
+    ${thumbnailHtml}${caption}
   </section>`;
 }
 

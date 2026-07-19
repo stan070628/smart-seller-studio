@@ -56,4 +56,22 @@ describe('renderYoutube', () => {
     const html = renderSection(ytSection(), theme, 'preview');
     expect(html).toContain('data-section-id="y1"');
   });
+  it('세로(shorts) export → 9:16 크롭 컨테이너', () => {
+    const html = renderSection(
+      ytSection({ aspect: 'vertical', exportThumbnailUrl: 'https://cdn.example.com/t.jpg' }),
+      theme,
+      'export',
+    );
+    expect(html).toContain('aspect-ratio:9 / 16');
+    expect(html).toContain('object-fit:cover');
+    expect(html).not.toContain('<iframe');
+  });
+  it('가로(horizontal) export → 9:16 크롭 없이 전체 폭 유지', () => {
+    const html = renderSection(
+      ytSection({ aspect: 'horizontal', exportThumbnailUrl: 'https://cdn.example.com/t.jpg' }),
+      theme,
+      'export',
+    );
+    expect(html).not.toContain('aspect-ratio:9 / 16');
+  });
 });
