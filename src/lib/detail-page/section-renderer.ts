@@ -26,6 +26,7 @@ import type {
   ClaudeLayoutContent,
   LayoutBlock,
   AttachedImage,
+  YoutubeContent,
 } from '@/types/detail-page';
 import type { PaletteColors } from '@/lib/detail-page/palette-config';
 import { PALETTES } from '@/lib/detail-page/palette-config';
@@ -973,7 +974,40 @@ function renderClaudeLayout(
   return `<div ${sectionAttrs(section)} style="background-color:${bg};padding:${pad};width:100%;box-sizing:border-box;">${blocksHtml}</div>`;
 }
 
-export function renderSection(section: DetailSection, theme: DetailPageTheme): string {
+type RenderMode = 'preview' | 'export';
+
+function renderYoutube(content: YoutubeContent, mode: RenderMode): string {
+  if (!content.enabled || !content.videoId) return '';
+  const caption = content.caption
+    ? `<p style="text-align:center;font-size:12px;color:#888888;margin:8px 0 0;">${escapeHtml(content.caption)}</p>`
+    : '';
+  const ratio = content.aspect === 'vertical' ? '9 / 16' : '16 / 9';
+  const maxW = content.aspect === 'vertical' ? '340px' : '100%';
+
+  if (mode === 'preview') {
+    return `<section style="padding:16px 0;">
+      <div style="max-width:${maxW};margin:0 auto;aspect-ratio:${ratio};">
+        <iframe width="100%" height="100%" style="border:0;border-radius:12px;"
+          src="https://www.youtube.com/embed/${content.videoId}"
+          title="YouTube video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowfullscreen></iframe>
+      </div>${caption}
+    </section>`;
+  }
+
+  // export — 합성 썸네일 img + 링크
+  const src = content.exportThumbnailUrl ?? `https://img.youtube.com/vi/${content.videoId}/hqdefault.jpg`;
+  const href = content.url || `https://www.youtube.com/watch?v=${content.videoId}`;
+  return `<section style="padding:16px 0;">
+    <div style="max-width:${maxW};margin:0 auto;">
+      <a href="${escapeHtml(href)}" target="_blank" rel="noopener" style="display:block;">
+        <img src="${escapeHtml(src)}" alt="유튜브 영상" style="width:100%;border-radius:12px;display:block;" />
+      </a>
+    </div>${caption}
+  </section>`;
+}
+
+export function renderSection(section: DetailSection, theme: DetailPageTheme, mode: RenderMode = 'export'): string {
   const colors = PALETTES[theme.palette];
   switch (section.type) {
     case 'hero':
@@ -1012,12 +1046,14 @@ export function renderSection(section: DetailSection, theme: DetailPageTheme): s
       return renderInfographicSteps(section.content as InfographicStepsContent, section, colors);
     case 'claude_layout':
       return renderClaudeLayout(section.content as ClaudeLayoutContent, section, colors);
+    case 'youtube':
+      return renderYoutube(section.content as YoutubeContent, mode);
   }
 }
 
-export function renderAllSections(sections: DetailSection[], theme: DetailPageTheme): string {
+export function renderAllSections(sections: DetailSection[], theme: DetailPageTheme, mode: RenderMode = 'export'): string {
   return [...sections]
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-    .map((s) => renderSection(s, theme))
+    .map((s) => renderSection(s, theme, mode))
     .join('\n');
 }
