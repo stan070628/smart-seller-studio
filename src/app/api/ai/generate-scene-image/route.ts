@@ -126,8 +126,13 @@ async function compositeProductOnBackground(
     // 전부 투명/균일 등으로 trim이 실패하면 원본을 쓴다.
   }
 
-  // 제품 높이: 배경 높이의 58%, 비율 유지
-  const targetH = Math.round(bgH * 0.58);
+  // 제품 높이: 배경 높이의 58%, 비율 유지.
+  // 단, 작은 누끼를 크게 확대하면 페더/디테일이 뭉개져(멜팅) AI 티가 나므로
+  // 원본(trim 후) 높이의 1.4배까지만 업스케일을 허용한다.
+  const trimmedMeta = await sharp(trimmed).metadata();
+  const trimmedH = trimmedMeta.height ?? 0;
+  const idealH = Math.round(bgH * 0.58);
+  const targetH = trimmedH > 0 ? Math.min(idealH, Math.round(trimmedH * 1.4)) : idealH;
   const productResized = await sharp(trimmed)
     .resize(null, targetH, { fit: 'inside', withoutEnlargement: false })
     .toBuffer();
