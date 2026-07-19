@@ -49,6 +49,8 @@ interface SectionCardProps {
   onSceneUndo?: () => void;
   /** claude_layout/youtube 섹션 콘텐츠/이미지 업데이트 */
   onSectionUpdate?: (id: string, updates: (Partial<import('@/types/detail-page').ClaudeLayoutContent> | Partial<import('@/types/detail-page').YoutubeContent>) & { attachedImages?: AttachedImage[] }) => void;
+  /** claude_layout Gemini 이미지 슬롯 단일 재생성 */
+  onClaudeSlotRegenerate?: (sectionId: string, slotIdx: number, hint: string) => Promise<void>;
 }
 
 // 섹션 타입별 한국어 레이블
@@ -131,6 +133,7 @@ export default function SectionCard({
   onSectionImageAiEdit,
   onSceneEdit,
   onSceneUseAsIs,
+  onClaudeSlotRegenerate,
   uploadedUrls = [],
   isSceneEditing = false,
   sceneEditError = null,
@@ -348,6 +351,7 @@ export default function SectionCard({
             <ClaudeLayoutEditor
               section={section}
               referenceUrls={uploadedUrls}
+              onRegenerateSlot={onClaudeSlotRegenerate ? (slotIdx, hint) => onClaudeSlotRegenerate(section.id, slotIdx, hint) : undefined}
               onUpdate={(updates) => onSectionUpdate(section.id, updates)}
               onUploadFile={async (file) => {
                 const reader = new FileReader();

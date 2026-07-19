@@ -11,14 +11,18 @@ interface Props {
   onUploadFile: (file: File) => Promise<string>;
   /** 참고 이미지 URL 목록 (왼쪽 패널에서 업로드된 원본 이미지들) */
   referenceUrls?: string[];
+  /** Gemini 이미지 슬롯을 힌트 기반으로 재생성 (제공되면 재생성 버튼 노출) */
+  onRegenerateSlot?: (slotIdx: number, hint: string) => Promise<void>;
 }
 
 const BRAND_PURPLE = '#7c3aed';
 
-export default function ClaudeLayoutEditor({ section, onUpdate, onUploadFile, referenceUrls = [] }: Props) {
+export default function ClaudeLayoutEditor({ section, onUpdate, onUploadFile, referenceUrls = [], onRegenerateSlot }: Props) {
   const content = section.content as ClaudeLayoutContent;
   // 슬롯별 참고 이미지 피커 표시 인덱스 (null = 닫힘)
   const [pickerSlotIdx, setPickerSlotIdx] = React.useState<number | null>(null);
+  // 재생성 중인 Gemini 슬롯 인덱스 (null = 없음)
+  const [regenIdx, setRegenIdx] = React.useState<number | null>(null);
 
   // 섹션 제목 변경
   function handleTitleChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -231,23 +235,60 @@ export default function ClaudeLayoutEditor({ section, onUpdate, onUploadFile, re
               ))}
             </div>
 
-            {/* Gemini 생성 힌트 입력 */}
+            {/* Gemini 생성 힌트 입력 + 재생성 */}
             {img.source === 'gemini' ? (
-              <input
-                value={img.generationHint ?? ''}
-                onChange={e => handleSlotHintChange(idx, e.target.value)}
-                placeholder="예: 알약 흰 배경 정면 사진"
-                style={{
-                  width: '100%',
-                  padding: '7px 10px',
-                  border: `1px solid ${C.border}`,
-                  borderRadius: 6,
-                  fontSize: 13,
-                  color: C.text,
-                  background: C.card,
-                  boxSizing: 'border-box',
-                }}
-              />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {img.url && (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={img.url}
+                    alt=""
+                    style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 6, border: `1px solid ${C.border}` }}
+                  />
+                )}
+                <input
+                  value={img.generationHint ?? ''}
+                  onChange={e => handleSlotHintChange(idx, e.target.value)}
+                  placeholder="예: 알약 흰 배경 정면 사진"
+                  style={{
+                    width: '100%',
+                    padding: '7px 10px',
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 6,
+                    fontSize: 13,
+                    color: C.text,
+                    background: C.card,
+                    boxSizing: 'border-box',
+                  }}
+                />
+                {onRegenerateSlot && (
+                  <button
+                    onClick={async () => {
+                      if (regenIdx !== null) return;
+                      setRegenIdx(idx);
+                      try {
+                        await onRegenerateSlot(idx, img.generationHint ?? '');
+                      } finally {
+                        setRegenIdx(null);
+                      }
+                    }}
+                    disabled={regenIdx !== null}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: 6,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: regenIdx !== null ? 'default' : 'pointer',
+                      background: regenIdx === idx ? C.card : BRAND_PURPLE,
+                      color: regenIdx === idx ? C.textSub : '#fff',
+                      border: 'none',
+                      opacity: regenIdx !== null && regenIdx !== idx ? 0.5 : 1,
+                    }}
+                  >
+                    {regenIdx === idx ? '이미지 생성 중…' : img.url ? '🔄 이미지 재생성' : '✨ 이미지 생성'}
+                  </button>
+                )}
+              </div>
             ) : (
               /* 직접 업로드 UI */
               <div>

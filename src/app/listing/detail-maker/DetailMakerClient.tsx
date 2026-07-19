@@ -347,6 +347,50 @@ export default function DetailMakerClient() {
     }
   }
 
+  // ─── claude_layout Gemini 이미지 슬롯 단일 재생성 ────────────────────────────
+  // 텍스트/블록은 그대로 두고, 지정한 이미지 슬롯 1장만 lifestyle 씬으로 다시 생성한다.
+  async function handleClaudeSlotRegenerate(sectionId: string, slotIdx: number, hint: string) {
+    const section = sections.find(s => s.id === sectionId);
+    if (!section || !isClaudeLayoutContent(section.content)) return;
+    setError(null);
+    try {
+      const sceneRes = await fetch('/api/ai/generate-scene-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sectionType: 'lifestyle',
+          productImageUrls: uploadedUrls.slice(0, 3),
+          sceneHint: hint.trim() || section.content.title,
+        }),
+      });
+      if (!sceneRes.ok) throw new Error('scene');
+      const sceneData = await sceneRes.json() as { success: boolean; data?: { imageBase64: string; mimeType: string } };
+      if (!sceneData.success || !sceneData.data) throw new Error('scene');
+
+      const uploadRes = await fetch('/api/image/upload-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: sceneData.data.imageBase64, mimeType: sceneData.data.mimeType, role: 'lifestyle' }),
+      });
+      if (!uploadRes.ok) throw new Error('upload');
+      const uploadData = await uploadRes.json() as { success: boolean; url?: string };
+      if (!uploadData.success || !uploadData.url) throw new Error('upload');
+      const newUrl = uploadData.url;
+
+      const nextSections = sections.map(s => {
+        if (s.id !== sectionId) return s;
+        const images = s.attachedImages.map((img, i) =>
+          i === slotIdx ? { ...img, url: newUrl, source: 'gemini' as const } : img,
+        );
+        return { ...s, attachedImages: images };
+      });
+      setSections(nextSections);
+      await refreshRenderedHtml(nextSections, theme);
+    } catch {
+      setError('이미지 재생성에 실패했습니다. 잠시 후 다시 시도해주세요.');
+    }
+  }
+
   // ─── Gemini 씬 이미지 생성 ─────────────────────────────────────────────────
   async function generateSceneImages(
     sectionsSnapshot: DetailSection[],
@@ -1207,6 +1251,7 @@ export default function DetailMakerClient() {
               sceneEditError={sceneEditError}
               prevSceneUrlMap={prevSceneUrls.current}
               onSceneUndo={handleSceneUndo}
+              onClaudeSlotRegenerate={handleClaudeSlotRegenerate}
             />
             {isGeneratingScenes && (
               <div style={{

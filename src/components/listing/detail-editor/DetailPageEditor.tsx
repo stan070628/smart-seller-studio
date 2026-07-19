@@ -155,6 +155,8 @@ export interface DetailPageEditorProps {
   uploadedUrls?: string[];
   onSceneEdit?: (section: DetailSection, opts: { instruction: string; referenceImageUrls: string[] }) => Promise<void>;
   onSceneUseAsIs?: (section: DetailSection, url: string) => void;
+  /** claude_layout Gemini 이미지 슬롯 단일 재생성 */
+  onClaudeSlotRegenerate?: (sectionId: string, slotIdx: number, hint: string) => Promise<void>;
   editingSectionId?: string | null;
   sceneEditError?: { sectionId: string; message: string } | null;
   prevSceneUrlMap?: Map<string, string>;
@@ -197,6 +199,7 @@ export default function DetailPageEditor({
   sceneEditError,
   prevSceneUrlMap,
   onSceneUndo,
+  onClaudeSlotRegenerate,
 }: DetailPageEditorProps) {
   // 섹션 추가 드롭다운 열림 여부
   const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -546,6 +549,7 @@ export default function DetailPageEditor({
                       sceneEditError={sceneEditError?.sectionId === section.id ? sceneEditError.message : null}
                       prevSceneUrl={prevSceneUrlMap?.get(section.id)}
                       onSceneUndo={onSceneUndo ? () => onSceneUndo(section.id) : undefined}
+                      onClaudeSlotRegenerate={onClaudeSlotRegenerate}
                       onSectionUpdate={handleSectionUpdate}
                     />
                   ))
