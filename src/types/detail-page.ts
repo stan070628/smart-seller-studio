@@ -18,7 +18,8 @@ export type SectionType =
   | 'why_icons'
   | 'certifications'
   | 'infographic_steps'
-  | 'claude_layout';
+  | 'claude_layout'
+  | 'youtube';
 
 export type PaletteName =
   | 'warm_cream'
@@ -189,6 +190,16 @@ export interface ClaudeLayoutContent {
   padding?: 'normal' | 'compact' | 'wide';
 }
 
+export interface YoutubeContent {
+  type: 'youtube';
+  url: string;                          // 붙여넣은 원본 URL
+  videoId: string;                      // 파싱된 11자 ID
+  aspect: 'vertical' | 'horizontal';    // Shorts=9:16, 일반=16:9
+  caption?: string;                     // 예: "동영상제공:유투버varoachi"
+  enabled: boolean;                     // 표시/숨김 토글
+  exportThumbnailUrl?: string;          // export 렌더 직전 route가 채우는 합성 썸네일 호스팅 URL
+}
+
 export type SectionContent =
   | HeroContent
   | SellingPointsContent
@@ -207,7 +218,8 @@ export type SectionContent =
   | WhyIconsContent
   | CertificationsContent
   | InfographicStepsContent
-  | ClaudeLayoutContent;
+  | ClaudeLayoutContent
+  | YoutubeContent;
 
 export interface DetailSection {
   id: string;
@@ -289,6 +301,9 @@ export function isInfographicStepsContent(c: SectionContent): c is InfographicSt
 }
 export function isClaudeLayoutContent(c: SectionContent): c is ClaudeLayoutContent {
   return c.type === 'claude_layout';
+}
+export function isYoutubeContent(c: SectionContent): c is YoutubeContent {
+  return c.type === 'youtube';
 }
 
 export interface RichSections {
