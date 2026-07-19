@@ -1,5 +1,7 @@
+import { randomUUID } from 'crypto';
 import sharp from 'sharp';
 import { uploadToStorage } from '@/lib/supabase/server';
+import { YOUTUBE_ID_RE } from '@/lib/detail-page/youtube';
 
 // 중앙 재생버튼 SVG (빨간 라운드 + 흰 삼각형)
 function playButtonSvg(size: number): Buffer {
@@ -41,6 +43,7 @@ export async function composeYoutubeThumbnail(
   videoId: string,
   _aspect: 'vertical' | 'horizontal',
 ): Promise<string> {
+  if (!YOUTUBE_ID_RE.test(videoId)) throw new Error(`유효하지 않은 videoId: ${videoId}`);
   const thumb = await fetchThumb(videoId);
   const meta = await sharp(thumb).metadata();
   const baseWidth = meta.width ?? 1280;
@@ -75,7 +78,7 @@ export async function composeYoutubeThumbnail(
     resultBuffer.byteOffset,
     resultBuffer.byteOffset + resultBuffer.byteLength,
   ) as ArrayBuffer;
-  const path = `ai-detail/youtube/${videoId}-${resultBuffer.byteLength}.jpg`;
+  const path = `ai-detail/youtube/${videoId}-${randomUUID()}.jpg`;
   const { url } = await uploadToStorage(path, arrayBuffer, 'image/jpeg', resultBuffer.byteLength);
   return url;
 }
