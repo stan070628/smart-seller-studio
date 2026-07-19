@@ -92,9 +92,20 @@ const SECTION_BG_HINTS: Record<string, string> = {
     'and NO blurry, faceless, or ghost-like human figures in the background. Keep lighting and shadows physically consistent.',
 };
 
-function buildNoProductSuffix(sectionType: string): string {
+// 동일 카테고리 연관 물품(장비·액세서리·동반 제품)까지 금지 — "환경 소품"으로
+// 위장한 카테고리 물품(예: 셔틀콕 씬의 라켓)이 배경에 등장하는 것을 막는다.
+const NO_CATEGORY_PROPS =
+  ' Do NOT include the product itself OR any related equipment, accessories, tools, companion products, or merchandise from the same product category ' +
+  '(e.g., if the product is a shuttlecock: no rackets, no racket bags, no nets, no players; if it is a phone case: no phones). ' +
+  'The scene must contain NO recognizable product of any kind — an empty, prop-light environment only.';
+
+function buildNoProductSuffix(sectionType: string, productName?: string): string {
   const hint = SECTION_BG_HINTS[sectionType] ?? '';
-  return NO_PRODUCT_BASE + hint;
+  const trimmedName = productName?.trim();
+  const identity = trimmedName
+    ? ` The product being sold is: "${trimmedName}". Nothing resembling it or its category may appear in this background.`
+    : '';
+  return NO_PRODUCT_BASE + NO_CATEGORY_PROPS + identity + hint;
 }
 
 async function compositeProductOnBackground(
