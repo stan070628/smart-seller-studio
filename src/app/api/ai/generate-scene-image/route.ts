@@ -236,7 +236,7 @@ export async function POST(req: NextRequest) {
     if (directPrompt) {
       // storyboard.prompt를 직접 사용 — Claude API 호출 없음
       finalScenePrompt = compositeProductPng
-        ? `${directPrompt}${buildNoProductSuffix(sectionType)}` // 합성 모드: 배경만 생성
+        ? `${directPrompt}${buildNoProductSuffix(sectionType, productInfo?.headline)}` // 합성 모드: 배경만 생성
         : `${directPrompt}\n\n${PRODUCT_FIDELITY_INSTRUCTION}`; // fallback: 기존 방식
     } else {
       // Claude Sonnet으로 섹션별 씬 프롬프트 생성
@@ -281,8 +281,13 @@ export async function POST(req: NextRequest) {
       const claudePrompt = promptData.prompt;
       if (!claudePrompt) throw new Error('Claude가 프롬프트를 생성하지 못했습니다.');
 
+      // 합성 모드: Claude가 SCENE_PROMPT_SYSTEM 규칙상 항상 끝에 붙이는
+      // PRODUCT_FIDELITY_INSTRUCTION("첨부 이미지의 제품을 씬에 렌더링하라")을
+      // 제거한다. 남겨두면 "제품을 그려라"와 "어떤 물체도 그리지 마라"(no-product
+      // suffix)가 한 프롬프트에서 충돌해 Gemini가 카테고리 소품을 지어낸다.
+      const bgPrompt = claudePrompt.replace(PRODUCT_FIDELITY_INSTRUCTION, '').trim();
       finalScenePrompt = compositeProductPng
-        ? `${claudePrompt}${buildNoProductSuffix(sectionType)}` // 합성 모드: 배경만 생성
+        ? `${bgPrompt}${buildNoProductSuffix(sectionType, productInfo?.headline)}` // 합성 모드: 배경만 생성
         : claudePrompt; // fallback: Claude 프롬프트 그대로 (PRODUCT_FIDELITY_INSTRUCTION 이미 포함)
     }
 
