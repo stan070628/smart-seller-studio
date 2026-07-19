@@ -1092,7 +1092,8 @@ export default function DetailMakerClient() {
       const json = await res.json();
       if (res.ok && json.html) html = json.html;
     } catch {
-      // 실패 시 현재 미리보기 HTML로 폴백
+      // 실패 시 현재 미리보기 HTML로 폴백 — 미리보기는 유튜브 iframe 등 export에 부적합한 마크업을 포함할 수 있으므로 사용자에게 알림
+      setError('내보내기 렌더에 실패해 미리보기 HTML로 대체했습니다. 다시 시도해주세요.');
     }
     return html
       .replace(/ data-section-id="[^"]*"/g, '')
@@ -1101,9 +1102,26 @@ export default function DetailMakerClient() {
       .replace(/ data-edit-path="[^"]*"/g, '');
   }
 
+  /**
+   * HTML 복사 — navigator.clipboard.write()에 Promise 페이로드를 담은 ClipboardItem을 "동기적으로" 전달해
+   * 클릭 이벤트의 transient user activation을 보존한다. await getCleanHtml() 이후 writeText를 호출하면
+   * (네트워크 왕복 이후이므로) Safari/Firefox에서 activation이 소실되어 조용히 실패 — 빈 클립보드로 이어진다.
+   */
   async function handleHtmlCopy() {
-    const html = await getCleanHtml();
-    await navigator.clipboard.writeText(html).catch(() => {});
+    try {
+      if (typeof window !== 'undefined' && 'ClipboardItem' in window && navigator.clipboard?.write) {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'text/plain': getCleanHtml().then((h) => new Blob([h], { type: 'text/plain' })),
+          }),
+        ]);
+      } else {
+        const html = await getCleanHtml();
+        await navigator.clipboard.writeText(html);
+      }
+    } catch {
+      setError('HTML 복사에 실패했습니다. 다시 시도해주세요.');
+    }
   }
 
   async function handleDownload() {

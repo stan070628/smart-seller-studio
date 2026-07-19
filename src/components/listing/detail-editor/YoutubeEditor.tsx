@@ -28,7 +28,14 @@ export default function YoutubeEditor({ section, onUpdate }: Props) {
       return;
     }
     setParseError(null);
-    onUpdate({ url: value, videoId: parsed.videoId, aspect: parsed.aspect });
+    // videoId가 바뀔 때만 파싱된 aspect를 적용 — 같은 영상 URL을 재입력/수정하는 동안
+    // 사용자가 수동으로 토글한 비율을 매 키 입력마다 덮어쓰지 않도록 한다.
+    const changed = parsed.videoId !== content.videoId;
+    onUpdate(
+      changed
+        ? { url: value, videoId: parsed.videoId, aspect: parsed.aspect }
+        : { url: value, videoId: parsed.videoId },
+    );
   }
 
   const label = { fontSize: 12, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 } as const;
