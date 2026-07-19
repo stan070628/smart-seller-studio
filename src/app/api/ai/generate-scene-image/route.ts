@@ -86,7 +86,8 @@ const SECTION_BG_HINTS: Record<string, string> = {
     ' Use a clean macro-photography backdrop: a softly blurred, slightly warm or cool neutral surface ' +
     '(marble, linen, concrete) with gentle diffused lighting to highlight material texture.',
   lifestyle:
-    ' Create an authentic, true-to-life real-world environment appropriate for the product category, ' +
+    ' Create an authentic, true-to-life real-world SETTING where this product would naturally be used — ' +
+    'the location, surfaces, and atmosphere only, with NO equipment, gear, or items from the product\'s category present, ' +
     'shot like a real editorial/commercial photograph with natural daylight and a grounded, eye-level perspective. ' +
     'AVOID the typical "AI look": no heavy bokeh/blur haze, no dreamy glow or bloom, no lens flare, no oversaturation, ' +
     'and NO blurry, faceless, or ghost-like human figures in the background. Keep lighting and shadows physically consistent.',
