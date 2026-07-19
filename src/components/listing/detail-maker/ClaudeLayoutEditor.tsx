@@ -224,9 +224,9 @@ export default function ClaudeLayoutEditor({ section, onUpdate, onUploadFile, re
                     fontSize: 12,
                     fontWeight: 600,
                     cursor: 'pointer',
-                    background: img.source === src ? BRAND_PURPLE : C.card,
-                    color: img.source === src ? '#fff' : C.textSub,
-                    border: `1px solid ${img.source === src ? BRAND_PURPLE : C.border}`,
+                    background: (img.source ?? 'gemini') === src ? BRAND_PURPLE : C.card,
+                    color: (img.source ?? 'gemini') === src ? '#fff' : C.textSub,
+                    border: `1px solid ${(img.source ?? 'gemini') === src ? BRAND_PURPLE : C.border}`,
                     transition: 'background 0.15s',
                   }}
                 >
@@ -235,8 +235,8 @@ export default function ClaudeLayoutEditor({ section, onUpdate, onUploadFile, re
               ))}
             </div>
 
-            {/* Gemini 생성 힌트 입력 + 재생성 */}
-            {img.source === 'gemini' ? (
+            {/* Gemini 생성 힌트 입력 + 재생성 (source 미지정 = PRO 생성 이미지도 포함) */}
+            {img.source !== 'upload' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {img.url && (
                   /* eslint-disable-next-line @next/next/no-img-element */
