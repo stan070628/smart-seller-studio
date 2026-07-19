@@ -92,7 +92,7 @@ export default function DetailMakerClient() {
           fetch('/api/detail-page/render', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sections: proSections, theme: initialTheme }),
+            body: JSON.stringify({ sections: proSections, theme: initialTheme, mode: 'preview' }),
           })
             .then(r => r.json())
             .then(json => { if (json.html) setGeneratedHtml(json.html); })
@@ -332,7 +332,7 @@ export default function DetailMakerClient() {
       const res = await fetch('/api/detail-page/render', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sections: nextSections, theme: nextTheme }),
+        body: JSON.stringify({ sections: nextSections, theme: nextTheme, mode: 'preview' }),
       });
       const json = await res.json();
       if (res.ok) {
@@ -1080,9 +1080,21 @@ export default function DetailMakerClient() {
   }
 
   // ─── HTML 복사 / 다운로드 ────────────────────────────────────────────────────
-  /** 에디터 전용 data-* 속성을 제거하여 Coupang Wing 등 외부 플랫폼에 붙여넣기 가능한 HTML 반환 */
-  function getCleanHtml(): string {
-    return generatedHtml
+  /** 내보내기용 HTML — export 모드로 재렌더(유튜브 썸네일 등) 후 에디터 전용 data-* 제거 */
+  async function getCleanHtml(): Promise<string> {
+    let html = generatedHtml;
+    try {
+      const res = await fetch('/api/detail-page/render', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sections, theme, mode: 'export' }),
+      });
+      const json = await res.json();
+      if (res.ok && json.html) html = json.html;
+    } catch {
+      // 실패 시 현재 미리보기 HTML로 폴백
+    }
+    return html
       .replace(/ data-section-id="[^"]*"/g, '')
       .replace(/ data-section-type="[^"]*"/g, '')
       .replace(/ data-section-label="[^"]*"/g, '')
@@ -1090,11 +1102,13 @@ export default function DetailMakerClient() {
   }
 
   async function handleHtmlCopy() {
-    await navigator.clipboard.writeText(getCleanHtml()).catch(() => {});
+    const html = await getCleanHtml();
+    await navigator.clipboard.writeText(html).catch(() => {});
   }
 
-  function handleDownload() {
-    const blob = new Blob([getCleanHtml()], { type: 'text/html;charset=utf-8' });
+  async function handleDownload() {
+    const html = await getCleanHtml();
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
