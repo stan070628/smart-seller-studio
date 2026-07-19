@@ -391,3 +391,12 @@ describe('createEmptySection — 신규 모바일 타입', () => {
     expect(s.content).toEqual({ type: 'image_grid', title: '', items: [] });
   });
 });
+
+describe('createEmptySection youtube', () => {
+  it('youtube 기본값', () => {
+    const s = createEmptySection('youtube', 3);
+    expect(s.type).toBe('youtube');
+    expect(s.order).toBe(3);
+    expect(s.content).toEqual({ type: 'youtube', url: '', videoId: '', aspect: 'horizontal', enabled: true });
+  });
+});
