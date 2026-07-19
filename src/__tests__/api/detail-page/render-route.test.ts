@@ -176,4 +176,47 @@ describe('POST /api/detail-page/render — youtube 섹션 + mode', () => {
     expect(response.status).toBe(400);
     expect(data).toHaveProperty('error');
   });
+
+  it('두 개의 유튜브 섹션 중 첫 번째 합성이 실패해도 두 번째 섹션은 정상 렌더링된다 (에러 격리)', async () => {
+    composeYoutubeThumbnailMock
+      .mockRejectedValueOnce(new Error('x'))
+      .mockResolvedValueOnce('https://cdn.example.com/ok.jpg');
+
+    const secondSection = {
+      ...VALID_YOUTUBE_SECTION,
+      id: 'youtube-002',
+      order: 1,
+      content: { ...VALID_YOUTUBE_SECTION.content, videoId: 'aB3dE5fG7hI' },
+    };
+    const request = makeRequest({
+      sections: [VALID_YOUTUBE_SECTION, secondSection],
+      theme: VALID_THEME,
+      mode: 'export',
+    });
+    const response = await POST(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(composeYoutubeThumbnailMock).toHaveBeenCalledTimes(2);
+    expect(data.html).toContain('https://cdn.example.com/ok.jpg');
+  });
+
+  it('videoId가 유효하지 않으면(합성 실패) 200으로 폴백되고 iframe은 렌더링되지 않는다', async () => {
+    composeYoutubeThumbnailMock.mockRejectedValueOnce(new Error('유효하지 않은 videoId'));
+
+    const invalidSection = {
+      ...VALID_YOUTUBE_SECTION,
+      content: { ...VALID_YOUTUBE_SECTION.content, videoId: 'bad/../id' },
+    };
+    const request = makeRequest({
+      sections: [invalidSection],
+      theme: VALID_THEME,
+      mode: 'export',
+    });
+    const response = await POST(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.html).not.toContain('<iframe');
+  });
 });
