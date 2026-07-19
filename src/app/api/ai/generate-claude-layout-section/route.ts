@@ -38,6 +38,8 @@ const RequestSchema = z.object({
   points: z.array(z.string().max(100)).max(8).default([]),
   sectionHint: z.string().max(400).optional(),
   imageSlots: z.array(ImageSlotSchema).max(4).default([]),
+  /** 제품 참조 이미지 URL — gemini 슬롯 생성 시 제품 정체성 고정에 사용 */
+  productImageUrls: z.array(z.string().url()).max(3).optional(),
 });
 
 // ─────────────────────────────────────────
@@ -170,17 +172,39 @@ async function processUploadSlot(url: string): Promise<string | null> {
 
 /**
  * Gemini 슬롯 처리:
- * 1. Gemini Imagen으로 이미지 생성
- * 2. 배경 제거 시도
- * 3. Supabase Storage 업로드
+ * 1. (가능하면) 제품 참조 이미지 로딩 — 참조 없이 텍스트만으로 생성하면
+ *    Gemini가 카테고리의 다른 제품(예: 셔틀콕 대신 라켓)을 지어낸다.
+ * 2. Gemini Imagen으로 이미지 생성 (참조가 있으면 제품 정체성 고정 프롬프트)
+ * 3. 배경 제거 시도
+ * 4. Supabase Storage 업로드
  */
-async function processGeminiSlot(generationHint: string): Promise<string | null> {
+async function processGeminiSlot(
+  generationHint: string,
+  productImageUrls?: string[],
+): Promise<string | null> {
   try {
     const { generateFrameImage } = await import('@/lib/ai/imagen');
     const { removeImageBackgrounds } = await import('@/lib/ai/remove-background');
 
-    const bgPrompt = `Clean product photography: ${generationHint}. White background, studio lighting, no shadows, no text.`;
-    const imageResult = await generateFrameImage({ imagePrompt: bgPrompt });
+    let referenceImages: Array<{ base64: string; mimeType: string }> = [];
+    if (productImageUrls?.length) {
+      const { loadReferenceImages } = await import('@/lib/ai/reference-images');
+      referenceImages = await loadReferenceImages({ productImageUrls });
+    }
+
+    const bgPrompt =
+      referenceImages.length > 0
+        ? `Clean e-commerce product photography of the EXACT product shown in the attached reference image(s): ${generationHint}. ` +
+          `Faithfully reproduce the reference product's shape, colors, materials, proportions, and details. ` +
+          `Do NOT add any other products, equipment, or accessories. ` +
+          `Plain seamless background, soft studio lighting, single product, no text or logos.`
+        : `Clean e-commerce product photography: ${generationHint}. ` +
+          `Do NOT add any other products, equipment, or accessories. ` +
+          `Plain seamless white background, soft studio lighting, single product, no shadows, no text or logos.`;
+    const imageResult = await generateFrameImage({
+      imagePrompt: bgPrompt,
+      ...(referenceImages.length > 0 ? { referenceImages } : {}),
+    });
 
     // ReferenceImage.mimeType은 'image/jpeg' 리터럴이므로 JPEG으로 정규화
     const { refs: cleaned } = await removeImageBackgrounds([{
@@ -238,7 +262,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     );
   }
 
-  const { title, points, sectionHint, imageSlots } = parsed.data;
+  const { title, points, sectionHint, imageSlots, productImageUrls } = parsed.data;
 
   try {
     // 4. Claude DSL 생성 + 이미지 슬롯 처리 병렬 실행
@@ -299,7 +323,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       ...imageSlots.map(slot =>
         slot.source === 'upload'
           ? processUploadSlot(slot.url)
-          : processGeminiSlot(slot.generationHint),
+          : processGeminiSlot(slot.generationHint, productImageUrls),
       ),
     ]);
 

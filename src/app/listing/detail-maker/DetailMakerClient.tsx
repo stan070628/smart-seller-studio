@@ -456,6 +456,8 @@ export default function DetailMakerClient() {
                 title: content.title,
                 points: content.points ?? [],
                 imageSlots,
+                // gemini 슬롯이 제품 정체성을 잃지 않도록 섹션별 제품 참조 URL 전달
+                productImageUrls: sectionRefUrls,
               }),
             });
             if (!layoutRes.ok) return null;
