@@ -18,11 +18,13 @@ import {
   isPointContent,
   isImageGridContent,
   isClaudeLayoutContent,
+  isYoutubeContent,
 } from '@/types/detail-page';
 import SectionInstructionPanel from './SectionInstructionPanel';
 import SectionImageAttachment from './SectionImageAttachment';
 import SceneEditPanel from './SceneEditPanel';
 import ClaudeLayoutEditor from '../detail-maker/ClaudeLayoutEditor';
+import YoutubeEditor from './YoutubeEditor';
 
 interface SectionCardProps {
   section: DetailSection;
@@ -45,8 +47,8 @@ interface SectionCardProps {
   sceneEditError?: string | null;
   prevSceneUrl?: string;
   onSceneUndo?: () => void;
-  /** claude_layout 섹션 콘텐츠/이미지 업데이트 */
-  onSectionUpdate?: (id: string, updates: Partial<import('@/types/detail-page').ClaudeLayoutContent> & { attachedImages?: AttachedImage[] }) => void;
+  /** claude_layout/youtube 섹션 콘텐츠/이미지 업데이트 */
+  onSectionUpdate?: (id: string, updates: (Partial<import('@/types/detail-page').ClaudeLayoutContent> | Partial<import('@/types/detail-page').YoutubeContent>) & { attachedImages?: AttachedImage[] }) => void;
 }
 
 // 섹션 타입별 한국어 레이블
@@ -365,6 +367,14 @@ export default function SectionCard({
               }}
             />
           </div>
+        )}
+
+        {/* youtube 전용 편집 UI */}
+        {isYoutubeContent(section.content) && onSectionUpdate && (
+          <YoutubeEditor
+            section={section}
+            onUpdate={(updates) => onSectionUpdate(section.id, updates)}
+          />
         )}
 
         {/* 이미지 첨부 패널 */}

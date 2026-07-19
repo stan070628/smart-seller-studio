@@ -174,6 +174,7 @@ const ADD_SECTION_OPTIONS: Array<{ type: SectionType; label: string }> = [
   { type: 'brand_header',   label: '브랜드 헤더' },
   { type: 'point',          label: '포인트' },
   { type: 'image_grid',     label: '이미지 그리드' },
+  { type: 'youtube',        label: '유튜브 영상' },
 ];
 
 export default function DetailPageEditor({
@@ -330,9 +331,9 @@ export default function DetailPageEditor({
     [sections, onSectionsChange],
   );
 
-  // claude_layout 섹션 콘텐츠/이미지 업데이트
+  // claude_layout/youtube 섹션 콘텐츠/이미지 업데이트
   const handleSectionUpdate = useCallback(
-    (id: string, updates: Partial<import('@/types/detail-page').ClaudeLayoutContent> & { attachedImages?: AttachedImage[] }) => {
+    (id: string, updates: (Partial<import('@/types/detail-page').ClaudeLayoutContent> | Partial<import('@/types/detail-page').YoutubeContent>) & { attachedImages?: AttachedImage[] }) => {
       const { attachedImages, ...contentUpdates } = updates;
       const updated = sections.map((s) => {
         if (s.id !== id) return s;
