@@ -73,6 +73,7 @@ const SECTION_LABELS: Record<DetailSection['type'], string> = {
   certifications: '인증 배지',
   infographic_steps: '사용법 인포그래픽',
   claude_layout: 'AI 레이아웃',
+  youtube: '유튜브 영상',
 };
 
 function sectionAttrs(section: DetailSection): string {
