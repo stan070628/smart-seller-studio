@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { requireAuth } from '@/lib/supabase/auth';
 import { renderAllSections } from '@/lib/detail-page/section-renderer';
 import { sanitizeProLayout } from '@/lib/detail-page/layout-validator';
+import { composeYoutubeThumbnail } from '@/lib/detail-page/youtube-thumbnail';
 import { PALETTE_NAMES } from '@/lib/detail-page/palette-config';
 import { appendPrivacyFooter } from '@/lib/detail-page-privacy';
 import type { DetailSection, DetailPageTheme, FontStyle } from '@/types/detail-page';
@@ -31,7 +32,7 @@ const RequestSchema = z.object({
     .array(
       z.object({
         id: z.string(),
-        type: z.enum(['hero', 'selling_points', 'features', 'stats', 'spec_table', 'usage_steps', 'warning', 'cta', 'brand_header', 'point', 'image_grid', 'claude_layout']),
+        type: z.enum(['hero', 'selling_points', 'features', 'stats', 'spec_table', 'usage_steps', 'warning', 'cta', 'brand_header', 'point', 'image_grid', 'claude_layout', 'youtube']),
         order: z.number().int().min(0),
         content: z.record(z.string(), z.unknown()),
         attachedImages: z
@@ -58,6 +59,7 @@ const RequestSchema = z.object({
     imageLayout: z.enum(['fullbleed', 'composed', 'split']),
     layoutMode: z.enum(['desktop', 'mobile']).optional(),
   }),
+  mode: z.enum(['preview', 'export']).optional().default('export'),
 });
 
 // ─────────────────────────────────────────
@@ -113,7 +115,7 @@ export async function POST(
     );
   }
 
-  const { sections, theme } = parseResult.data;
+  const { sections, theme, mode } = parseResult.data;
 
   // claude_layout 섹션의 불량 블록·CJK가 렌더를 깨거나 오염하지 않도록 정화.
   // sanitizeProLayout는 CJK를 전체 문자열(title 포함)에서 제거하고 불량/빈 블록을 prune하므로
@@ -124,11 +126,27 @@ export async function POST(
     return { ...s, content: cleaned[0] ?? { ...(s.content as Record<string, unknown>), blocks: [] } };
   });
 
+  // export 모드에서만: enabled 유튜브 섹션의 재생버튼 합성 썸네일을 미리 생성해 content에 채운다.
+  const withYoutube = await Promise.all(
+    safeSections.map(async (s) => {
+      if (s.type !== 'youtube' || mode !== 'export') return s;
+      const c = s.content as { videoId?: string; enabled?: boolean; aspect?: 'vertical' | 'horizontal' };
+      if (!c.enabled || !c.videoId) return s;
+      try {
+        const url = await composeYoutubeThumbnail(c.videoId, c.aspect ?? 'horizontal');
+        return { ...s, content: { ...c, exportThumbnailUrl: url } };
+      } catch (e) {
+        console.error('[detail-page/render] 유튜브 썸네일 합성 실패:', e);
+        return s; // 실패 시 renderYoutube가 hqdefault 폴백 img 사용
+      }
+    }),
+  );
+
   // 렌더링
   let renderedSections: string;
   try {
     // Zod에서 content는 z.record(z.unknown())으로 받았으므로 unknown 경유 후 DetailSection으로 캐스팅
-    renderedSections = renderAllSections(safeSections as unknown as DetailSection[], theme as DetailPageTheme);
+    renderedSections = renderAllSections(withYoutube as unknown as DetailSection[], theme as DetailPageTheme, mode);
   } catch (error) {
     console.error('[detail-page/render] 섹션 렌더링 실패:', error);
     return NextResponse.json(
