@@ -36,4 +36,24 @@ describe('renderYoutube', () => {
     const html = renderSection(ytSection({ aspect: 'vertical' }), theme, 'preview');
     expect(html).toContain('9 / 16');
   });
+  it('caption 렌더링', () => {
+    const html = renderSection(ytSection({ caption: '동영상제공:유투버varoachi' }), theme, 'preview');
+    expect(html).toContain('동영상제공:유투버varoachi');
+  });
+  it('caption escape 처리', () => {
+    const html = renderSection(ytSection({ caption: '<script>x</script>' }), theme, 'preview');
+    expect(html).not.toContain('<script>x</script>');
+  });
+  it('javascript: href 무력화', () => {
+    const html = renderSection(ytSection({ url: 'javascript:alert(1)' }), theme, 'export');
+    expect(html).not.toContain('javascript:alert');
+  });
+  it('malformed videoId → 빈 문자열', () => {
+    const html = renderSection(ytSection({ videoId: '"><img src=x onerror=y>' }), theme, 'preview');
+    expect(html.trim()).toBe('');
+  });
+  it('sectionAttrs 로 data-section-id 부여', () => {
+    const html = renderSection(ytSection(), theme, 'preview');
+    expect(html).toContain('data-section-id="y1"');
+  });
 });

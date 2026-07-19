@@ -31,6 +31,7 @@ import type {
 import type { PaletteColors } from '@/lib/detail-page/palette-config';
 import { PALETTES } from '@/lib/detail-page/palette-config';
 import { editableMarkupText } from '@/lib/detail-page/inline-markup';
+import { YOUTUBE_ID_RE } from '@/lib/detail-page/youtube';
 
 // ─────────────────────────────────────────
 // 보안 헬퍼
@@ -977,8 +978,8 @@ function renderClaudeLayout(
 
 type RenderMode = 'preview' | 'export';
 
-function renderYoutube(content: YoutubeContent, mode: RenderMode): string {
-  if (!content.enabled || !content.videoId) return '';
+function renderYoutube(content: YoutubeContent, section: DetailSection, mode: RenderMode): string {
+  if (!content.enabled || !YOUTUBE_ID_RE.test(content.videoId)) return '';
   const caption = content.caption
     ? `<p style="text-align:center;font-size:12px;color:#888888;margin:8px 0 0;">${escapeHtml(content.caption)}</p>`
     : '';
@@ -986,7 +987,7 @@ function renderYoutube(content: YoutubeContent, mode: RenderMode): string {
   const maxW = content.aspect === 'vertical' ? '340px' : '100%';
 
   if (mode === 'preview') {
-    return `<section style="padding:16px 0;">
+    return `<section ${sectionAttrs(section)} style="padding:16px 0;">
       <div style="max-width:${maxW};margin:0 auto;aspect-ratio:${ratio};">
         <iframe width="100%" height="100%" style="border:0;border-radius:12px;"
           src="https://www.youtube.com/embed/${content.videoId}"
@@ -997,12 +998,14 @@ function renderYoutube(content: YoutubeContent, mode: RenderMode): string {
   }
 
   // export — 합성 썸네일 img + 링크
-  const src = content.exportThumbnailUrl ?? `https://img.youtube.com/vi/${content.videoId}/hqdefault.jpg`;
-  const href = content.url || `https://www.youtube.com/watch?v=${content.videoId}`;
-  return `<section style="padding:16px 0;">
+  const rawSrc = content.exportThumbnailUrl ?? `https://img.youtube.com/vi/${content.videoId}/hqdefault.jpg`;
+  const rawHref = content.url || `https://www.youtube.com/watch?v=${content.videoId}`;
+  const src = escapeHtml(sanitizeUrl(rawSrc));
+  const href = escapeHtml(sanitizeUrl(rawHref));
+  return `<section ${sectionAttrs(section)} style="padding:16px 0;">
     <div style="max-width:${maxW};margin:0 auto;">
-      <a href="${escapeHtml(href)}" target="_blank" rel="noopener" style="display:block;">
-        <img src="${escapeHtml(src)}" alt="유튜브 영상" style="width:100%;border-radius:12px;display:block;" />
+      <a href="${href}" target="_blank" rel="noopener" style="display:block;">
+        <img src="${src}" alt="유튜브 영상" style="width:100%;border-radius:12px;display:block;" />
       </a>
     </div>${caption}
   </section>`;
@@ -1048,7 +1051,7 @@ export function renderSection(section: DetailSection, theme: DetailPageTheme, mo
     case 'claude_layout':
       return renderClaudeLayout(section.content as ClaudeLayoutContent, section, colors);
     case 'youtube':
-      return renderYoutube(section.content as YoutubeContent, mode);
+      return renderYoutube(section.content as YoutubeContent, section, mode);
   }
 }
 

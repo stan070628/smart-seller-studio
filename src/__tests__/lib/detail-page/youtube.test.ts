@@ -18,4 +18,13 @@ describe('parseYoutubeUrl', () => {
     expect(parseYoutubeUrl('https://example.com/video')).toBeNull();
     expect(parseYoutubeUrl('그냥 텍스트')).toBeNull();
   });
+  it('유효한 호스트 + 잘못된 id 길이 → null', () => {
+    expect(parseYoutubeUrl('https://www.youtube.com/watch?v=short')).toBeNull();
+  });
+  it('m.youtube.com watch URL → 가로', () => {
+    expect(parseYoutubeUrl('https://m.youtube.com/watch?v=dQw4w9WgXcQ')).toEqual({ videoId: 'dQw4w9WgXcQ', aspect: 'horizontal' });
+  });
+  it('앞뒤 공백은 trim 되어 파싱된다', () => {
+    expect(parseYoutubeUrl('  https://youtu.be/dQw4w9WgXcQ  ')).toEqual({ videoId: 'dQw4w9WgXcQ', aspect: 'horizontal' });
+  });
 });

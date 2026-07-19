@@ -4,7 +4,7 @@ export interface ParsedYoutube {
   aspect: 'vertical' | 'horizontal';
 }
 
-const ID_RE = /^[A-Za-z0-9_-]{11}$/;
+export const YOUTUBE_ID_RE = /^[A-Za-z0-9_-]{11}$/;
 
 export function parseYoutubeUrl(raw: string): ParsedYoutube | null {
   if (!raw || typeof raw !== 'string') return null;
@@ -34,6 +34,6 @@ export function parseYoutubeUrl(raw: string): ParsedYoutube | null {
     return null;
   }
 
-  if (!ID_RE.test(videoId)) return null;
+  if (!YOUTUBE_ID_RE.test(videoId)) return null;
   return { videoId, aspect };
 }
