@@ -10,6 +10,11 @@ export interface SceneEditOpts {
   isEditMode?: boolean;
   /** 편집 지시어 (편집 모드) 또는 art direction (새 생성 모드) */
   instruction?: string;
+  /**
+   * true: 합성 모드 배경 브리프 — 제품은 나중에 합성되므로
+   * 참조 이미지는 세팅/조명 추론용으로만 쓰고 배경 플레이트 프롬프트만 요청한다.
+   */
+  isCompositeBackground?: boolean;
 }
 
 export function buildSceneUserPrompt(
@@ -35,7 +40,11 @@ export function buildSceneUserPrompt(
   }
 
   // 새 생성 모드
-  const lines: string[] = ['Product reference image(s) are attached above.'];
+  const lines: string[] = [
+    editOpts?.isCompositeBackground
+      ? 'Product reference image(s) are attached above — use them ONLY to infer an appropriate setting, camera height, and lighting direction. The product itself will be composited onto your background later and must NOT appear in it.'
+      : 'Product reference image(s) are attached above.',
+  ];
 
   if (productInfo) {
     if (productInfo.headline) lines.push(`Product headline: ${productInfo.headline}`);
@@ -57,7 +66,11 @@ export function buildSceneUserPrompt(
 
   lines.push('');
   lines.push(`Section type: ${sectionType}`);
-  lines.push('Generate a detailed Gemini image generation prompt for this section. Return only JSON.');
+  lines.push(
+    editOpts?.isCompositeBackground
+      ? 'Generate a detailed Gemini prompt for the EMPTY BACKGROUND PLATE ONLY for this section. Return only JSON.'
+      : 'Generate a detailed Gemini image generation prompt for this section. Return only JSON.',
+  );
 
   return lines.join('\n');
 }

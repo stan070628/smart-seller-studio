@@ -64,6 +64,29 @@ Return ONLY valid JSON: {"prompt": "your detailed English prompt here"}`;
 
 const PRODUCT_FIDELITY_INSTRUCTION = `Using the attached product image(s) as a visual reference, study the product's overall shape, proportions, color palette, material texture, and key design details, then render it as a new photorealistic image naturally integrated in the scene. The product rendition should faithfully capture the reference's essential visual characteristics (form, color scheme, distinctive features) as an independent creative work — not a direct reproduction of the original photograph. IMPORTANT: Use EXACTLY the same quantity of items as shown in the reference image — do not add more items, do not duplicate products. SINGLE FRAME ONLY: Generate exactly one single continuous photograph — no split panels, diptychs, multi-view layouts, before/after comparisons, or composite image compositions.`;
 
+// 합성 모드 전용 시스템 프롬프트: Claude가 "제품이 포함된 씬"이 아니라
+// "빈 배경 플레이트" 프롬프트를 처음부터 작성하도록 한다. 기존에는
+// SCENE_PROMPT_SYSTEM(제품 필수 등장)으로 쓴 프롬프트에 no-product suffix를
+// 덧붙여 모순이 생겼고, Gemini가 절충안으로 카테고리 소품(라켓 등)을 지어냈다.
+const BACKGROUND_PROMPT_SYSTEM = `You are an expert e-commerce art director writing a Gemini image-generation prompt for an EMPTY background plate.
+
+A real cut-out photograph of the product will be composited onto this background later, placed at the lower-center of the frame and occupying roughly the lower half. Study the attached product reference image(s) ONLY to infer an appropriate setting, camera height, and lighting direction — the product itself must NOT appear in the background and must NOT be described in your prompt.
+
+Rules:
+- Describe ONLY the environment: the location, surfaces, lighting, and atmosphere.
+- Absolutely NO products, merchandise, packaging, or any equipment/accessories from the product's category. NO people, hands, or body parts.
+- Require a clean, unobstructed, well-lit horizontal surface (floor, table, or counter) across the LOWER-CENTER foreground where the product will rest.
+- Specify a single consistent key light with a clear direction and believable grounded shadows, so the composited product can be matched to the scene.
+- Be extremely specific: lighting quality, environment details, camera angle, mood, color palette.
+- Photorealistic commercial photography only. No text, logos, watermarks, split panels, or collages.
+
+Section type directions:
+- lifestyle: an authentic real-world setting where the product would naturally be used — the location and surfaces only, natural daylight, grounded eye-level perspective, no equipment or items from the product's category present.
+- detail: a macro-photography backdrop — a softly blurred neutral surface (marble, linen, concrete) with gentle diffused lighting.
+- feature: a premium editorial studio backdrop with visual depth — a subtly textured dark surface with soft directional light, dramatic but physically plausible.
+
+Return ONLY valid JSON: {"prompt": "your detailed English background prompt here"}`;
+
 // lifestyle/detail/feature: 제품 합성 방식 (Gemini에 배경만 생성 → Sharp 합성)
 const COMPOSITE_SECTIONS = new Set<string>(['lifestyle', 'detail', 'feature']);
 
@@ -107,6 +130,170 @@ function buildNoProductSuffix(sectionType: string, productName?: string): string
     ? ` The product being sold is: "${trimmedName}". Nothing resembling it or its category may appear in this background.`
     : '';
   return NO_PRODUCT_BASE + NO_CATEGORY_PROPS + identity + hint;
+}
+
+// ── 누끼(컷아웃) 검증 임계값 ──────────────────────────────────────────────
+// 불투명 픽셀 비율이 상한을 넘으면 멀티 제품 콜라주/마케팅 컷(라켓 등 다른
+// 물체 포함) 가능성이 높고, 하한 미만이면 rembg 실패(블롭)로 본다.
+const CUTOUT_MAX_OPAQUE_RATIO = 0.6;
+const CUTOUT_MIN_OPAQUE_RATIO = 0.03;
+
+/** 누끼 PNG의 불투명(alpha>128) 픽셀 비율(0~1)을 계산한다. */
+async function measureOpaqueRatio(png: Buffer): Promise<number> {
+  const { data } = await sharp(png)
+    .ensureAlpha()
+    .extractChannel('alpha')
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  if (data.length === 0) return 0;
+  let opaque = 0;
+  for (let i = 0; i < data.length; i++) {
+    if (data[i]! > 128) opaque++;
+  }
+  return opaque / data.length;
+}
+
+/**
+ * 참조 이미지 테두리 영역의 그레이스케일 분산을 계산한다.
+ * 배경이 균일한(단색 스튜디오 컷) 이미지일수록 값이 낮고,
+ * rembg 누끼 품질이 좋을 가능성이 높다 — 시도 순서 정렬에 사용.
+ */
+async function borderVariance(ref: ReferenceImage): Promise<number> {
+  const SIZE = 200;
+  const RING = 20;
+  const raw = await sharp(Buffer.from(ref.base64, 'base64'))
+    .resize(SIZE, SIZE, { fit: 'fill' })
+    .greyscale()
+    .raw()
+    .toBuffer();
+  let sum = 0;
+  let sumSq = 0;
+  let n = 0;
+  for (let y = 0; y < SIZE; y++) {
+    for (let x = 0; x < SIZE; x++) {
+      if (x >= RING && x < SIZE - RING && y >= RING && y < SIZE - RING) continue;
+      const v = raw[y * SIZE + x]!;
+      sum += v;
+      sumSq += v * v;
+      n++;
+    }
+  }
+  if (n === 0) return Number.MAX_SAFE_INTEGER;
+  const mean = sum / n;
+  return sumSq / n - mean * mean;
+}
+
+/**
+ * 합성용 누끼 선택: 배경이 균일한 참조부터 rembg를 시도하고,
+ * 불투명 비율 검증을 통과한 첫 누끼를 반환한다. 전부 실패하면 null을
+ * 반환해 비합성 경로(제품 ref를 Gemini에 직접 전달)로 fallback시킨다.
+ * 주의: 후보당 Replicate 왕복 1회 — 최악의 경우 refs.length회 발생.
+ */
+async function selectCompositeCutout(refs: ReferenceImage[]): Promise<Buffer | null> {
+  // 1. 배경 균일도 순 정렬 (실패 시 원래 순서 유지)
+  let ordered = refs;
+  if (refs.length > 1) {
+    try {
+      const scored = await Promise.all(
+        refs.map(async (r, i) => ({ r, i, v: await borderVariance(r) })),
+      );
+      scored.sort((a, b) => a.v - b.v);
+      ordered = scored.map((s) => s.r);
+    } catch {
+      /* 정렬 실패는 무시하고 원래 순서로 진행 */
+    }
+  }
+
+  // 2. 순서대로 rembg → 검증
+  for (let i = 0; i < ordered.length; i++) {
+    const png = await removeBackgroundTransparent(ordered[i]!);
+    if (!png) continue;
+    try {
+      const ratio = await measureOpaqueRatio(png);
+      if (ratio > CUTOUT_MAX_OPAQUE_RATIO || ratio < CUTOUT_MIN_OPAQUE_RATIO) {
+        console.warn(
+          `[generate-scene-image] 누끼 검증 실패(후보 ${i}, opaque=${ratio.toFixed(2)}) — 다음 참조 시도`,
+        );
+        continue;
+      }
+      console.log(
+        `[generate-scene-image] 합성 누끼 채택(후보 ${i}, opaque=${ratio.toFixed(2)})`,
+      );
+      return png;
+    } catch {
+      // 측정 자체가 실패하면 누끼를 그대로 사용 (기존 동작 보존)
+      return png;
+    }
+  }
+  console.warn('[generate-scene-image] 유효한 누끼 없음 — 비합성 경로로 fallback');
+  return null;
+}
+
+// ── 합성 후 리파인 패스 (환경변수 SCENE_COMPOSITE_REFINE=true 일 때만) ─────
+// Sharp 합성 결과를 Gemini에 유일한 참조로 넘겨 조명/그림자/가장자리만
+// 정합시킨다. 제품을 다시 그릴 위험이 있으므로 기본 OFF — 반드시 플래그로만.
+const COMPOSITE_REFINE_PROMPT =
+  'This is a composite photograph: a real product photo has been placed onto a generated background. ' +
+  'Refine it into a seamless photorealistic image. STRICT RULES: keep the product\'s exact shape, colors, ' +
+  'proportions, position, and every visible detail pixel-faithful — do NOT add, remove, move, resize, or ' +
+  'redraw any object, and do NOT alter the product in any way. ONLY harmonize: match the lighting and color ' +
+  'temperature between the product and the background, correct the contact shadow so the product sits ' +
+  'naturally on the surface, and soften the cut-out edges. Output a single continuous photograph, no text.';
+
+// ── 합성 모드 배경 검증(안전망) ────────────────────────────────────────────
+const VISION_MEDIA_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+
+/**
+ * 생성된 배경에 제품/카테고리 장비가 섞였는지 Haiku vision으로 검증한다.
+ * yes/no 단답 1회 — 저비용(claude-haiku-4-5). 검증 API 오류는 절대 응답을
+ * 막지 않도록 false(통과)로 처리한다.
+ */
+async function backgroundContainsProduct(
+  imageBase64: string,
+  mimeType: string,
+  productName?: string,
+): Promise<boolean> {
+  try {
+    const client = getAnthropicClient();
+    const mediaType = (VISION_MEDIA_TYPES.has(mimeType) ? mimeType : 'image/png') as
+      | 'image/jpeg'
+      | 'image/png'
+      | 'image/gif'
+      | 'image/webp';
+    const identity = productName?.trim()
+      ? ` or anything related to "${productName.trim()}" or its product category`
+      : '';
+    const res = await client.messages.create({
+      model: 'claude-haiku-4-5',
+      max_tokens: 8,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: { type: 'base64', media_type: mediaType, data: imageBase64 },
+            },
+            {
+              type: 'text',
+              text:
+                'This image should be an EMPTY background scene with no products. ' +
+                `Does it contain any product, merchandise, packaging, sports equipment${identity}? ` +
+                'Answer strictly "yes" or "no".',
+            },
+          ],
+        },
+      ],
+    });
+    const text = res.content
+      .filter((b) => b.type === 'text')
+      .map((b) => (b as { type: 'text'; text: string }).text)
+      .join('');
+    return /^\s*yes/i.test(text);
+  } catch (err) {
+    console.warn('[generate-scene-image] 배경 검증 호출 실패 — 검증 생략:', err);
+    return false;
+  }
 }
 
 async function compositeProductOnBackground(
@@ -226,10 +413,30 @@ export async function POST(req: NextRequest) {
     });
 
     // Point 씬(lifestyle/detail/feature): 누끼 → 배경만 Gemini 생성 → Sharp 합성
-    // 합성 실패 시 기존 방식(product ref 포함해서 Gemini에 전달)으로 자동 fallback
+    // selectCompositeCutout: 균일 배경 참조 우선 + 불투명 비율 검증 통과분만 사용.
+    // 유효 누끼가 없으면 null → 기존 비합성 경로(product ref를 Gemini에 전달)로 fallback
     let compositeProductPng: Buffer | null = null;
     if (COMPOSITE_SECTIONS.has(sectionType) && productRefs.length > 0) {
-      compositeProductPng = await removeBackgroundTransparent(productRefs[0]);
+      // 누끼 소스는 무손실 PNG로 별도 로딩한다: q80 JPEG 재압축을 거친 refs를
+      // rembg에 넣으면 페더 등 미세 가장자리가 뭉개진다. URL 참조는 fetch가
+      // 1회 더 발생하지만 합성 모드 한정이며, 실패 시 기존 q80 refs로 폴백.
+      let cutoutSources: ReferenceImage[] = productRefs;
+      try {
+        const hifi = await loadReferenceImages(
+          {
+            referenceImages: parsed.data.referenceImages,
+            productImageUrls: parsed.data.productImageUrls,
+            productImageBase64: parsed.data.productImageBase64,
+            productImageMimeType: parsed.data.productImageMimeType,
+            productImageUrl: parsed.data.productImageUrl,
+          },
+          { lossless: true },
+        );
+        if (hifi.length > 0) cutoutSources = hifi;
+      } catch {
+        /* 무손실 로딩 실패 시 q80 refs 사용 */
+      }
+      compositeProductPng = await selectCompositeCutout(cutoutSources);
     }
 
     // 합성 성공 시 Gemini에 product ref 미전달 (배경만 생성하도록)
@@ -248,6 +455,11 @@ export async function POST(req: NextRequest) {
       // Claude Sonnet으로 섹션별 씬 프롬프트 생성
       const client = getAnthropicClient();
 
+      // 합성 모드(비편집)에서는 배경 전용 브리프를 사용한다. 편집 모드는
+      // "기존 씬 수정" 사용자 프롬프트와 충돌하므로 기존 경로를 유지한다.
+      const isCompositeBackground = !!compositeProductPng && !isEditMode;
+      const systemPrompt = isCompositeBackground ? BACKGROUND_PROMPT_SYSTEM : SCENE_PROMPT_SYSTEM;
+
       type ContentBlock =
         | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
         | { type: 'text'; text: string };
@@ -265,14 +477,18 @@ export async function POST(req: NextRequest) {
 
       userContent.push({
         type: 'text',
-        text: buildSceneUserPrompt(sectionType, productInfo, sceneHint, { isEditMode, instruction }),
+        text: buildSceneUserPrompt(sectionType, productInfo, sceneHint, {
+          isEditMode,
+          instruction,
+          isCompositeBackground,
+        }),
       });
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const claudeRes = await client.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 600,
-        system: SCENE_PROMPT_SYSTEM,
+        system: systemPrompt,
         messages: [{ role: 'user', content: userContent as any }],
       });
 
@@ -287,10 +503,10 @@ export async function POST(req: NextRequest) {
       const claudePrompt = promptData.prompt;
       if (!claudePrompt) throw new Error('Claude가 프롬프트를 생성하지 못했습니다.');
 
-      // 합성 모드: Claude가 SCENE_PROMPT_SYSTEM 규칙상 항상 끝에 붙이는
-      // PRODUCT_FIDELITY_INSTRUCTION("첨부 이미지의 제품을 씬에 렌더링하라")을
-      // 제거한다. 남겨두면 "제품을 그려라"와 "어떤 물체도 그리지 마라"(no-product
-      // suffix)가 한 프롬프트에서 충돌해 Gemini가 카테고리 소품을 지어낸다.
+      // 방어적 스트립: 배경 브리프(BACKGROUND_PROMPT_SYSTEM)는 fidelity 지시를
+      // 요구하지 않지만, 모델이 학습된 패턴을 따라 에코할 가능성에 대비해
+      // PRODUCT_FIDELITY_INSTRUCTION이 있으면 제거한다(없으면 no-op).
+      // 편집+합성 경로는 여전히 SCENE_PROMPT_SYSTEM을 쓰므로 이 스트립이 필수다.
       const bgPrompt = claudePrompt.replace(PRODUCT_FIDELITY_INSTRUCTION, '').trim();
       finalScenePrompt = compositeProductPng
         ? `${bgPrompt}${buildNoProductSuffix(sectionType, productInfo?.headline)}` // 합성 모드: 배경만 생성
@@ -298,10 +514,45 @@ export async function POST(req: NextRequest) {
     }
 
     // Step 2: Gemini로 씬 생성 (합성 모드: 배경만 / fallback: 제품 포함)
-    const imageResult = await generateFrameImage({
+    let imageResult = await generateFrameImage({
       imagePrompt: finalScenePrompt,
       referenceImages: allImages,
     });
+
+    // Step 2.5: 합성 모드 안전망 — 배경에 제품/카테고리 장비가 섞였는지 검증.
+    // 비용/지연: 합성 요청당 Haiku vision 최대 2회 + Gemini 재생성 최대 1회 추가
+    // (오염이 없으면 Haiku 1회뿐). 위반 시 정확히 1회만 재생성하고, 재검증도
+    // 실패하면 마지막 배경을 그대로 채택한다(루프 없음). 검증 오류는 통과 처리.
+    if (compositeProductPng) {
+      const contaminated = await backgroundContainsProduct(
+        imageResult.imageBase64,
+        imageResult.mimeType,
+        productInfo?.headline,
+      );
+      if (contaminated) {
+        console.warn('[generate-scene-image] 배경에서 제품/장비 검출 — 1회 재생성');
+        try {
+          const retry = await generateFrameImage({
+            imagePrompt:
+              `${finalScenePrompt}\n\nPREVIOUS ATTEMPT REJECTED: the generated background contained a product, ` +
+              'merchandise, or category equipment. Regenerate the same scene with ABSOLUTELY NO products, ' +
+              'merchandise, equipment, or accessories of any kind — an empty environment only.',
+            referenceImages: allImages,
+          });
+          const stillContaminated = await backgroundContainsProduct(
+            retry.imageBase64,
+            retry.mimeType,
+            productInfo?.headline,
+          );
+          imageResult = retry; // 마지막 배경 채택
+          if (stillContaminated) {
+            console.warn('[generate-scene-image] 재생성 후에도 검출 — 마지막 배경으로 진행');
+          }
+        } catch (err) {
+          console.warn('[generate-scene-image] 배경 재생성 실패 — 최초 배경 사용:', err);
+        }
+      }
+    }
 
     // Step 3: 합성 모드 — Gemini 배경 위에 원본 제품(투명 PNG) 합성
     let finalBase64 = imageResult.imageBase64;
@@ -311,6 +562,22 @@ export async function POST(req: NextRequest) {
       const composited = await compositeProductOnBackground(bgBuffer, compositeProductPng);
       finalBase64 = composited.toString('base64');
       finalMime = 'image/jpeg';
+
+      // Step 3.5: (플래그) 조명/그림자/가장자리 정합 리파인 — 기본 OFF.
+      // Gemini가 제품을 재드로잉할 위험이 있어 SCENE_COMPOSITE_REFINE=true
+      // 환경변수로만 활성화한다. 실패 시 Sharp 합성 원본을 그대로 사용.
+      if (process.env.SCENE_COMPOSITE_REFINE === 'true') {
+        try {
+          const refined = await generateFrameImage({
+            imagePrompt: COMPOSITE_REFINE_PROMPT,
+            referenceImages: [{ base64: finalBase64, mimeType: 'image/jpeg' }],
+          });
+          finalBase64 = refined.imageBase64;
+          finalMime = refined.mimeType;
+        } catch (err) {
+          console.warn('[generate-scene-image] 합성 리파인 실패 — Sharp 합성본 사용:', err);
+        }
+      }
     }
 
     return NextResponse.json({
