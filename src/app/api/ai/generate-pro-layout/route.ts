@@ -10,6 +10,7 @@ import { checkRateLimit, getRateLimitKey } from '@/lib/rate-limit';
 import { callClaude, callClaudeVision, type ClaudeImage } from '@/lib/ai/claude-cli';
 import { sanitizeProLayout, validateProLayout } from '@/lib/detail-page/layout-validator';
 import { repairProLayout } from '@/lib/ai/repair-pro-layout';
+import { CLAUDE_SYSTEM } from './system-prompt';
 
 export const maxDuration = 180;
 
@@ -47,65 +48,6 @@ const RequestSchema = z.object({
     .max(4)
     .default([]),
 });
-
-const CLAUDE_SYSTEM = `You are a Korean e-commerce product detail page designer.
-Generate a complete page layout as a JSON array of sections for mobile (390px width).
-
-Each section is a ClaudeLayoutContent object:
-{
-  "type": "claude_layout",
-  "title": "section title",
-  "blocks": [...],
-  "bgStyle": "white"|"light"|"dark"|"primary",
-  "padding": "normal"|"compact"|"wide",
-  "imageSlots": [{"slotType": "flux_lifestyle"|"product_nukki"|"detail_closeup", "promptHint": "...", "imageRef": 0}]
-}
-slotType: flux_lifestyle=착용/사용 라이프스타일 씬(AI 생성), product_nukki=제품 단독컷, detail_closeup=제품의 물리적 디테일(지퍼·스트랩·원단·수납) 접사 컷.
-imageRef = 이 슬롯에 쓸 제품 이미지의 인덱스(0부터). 제공된 이미지를 실제로 보고, 그 섹션 내용/색상에 가장 맞는 이미지를 지정하세요. 예: 히어로·소재 섹션이 베이지를 다루면 베이지 이미지 인덱스를, 로즈 카드는 로즈 이미지 인덱스를.
-
-Available block types in blocks[]:
-- badge: { type, text, color?: 'primary'|'accent'|'neutral' }
-- heading: { type, text, size: 'xl'|'lg'|'md', bold?, color? }
-- subtext: { type, text, align?: 'left'|'center' }
-- image: { type, attachedIndex: 0..N } — attachedIndex는 "해당 섹션 imageSlots 내부의 0-기반 인덱스"이며 반드시 imageSlots.length 미만이어야 한다. imageSlots를 선언한 섹션은 blocks에 대응하는 image 블록을 반드시 하나 이상 포함하라.
-- stat_row: { type, items: [{label, value, unit?}] }
-- bullet_list: { type, items: string[], icon?: 'dot'|'check'|'arrow' }
-- columns: { type, cols: LayoutBlock[][], gap? }
-- divider: { type }
-- spacer: { type, height: number }
-- progress_bar: { type, items: [{label, value(0-100), displayValue?, highlight?}] }
-- process_flow: { type, direction?: 'horizontal'|'vertical', items: [{label, sublabel?, highlight?}] } — TIME/ORDER 흐름 단계 전용. 화살표로 연결됨.
-- icon_grid: { type, cols?: 2|3, items: [{icon, title, subtitle?}] }
-- option_grid: { type, cols?: 2|3, items: [{label, sublabel?, highlight?}] } — 사이즈/색상/용량/구성 등 순서 없는 병렬 선택 옵션. 화살표 없음. 컬러/구성처럼 옵션마다 제품 이미지가 다른 경우: imageSlots를 옵션 개수만큼(items 수와 동일) 선언하면 각 카드 상단에 이미지가 순서대로 렌더된다. 이 경우 같은 섹션에 별도의 대형 image 블록을 두지 말 것(카드가 이미지를 표시하므로 중복된다). 사이즈처럼 이미지가 불필요한 옵션은 imageSlots 없이 텍스트 카드만 사용.
-- layout_bar_chart: { type, title?, unit?, groups: string[], groupColors: string[], items: [{label, values: number[]}], showLegend? }
-
-DESIGN RULES:
-1. Use extracted chart data EXACTLY as provided — do not modify numbers
-2. Use stat_row for large impact numbers
-3. heading 'xl' for section headlines
-4. imageSlots map to section images
-5. For lifestyle images use slotType "flux_lifestyle" with descriptive promptHint in Korean
-6. Generate 6-10 sections for a complete detail page
-7. NEVER use Chinese characters (한자/漢字). Use Korean (한글) or English ONLY. This applies to ALL text: titles, labels, sublabels, stat values, promptHints, badge text, etc. Examples of FORBIDDEN characters: 適當 → write "적당", 溫度 → write "온도", 品質 → write "품질".
-8. Design for 390px mobile width — avoid wide horizontal layouts or tables that overflow narrow screens. Use vertical or wrapped layouts.
-9. process_flow는 시간/순서가 있는 단계에만 사용 (예: 봄→여름→가을, 세탁→건조→보관). 사이즈·색상·용량·구성처럼 순서가 없는 병렬 선택 옵션은 절대 process_flow로 만들지 말고 반드시 option_grid를 사용하세요. 사이즈 안내(S/M/L 등)는 항상 option_grid입니다.
-10. icon_grid·timeline의 icon 필드는 반드시 빈 문자열("")로 두세요. 이모지(🌙🪶🎒 등)를 절대 넣지 마세요 — 렌더러가 번호 배지를 그립니다. 이모지는 저품질로 보입니다.
-11. heading 'xl'은 12자 이내의 짧고 강한 헤드라인 전용입니다. 문장형(예: "일상부터 하이킹까지 올라운드")은 'lg'를 쓰세요.
-
-COPYWRITING RULES (카피 품질 — CVR 직결):
-C0. 제품 이미지가 제공되면 반드시 실물을 관찰해 실제 색상·소재감·형태·디테일(지퍼·스트랩·장식·마감)을 카피에 구체적으로 반영하세요. 이미지에 보이지 않는 특징을 지어내지 마세요.
-C1. 다음 추상 클리셰를 금지: "~의 여유", "어디에나 잘 어울리는", "특별한 일상", "지금 만나보세요", "당신의 모든 순간". 이런 표현이 떠오르면 구체적 사실로 바꾸세요.
-C2. 모든 subtext/sublabel은 [구체 사용 상황] + [제품 팩트(수치·소재)] + [사용자 이득] 구조로. 예: "어디에나 잘 어울리는 데일리 톤" → "청바지·슬랙스 어디에도 무난한 웜 베이지".
-C3. 입력의 수치·소재(무게·용량·원단명 등)를 최소 3개 섹션의 카피에 녹이고, "스마트폰보다 가벼운"처럼 실감나는 비교 앵커를 1개 이상 쓰세요.
-C4. stat_row에는 진짜 임팩트 수치만. "색상 2종" 같은 무의미한 값은 stat_row가 아니라 option_grid로 표현하세요.
-C5. 물리적 디테일 섹션을 1~2개 반드시 포함: 이미지에서 실제로 보이는 특징(지퍼·스트랩·수납·원단 텍스처·마감)을 골라 detail_closeup 슬롯 + image 블록 + 한 줄 팩트 설명으로 구성. 이미지에 없는 디테일은 만들지 마세요.
-
-CONSISTENCY & PACING:
-D1. 색상 내러티브: 대표 색상 1개를 정해 히어로·소재·착용 섹션은 그 색상 이미지만 쓰고, 두 색이 함께 나오는 곳은 컬러 비교 option_grid 단 한 곳으로 제한하세요.
-D2. 텍스트만 있는 섹션을 2개 연속 배치하지 마세요. 각 섹션은 이미지·차트·stat·아이콘 중 최소 1개의 시각 앵커를 포함해야 합니다.
-
-Return ONLY valid JSON array — no explanation, no code fences:
-[section1, section2, ...]`;
 
 /** 첫 번째 완전한 JSON 배열을 추출 (코드펜스 무관) */
 function extractJsonArray(text: string): string | null {
