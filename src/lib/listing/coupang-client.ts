@@ -14,6 +14,9 @@ import { proxyFetch } from '@/lib/proxy-fetch';
 
 const API_HOST = 'https://api-gateway.coupang.com';
 const API_DELAY = 200;
+// 로켓그로스(rg_open_api) 전용 요청 간격. RG는 분당 50회 한도라 일반 200ms(=300회/분)로는
+// 필연적으로 429가 난다. 1300ms(≈46회/분)로 한도 아래를 유지해 429 자체를 예방한다.
+const RG_API_DELAY = 1300;
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -217,10 +220,21 @@ export class CoupangClient {
 
       if (res.status !== 429 || attempt >= RETRY_DELAYS_SEC.length) break;
 
+      // 대기 시간 우선순위: Retry-After 헤더 > 응답 body의 "Try after N seconds" 메시지 > 기본 백오프.
+      // 쿠팡 로켓그로스(rg_open_api)는 Retry-After 헤더 없이 대기 시간을 body 메시지에만 담아
+      // 보내므로("ERROR: Too many request. Try after 45 seconds") 헤더만 보면 45초를 기다리지
+      // 못하고 짧은 기본 백오프로 재시도를 소진해 429가 그대로 표면화된다.
       const retryAfterHeader = Number(res.headers.get('Retry-After'));
-      const waitSec = Number.isFinite(retryAfterHeader) && retryAfterHeader > 0
-        ? retryAfterHeader
-        : RETRY_DELAYS_SEC[attempt];
+      const bodyWaitMatch = text.match(/after\s+(\d+)\s*second/i);
+      const bodyWaitSec = bodyWaitMatch ? Number(bodyWaitMatch[1]) : NaN;
+      const rawWaitSec =
+        Number.isFinite(retryAfterHeader) && retryAfterHeader > 0
+          ? retryAfterHeader
+          : Number.isFinite(bodyWaitSec) && bodyWaitSec > 0
+            ? bodyWaitSec
+            : RETRY_DELAYS_SEC[attempt];
+      // 과도한 블로킹 방지: 최대 60초로 캡(+1초 여유로 경계 오차 흡수)
+      const waitSec = Math.min(rawWaitSec + 1, 60);
       console.warn(`[coupang-retry] 429 attempt ${attempt + 1}/${RETRY_DELAYS_SEC.length}, sleeping ${waitSec}s → ${pathOnly}`);
       await sleep(waitSec * 1000);
     }
@@ -730,7 +744,7 @@ export class CoupangClient {
     if (params.nextToken) parts.push(`nextToken=${encodeURIComponent(params.nextToken)}`);
 
     const url = `/v2/providers/rg_open_api/apis/api/v1/vendors/${this.vendorId}/rg/orders?${parts.join('&')}`;
-    await sleep(API_DELAY);
+    await sleep(RG_API_DELAY);
     const res = await this.request<Array<Record<string, unknown>>>('GET', url);
     if (res.code !== 'SUCCESS' && String(res.code) !== '200') {
       throw new Error(`로켓그로스 주문 조회 실패 (code: ${res.code}): ${res.message}`);
@@ -767,7 +781,7 @@ export class CoupangClient {
     if (params?.nextToken) parts.push(`nextToken=${encodeURIComponent(params.nextToken)}`);
     const qs = parts.length ? `?${parts.join('&')}` : '';
     const url = `/v2/providers/rg_open_api/apis/api/v1/vendors/${this.vendorId}/rg/inventory/summaries${qs}`;
-    await sleep(API_DELAY);
+    await sleep(RG_API_DELAY);
     const res = await this.request<Array<Record<string, unknown>>>('GET', url);
     if (res.code !== 'SUCCESS' && String(res.code) !== '200') {
       throw new Error(`RG 재고 조회 실패 (code: ${res.code}): ${res.message}`);
