@@ -43,6 +43,7 @@ interface ProductRow {
   weighted_avg_rg_shipping: number;
   total_purchase_amount: number;
   current_stock: number;
+  total_entry_stock: number;
   stock_value: number;
   total_realized_profit: number;
   total_sales_amount: number;
@@ -1017,10 +1018,10 @@ export default function CostManagementTab() {
       )}
       {showRgModal && (
         <RocketGrowthShipmentModal
-          products={products.filter((p) => p.current_stock > 0).map((p) => ({
+          products={products.filter((p) => p.total_entry_stock > 0).map((p) => ({
             id: p.id,
             product_name: p.product_name,
-            current_stock: p.current_stock,
+            current_stock: p.total_entry_stock,
           }))}
           onClose={() => setShowRgModal(false)}
           onCreated={load}

@@ -196,6 +196,10 @@ export async function GET(request: NextRequest) {
 
       const metrics = calculateProductMetrics(batchesToUse);
 
+      // RG 입고 등록 검증 기준과 일치: 채널 무관 원입고 수량 합계(판매 미차감)
+      // rg-shipments POST의 SUM(cost_entries.quantity)와 동일한 정의
+      const totalEntryStock = pEntries.reduce((s, e) => s + e.quantity, 0);
+
       // 채널 필터된 입고/판매로 FIFO 실행 → current_stock, stock_value 정확히 계산
       let fifoResult: FifoSummary = { current_stock: 0, stock_value: 0, total_realized_profit: 0, sale_details: [] };
       let fifoError = false;
@@ -257,6 +261,7 @@ export async function GET(request: NextRequest) {
         weighted_avg_rg_shipping: metrics.weighted_avg_rg_shipping,
         total_purchase_amount: periodPurchaseAmount,
         current_stock: fifoResult.current_stock,
+        total_entry_stock: totalEntryStock,
         stock_value: fifoResult.stock_value,
         total_realized_profit: periodRealizedProfit,
         total_sales_amount: periodSalesAmount,

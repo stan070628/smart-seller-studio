@@ -80,9 +80,10 @@ export default function SettlementTab() {
     r.purchase + r.parcelFee + r.adSpend + r.boxCost;
 
   // 최근 며칠은 쿠팡 확정(윙 인식 ~3~4일, RG API 반영 ~1~2일) 전이라 실제보다 낮게 잡힌다.
-  // 트레일링 4일(오늘 포함)을 "미확정"으로 표시한다.
+  // 윙 인식이 최대 4일까지 걸리므로 diff <= 4(오늘 포함 5일)를 "미확정"으로 표시한다.
+  // (diff==4 인 날짜가 아직 인식 전인데 확정처럼 보이던 off-by-one 수정)
   const todayKst = nowKst.toISOString().slice(0, 10);
-  const PROVISIONAL_DAYS = 4;
+  const PROVISIONAL_DAYS = 5;
   const isProvisional = (d: string) => {
     const diff = Math.round((Date.parse(todayKst) - Date.parse(d)) / 86400000);
     return diff >= 0 && diff < PROVISIONAL_DAYS;
