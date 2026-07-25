@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateProLayout, sanitizeProLayout } from '@/lib/detail-page/layout-validator';
+import { validateProLayout, sanitizeProLayout, isNoiseStatItem } from '@/lib/detail-page/layout-validator';
 
 /** 유효한 최소 섹션(6개) 생성 헬퍼 */
 function validSections(count = 6): unknown[] {
@@ -240,7 +240,49 @@ describe('sanitizeProLayout — stat_row 위생', () => {
     }];
     const { sections } = sanitizeProLayout(secs, { statHygiene: true });
     const cols = ((sections[0] as { blocks: Array<{ cols: unknown[][] }> }).blocks[0]!).cols;
-    expect(cols[0]).toEqual([]);
-    expect(cols[1]).toHaveLength(1);
+    // stat_row가 빠진 컬럼은 통째로 제거된다 (빈 flex 칸 렌더 방지)
+    expect(cols).toHaveLength(1);
+    expect(cols[0]).toHaveLength(1);
+  });
+});
+
+describe('isNoiseStatItem', () => {
+  const NOISE: Array<[string, string, string]> = [
+    ['소매 길이', '0', 'cm'],
+    ['사이즈', '4', '단계'],
+    ['사이즈', '4단계', ''],
+    ['컬러', '2종', ''],
+    ['색상', '2', '종'],
+    ['사이즈 단계', '4', ''],
+    ['소매', '없음', ''],
+    ['부자재', '-', ''],
+  ];
+
+  const LEGIT: Array<[string, string, string]> = [
+    ['설탕', '0', 'g'],
+    ['유해물질', '0', '%'],
+    ['두께 오차', '0', 'mm'],
+    ['길이 변형', '0', '%'],
+    ['주름', '0', '개'],
+    ['누적 판매', '12000', '개'],
+    ['보증 기간', '24', '개월'],
+    ['개봉 후 사용기간', '12', '개월'],
+    ['최종 등급', '3', ''],
+    ['각종 인증', '5', ''],
+    ['세트 구성 중량', '500', 'g'],
+    ['세트당 수량', '3', ''],
+    ['색상 유지력', '95', '%'],
+    ['단계별 온도 조절', '5', ''],
+    ['가슴둘레', '95~110', 'cm'],
+    ['무게', '180', 'g'],
+    ['폭발 위험', '0', '건'],
+  ];
+
+  it.each(NOISE)('노이즈로 판정: %s / %s / %s', (label, value, unit) => {
+    expect(isNoiseStatItem({ label, value, unit })).toBe(true);
+  });
+
+  it.each(LEGIT)('정당한 지표로 유지: %s / %s / %s', (label, value, unit) => {
+    expect(isNoiseStatItem({ label, value, unit })).toBe(false);
   });
 });

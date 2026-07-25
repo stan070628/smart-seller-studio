@@ -93,9 +93,18 @@ function forEachBlock(sec: unknown, cb: (block: Record<string, unknown>, path: s
 // ── stat_row 위생 ──
 // 치수의 0(= 그 부위가 없음)과 옵션 개수는 임팩트 수치가 아니다.
 // "설탕 0g"처럼 0 자체가 셀링포인트인 경우가 있어 0값 제거는 치수로 좁힌다.
-const DIMENSION_WORDS = /(cm|mm|㎜|㎝|인치|길이|두께|높이|너비|폭|깊이|지름|둘레)/i;
-const COUNT_WORDS = /(단계|종|가지|개|컬러|색상|종류|옵션|세트)/;
-const COUNT_VALUE = /^\d+\s*(단계|종|가지|개|컬러|색상|종류|옵션|세트)$/;
+// 0이 자랑거리인 패턴 — "두께 오차 0mm", "불량 0건"은 지우면 안 된다.
+const ZERO_IS_VIRTUE = /(오차|편차|변형|수축|하자|불량|손상|위험|검출|이염)/;
+// 실제 치수 단위 (완전일치)
+const DIMENSION_UNITS = new Set(['cm', 'mm', '㎜', '㎝', 'm', '인치', 'inch']);
+// 치수 명사가 label 끝에 올 때만 — "폭발"처럼 앞쪽 매칭을 피한다
+const DIMENSION_LABEL_SUFFIX = /(길이|두께|높이|너비|폭|깊이|지름|둘레)$/;
+// 개수 단위 (완전일치) — "개월"은 "개"와 다른 문자열이므로 자동으로 제외된다
+const COUNT_UNITS = new Set(['단계', '종', '가지', '개', '컬러', '색상', '종류', '옵션', '세트']);
+// unit이 비었을 때만 쓰는 좁은 label 구문
+const COUNT_LABEL_PHRASE = /(사이즈\s*단계|컬러\s*수|색상\s*수|옵션\s*수|구성\s*수|종류\s*수)/;
+// 개수형으로 볼 상한 — "누적 판매 12000개"는 실적 지표다
+const MAX_COUNT_VALUE = 100;
 const ABSENT_VALUES = new Set(['없음', '무', '-', '–', 'N/A', 'n/a']);
 
 interface StatItem { label?: string; value?: string; unit?: string }
@@ -103,23 +112,32 @@ interface StatItem { label?: string; value?: string; unit?: string }
 /** 임팩트 수치로 볼 수 없는 stat 항목인지 */
 export function isNoiseStatItem(item: StatItem): boolean {
   const value = (item?.value ?? '').trim();
-  const label = item?.label ?? '';
-  const unit = item?.unit ?? '';
+  const label = (item?.label ?? '').trim();
+  const unit = (item?.unit ?? '').trim();
 
   if (value === '' || ABSENT_VALUES.has(value)) return true;
-  if (COUNT_VALUE.test(value)) return true;
 
   const nums = value.match(/\d+(?:\.\d+)?/g);
   if (!nums) return false;
+  const isZero = nums.every((n) => Number(n) === 0);
 
-  // 값이 0 + 치수 계열 → "소매 길이 0cm"
-  if (nums.every((n) => Number(n) === 0) && DIMENSION_WORDS.test(`${label} ${unit} ${value}`)) {
-    return true;
+  // 값이 0 + 치수 → "소매 길이 0cm" (그 부위가 없다는 뜻).
+  // 단 "두께 오차 0mm"처럼 0이 자랑인 표현은 남긴다.
+  if (isZero) {
+    if (ZERO_IS_VIRTUE.test(label)) return false;
+    return DIMENSION_UNITS.has(unit) || DIMENSION_LABEL_SUFFIX.test(label);
   }
-  // 값이 정수 + label/unit이 개수 단위 → "4" + "단계"
-  if (/^\d+$/.test(value) && COUNT_WORDS.test(`${label} ${unit}`)) return true;
 
-  return false;
+  // 개수형 판정. "4단계"처럼 값에 단위가 붙은 형태와 unit이 분리된 형태를 모두 본다.
+  const m = value.match(/^(\d+)\s*(\S*)$/);
+  if (!m) return false;
+  const n = Number(m[1]);
+  // 큰 수는 옵션 개수가 아니라 실적 지표다 — "누적 판매 12000개".
+  if (!Number.isFinite(n) || n >= MAX_COUNT_VALUE) return false;
+
+  const inlineUnit = m[2] ?? '';
+  if (inlineUnit !== '') return COUNT_UNITS.has(inlineUnit);
+  return COUNT_UNITS.has(unit) || COUNT_LABEL_PHRASE.test(label);
 }
 
 /**
@@ -134,16 +152,22 @@ function cleanStatBlocks(blocks: unknown[], topLevel: boolean): unknown[] {
     const block = { ...(b as Record<string, unknown>) };
 
     if (Array.isArray(block.cols)) {
-      block.cols = (block.cols as unknown[]).map((col) =>
-        Array.isArray(col) ? cleanStatBlocks(col, false) : col
-      );
+      // stat_row를 빼서 빈 컬럼이 생기면 렌더러가 빈 flex 칸을 그린다 → 함께 제거한다.
+      const cols = (block.cols as unknown[])
+        .map((col) => (Array.isArray(col) ? cleanStatBlocks(col, false) : col))
+        .filter((col) => !Array.isArray(col) || col.length > 0);
+      if (cols.length === 0) continue; // 모든 컬럼이 비면 columns 블록 자체를 드롭
+      block.cols = cols;
     }
 
     if (block.type === 'stat_row' && Array.isArray(block.items)) {
-      const kept = (block.items as StatItem[]).filter(
+      const original = block.items as StatItem[];
+      const kept = original.filter(
         (it) => it && typeof it === 'object' && !isNoiseStatItem(it)
       );
-      if (kept.length < 2) {
+      // 위생의 목적은 잡음 제거지 구조 개편이 아니다 — 필터링이 실제로 일어난 경우에만
+      // 2개 미만 규칙을 적용한다. 원래도 1개였던 stat_row는 그대로 둔다.
+      if (kept.length < 2 && kept.length < original.length) {
         if (!topLevel) continue; // cols 안: 블록 자체 제거
         block.items = [];        // 최상위: pruneBlocks가 제거
       } else {
