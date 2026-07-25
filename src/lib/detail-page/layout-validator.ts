@@ -3,11 +3,13 @@ import { z } from 'zod';
 import { checkProhibitedPhrases } from '@/lib/ai/prompts/detail-page';
 import { normalizeImageBlocks } from './layout-image-blocks';
 import type { LayoutBlock } from '@/types/detail-page';
+import { collectOptionCoverage, type OptionSection } from './product-options';
 
 export interface Violation {
   code:
     | 'schema' | 'cjk' | 'broken_text' | 'empty_block'
-    | 'duplicate' | 'section_count' | 'prohibited';
+    | 'duplicate' | 'section_count' | 'prohibited'
+    | 'option_compare' | 'option_coverage';
   path: string;
   message: string;
   severity: 'error' | 'warning';
@@ -255,6 +257,53 @@ export function validateProLayout(sections: unknown, opts?: ProLayoutOpts): Vali
       if (isEmptyBlock(block)) violations.push({ code: 'empty_block', path: `${base}.${bpath}`, message: `빈 블록(${String(block.type)})`, severity: 'warning', autoFixable: true });
     });
   });
+
+  // ── 옵션 커버리지 (고유 옵션이 2개 이상일 때만) ──
+  const nameByIdx = opts?.optionNameByImageIndex;
+  if (nameByIdx && new Set(nameByIdx.values()).size >= 2) {
+    const cov = collectOptionCoverage(sections as OptionSection[], nameByIdx);
+
+    if (cov.compareSectionCount === 0) {
+      violations.push({
+        code: 'option_compare', path: 'sections',
+        message: '옵션 비교 섹션이 없습니다. option_grid + 옵션 수만큼의 imageSlots를 가진 섹션이 1개 필요합니다.',
+        severity: 'error', autoFixable: false,
+      });
+    } else if (cov.compareSectionCount > 1) {
+      violations.push({
+        code: 'option_compare', path: 'sections',
+        message: `옵션 비교 섹션이 ${cov.compareSectionCount}개입니다 (1개여야 함).`,
+        severity: 'warning', autoFixable: false,
+      });
+    }
+
+    if (cov.unresolvedSlots > 0) {
+      violations.push({
+        code: 'option_coverage', path: 'sections',
+        message: `비교 섹션 밖 이미지 슬롯 ${cov.unresolvedSlots}개에 imageRef가 없거나 옵션명 없는 이미지를 가리킵니다.`,
+        severity: 'error', autoFixable: false,
+      });
+    }
+
+    const entries = [...cov.counts.entries()];
+    const zero = entries.filter(([, c]) => c === 0).map(([n]) => n);
+    if (zero.length > 0) {
+      violations.push({
+        code: 'option_coverage', path: 'sections',
+        message: `비교 섹션 밖에서 한 번도 등장하지 않은 옵션: ${zero.join(', ')}`,
+        severity: 'error', autoFixable: false,
+      });
+    } else if (entries.length > 0) {
+      const counts = entries.map(([, c]) => c);
+      if (Math.max(...counts) - Math.min(...counts) > 1) {
+        violations.push({
+          code: 'option_coverage', path: 'sections',
+          message: `옵션 편중: ${entries.map(([n, c]) => `${n} ${c}회`).join(', ')} (편차 1 이하여야 함)`,
+          severity: 'error', autoFixable: false,
+        });
+      }
+    }
+  }
 
   const isClean = !violations.some((v) => v.severity === 'error');
   return { violations, isClean };

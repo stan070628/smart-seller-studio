@@ -286,3 +286,107 @@ describe('isNoiseStatItem', () => {
     expect(isNoiseStatItem({ label, value, unit })).toBe(false);
   });
 });
+
+describe('validateProLayout — 옵션 커버리지', () => {
+  const nameByIdx = new Map<number, string>([[0, '화이트'], [1, '블랙']]);
+
+  function imgSection(title: string, refs: Array<number | undefined>): unknown {
+    return {
+      type: 'claude_layout',
+      title,
+      blocks: [{ type: 'heading', text: title, size: 'xl' }],
+      imageSlots: refs.map((r) => ({ slotType: 'flux_lifestyle', imageRef: r })),
+    };
+  }
+
+  function compareSection(): unknown {
+    return {
+      type: 'claude_layout',
+      title: '컬러',
+      blocks: [{ type: 'option_grid', items: [{ label: '화이트' }, { label: '블랙' }] }],
+      imageSlots: [
+        { slotType: 'product_nukki', imageRef: 0 },
+        { slotType: 'product_nukki', imageRef: 1 },
+      ],
+    };
+  }
+
+  /** 비교 1개 + 화이트 2 / 블랙 2 — 균형 잡힌 6섹션 */
+  function balanced(): unknown[] {
+    return [
+      imgSection('히어로', [0]),
+      imgSection('소재', [1]),
+      compareSection(),
+      imgSection('디테일', [0]),
+      imgSection('활용', [1]),
+      { type: 'claude_layout', title: '안내', blocks: [{ type: 'heading', text: '안내', size: 'xl' }] },
+    ];
+  }
+
+  it('opts가 없으면 옵션 검사를 하지 않는다', () => {
+    const secs = [imgSection('a', [0]), imgSection('b', [0]), ...balanced().slice(2)];
+    const res = validateProLayout(secs);
+    expect(res.violations.filter((v) => v.code.startsWith('option'))).toHaveLength(0);
+  });
+
+  it('옵션이 1개면 검사하지 않는다', () => {
+    const single = new Map<number, string>([[0, '화이트']]);
+    const res = validateProLayout(balanced(), { optionNameByImageIndex: single });
+    expect(res.violations.filter((v) => v.code.startsWith('option'))).toHaveLength(0);
+  });
+
+  it('균형 잡힌 레이아웃은 옵션 위반이 없다', () => {
+    const res = validateProLayout(balanced(), { optionNameByImageIndex: nameByIdx });
+    expect(res.violations.filter((v) => v.code.startsWith('option'))).toHaveLength(0);
+  });
+
+  it('비교 섹션이 없으면 error', () => {
+    const secs = balanced().filter((_, i) => i !== 2);
+    const res = validateProLayout(secs, { optionNameByImageIndex: nameByIdx });
+    const v = res.violations.find((x) => x.code === 'option_compare');
+    expect(v?.severity).toBe('error');
+    expect(res.isClean).toBe(false);
+  });
+
+  it('한 옵션이 비교 섹션 밖에 한 번도 안 나오면 error', () => {
+    const secs = balanced();
+    secs[1] = imgSection('소재', [0]);
+    secs[4] = imgSection('활용', [0]);
+    const res = validateProLayout(secs, { optionNameByImageIndex: nameByIdx });
+    const v = res.violations.find((x) => x.code === 'option_coverage');
+    expect(v?.severity).toBe('error');
+    expect(v?.message).toContain('블랙');
+  });
+
+  it('등장 횟수 편차가 1을 넘으면 error', () => {
+    const secs = balanced();
+    secs[3] = imgSection('디테일', [0, 0, 0]);
+    const res = validateProLayout(secs, { optionNameByImageIndex: nameByIdx });
+    // 화이트 4 / 블랙 2 → 편차 2
+    expect(res.violations.some((x) => x.code === 'option_coverage')).toBe(true);
+  });
+
+  it('편차가 정확히 1이면 통과한다', () => {
+    const secs = balanced();
+    secs.push(imgSection('추가', [0]));
+    // 화이트 3 / 블랙 2 → 편차 1
+    const res = validateProLayout(secs, { optionNameByImageIndex: nameByIdx });
+    expect(res.violations.filter((v) => v.code === 'option_coverage')).toHaveLength(0);
+  });
+
+  it('비교 섹션 밖 슬롯에 imageRef가 없으면 error', () => {
+    const secs = balanced();
+    secs[0] = imgSection('히어로', [undefined]);
+    const res = validateProLayout(secs, { optionNameByImageIndex: nameByIdx });
+    const v = res.violations.find((x) => x.code === 'option_coverage' && x.message.includes('imageRef'));
+    expect(v?.severity).toBe('error');
+  });
+
+  it('비교 섹션이 2개 이상이면 warning (error 아님)', () => {
+    const secs = balanced();
+    secs.splice(3, 0, compareSection());
+    const res = validateProLayout(secs, { optionNameByImageIndex: nameByIdx });
+    const v = res.violations.find((x) => x.code === 'option_compare');
+    expect(v?.severity).toBe('warning');
+  });
+});
