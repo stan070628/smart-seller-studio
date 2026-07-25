@@ -41,7 +41,7 @@ const RequestBodySchema = z.object({
   instruction: z.string().max(500).optional(),
 });
 
-const PRODUCT_FIDELITY_INSTRUCTION = `Using the attached product image(s) as a visual reference, study the product's overall shape, proportions, color palette, material texture, and key design details, then render it as a new photorealistic image naturally integrated in the scene. The product rendition should faithfully capture the reference's essential visual characteristics (form, color scheme, distinctive features) as an independent creative work — not a direct reproduction of the original photograph. IMPORTANT: Use EXACTLY the same quantity of items as shown in the reference image — do not add more items, do not duplicate products. SINGLE FRAME ONLY: Generate exactly one single continuous photograph — no split panels, diptychs, multi-view layouts, before/after comparisons, or composite image compositions.`;
+const PRODUCT_FIDELITY_INSTRUCTION = `Using the attached product image(s) as a visual reference, study the product's overall shape, proportions, color palette, material texture, and key design details, then render it as a new photorealistic image naturally integrated in the scene. The product rendition should faithfully capture the reference's essential visual characteristics (form, color scheme, distinctive features) as an independent creative work — not a direct reproduction of the original photograph. IMPORTANT: Use EXACTLY the same quantity of items as shown in the reference image — do not add more items, do not duplicate products. SINGLE FRAME ONLY: Generate exactly one single continuous photograph — no split panels, diptychs, multi-view layouts, before/after comparisons, or composite image compositions. NO SPARKLE MARKS: Do NOT render any four-pointed star, sparkle, glitter, or diamond glyph anywhere in the image — not on the garment, product surface, or background. If such a mark appears in the reference image, treat it as an artifact and omit it. POSITIVE SUBJECT: If a person appears, they must look confident, comfortable, and at ease — relaxed or lightly positive expression, upright active posture. No grimacing, exhaustion, hunching over, hands on knees, slumping, distress, or discomfort.`;
 
 const SCENE_PROMPT_SYSTEM = `You are an expert e-commerce product photographer and AI image prompt engineer.
 
@@ -52,6 +52,7 @@ Rules:
 - Create a COMPLETE scene with the product naturally integrated — not just a background
 - Be extremely specific: lighting quality, environment details, props, camera angle, mood, color palette
 - Do NOT include any text, logos, watermarks, or price tags in the scene description
+- Do NOT describe any four-pointed star, sparkle, or glitter mark on the product or background. If a person appears, describe a confident, comfortable, energetic subject — never fatigue, strain, or discomfort.
 - The output must be a photorealistic commercial photography scene
 - CRITICAL PRODUCT COUNT: The multiple reference images show the SAME single product from different angles — they do NOT represent multiple products. Carefully count the EXACT number of each item type that makes up ONE product unit (e.g., "1 spoon and 1 chopstick set" or "3 bottles sold together"). Your prompt MUST specify this EXACT count. NEVER duplicate or multiply items based on the number of reference images provided. State the count explicitly: "exactly 1 [item]" etc.
 - CRITICAL: The generated prompt MUST end with this exact instruction: "${PRODUCT_FIDELITY_INSTRUCTION}"
@@ -78,7 +79,7 @@ Rules:
 - Require a clean, unobstructed, well-lit horizontal surface (floor, table, or counter) across the LOWER-CENTER foreground where the product will rest.
 - Specify a single consistent key light with a clear direction and believable grounded shadows, so the composited product can be matched to the scene.
 - Be extremely specific: lighting quality, environment details, camera angle, mood, color palette.
-- Photorealistic commercial photography only. No text, logos, watermarks, split panels, or collages.
+- Photorealistic commercial photography only. No text, logos, watermarks, sparkles, four-pointed stars, split panels, or collages.
 
 Section type directions:
 - lifestyle: an authentic real-world setting where the product would naturally be used — the location and surfaces only, natural daylight, grounded eye-level perspective, no equipment or items from the product's category present.
