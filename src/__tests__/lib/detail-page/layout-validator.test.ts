@@ -353,9 +353,11 @@ describe('validateProLayout — 옵션 커버리지', () => {
     secs[1] = imgSection('소재', [0]);
     secs[4] = imgSection('활용', [0]);
     const res = validateProLayout(secs, { optionNameByImageIndex: nameByIdx });
-    const v = res.violations.find((x) => x.code === 'option_coverage');
-    expect(v?.severity).toBe('error');
-    expect(v?.message).toContain('블랙');
+    const coverage = res.violations.filter((x) => x.code === 'option_coverage');
+    expect(coverage[0]?.severity).toBe('error');
+    expect(coverage[0]?.message).toContain('블랙');
+    // 미등장 옵션이 있으면 편차도 당연히 크다. 같은 원인에 위반을 2개 쌓지 않는다.
+    expect(coverage).toHaveLength(1);
   });
 
   it('등장 횟수 편차가 1을 넘으면 error', () => {
