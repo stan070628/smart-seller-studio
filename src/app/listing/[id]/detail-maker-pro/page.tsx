@@ -1095,7 +1095,22 @@ export default function DetailMakerProPage() {
             // Step 2: 생성형 슬롯(flux_lifestyle=라이프스타일, detail_closeup=디테일 접사)
             // 섹션마다 Gemini 씬 생성. generate-scene-image: 누끼 → 배경 생성 → 합성.
             const geminiUrlMap: Record<number, string> = {};
-            if (uploadedImageUrls.length > 0) {
+
+            // 재개 시 productImages(File) 없음 → 저장해둔 productImageUrls로 폴백
+            const effectiveProductUrls = uploadedImageUrls.length > 0 ? uploadedImageUrls : productImageUrls;
+            // 실사진 override: 업로드된 detail_closeup이 그 섹션의 targeting gen 슬롯(genSlotIdx)일 때만
+            const realBySection: Record<number, string> = {};
+            for (const sl of slots) {
+              if (!sl.uploadedUrl) continue;
+              const sec = generatedSections[sl.sectionIndex];
+              const genSlotIdx = (sec?.imageSlots ?? []).findIndex(
+                x => x.slotType === 'flux_lifestyle' || x.slotType === 'detail_closeup',
+              );
+              if (genSlotIdx === sl.slotIndex) realBySection[sl.sectionIndex] = sl.uploadedUrl;
+            }
+            Object.assign(geminiUrlMap, realBySection);
+
+            if (effectiveProductUrls.length > 0) {
               if (editBtn) editBtn.textContent = 'AI 이미지 생성 중...';
 
               const isGenSlot = (t?: string) =>
@@ -1105,7 +1120,7 @@ export default function DetailMakerProPage() {
                 t === 'detail_closeup' ? 'detail' : 'lifestyle';
               const genItems = generatedSections
                 .map((s, i) => ({ s, i }))
-                .filter(({ s }) => s.imageSlots?.some(slot => isGenSlot(slot.slotType)));
+                .filter(({ s, i }) => realBySection[i] === undefined && (s.imageSlots?.some(slot => isGenSlot(slot.slotType)) ?? false));
 
               await Promise.allSettled(
                 genItems.map(async ({ s, i }) => {
@@ -1113,9 +1128,9 @@ export default function DetailMakerProPage() {
                     const slot = s.imageSlots?.find(sl => isGenSlot(sl.slotType));
                     // Claude가 지정한 imageRef 제품 이미지를 씬 합성의 첫 ref로 → 색상 일치.
                     const refImages =
-                      typeof slot?.imageRef === 'number' && uploadedImageUrls[slot.imageRef]
-                        ? [uploadedImageUrls[slot.imageRef], ...uploadedImageUrls].slice(0, 2)
-                        : uploadedImageUrls.slice(0, 2);
+                      typeof slot?.imageRef === 'number' && effectiveProductUrls[slot.imageRef]
+                        ? [effectiveProductUrls[slot.imageRef], ...effectiveProductUrls].slice(0, 2)
+                        : effectiveProductUrls.slice(0, 2);
                     const sceneRes = await fetch('/api/ai/generate-scene-image', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
@@ -1171,8 +1186,8 @@ export default function DetailMakerProPage() {
                   const refIdx =
                     typeof slot.imageRef === 'number' ? slot.imageRef : i + idx;
                   const chosen =
-                    uploadedImageUrls.length > 0
-                      ? uploadedImageUrls[refIdx % uploadedImageUrls.length]
+                    effectiveProductUrls.length > 0
+                      ? effectiveProductUrls[refIdx % effectiveProductUrls.length]
                       : undefined;
                   // 생성 씬 슬롯 → Gemini 씬, 그 외 슬롯 → imageRef/로테이션 제품 이미지.
                   const url =
@@ -1206,7 +1221,7 @@ export default function DetailMakerProPage() {
             });
 
             sessionStorage.setItem('pro_sections', JSON.stringify(detailSections));
-            sessionStorage.setItem('pro_meta', JSON.stringify({ productName, uploadedImageUrls }));
+            sessionStorage.setItem('pro_meta', JSON.stringify({ productName, uploadedImageUrls: effectiveProductUrls }));
             router.push('/listing/detail-maker');
             } catch (err) {
               // 업로드/씬 생성/조립 중 실패 시 버튼을 되살리고 원인을 표시한다
