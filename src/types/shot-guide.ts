@@ -9,6 +9,14 @@ export interface ShotCard {
 }
 
 export interface ShotGuideInput {
+  sectionIndex: number;
+  slotIndex: number;
   sectionTitle: string;
   promptHint: string;
+}
+
+export interface ShootSlot {
+  sectionIndex: number;
+  slotIndex: number;
+  uploadedUrl: string | null;
 }

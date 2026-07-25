@@ -1,18 +1,23 @@
-import type { ShotCard, ShotGuideInput } from '@/types/shot-guide';
+import type { ShotCard, ShotGuideInput, ShootSlot } from '@/types/shot-guide';
 
 type LooseSection = { title?: string; imageSlots?: Array<{ slotType?: string; promptHint?: string }> };
 
 /** generatedSections에서 detail_closeup 슬롯만 추출. */
 export function extractDetailCloseupShots(sections: LooseSection[]): ShotGuideInput[] {
   const out: ShotGuideInput[] = [];
-  for (const s of sections ?? []) {
-    for (const slot of s?.imageSlots ?? []) {
+  (sections ?? []).forEach((s, sectionIndex) => {
+    (s?.imageSlots ?? []).forEach((slot, slotIndex) => {
       if (slot?.slotType === 'detail_closeup') {
-        out.push({ sectionTitle: s.title ?? '(제목 없음)', promptHint: slot.promptHint ?? '' });
+        out.push({ sectionIndex, slotIndex, sectionTitle: s.title ?? '(제목 없음)', promptHint: slot.promptHint ?? '' });
       }
-    }
-  }
+    });
+  });
   return out;
+}
+
+/** 업로드 완료된 슬롯 수를 센다. */
+export function countUploaded(slots: ShootSlot[]): number {
+  return (slots ?? []).filter(s => !!s?.uploadedUrl).length;
 }
 
 /** ShotCard[] → 폰으로 보며 촬영할 텍스트 체크리스트. */

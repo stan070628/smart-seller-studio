@@ -14,8 +14,8 @@ describe('extractDetailCloseupShots', () => {
     ];
     const out = extractDetailCloseupShots(sections);
     expect(out).toEqual([
-      { sectionTitle: '디테일', promptHint: '지퍼 접사' },
-      { sectionTitle: '디테일2', promptHint: '원단 텍스처' },
+      { sectionIndex: 0, slotIndex: 0, sectionTitle: '디테일', promptHint: '지퍼 접사' },
+      { sectionIndex: 2, slotIndex: 0, sectionTitle: '디테일2', promptHint: '원단 텍스처' },
     ]);
   });
   it('슬롯/섹션이 비어도 안전하다', () => {
@@ -49,5 +49,13 @@ describe('parseShotGuideResponse', () => {
   it('파싱 불가/비배열이면 빈 배열', () => {
     expect(parseShotGuideResponse('없음')).toEqual([]);
     expect(parseShotGuideResponse('{"a":1}')).toEqual([]);
+  });
+});
+
+import { countUploaded } from './shot-guide';
+describe('countUploaded', () => {
+  it('업로드된 슬롯 수를 센다', () => {
+    expect(countUploaded([{ sectionIndex:0, slotIndex:0, uploadedUrl:'u' }, { sectionIndex:1, slotIndex:0, uploadedUrl:null }])).toBe(1);
+    expect(countUploaded([])).toBe(0);
   });
 });
