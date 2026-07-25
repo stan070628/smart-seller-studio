@@ -43,9 +43,17 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => null);
-  const { imageUrl, region } = (body ?? {}) as Record<string, unknown>;
+  const { imageUrl, imageBase64, mimeType, region } = (body ?? {}) as Record<string, unknown>;
 
-  if (typeof imageUrl !== 'string' || !SUPABASE_PATTERN.test(imageUrl)) {
+  // 입력은 Supabase URL 또는 클라이언트가 보낸 base64 둘 중 하나.
+  // SSRF 방어는 URL 분기에만 필요하다 — base64는 서버가 외부를 호출하지 않는다.
+  const hasBase64 = typeof imageBase64 === 'string' && imageBase64.length > 0;
+  const hasUrl = typeof imageUrl === 'string' && imageUrl.length > 0;
+
+  if (!hasBase64 && !hasUrl) {
+    return NextResponse.json({ error: 'imageUrl 또는 imageBase64가 필요합니다.' }, { status: 400 });
+  }
+  if (!hasBase64 && !SUPABASE_PATTERN.test(imageUrl as string)) {
     return NextResponse.json({ error: '허용되지 않는 이미지 URL입니다.' }, { status: 403 });
   }
 
@@ -65,17 +73,23 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const imgRes = await fetch(imageUrl, { signal: AbortSignal.timeout(15_000) });
-    if (!imgRes.ok) {
-      return NextResponse.json({ error: '이미지를 불러오지 못했습니다.' }, { status: 422 });
+    let sourceBuffer: Buffer;
+    if (hasBase64) {
+      const raw = imageBase64 as string;
+      sourceBuffer = Buffer.from(raw.includes(';base64,') ? raw.split(';base64,')[1]! : raw, 'base64');
+    } else {
+      const imgRes = await fetch(imageUrl as string, { signal: AbortSignal.timeout(15_000) });
+      if (!imgRes.ok) {
+        return NextResponse.json({ error: '이미지를 불러오지 못했습니다.' }, { status: 422 });
+      }
+      sourceBuffer = Buffer.from(await imgRes.arrayBuffer());
     }
-    const arrayBuffer = await imgRes.arrayBuffer();
 
-    if (arrayBuffer.byteLength > 20 * 1024 * 1024) {
+    if (sourceBuffer.byteLength > 20 * 1024 * 1024) {
       return NextResponse.json({ error: '이미지 크기가 너무 큽니다.' }, { status: 413 });
     }
 
-    let img = sharp(Buffer.from(arrayBuffer)).rotate();
+    let img = sharp(sourceBuffer).rotate();
     const meta = await img.metadata();
     let W = meta.width ?? 0;
     let H = meta.height ?? 0;
