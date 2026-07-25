@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import type { AnalyzedSection } from '@/app/api/ai/analyze-detail-page/route';
 import type { LayoutBlock } from '@/types/detail-page';
 import { normalizeImageBlocks } from '@/lib/detail-page/layout-image-blocks';
@@ -67,6 +67,8 @@ export default function DetailMakerProPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [shotGuide, setShotGuide] = useState<ShotCard[] | null>(null);
   const [shotGuideLoading, setShotGuideLoading] = useState(false);
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
 
   const [refPreviews, setRefPreviews] = useState<string[]>([]);
   const [prodPreviews, setProdPreviews] = useState<string[]>([]);
@@ -256,6 +258,50 @@ export default function DetailMakerProPage() {
     [productImages.length]
   );
 
+  // 촬영 초안 저장: shootSession(shotGuide+step)을 draft API에 upsert. 반환된 id를 넘겨받아 재사용.
+  async function saveShootDraft(nextId: string | null): Promise<string | null> {
+    const res = await fetch('/api/detail-page/draft', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: nextId ?? undefined,
+        productName,
+        sections: generatedSections,
+        theme: {},
+        shootSession: { shotGuide: shotGuide ?? [], step: 'guide' },
+      }),
+    });
+    const json = await res.json();
+    return (json?.id as string) ?? nextId;
+  }
+
+  // 디바운스 자동저장: draftId가 잡힌 뒤 shotGuide가 바뀌면 1.5s 후 저장.
+  useEffect(() => {
+    if (!draftId || !shotGuide) return;
+    const t = setTimeout(() => { saveShootDraft(draftId).catch(() => {}); }, 1500);
+    return () => clearTimeout(t);
+  }, [draftId, shotGuide]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 마운트 시 ?draftId= 로 초안 재개.
+  useEffect(() => {
+    const rid = searchParams.get('draftId');
+    if (!rid) return;
+    (async () => {
+      try {
+        const res = await fetch(`/api/detail-page/draft?id=${rid}`);
+        const json = await res.json();
+        const d = json?.draft;
+        if (!d) return;
+        setDraftId(d.id);
+        if (d.productName) setProductName(d.productName);
+        if (Array.isArray(d.sections)) setGeneratedSections(d.sections);
+        const sg = d.shootSession?.shotGuide;
+        if (Array.isArray(sg)) setShotGuide(sg);
+        setScreen('shootguide');
+      } catch { /* 무시 */ }
+    })();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // 촬영 가이드: 생성된 레이아웃의 detail_closeup 슬롯 → 폰 촬영용 컷 카드 생성.
   async function handleShotGuide() {
     const shots = extractDetailCloseupShots(
@@ -283,6 +329,15 @@ export default function DetailMakerProPage() {
       if (!json.success) throw new Error(json.error || '가이드 생성 실패');
       setShotGuide(json.data.shots as ShotCard[]);
       setScreen('shootguide');
+      try {
+        const id = await saveShootDraft(draftId);
+        if (id) {
+          setDraftId(id);
+          const url = new URL(window.location.href);
+          url.searchParams.set('draftId', id);
+          window.history.replaceState(null, '', url.toString());
+        }
+      } catch { /* 저장 실패는 조용히 무시 — 가이드 표시는 유지 */ }
     } catch (e) {
       alert(e instanceof Error ? e.message : '가이드 생성 실패');
     } finally {
