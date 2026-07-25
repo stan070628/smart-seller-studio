@@ -5,7 +5,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import type { AnalyzedSection } from '@/app/api/ai/analyze-detail-page/route';
 import type { LayoutBlock } from '@/types/detail-page';
 import { normalizeImageBlocks } from '@/lib/detail-page/layout-image-blocks';
-import { extractDetailCloseupShots, serializeShotChecklist } from '@/lib/detail-page/shot-guide';
+import { extractDetailCloseupShots, serializeShotChecklist, countUploaded } from '@/lib/detail-page/shot-guide';
 import type { ShotCard, ShootSlot } from '@/types/shot-guide';
 
 type ScreenState = 'upload' | 'review' | 'generating' | 'result' | 'shootguide';
@@ -372,6 +372,15 @@ export default function DetailMakerProPage() {
     } finally {
       setShotGuideLoading(false);
     }
+  }
+
+  async function handleSlotUpload(index: number, file: File) {
+    const fd = new FormData(); fd.append('file', file); fd.append('usageContext', 'listing_detail');
+    const r = await fetch('/api/listing/upload-image', { method: 'POST', body: fd });
+    const j = await r.json() as { success: boolean; data?: { url: string }; error?: string };
+    if (!j.success || !j.data?.url) { alert(j.error || '업로드 실패 (jpg/png/webp 형식으로 다시 시도하세요).'); return; }
+    const url = j.data.url;
+    setSlots(prev => prev.map((s, i) => i === index ? { ...s, uploadedUrl: url } : s));
   }
 
   function copyShotChecklist() {
@@ -859,7 +868,10 @@ export default function DetailMakerProPage() {
     return (
       <div style={containerStyle}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-          <h1 style={{ fontSize: '18px', fontWeight: 800 }}>📸 촬영 가이드</h1>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+            <h1 style={{ fontSize: '18px', fontWeight: 800 }}>📸 촬영 가이드</h1>
+            <span style={{ fontSize: 12, color: '#a0a0b0' }}>업로드 {countUploaded(slots)}/{(shotGuide ?? []).length}</span>
+          </div>
           <button
             type="button"
             onClick={() => setScreen('result')}
@@ -894,6 +906,20 @@ export default function DetailMakerProPage() {
                 <li>· 배경: {c.background}</li>
                 <li style={{ color: '#6b7280' }}>· 팁: {c.tip}</li>
               </ul>
+              <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                {slots[i]?.uploadedUrl ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={slots[i]!.uploadedUrl!} alt="" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 6, border: '1px solid #374151' }} />
+                    <span style={{ fontSize: 12, color: '#4ade80' }}>완료</span>
+                  </>
+                ) : null}
+                <label style={{ fontSize: 12, color: '#e2e8f0', border: '1px solid #374151', borderRadius: 6, padding: '4px 8px', cursor: 'pointer' }}>
+                  {slots[i]?.uploadedUrl ? '다시 업로드' : '사진 업로드'}
+                  <input type="file" accept="image/*" style={{ display: 'none' }}
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleSlotUpload(i, f); e.currentTarget.value = ''; }} />
+                </label>
+              </div>
             </div>
           ))}
         </div>
@@ -931,7 +957,7 @@ export default function DetailMakerProPage() {
           </button>
         </div>
         <p style={{ fontSize: '11px', color: '#6b7280', marginTop: '12px' }}>
-          촬영·업로드·보정은 다음 단계에서 추가됩니다. 지금은 &quot;뒤로&quot; 후 &quot;에디터에서 편집&quot;으로 진행하세요.
+          찍은 사진을 각 컷에 업로드하세요. AI 보정은 다음 단계에서 적용됩니다.
         </p>
       </div>
     );
