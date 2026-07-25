@@ -7,6 +7,8 @@ import type { LayoutBlock } from '@/types/detail-page';
 import { normalizeImageBlocks } from '@/lib/detail-page/layout-image-blocks';
 import { extractDetailCloseupShots, serializeShotChecklist, countUploaded } from '@/lib/detail-page/shot-guide';
 import type { ShotCard, ShootSlot } from '@/types/shot-guide';
+import ImageCleanupModal from '@/components/common/ImageCleanupModal';
+import { deriveOptions, isOptionMode } from '@/lib/detail-page/product-options';
 
 type ScreenState = 'upload' | 'review' | 'generating' | 'result' | 'shootguide';
 
@@ -55,6 +57,11 @@ export default function DetailMakerProPage() {
   const [screen, setScreen] = useState<ScreenState>('upload');
   const [referenceImages, setReferenceImages] = useState<File[]>([]);
   const [productImages, setProductImages] = useState<File[]>([]);
+  // productImages와 인덱스가 1:1로 대응한다. 빈 문자열 = 옵션명 미지정.
+  const [optionNames, setOptionNames] = useState<string[]>([]);
+  const [cleanupTarget, setCleanupTarget] = useState<{
+    index: number; url: string; base64: string; mimeType: string;
+  } | null>(null);
   const [editedSections, setEditedSections] = useState<AnalyzedSection[]>([]);
   const [productName, setProductName] = useState('');
   const [productPoints, setProductPoints] = useState('');
@@ -570,6 +577,7 @@ export default function DetailMakerProPage() {
             onChange={e => {
               const newFiles = Array.from(e.target.files ?? []);
               setProductImages(prev => [...prev, ...newFiles].slice(0, 4));
+              setOptionNames(prev => [...prev, ...newFiles.map(() => '')].slice(0, 4));
               e.target.value = '';
             }}
           />
@@ -580,7 +588,12 @@ export default function DetailMakerProPage() {
             accept="image/png,image/jpeg,image/webp"
             multiple
             style={{ display: 'none' }}
-            onChange={e => { setProductImages(Array.from(e.target.files ?? []).slice(0, 4)); e.target.value = ''; }}
+            onChange={e => {
+              const files = Array.from(e.target.files ?? []).slice(0, 4);
+              setProductImages(files);
+              setOptionNames(files.map(() => ''));
+              e.target.value = '';
+            }}
           />
           {prodPreviews.length > 0 ? (
             <div>
@@ -591,7 +604,11 @@ export default function DetailMakerProPage() {
                     <img src={url} alt={`제품 ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     <button
                       type="button"
-                      onClick={e => { e.stopPropagation(); setProductImages(prev => prev.filter((_, i) => i !== idx)); }}
+                      onClick={e => {
+                        e.stopPropagation();
+                        setProductImages(prev => prev.filter((_, i) => i !== idx));
+                        setOptionNames(prev => prev.filter((_, i) => i !== idx));
+                      }}
                       style={{
                         position: 'absolute', top: 3, right: 3,
                         width: 18, height: 18, borderRadius: '50%',
@@ -601,9 +618,51 @@ export default function DetailMakerProPage() {
                         lineHeight: 1,
                       }}
                     >×</button>
+                    <button
+                      type="button"
+                      title="워터마크 제거"
+                      onClick={async e => {
+                        e.stopPropagation();
+                        const file = productImages[idx];
+                        if (!file) return;
+                        const { base64, mimeType } = await fileToDownscaledBase64(file, 2000);
+                        setCleanupTarget({ index: idx, url, base64, mimeType });
+                      }}
+                      style={{
+                        position: 'absolute', top: 3, left: 3,
+                        width: 18, height: 18, borderRadius: '50%',
+                        background: 'rgba(0,0,0,0.65)', border: 'none',
+                        color: '#fff', fontSize: 10, cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        lineHeight: 1,
+                      }}
+                    >✦</button>
                   </div>
                 ))}
               </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', marginBottom: '8px' }}>
+                {prodPreviews.map((_, idx) => (
+                  <input
+                    key={idx}
+                    type="text"
+                    value={optionNames[idx] ?? ''}
+                    onChange={e => {
+                      const v = e.target.value.slice(0, 40);
+                      setOptionNames(prev => {
+                        const next = [...prev];
+                        while (next.length <= idx) next.push('');
+                        next[idx] = v;
+                        return next;
+                      });
+                    }}
+                    placeholder="옵션명"
+                    style={{ ...inputStyle, padding: '6px 8px', fontSize: '12px' }}
+                  />
+                ))}
+              </div>
+              <p style={{ fontSize: '11px', color: '#6b7280', margin: '0 0 8px' }}>
+                옵션명을 2개 이상 적으면 옵션별로 고르게 노출되는 상세페이지가 만들어집니다. (선택)
+              </p>
               <div style={{ display: 'flex', gap: '8px' }}>
                 {prodPreviews.length < 4 && (
                   <label
@@ -692,6 +751,26 @@ export default function DetailMakerProPage() {
               </>)}
             </div>
           </div>
+        )}
+
+        {cleanupTarget && (
+          <ImageCleanupModal
+            mode="watermark"
+            imageUrl={cleanupTarget.url}
+            imageBase64={cleanupTarget.base64}
+            mimeType={cleanupTarget.mimeType}
+            canAdd={false}
+            onReplace={() => setCleanupTarget(null)}
+            onAdd={() => setCleanupTarget(null)}
+            onClose={() => setCleanupTarget(null)}
+            onResultBase64={(base64, mime) => {
+              const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+              const ext = mime === 'image/png' ? 'png' : 'jpg';
+              const file = new File([bytes], `cleaned-${cleanupTarget.index}.${ext}`, { type: mime });
+              setProductImages(prev => prev.map((f, i) => (i === cleanupTarget.index ? file : f)));
+              setCleanupTarget(null);
+            }}
+          />
         )}
       </div>
     );
