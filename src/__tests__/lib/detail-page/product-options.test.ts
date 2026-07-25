@@ -115,4 +115,21 @@ describe('collectOptionCoverage', () => {
     const cov = collectOptionCoverage([{ blocks: [] }], nameByIdx);
     expect(cov.total).toBe(0);
   });
+
+  it('슬롯 수는 옵션 수와 같아도 option_grid items 수가 다르면 비교 섹션이 아니다', () => {
+    const mismatched: OptionSection = {
+      blocks: [{ type: 'option_grid', items: [{ label: '화이트' }] }],
+      imageSlots: [{ imageRef: 0 }, { imageRef: 1 }],
+    };
+    const cov = collectOptionCoverage([mismatched], nameByIdx);
+    expect(cov.compareSectionCount).toBe(0);
+    expect(cov.counts.get('화이트')).toBe(1);
+    expect(cov.counts.get('블랙')).toBe(1);
+  });
+
+  it('imageSlots가 배열이 아니면 건너뛴다', () => {
+    const bogus = { blocks: [], imageSlots: 'nope' } as unknown as OptionSection;
+    const cov = collectOptionCoverage([bogus], nameByIdx);
+    expect(cov.total).toBe(0);
+  });
 });

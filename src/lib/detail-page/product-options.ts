@@ -73,9 +73,10 @@ export function optionNameByImageIndex(options: ProductOption[]): Map<number, st
  * 슬롯 수가 옵션 수와 같고 items 수와도 같아야 비교 섹션으로 본다.
  */
 export function isCompareSection(section: OptionSection, optionCount: number): boolean {
-  const slots = section.imageSlots ?? [];
+  const slots = Array.isArray(section?.imageSlots) ? section.imageSlots : [];
   if (slots.length !== optionCount) return false;
-  const grid = (section.blocks ?? []).find((b) => b?.type === 'option_grid');
+  const blocks = Array.isArray(section?.blocks) ? section.blocks : [];
+  const grid = blocks.find((b) => b?.type === 'option_grid');
   if (!grid) return false;
   return Array.isArray(grid.items) && grid.items.length === slots.length;
 }
@@ -96,7 +97,7 @@ export function collectOptionCoverage(
   let unresolvedSlots = 0;
 
   for (const section of sections) {
-    const slots = section?.imageSlots ?? [];
+    const slots = Array.isArray(section?.imageSlots) ? section.imageSlots : [];
     if (slots.length === 0) continue;
 
     if (isCompareSection(section, optionNames.length)) {
