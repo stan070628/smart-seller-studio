@@ -3,8 +3,14 @@
 import React, { useRef, useState } from 'react';
 
 interface ImageCleanupModalProps {
+  /** 표시용 이미지. blob: URL 허용 */
   imageUrl: string;
+  /** 있으면 API 호출에 imageUrl 대신 사용 (업로드 전 File 대응) */
+  imageBase64?: string;
+  mimeType?: string;
   onReplace: (newUrl: string) => void;
+  /** 있으면 Storage 업로드를 건너뛰고 결과 base64를 그대로 넘긴다 */
+  onResultBase64?: (base64: string, mimeType: string) => void;
   onAdd: (newUrl: string) => void;
   onClose: () => void;
   canAdd: boolean;
@@ -22,7 +28,10 @@ interface Selection {
 
 export default function ImageCleanupModal({
   imageUrl,
+  imageBase64,
+  mimeType,
   onReplace,
+  onResultBase64,
   onAdd,
   onClose,
   canAdd,
@@ -91,7 +100,11 @@ export default function ImageCleanupModal({
       const res = await fetch(apiEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageUrl, region: selection }),
+        body: JSON.stringify(
+          imageBase64
+            ? { imageBase64, mimeType: mimeType ?? 'image/jpeg', region: selection }
+            : { imageUrl, region: selection },
+        ),
       });
       const data = await res.json() as { imageBase64?: string; mimeType?: string; error?: string };
       if (!res.ok || data.error || !data.imageBase64) {
@@ -120,6 +133,10 @@ export default function ImageCleanupModal({
   }
 
   async function handleReplace() {
+    if (onResultBase64 && resultBase64) {
+      onResultBase64(resultBase64, resultMime);
+      return;
+    }
     setIsUploading(true);
     try {
       const url = await uploadResult();
