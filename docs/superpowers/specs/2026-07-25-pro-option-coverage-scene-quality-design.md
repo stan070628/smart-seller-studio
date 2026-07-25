@@ -1,7 +1,7 @@
 # PRO 상세페이지: 옵션 고른 노출 + 씬 품질 설계
 
 > 작성일: 2026-07-25
-> 대상: `detail-maker-pro` 화면 + `generate-pro-layout` API + `layout-validator` + `watermark-removal`
+> 대상: `detail-maker-pro` 화면 + `generate-pro-layout` API + `layout-validator` + 씬 생성 프롬프트
 > 선행 문서: [PRO 촬영 가이드 Phase1](./2026-07-24-pro-shot-guide-phase1-design.md)
 
 ## 0. 문제
@@ -21,12 +21,12 @@
 | `1784981818955-lifestyle.png` (AI 씬) | 85.4, 87.9 | 검은 원단 위 **밝은** 회색 |
 | `1784981815943-lifestyle.png` (AI 히어로) | 72.4, 86.1 | **반바지 밑단에 그려진 프린트** — 코너 아님 |
 
-현행 `hasWatermarkCandidate`(`watermark-removal.ts:45`)가 실패하는 이유는 두 가지다.
+현행 `hasWatermarkCandidate`(`watermark-removal.ts:45`)는 셋 다 놓친다. 이유는 두 가지다.
 
 1. **검사창 위치.** 우하단 12%×8%(x≥88%, y≥92%)만 본다. 세 사례 모두 그 밖에 있다.
-2. **평균 비교의 둔감함.** 코너 패치와 바로 위 패치의 **평균 밝기 차**를 본다(`:73`). 대비 방향은 `Math.abs`라 양방향이지만, 작은 ✦ 하나는 103×94 패치의 평균을 거의 움직이지 못한다. 실측 `brightnessDiff 1.0`(임계 30), `varianceDelta −0.7`(임계 200) — 검사창을 넓히기만 해선 오히려 더 둔해진다.
+2. **평균 비교의 둔감함.** 코너 패치와 바로 위 패치의 **평균 밝기 차**를 본다(`:73`). 대비 방향은 `Math.abs`라 양방향이지만, 작은 ✦ 하나는 103×94 패치의 평균을 거의 움직이지 못한다. 실측 `brightnessDiff 1.0`(임계 30), `varianceDelta −0.7`(임계 200).
 
-즉 창을 넓히는 것만으로는 부족하고, 패치 평균이 아니라 **픽셀 단위 블롭 탐지**로 바꿔야 한다.
+검사창을 넓히고 픽셀 단위 블롭 탐지로 바꾸는 개선안을 실측 검증했으나 **여전히 쓸 수 없는 정확도**였다. §7.1에 근거를 정리했고, 자동 감지 자체를 철회했다.
 
 `GOOGLE_AI_API_KEY`는 유료 티어임을 확인했다(`scripts/check-gemini-watermark.mjs` 통과). 워터마크는 API가 아니라 **제미나이 앱에서 만든 이미지**가 들여온 것이다.
 
@@ -34,10 +34,10 @@
 
 - 옵션이 2개 이상인 상품은 **한 페이지 안에서 옵션이 고르게 등장**하고, **옵션 비교 섹션이 정확히 1개** 들어간다.
 - `stat_row`에 값이 0이거나 옵션 개수인 항목이 남지 않는다.
-- 제미나이 앱 워터마크가 업로드 시점에 제거되어 상세페이지에도, 생성 씬에도 전파되지 않는다.
+- 판매자가 레이아웃 생성 **전에** 워터마크를 손으로 지울 수 있고, 생성 씬에 ✦가 복제되지 않는다.
 - 인물 씬은 부정적 감정·자세를 그리지 않는다.
 
-**성공 기준:** 화이트/블랙 2옵션으로 생성했을 때 (a) 옵션 비교 섹션 1개가 존재하고, (b) 비교 섹션 밖 이미지 슬롯에서 두 옵션이 모두 최소 1회 등장하며 등장 횟수 편차가 1 이하이고, (c) `stat_row`에 0값·개수형 항목이 없고, (d) 업로드한 워터마크 이미지가 저장 시점에 정리된다.
+**성공 기준:** 화이트/블랙 2옵션으로 생성했을 때 (a) 옵션 비교 섹션 1개가 존재하고, (b) 비교 섹션 밖 이미지 슬롯에서 두 옵션이 모두 최소 1회 등장하며 등장 횟수 편차가 1 이하이고, (c) `stat_row`에 0값·개수형 항목이 없고, (d) 업로드 화면에서 ✦ 버튼으로 워터마크를 지우면 그 이미지가 레이아웃 생성·씬 참조에 반영되며, (e) 어떤 업로드 경로도 사용자 이미지를 자동으로 편집하지 않는다.
 
 ## 2. 옵션 데이터 모델 (`src/lib/detail-page/product-options.ts` 신규)
 
@@ -314,91 +314,73 @@ const uploadedImageUrls: (string | null)[] =
 `sceneHint`에 옵션명을 덧붙인다: `${promptHint} (제품 색상: 화이트)`.
 
 `generate-scene-image`의 스키마는 `sceneHint: z.string().max(600)`(`route.ts:35`)이다. 접미사를 붙인 뒤 **600자로 자른다.** 안 자르면 긴 `promptHint`에서 400이 나고, `page.tsx:1104`의 catch가 조용히 삼켜 그 섹션 이미지만 사라진다.
-
-## 7. 워터마크 (`src/lib/image/watermark-removal.ts`)
+## 7. 워터마크
 
 전파 경로가 두 갈래다.
 
 ```
 제미나이 앱 이미지 (✦ 우하단)
-   ├─ 상세페이지에 직접 삽입          → 코너 감지로 잡힘
+   ├─ 상세페이지에 직접 삽입
    └─ AI 씬 생성의 참조로 투입
-          → Gemini가 옷 위에 ✦를 그림  → 위치 불특정, 코너 감지 불가
+          → Gemini가 옷 위에 ✦를 그림 (위치 불특정)
 ```
 
-### 7.1 1차 방어 — 진입 시점 제거 (주력)
+### 7.1 자동 감지를 하지 않는다 — 실측 근거
 
-업로드 이미지에서 ✦를 지우면 두 번째 경로 자체가 사라진다. `hasWatermarkCandidate`(불리언)를 `findWatermarkBox`(좌표)로 교체한다.
+당초 설계는 업로드 시점에 ✦를 자동 감지해 인페인팅하는 것이었다. 정답을 아는 이미지 6장으로 검증한 결과 **쓸 수 없는 수준**이라 철회한다.
 
-```ts
-export interface WatermarkBox { left: number; top: number; width: number; height: number }
+| 이미지 | 실제 ✦ | 판정 |
+|---|---|---|
+| `p3.jpg` (업로드 원본, 이 스펙의 동기) | 있음 | **미탐** |
+| `l_…818955.png` (원단 접사) | 있음 | 정탐 |
+| `wm1.png` (히어로, 반바지 프린트) | 있음 | 정탐 |
+| `p1.jpg` (화이트 티셔츠) | 없음 | **오탐** |
+| `l_…813676.png` (스플래터 로고) | 없음 | **오탐** |
+| `l_…814920.png` (헬스장 씬) | 없음 | **오탐** |
 
-/** 우하단 영역에서 워터마크 후보의 원본 좌표 박스를 찾는다. 없으면 null. */
-export async function findWatermarkBox(buffer: Buffer): Promise<WatermarkBox | null>;
-```
+재현율 위주로 임계를 느슨하게 잡은 최선의 설정에서 **TP 2 / FP 3 / FN 1 / TN 0**. 특이도 0%다.
 
-알고리즘:
+**구조적 원인.** 밝기 median 기준 마스크는 검사 영역에 강한 경계(제품 실루엣, 배경 전환)가 있으면 blob이 ✦가 아니라 경계 전체로 번진다. `p3.jpg`가 정확히 그 경우 — 검은 티셔츠와 베이지 배경이 걸쳐 있어 배경을 통째로 잡는다. 반대로 스플래터 프린트·아령 가장자리는 ✦와 형태로 구분되지 않는다. 연결 성분 분리로 개선해도 미탐은 남고 오탐만 늘었다.
 
-1. 최대 512px로 축소 → 그레이스케일 → raw 픽셀
-2. 검사 영역: **우하단 35% × 25%** (실측 x가 72.4~86.5%로 흩어져 있음)
-3. 배경 밝기 = 영역 **중앙값** (평균은 워터마크에 끌려간다)
-4. 마스크 = `|픽셀 − 중앙값| > 35` — **양방향** (밝은 ✦, 어두운 ✦ 모두)
-5. 형태 검사로 오탐 제거. 모두 통과해야 워터마크로 본다:
-   - 마스크 면적이 전체 이미지의 0.02% ~ 2%
-   - bbox 종횡비 0.5 ~ 2 (✦는 대략 정사각)
-   - bbox 안 마스크 채움률 **0.25 ~ 0.6** (범위 조건)
-6. bbox를 원본 좌표로 환산하고 짧은 변의 40%만큼 패딩 → 이미지 경계로 클램프
+이 정확도로 자동 인페인팅을 붙이면 **깨끗한 제품 사진을 소리 없이 덧칠한다.** 원본 훼손이 워터마크 잔존보다 나쁘다. 경고 배지로 낮춰도 마찬가지다 — 정상 이미지 3장 전부에 켜지고 진짜는 놓치는 표시등은 신호가 아니라 소음이다.
 
-`removeGeminiWatermark`는 고정 코너 대신 이 박스를 crop → Gemini 인페인팅 → 원위치 합성한다. 박스가 `null`이면 원본을 그대로 반환한다(현행과 동일한 무동작 경로).
+**결정:** 자동 감지·자동 편집을 모두 제거하고, 사용자가 눈으로 보고 지우는 수동 경로만 남긴다.
 
-**채움률에 상한이 필요한 이유.** ✦는 뾰족한 네 갈래라 bbox를 절반 이하로 채운다. 반면 단추·라벨·브랜드 태그 같은 솔리드 사각·원형 요소는 채움률이 0.8~1.0이면서 종횡비 ~1, 면적 0.02~2%에 흔히 들어와 하한만으로는 세 조건을 전부 통과한다. 이 함수는 세 업로드 경로 모두에서 동기 실행되므로 오탐은 곧 **사용자 이미지를 소리 없이 인페인팅하는 것**이다. 상한 0.6이 그 방어의 핵심이다.
+### 7.2 기존 자동 제거 코드 철거
 
-**로깅.** 감지 시 `console.log`로 박스 좌표·면적·채움률을 남긴다. 오탐 신고가 들어왔을 때 임계값을 조정할 근거가 없으면 안 된다.
+`removeGeminiWatermark` 호출을 세 곳에서 제거한다.
 
-**비용·지연.** 검사 자체는 512px 다운스케일 후 픽셀 순회라 무시할 수준이다. 다만 감지율이 올라간 만큼 Gemini 인페인팅 호출이 늘어 업로드가 건당 수 초 느려질 수 있다. 감지된 경우에만 호출하는 현행 구조는 유지한다.
+| 파일 | 위치 |
+|---|---|
+| `src/app/api/listing/upload-image/route.ts` | `:284` 부근 |
+| `src/app/api/image/upload-ai/route.ts` | `:151` |
+| `src/app/api/ai/generate-detail-html/route.ts` | `:204` 부근 |
 
-이 함수 하나를 고치면 세 경로가 동시에 고쳐진다:
-- `/api/listing/upload-image` (제품 이미지 업로드 — 이번 문제의 진원지)
-- `/api/image/upload-ai` (AI 씬 업로드)
-- `/api/ai/generate-detail-html`
+호출부를 걷어내면 `src/lib/image/watermark-removal.ts`를 참조하는 곳이 없다. 모듈과 테스트(`src/__tests__/lib/watermark-removal.test.ts`)를 함께 삭제한다.
 
-### 7.2 2차 방어 — 생성 프롬프트에서 금지
+부수 효과 두 가지가 따라온다.
 
-참조가 이미 오염된 경우를 대비해, 모든 생성 경로의 프롬프트 꼬리인 `PRODUCT_FIDELITY_INSTRUCTION`(`generate-scene-image/route.ts:65`)과 `SCENE_PROMPT_SYSTEM`의 규칙에 추가한다:
+- **곁다리 버그가 소멸한다.** `removeWithGemini`는 JPEG를 반환하는데 `upload-ai`는 `mimeType`을 원본값으로 유지해 `.png` 이름으로 올렸다. 경로 자체가 없어지므로 별도 수정이 필요 없다.
+- **업로드가 빨라지고 싸진다.** 감지가 걸릴 때마다 돌던 Gemini 인페인팅 호출이 사라진다.
 
-> Do NOT render any four-pointed star, sparkle, glitter, or diamond glyph anywhere in the image — not on the garment, product surface, or background. If such a mark appears in the reference image, treat it as an artifact and omit it.
-
-`BACKGROUND_PROMPT_SYSTEM`(`:81`)의 "No text, logos, watermarks" 목록에도 sparkle을 추가한다.
-
-### 7.2.1 선결 리팩터 — 중복 상수 제거
-
-`PRODUCT_FIDELITY_INSTRUCTION`(`:65`)과 **동일한 문자열이 `SCENE_PROMPT_SYSTEM`(`:55`) 안에 하드코딩**돼 있다("MUST end with this exact instruction: …"). 그리고 `:510`이 그 상수로 스트립한다:
-
-```ts
-const bgPrompt = claudePrompt.replace(PRODUCT_FIDELITY_INSTRUCTION, '').trim();
-```
-
-상수(`:65`)에만 문구를 추가하면 Claude는 `:55`의 **옛 문자열**을 그대로 에코하고, `:510`의 `replace`는 매칭에 실패해 no-op이 된다. 그러면 편집+합성 경로의 배경 프롬프트에 제품 충실도 지시가 남아 **배경에 제품이 그려지는 회귀**가 난다.
-
-그래서 §7.2·§8의 문구 추가에 앞서, `:55`의 내장 사본을 상수 보간으로 바꾼다:
-
-```ts
-const SCENE_PROMPT_SYSTEM = `…
-- CRITICAL: The generated prompt MUST end with this exact instruction: "${PRODUCT_FIDELITY_INSTRUCTION}"
-…`;
-```
-
-`PRODUCT_FIDELITY_INSTRUCTION` 선언을 `SCENE_PROMPT_SYSTEM`보다 위로 올려야 한다(현재는 아래에 있다).
-
-### 7.3 3차 방어 — 수동 제거 도구 연결
-
-**이미 ✦가 옷 위에 그려져 나온 이미지는 자동으로 지울 수 없다.** 코너 오버레이가 아니라 생성된 콘텐츠이므로 위치·형태 가정이 성립하지 않는다. 자동 감지가 놓친 건을 손으로 잡을 수단이 필요하다.
+### 7.3 수동 제거 도구 연결 (주력)
 
 기존 자산을 재사용한다: `ImageCleanupModal`(`mode='watermark'`) + `/api/ai/remove-watermark-region`. 드래그로 영역을 지정하면 그 부분만 인페인팅한다.
 
-**제약:** `remove-watermark-region`은 `imageUrl`이 Supabase Storage URL일 것을 요구한다(`route.ts:18`, SSRF 방어). PRO 업로드 화면의 제품 이미지는 아직 업로드 전 `File`이고, 업로드는 결과 화면(`page.tsx:951`)에서야 일어난다. 그런데 워터마크는 **레이아웃 생성 전에** 지워야 한다 — 그래야 참조 이미지로 투입될 때 이미 깨끗하다(§7.1의 전제).
+**노출 방식:** PRO 업로드 화면의 제품 이미지 썸네일마다 ✦ 버튼을 **상시 노출**한다. 감지기가 없으니 조건부로 띄울 근거가 없고, 사용자는 자기 이미지에 워터마크가 있는지 이미 안다.
 
-**해법: base64 입력 경로를 추가한다.** 임시 업로드 후 URL로 호출하는 방식은 정리 안 된 원본이 Storage에 남고 왕복이 한 번 더 든다. 클라이언트가 보낸 base64는 애초에 SSRF 대상이 아니므로 보안 성격이 다르지 않다.
+```
+제품 이미지  ★ 상세페이지에 삽입됩니다
+┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐
+│ ✦ ×│ │ ✦ ×│ │ ✦ ×│ │ ✦ ×│
+└─────┘ └─────┘ └─────┘ └─────┘
+[화이트] [블랙 ] [블랙 ] [     ]
+   ✦ = 워터마크 제거   × = 삭제
+```
+
+**제약과 해법.** `remove-watermark-region`은 `imageUrl`이 Supabase Storage URL일 것을 요구한다(`route.ts:18`, SSRF 방어). PRO 업로드 화면의 제품 이미지는 아직 업로드 전 `File`이고, 업로드는 결과 화면(`page.tsx:1038`)에서야 일어난다. 그런데 워터마크는 **레이아웃 생성 전에** 지워야 한다 — 그래야 참조 이미지로 투입될 때 이미 깨끗해 §7의 두 번째 전파 경로가 막힌다.
+
+임시 업로드 후 URL로 호출하면 정리 안 된 원본이 Storage에 남고 왕복이 한 번 더 든다. 대신 **base64 입력 경로를 추가한다.** 클라이언트가 보낸 base64는 애초에 SSRF 대상이 아니라 보안 성격이 다르지 않다.
 
 `remove-watermark-region` 요청 스키마:
 
@@ -429,13 +411,44 @@ interface ImageCleanupModalProps {
 
 `onResultBase64`가 있으면 `uploadResult()`(`ImageCleanupModal.tsx:111`)를 건너뛰고 콜백만 호출한다. PRO 화면은 `File[]`로 상태를 들고 있으므로, 결과를 `File`로 되돌려 `productImages[i]`를 교체하면 이후 파이프라인이 그대로 돈다. URL/File 이중 관리를 만들지 않는다.
 
-**PRO 화면 결선.** 제품 이미지 썸네일(`page.tsx:473-490`)의 × 버튼 옆에 ✦ 버튼을 단다. 누르면 해당 파일을 최대 2000px JPEG로 다운스케일해 모달에 넘긴다 — 서버가 어차피 `MAX_DIM = 2000`으로 줄이므로(`remove-watermark-region/route.ts:20`) 추가 손실이 없고, base64 요청 본문이 Vercel 4.5MB 제한에 걸리지 않는다. 기존 `fileToDownscaledBase64`(`page.tsx:118`)에 최대 변 인자를 넘겨 재사용한다.
+**전달 크기.** ✦ 버튼을 누르면 해당 파일을 최대 2000px JPEG로 다운스케일해 모달에 넘긴다 — 서버가 어차피 `MAX_DIM = 2000`으로 줄이므로(`remove-watermark-region/route.ts:20`) 추가 손실이 없고, base64 요청 본문이 Vercel 4.5MB 제한에 걸리지 않는다. 기존 `fileToDownscaledBase64`(`page.tsx:130`)에 최대 변 인자를 넘겨 재사용한다.
 
 교체된 파일은 `optionNames[i]`를 유지한다(§3의 인덱스 정합).
 
-### 7.4 곁다리 버그
+### 7.4 생성 프롬프트에서 금지
 
-`removeWithGemini`는 JPEG를 반환하는데(`watermark-removal.ts:148`) `upload-ai`(`route.ts:151-156`)는 `mimeType`을 원본값으로 유지해 `.png` 이름·`image/png` 타입으로 올린다. 실제로 문제의 씬 파일이 `-lifestyle.png`다. `removeGeminiWatermark`가 `{ buffer, mimeType }`을 반환하도록 바꾸고 호출부 3곳에서 반영한다.
+참조가 이미 오염된 경우를 대비해, 모든 생성 경로의 프롬프트 꼬리인 `PRODUCT_FIDELITY_INSTRUCTION`(`generate-scene-image/route.ts:65`)과 `SCENE_PROMPT_SYSTEM`의 규칙에 추가한다:
+
+> Do NOT render any four-pointed star, sparkle, glitter, or diamond glyph anywhere in the image — not on the garment, product surface, or background. If such a mark appears in the reference image, treat it as an artifact and omit it.
+
+`BACKGROUND_PROMPT_SYSTEM`(`:81`)의 "No text, logos, watermarks" 목록에도 sparkle을 추가한다.
+
+자동 감지가 없는 지금, 이 프롬프트 규칙이 **전파 경로를 막는 유일한 코드 레벨 방어**다.
+
+### 7.4.1 선결 리팩터 — 중복 상수 제거
+
+`PRODUCT_FIDELITY_INSTRUCTION`(`:65`)과 **동일한 문자열이 `SCENE_PROMPT_SYSTEM`(`:55`) 안에 하드코딩**돼 있다("MUST end with this exact instruction: …"). 그리고 `:510`이 그 상수로 스트립한다:
+
+```ts
+const bgPrompt = claudePrompt.replace(PRODUCT_FIDELITY_INSTRUCTION, '').trim();
+```
+
+상수(`:65`)에만 문구를 추가하면 Claude는 `:55`의 **옛 문자열**을 그대로 에코하고, `:510`의 `replace`는 매칭에 실패해 no-op이 된다. 그러면 편집+합성 경로의 배경 프롬프트에 제품 충실도 지시가 남아 **배경에 제품이 그려지는 회귀**가 난다.
+
+그래서 §7.4의 문구 추가에 앞서 `:55`의 내장 사본을 상수 보간으로 바꾼다:
+
+```ts
+const SCENE_PROMPT_SYSTEM = `…
+- CRITICAL: The generated prompt MUST end with this exact instruction: "${PRODUCT_FIDELITY_INSTRUCTION}"
+…`;
+```
+
+`PRODUCT_FIDELITY_INSTRUCTION` 선언을 `SCENE_PROMPT_SYSTEM`보다 위로 올려야 한다(현재는 아래에 있다).
+
+### 7.5 남는 한계
+
+- 사용자가 워터마크를 못 보고 넘기면 그대로 상세페이지에 나간다. 자동 방어가 없다는 뜻이다.
+- 이미 ✦가 옷 위에 그려져 나온 생성 이미지는 §7.4 프롬프트로 예방할 뿐, 이미 만들어진 것은 수동 도구로 지워야 한다.
 
 ## 8. 부정적 이미지 금지 — 하류 (`generate-scene-image/route.ts`)
 
@@ -449,32 +462,14 @@ interface ImageCleanupModalProps {
 
 | 파일 | 검증 |
 |---|---|
-| `src/__tests__/lib/watermark-removal.test.ts` (**기존 파일 개편**) | 아래 참조 |
-| `src/__tests__/lib/detail-page/product-options.test.ts` (신규) | `deriveOptions` 중복·공백 처리, `collectOptionCoverage`가 비교 섹션을 제외하는지 |
-| `src/__tests__/lib/detail-page/layout-validator.test.ts` (추가) | stat 위생 3규칙, 2개 미만 시 블록 삭제, `columns.cols` 재귀. 옵션 커버리지 위반 4종. `opts` 없으면 옵션 검사 미수행 |
-| `src/__tests__/api/generate-pro-layout.test.ts` (추가 또는 신규) | `productOptions` 전달 시 유저 프롬프트에 옵션 줄 포함, 미전달 시 기존 동작 |
-| `src/__tests__/api/ai/remove-watermark-region.test.ts` (추가 또는 신규) | `imageBase64` 분기 동작, `imageUrl` 분기의 SSRF 검사 유지, 둘 다 없으면 400 |
+| `src/__tests__/lib/detail-page/product-options.test.ts` (신규) | `deriveOptions` 중복·공백 처리, `uniqueOptionNames` 순서, `collectOptionCoverage`가 비교 섹션을 제외하는지, 미지정 슬롯 집계 |
+| `src/__tests__/lib/detail-page/layout-validator.test.ts` (추가) | stat 위생 4규칙, 2개 미만 시 블록 삭제, `columns.cols` 재귀, `statHygiene` 미지정 시 미수행. 옵션 커버리지 위반 4종, `opts` 없으면 옵션 검사 미수행 |
+| `src/__tests__/api/generate-pro-layout.test.ts` (신규) | `productOptions` 전달 시 유저 프롬프트에 옵션 줄 포함, 미전달 시 기존 동작 |
+| `src/__tests__/api/ai/remove-watermark-region.test.ts` (신규) | `imageBase64` 분기 동작, `imageUrl` 분기의 SSRF 검사 유지, 둘 다 없으면 400 |
 
-### 9.1 기존 워터마크 테스트 개편
+### 9.1 기존 워터마크 테스트 삭제
 
-`src/__tests__/lib/watermark-removal.test.ts`는 그대로 두면 **컴파일부터 깨진다.**
-
-- `:3`이 `hasWatermarkCandidate`를 import한다 → §7.1에서 `findWatermarkBox`로 교체됨
-- `:78`·`:130`·`:148`·`:157`이 `expect(result).toBe(input)`으로 `removeGeminiWatermark`가 **입력 Buffer를 그대로 반환**한다고 단언한다 → §7.4에서 `{ buffer, mimeType }` 반환으로 변경됨
-
-또한 이 파일의 "Stability AI 인페인팅 경로" describe(`:96-170`)는 현재 Gemini 구현과 이미 어긋난 스테일 테스트다. 신규 파일을 따로 만들지 말고 **이 파일을 제자리에서 개편한다**(두 파일이 같은 모듈을 검증하는 상태를 만들지 않는다).
-
-개편 후 케이스:
-
-| 픽스처 | 기대 |
-|---|---|
-| 밝은 베이지 배경 + 어두운 회색 ✦ @ (86.5%, 89.8%) — 실제 실패 케이스 | 박스 반환 |
-| 어두운 원단 + 밝은 회색 ✦ @ (72.4%, 86.1%) — 실제 실패 케이스 | 박스 반환 |
-| 워터마크 없는 사진 | `null` |
-| 우하단 솔리드 사각 라벨(채움률 ~1.0) | `null` — 채움률 상한 회귀 |
-| 균일 단색 이미지 | `null` |
-
-Gemini 호출은 mock한다.
+`src/__tests__/lib/watermark-removal.test.ts`는 검증 대상 모듈과 함께 삭제한다(§7.2). 이 파일은 `hasWatermarkCandidate`를 import하고(`:3`) `removeGeminiWatermark`가 입력 Buffer를 그대로 반환한다고 단언하는데(`:78`·`:130`·`:148`·`:157`), 모듈이 사라지므로 남길 이유가 없다. "Stability AI 인페인팅 경로" describe(`:96-170`)는 현재 Gemini 구현과 이미 어긋난 스테일 테스트이기도 하다.
 
 ### 9.2 실행
 
@@ -485,17 +480,17 @@ Gemini 호출은 mock한다.
 | 파일 | 내용 |
 |---|---|
 | `src/lib/detail-page/product-options.ts` | 신규 — 옵션 도출·커버리지 집계 (순수) |
-| `src/lib/image/watermark-removal.ts` | 감지 재작성 + mimeType 반환 |
+| `src/lib/image/watermark-removal.ts` | **삭제** — 자동 감지 철회 (§7.1) |
+| `src/__tests__/lib/watermark-removal.test.ts` | **삭제** — 대상 모듈과 함께 |
 | `src/lib/detail-page/layout-validator.ts` | stat 위생 + 옵션 커버리지 |
 | `src/lib/ai/repair-pro-layout.ts` | 옵션 컨텍스트 전달 |
 | `src/app/api/ai/generate-pro-layout/system-prompt.ts` | D1 교체, C4 강화, D3 신규 |
 | `src/app/api/ai/generate-pro-layout/route.ts` | 스키마·프롬프트·검증 결선 |
 | `src/app/api/ai/generate-scene-image/route.ts` | 중복 상수 제거(선결) + 스파클 금지 + 긍정 감정 규칙 + sceneHint 절단 |
-| `src/__tests__/lib/watermark-removal.test.ts` | 기존 파일 개편 (§9.1) |
-| `src/app/listing/[id]/detail-maker-pro/page.tsx` | 옵션명 UI, 씬 참조 이미지 선택 |
-| `src/app/api/image/upload-ai/route.ts` | mimeType 정합 |
-| `src/app/api/listing/upload-image/route.ts` | mimeType 정합 |
-| `src/app/api/ai/generate-detail-html/route.ts` | mimeType 정합 |
+| `src/app/listing/[id]/detail-maker-pro/page.tsx` | 옵션명 UI, ✦ 버튼, 업로드 자리 유지, 씬 참조 선택 |
+| `src/app/api/image/upload-ai/route.ts` | `removeGeminiWatermark` 호출 제거 |
+| `src/app/api/listing/upload-image/route.ts` | `removeGeminiWatermark` 호출 제거 |
+| `src/app/api/ai/generate-detail-html/route.ts` | `removeGeminiWatermark` 호출 제거 |
 | `src/app/api/ai/remove-watermark-region/route.ts` | base64 입력 분기 |
 | `src/components/common/ImageCleanupModal.tsx` | base64 입출력 optional prop |
 | `scripts/check-gemini-watermark.mjs` | 이미 추가됨 — Gemini API 티어 판별 |
