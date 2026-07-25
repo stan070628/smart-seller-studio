@@ -21,7 +21,12 @@
 | `1784981818955-lifestyle.png` (AI 씬) | 85.4, 87.9 | 검은 원단 위 **밝은** 회색 |
 | `1784981815943-lifestyle.png` (AI 히어로) | 72.4, 86.1 | **반바지 밑단에 그려진 프린트** — 코너 아님 |
 
-현행 `hasWatermarkCandidate`(`watermark-removal.ts:45`)는 우하단 12%×8%(x≥88%, y≥92%)만 보고, 코너가 바로 위 영역보다 **밝을 때만** 감지한다. 세 사례 모두 위치가 검사창 밖이고, 첫 사례는 대비 방향까지 반대다. 실측값은 `brightnessDiff 1.0`(임계 30), `varianceDelta −0.7`(임계 200)으로 감지 근처에도 못 간다.
+현행 `hasWatermarkCandidate`(`watermark-removal.ts:45`)가 실패하는 이유는 두 가지다.
+
+1. **검사창 위치.** 우하단 12%×8%(x≥88%, y≥92%)만 본다. 세 사례 모두 그 밖에 있다.
+2. **평균 비교의 둔감함.** 코너 패치와 바로 위 패치의 **평균 밝기 차**를 본다(`:73`). 대비 방향은 `Math.abs`라 양방향이지만, 작은 ✦ 하나는 103×94 패치의 평균을 거의 움직이지 못한다. 실측 `brightnessDiff 1.0`(임계 30), `varianceDelta −0.7`(임계 200) — 검사창을 넓히기만 해선 오히려 더 둔해진다.
+
+즉 창을 넓히는 것만으로는 부족하고, 패치 평균이 아니라 **픽셀 단위 블롭 탐지**로 바꿔야 한다.
 
 `GOOGLE_AI_API_KEY`는 유료 티어임을 확인했다(`scripts/check-gemini-watermark.mjs` 통과). 워터마크는 API가 아니라 **제미나이 앱에서 만든 이미지**가 들여온 것이다.
 
@@ -84,13 +89,23 @@ export function collectOptionCoverage(
 
 `counts`는 **등장하지 않은 옵션도 0으로 채워 반환한다.** 그래야 "0회인 옵션 존재" 검사가 성립한다.
 
-**비교 섹션 판정:** `blocks`에 `option_grid`가 있고 `imageSlots.length >= 2`인 섹션.
+**비교 섹션 판정:** 세 조건을 모두 만족하는 섹션.
+
+1. `blocks`에 `option_grid`가 있다
+2. `imageSlots.length === 고유 옵션 수`
+3. `option_grid.items.length === imageSlots.length`
+
+조건 1만으로는 좁히기에 부족하다. C4 강화(§4.3)로 "4단계 사이즈"류가 `option_grid`로 유도되므로 한 페이지에 `option_grid`가 2개 이상 나오는 것이 정상 상태가 된다. 사이즈 grid가 우연히 `imageSlots` 2개를 가지면 비교 섹션으로 오인되어 커버리지 집계에서 통째로 빠지고 `compareSectionCount`가 2가 된다. 조건 2·3이 그것을 막는다.
 
 비교 섹션을 집계에서 제외하는 것이 핵심이다. 포함하면 비교 섹션의 화이트 1 + 블랙 1이 "나머지 전부 화이트"인 편중을 가려버린다.
 
+**`imageRef` 미지정 슬롯.** 렌더 폴백(`page.tsx:1126`)은 `imageRef`가 없으면 `(섹션 + 슬롯) % 이미지 수` 로테이션으로 배정한다. 즉 미지정 슬롯도 실제로는 특정 옵션을 노출하므로, 집계에서 그냥 무시하면 "검증 통과했는데 렌더는 편중"이 성립한다. 그래서 옵션 모드에서는 **비교 섹션 밖 이미지 슬롯에 `imageRef`가 없으면 그 자체를 위반으로 잡는다**(§5.2). 폴백 로테이션은 옵션 모드가 아닐 때만 의미를 갖는다.
+
+이름이 붙지 않은 이미지 인덱스를 가리키는 슬롯도 같은 위반으로 처리한다 — 어느 옵션인지 판정할 수 없기 때문이다.
+
 ## 3. 입력 UI (`detail-maker-pro/page.tsx`)
 
-제품 이미지 4칸 그리드(`:472-491`) 각 썸네일 아래에 옵션명 입력칸을 단다.
+제품 이미지 4칸 그리드(`:559-604`) 각 썸네일 아래에 옵션명 입력칸을 단다.
 
 ```
 제품 이미지  ★ 상세페이지에 삽입됩니다
@@ -101,13 +116,15 @@ export function collectOptionCoverage(
 ```
 
 - 상태: `optionNames: string[]` — `productImages`와 인덱스 정합을 유지한다.
-  - 추가(`:455-459`): 새 파일 수만큼 `''`를 이어붙이고 4개로 자른다.
-  - 삭제(`:479`): 같은 인덱스를 splice.
-  - 교체(`:468`): 배열을 새 파일 수만큼 `''`로 초기화.
+  - 추가(`:544`): 새 파일 수만큼 `''`를 이어붙이고 4개로 자른다.
+  - 삭제(`:566`): 같은 인덱스를 splice.
+  - 교체(`:555`): 배열을 새 파일 수만큼 `''`로 초기화.
 - 안내문: "옵션명을 2개 이상 적으면 옵션별로 고르게 노출되는 상세페이지가 만들어집니다. (선택)"
 - 입력값은 40자로 자른다.
 
-옵션 도출·커버리지 로직은 전부 `product-options.ts`에 두고 컴포넌트에는 UI만 남긴다 (`page.tsx`가 이미 1135줄).
+옵션 도출·커버리지 로직은 전부 `product-options.ts`에 두고 컴포넌트에는 UI만 남긴다 (`page.tsx`가 이미 1222줄).
+
+> 줄번호 주의: `page.tsx`는 2026-07-25 `16f9a471`("업로드 화면에 '촬영 진행중' 리스트")로 1135→1222줄이 됐다. 이 문서의 번호는 그 커밋 기준이다. 구현 시 앵커는 줄번호가 아니라 인용된 코드 조각으로 찾을 것.
 
 ## 4. 레이아웃 생성 (`generate-pro-layout`)
 
@@ -160,19 +177,47 @@ export function collectOptionCoverage(
 
 ### 5.1 stat_row 위생 — 결정론적 제거
 
-`sanitizeProLayout`의 파이프라인(`:190-204`)에 `pruneBlocks` **앞** 단계로 `sanitizeStatRows`를 넣는다. 항목을 걸러 2개 미만이면 `items: []`로 비우고, 뒤따르는 `pruneBlocks`의 `isEmptyBlock`이 블록을 제거한다.
+**반드시 생성 경로에서만 돌아야 한다.** `sanitizeProLayout`은 생성 시점 외에도 두 곳에서 호출된다:
+
+- `src/app/api/detail-page/draft/route.ts:44` — 초안 저장 시
+- `src/app/api/detail-page/render/route.ts:125` — 렌더 시
+
+이 두 경로는 **사용자가 에디터에서 직접 편집한 콘텐츠**를 다룬다. stat 위생을 파이프라인에 무조건 넣으면 사용자가 손으로 쓴 "당류 0g", "카페인 0mg" 같은 항목이 저장·렌더 때마다 소리 없이 사라진다.
+
+그래서 opt-in 플래그로 게이트한다.
+
+```ts
+export function sanitizeProLayout(
+  sections: unknown[],
+  opts?: {
+    /** stat_row 위생. 생성 경로에서만 true */
+    statHygiene?: boolean;
+    optionNameByImageIndex?: Map<number, string>;
+  },
+): { sections: unknown[]; warnings: Violation[] };
+```
+
+`generate-pro-layout` 라우트만 `statHygiene: true`를 넘긴다. 옵션 커버리지 검사와 동일한 게이트 방식이라 일관된다.
+
+파이프라인(`:190-204`)에서 `pruneBlocks` **앞** 단계로 `sanitizeStatRows`를 넣는다.
 
 제거 규칙 (`value`는 문자열, `unit`·`label`과 함께 판단):
 
-| 규칙 | 예 |
-|---|---|
-| 숫자 토큰이 있고 모두 0 | `"0"`, `"0.0"`, `"0cm"` |
-| 값이 순수 정수 + `label`/`unit`에 개수 단위 | `"4"` + `"단계"`/`"사이즈"` |
-| 값이 없음·무·`-`·`N/A` | `"없음"` |
+| 규칙 | 예 | 비고 |
+|---|---|---|
+| 값이 0 **이고** `label`/`unit`이 치수 계열 | `"0"` + `"소매 길이"`/`"cm"` | 치수 어휘로 좁힘 — 아래 참조 |
+| 값이 정수 + `label`/`unit`에 개수 단위 | `"4"` + `"단계"` | |
+| 값 문자열 안에 숫자+개수 단위가 결합 | `"4단계"`, `"2종"` | `unit`이 비어도 잡음 |
+| 값이 없음·무·`-`·`N/A` | `"없음"` | |
 
+치수 어휘: `cm mm m 인치 길이 두께 높이 너비 폭 깊이 지름 둘레`.
 개수 단위 어휘: `단계 종 가지 개 컬러 색상 종류 옵션 세트`.
 
-`stat_row`는 `columns.cols` 안에도 들어갈 수 있으므로 `sanitizeStatRows`는 `cols`를 재귀 순회한다. (기존 `pruneBlocks`는 최상위 blocks만 보는 한계가 있으나 이번 범위 밖이다.)
+**0값 규칙을 치수로 좁히는 이유:** 식품·화학 카테고리에서 "설탕 0g", "유해물질 0%"는 오히려 핵심 임팩트 수치다. 값만 보고 지우면 정당한 지표를 죽인다. 치수의 0(= 그 부위가 존재하지 않음)만 결정론적으로 걷어내고, 나머지 0값 판단은 C4 프롬프트 규칙(LLM 담당)에 맡긴다.
+
+**항목이 2개 미만이 되면:**
+- 최상위 `blocks`에서는 `items: []`로 비운다 → 뒤따르는 `pruneBlocks`의 `isEmptyBlock`이 제거한다.
+- `columns.cols` 안에서는 **블록 자체를 배열에서 제거한다.** `pruneBlocks`는 최상위 blocks만 순회하므로(`layout-validator.ts:173-184`) cols 안의 빈 블록은 남고, `validateProLayout`의 `forEachBlock`(`:70-84`)은 cols를 재귀하므로 매번 `empty_block` warning이 찍힌다. `sanitizeStatRows`가 이미 cols를 재귀 중이라 추가 비용은 없다.
 
 ### 5.2 옵션 커버리지 — 위반 → repair 유발
 
@@ -193,14 +238,15 @@ export function validateProLayout(
 | 비교 섹션 2개 이상 | `option_compare` | warning |
 | 비교 섹션 밖 등장 0회인 옵션 존재 | `option_coverage` | error |
 | 비교 섹션 밖 `max(등장수) − min(등장수) > 1` | `option_coverage` | error |
+| 비교 섹션 밖 이미지 슬롯에 `imageRef` 미지정 또는 무명 인덱스 참조 | `option_coverage` | error |
 
-편중 판정에 비율이 아니라 **편차**를 쓴다. "한 옵션이 절반 초과"로 하면 슬롯 3개·옵션 2개처럼 애초에 균등 분배가 불가능한 경우(2:1 = 66%)를 위반으로 잡아 무한히 못 고치는 요구를 만든다. 편차 1 이하 허용은 어떤 슬롯 수에서도 달성 가능하다.
+편중 판정에 비율이 아니라 **편차**를 쓴다. "한 옵션이 절반 초과"로 하면 슬롯 3개·옵션 2개처럼 애초에 균등 분배가 불가능한 경우(2:1 = 66%)를 위반으로 잡아 영원히 못 고치는 요구를 만든다. 편차 1 이하 허용은 어떤 슬롯 수에서도 달성 가능하다.
 
-| 슬롯 : 옵션 | 최선 분배 | 편차 | 판정 |
+| 슬롯 : 옵션 | 예시 분배 | 편차 | 판정 |
 |---|---|---|---|
 | 3 : 2 | 2, 1 | 1 | 통과 |
-| 5 : 2 | 5, 0 | 5 | 위반 |
-| 6 : 2 | 4, 2 | 2 | 위반 |
+| 5 : 2 | 5, 0 | 5 | 위반 (최선은 3,2 → 편차 1) |
+| 6 : 2 | 4, 2 | 2 | 위반 (최선은 3,3 → 편차 0) |
 | 6 : 3 | 2, 2, 2 | 0 | 통과 |
 
 `sanitizeProLayout`도 같은 `opts`를 받아 내부 `validateProLayout` 호출에 넘긴다.
@@ -227,20 +273,47 @@ export interface RepairProductInfo {
 
 ```
 options = productOptions → nameByImageIndex
-cleaned = sanitizeProLayout(sections, { optionNameByImageIndex }).sections
-{ violations, isClean } = validateProLayout(cleaned, { optionNameByImageIndex })
-!isClean → repairProLayout(cleaned, violations, { …, optionLines }) → 재정화
+opts    = { statHygiene: true, optionNameByImageIndex }
+cleaned = sanitizeProLayout(sections, opts).sections
+{ violations, isClean } = validateProLayout(cleaned, opts)
+!isClean → repairProLayout(cleaned, violations, { …, optionLines }) → sanitizeProLayout(repaired, opts)
 ```
 
-repair는 1패스만 돈다(기존 동작 유지). 재정화 후에도 편중이 남으면 그대로 반환한다 — 루프를 만들지 않는다.
+repair는 1패스만 돈다(기존 동작 유지). 재정화 후에도 편중이 남으면 **경고 로그만 남기고 그대로 반환한다** — 루프를 만들지 않는다. 옵션 편중은 페이지를 못 쓰게 만드는 결함이 아니라 품질 저하이므로, 사용자를 막는 것보다 결과를 주는 편이 낫다.
 
-## 6. 씬 생성 시 색 오염 차단 (`page.tsx:982-985`)
+## 6. 씬 생성 시 색 오염 차단 (`page.tsx:1069-1072`)
 
-현행은 참조 이미지를 2장 보낸다: `[imageRef 이미지, ...전체].slice(0, 2)`. 옵션 모드에서 이러면 화이트 슬롯에 블랙 사진이 함께 들어가 Gemini가 색을 섞는다.
+현행은 참조 이미지를 2장 보낸다: `[uploadedImageUrls[slot.imageRef], ...uploadedImageUrls].slice(0, 2)`. 옵션 모드에서 이러면 화이트 슬롯에 블랙 사진이 함께 들어가 Gemini가 색을 섞는다.
 
 **옵션 모드에서는 `imageRef`가 가리키는 이미지 1장만 보낸다.** 같은 옵션명을 가진 이미지가 여러 장이면 그중 최대 2장까지 허용한다(각도 참조 이득은 유지하면서 색은 안 섞임). 옵션 모드가 아니면 현행 그대로.
 
-`sceneHint`에는 옵션명을 덧붙인다: `${promptHint} (제품 색상: 화이트)`.
+### 6.1 업로드 부분 실패 시 인덱스 시프트 — 선결 과제
+
+`imageRef`는 **업로드 전 `productImages` 인덱스** 기준인데, `uploadedImageUrls`는 실패 건을 걸러내며 인덱스가 당겨진다(`page.tsx:1045-1046`).
+
+```ts
+  .filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled')
+  .map((r) => r.value);
+```
+
+이미지 1(블랙) 업로드가 실패하면 `uploadedImageUrls`는 `[화이트, 블랙2]`가 되고, `imageRef=1`(블랙)이 가리키던 자리에 **블랙2**가 온다 — 우연히 맞는다. 그러나 이미지 0(화이트)이 실패하면 `imageRef=1`이 블랙2를 가리키고 `imageRef=0`은 블랙1을 가리켜, 화이트 슬롯에 블랙이 들어간다. §6의 "옵션 이미지 1장만" 전제가 조용히 깨진다.
+
+지금도 잠재 버그지만 옵션 기능이 이를 **기능 실패로 승격**시킨다. 그래서 자리를 유지한다.
+
+```ts
+const uploadedImageUrls: (string | null)[] =
+  results.map(r => r.status === 'fulfilled' ? r.value : null);
+```
+
+- `imageRef`가 `null` 자리를 가리키면 그 슬롯의 씬 생성을 건너뛴다(현행 실패 폴백과 동일 경로).
+- 섹션 조립(`:1126`)에서도 `null`을 걸러 쓴다.
+- 옵션 모드에서 하나라도 실패하면 결과 화면에 "일부 이미지 업로드 실패 — 옵션 배분이 정확하지 않을 수 있습니다" 경고를 띄운다.
+
+### 6.2 sceneHint 길이
+
+`sceneHint`에 옵션명을 덧붙인다: `${promptHint} (제품 색상: 화이트)`.
+
+`generate-scene-image`의 스키마는 `sceneHint: z.string().max(600)`(`route.ts:35`)이다. 접미사를 붙인 뒤 **600자로 자른다.** 안 자르면 긴 `promptHint`에서 400이 나고, `page.tsx:1104`의 catch가 조용히 삼켜 그 섹션 이미지만 사라진다.
 
 ## 7. 워터마크 (`src/lib/image/watermark-removal.ts`)
 
@@ -273,12 +346,16 @@ export async function findWatermarkBox(buffer: Buffer): Promise<WatermarkBox | n
 5. 형태 검사로 오탐 제거. 모두 통과해야 워터마크로 본다:
    - 마스크 면적이 전체 이미지의 0.02% ~ 2%
    - bbox 종횡비 0.5 ~ 2 (✦는 대략 정사각)
-   - bbox 안 마스크 채움률 > 0.25 (✦는 bbox를 절반 이하로 채운다)
+   - bbox 안 마스크 채움률 **0.25 ~ 0.6** (범위 조건)
 6. bbox를 원본 좌표로 환산하고 짧은 변의 40%만큼 패딩 → 이미지 경계로 클램프
 
 `removeGeminiWatermark`는 고정 코너 대신 이 박스를 crop → Gemini 인페인팅 → 원위치 합성한다. 박스가 `null`이면 원본을 그대로 반환한다(현행과 동일한 무동작 경로).
 
-형태 검사가 오탐 방어의 전부다. 검사창을 넓힌 만큼, 우하단에 있는 정당한 작은 디테일(브랜드 태그·단추)을 지우지 않도록 면적·종횡비·채움률 세 조건을 모두 요구한다.
+**채움률에 상한이 필요한 이유.** ✦는 뾰족한 네 갈래라 bbox를 절반 이하로 채운다. 반면 단추·라벨·브랜드 태그 같은 솔리드 사각·원형 요소는 채움률이 0.8~1.0이면서 종횡비 ~1, 면적 0.02~2%에 흔히 들어와 하한만으로는 세 조건을 전부 통과한다. 이 함수는 세 업로드 경로 모두에서 동기 실행되므로 오탐은 곧 **사용자 이미지를 소리 없이 인페인팅하는 것**이다. 상한 0.6이 그 방어의 핵심이다.
+
+**로깅.** 감지 시 `console.log`로 박스 좌표·면적·채움률을 남긴다. 오탐 신고가 들어왔을 때 임계값을 조정할 근거가 없으면 안 된다.
+
+**비용·지연.** 검사 자체는 512px 다운스케일 후 픽셀 순회라 무시할 수준이다. 다만 감지율이 올라간 만큼 Gemini 인페인팅 호출이 늘어 업로드가 건당 수 초 느려질 수 있다. 감지된 경우에만 호출하는 현행 구조는 유지한다.
 
 이 함수 하나를 고치면 세 경로가 동시에 고쳐진다:
 - `/api/listing/upload-image` (제품 이미지 업로드 — 이번 문제의 진원지)
@@ -293,9 +370,68 @@ export async function findWatermarkBox(buffer: Buffer): Promise<WatermarkBox | n
 
 `BACKGROUND_PROMPT_SYSTEM`(`:81`)의 "No text, logos, watermarks" 목록에도 sparkle을 추가한다.
 
-### 7.3 한계
+### 7.2.1 선결 리팩터 — 중복 상수 제거
 
-**이미 ✦가 옷 위에 그려져 나온 이미지는 자동으로 지울 수 없다.** 코너 오버레이가 아니라 생성된 콘텐츠이기 때문이다. 기존 수동 도구(`ImageCleanupModal` `mode='watermark'` + `/api/ai/remove-watermark-region`)로 지우거나 재생성해야 한다. 이 스펙에서는 그 도구를 PRO 화면에 연결하지 않는다.
+`PRODUCT_FIDELITY_INSTRUCTION`(`:65`)과 **동일한 문자열이 `SCENE_PROMPT_SYSTEM`(`:55`) 안에 하드코딩**돼 있다("MUST end with this exact instruction: …"). 그리고 `:510`이 그 상수로 스트립한다:
+
+```ts
+const bgPrompt = claudePrompt.replace(PRODUCT_FIDELITY_INSTRUCTION, '').trim();
+```
+
+상수(`:65`)에만 문구를 추가하면 Claude는 `:55`의 **옛 문자열**을 그대로 에코하고, `:510`의 `replace`는 매칭에 실패해 no-op이 된다. 그러면 편집+합성 경로의 배경 프롬프트에 제품 충실도 지시가 남아 **배경에 제품이 그려지는 회귀**가 난다.
+
+그래서 §7.2·§8의 문구 추가에 앞서, `:55`의 내장 사본을 상수 보간으로 바꾼다:
+
+```ts
+const SCENE_PROMPT_SYSTEM = `…
+- CRITICAL: The generated prompt MUST end with this exact instruction: "${PRODUCT_FIDELITY_INSTRUCTION}"
+…`;
+```
+
+`PRODUCT_FIDELITY_INSTRUCTION` 선언을 `SCENE_PROMPT_SYSTEM`보다 위로 올려야 한다(현재는 아래에 있다).
+
+### 7.3 3차 방어 — 수동 제거 도구 연결
+
+**이미 ✦가 옷 위에 그려져 나온 이미지는 자동으로 지울 수 없다.** 코너 오버레이가 아니라 생성된 콘텐츠이므로 위치·형태 가정이 성립하지 않는다. 자동 감지가 놓친 건을 손으로 잡을 수단이 필요하다.
+
+기존 자산을 재사용한다: `ImageCleanupModal`(`mode='watermark'`) + `/api/ai/remove-watermark-region`. 드래그로 영역을 지정하면 그 부분만 인페인팅한다.
+
+**제약:** `remove-watermark-region`은 `imageUrl`이 Supabase Storage URL일 것을 요구한다(`route.ts:18`, SSRF 방어). PRO 업로드 화면의 제품 이미지는 아직 업로드 전 `File`이고, 업로드는 결과 화면(`page.tsx:951`)에서야 일어난다. 그런데 워터마크는 **레이아웃 생성 전에** 지워야 한다 — 그래야 참조 이미지로 투입될 때 이미 깨끗하다(§7.1의 전제).
+
+**해법: base64 입력 경로를 추가한다.** 임시 업로드 후 URL로 호출하는 방식은 정리 안 된 원본이 Storage에 남고 왕복이 한 번 더 든다. 클라이언트가 보낸 base64는 애초에 SSRF 대상이 아니므로 보안 성격이 다르지 않다.
+
+`remove-watermark-region` 요청 스키마:
+
+```
+imageUrl (Supabase URL)        ─┐
+                                ├─ 둘 중 하나 필수
+imageBase64 + mimeType         ─┘
+region { x, y, width, height }    (0~1 정규화, 현행 유지)
+```
+
+SSRF 검사는 `imageUrl` 분기에만 적용한다. 응답 형식(`{ imageBase64, mimeType }`)은 그대로다.
+
+**`ImageCleanupModal` 확장** (기존 호출부 무영향, 모두 optional):
+
+```ts
+interface ImageCleanupModalProps {
+  imageUrl: string;              // 표시용. blob: URL 허용
+  imageBase64?: string;          // 있으면 API 호출에 URL 대신 사용
+  mimeType?: string;
+  onReplace: (newUrl: string) => void;
+  onResultBase64?: (base64: string, mimeType: string) => void; // 있으면 업로드 생략
+  onAdd: (newUrl: string) => void;
+  onClose: () => void;
+  canAdd: boolean;
+  mode?: 'chinese' | 'watermark';
+}
+```
+
+`onResultBase64`가 있으면 `uploadResult()`(`ImageCleanupModal.tsx:111`)를 건너뛰고 콜백만 호출한다. PRO 화면은 `File[]`로 상태를 들고 있으므로, 결과를 `File`로 되돌려 `productImages[i]`를 교체하면 이후 파이프라인이 그대로 돈다. URL/File 이중 관리를 만들지 않는다.
+
+**PRO 화면 결선.** 제품 이미지 썸네일(`page.tsx:473-490`)의 × 버튼 옆에 ✦ 버튼을 단다. 누르면 해당 파일을 최대 2000px JPEG로 다운스케일해 모달에 넘긴다 — 서버가 어차피 `MAX_DIM = 2000`으로 줄이므로(`remove-watermark-region/route.ts:20`) 추가 손실이 없고, base64 요청 본문이 Vercel 4.5MB 제한에 걸리지 않는다. 기존 `fileToDownscaledBase64`(`page.tsx:118`)에 최대 변 인자를 넘겨 재사용한다.
+
+교체된 파일은 `optionNames[i]`를 유지한다(§3의 인덱스 정합).
 
 ### 7.4 곁다리 버그
 
@@ -313,10 +449,34 @@ export async function findWatermarkBox(buffer: Buffer): Promise<WatermarkBox | n
 
 | 파일 | 검증 |
 |---|---|
-| `src/__tests__/lib/image/watermark-removal.test.ts` (신규) | sharp 합성 픽스처 3종 — ① 밝은 배경 + 어두운 ✦ (x 86.5%, y 89.8% — 실제 실패 케이스), ② 어두운 배경 + 밝은 ✦ (x 72.4%, y 86.1%), ③ 워터마크 없는 사진. ①②는 박스 반환, ③은 `null`. Gemini 호출은 mock |
+| `src/__tests__/lib/watermark-removal.test.ts` (**기존 파일 개편**) | 아래 참조 |
 | `src/__tests__/lib/detail-page/product-options.test.ts` (신규) | `deriveOptions` 중복·공백 처리, `collectOptionCoverage`가 비교 섹션을 제외하는지 |
 | `src/__tests__/lib/detail-page/layout-validator.test.ts` (추가) | stat 위생 3규칙, 2개 미만 시 블록 삭제, `columns.cols` 재귀. 옵션 커버리지 위반 4종. `opts` 없으면 옵션 검사 미수행 |
 | `src/__tests__/api/generate-pro-layout.test.ts` (추가 또는 신규) | `productOptions` 전달 시 유저 프롬프트에 옵션 줄 포함, 미전달 시 기존 동작 |
+| `src/__tests__/api/ai/remove-watermark-region.test.ts` (추가 또는 신규) | `imageBase64` 분기 동작, `imageUrl` 분기의 SSRF 검사 유지, 둘 다 없으면 400 |
+
+### 9.1 기존 워터마크 테스트 개편
+
+`src/__tests__/lib/watermark-removal.test.ts`는 그대로 두면 **컴파일부터 깨진다.**
+
+- `:3`이 `hasWatermarkCandidate`를 import한다 → §7.1에서 `findWatermarkBox`로 교체됨
+- `:78`·`:130`·`:148`·`:157`이 `expect(result).toBe(input)`으로 `removeGeminiWatermark`가 **입력 Buffer를 그대로 반환**한다고 단언한다 → §7.4에서 `{ buffer, mimeType }` 반환으로 변경됨
+
+또한 이 파일의 "Stability AI 인페인팅 경로" describe(`:96-170`)는 현재 Gemini 구현과 이미 어긋난 스테일 테스트다. 신규 파일을 따로 만들지 말고 **이 파일을 제자리에서 개편한다**(두 파일이 같은 모듈을 검증하는 상태를 만들지 않는다).
+
+개편 후 케이스:
+
+| 픽스처 | 기대 |
+|---|---|
+| 밝은 베이지 배경 + 어두운 회색 ✦ @ (86.5%, 89.8%) — 실제 실패 케이스 | 박스 반환 |
+| 어두운 원단 + 밝은 회색 ✦ @ (72.4%, 86.1%) — 실제 실패 케이스 | 박스 반환 |
+| 워터마크 없는 사진 | `null` |
+| 우하단 솔리드 사각 라벨(채움률 ~1.0) | `null` — 채움률 상한 회귀 |
+| 균일 단색 이미지 | `null` |
+
+Gemini 호출은 mock한다.
+
+### 9.2 실행
 
 `npx vitest run`을 인자 없이 돌리면 라이브러리 테스트까지 돌아 무관한 선재 실패가 섞인다. 회귀 판단은 위 경로를 지정해서 한다.
 
@@ -330,16 +490,18 @@ export async function findWatermarkBox(buffer: Buffer): Promise<WatermarkBox | n
 | `src/lib/ai/repair-pro-layout.ts` | 옵션 컨텍스트 전달 |
 | `src/app/api/ai/generate-pro-layout/system-prompt.ts` | D1 교체, C4 강화, D3 신규 |
 | `src/app/api/ai/generate-pro-layout/route.ts` | 스키마·프롬프트·검증 결선 |
-| `src/app/api/ai/generate-scene-image/route.ts` | 스파클 금지 + 긍정 감정 규칙 |
+| `src/app/api/ai/generate-scene-image/route.ts` | 중복 상수 제거(선결) + 스파클 금지 + 긍정 감정 규칙 + sceneHint 절단 |
+| `src/__tests__/lib/watermark-removal.test.ts` | 기존 파일 개편 (§9.1) |
 | `src/app/listing/[id]/detail-maker-pro/page.tsx` | 옵션명 UI, 씬 참조 이미지 선택 |
 | `src/app/api/image/upload-ai/route.ts` | mimeType 정합 |
 | `src/app/api/listing/upload-image/route.ts` | mimeType 정합 |
 | `src/app/api/ai/generate-detail-html/route.ts` | mimeType 정합 |
+| `src/app/api/ai/remove-watermark-region/route.ts` | base64 입력 분기 |
+| `src/components/common/ImageCleanupModal.tsx` | base64 입출력 optional prop |
 | `scripts/check-gemini-watermark.mjs` | 이미 추가됨 — Gemini API 티어 판별 |
 
 ## 11. 범위 밖
 
 - 옵션별로 상세페이지를 **여러 장** 뽑는 것 (한 페이지 안 고른 노출로 결정)
-- 이미 생성된 워터마크 이미지의 소급 정리
-- PRO 화면에 수동 워터마크 제거 도구 연결
+- 이미 Storage에 올라간 워터마크 이미지의 소급 정리 (필요 시 일회성 스크립트로 별도 처리)
 - `pruneBlocks`가 `columns.cols`를 재귀하지 않는 기존 한계 (stat 위생만 재귀 처리)
