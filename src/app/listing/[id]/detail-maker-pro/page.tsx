@@ -1152,7 +1152,7 @@ export default function DetailMakerProPage() {
             try {
 
             // Step 1: 제품 이미지 업로드 → Supabase URL 확보
-            let uploadedImageUrls: string[] = [];
+            let uploadedImageUrls: (string | null)[] = [];
             if (productImages.length > 0) {
               uploadedImageUrls = (
                 await Promise.allSettled(
@@ -1167,8 +1167,9 @@ export default function DetailMakerProPage() {
                   })
                 )
               )
-                .filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled')
-                .map((r) => r.value);
+                // 자리 유지 — imageRef는 업로드 전 productImages 인덱스 기준이라
+                // 실패분을 당겨내면 화이트 슬롯에 블랙이 들어간다.
+                .map((r) => (r.status === 'fulfilled' ? r.value : null));
             }
 
             // Step 2: 생성형 슬롯(flux_lifestyle=라이프스타일, detail_closeup=디테일 접사)
@@ -1176,7 +1177,12 @@ export default function DetailMakerProPage() {
             const geminiUrlMap: Record<number, string> = {};
 
             // 재개 시 productImages(File) 없음 → 저장해둔 productImageUrls로 폴백
-            const effectiveProductUrls = uploadedImageUrls.length > 0 ? uploadedImageUrls : productImageUrls;
+            const effectiveProductUrls: (string | null)[] =
+              uploadedImageUrls.length > 0 ? uploadedImageUrls : productImageUrls;
+
+            if (uploadedImageUrls.some((u) => u === null) && isOptionMode(deriveOptions(optionNames))) {
+              setError('일부 이미지 업로드에 실패했습니다. 옵션 배분이 정확하지 않을 수 있습니다.');
+            }
             // 실사진 override: 업로드된 detail_closeup이 그 섹션의 targeting gen 슬롯(genSlotIdx)일 때만
             const realBySection: Record<number, string> = {};
             for (const sl of slots) {
@@ -1205,11 +1211,28 @@ export default function DetailMakerProPage() {
                 genItems.map(async ({ s, i }) => {
                   try {
                     const slot = s.imageSlots?.find(sl => isGenSlot(sl.slotType));
-                    // Claude가 지정한 imageRef 제품 이미지를 씬 합성의 첫 ref로 → 색상 일치.
-                    const refImages =
-                      typeof slot?.imageRef === 'number' && effectiveProductUrls[slot.imageRef]
-                        ? [effectiveProductUrls[slot.imageRef], ...effectiveProductUrls].slice(0, 2)
-                        : effectiveProductUrls.slice(0, 2);
+                    // 옵션 모드에선 다른 옵션 사진이 섞이면 Gemini가 색을 섞는다 →
+                    // imageRef가 가리키는 1장만(같은 옵션명이면 최대 2장) 보낸다.
+                    const options = deriveOptions(optionNames);
+                    const optionMode = isOptionMode(options);
+                    const nameByIdx = new Map(options.map(o => [o.imageIndex, o.name]));
+                    const ref = typeof slot?.imageRef === 'number' ? slot.imageRef : null;
+                    const primary = ref !== null ? effectiveProductUrls[ref] ?? null : null;
+
+                    let refImages: string[];
+                    if (optionMode) {
+                      if (!primary || ref === null) return; // 해당 옵션 이미지가 없으면 이 슬롯은 건너뛴다
+                      const refName = nameByIdx.get(ref);
+                      const sameOption = effectiveProductUrls
+                        .map((u, idx) => ({ u, idx }))
+                        .filter(({ u, idx }) => !!u && idx !== ref && nameByIdx.get(idx) === refName)
+                        .map(({ u }) => u as string);
+                      refImages = [primary, ...sameOption].slice(0, 2);
+                    } else {
+                      const available = effectiveProductUrls.filter((u): u is string => !!u);
+                      refImages = primary ? [primary, ...available].slice(0, 2) : available.slice(0, 2);
+                    }
+                    if (refImages.length === 0) return;
                     const sceneRes = await fetch('/api/ai/generate-scene-image', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
@@ -1218,7 +1241,14 @@ export default function DetailMakerProPage() {
                         productImageUrls: refImages,
                         // scenePrompt(직결) 대신 sceneHint로 전달 → Claude 프롬프트 정교화
                         // (조명·앵글·무드 + anti-AI 규칙) 단계를 경유해 씬 품질을 높인다.
-                        sceneHint: slot?.promptHint,
+                        // zod가 600자로 제한한다(generate-scene-image/route.ts의 sceneHint).
+                        // 넘기면 400이 나고 아래 catch가 삼켜 이 섹션 이미지만 조용히 사라진다.
+                        sceneHint: (() => {
+                          const optionName = ref !== null ? nameByIdx.get(ref) : undefined;
+                          const base = slot?.promptHint ?? '';
+                          const withOption = optionName ? `${base} (제품 색상: ${optionName})` : base;
+                          return withOption.slice(0, 600);
+                        })(),
                         productInfo: { headline: productName },
                       }),
                     });
@@ -1300,7 +1330,10 @@ export default function DetailMakerProPage() {
             });
 
             sessionStorage.setItem('pro_sections', JSON.stringify(detailSections));
-            sessionStorage.setItem('pro_meta', JSON.stringify({ productName, uploadedImageUrls: effectiveProductUrls }));
+            sessionStorage.setItem('pro_meta', JSON.stringify({
+              productName,
+              uploadedImageUrls: effectiveProductUrls.filter((u): u is string => !!u),
+            }));
             router.push('/listing/detail-maker');
             } catch (err) {
               // 업로드/씬 생성/조립 중 실패 시 버튼을 되살리고 원인을 표시한다
