@@ -16,6 +16,7 @@ REVIEW CHECKLIST:
 2. Verify each block type fits its content per the rules above; reassign wrong types (예: 사이즈를 process_flow로 만든 경우 반드시 option_grid로 교체).
 3. Rewrite any Chinese characters into Korean — never delete text leaving a broken sentence.
 4. Keep all valid content and structure unchanged. If a section is already correct, return it unchanged.
+5. 옵션 편중(option_coverage) 이슈가 있으면 imageSlots[].imageRef를 재배정해 옵션을 고르게 만든다. 단 섹션 내용과 옵션이 충돌하면 내용을 우선하고 다른 섹션에서 균형을 맞춘다. 비교 섹션(option_compare)은 옵션당 imageSlot 1개를 유지한다.
 
 Return ONLY the corrected JSON array — no explanation, no code fences.`;
 
@@ -23,6 +24,8 @@ export interface RepairProductInfo {
   name: string;
   points: string[];
   category: string;
+  /** 옵션 모드일 때만. 예: ['이미지 0 = "화이트"', '이미지 1 = "블랙"'] */
+  optionLines?: string[];
 }
 
 /**
@@ -42,6 +45,9 @@ export async function repairProLayout(
     `Product: "${productInfo.name}"`,
     productInfo.category ? `Category: ${productInfo.category}` : '',
     productInfo.points.length > 0 ? `Key points:\n${productInfo.points.map((p) => `- ${p}`).join('\n')}` : '',
+    productInfo.optionLines && productInfo.optionLines.length > 0
+      ? `옵션(색상/모델): ${productInfo.optionLines.join(', ')}`
+      : '',
     `ISSUES:\n${issuesText}`,
     `CURRENT LAYOUT JSON:\n${JSON.stringify(sections)}`,
   ].filter(Boolean).join('\n\n');
