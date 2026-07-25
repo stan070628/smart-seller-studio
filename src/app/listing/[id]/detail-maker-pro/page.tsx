@@ -230,6 +230,7 @@ export default function DetailMakerProPage() {
           analyzedSections: editedSections,
           productImageCount: productImages.length,
           productImages: productImagePayload,
+          productOptions: deriveOptions(optionNames),
         }),
       });
 
@@ -254,7 +255,7 @@ export default function DetailMakerProPage() {
     } finally {
       setIsGenerating(false);
     }
-  }, [isGenerating, productName, productPoints, editedSections, productImages]);
+  }, [isGenerating, productName, productPoints, editedSections, productImages, optionNames]);
 
   // FLUX 이미지 재생성
   const handleFluxRegenerate = useCallback(
