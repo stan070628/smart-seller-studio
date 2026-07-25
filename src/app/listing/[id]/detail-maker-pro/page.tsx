@@ -1,12 +1,14 @@
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import type { AnalyzedSection } from '@/app/api/ai/analyze-detail-page/route';
 import type { LayoutBlock } from '@/types/detail-page';
 import { normalizeImageBlocks } from '@/lib/detail-page/layout-image-blocks';
+import { extractDetailCloseupShots, serializeShotChecklist } from '@/lib/detail-page/shot-guide';
+import type { ShotCard } from '@/types/shot-guide';
 
-type ScreenState = 'upload' | 'review' | 'generating' | 'result';
+type ScreenState = 'upload' | 'review' | 'generating' | 'result' | 'shootguide';
 
 interface GeneratedSection {
   title?: string;
@@ -63,11 +65,25 @@ export default function DetailMakerProPage() {
   const [isRegenerating, setIsRegenerating] = useState<number | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [shotGuide, setShotGuide] = useState<ShotCard[] | null>(null);
+  const [shotGuideLoading, setShotGuideLoading] = useState(false);
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
 
   const [refPreviews, setRefPreviews] = useState<string[]>([]);
   const [prodPreviews, setProdPreviews] = useState<string[]>([]);
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null);
+  const [shootDrafts, setShootDrafts] = useState<Array<{ id: string; productName: string | null; updatedAt: string; step: string | null; shotCount: number }>>([]);
 
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/detail-page/draft?list=1');
+        const json = await res.json();
+        if (json?.success && Array.isArray(json.drafts)) setShootDrafts(json.drafts);
+      } catch { /* 무시 */ }
+    })();
+  }, []);
 
   useEffect(() => {
     const urls = referenceImages.map(f => URL.createObjectURL(f));
@@ -252,6 +268,107 @@ export default function DetailMakerProPage() {
     [productImages.length]
   );
 
+  // 촬영 초안 저장: shootSession(shotGuide+step)을 draft API에 upsert. 반환된 id를 넘겨받아 재사용.
+  async function saveShootDraft(nextId: string | null): Promise<string | null> {
+    const res = await fetch('/api/detail-page/draft', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: nextId ?? undefined,
+        productName,
+        sections: generatedSections,
+        theme: {},
+        shootSession: { shotGuide: shotGuide ?? [], step: 'guide' },
+      }),
+    });
+    const json = await res.json();
+    return (json?.id as string) ?? nextId;
+  }
+
+  // 디바운스 자동저장: draftId가 잡힌 뒤 shotGuide가 바뀌면 1.5s 후 저장.
+  useEffect(() => {
+    if (!draftId || !shotGuide) return;
+    const t = setTimeout(() => { saveShootDraft(draftId).catch(() => {}); }, 1500);
+    return () => clearTimeout(t);
+  }, [draftId, shotGuide]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 마운트 시 ?draftId= 로 초안 재개.
+  useEffect(() => {
+    const rid = searchParams.get('draftId');
+    if (!rid) return;
+    (async () => {
+      try {
+        const res = await fetch(`/api/detail-page/draft?id=${rid}`);
+        const json = await res.json();
+        const d = json?.draft;
+        if (!d) return;
+        setDraftId(d.id);
+        if (d.productName) setProductName(d.productName);
+        if (Array.isArray(d.sections)) setGeneratedSections(d.sections);
+        const sg = d.shootSession?.shotGuide;
+        if (Array.isArray(sg)) setShotGuide(sg);
+        setScreen('shootguide');
+      } catch { /* 무시 */ }
+    })();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 촬영 가이드: 생성된 레이아웃의 detail_closeup 슬롯 → 폰 촬영용 컷 카드 생성.
+  async function handleShotGuide() {
+    const shots = extractDetailCloseupShots(
+      generatedSections as unknown as { title?: string; imageSlots?: { slotType?: string; promptHint?: string }[] }[]
+    );
+    if (shots.length === 0) {
+      alert('이 레이아웃엔 디테일 접사(detail_closeup) 컷이 없어요.');
+      return;
+    }
+    setShotGuideLoading(true);
+    try {
+      const res = await fetch('/api/ai/generate-shot-guide', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productInfo: {
+            name: productName,
+            points: productPoints.split('\n').map(s => s.trim()).filter(Boolean),
+            category: '',
+          },
+          shots,
+        }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || '가이드 생성 실패');
+      setShotGuide(json.data.shots as ShotCard[]);
+      setScreen('shootguide');
+      try {
+        const id = await saveShootDraft(draftId);
+        if (id) {
+          setDraftId(id);
+          const url = new URL(window.location.href);
+          url.searchParams.set('draftId', id);
+          window.history.replaceState(null, '', url.toString());
+        }
+      } catch { /* 저장 실패는 조용히 무시 — 가이드 표시는 유지 */ }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '가이드 생성 실패');
+    } finally {
+      setShotGuideLoading(false);
+    }
+  }
+
+  function copyShotChecklist() {
+    navigator.clipboard?.writeText(serializeShotChecklist(shotGuide ?? []));
+  }
+
+  function downloadShotChecklist() {
+    const blob = new Blob([serializeShotChecklist(shotGuide ?? [])], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '촬영가이드.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   const errorBanner = error ? (
     <div
       style={{
@@ -293,6 +410,28 @@ export default function DetailMakerProPage() {
         </p>
 
         {errorBanner}
+
+        {shootDrafts.length > 0 && (
+          <div style={{ marginBottom: 16, padding: 12, background: '#1e1e2e', border: '1px solid #374151', borderRadius: 8 }}>
+            <div style={{ fontSize: 13, color: '#a0a0b0', marginBottom: 8 }}>이어서 진행할 촬영</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {shootDrafts.map((d) => (
+                <button
+                  key={d.id}
+                  type="button"
+                  onClick={() => {
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('draftId', d.id);
+                    window.location.href = url.toString();
+                  }}
+                  style={{ textAlign: 'left', padding: '8px 10px', borderRadius: 6, border: '1px solid #374151', background: 'transparent', color: '#e2e8f0', cursor: 'pointer', fontSize: '13px' }}
+                >
+                  {(d.productName || '(제목 없음)') + ' · 컷 ' + d.shotCount + '개 · ' + new Date(d.updatedAt).toLocaleDateString('ko-KR')}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div style={{ marginBottom: '20px' }}>
           <label
@@ -695,6 +834,90 @@ export default function DetailMakerProPage() {
     );
   }
 
+  // ── Shoot Guide Screen ─────────────────────────────────────────────────────
+  if (screen === 'shootguide') {
+    const cards = shotGuide ?? [];
+    return (
+      <div style={containerStyle}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+          <h1 style={{ fontSize: '18px', fontWeight: 800 }}>📸 촬영 가이드</h1>
+          <button
+            type="button"
+            onClick={() => setScreen('result')}
+            style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: '13px' }}
+          >
+            &larr; 뒤로
+          </button>
+        </div>
+        <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '16px' }}>
+          아래 디테일 컷들을 폰으로 직접 찍어보세요. (라이프스타일 씬은 AI가 생성합니다.)
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {cards.map((c, i) => (
+            <div
+              key={i}
+              style={{
+                background: '#1e1e2e',
+                border: '1px solid #374151',
+                borderRadius: '8px',
+                padding: '14px',
+              }}
+            >
+              <div style={{ fontSize: '14px', fontWeight: 700, color: '#e2e8f0', marginBottom: '6px' }}>
+                {i + 1}. {c.subject}{' '}
+                <span style={{ fontSize: '11px', color: '#6b7280' }}>[{c.sectionTitle}]</span>
+              </div>
+              <ul style={{ margin: 0, paddingLeft: '4px', listStyle: 'none', fontSize: '13px', color: '#a0a0b0', lineHeight: 1.7 }}>
+                <li>· 구도·각도: {c.angle}</li>
+                <li>· 프레이밍: {c.framing}</li>
+                <li>· 조명: {c.lighting}</li>
+                <li>· 배경: {c.background}</li>
+                <li style={{ color: '#6b7280' }}>· 팁: {c.tip}</li>
+              </ul>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '16px' }}>
+          <button
+            type="button"
+            onClick={copyShotChecklist}
+            style={{
+              padding: '10px 14px',
+              background: '#1e1e2e',
+              border: '1px solid #374151',
+              borderRadius: '8px',
+              color: '#e2e8f0',
+              cursor: 'pointer',
+              fontSize: '13px',
+            }}
+          >
+            체크리스트 복사
+          </button>
+          <button
+            type="button"
+            onClick={downloadShotChecklist}
+            style={{
+              padding: '10px 14px',
+              background: '#1e1e2e',
+              border: '1px solid #374151',
+              borderRadius: '8px',
+              color: '#e2e8f0',
+              cursor: 'pointer',
+              fontSize: '13px',
+            }}
+          >
+            다운로드 (.txt)
+          </button>
+        </div>
+        <p style={{ fontSize: '11px', color: '#6b7280', marginTop: '12px' }}>
+          촬영·업로드·보정은 다음 단계에서 추가됩니다. 지금은 &quot;뒤로&quot; 후 &quot;에디터에서 편집&quot;으로 진행하세요.
+        </p>
+      </div>
+    );
+  }
+
   // ── Result Screen ──────────────────────────────────────────────────────────
   return (
     <div style={containerStyle}>
@@ -973,6 +1196,27 @@ export default function DetailMakerProPage() {
           에디터에서 편집 →
         </button>
       </div>
+
+      <button
+        type="button"
+        onClick={handleShotGuide}
+        disabled={shotGuideLoading}
+        style={{
+          width: '100%',
+          marginTop: '10px',
+          padding: '12px',
+          background: '#1e1e2e',
+          border: '1px solid #374151',
+          borderRadius: '8px',
+          color: '#e2e8f0',
+          cursor: 'pointer',
+          fontSize: '14px',
+          fontWeight: 700,
+          opacity: shotGuideLoading ? 0.5 : 1,
+        }}
+      >
+        {shotGuideLoading ? '가이드 생성 중…' : '📸 촬영 가이드 만들기'}
+      </button>
     </div>
   );
 }
