@@ -19,6 +19,13 @@ export interface ValidationResult {
   isClean: boolean; // error severity가 하나도 없으면 true
 }
 
+export interface ProLayoutOpts {
+  /** stat_row 위생. 생성 경로에서만 true (draft/render는 사용자 편집본이라 건드리지 않는다) */
+  statHygiene?: boolean;
+  /** 옵션 모드일 때 imageIndex → 옵션명. (다음 작업에서 사용) */
+  optionNameByImageIndex?: Map<number, string>;
+}
+
 // ── CJK 정규식: test용(non-global, lastIndex 버그 회피)과 strip용(global) 분리 ──
 // U+4E00-U+9FFF: CJK Unified Ideographs, U+3400-U+4DBF: CJK Ext-A, U+F900-U+FAFF: CJK Compatibility
 const CJK_TEST = /[一-鿿㐀-䶿豈-﫿]/;
@@ -83,6 +90,80 @@ function forEachBlock(sec: unknown, cb: (block: Record<string, unknown>, path: s
   walk(blocks, 'blocks');
 }
 
+// ── stat_row 위생 ──
+// 치수의 0(= 그 부위가 없음)과 옵션 개수는 임팩트 수치가 아니다.
+// "설탕 0g"처럼 0 자체가 셀링포인트인 경우가 있어 0값 제거는 치수로 좁힌다.
+const DIMENSION_WORDS = /(cm|mm|㎜|㎝|인치|길이|두께|높이|너비|폭|깊이|지름|둘레)/i;
+const COUNT_WORDS = /(단계|종|가지|개|컬러|색상|종류|옵션|세트)/;
+const COUNT_VALUE = /^\d+\s*(단계|종|가지|개|컬러|색상|종류|옵션|세트)$/;
+const ABSENT_VALUES = new Set(['없음', '무', '-', '–', 'N/A', 'n/a']);
+
+interface StatItem { label?: string; value?: string; unit?: string }
+
+/** 임팩트 수치로 볼 수 없는 stat 항목인지 */
+export function isNoiseStatItem(item: StatItem): boolean {
+  const value = (item?.value ?? '').trim();
+  const label = item?.label ?? '';
+  const unit = item?.unit ?? '';
+
+  if (value === '' || ABSENT_VALUES.has(value)) return true;
+  if (COUNT_VALUE.test(value)) return true;
+
+  const nums = value.match(/\d+(?:\.\d+)?/g);
+  if (!nums) return false;
+
+  // 값이 0 + 치수 계열 → "소매 길이 0cm"
+  if (nums.every((n) => Number(n) === 0) && DIMENSION_WORDS.test(`${label} ${unit} ${value}`)) {
+    return true;
+  }
+  // 값이 정수 + label/unit이 개수 단위 → "4" + "단계"
+  if (/^\d+$/.test(value) && COUNT_WORDS.test(`${label} ${unit}`)) return true;
+
+  return false;
+}
+
+/**
+ * blocks 배열의 stat_row 항목을 걸러낸다.
+ * topLevel이면 2개 미만일 때 items를 비워 pruneBlocks가 제거하게 하고,
+ * cols 안(topLevel=false)이면 pruneBlocks가 닿지 않으므로 블록을 직접 뺀다.
+ */
+function cleanStatBlocks(blocks: unknown[], topLevel: boolean): unknown[] {
+  const out: unknown[] = [];
+  for (const b of blocks) {
+    if (!b || typeof b !== 'object') { out.push(b); continue; }
+    const block = { ...(b as Record<string, unknown>) };
+
+    if (Array.isArray(block.cols)) {
+      block.cols = (block.cols as unknown[]).map((col) =>
+        Array.isArray(col) ? cleanStatBlocks(col, false) : col
+      );
+    }
+
+    if (block.type === 'stat_row' && Array.isArray(block.items)) {
+      const kept = (block.items as StatItem[]).filter(
+        (it) => it && typeof it === 'object' && !isNoiseStatItem(it)
+      );
+      if (kept.length < 2) {
+        if (!topLevel) continue; // cols 안: 블록 자체 제거
+        block.items = [];        // 최상위: pruneBlocks가 제거
+      } else {
+        block.items = kept;
+      }
+    }
+    out.push(block);
+  }
+  return out;
+}
+
+/** 섹션의 stat_row를 위생 처리 */
+function sanitizeStatRows(sec: unknown): unknown {
+  if (!sec || typeof sec !== 'object') return sec;
+  const s = { ...(sec as Record<string, unknown>) };
+  if (!Array.isArray(s.blocks)) return s;
+  s.blocks = cleanStatBlocks(s.blocks as unknown[], true);
+  return s;
+}
+
 /** 텍스트/항목이 비어 렌더링이 무의미한 블록인지 */
 export function isEmptyBlock(block: Record<string, unknown>): boolean {
   const t = block.type;
@@ -106,7 +187,7 @@ export function stripCjk(value: unknown): unknown {
 export { zLayoutBlock, zClaudeSection };
 
 /** 생성된 PRO 레이아웃을 결정적으로 검증한다. 의미 오류는 여기서 다루지 않는다(LLM 담당). */
-export function validateProLayout(sections: unknown): ValidationResult {
+export function validateProLayout(sections: unknown, opts?: ProLayoutOpts): ValidationResult {
   if (!Array.isArray(sections)) {
     return {
       violations: [{ code: 'schema', path: 'sections', message: 'sections는 배열이어야 합니다.', severity: 'error', autoFixable: false }],
@@ -187,18 +268,23 @@ function pruneBlocks(sec: unknown): unknown {
  * 결정적 코드 폴백. autoFixable 문제를 코드로 강제 교정하고,
  * 교정 후에도 남은 위반을 warnings로 반환한다.
  */
-export function sanitizeProLayout(sections: unknown[]): { sections: unknown[]; warnings: Violation[] } {
-  if (!Array.isArray(sections)) return { sections: [], warnings: validateProLayout(sections).violations };
+export function sanitizeProLayout(
+  sections: unknown[],
+  opts?: ProLayoutOpts,
+): { sections: unknown[]; warnings: Violation[] } {
+  if (!Array.isArray(sections)) return { sections: [], warnings: validateProLayout(sections, opts).violations };
 
   // 1) CJK·U+FFFD 삭제
   let cleaned = stripCjk(sections) as unknown[];
-  // 2) 빈/무효 블록 제거
+  // 2) stat_row 위생 (생성 경로 전용 — draft/render는 사용자 편집본이라 건드리지 않는다)
+  if (opts?.statHygiene) cleaned = cleaned.map(sanitizeStatRows);
+  // 3) 빈/무효 블록 제거
   cleaned = cleaned.map(pruneBlocks);
-  // 3) 연속 중복 섹션 제거
+  // 4) 연속 중복 섹션 제거
   cleaned = cleaned.filter((sec, i) => i === 0 || JSON.stringify(sec) !== JSON.stringify(cleaned[i - 1]));
-  // 4) image 블록 ↔ imageSlots 정합성 (범위 클램프 + 부재 시 주입)
+  // 5) image 블록 ↔ imageSlots 정합성 (범위 클램프 + 부재 시 주입)
   cleaned = cleaned.map(normalizeSectionImages);
 
-  const { violations } = validateProLayout(cleaned);
+  const { violations } = validateProLayout(cleaned, opts);
   return { sections: cleaned, warnings: violations };
 }

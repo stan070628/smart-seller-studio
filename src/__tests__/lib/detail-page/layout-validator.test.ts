@@ -127,3 +127,120 @@ describe('sanitizeProLayout', () => {
     expect(warnings.some((w) => w.code === 'section_count')).toBe(true);
   });
 });
+
+describe('sanitizeProLayout — stat_row 위생', () => {
+  /** stat_row 하나를 가진 섹션 */
+  function statSection(items: Array<{ label: string; value: string; unit?: string }>): unknown {
+    return {
+      type: 'claude_layout',
+      title: '지표',
+      blocks: [
+        { type: 'heading', text: '지표', size: 'xl' },
+        { type: 'stat_row', items },
+      ],
+    };
+  }
+
+  function statBlockOf(section: unknown): { items?: unknown[] } | undefined {
+    const blocks = (section as { blocks?: Array<{ type?: string; items?: unknown[] }> }).blocks ?? [];
+    return blocks.find((b) => b.type === 'stat_row');
+  }
+
+  it('statHygiene 없으면 아무것도 지우지 않는다', () => {
+    const secs = [statSection([
+      { label: '소매 길이', value: '0', unit: 'cm' },
+      { label: '사이즈', value: '4', unit: '단계' },
+      { label: '가슴둘레', value: '95~110', unit: 'cm' },
+    ])];
+    const { sections } = sanitizeProLayout(secs);
+    expect(statBlockOf(sections[0])!.items).toHaveLength(3);
+  });
+
+  it('치수 계열의 0값을 제거한다', () => {
+    const secs = [statSection([
+      { label: '소매 길이', value: '0', unit: 'cm' },
+      { label: '가슴둘레', value: '95~110', unit: 'cm' },
+      { label: '무게', value: '180', unit: 'g' },
+    ])];
+    const { sections } = sanitizeProLayout(secs, { statHygiene: true });
+    const items = statBlockOf(sections[0])!.items as Array<{ label: string }>;
+    expect(items.map((i) => i.label)).toEqual(['가슴둘레', '무게']);
+  });
+
+  it('치수가 아닌 0값은 남긴다 (설탕 0g은 정당한 지표)', () => {
+    const secs = [statSection([
+      { label: '설탕', value: '0', unit: 'g' },
+      { label: '열량', value: '25', unit: 'kcal' },
+    ])];
+    const { sections } = sanitizeProLayout(secs, { statHygiene: true });
+    expect(statBlockOf(sections[0])!.items).toHaveLength(2);
+  });
+
+  it('개수 단위가 unit에 있으면 제거한다', () => {
+    const secs = [statSection([
+      { label: '사이즈', value: '4', unit: '단계' },
+      { label: '가슴둘레', value: '95~110', unit: 'cm' },
+      { label: '무게', value: '180', unit: 'g' },
+    ])];
+    const { sections } = sanitizeProLayout(secs, { statHygiene: true });
+    const items = statBlockOf(sections[0])!.items as Array<{ label: string }>;
+    expect(items.map((i) => i.label)).toEqual(['가슴둘레', '무게']);
+  });
+
+  it('숫자와 개수 단위가 value에 결합된 경우도 제거한다', () => {
+    const secs = [statSection([
+      { label: '사이즈', value: '4단계' },
+      { label: '컬러', value: '2종' },
+      { label: '가슴둘레', value: '95~110', unit: 'cm' },
+      { label: '무게', value: '180', unit: 'g' },
+    ])];
+    const { sections } = sanitizeProLayout(secs, { statHygiene: true });
+    const items = statBlockOf(sections[0])!.items as Array<{ label: string }>;
+    expect(items.map((i) => i.label)).toEqual(['가슴둘레', '무게']);
+  });
+
+  it('없음/무/-/N/A 값을 제거한다', () => {
+    const secs = [statSection([
+      { label: '소매', value: '없음' },
+      { label: '부자재', value: '-' },
+      { label: '가슴둘레', value: '95~110', unit: 'cm' },
+      { label: '무게', value: '180', unit: 'g' },
+    ])];
+    const { sections } = sanitizeProLayout(secs, { statHygiene: true });
+    const items = statBlockOf(sections[0])!.items as Array<{ label: string }>;
+    expect(items.map((i) => i.label)).toEqual(['가슴둘레', '무게']);
+  });
+
+  it('남은 항목이 2개 미만이면 블록을 제거한다', () => {
+    const secs = [statSection([
+      { label: '소매 길이', value: '0', unit: 'cm' },
+      { label: '사이즈', value: '4', unit: '단계' },
+      { label: '무게', value: '180', unit: 'g' },
+    ])];
+    const { sections } = sanitizeProLayout(secs, { statHygiene: true });
+    expect(statBlockOf(sections[0])).toBeUndefined();
+  });
+
+  it('columns.cols 안의 stat_row도 정리하고, 2개 미만이면 배열에서 뺀다', () => {
+    const secs = [{
+      type: 'claude_layout',
+      title: '지표',
+      blocks: [
+        {
+          type: 'columns',
+          cols: [
+            [{ type: 'stat_row', items: [
+              { label: '소매 길이', value: '0', unit: 'cm' },
+              { label: '무게', value: '180', unit: 'g' },
+            ] }],
+            [{ type: 'heading', text: '오른쪽', size: 'md' }],
+          ],
+        },
+      ],
+    }];
+    const { sections } = sanitizeProLayout(secs, { statHygiene: true });
+    const cols = ((sections[0] as { blocks: Array<{ cols: unknown[][] }> }).blocks[0]!).cols;
+    expect(cols[0]).toEqual([]);
+    expect(cols[1]).toHaveLength(1);
+  });
+});
