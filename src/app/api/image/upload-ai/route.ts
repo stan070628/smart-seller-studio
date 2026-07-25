@@ -2,14 +2,12 @@
  * POST /api/image/upload-ai
  *
  * Gemini AI 생성 이미지(base64)를 Supabase Storage에 업로드하고 공개 URL을 반환합니다.
- * 워터마크 제거(STABILITY_API_KEY 설정 시)를 거쳐 업로드합니다.
  * imageUrl 필드로 외부 URL에서 fetch 후 업로드도 지원합니다.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { uploadToStorage } from '@/lib/supabase/server';
-import { removeGeminiWatermark } from '@/lib/image/watermark-removal';
 import { requireAuth } from '@/lib/supabase/auth';
 import { checkRateLimit, getRateLimitKey } from '@/lib/rate-limit';
 
@@ -146,9 +144,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
       buffer = Buffer.from(await fetchRes.arrayBuffer());
     }
-
-    // 워터마크 제거 (STABILITY_API_KEY 미설정 시 원본 반환)
-    buffer = await removeGeminiWatermark(buffer);
 
     // 파일 확장자 결정 및 Storage 경로 생성
     const ext = MIME_TO_EXT[mimeType];
