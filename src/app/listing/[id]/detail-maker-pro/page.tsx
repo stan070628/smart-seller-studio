@@ -73,7 +73,17 @@ export default function DetailMakerProPage() {
   const [refPreviews, setRefPreviews] = useState<string[]>([]);
   const [prodPreviews, setProdPreviews] = useState<string[]>([]);
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null);
+  const [shootDrafts, setShootDrafts] = useState<Array<{ id: string; productName: string | null; updatedAt: string; step: string | null; shotCount: number }>>([]);
 
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/detail-page/draft?list=1');
+        const json = await res.json();
+        if (json?.success && Array.isArray(json.drafts)) setShootDrafts(json.drafts);
+      } catch { /* 무시 */ }
+    })();
+  }, []);
 
   useEffect(() => {
     const urls = referenceImages.map(f => URL.createObjectURL(f));
@@ -400,6 +410,28 @@ export default function DetailMakerProPage() {
         </p>
 
         {errorBanner}
+
+        {shootDrafts.length > 0 && (
+          <div style={{ marginBottom: 16, padding: 12, background: '#1e1e2e', border: '1px solid #374151', borderRadius: 8 }}>
+            <div style={{ fontSize: 13, color: '#a0a0b0', marginBottom: 8 }}>이어서 진행할 촬영</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {shootDrafts.map((d) => (
+                <button
+                  key={d.id}
+                  type="button"
+                  onClick={() => {
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('draftId', d.id);
+                    window.location.href = url.toString();
+                  }}
+                  style={{ textAlign: 'left', padding: '8px 10px', borderRadius: 6, border: '1px solid #374151', background: 'transparent', color: '#e2e8f0', cursor: 'pointer', fontSize: '13px' }}
+                >
+                  {(d.productName || '(제목 없음)') + ' · 컷 ' + d.shotCount + '개 · ' + new Date(d.updatedAt).toLocaleDateString('ko-KR')}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div style={{ marginBottom: '20px' }}>
           <label
