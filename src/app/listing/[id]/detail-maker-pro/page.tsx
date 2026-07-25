@@ -6,7 +6,7 @@ import type { AnalyzedSection } from '@/app/api/ai/analyze-detail-page/route';
 import type { LayoutBlock } from '@/types/detail-page';
 import { normalizeImageBlocks } from '@/lib/detail-page/layout-image-blocks';
 import { extractDetailCloseupShots, serializeShotChecklist } from '@/lib/detail-page/shot-guide';
-import type { ShotCard } from '@/types/shot-guide';
+import type { ShotCard, ShootSlot } from '@/types/shot-guide';
 
 type ScreenState = 'upload' | 'review' | 'generating' | 'result' | 'shootguide';
 
@@ -66,6 +66,8 @@ export default function DetailMakerProPage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [shotGuide, setShotGuide] = useState<ShotCard[] | null>(null);
+  const [slots, setSlots] = useState<ShootSlot[]>([]);
+  const [productImageUrls, setProductImageUrls] = useState<string[]>([]);
   const [shotGuideLoading, setShotGuideLoading] = useState(false);
   const [draftId, setDraftId] = useState<string | null>(null);
   const searchParams = useSearchParams();
@@ -268,29 +270,28 @@ export default function DetailMakerProPage() {
     [productImages.length]
   );
 
-  // 촬영 초안 저장: shootSession(shotGuide+step)을 draft API에 upsert. 반환된 id를 넘겨받아 재사용.
-  async function saveShootDraft(nextId: string | null): Promise<string | null> {
+  // 촬영 초안 저장: shootSession(shotGuide+slots+step+productImageUrls)을 draft API에 upsert. 반환된 id를 재사용.
+  async function saveShootDraft(
+    nextId: string | null,
+    session: { shotGuide: ShotCard[]; slots: ShootSlot[]; step: 'guide' | 'shooting'; productImageUrls: string[] },
+  ): Promise<string | null> {
     const res = await fetch('/api/detail-page/draft', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: nextId ?? undefined,
-        productName,
-        sections: generatedSections,
-        theme: {},
-        shootSession: { shotGuide: shotGuide ?? [], step: 'guide' },
-      }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: nextId ?? undefined, productName, sections: generatedSections, theme: {}, shootSession: session }),
     });
     const json = await res.json();
     return (json?.id as string) ?? nextId;
   }
+  function currentStep(sl: ShootSlot[]): 'guide' | 'shooting' { return sl.some(s => s.uploadedUrl) ? 'shooting' : 'guide'; }
 
-  // 디바운스 자동저장: draftId가 잡힌 뒤 shotGuide가 바뀌면 1.5s 후 저장.
+  // 디바운스 자동저장: draftId가 잡힌 뒤 shotGuide/slots/productImageUrls가 바뀌면 1.5s 후 전체 세션 저장.
   useEffect(() => {
     if (!draftId || !shotGuide) return;
-    const t = setTimeout(() => { saveShootDraft(draftId).catch(() => {}); }, 1500);
+    const t = setTimeout(() => {
+      saveShootDraft(draftId, { shotGuide, slots, step: currentStep(slots), productImageUrls }).catch(() => {});
+    }, 1500);
     return () => clearTimeout(t);
-  }, [draftId, shotGuide]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [draftId, shotGuide, slots, productImageUrls]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 마운트 시 ?draftId= 로 초안 재개.
   useEffect(() => {
@@ -307,6 +308,9 @@ export default function DetailMakerProPage() {
         if (Array.isArray(d.sections)) setGeneratedSections(d.sections);
         const sg = d.shootSession?.shotGuide;
         if (Array.isArray(sg)) setShotGuide(sg);
+        const ss = d.shootSession ?? {};
+        if (Array.isArray(ss.slots)) setSlots(ss.slots);
+        if (Array.isArray(ss.productImageUrls)) setProductImageUrls(ss.productImageUrls);
         setScreen('shootguide');
       } catch { /* 무시 */ }
     })();
@@ -338,9 +342,24 @@ export default function DetailMakerProPage() {
       const json = await res.json();
       if (!json.success) throw new Error(json.error || '가이드 생성 실패');
       setShotGuide(json.data.shots as ShotCard[]);
+      // 슬롯 초기화(추출 shots와 1:1). `shots`는 이 함수 상단에서 extractDetailCloseupShots로 만든 값(sectionIndex/slotIndex 포함).
+      const initSlots: ShootSlot[] = shots.map(sh => ({ sectionIndex: sh.sectionIndex, slotIndex: sh.slotIndex, uploadedUrl: null }));
+      setSlots(initSlots);
+      // 제품 이미지를 지금 업로드해 URL 확보(재개-적용에서 라이프스타일/누끼용). 실패는 빈 배열.
+      let prodUrls: string[] = [];
+      try {
+        prodUrls = (await Promise.allSettled(productImages.map(async (file) => {
+          const fd = new FormData(); fd.append('file', file); fd.append('usageContext', 'listing_detail');
+          const r = await fetch('/api/listing/upload-image', { method: 'POST', body: fd });
+          const j = await r.json() as { success: boolean; data?: { url: string } };
+          if (!j.success || !j.data?.url) throw new Error('upload failed');
+          return j.data.url;
+        }))).filter((x): x is PromiseFulfilledResult<string> => x.status === 'fulfilled').map(x => x.value);
+      } catch { /* 무시 */ }
+      setProductImageUrls(prodUrls);
       setScreen('shootguide');
       try {
-        const id = await saveShootDraft(draftId);
+        const id = await saveShootDraft(draftId, { shotGuide: json.data.shots as ShotCard[], slots: initSlots, step: 'guide', productImageUrls: prodUrls });
         if (id) {
           setDraftId(id);
           const url = new URL(window.location.href);
@@ -1007,6 +1026,7 @@ export default function DetailMakerProPage() {
             setGeneratedSections([]);
             setFluxResults({});
             setError(null);
+            setShotGuide(null); setSlots([]); setProductImageUrls([]);
           }}
           style={{
             flex: 1,
