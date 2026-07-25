@@ -10,6 +10,12 @@ import { checkRateLimit, getRateLimitKey } from '@/lib/rate-limit';
 import { callClaude, callClaudeVision, type ClaudeImage } from '@/lib/ai/claude-cli';
 import { sanitizeProLayout, validateProLayout } from '@/lib/detail-page/layout-validator';
 import { repairProLayout } from '@/lib/ai/repair-pro-layout';
+import {
+  uniqueOptionNames,
+  isOptionMode,
+  optionNameByImageIndex,
+  type ProductOption,
+} from '@/lib/detail-page/product-options';
 import { CLAUDE_SYSTEM } from './system-prompt';
 
 export const maxDuration = 180;
@@ -45,6 +51,14 @@ const RequestSchema = z.object({
   // 제품 이미지(다운스케일 base64). Claude가 실물을 보고 색상·디테일·카피를 정하도록.
   productImages: z
     .array(z.object({ base64: z.string().min(1), mimeType: z.string() }))
+    .max(4)
+    .default([]),
+  // 이미지에 붙은 옵션명. 이름이 붙은 이미지마다 한 항목(중복 허용).
+  productOptions: z
+    .array(z.object({
+      name: z.string().min(1).max(40),
+      imageIndex: z.number().int().min(0).max(3),
+    }))
     .max(4)
     .default([]),
 });
@@ -101,11 +115,21 @@ export async function POST(req: NextRequest): Promise<Response> {
     );
   }
 
-  const { productInfo, analyzedSections, productImageCount, productImages } = parsed.data;
+  const { productInfo, analyzedSections, productImageCount, productImages, productOptions } = parsed.data;
   const images: ClaudeImage[] = productImages.length > 0
     ? productImages
     : [];
   const imageCount = images.length || productImageCount;
+
+  const options: ProductOption[] = productOptions;
+  const optionMode = isOptionMode(options);
+  const optionLines = optionMode
+    ? options.map((o) => `이미지 ${o.imageIndex} = "${o.name}"`)
+    : [];
+  // stat 위생은 생성 경로 전용 — draft/render는 사용자 편집본이라 켜지 않는다.
+  const layoutOpts = optionMode
+    ? { statHygiene: true, optionNameByImageIndex: optionNameByImageIndex(options) }
+    : { statHygiene: true };
 
   const userPrompt = [
     `Product: "${productInfo.name}"`,
@@ -115,6 +139,10 @@ export async function POST(req: NextRequest): Promise<Response> {
       : '',
     imageCount > 0
       ? `제품 이미지 ${imageCount}장이 인덱스 0..${imageCount - 1}로 제공됩니다. 실물을 보고 색상·소재·디테일을 파악해 카피에 반영하고, 각 imageSlot의 imageRef에 그 슬롯에 가장 알맞은 이미지 인덱스를 지정하세요.`
+      : '',
+    optionLines.length > 0
+      ? `옵션(색상/모델): ${optionLines.join(', ')}\n` +
+        `옵션 비교 섹션을 정확히 1개 만들고, 나머지 이미지 섹션에는 ${uniqueOptionNames(options).join('·')}를 고르게 배분하세요. 모든 imageSlot에 imageRef를 명시하세요.`
       : '',
     analyzedSections.length > 0
       ? `Extracted data from reference pages:\n${analyzedSections
@@ -153,18 +181,29 @@ export async function POST(req: NextRequest): Promise<Response> {
       );
     }
 
-    // 결정론적 정화(CJK 제거 + 무효/빈 블록 prune + 중복 제거)
-    let cleaned = sanitizeProLayout(sections).sections;
+    // 결정론적 정화(CJK 제거 + stat 위생 + 무효/빈 블록 prune + 중복 제거)
+    let cleaned = sanitizeProLayout(sections, layoutOpts).sections;
     // error-severity 위반이 남으면 Claude로 1-pass 수리 후 재정화 (조건부)
-    const { violations, isClean } = validateProLayout(cleaned);
+    const { violations, isClean } = validateProLayout(cleaned, layoutOpts);
     if (!isClean) {
       console.warn('[generate-pro-layout] 위반 발견, repair 실행:', violations.length);
       const repaired = await repairProLayout(cleaned, violations, {
         name: productInfo.name,
         points: productInfo.points,
         category: productInfo.category,
+        optionLines: optionLines.length > 0 ? optionLines : undefined,
       });
-      cleaned = sanitizeProLayout(repaired).sections;
+      cleaned = sanitizeProLayout(repaired, layoutOpts).sections;
+
+      // 재정화 후에도 남으면 경고만 남기고 결과를 준다 — 루프를 만들지 않는다.
+      // 옵션 편중은 페이지를 못 쓰게 만드는 결함이 아니라 품질 저하다.
+      const after = validateProLayout(cleaned, layoutOpts);
+      if (!after.isClean) {
+        console.warn(
+          '[generate-pro-layout] repair 후에도 위반 잔존:',
+          after.violations.filter((v) => v.severity === 'error').map((v) => `${v.code}: ${v.message}`),
+        );
+      }
     }
     return NextResponse.json({ success: true, sections: cleaned });
   } catch (error) {
