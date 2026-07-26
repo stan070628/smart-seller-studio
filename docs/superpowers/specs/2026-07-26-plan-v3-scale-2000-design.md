@@ -185,7 +185,7 @@ src/lib/plan/
 export type { WbsTask, WeekData } from './plans/types';
 export {
   WBS_DATA, WEEKLY_TARGETS, WEEKLY_RUN_RATE,
-  PLAN_START, PLAN_MAX_TARGET, MONTH_WEEKS,
+  PLAN_START, PLAN_MAX_TARGET, PLAN_GOAL_MONTHLY, MONTH_WEEKS,
 } from './plans/v3-scale-2000';
 ```
 
