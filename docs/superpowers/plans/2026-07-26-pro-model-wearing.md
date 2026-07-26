@@ -1195,7 +1195,15 @@ function dropClaimSentences(text: string, isClaim: (t: string) => boolean): stri
 
 - [ ] **Step 6: 병치 규칙을 N7에 추가한다**
 
-`section-renderer.ts:757`이 `block.width ?? '100%'`를 지원하고, `page.tsx:1379-1390`이 `genSlotIdx` 슬롯에만 AI 씬을 넣고 나머지 슬롯은 `imageRef` 제품 이미지를 넣으므로, 슬롯 두 개 + image 블록 두 개로 병치가 성립한다. N7 끝에 추가한다:
+`section-renderer.ts`의 `image` 블록이 `block.width ?? '100%'`를 지원하고, `page.tsx`의 `attachedImages` 조립이 `genSlotIdx` 슬롯에만 AI 씬을 넣고 나머지 슬롯은 `imageRef` 제품 이미지를 넣으므로, 슬롯 두 개 + image 블록 두 개로 병치가 성립한다.
+
+**`N7`이 이미 22줄이다.** 프롬프트 설계 리뷰가 18줄 시점에 "이미 예산에 도달했다"고 판정했으므로, **추가하면서 같은 양을 압축하라.** 압축 후보(리뷰어가 지목한 것):
+- `promptHint` 예시를 하나만 남긴다
+- 근거 문장(`얼굴 컷은 표정으로… 크롭 컷은 시선을…`)을 한 절로 줄인다
+
+**빼지 말 것**: 두 컷 짝 요구와 `faceVisible` 필수, `promptHint`에는 [상황]만, "0개로 두세요. 1개는 안 됩니다", 공존 금지·첫 슬롯 배치.
+
+N7 끝에 추가한다(2줄 이내로):
 
 ```
     - model_wearing 슬롯이 있는 섹션에는 product_nukki 슬롯을 하나 더 두고(model_wearing이
@@ -1208,13 +1216,9 @@ function dropClaimSentences(text: string, isClaim: (t: string) => boolean): stri
 
 - [ ] **Step 7: AI 연출 고지를 추가한다**
 
-`page.tsx`에서 `detailSections`를 만든 뒤, **하단 고정 프레임 이미지를 붙이는 지점보다 앞**에 삽입한다. 그 지점을 먼저 찾아라:
+**삽입 위치가 확인됐다.** `detailSections`는 `generatedSections.map(...)`의 결과이고, 사용처는 **`sessionStorage.setItem('pro_sections', JSON.stringify(detailSections))` 한 곳뿐이다.** 하단 고정 프레임 이미지 3종을 결합하는 코드는 이 파일에 없다(에디터·export 단계에서 붙는다) — 계획 초안이 그것을 전제했으나 틀렸다.
 
-```bash
-grep -n "detailSections" "src/app/listing/[id]/detail-maker-pro/page.tsx"
-```
-
-`detailSections`가 `generatedSections.map(...)`의 결과라 `const` 배열이면 `push`가 타입상 막힐 수 있다. 그 경우 새 배열을 만들어 이후 사용처 **한 곳만** 바꿔라:
+따라서 `map` 결과에 고지 섹션을 이어붙인 새 배열을 만들고, **`sessionStorage.setItem` 호출 한 곳만** 그것으로 바꾼다. `map` 결과는 `const`이므로 `push`를 쓰지 말고 스프레드로 만든다:
 
 ```ts
             // AI 생성 착용컷이 있으면 연출 고지를 붙인다. 제품 재현이 좋아도
@@ -1239,7 +1243,7 @@ grep -n "detailSections" "src/app/listing/[id]/detail-maker-pro/page.tsx"
               : detailSections;
 ```
 
-이후 하단 프레임과 결합하는 곳에서 `detailSections` → `sectionsWithDisclosure`로 바꾼다.
+그리고 `sessionStorage.setItem('pro_sections', JSON.stringify(detailSections))`를 `sectionsWithDisclosure`로 바꾼다. **그 한 곳이 전부다** — `detailSections`의 다른 사용처는 없다.
 
 - [ ] **Step 8: 확인한다**
 
