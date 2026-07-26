@@ -72,6 +72,52 @@ describe('wearing_coverage', () => {
     expect(res.violations.filter(v => v.severity === 'error').map(v => v.code)).toEqual(['wearing_coverage']);
     expect(res.isClean).toBe(false);
   });
+
+  it('flux_lifestyle이 앞에 오면 카운트하지 않는다 — 그 섹션은 라이프스타일 씬이 된다', () => {
+    const secs = withWearing(1); // 섹션 0에 순수 model_wearing 1개
+    secs[1]!.imageSlots = [
+      { slotType: 'flux_lifestyle', promptHint: '카페' },
+      { slotType: 'model_wearing', promptHint: '해변', faceVisible: false, modelGender: 'male' },
+    ];
+    // 섹션 1의 첫 gen 슬롯은 flux_lifestyle → 착용컷은 실제로 1장뿐 → 위반
+    const res = validateProLayout(secs, { wearing: true });
+    expect(res.violations.some(v => v.code === 'wearing_coverage')).toBe(true);
+  });
+
+  it('detail_closeup이 앞에 오면 그 섹션의 model_wearing은 세지 않는다', () => {
+    const secs = withWearing(0);
+    secs[0]!.imageSlots = [
+      { slotType: 'model_wearing', promptHint: '해변', faceVisible: true, modelGender: 'male' },
+    ];
+    secs[1]!.imageSlots = [
+      { slotType: 'detail_closeup', promptHint: '박음질 접사' },
+      { slotType: 'model_wearing', promptHint: '실내', faceVisible: false, modelGender: 'male' },
+    ];
+    const res = validateProLayout(secs, { wearing: true });
+    expect(res.violations.some(v => v.code === 'wearing_coverage')).toBe(true);
+  });
+
+  it('두 섹션 모두 얼굴 컷이면(faceVisible 생략) 위반 — 두 컷이 같은 종류다', () => {
+    const secs = withWearing(0);
+    // 둘 다 faceVisible 생략 → 서버 기본값 true로 처리되어 둘 다 얼굴 컷이 된다.
+    secs[0]!.imageSlots = [{ slotType: 'model_wearing', promptHint: '해변 산책', modelGender: 'male' }];
+    secs[1]!.imageSlots = [{ slotType: 'model_wearing', promptHint: '실내 짐', modelGender: 'male' }];
+    const res = validateProLayout(secs, { wearing: true });
+    expect(res.violations.some(v => v.code === 'wearing_coverage')).toBe(true);
+  });
+
+  it('두 섹션 모두 크롭 컷이면(faceVisible: false) 위반', () => {
+    const secs = withWearing(0);
+    secs[0]!.imageSlots = [{ slotType: 'model_wearing', promptHint: '해변 산책', faceVisible: false, modelGender: 'male' }];
+    secs[1]!.imageSlots = [{ slotType: 'model_wearing', promptHint: '실내 짐', faceVisible: false, modelGender: 'male' }];
+    const res = validateProLayout(secs, { wearing: true });
+    expect(res.violations.some(v => v.code === 'wearing_coverage')).toBe(true);
+  });
+
+  it('얼굴 컷 + 크롭 컷이 각각 하나씩이면 통과한다 (faceVisible 명시)', () => {
+    const res = validateProLayout(withWearing(2), { wearing: true });
+    expect(res.violations.some(v => v.code === 'wearing_coverage')).toBe(false);
+  });
 });
 
 describe('imageSlots 신규 필드', () => {

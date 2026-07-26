@@ -9,6 +9,7 @@ import { extractDetailCloseupShots, serializeShotChecklist, countUploaded, resol
 import type { ShotCard, ShootSlot } from '@/types/shot-guide';
 import ImageCleanupModal from '@/components/common/ImageCleanupModal';
 import { deriveOptions, isOptionMode } from '@/lib/detail-page/product-options';
+import { isGenSlotType } from '@/lib/detail-page/layout-validator';
 import {
   stripCloseupClaims,
   findReusedImages,
@@ -21,7 +22,13 @@ type ScreenState = 'upload' | 'review' | 'generating' | 'result' | 'shootguide';
 interface GeneratedSection {
   title?: string;
   type?: string;
-  imageSlots?: Array<{ slotType: string; promptHint?: string; imageRef?: number }>;
+  imageSlots?: Array<{
+    slotType: string;
+    promptHint?: string;
+    imageRef?: number;
+    faceVisible?: boolean;
+    modelGender?: 'male' | 'female';
+  }>;
 }
 
 interface ProgressEvent {
@@ -1264,7 +1271,11 @@ export default function DetailMakerProPage() {
             if (uploadedImageUrls.some((u) => u === null) && isOptionMode(deriveOptions(optionNames))) {
               setError('일부 이미지 업로드에 실패했습니다. 옵션 배분이 정확하지 않을 수 있습니다.');
             }
-            // 실사진 override: 업로드된 detail_closeup이 그 섹션의 targeting gen 슬롯(genSlotIdx)일 때만
+            // 실사진 override: 업로드된 detail_closeup이 그 섹션의 targeting gen 슬롯(genSlotIdx)일 때만.
+            // model_wearing은 의도적으로 제외한다(GEN_SLOT_TYPES를 쓰지 않고 두 타입만 직접
+            // 나열) — shot-guide는 detail_closeup 슬롯만 촬영 카드로 만들므로 업로드 사진은
+            // 전부 제품 접사이고, 그것이 인물 씬 자리를 먹으면 "모델 착용컷이 없다"는 원래
+            // 문제가 그대로 돌아온다.
             const realBySection: Record<number, string> = {};
             for (const sl of slots) {
               const u = resolveSlotUrl(sl);
@@ -1280,11 +1291,16 @@ export default function DetailMakerProPage() {
             if (effectiveProductUrls.length > 0) {
               if (editBtn) editBtn.textContent = 'AI 이미지 생성 중...';
 
-              const isGenSlot = (t?: string) =>
-                t === 'flux_lifestyle' || t === 'detail_closeup';
-              // 슬롯 타입 → 씬 타입: detail_closeup은 매크로 접사('detail'), 그 외 라이프스타일.
+              // GEN_SLOT_TYPES(layout-validator) 하나만 본다 — wearing_coverage 검증과
+              // 렌더 조립(genSlotIdx)이 모두 같은 목록을 쓰지 않으면 "검증 통과,
+              // 이미지 없음"이 조용히 발생한다.
+              const isGenSlot = (t?: string) => isGenSlotType(t);
+              // 슬롯 타입 → 씬 타입: detail_closeup은 매크로 접사('detail'),
+              // model_wearing은 인물 착용컷('wearing', 비합성 경로), 그 외 라이프스타일.
               const sceneTypeFor = (t?: string) =>
-                t === 'detail_closeup' ? 'detail' : 'lifestyle';
+                t === 'detail_closeup' ? 'detail'
+                : t === 'model_wearing' ? 'wearing'
+                : 'lifestyle';
               const genItems = generatedSections
                 .map((s, i) => ({ s, i }))
                 .filter(({ s, i }) => realBySection[i] === undefined && (s.imageSlots?.some(slot => isGenSlot(slot.slotType)) ?? false));
@@ -1320,6 +1336,14 @@ export default function DetailMakerProPage() {
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
                         sectionType: sceneTypeFor(slot?.slotType),
+                        // wearing 전용: 얼굴 노출과 모델 성별. 자연어 sceneHint로는
+                        // 서버가 수위를 판정할 수 없어 필드로 보낸다.
+                        // 기본값은 route.ts의 Zod가 채우므로 여기서 ??를 쓰지 않는다 —
+                        // 두 계층이 각각 기본값을 주면 한쪽만 바뀔 때 경로에 따라
+                        // 동작이 갈린다. undefined는 JSON에서 사라지고 Zod가 채운다.
+                        ...(slot?.slotType === 'model_wearing' && {
+                          wearing: { faceVisible: slot.faceVisible, gender: slot.modelGender },
+                        }),
                         productImageUrls: refImages,
                         // scenePrompt(직결) 대신 sceneHint로 전달 → Claude 프롬프트 정교화
                         // (조명·앵글·무드 + anti-AI 규칙) 단계를 경유해 씬 품질을 높인다.
@@ -1372,10 +1396,9 @@ export default function DetailMakerProPage() {
             const detailSections = generatedSections.map((s, i) => {
               const geminiUrl = geminiUrlMap[i];
               const slots = s.imageSlots ?? [];
-              // 생성 씬(flux_lifestyle 또는 detail_closeup)을 만든 슬롯 위치에 넣는다.
-              const genSlotIdx = slots.findIndex(
-                sl => sl.slotType === 'flux_lifestyle' || sl.slotType === 'detail_closeup',
-              );
+              // 생성 씬을 만든 슬롯 위치에 넣는다. 판정은 GEN_SLOT_TYPES 하나로 —
+              // 이 조건이 wearing_coverage 검증과 어긋나면 "검증 통과, 이미지 없음"이 된다.
+              const genSlotIdx = slots.findIndex(sl => isGenSlotType(sl.slotType));
 
               const attachedImages = slots
                 .map((slot, idx) => {

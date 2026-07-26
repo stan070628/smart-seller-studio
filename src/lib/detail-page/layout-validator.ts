@@ -7,6 +7,20 @@ import { collectOptionCoverage, type OptionSection } from './product-options';
 import { BEATS, checkNarrative, type NarrativeSection } from './narrative';
 import { sanitizeProgressBars } from './progress-hygiene';
 
+/**
+ * AI가 씬을 생성하는 슬롯 타입. page.tsx가 섹션당 이 중 첫 번째 하나만
+ * 생성하고 렌더하므로(find / findIndex), 검증도 같은 기준을 써야 한다.
+ * 두 곳이 어긋나면 "검증 통과, 이미지 없음"이 조용히 발생한다.
+ */
+export const GEN_SLOT_TYPES = ['flux_lifestyle', 'detail_closeup', 'model_wearing'] as const;
+export type GenSlotType = (typeof GEN_SLOT_TYPES)[number];
+const GEN_SLOT_SET: ReadonlySet<string> = new Set(GEN_SLOT_TYPES);
+
+/** GEN_SLOT_TYPES 소속 여부 타입가드. 호출부(검증/생성/렌더)가 모두 이것 하나만 본다. */
+export function isGenSlotType(t: unknown): t is GenSlotType {
+  return typeof t === 'string' && GEN_SLOT_SET.has(t);
+}
+
 export interface Violation {
   code:
     | 'schema' | 'cjk' | 'broken_text' | 'empty_block'
@@ -404,18 +418,41 @@ export function validateProLayout(sections: unknown, opts?: ProLayoutOpts): Vali
   // 0개는 통과: 인물이 부적절한 상품(위생용품·속옷·의료기기)은 0개가 정답이며,
   //   카테고리를 하드코딩하지 않고도 "Claude가 필요하다고 판단했으면 2개"가 강제된다.
   if (opts?.wearing) {
-    // 슬롯 수가 아니라 "model_wearing을 가진 섹션 수"를 센다.
-    // page.tsx가 섹션당 첫 gen 슬롯 하나만 생성하고 렌더한다(find / findIndex).
-    // 한 섹션에 model_wearing을 2개 넣어도 실제로는 1장만 나오므로,
-    // 슬롯 수로 세면 그 경우가 통과해 검증이 실효성을 잃는다.
+    // 슬롯 수도, "model_wearing을 가진 섹션 수"도 아니라 "첫 gen 슬롯이
+    // model_wearing인 섹션 수"를 센다 — page.tsx가 섹션당 첫 gen 슬롯
+    // (GEN_SLOT_TYPES) 하나만 생성하고 렌더하기 때문이다(find / findIndex).
+    // [flux_lifestyle, model_wearing]처럼 다른 gen 슬롯이 앞에 오면 그 섹션은
+    // 실제로 라이프스타일 씬이 되고 착용컷은 0장인데, "가진 섹션 수"로 세면
+    // 통과해버린다.
     let wearingSections = 0;
+    let sawFaceVisible = false;
+    let sawFaceCropped = false;
     for (const sec of sections) {
       const slots = (sec as { imageSlots?: unknown }).imageSlots;
       if (!Array.isArray(slots)) continue;
-      const hasWearing = slots.some(
-        (sl) => sl && typeof sl === 'object' && (sl as { slotType?: unknown }).slotType === 'model_wearing',
-      );
-      if (hasWearing) wearingSections += 1;
+      const firstGen = slots.find(
+        (sl) => sl && typeof sl === 'object' && isGenSlotType((sl as { slotType?: unknown }).slotType),
+      ) as { slotType?: string; faceVisible?: unknown } | undefined;
+      if (firstGen?.slotType === 'model_wearing') {
+        wearingSections += 1;
+        // faceVisible 생략은 generate-scene-image route의 Zod 기본값(true)으로
+        // 처리되므로 얼굴 컷으로 센다.
+        if (firstGen.faceVisible === false) sawFaceCropped = true;
+        else sawFaceVisible = true;
+      }
+    }
+    // faceVisible 쌍 검증: 개수가 맞아도 두 컷이 모두 같은 종류(둘 다 얼굴 또는
+    // 둘 다 크롭)면 의미가 없다. faceVisible은 optional이고 생략 시 true로
+    // 처리되므로, Claude가 두 슬롯 모두 생략하면 개수 검증만으로는 통과한다.
+    if (wearingSections >= 2 && !(sawFaceVisible && sawFaceCropped)) {
+      violations.push({
+        code: 'wearing_coverage',
+        path: 'sections',
+        message:
+          '인물 착용컷이 모두 같은 종류입니다. 하나는 faceVisible: true(얼굴 컷), 하나는 false(크롭 컷)로 지정하세요.',
+        severity: 'error',
+        autoFixable: false,
+      });
     }
     if (wearingSections === 1) {
       violations.push({

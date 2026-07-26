@@ -137,6 +137,9 @@ const VIOLATION_CODE_MESSAGES: Record<string, string> = {
   // 쿠팡 광고 정책 위반 표현 — autoFixable:false라 재생성해도 같은 표현이 또 나올 수
   // 있다. "다시 생성"이 아니라 "에디터에서 직접 수정"을 안내해야 한다.
   prohibited: '광고 정책상 사용할 수 없는 표현이 남아 있습니다. 에디터에서 해당 문구를 직접 수정해주세요.',
+  // prohibited와 달리 재생성으로 해결될 수 있다 — repair가 슬롯을 추가하거나,
+  // 다음 생성에서 Claude가 2개를 만든다.
+  wearing_coverage: '인물 착용컷이 1개뿐입니다. 다시 생성하면 얼굴 컷과 크롭 컷이 각각 만들어질 수 있습니다.',
 };
 const GENERIC_VIOLATION_MESSAGE = '일부 구성이 자동 검증 기준에 못 미칩니다. 다시 생성하면 개선될 수 있습니다.';
 
@@ -225,10 +228,11 @@ export async function POST(req: NextRequest): Promise<Response> {
     ? {
         statHygiene: true,
         narrative: true,
+        wearing: true,
         provenanceSource,
         optionNameByImageIndex: optionNameByImageIndex(options),
       }
-    : { statHygiene: true, narrative: true, provenanceSource };
+    : { statHygiene: true, narrative: true, wearing: true, provenanceSource };
 
   const userPrompt = [
     `Product: "${productInfo.name}"`,
