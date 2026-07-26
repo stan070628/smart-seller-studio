@@ -49,7 +49,8 @@ describe('narrative 플래그 게이트', () => {
   });
 
   it('섹션 단위 이슈는 path에 인덱스가 들어간다', () => {
-    // 첫 섹션의 beat를 제거해 beat_missing을 유발
+    // 인덱스 2("solution")의 beat를 제거해 beat_missing을 유발 — 0이 아닌 인덱스를
+    // 써야 "path에 인덱스가 그대로 들어가는지"(0이 기본값과 헷갈리지 않는지)가 검증된다
     const secs = narrativeSections() as Record<string, unknown>[];
     delete secs[2].beat;
     const res = validateProLayout(secs, { narrative: true });
@@ -64,6 +65,19 @@ describe('narrative 플래그 게이트', () => {
     const res = validateProLayout(secs, { narrative: true });
     const issue = res.violations.find(v => v.code === 'narrative' && v.path === 'sections');
     expect(issue).toBeDefined();
+  });
+
+  it('warning severity가 error로 하드코딩되지 않고 그대로 전달된다', () => {
+    // checkNarrative의 compare_claim은 severity:'warning'이다. 결선 코드가
+    // issue.severity를 그대로 옮기지 않고 'error'로 고정해도 error 경로만
+    // 테스트하면 걸러지지 않으므로, warning이 isClean을 꺼뜨리지 않는지까지 고정한다.
+    const secs = narrativeSections() as Record<string, unknown>[];
+    const compareBlocks = secs[3].blocks as Array<{ cols: Array<Array<{ text?: string }>> }>;
+    compareBlocks[0].cols[0][0].text = '타사 대비 3배 빠른 건조';
+    const res = validateProLayout(secs, { narrative: true });
+    const warn = res.violations.find(v => v.code === 'narrative' && v.severity === 'warning');
+    expect(warn).toBeDefined();
+    expect(res.isClean).toBe(true);
   });
 });
 

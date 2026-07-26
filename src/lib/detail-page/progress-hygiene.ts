@@ -91,7 +91,7 @@ export function isGroundedProgressItem(item: ProgressItem, sourceText: string): 
  * topLevel이면 2개 미만일 때 items를 비워 pruneBlocks가 제거하게 하고,
  * cols 안(topLevel=false)이면 pruneBlocks가 닿지 않으므로 블록을 직접 뺀다.
  *
- * cleanStatBlocks(layout-validator.ts:150~182)와 동일한 규약(3가지: cols 재귀,
+ * cleanStatBlocks(layout-validator.ts)와 동일한 규약(3가지: cols 재귀,
  * topLevel 분기, "필터링이 실제로 일어난 경우에만" 2개 미만 규칙)을 따른다 — 이 함수를
  * 고칠 때는 cleanStatBlocks도 같은 규약이 깨지지 않았는지 함께 확인할 것. 자동으로
  * 강제되지 않으므로 리뷰 시 수동 대조가 필요하다.

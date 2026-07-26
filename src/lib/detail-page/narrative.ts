@@ -116,25 +116,55 @@ function forEachString(node: unknown, cb: (s: string) => void): void {
 }
 
 /**
+ * 값 트리에서 `{ value, unit }`이 둘 다 문자열인 객체를 찾아 "value+unit" 붙인
+ * 형태를 콜백에 전달한다. stat_row(`{label,value,unit}`)처럼 수치와 단위가
+ * 별개 필드인 블록에서, collectSectionText가 leaf를 " | "로 분리해버리면
+ * "1"과 "위"가 서로 다른 leaf가 되어 "1위" 매칭이 끊긴다 — 이 함수가 그 붙인
+ * 형태를 별도로 복원해 넣는다.
+ */
+function forEachValueUnitPair(node: unknown, cb: (pair: string) => void): void {
+  if (Array.isArray(node)) { node.forEach((v) => forEachValueUnitPair(v, cb)); return; }
+  if (node !== null && typeof node === 'object') {
+    const obj = node as Record<string, unknown>;
+    if (typeof obj.value === 'string' && typeof obj.unit === 'string') {
+      cb(`${obj.value}${obj.unit}`);
+    }
+    Object.values(obj).forEach((v) => forEachValueUnitPair(v, cb));
+  }
+}
+
+/**
  * 섹션의 모든 leaf 문자열을 하나로 이어붙인다. 헤더와 표 셀처럼 서로 다른
  * leaf에 표지어와 수치가 나뉘어 있어도 compare_claim 판정은 섹션 전체
  * 기준으로 해야 하기 때문이다 (FORBIDDEN_COMPARE 주석 참고).
  *
- * 두 가지를 조심한다:
+ * 조심할 것 세 가지:
  * 1) 구분자는 공백이 아니라 " | "를 쓴다 — FORBIDDEN_COMPARE의 정규식(예: 배수의
  *    `\d+\s*배`)이 공백을 허용하므로, 공백으로 이어붙이면 앞 leaf의 끝 숫자와
  *    뒤 leaf의 첫 음절이 우연히 붙어 매칭된다(예: ["재고 30", "위탁 판매"] →
  *    "30 위" 순위 오탐, ["옵션 3", "배기 성능"] → "3 배" 배수 오탐). 마커 게이트
  *    (섹션 전체에서 표지어 유무를 보는 것)는 공백이 아니어도 그대로 작동한다.
- * 2) 이미지 URL은 판정 대상에서 뺀다 — `%ED%95%9C`처럼 퍼센트 인코딩된 URL의
- *    "95%"가 퍼센트 주장으로 오인되고, "타사 대비" 헤더 + 이미지 2단 비교라는
- *    compare 섹션의 전형적인 형태에서 실제로 발화한다.
+ * 2) 하지만 " | " 구분자는 stat_row처럼 수치와 단위가 별개 필드("판매"/"1"/"위")인
+ *    블록에서 "1"과 "위"도 갈라놓는다 — compare 섹션의 양쪽 컬럼에 stat_row로
+ *    "기존 3배 / 우리 1위"를 대비시키는 배치는 이 스키마에서 흔히 나오는 형태라,
+ *    이걸 그대로 두면 가장 실증 책임이 무거운 "1위" 류를 통째로 놓친다. 그래서
+ *    forEachValueUnitPair로 value+unit을 붙인 토큰을 별도로 추가한다 — leaf 경계
+ *    분리(1번)의 이득은 유지하면서 이 경로만 가산적으로 복구한다.
+ * 3) 문자열 안에 임베드된 URL은 매칭에서 제외한다 — 퍼센트 인코딩된 URL
+ *    (`%ED%95%9C`처럼 우연히 "95%" 형태가 들어간 경우)이 퍼센트 주장으로 오인될
+ *    수 있다. LayoutBlock의 image 변형에는 스키마상 url 필드가 없어 정상 생성
+ *    경로에서는 등장하지 않지만, zod 파싱이 non-strict라 LLM이 규격 외 url
+ *    키를 덤으로 붙여도 그 블록 자체는 유효하다고 통과된다 — 그 경우를 대비한
+ *    가드다. 전체 문자열이 URL인 leaf뿐 아니라 "자세히는 https://... 참고"처럼
+ *    URL이 문장 중간에 임베드된 경우까지 덮도록 부분 치환한다(앵커 매칭이면 후자를
+ *    놓친다).
  */
 function collectSectionText(blocks: unknown): string {
   const parts: string[] = [];
   forEachString(blocks, (s) => {
-    if (!/^https?:\/\//.test(s)) parts.push(s);
+    parts.push(s.replace(/https?:\/\/\S+/g, ' '));
   });
+  forEachValueUnitPair(blocks, (pair) => parts.push(pair));
   return parts.join(' | ');
 }
 

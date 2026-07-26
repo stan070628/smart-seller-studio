@@ -320,6 +320,13 @@ export function validateProLayout(sections: unknown, opts?: ProLayoutOpts): Vali
   }
 
   // ── 서사 검증 (생성 경로 전용) ──
+  // NarrativeIssue의 rule(8종 세부 코드)·labels(compare_claim 종류)는 여기서 버리고
+  // Violation.code는 'narrative' 하나로 접는다 — 지금 유일한 소비자(repair 프롬프트)가
+  // severity별로만 분기하기 때문이다. narrative.ts가 세운 계약("메시지를 정규식으로
+  // 파싱해 분기하지 말라")과 겉보기엔 모순이지만 의도적이다: 규칙별 분기가
+  // 필요해지면 Violation에 code를 세분화하거나 rule/labels를 얹은 필드를 추가하라
+  // (Violation 타입에 필드를 미리 추가해두지 않기로 한 것도 이번 검토에서 정한
+  // 결정이다). 정규식 파싱으로 우회하지 말 것.
   if (opts?.narrative) {
     for (const issue of checkNarrative(sections as NarrativeSection[])) {
       violations.push({

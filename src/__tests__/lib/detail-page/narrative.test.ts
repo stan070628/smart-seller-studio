@@ -288,15 +288,47 @@ describe('compare 섹션의 금지 표현', () => {
   });
 
   it('퍼센트 인코딩 URL의 숫자를 퍼센트 주장으로 오탐하지 않는다', () => {
-    // "%ED%95%9C" 안의 "95%"가 퍼센트로, "타사 대비"가 비교 표지어로 잡혀
-    // 실전에서 흔한 "타사 대비 헤더 + 이미지 2단 비교" 형태가 오탐한다.
+    // LayoutBlock의 image 변형에는 스키마상 url 필드가 없어 정상 경로에선 등장하지
+    // 않지만, zod가 non-strict라 LLM이 규격 외 url 키를 덤으로 붙여도 attachedIndex가
+    // 있으면 그 블록은 pruneBlocks를 통과해 checkNarrative까지 살아남는다.
+    // "%ED%95%9C" 안의 "95%"가 퍼센트로, "타사 대비"가 비교 표지어로 잡힐 수 있다.
     const section = sec('compare', [
       { type: 'columns', cols: [
         [{ type: 'subtext', text: '타사 대비' }],
-        [{ type: 'image', url: 'https://cdn.example.com/img/%ED%95%9C%EA%B5%AD.jpg' }],
+        [{ type: 'image', attachedIndex: 0, url: 'https://cdn.example.com/img/%ED%95%9C%EA%B5%AD.jpg' }],
       ] },
     ]);
     const issues = checkNarrative([sec('hook'), section, sec('assure')]);
     expect(issues.some(i => i.rule === 'compare_claim')).toBe(false);
+  });
+
+  it('문장 중간에 임베드된 URL도 부분 치환으로 걸러낸다 (앵커 매칭이면 놓친다)', () => {
+    // 가드가 "문자열 전체가 URL"에만 앵커돼 있으면 "자세히는 https://...%95... 참고"
+    // 같은 임베드 형태는 그대로 뚫린다. 부분 치환이어야 이 경우도 막는다.
+    const section = sec('compare', [
+      { type: 'subtext', text: '자세히는 https://cdn.example.com/%ED%95%9C.jpg 참고 (타사 대비 성능)' },
+    ]);
+    const issues = checkNarrative([sec('hook'), section, sec('assure')]);
+    expect(issues.some(i => i.rule === 'compare_claim')).toBe(false);
+  });
+
+  it('stat_row처럼 value/unit이 별개 필드여도 "1위" 붙인 형태로 순위를 검출한다', () => {
+    // " | " 구분자가 leaf 경계 오탐(위 두 테스트)을 막는 대가로 stat_row의
+    // { value:'1', unit:'위' }를 "1"과 "위"로 갈라놓아 "판매 1위" 같은 실증 책임이
+    // 가장 무거운 표현을 놓칠 뻔했다. forEachValueUnitPair가 이 붙인 형태를
+    // 별도로 복원해야 검출된다.
+    const section = sec('compare', [
+      {
+        type: 'columns',
+        cols: [
+          [{ type: 'stat_row', items: [{ label: '판매', value: '1', unit: '위' }] }],
+          [{ type: 'subtext', text: '우리' }],
+        ],
+      },
+    ]);
+    const issues = checkNarrative([sec('hook'), section, sec('assure')]);
+    const issue = issues.find(i => i.rule === 'compare_claim');
+    expect(issue?.severity).toBe('warning');
+    expect(issue?.labels).toContain('순위');
   });
 });
