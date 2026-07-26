@@ -404,17 +404,20 @@ export function validateProLayout(sections: unknown, opts?: ProLayoutOpts): Vali
   // 0개는 통과: 인물이 부적절한 상품(위생용품·속옷·의료기기)은 0개가 정답이며,
   //   카테고리를 하드코딩하지 않고도 "Claude가 필요하다고 판단했으면 2개"가 강제된다.
   if (opts?.wearing) {
-    let wearingSlots = 0;
+    // 슬롯 수가 아니라 "model_wearing을 가진 섹션 수"를 센다.
+    // page.tsx가 섹션당 첫 gen 슬롯 하나만 생성하고 렌더한다(find / findIndex).
+    // 한 섹션에 model_wearing을 2개 넣어도 실제로는 1장만 나오므로,
+    // 슬롯 수로 세면 그 경우가 통과해 검증이 실효성을 잃는다.
+    let wearingSections = 0;
     for (const sec of sections) {
       const slots = (sec as { imageSlots?: unknown }).imageSlots;
       if (!Array.isArray(slots)) continue;
-      for (const sl of slots) {
-        if (sl && typeof sl === 'object' && (sl as { slotType?: unknown }).slotType === 'model_wearing') {
-          wearingSlots += 1;
-        }
-      }
+      const hasWearing = slots.some(
+        (sl) => sl && typeof sl === 'object' && (sl as { slotType?: unknown }).slotType === 'model_wearing',
+      );
+      if (hasWearing) wearingSections += 1;
     }
-    if (wearingSlots === 1) {
+    if (wearingSections === 1) {
       violations.push({
         code: 'wearing_coverage',
         path: 'sections',

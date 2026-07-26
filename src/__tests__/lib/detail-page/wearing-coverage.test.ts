@@ -43,6 +43,17 @@ describe('wearing_coverage', () => {
     expect(res.violations.some(v => v.code === 'wearing_coverage')).toBe(false);
   });
 
+  it('한 섹션에 2개를 넣으면 위반 — 섹션당 1장만 생성된다', () => {
+    // page.tsx가 섹션당 첫 gen 슬롯만 생성하므로 한 섹션의 2개는 실제로 1장이다.
+    const secs = withWearing(0);
+    secs[0]!.imageSlots = [
+      { slotType: 'model_wearing', promptHint: '해변 산책', faceVisible: true, modelGender: 'male' },
+      { slotType: 'model_wearing', promptHint: '실내 짐', faceVisible: false, modelGender: 'male' },
+    ];
+    const res = validateProLayout(secs, { wearing: true });
+    expect(res.violations.some(v => v.code === 'wearing_coverage')).toBe(true);
+  });
+
   it('위반은 error 등급이라 repair를 트리거한다', () => {
     const res = validateProLayout(withWearing(1), { wearing: true });
     const v = res.violations.find(x => x.code === 'wearing_coverage');
