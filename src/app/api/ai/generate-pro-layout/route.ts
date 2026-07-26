@@ -13,6 +13,7 @@ import { checkRateLimit, getRateLimitKey } from '@/lib/rate-limit';
 import { callClaude, callClaudeVision, type ClaudeImage } from '@/lib/ai/claude-cli';
 import { sanitizeProLayout, validateProLayout, stripCjk } from '@/lib/detail-page/layout-validator';
 import { isGroundedProgressItem, type ProgressItem } from '@/lib/detail-page/progress-hygiene';
+import { requiredSpecWarnings } from '@/lib/detail-page/required-specs';
 import { repairProLayout } from '@/lib/ai/repair-pro-layout';
 import {
   uniqueOptionNames,
@@ -294,6 +295,17 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     // 결정론적 정화(CJK 제거 + stat 위생 + 무효/빈 블록 prune + 중복 제거)
     let cleaned = sanitizeProLayout(sections, layoutOpts).sections;
+
+    // 필수 스펙 커버리지. 입력(productInfo)만 보므로 생성 결과와 무관하게 값이 같다 —
+    // repair 경로·정상 경로 어디서 호출해도 동일하다. Violation으로 만들지 않는 이유는
+    // required-specs.ts 상단 주석 참고: error로 올리면 repair가 없는 수치를 지어내도록
+    // 압박하고, warning으로 올리면 friendlyViolationWarnings가 걸러 셀러에게 안 닿는다.
+    const specWarnings = requiredSpecWarnings(
+      productInfo.category,
+      productInfo.name,
+      productInfo.points,
+    );
+
     // error-severity 위반이 남으면 Claude로 1-pass 수리 후 재정화 (조건부)
     const { violations, isClean } = validateProLayout(cleaned, layoutOpts);
     if (!isClean) {
@@ -317,7 +329,11 @@ export async function POST(req: NextRequest): Promise<Response> {
       }
       // 잔존 error + 위생 삭제 경고를 함께 클라이언트에 전달해 결과 화면에서 알린다.
       // 진단용 code:message가 아니라 friendlyViolationWarnings가 만든 사용자 문구를 싣는다.
-      const warnings = [...hygieneWarnings, ...friendlyViolationWarnings(after.violations)];
+      const warnings = [
+        ...hygieneWarnings,
+        ...specWarnings,
+        ...friendlyViolationWarnings(after.violations),
+      ];
       return NextResponse.json({
         success: true,
         sections: cleaned,
@@ -325,13 +341,14 @@ export async function POST(req: NextRequest): Promise<Response> {
       });
     }
 
-    // repair를 타지 않은 정상 경로도 위생 삭제만큼은 알려야 한다 — repair 여부와
-    // 무관하게 일어나는 일이기 때문이다. (isClean이므로 friendlyViolationWarnings는
-    // 항상 빈 배열이라 여기선 호출하지 않는다.)
+    // repair를 타지 않은 정상 경로도 위생 삭제·필수 스펙 누락은 알려야 한다 — repair
+    // 여부와 무관하게 일어나는 일이기 때문이다. (isClean이므로
+    // friendlyViolationWarnings는 항상 빈 배열이라 여기선 호출하지 않는다.)
+    const cleanWarnings = [...hygieneWarnings, ...specWarnings];
     return NextResponse.json({
       success: true,
       sections: cleaned,
-      ...(hygieneWarnings.length > 0 ? { warnings: hygieneWarnings } : {}),
+      ...(cleanWarnings.length > 0 ? { warnings: cleanWarnings } : {}),
     });
   } catch (error) {
     console.error('[generate-pro-layout] 오류:', error);

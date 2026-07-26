@@ -936,6 +936,41 @@ function renderLayoutBlock(
         : '';
       return `<div style="margin-bottom:16px;">${titleHtml}<img src="data:image/svg+xml;base64,${b64}" alt="${escapeHtml(block.title ?? '차트')}" style="width:100%;max-width:100%;display:block;" /></div>`;
     }
+    case 'spec_table': {
+      if (!Array.isArray(block.rows) || block.rows.length === 0) return '';
+      const isDark = colors.text === '#ffffff';
+      // 390px에서 읽히는 한계가 5열이다. 초과분은 잘라낸다 — 가로 스크롤을 걸면
+      // 마켓플레이스 붙여넣기(스타일 일부 제거)에서 표가 잘린 채 고정될 수 있다.
+      const MAX_COLS = 5;
+      const cols = (Array.isArray(block.columns) ? block.columns : []).slice(0, MAX_COLS);
+      const colCount = cols.length || Math.max(...block.rows.map(r => r.length));
+      const headBg = isDark ? 'rgba(255,255,255,0.16)' : `${colors.accent}12`;
+      const zebra = isDark ? 'rgba(255,255,255,0.06)' : '#fafafa';
+      const line = isDark ? 'rgba(255,255,255,0.22)' : '#e5e7eb';
+
+      const headHtml = cols.length > 0
+        ? `<thead><tr>${cols.map((c, i) => `<th scope="col" style="padding:9px 6px;font-size:12px;font-weight:800;color:${colors.text};background:${headBg};border-bottom:1px solid ${line};text-align:${i === 0 ? 'left' : 'center'};word-break:keep-all;">${editableText(`${basePath}.columns.${i}`, c)}</th>`).join('')}</tr></thead>`
+        : '';
+
+      const bodyHtml = block.rows.map((row, r) => {
+        const cells = (Array.isArray(row) ? row : []).slice(0, colCount);
+        // 행마다 길이가 달라도 열이 밀리지 않도록 빈 칸으로 채운다.
+        while (cells.length < colCount) cells.push('');
+        return `<tr style="background:${r % 2 === 1 ? zebra : 'transparent'};">${cells.map((cell, c) => {
+          const isHead = c === 0;
+          return `<td style="padding:9px 6px;font-size:12.5px;color:${isHead ? colors.text : colors.textSub};font-weight:${isHead ? 700 : 400};border-bottom:1px solid ${line};text-align:${isHead ? 'left' : 'center'};word-break:keep-all;font-variant-numeric:tabular-nums;">${editableText(`${basePath}.rows.${r}.${c}`, cell)}</td>`;
+        }).join('')}</tr>`;
+      }).join('');
+
+      const unitHtml = block.unit
+        ? `<div style="font-size:11px;color:${colors.textSub};margin-bottom:6px;text-align:right;">단위: ${escapeHtml(block.unit)}</div>`
+        : '';
+      const noteHtml = block.note
+        ? `<div style="font-size:11.5px;color:${colors.textSub};margin-top:8px;line-height:1.5;word-break:keep-all;">${editableText(`${basePath}.note`, block.note)}</div>`
+        : '';
+
+      return `<div style="margin-bottom:16px;">${unitHtml}<table style="width:100%;border-collapse:collapse;table-layout:fixed;">${headHtml}<tbody>${bodyHtml}</tbody></table>${noteHtml}</div>`;
+    }
     case 'radar_chart': {
       if (block.axes.length === 0) return '';
       const svg = buildRadarChartSvg(block);

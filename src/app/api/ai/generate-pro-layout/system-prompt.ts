@@ -35,6 +35,9 @@ Available block types in blocks[]:
 - icon_grid: { type, cols?: 2|3, items: [{icon, title, subtitle?}] }
 - option_grid: { type, cols?: 2|3, items: [{label, sublabel?, highlight?}] } — 사이즈/색상/용량/구성 등 순서 없는 병렬 선택 옵션. 화살표 없음. 컬러/구성처럼 옵션마다 제품 이미지가 다른 경우: imageSlots를 옵션 개수만큼(items 수와 동일) 선언하면 각 카드 상단에 이미지가 순서대로 렌더된다. 이 경우 같은 섹션에 별도의 대형 image 블록을 두지 말 것(카드가 이미지를 표시하므로 중복된다). 사이즈처럼 이미지가 불필요한 옵션은 imageSlots 없이 텍스트 카드만 사용.
 - layout_bar_chart: { type, title?, unit?, groups: string[], groupColors: string[], items: [{label, values: number[]}], showLegend? }
+- spec_table: { type, columns: string[], rows: string[][], unit?, note? } — 실측 스펙 표. columns[0]은 행 머리 이름(예: "사이즈"), 각 row도 [머리값, ...셀] 순서로 열 개수를 맞춘다. 390px 가독성 한계라 열은 5개까지만 렌더되니 4열 이하를 권장한다.
+  용도: ① 사이즈 실측표(사이즈 × 허리단면·총장·밑위) ② 소재 혼용률 ③ 제품 고시정보.
+  Key points에 없는 수치를 지어내지 말 것. 실측을 모르면 표를 만들지 말고 아래 R2를 따른다.
 
 DESIGN RULES:
 1. Use extracted chart data EXACTLY as provided — do not modify numbers
@@ -75,6 +78,17 @@ C8. 사이즈 option_grid의 sublabel은 실측 치수를 먼저 쓰고 체형·
     덧붙이세요: "허리 34cm · 총장 47cm\\n평소 28~30인치". 입력에 실측이 없으면 지어내지
     말고 체형 기준만 쓰세요. 실측을 쓴 경우 그 섹션 subtext에 측정 기준을 한 줄 넣으세요
     ("평면 실측이며 1~2cm 오차가 있을 수 있습니다").
+    단 실측 항목이 3개 이상이면 sublabel에 욱여넣지 말고 C9의 spec_table을 쓰세요.
+    같은 섹션에 spec_table을 둔 경우 sublabel엔 실측을 반복하지 말고 체형 기준만 씁니다.
+C9. 카테고리별 필수 정보 — 아래 항목은 구매 결정에 직결되므로 Key points에 값이 있으면
+    반드시 spec_table로 묶으세요. bullet_list에 흩뿌리면 비교가 안 됩니다.
+    - 의류·패션: 사이즈 실측(허리단면·총장·밑위·밑단 등), 소재 혼용률
+    - 식품: 원산지, 용량·중량, 보관방법, 유통기한
+    - 가전·전자: 정격전압·소비전력, 크기·무게
+    - 공통: 제조사/수입자, 원산지
+    Key points에 없는 값은 절대 지어내지 말고 그 열이나 행을 빼세요. 표를 채울 값이
+    하나도 없으면 spec_table 자체를 만들지 마세요 — 빈 표나 "문의 바랍니다" 같은
+    자리표시 문구를 넣는 것보다 없는 편이 낫습니다. 셀러에게는 시스템이 따로 알립니다.
 
 CONSISTENCY & PACING:
 D1. 옵션 내러티브: 옵션(색상·모델)이 2개 이상 제공되면 —

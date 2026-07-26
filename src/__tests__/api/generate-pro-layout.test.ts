@@ -2,6 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const callClaudeMock = vi.fn();
 const callClaudeVisionMock = vi.fn();
+const repairMock = vi.fn(async (s: unknown[]) => s);
+
+/**
+ * 필수 스펙(사이즈 실측·소재 혼용률) 입력값. 픽스처 상품명이 "민소매 티셔츠"라
+ * 의류 규칙에 걸리므로, 스펙 경고가 관심사가 아닌 테스트는 이걸 넣어 배제한다.
+ */
+const SPEC_POINTS = ['어깨단면 42cm', '총장 68cm', '면 100%'];
 
 vi.mock('@/lib/ai/claude-cli', () => ({
   callClaude: (...args: unknown[]) => callClaudeMock(...args),
@@ -15,7 +22,7 @@ vi.mock('@/lib/rate-limit', () => ({
   getRateLimitKey: vi.fn().mockReturnValue('k'),
 }));
 vi.mock('@/lib/ai/repair-pro-layout', () => ({
-  repairProLayout: vi.fn(async (s: unknown[]) => s),
+  repairProLayout: (...args: unknown[]) => repairMock(...(args as [unknown[]])),
 }));
 
 import { POST } from '@/app/api/ai/generate-pro-layout/route';
@@ -72,6 +79,9 @@ describe('POST /api/ai/generate-pro-layout', () => {
   beforeEach(() => {
     callClaudeMock.mockReset();
     callClaudeVisionMock.mockReset();
+    // mockReset은 구현까지 지워 repair가 undefined를 반환하게 되므로 identity를 다시 넣는다.
+    repairMock.mockReset();
+    repairMock.mockImplementation(async (s: unknown[]) => s);
     callClaudeMock.mockResolvedValue(JSON.stringify(validLayout()));
   });
 
@@ -138,7 +148,10 @@ describe('POST /api/ai/generate-pro-layout', () => {
     callClaudeMock.mockResolvedValue(JSON.stringify(validLayout()));
 
     const res = await POST(request({
-      productInfo: { name: '민소매 티셔츠', points: [], category: '' },
+      // 상품명이 "티셔츠"라 필수 스펙(실측·혼용률) 규칙에 걸린다. 이 테스트의 관심사는
+      // 서사 경로이므로 스펙을 채워 그쪽 경고를 배제한다 — 스펙 경고 자체는 아래
+      // 전용 테스트에서 검증한다.
+      productInfo: { name: '민소매 티셔츠', points: SPEC_POINTS, category: '' },
     }) as never);
 
     expect(res.status).toBe(200);
@@ -161,7 +174,8 @@ describe('POST /api/ai/generate-pro-layout', () => {
     callClaudeMock.mockResolvedValue(JSON.stringify(noBeatLayout));
 
     const res = await POST(request({
-      productInfo: { name: '민소매 티셔츠', points: [], category: '' },
+      // 스펙을 채워 필수 스펙 경고를 배제한다 — 이 테스트는 narrative 문구 1개만 나오는지를 본다.
+      productInfo: { name: '민소매 티셔츠', points: SPEC_POINTS, category: '' },
     }) as never);
 
     expect(res.status).toBe(200);
@@ -215,13 +229,31 @@ describe('POST /api/ai/generate-pro-layout', () => {
     callClaudeMock.mockResolvedValue(JSON.stringify(layout));
 
     const res = await POST(request({
-      productInfo: { name: '민소매 티셔츠', points: ['통기성 92%', '신축성 88%'], category: '' },
+      productInfo: { name: '민소매 티셔츠', points: ['통기성 92%', '신축성 88%', ...SPEC_POINTS], category: '' },
     }) as never);
 
     expect(res.status).toBe(200);
     const json = await res.json() as { sections: Array<{ blocks: Array<{ type: string }> }>; warnings?: string[] };
     expect(json.sections[0]!.blocks.some((b) => b.type === 'progress_bar')).toBe(true);
     expect('warnings' in json).toBe(false);
+  });
+
+  it('의류인데 실측·혼용률이 없으면 셀러에게 입력을 안내한다', async () => {
+    // 필수 스펙 누락은 "생성이 잘못됐다"가 아니라 "셀러 입력이 비었다"라서 Violation이
+    // 아니다(error로 올리면 repair가 없는 수치를 지어내도록 압박한다). 검증 파이프라인
+    // 밖에서 계산해 warnings에만 실리는 경로를 고정한다.
+    callClaudeMock.mockResolvedValue(JSON.stringify(validLayout()));
+
+    const res = await POST(request({
+      productInfo: { name: '민소매 티셔츠', points: ['시원한 착용감'], category: '의류' },
+    }) as never);
+
+    expect(res.status).toBe(200);
+    const json = await res.json() as { warnings?: string[] };
+    expect(json.warnings!.some((w) => w.includes('사이즈 실측'))).toBe(true);
+    expect(json.warnings!.some((w) => w.includes('혼용률'))).toBe(true);
+    // repair를 타지 않아야 한다 — 없는 값을 만들어내게 하면 안 된다.
+    expect(repairMock).not.toHaveBeenCalled();
   });
 
   it('repair 경로에서도 위생 삭제 경고와 잔존 위반 경고가 함께, 사용자 문구로 실린다', async () => {
