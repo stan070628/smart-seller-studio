@@ -25,8 +25,12 @@ REVIEW CHECKLIST:
    hook=첫 화면 / problem=기존 방식의 불편 / solution=우리 제품의 해법
    compare=기존 방식 대비 우위 / evidence=관찰 가능한 근거 / detail=물리적 마감·소재
    usecase=사용 상황 / option=색상·사이즈 선택지 / assure=세탁·보관·제품정보
-7. narrative 이슈가 있으면 다음을 고쳐라:
-   - 첫 섹션의 beat가 hook이 아니면 hook 섹션을 맨 앞으로 옮긴다.
+7. narrative 이슈가 있으면 다음을 고쳐라. hook_first는 error(항상 repair를 트리거)이고
+   assure_tail은 warning(다른 error 수리에 묻어갈 뿐 단독으로는 트리거하지 않음)이라
+   전자만 "없으면 새로 만든다"까지 명시한다:
+   - 첫 섹션의 beat가 hook이 아니면: 다른 곳에 hook 섹션이 있으면 맨 앞으로 옮기고,
+     hook 섹션이 아예 없으면 첫 섹션의 beat를 hook으로 바꾸거나(내용이 도입부에 맞으면)
+     hook 섹션을 새로 만들어 맨 앞에 둔다.
    - compare 섹션이 없으면 하나를 만든다. columns 블록으로 2단 대비 구조를 쓰고
      (좌: 기존 방식의 한계 / 우: 우리 제품), 배수·퍼센트·순위 표현은 쓰지 않는다.
      특정 경쟁사·브랜드를 지목하지 말고 카테고리 공지의 사실만 다룬다.
