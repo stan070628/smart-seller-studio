@@ -104,6 +104,11 @@ function forEachProgressBarItems(sections: unknown[], cb: (items: unknown[]) => 
  * 기준으로 세려면 stripCjk를 거친 sections를 넘겨야 한다(호출부에서 처리).
  * isGroundedProgressItem/layout-validator.ts는 이 함수가 import만 하고 수정하지
  * 않는다.
+ *
+ * 알려진 미탐 한계: 원본 1회만 계산하므로, repair가 나중에 근거 없는 progress_bar를
+ * 새로 추가하면 이 카운트엔 반영되지 않아 그 삭제분은 보고되지 않는다. 미탐(경고를
+ * 덜 내는) 방향이라 사용자에게 거짓 안심을 주지는 않지만, 완전하지 않다는 점은
+ * 명시해둔다.
  */
 function countUngroundedProgressItems(sections: unknown[], sourceText: string): number {
   let total = 0;
@@ -127,6 +132,9 @@ const VIOLATION_CODE_MESSAGES: Record<string, string> = {
   narrative: '페이지 구성이 권장 흐름(도입-근거-비교-안심)에 못 미칩니다. 다시 생성하면 개선될 수 있습니다.',
   option_compare: '옵션 비교 섹션 구성에 문제가 있습니다. 다시 생성하면 개선될 수 있습니다.',
   option_coverage: '옵션별 이미지 배분이 고르지 않습니다. 다시 생성하면 개선될 수 있습니다.',
+  // 쿠팡 광고 정책 위반 표현 — autoFixable:false라 재생성해도 같은 표현이 또 나올 수
+  // 있다. "다시 생성"이 아니라 "에디터에서 직접 수정"을 안내해야 한다.
+  prohibited: '광고 정책상 사용할 수 없는 표현이 남아 있습니다. 에디터에서 해당 문구를 직접 수정해주세요.',
 };
 const GENERIC_VIOLATION_MESSAGE = '일부 구성이 자동 검증 기준에 못 미칩니다. 다시 생성하면 개선될 수 있습니다.';
 

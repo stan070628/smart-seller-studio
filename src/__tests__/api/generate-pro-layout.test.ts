@@ -253,4 +253,23 @@ describe('POST /api/ai/generate-pro-layout', () => {
     expect(json.warnings!.some((w) => w.includes('권장 흐름'))).toBe(true);
     expect(json.warnings!.every((w) => !/^[a-z_]+: /.test(w))).toBe(true);
   });
+
+  it('금지어(예: "선착순") 위반은 재생성이 아니라 에디터에서 직접 수정하라고 안내한다', async () => {
+    // prohibited는 autoFixable:false라 재생성해도 같은 표현이 또 나올 수 있다 —
+    // narrative/option 계열과 달리 "다시 생성하면 개선될 수 있습니다"는 거짓 안심이라
+    // generic 문구로 뭉개면 안 되고, "에디터에서 직접 수정"을 안내해야 한다.
+    const layout = validLayout();
+    (layout[0] as { blocks: unknown[] }).blocks.push({ type: 'subtext', text: '선착순 한정 특가' });
+    callClaudeMock.mockResolvedValue(JSON.stringify(layout));
+
+    const res = await POST(request({
+      productInfo: { name: '민소매 티셔츠', points: [], category: '' },
+    }) as never);
+
+    expect(res.status).toBe(200);
+    const json = await res.json() as { warnings?: string[] };
+    expect(Array.isArray(json.warnings)).toBe(true);
+    expect(json.warnings!.some((w) => w.includes('에디터에서 해당 문구를 직접 수정'))).toBe(true);
+    expect(json.warnings!.every((w) => !/^[a-z_]+: /.test(w))).toBe(true);
+  });
 });

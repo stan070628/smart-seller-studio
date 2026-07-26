@@ -1111,12 +1111,12 @@ export default function DetailMakerProPage() {
           lineHeight: 1.6,
         }}>
           <strong>생성 결과에서 확인할 점이 있습니다.</strong>
+          {/* 각 경고 문구가 이미 스스로 행동을 안내한다(재생성/에디터 수정/실측값 입력) —
+              공통 안내를 덧붙이면 hygiene 경고엔 "재생성" 조언이 거짓이 된다(수치가
+              그대로 다시 사라진다). 그래서 여기엔 공통 문구를 두지 않는다. */}
           <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
             {layoutWarnings.map((w, i) => <li key={i}>{w}</li>)}
           </ul>
-          <div style={{ marginTop: 6, color: '#a0a0b0' }}>
-            그대로 사용할 수 있지만, 다시 생성하면 개선될 수 있습니다.
-          </div>
         </div>
       )}
 
