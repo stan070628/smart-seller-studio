@@ -56,3 +56,8 @@ export function parseShotGuideResponse(text: string): ShotCard[] {
       tip: String(x.tip ?? ''),
     }));
 }
+
+/** 보정본(retouchedUrl)이 있으면 우선, 없으면 원본(uploadedUrl). */
+export function resolveSlotUrl(slot: ShootSlot): string | null {
+  return slot?.retouchedUrl ?? slot?.uploadedUrl ?? null;
+}

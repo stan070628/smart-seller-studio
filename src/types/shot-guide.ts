@@ -19,4 +19,5 @@ export interface ShootSlot {
   sectionIndex: number;
   slotIndex: number;
   uploadedUrl: string | null;
+  retouchedUrl?: string | null; // Phase 4: 보정본 URL
 }

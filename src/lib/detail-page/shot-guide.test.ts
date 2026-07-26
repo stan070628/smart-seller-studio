@@ -59,3 +59,17 @@ describe('countUploaded', () => {
     expect(countUploaded([])).toBe(0);
   });
 });
+
+import { resolveSlotUrl } from './shot-guide';
+describe('resolveSlotUrl', () => {
+  it('보정본이 있으면 보정본을 반환', () => {
+    expect(resolveSlotUrl({ sectionIndex:0, slotIndex:0, uploadedUrl:'raw', retouchedUrl:'ret' })).toBe('ret');
+  });
+  it('보정본이 없으면 원본', () => {
+    expect(resolveSlotUrl({ sectionIndex:0, slotIndex:0, uploadedUrl:'raw' })).toBe('raw');
+    expect(resolveSlotUrl({ sectionIndex:0, slotIndex:0, uploadedUrl:'raw', retouchedUrl:null })).toBe('raw');
+  });
+  it('둘 다 없으면 null', () => {
+    expect(resolveSlotUrl({ sectionIndex:0, slotIndex:0, uploadedUrl:null })).toBeNull();
+  });
+});
