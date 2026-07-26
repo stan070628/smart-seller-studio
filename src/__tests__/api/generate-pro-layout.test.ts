@@ -147,9 +147,13 @@ describe('POST /api/ai/generate-pro-layout', () => {
     expect('warnings' in json).toBe(false);
   });
 
-  it('서사 없는 레이아웃(beat 누락)은 repair 후에도 남은 위반을 warnings 배열로 응답에 싣는다', async () => {
+  it('서사 없는 레이아웃(beat 누락)은 repair 후에도 남은 위반을 사용자 문구 warnings로 응답에 싣는다', async () => {
     // beat를 전부 제거하면 checkNarrative가 각 섹션에 beat_missing(error)을 낸다.
     // repairProLayout mock은 identity라 재정화 후에도 위반이 그대로 남는다.
+    // 진단용 code:message(개발자용, 예: "narrative: sections[1]에 beat 필드가
+    // 없습니다")는 화면에 노출하지 않고 friendlyViolationWarnings가 매핑한
+    // 사용자 문구만 나가야 한다 — code당 한 줄로 중복도 제거된다(9섹션 모두
+    // beat_missing이어도 warnings는 narrative 문구 1개).
     const noBeatLayout = validLayout().map((sec) => {
       const { beat, ...rest } = sec as Record<string, unknown>;
       return rest;
@@ -163,16 +167,17 @@ describe('POST /api/ai/generate-pro-layout', () => {
     expect(res.status).toBe(200);
     const json = await res.json() as { warnings?: string[] };
     expect(Array.isArray(json.warnings)).toBe(true);
-    expect(json.warnings!.length).toBeGreaterThan(0);
-    expect(json.warnings!.every((w) => typeof w === 'string' && /^[a-z_]+: /.test(w))).toBe(true);
-    expect(json.warnings!.some((w) => w.startsWith('narrative: '))).toBe(true);
+    expect(json.warnings!.length).toBe(1); // narrative 코드 하나로 중복 제거
+    expect(json.warnings!.every((w) => typeof w === 'string' && !/^[a-z_]+: /.test(w))).toBe(true);
+    expect(json.warnings!.some((w) => w.includes('권장 흐름'))).toBe(true);
   });
 
-  it('points가 비어 있으면 progress_bar 수치가 전부 위생 삭제되고 warnings에 실린다', async () => {
+  it('points가 비어 있으면 progress_bar 수치가 전부 위생 삭제되고 사용자 문구 warnings에 실린다', async () => {
     // provenanceSource = points.join(' ')가 빈 문자열이면 isGroundedProgressItem이
     // 모든 숫자 대조에 실패해 progress_bar 항목이 전부 제거된다(progress-hygiene.ts).
     // 블록째 사라지면 재검증에 걸릴 위반이 없어 narrative처럼 error warnings로는
-    // 안 잡힌다 — route.ts의 hygiene count 비교가 이걸 잡아야 한다.
+    // 안 잡힌다 — route.ts의 countUngroundedProgressItems가 원인(provenance) 기준으로
+    // 직접 세어 이걸 잡아야 한다.
     const layout = validLayout();
     (layout[0] as { blocks: unknown[] }).blocks.push({
       type: 'progress_bar',
@@ -191,12 +196,14 @@ describe('POST /api/ai/generate-pro-layout', () => {
     const json = await res.json() as { sections: Array<{ blocks: Array<{ type: string }> }>; warnings?: string[] };
     expect(json.sections[0]!.blocks.some((b) => b.type === 'progress_bar')).toBe(false);
     expect(Array.isArray(json.warnings)).toBe(true);
-    expect(json.warnings!.some((w) => w.includes('근거 없는 수치 2개가 제거되었습니다'))).toBe(true);
+    expect(json.warnings!.some((w) => w.includes('근거 없는 수치 2개가 발견되어'))).toBe(true);
+    // 형식까지 일치해야 통과한다는 걸 사용자가 알 수 있도록 예시를 포함한다
+    expect(json.warnings!.some((w) => w.includes('통기성 92%'))).toBe(true);
   });
 
   it('상품 정보에 실제 등장하는 수치는 위생 삭제되지 않고 warnings도 없다', async () => {
     // points에 "92%"가 실제로 등장하면 isGroundedProgressItem이 통과시킨다 —
-    // hygiene count diff가 0이어야 오탐 경고가 뜨지 않는다.
+    // 원인 기준 카운트가 0이어야 오탐 경고가 뜨지 않는다.
     const layout = validLayout();
     (layout[0] as { blocks: unknown[] }).blocks.push({
       type: 'progress_bar',
@@ -215,5 +222,35 @@ describe('POST /api/ai/generate-pro-layout', () => {
     const json = await res.json() as { sections: Array<{ blocks: Array<{ type: string }> }>; warnings?: string[] };
     expect(json.sections[0]!.blocks.some((b) => b.type === 'progress_bar')).toBe(true);
     expect('warnings' in json).toBe(false);
+  });
+
+  it('repair 경로에서도 위생 삭제 경고와 잔존 위반 경고가 함께, 사용자 문구로 실린다', async () => {
+    // "양쪽 반환 경로 모두"의 repair 분기 쪽을 고정한다: beat 하나를 제거해 narrative
+    // 위반(repair identity mock이라 재정화 후에도 잔존)을 만들고, points를 비워
+    // progress_bar도 함께 위생 삭제되게 한다. 두 경고가 섞여도 형식(code:message 아님)이
+    // 일관되어야 하고, hygiene count는 repair 이전 원본 기준이라 repair가 아무것도
+    // 안 하는 이 mock에서도 정확해야 한다.
+    const layout = validLayout();
+    const { beat: _beat, ...rest } = layout[1] as Record<string, unknown>;
+    layout[1] = rest;
+    (layout[0] as { blocks: unknown[] }).blocks.push({
+      type: 'progress_bar',
+      items: [
+        { label: '통기성', value: 80, displayValue: '92%' },
+        { label: '신축성', value: 70, displayValue: '88%' },
+      ],
+    });
+    callClaudeMock.mockResolvedValue(JSON.stringify(layout));
+
+    const res = await POST(request({
+      productInfo: { name: '민소매 티셔츠', points: [], category: '' },
+    }) as never);
+
+    expect(res.status).toBe(200);
+    const json = await res.json() as { warnings?: string[] };
+    expect(Array.isArray(json.warnings)).toBe(true);
+    expect(json.warnings!.some((w) => w.includes('근거 없는 수치 2개가 발견되어'))).toBe(true);
+    expect(json.warnings!.some((w) => w.includes('권장 흐름'))).toBe(true);
+    expect(json.warnings!.every((w) => !/^[a-z_]+: /.test(w))).toBe(true);
   });
 });
