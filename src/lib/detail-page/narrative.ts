@@ -39,6 +39,10 @@ export interface NarrativeIssue {
   /** 섹션 단위 규칙에만 채운다. compare_missing·problem_without_solution처럼
    *  레이아웃 전체를 보는 규칙은 특정 섹션 하나를 가리키지 않으므로 비워둔다. */
   sectionIndex?: number;
+  /** compare_claim에만 채운다 — 어떤 종류의 주장인지(배수/퍼센트/순위).
+   *  소비자가 "퍼센트 주장만 자동수정" 같은 종류별 분기를 하려면 한국어
+   *  message를 파싱하지 않고 이 배열을 봐야 한다. */
+  labels?: string[];
   message: string;
   severity: 'error' | 'warning';
 }
@@ -52,39 +56,54 @@ export interface NarrativeSection {
 const ASSURE_TAIL = 3;
 
 /**
- * 우위 주장임을 드러내는 표지어. 이것이 같은 문자열에 없으면 퍼센트는
- * 조성비·함량 진술("면 60% 폴리 40%", "당 함량 5%")로 보고 통과시킨다.
+ * 우위 주장임을 드러내는 표지어. compare 섹션 전체(헤더+표 셀 등 모든 leaf를
+ * 이어붙인 텍스트) 기준으로 이것이 없으면 퍼센트는 조성비·함량 진술
+ * ("면 60% 폴리 40%", "당 함량 5%")로 보고 통과시킨다.
  *
- * 알려진 한계: 표지어 목록에 없는 부사로 우위를 주장하면 검출을 놓친다
- * (예: "40% 더 빠른 건조" — "더"는 마커가 아니다). 조성비 오탐을 없애기
- * 위해 의도적으로 받아들인 트레이드오프이며, 아래 테스트
- * ("알려진 한계: 비교 표지어 없는 주장은 놓친다")로 고정해 회귀 시
- * 이 한계가 조용히 사라지거나 늘어나지 않게 한다.
+ * 알려진 한계 두 가지 — 어느 쪽으로도 완전할 수 없어 트레이드오프를 선택했다:
+ *
+ * 1) 미탐: 표지어 목록에 없는 부사로 우위를 주장하면 놓친다
+ *    (예: "40% 더 빠른 건조" — "더"는 마커가 아니다).
+ * 2) 오탐: 조성비·마감 설명 문장에 이 표지어 어휘가 우연히 섞이면 잘못 검출한다
+ *    (예: "면 100% 원단으로 통기성이 개선되었습니다" — "개선"이 마커라서 걸린다).
+ *
+ * severity가 warning(비차단)이므로 두 위험의 크기가 다르다: 미탐(1)은 "판매 1위"·
+ * "타사 대비 개선"처럼 표시광고법상 실증 책임이 걸리는 주장을 그대로 흘려보내는
+ * 반면, 오탐(2)은 사람이 한 번 더 보고 넘기면 그만인 노이즈다. 그래서 마커
+ * 목록을 좁혀 미탐을 줄이는 대신 오탐이 늘어나는 쪽을 택했다. 두 한계 모두
+ * 아래 "알려진 한계" 테스트로 고정해 회귀 시 조용히 사라지거나 늘어나지 않게 한다.
  */
 const COMPARATIVE_MARKER = /(대비|보다|향상|증가|절감|개선|상승|우위|뛰어)/;
 
 /**
  * compare 섹션에서 금지하는 표현.
  * 근거 없는 우위 주장은 실증 책임이 걸린다 — 카테고리 공지의 사실만 허용한다.
- * severity가 warning이므로 오탐 비용이 낮아 패턴을 단순하게 둔다.
  *
  * compare 섹션에만 적용하는 이유: "1위"·"40% 향상" 같은 과장 표현이
  * 전역 광고 심의 대상(PROHIBITED_PHRASES_ABSOLUTE)에도 속해야 하는지는
  * 별도 관심사라 후속 태스크로 미룬다. 여기서는 "compare 섹션에서 근거
  * 없는 상대 비교를 하지 말라"는 서사 규칙만 강제한다.
  *
- * 배수·순위는 뒤에 한글 음절이 이어지면 매칭하지 않는다 — 이 프로젝트는
- * 1688 중국 사입가를 다루므로 "50위안"이 순위로, "2배수 구조"가 배수로
- * 오탐하는 사례가 실재한다. "3배 빠른"·"1위 흡수력"처럼 수치+단위 뒤에
- * 공백이 오는 정상 탐지에는 영향이 없다.
+ * 이 패턴들은 개별 leaf 문자열이 아니라 checkNarrative가 만든
+ * "섹션 전체를 이어붙인 텍스트"에 적용된다 — compare 섹션은 정의상
+ * columns 2단 구조라, "타사 대비"는 헤더에 두고 수치는 표 셀에 두는
+ * 배치가 오히려 자연스러운 산출물이기 때문이다. leaf 단위로 판정하면
+ * 이 전형적인 배치에서 뚫린다.
+ *
+ * 배수·순위는 관찰된 노이즈 음절만 제외한다 — 한글 전체를 막으면
+ * (구 버전의 (?![가-힣])) "1위를"·"1위의"·"3배나"처럼 조사가 붙은
+ * 형태를 전부 놓친다. 한국어 카피에서는 오히려 이쪽이 다수이고,
+ * 그중 "판매 1위" 류가 실증 책임이 가장 무거운 표현이라 놓치는 비용이
+ * 크다. 그래서 "50위안"(1688 사입가)·"2배수 구조" 같은 실측 오탐
+ * 사례에서 관찰된 음절만 좁게 제외한다.
  */
 const FORBIDDEN_COMPARE: ReadonlyArray<{ label: string; test: (s: string) => boolean }> = [
-  { label: '배수', test: (s) => /\d+\s*배(?![가-힣])/.test(s) },
+  { label: '배수', test: (s) => /\d+\s*배(?!수|송|열|치|터)/.test(s) },
   {
     label: '퍼센트',
     test: (s) => /\d+(?:\.\d+)?\s*%/.test(s) && COMPARATIVE_MARKER.test(s),
   },
-  { label: '순위', test: (s) => /\d+\s*위(?![가-힣])/.test(s) },
+  { label: '순위', test: (s) => /\d+\s*위(?!안|치|험|생|원)/.test(s) },
 ];
 
 /** 값 트리의 모든 문자열에 콜백을 적용한다 */
@@ -94,6 +113,17 @@ function forEachString(node: unknown, cb: (s: string) => void): void {
   if (node !== null && typeof node === 'object') {
     Object.values(node as Record<string, unknown>).forEach((v) => forEachString(v, cb));
   }
+}
+
+/**
+ * 섹션의 모든 leaf 문자열을 하나로 이어붙인다. 헤더와 표 셀처럼 서로 다른
+ * leaf에 표지어와 수치가 나뉘어 있어도 compare_claim 판정은 섹션 전체
+ * 기준으로 해야 하기 때문이다 (FORBIDDEN_COMPARE 주석 참고).
+ */
+function collectSectionText(blocks: unknown): string {
+  const parts: string[] = [];
+  forEachString(blocks, (s) => parts.push(s));
+  return parts.join(' ');
 }
 
 /**
@@ -170,18 +200,20 @@ export function checkNarrative(sections: NarrativeSection[]): NarrativeIssue[] {
           severity: 'error',
         });
       }
-      // 근거 없는 우위 주장 검출 — 프롬프트 지시만으로는 막히지 않는다
+      // 근거 없는 우위 주장 검출 — 프롬프트 지시만으로는 막히지 않는다.
+      // 섹션 전체를 이어붙인 텍스트 기준으로 판정한다 (헤더/셀 분리 대응).
+      const sectionText = collectSectionText(sections[i].blocks);
       const found = new Set<string>();
-      forEachString(sections[i].blocks, (s) => {
-        for (const { label, test } of FORBIDDEN_COMPARE) {
-          if (test(s)) found.add(label);
-        }
-      });
+      for (const { label, test } of FORBIDDEN_COMPARE) {
+        if (test(sectionText)) found.add(label);
+      }
       if (found.size > 0) {
+        const labels = [...found];
         issues.push({
           rule: 'compare_claim',
           sectionIndex: i,
-          message: `sections[${i}](compare)에 ${[...found].join('·')} 표현이 있습니다. 카테고리 공지의 사실만 쓰세요.`,
+          labels,
+          message: `sections[${i}](compare)에 ${labels.join('·')} 표현이 있습니다. 카테고리 공지의 사실만 쓰세요.`,
           severity: 'warning',
         });
       }

@@ -133,29 +133,65 @@ describe('checkNarrative', () => {
 });
 
 describe('compare 섹션의 금지 표현', () => {
-  it('배수 표현은 compare_claim warning', () => {
+  it('배수 표현은 compare_claim warning + labels에 배수', () => {
     const issues = checkNarrative([sec('hook'), compareWithText('타사 대비 3배 빠른 건조'), sec('assure')]);
-    expect(issues.some(i => i.severity === 'warning' && i.rule === 'compare_claim')).toBe(true);
+    const issue = issues.find(i => i.rule === 'compare_claim');
+    expect(issue?.severity).toBe('warning');
+    expect(issue?.sectionIndex).toBe(1);
+    expect(issue?.labels).toContain('배수');
   });
 
-  it('비교 표지어가 있는 퍼센트 표현은 compare_claim warning', () => {
+  it('비교 표지어가 있는 퍼센트 표현은 compare_claim warning + labels에 퍼센트', () => {
     const issues = checkNarrative([sec('hook'), compareWithText('흡수력 40% 향상'), sec('assure')]);
-    expect(issues.some(i => i.severity === 'warning' && i.rule === 'compare_claim')).toBe(true);
+    const issue = issues.find(i => i.rule === 'compare_claim');
+    expect(issue?.severity).toBe('warning');
+    expect(issue?.labels).toContain('퍼센트');
+  });
+
+  it('순위 표현은 compare_claim warning + labels에 순위', () => {
+    const issues = checkNarrative([sec('hook'), compareWithText('업계 1위 흡수력'), sec('assure')]);
+    const issue = issues.find(i => i.rule === 'compare_claim');
+    expect(issue?.severity).toBe('warning');
+    expect(issue?.labels).toContain('순위');
+  });
+
+  it('조사가 붙은 순위 표현("1위입니다")도 검출한다', () => {
+    const issues = checkNarrative([sec('hook'), compareWithText('카테고리 판매량 1위입니다'), sec('assure')]);
+    const issue = issues.find(i => i.rule === 'compare_claim');
+    expect(issue?.severity).toBe('warning');
+    expect(issue?.labels).toContain('순위');
+  });
+
+  it('조사가 붙은 배수 표현("3배나 뛰어납니다")도 검출한다', () => {
+    const issues = checkNarrative([sec('hook'), compareWithText('흡수력이 3배나 뛰어납니다'), sec('assure')]);
+    const issue = issues.find(i => i.rule === 'compare_claim');
+    expect(issue?.severity).toBe('warning');
+    expect(issue?.labels).toContain('배수');
   });
 
   it('숫자가 100이어도 비교 표지어가 있으면 검출한다 (기존 미탐 해소)', () => {
     const issues = checkNarrative([sec('hook'), compareWithText('흡수력 100% 향상'), sec('assure')]);
-    expect(issues.some(i => i.rule === 'compare_claim')).toBe(true);
+    expect(issues.some(i => i.rule === 'compare_claim' && i.severity === 'warning')).toBe(true);
   });
 
   it('비교 표지어가 있으면 소수점 퍼센트도 검출한다', () => {
     const issues = checkNarrative([sec('hook'), compareWithText('타사 대비 40.5% 빠른 건조'), sec('assure')]);
-    expect(issues.some(i => i.rule === 'compare_claim')).toBe(true);
+    expect(issues.some(i => i.rule === 'compare_claim' && i.severity === 'warning')).toBe(true);
   });
 
-  it('순위 표현은 compare_claim warning', () => {
-    const issues = checkNarrative([sec('hook'), compareWithText('업계 1위 흡수력'), sec('assure')]);
-    expect(issues.some(i => i.severity === 'warning' && i.rule === 'compare_claim')).toBe(true);
+  it('헤더와 표 셀에 표지어와 수치가 나뉘어 있어도 섹션 전체 기준으로 검출한다', () => {
+    const section = sec('compare', [
+      { type: 'heading', text: '타사 대비', size: 'lg' },
+      {
+        type: 'columns',
+        cols: [[{ type: 'subtext', text: '40% 단축' }], [{ type: 'subtext', text: '변화 없음' }]],
+      },
+    ]);
+    const issues = checkNarrative([sec('hook'), section, sec('assure')]);
+    const issue = issues.find(i => i.rule === 'compare_claim');
+    expect(issue?.severity).toBe('warning');
+    expect(issue?.sectionIndex).toBe(1);
+    expect(issue?.labels).toContain('퍼센트');
   });
 
   it('카테고리 상식 비교는 통과', () => {
@@ -191,6 +227,21 @@ describe('compare 섹션의 금지 표현', () => {
     // 사라지거나 늘어나지 않도록 이 테스트로 고정한다.
     const issues = checkNarrative([sec('hook'), compareWithText('40% 더 빠른 건조'), sec('assure')]);
     expect(issues.some(i => i.rule === 'compare_claim')).toBe(false);
+  });
+
+  it('알려진 한계: 조성비 문장에 마커 어휘가 섞이면 오탐한다 (의도된 트레이드오프)', () => {
+    // "개선"이 COMPARATIVE_MARKER라서, 조성비를 설명하는 문장이어도 걸린다.
+    // 미탐(실증 책임 있는 주장을 놓치는 것)이 오탐(노이즈)보다 비용이 크다고
+    // 판단해 받아들인 한계이며, 회귀 시 이 동작이 바뀌면 의도적으로 검토해야
+    // 하므로 여기 고정한다.
+    const issues = checkNarrative([
+      sec('hook'),
+      compareWithText('면 100% 원단으로 통기성이 개선되었습니다'),
+      sec('assure'),
+    ]);
+    const issue = issues.find(i => i.rule === 'compare_claim');
+    expect(issue?.severity).toBe('warning');
+    expect(issue?.labels).toContain('퍼센트');
   });
 
   it('"50위안" 같은 가격 표기는 순위로 오탐하지 않는다', () => {
