@@ -3,6 +3,8 @@
  * PlanClient에서 추출. 대시보드의 12주 차트가 누적 매출을 계산할 때 사용.
  */
 
+import { PLAN_START } from './constants';
+
 export interface DailyRecord {
   date: string;       // YYYY-MM-DD
   revenue: number;    // 만원
@@ -15,10 +17,21 @@ export interface DailyRecord {
 
 const STORAGE_KEY = 'plan_daily_records';
 
+/**
+ * 저장된 일별 기록을 읽는다.
+ *
+ * PLAN_START 이전 날짜의 기록은 제외한다. week 값이 이전 플랜 기준으로
+ * 계산돼 있어서, 그대로 두면 새 플랜의 주차 실적으로 잘못 합산된다.
+ * 삭제하지 않고 걸러내기만 하므로 플랜을 되돌리면 다시 살아난다.
+ */
 export function loadDailyRecords(): DailyRecord[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as DailyRecord[]) : [];
+    if (!raw) return [];
+    const records = JSON.parse(raw) as DailyRecord[];
+    if (!Array.isArray(records)) return [];
+    const startStr = new Date(PLAN_START.getTime() + 9 * 3_600_000).toISOString().slice(0, 10);
+    return records.filter((r) => typeof r?.date === 'string' && r.date >= startStr);
   } catch {
     return [];
   }
