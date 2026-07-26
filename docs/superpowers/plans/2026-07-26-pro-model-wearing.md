@@ -1337,6 +1337,9 @@ git commit -m "feat(wearing): 제품컷 병치 + AI 고지 + 폴백 시 착용�
 - **비의류 카테고리** — 화장품 "손에 든 튜브" 같은 형태는 미검증
 - **마켓플레이스 AI 인물 정책** — 미확인. 연출 고지로 완화하되 정책 확인은 별건
 - **`buildNoProductSuffix` 테스트** — Task 1에서 module-private에서 export로 바뀌며 테스트 가능해졌다(그전에는 핸들러 전체를 호출해야 했다). `productName?.trim()` 항등 절과 `SECTION_BG_HINTS[sectionType] ?? ''` 폴백에 분기가 있어 고정할 가치가 있으나, 이 계획의 범위가 아니다
+- **병치 시 제품컷 URL이 비면 착용컷이 두 번 나온다** — `normalizeImageBlocks`가 LLM이 쓴 `attachedIndex`를 무시하고 **블록 순서로 재매핑하며 `imageCount-1`로 클램프**한다. `attachedImages`는 `.filter(item => item.url)`로 빈 URL을 걸러내므로, `product_nukki`의 `imageRef`가 가리키는 URL이 없으면 `imageCount`가 1이 되고 두 번째 image 블록이 `min(1, 0) = 0`으로 클램프돼 **AI 착용컷이 실물 제품컷 자리에 한 번 더 렌더된다.** 실물 대조라는 병치의 목적이 정확히 무력화되고, AI 이미지를 실물처럼 두 번 보여주는 것이라 오히려 나쁘다. 크래시가 아니라 조용한 실패다.
+
+  현재는 제품 URL이 비는 것이 업로드 실패 시점에 별도 에러로 표시되므로 우선순위를 낮췄다. 닫으려면 `normalizeImageBlocks`가 `attachedIndex`를 클램프하는 대신 유효하지 않은 image 블록을 제거해야 하는데, 그 함수는 다른 섹션 타입에서도 쓰이므로 영향 범위를 따로 확인해야 한다.
 - **`page.tsx` 호출부의 회귀 방어 공백** — Task 6에서 순수 판정을 `gen-slots.ts`로 추출해 단위 테스트했지만, 뮤테이션 실험 결과 **호출부 세 곳은 여전히 잡히지 않는다**: 렌더 조립의 `genSlotIdx`, 생성 루프의 슬롯 선택, 요청 바디의 `wearing` 필드. 되돌려도 519 테스트가 전부 통과하고 `src/` 타입 오류도 0이다. `sceneTypeFor`의 **정의**만 보호된다(정의를 바꾸면 `gen-slots.test.ts` 2개가 실패).
 
   원인은 `page.tsx`가 1500줄 넘는 클라이언트 컴포넌트이고 직접 테스트가 없다는 것이다. 닫으려면 컴포넌트 테스트나 요청 바디 조립을 순수 함수로 한 번 더 추출해야 하는데, 그 함수는 인자가 많고 `page.tsx` 컨텍스트에 얽혀 비용이 크다.
