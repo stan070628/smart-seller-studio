@@ -6,6 +6,10 @@
  *
  * 형식 검사로는 막을 수 없다 — "92%"는 형식상 완벽히 유효하다.
  * 판정 기준은 출처다: displayValue의 숫자가 상품 입력에 실제로 등장해야 한다.
+ *
+ * 이 모듈이 보증하지 않는 것: displayValue의 출처만 검증하며 바 길이(`value`,
+ * 0~100 스케일)는 손대지 않는다. 근거가 있는 "180g"도 임의의 `value`로 그려질 수
+ * 있다 — 바 길이 자체의 정직성은 이 모듈의 책임 밖이다.
  */
 
 export interface ProgressItem {
@@ -17,29 +21,58 @@ export interface ProgressItem {
 
 /** 숫자 토큰(정수·소수)을 뽑는다 */
 const NUM_TOKEN = /\d+(?:\.\d+)?/g;
+/** 퍼센트 토큰("숫자%", 공백 허용) — 단위까지 포함해 완전일치로 대조한다 */
+const PCT_TOKEN = /\d+(?:\.\d+)?\s*%/g;
 
 /** 문자열에서 숫자 토큰 집합을 만든다 */
 function numberSet(text: string): Set<string> {
   return new Set(text.match(NUM_TOKEN) ?? []);
 }
 
+/** 문자열에서 퍼센트 토큰 집합을 만든다 (내부 공백 제거 후 정규화) */
+function percentSet(text: string): Set<string> {
+  return new Set((text.match(PCT_TOKEN) ?? []).map((p) => p.replace(/\s/g, '')));
+}
+
 /**
  * displayValue의 모든 숫자가 입력 원천에 등장하는지 판정한다.
  *
  * 완전일치만 인정한다 — 단위 환산(0.18kg vs 180g)과 반올림은 대조 실패로 본다.
- * 오탐(정당한 수치를 제거)은 감수하고 미탐(지어낸 수치를 통과)을 0으로 만드는 선택이다.
  * 부분일치 정규식이 오탐을 낸 선례가 있어(커밋 5b0a49ba) 집합 완전일치를 쓴다.
+ *
+ * 미탐(지어낸 수치를 통과)은 0이 아니다 — 구조적으로 줄어들 뿐이다. 한국 의류
+ * 입력의 숫자 대역(사이즈 95/100/105/110, 총장 70cm, 혼용률 100%)이 progress_bar가
+ * 지어내는 0~100 퍼센트 대역과 겹치기 때문에, 순수 숫자 대조만으로는 "가슴둘레
+ * 95cm"가 지어낸 "신축성 95%"를 정당화해버린다. 그래서 퍼센트는 숫자만이 아니라
+ * "숫자%" 형태 자체가 입력에 등장해야 하는 별도 검사를 추가한다 — `%`로 좁힌 이유는
+ * 한국어 접미사를 일반적으로 매칭하려 들면 커밋 5b0a49ba의 실패(부분일치가 "개월"
+ * 등을 "개"로 오인)를 반복하기 때문이다. 그 외 단위(배·초·g 등)는 여전히 숫자만
+ * 보므로 "3배 빠름"처럼 입력에 같은 숫자가 다른 단위로 존재하면 통과한다 — 알려진
+ * 한계다.
+ *
+ * 부수 한계: 콤마가 포함된 숫자("1,000회")는 콤마에서 끊겨 {"1","000"}으로
+ * 쪼개진다 — "1"은 가장 충돌하기 쉬운 토큰이라 오염 가능성이 있다.
  */
 export function isGroundedProgressItem(item: ProgressItem, sourceText: string): boolean {
   const display = (item?.displayValue ?? '').trim();
   if (display === '') return false;
+  const source = sourceText ?? '';
 
   const nums = display.match(NUM_TOKEN);
   // 숫자가 없는 정성 표현("높음", "Omni-Wick")은 근거로 볼 수 없다
   if (!nums || nums.length === 0) return false;
+  if (!nums.every((n) => numberSet(source).has(n))) return false;
 
-  const source = numberSet(sourceText ?? '');
-  return nums.every((n) => source.has(n));
+  // 퍼센트는 그 자체로 비율 주장이다 — 숫자만 일치해서는 안 되고 "숫자%" 형태로
+  // 입력에 등장해야 한다.
+  const displayPcts = display.match(PCT_TOKEN);
+  if (displayPcts && displayPcts.length > 0) {
+    const srcPcts = percentSet(source);
+    const normalized = displayPcts.map((p) => p.replace(/\s/g, ''));
+    if (!normalized.every((p) => srcPcts.has(p))) return false;
+  }
+
+  return true;
 }
 
 /**
@@ -47,7 +80,11 @@ export function isGroundedProgressItem(item: ProgressItem, sourceText: string): 
  *
  * topLevel이면 2개 미만일 때 items를 비워 pruneBlocks가 제거하게 하고,
  * cols 안(topLevel=false)이면 pruneBlocks가 닿지 않으므로 블록을 직접 뺀다.
- * cleanStatBlocks(layout-validator.ts)와 동일한 규약이다.
+ *
+ * cleanStatBlocks(layout-validator.ts:150~182)와 동일한 규약(3가지: cols 재귀,
+ * topLevel 분기, "필터링이 실제로 일어난 경우에만" 2개 미만 규칙)을 따른다 — 이 함수를
+ * 고칠 때는 cleanStatBlocks도 같은 규약이 깨지지 않았는지 함께 확인할 것. 자동으로
+ * 강제되지 않으므로 리뷰 시 수동 대조가 필요하다.
  */
 export function cleanProgressBlocks(
   blocks: unknown[],
@@ -92,7 +129,13 @@ export function cleanProgressBlocks(
   return out;
 }
 
-/** 섹션의 progress_bar를 위생 처리한다 */
+/**
+ * 섹션의 progress_bar를 위생 처리한다.
+ *
+ * 반드시 pruneBlocks보다 앞에서 호출해야 한다 — 이 함수는 근거 없는 progress_bar를
+ * items:[] 로 비우기만 하고, 그 빈 블록을 실제로 제거하는 것은 pruneBlocks의
+ * 책임이다. 순서를 바꾸면 빈 progress_bar 블록이 렌더까지 그대로 간다.
+ */
 export function sanitizeProgressBars(sec: unknown, sourceText: string): unknown {
   if (!sec || typeof sec !== 'object') return sec;
   const s = { ...(sec as Record<string, unknown>) };
