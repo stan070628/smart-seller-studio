@@ -29,3 +29,15 @@ export function getDaysIntoWeek(): number {
   if (diffDays < 0) return 1;
   return (diffDays % 7) + 1;
 }
+
+/**
+ * 12주 플랜 기간이 끝났는지 여부.
+ *
+ * 주차 계산은 12로 클램프되므로 종료 후에도 getCurrentWeek()는 계속 12를
+ * 반환한다. 종료 이후 기록은 전부 12주차로 쌓이므로, "이번 주" 단위 지표를
+ * 그대로 보여주면 값이 시간이 갈수록 부풀어 오른다. 그 구간을 가리는 데 쓴다.
+ */
+export function isPlanEnded(): boolean {
+  const diffDays = Math.floor((Date.now() - PLAN_START.getTime()) / MS_PER_DAY);
+  return diffDays >= 84; // 12주 = 84일. 마지막 날은 83일째다.
+}

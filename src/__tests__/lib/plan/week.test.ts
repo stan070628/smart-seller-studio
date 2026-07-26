@@ -5,7 +5,7 @@
  * 플랜을 교체할 때마다 이 파일이 깨진다.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { getCurrentWeek, getWeekForDate, getDaysIntoWeek } from '@/lib/plan/week';
+import { getCurrentWeek, getWeekForDate, getDaysIntoWeek, isPlanEnded } from '@/lib/plan/week';
 import { PLAN_START } from '@/lib/plan/constants';
 
 const MS_PER_DAY = 86_400_000;
@@ -85,5 +85,27 @@ describe('getDaysIntoWeek', () => {
     vi.useFakeTimers();
     vi.setSystemTime(dayOffsetNoon(7));
     expect(getDaysIntoWeek()).toBe(1);
+  });
+});
+
+describe('isPlanEnded', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('플랜 시작 전에는 false', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(dayOffsetNoon(-1));
+    expect(isPlanEnded()).toBe(false);
+  });
+
+  it('12주차 마지막 날(83일째)에는 false', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(dayOffsetNoon(83));
+    expect(isPlanEnded()).toBe(false);
+  });
+
+  it('84일째(13주차 첫날)부터 true', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(dayOffsetNoon(84));
+    expect(isPlanEnded()).toBe(true);
   });
 });

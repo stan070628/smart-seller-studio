@@ -32,6 +32,7 @@ import {
 import {
   getCurrentWeek,
   getWeekForDate,
+  isPlanEnded,
 } from '@/lib/plan/week';
 import {
   loadDailyRecords,
@@ -1404,6 +1405,7 @@ function ProgressTab() {
       : (weeklyActual[currentWeek - 1] ?? 0) - (weeklyActual[currentWeek - 2] ?? 0);
   const targetRunRate = Math.round(weekTarget * MONTH_WEEKS);
   const actualRunRate = Math.round(weekActual * MONTH_WEEKS);
+  const planEnded = isPlanEnded();
 
   if (!mounted) return null;
 
@@ -1433,11 +1435,18 @@ function ProgressTab() {
             현재 {currentWeek}주차 &nbsp;|&nbsp; 이번 주 목표 누적&nbsp;
             <strong style={{ color: C.text }}>{totalTarget.toLocaleString()}만원</strong>
           </div>
-          <div style={{ fontSize: 13, color: C.textSub, marginTop: 6 }}>
-            이번 주 런레이트&nbsp;
-            <strong style={{ color: C.text }}>월 {actualRunRate.toLocaleString()}만원</strong>
-            &nbsp;/&nbsp; 목표 월 {targetRunRate.toLocaleString()}만원
-          </div>
+          {planEnded ? (
+            <div style={{ fontSize: 13, color: C.textSub, marginTop: 6 }}>
+              12주 플랜 종료 &nbsp;·&nbsp; 목표 런레이트는 월&nbsp;
+              {targetRunRate.toLocaleString()}만원이었다
+            </div>
+          ) : (
+            <div style={{ fontSize: 13, color: C.textSub, marginTop: 6 }}>
+              이번 주 런레이트&nbsp;
+              <strong style={{ color: C.text }}>월 {actualRunRate.toLocaleString()}만원</strong>
+              &nbsp;/&nbsp; 목표 월 {targetRunRate.toLocaleString()}만원
+            </div>
+          )}
         </div>
 
         <div style={{ textAlign: 'center', minWidth: 120 }}>
