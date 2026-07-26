@@ -140,6 +140,10 @@ const VIOLATION_CODE_MESSAGES: Record<string, string> = {
   // prohibited와 달리 재생성으로 해결될 수 있다 — repair가 슬롯을 추가하거나,
   // 다음 생성에서 Claude가 2개를 만든다.
   wearing_coverage: '인물 착용컷이 1개뿐입니다. 다시 생성하면 얼굴 컷과 크롭 컷이 각각 만들어질 수 있습니다.',
+  // wearing_coverage(개수 부족)와 다른 code다 — 이건 개수는 맞는데 두 컷이
+  // 같은 종류(둘 다 얼굴 또는 둘 다 크롭)인 경우라, 같은 문구를 쓰면
+  // 2장을 만든 사용자가 "1개뿐입니다"라는 틀린 원인을 보게 된다.
+  wearing_face_pair: '인물 착용컷이 모두 같은 종류입니다. 다시 생성하면 얼굴 컷과 크롭 컷으로 나뉠 수 있습니다.',
 };
 const GENERIC_VIOLATION_MESSAGE = '일부 구성이 자동 검증 기준에 못 미칩니다. 다시 생성하면 개선될 수 있습니다.';
 

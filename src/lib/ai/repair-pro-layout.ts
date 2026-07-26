@@ -56,6 +56,10 @@ REVIEW CHECKLIST:
      faceVisible을 생략하지 마라 — 생략하면 두 컷이 모두 얼굴 컷이 된다.
    - 두 씬의 promptHint가 겹치면 안 된다. 기존 슬롯을 삭제하지 마라.
    - promptHint에는 상황만 쓴다. 모델 외형·프레이밍·조명·포즈는 시스템이 붙인다.
+9. wearing_face_pair 이슈가 있으면 model_wearing 슬롯들의 faceVisible을 확인해
+   하나는 true(얼굴 컷), 하나는 false(크롭 컷)로 바꿔라. 슬롯을 추가하거나
+   삭제하지 마라 — 개수는 이미 맞다. faceVisible: false는 detail·evidence 비트
+   섹션의 슬롯에 주는 것이 자연스럽다.
 
 Return ONLY the corrected JSON array — no explanation, no code fences.`;
 

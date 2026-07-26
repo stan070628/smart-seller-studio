@@ -25,7 +25,8 @@ export interface Violation {
   code:
     | 'schema' | 'cjk' | 'broken_text' | 'empty_block'
     | 'duplicate' | 'section_count' | 'prohibited'
-    | 'option_compare' | 'option_coverage' | 'option_image' | 'narrative' | 'wearing_coverage';
+    | 'option_compare' | 'option_coverage' | 'option_image' | 'narrative' | 'wearing_coverage'
+    | 'wearing_face_pair';
   path: string;
   message: string;
   severity: 'error' | 'warning';
@@ -444,9 +445,12 @@ export function validateProLayout(sections: unknown, opts?: ProLayoutOpts): Vali
     // faceVisible 쌍 검증: 개수가 맞아도 두 컷이 모두 같은 종류(둘 다 얼굴 또는
     // 둘 다 크롭)면 의미가 없다. faceVisible은 optional이고 생략 시 true로
     // 처리되므로, Claude가 두 슬롯 모두 생략하면 개수 검증만으로는 통과한다.
+    // code를 wearing_coverage와 분리한다 — friendlyViolationWarnings(route.ts)가
+    // code로만 사용자 문구를 찾고 message는 버리므로, 같은 code를 쓰면 2장을
+    // 만든 사용자가 "1개뿐입니다"라는 틀린 원인을 보게 된다.
     if (wearingSections >= 2 && !(sawFaceVisible && sawFaceCropped)) {
       violations.push({
-        code: 'wearing_coverage',
+        code: 'wearing_face_pair',
         path: 'sections',
         message:
           '인물 착용컷이 모두 같은 종류입니다. 하나는 faceVisible: true(얼굴 컷), 하나는 false(크롭 컷)로 지정하세요.',

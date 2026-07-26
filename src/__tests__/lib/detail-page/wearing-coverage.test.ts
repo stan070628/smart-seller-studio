@@ -97,26 +97,38 @@ describe('wearing_coverage', () => {
     expect(res.violations.some(v => v.code === 'wearing_coverage')).toBe(true);
   });
 
-  it('두 섹션 모두 얼굴 컷이면(faceVisible 생략) 위반 — 두 컷이 같은 종류다', () => {
+  it('두 섹션 모두 얼굴 컷이면(faceVisible 생략) wearing_face_pair 위반 — 두 컷이 같은 종류다', () => {
     const secs = withWearing(0);
     // 둘 다 faceVisible 생략 → 서버 기본값 true로 처리되어 둘 다 얼굴 컷이 된다.
     secs[0]!.imageSlots = [{ slotType: 'model_wearing', promptHint: '해변 산책', modelGender: 'male' }];
     secs[1]!.imageSlots = [{ slotType: 'model_wearing', promptHint: '실내 짐', modelGender: 'male' }];
     const res = validateProLayout(secs, { wearing: true });
-    expect(res.violations.some(v => v.code === 'wearing_coverage')).toBe(true);
+    expect(res.violations.some(v => v.code === 'wearing_face_pair')).toBe(true);
   });
 
-  it('두 섹션 모두 크롭 컷이면(faceVisible: false) 위반', () => {
+  it('두 섹션 모두 크롭 컷이면(faceVisible: false) wearing_face_pair 위반', () => {
     const secs = withWearing(0);
     secs[0]!.imageSlots = [{ slotType: 'model_wearing', promptHint: '해변 산책', faceVisible: false, modelGender: 'male' }];
     secs[1]!.imageSlots = [{ slotType: 'model_wearing', promptHint: '실내 짐', faceVisible: false, modelGender: 'male' }];
     const res = validateProLayout(secs, { wearing: true });
-    expect(res.violations.some(v => v.code === 'wearing_coverage')).toBe(true);
+    expect(res.violations.some(v => v.code === 'wearing_face_pair')).toBe(true);
   });
 
-  it('얼굴 컷 + 크롭 컷이 각각 하나씩이면 통과한다 (faceVisible 명시)', () => {
-    const res = validateProLayout(withWearing(2), { wearing: true });
-    expect(res.violations.some(v => v.code === 'wearing_coverage')).toBe(false);
+  it('개수 위반과 쌍 위반은 서로 다른 code를 쓴다', () => {
+    // 사용자에게 보이는 경고 문장이 code로 결정되므로(friendlyViolationWarnings가
+    // code로만 문구를 찾고 message는 버린다), 같은 code를 쓰면 2장을 만든 사람이
+    // "1개뿐입니다"를 보게 된다.
+    const one = validateProLayout(withWearing(1), { wearing: true });
+    expect(one.violations.map(v => v.code)).toContain('wearing_coverage');
+    expect(one.violations.map(v => v.code)).not.toContain('wearing_face_pair');
+
+    // withWearing(2)는 섹션 1을 faceVisible: false(크롭 컷)로 만드므로,
+    // true로 뒤집어 두 섹션 모두 얼굴 컷(같은 종류)으로 만든다.
+    const bothFace = withWearing(2);
+    (bothFace[1]!.imageSlots as Record<string, unknown>[])[0]!.faceVisible = true;
+    const two = validateProLayout(bothFace, { wearing: true });
+    expect(two.violations.map(v => v.code)).toContain('wearing_face_pair');
+    expect(two.violations.map(v => v.code)).not.toContain('wearing_coverage');
   });
 });
 
