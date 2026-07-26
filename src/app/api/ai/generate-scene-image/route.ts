@@ -414,9 +414,13 @@ export async function POST(req: NextRequest) {
       });
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // 1200: 600이면 wearing 씬에서 응답이 잘린다. SCENE_PROMPT_SYSTEM이 요구하는
+      // 조명·환경·소품·앵글·무드·색 서술에 인물 서술(모델 외형·프레이밍·포즈)이 더해지고,
+      // 프롬프트가 PRODUCT_FIDELITY_INSTRUCTION(약 200토큰)으로 끝나야 하기 때문이다.
+      // 잘리면 JSON에 닫는 중괄호가 없어 아래 파싱이 실패한다(실물 검증에서 발견).
       const claudeRes = await client.messages.create({
         model: 'claude-sonnet-4-6',
-        max_tokens: 600,
+        max_tokens: 1200,
         system: systemPrompt,
         messages: [{ role: 'user', content: userContent as any }],
       });
@@ -427,7 +431,16 @@ export async function POST(req: NextRequest) {
         .join('');
 
       const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error('Claude 응답에서 JSON을 찾을 수 없습니다.');
+      if (!jsonMatch) {
+        // 잘림과 형식 이상을 구분한다. 전자는 max_tokens를 올려야 하고 후자는
+        // 프롬프트를 고쳐야 하는데, 메시지가 같으면 원인을 찾는 데 시간이 든다.
+        const truncated = claudeRes.stop_reason === 'max_tokens';
+        throw new Error(
+          truncated
+            ? `Claude 응답이 max_tokens에서 잘려 JSON이 닫히지 않았습니다(sectionType=${sectionType}).`
+            : 'Claude 응답에서 JSON을 찾을 수 없습니다.',
+        );
+      }
       const promptData = JSON.parse(jsonMatch[0]) as { prompt?: string };
       const claudePrompt = promptData.prompt;
       if (!claudePrompt) throw new Error('Claude가 프롬프트를 생성하지 못했습니다.');
