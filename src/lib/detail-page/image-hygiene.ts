@@ -39,10 +39,23 @@ export function hasCloseupClaim(text: string): boolean {
   return typeof text === 'string' && CLOSEUP_MARKERS.test(text);
 }
 
-/** 마침표 기준으로 자른 뒤, 접사를 주장하는 문장만 뺀다. 나머지 문장은 보존한다. */
-function dropCloseupSentences(text: string): string {
+/**
+ * "이 사진에 사람이 있다"고 주장하는 표현. model_wearing 슬롯이 생성 실패로 원본
+ * 제품컷으로 대체되면 이 문장들이 거짓이 된다(접사 주장과 같은 문제, 같은 메커니즘).
+ *
+ * 좁게 잡는다. "착용"만으로 잡으면 "착용 후 세탁하세요" 같은 멀쩡한 안내를 지운다 —
+ * 사진에 인물이 있다는 주장으로 읽히는 형태만 대상이다.
+ */
+const WEARING_MARKERS = /모델이|착용한 모습|착용컷|입은 모습|입고 있는|들고 있는|사용하는 모습/;
+
+export function hasWearingClaim(text: string): boolean {
+  return typeof text === 'string' && WEARING_MARKERS.test(text);
+}
+
+/** 마침표 기준으로 자른 뒤, isClaim이 참인 문장만 뺀다. 나머지 문장은 보존한다. */
+function dropClaimSentences(text: string, isClaim: (t: string) => boolean): string {
   const parts = text.split(/(?<=[.!?])\s+/).filter((s) => s.trim() !== '');
-  const kept = parts.filter((s) => !hasCloseupClaim(s));
+  const kept = parts.filter((s) => !isClaim(s));
   return kept.join(' ').trim();
 }
 
@@ -54,14 +67,25 @@ export interface CloseupStripResult {
   headingClaims: string[];
 }
 
+export interface StripOpts {
+  /** model_wearing 슬롯이 있던 섹션이면 true — 착용 주장도 함께 제거한다 */
+  wearing?: boolean;
+}
+
 /**
  * 블록 트리에서 접사 주장을 제거한다. subtext는 해당 문장만, bullet_list는 해당
  * 항목만 뺀다. heading은 건드리지 않고 headingClaims로 보고한다 — 헤드라인을
  * 지우면 섹션에 제목이 없어지므로 셀러가 직접 고치는 편이 낫다.
+ *
+ * opts.wearing이 true면 착용 주장(hasWearingClaim)도 같은 방식으로 제거한다 —
+ * model_wearing 슬롯이 생성 실패로 원본 제품컷으로 대체된 섹션에서 쓴다.
+ * 옵션 없이 호출하면(하위 호환) 접사 주장만 대상이다.
  */
-export function stripCloseupClaims(blocks: unknown): CloseupStripResult {
+export function stripCloseupClaims(blocks: unknown, opts?: StripOpts): CloseupStripResult {
   let removed = 0;
   const headingClaims: string[] = [];
+  const isClaim = (t: string) =>
+    hasCloseupClaim(t) || (opts?.wearing === true && hasWearingClaim(t));
 
   const walk = (list: unknown): unknown[] => {
     if (!Array.isArray(list)) return [];
@@ -70,12 +94,12 @@ export function stripCloseupClaims(blocks: unknown): CloseupStripResult {
       if (!b || typeof b !== 'object') { out.push(b); continue; }
       const block = { ...(b as Record<string, unknown>) };
 
-      if (block.type === 'heading' && typeof block.text === 'string' && hasCloseupClaim(block.text)) {
+      if (block.type === 'heading' && typeof block.text === 'string' && isClaim(block.text)) {
         headingClaims.push(block.text);
       }
 
-      if (block.type === 'subtext' && typeof block.text === 'string' && hasCloseupClaim(block.text)) {
-        const next = dropCloseupSentences(block.text);
+      if (block.type === 'subtext' && typeof block.text === 'string' && isClaim(block.text)) {
+        const next = dropClaimSentences(block.text, isClaim);
         removed++;
         // 문장이 하나뿐이라 통째로 비면 블록 자체를 뺀다(빈 subtext는 여백만 남긴다).
         if (next === '') continue;
@@ -84,7 +108,7 @@ export function stripCloseupClaims(blocks: unknown): CloseupStripResult {
 
       if (block.type === 'bullet_list' && Array.isArray(block.items)) {
         const items = (block.items as unknown[]).filter(
-          (it) => !(typeof it === 'string' && hasCloseupClaim(it)),
+          (it) => !(typeof it === 'string' && isClaim(it)),
         );
         removed += (block.items as unknown[]).length - items.length;
         if (items.length === 0) continue;

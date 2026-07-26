@@ -1426,11 +1426,13 @@ export default function DetailMakerProPage() {
                 attachedImages.length,
               );
 
-              // 씬 생성이 실패해 원본 전체컷으로 대체된 섹션에서는 "접사입니다" 류
-              // 문구가 거짓이 된다. 사진을 바꿀 수 없으니 카피를 사진에 맞춘다.
+              // 씬 생성이 실패해 원본 전체컷으로 대체된 섹션에서는 "접사입니다"·
+              // "모델이 착용한" 류 문구가 거짓이 된다. 사진을 바꿀 수 없으니 카피를
+              // 사진에 맞춘다. wearing 여부는 실패한 slot이 model_wearing이었는지로 판정한다.
               if (genSlotIdx >= 0 && !geminiUrl) {
                 fallbackSections++;
-                const stripped = stripCloseupClaims(blocks);
+                const wasWearing = slots[genSlotIdx]?.slotType === 'model_wearing';
+                const stripped = stripCloseupClaims(blocks, { wearing: wasWearing });
                 blocks = stripped.blocks as LayoutBlock[];
                 strippedClaims += stripped.removed;
                 headingClaims.push(...stripped.headingClaims);
@@ -1469,7 +1471,37 @@ export default function DetailMakerProPage() {
               setLayoutWarnings((prev) => [...prev, ...hygiene]);
             }
 
-            sessionStorage.setItem('pro_sections', JSON.stringify(detailSections));
+            // AI 생성 착용컷이 있으면 연출 고지를 붙인다. 제품 재현이 좋아도
+            // 스파클 글리프 같은 것이 간헐적으로 섞이므로(12장 중 2장) 구매자가 알 수 있어야 한다.
+            // detailSections는 map 결과라 const다 — push 대신 스프레드로 새 배열을 만든다.
+            const hasWearing = generatedSections.some(
+              s => s.imageSlots?.some(sl => sl.slotType === 'model_wearing') ?? false,
+            );
+            const sectionsWithDisclosure = hasWearing
+              ? [
+                  ...detailSections,
+                  {
+                    id: crypto.randomUUID(),
+                    type: 'claude_layout' as const,
+                    order: detailSections.length,
+                    content: {
+                      type: 'claude_layout' as const,
+                      title: '이미지 안내',
+                      blocks: [{
+                        type: 'subtext' as const,
+                        text: '일부 이미지는 제품 연출을 위해 AI로 생성되었으며, 실제 제품과 다를 수 있습니다.',
+                        align: 'left' as const,
+                      }],
+                      bgStyle: 'light',
+                      padding: undefined,
+                      imageSlots: undefined,
+                    },
+                    attachedImages: [],
+                  },
+                ]
+              : detailSections;
+
+            sessionStorage.setItem('pro_sections', JSON.stringify(sectionsWithDisclosure));
             sessionStorage.setItem('pro_meta', JSON.stringify({
               productName,
               uploadedImageUrls: effectiveProductUrls.filter((u): u is string => !!u),
