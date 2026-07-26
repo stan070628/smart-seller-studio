@@ -421,35 +421,51 @@ Expected: FAIL — `SCENE_PROMPT_SYSTEM`에 `wearing:`이 없음
 `RequestBodySchema`에 추가한다:
 
 ```ts
-  /** wearing 전용: 얼굴이 보이는 컷인지. 기본 true */
-  faceVisible: z.boolean().optional(),
-  /** wearing 전용: 모델 성별. 기본 male */
-  modelGender: z.enum(['male', 'female']).optional(),
+  /** wearing 전용. 기본값은 여기 한 곳에만 둔다 — 호출자는 그대로 흘려보낸다. */
+  wearing: z.object({
+    faceVisible: z.boolean().default(true),
+    gender: z.enum(['male', 'female']).default('male'),
+  }).default({ faceVisible: true, gender: 'male' }),
 ```
 
-391행의 구조 분해에 추가한다:
+**외부 `.default()`에 전체 shape을 적는 이유 — Zod 함정이다.** `.default({})`로 쓰면 안 된다. Zod는 외부 기본값을 **내부 스키마에 다시 통과시키지 않고 리터럴을 그대로 대입**하므로, `wearing` 필드가 생략된 요청에서 값이 `{}`가 되어 `faceVisible`과 `gender`가 아예 없는 상태가 된다. 그러면 `buildWearingInstruction`이 `faceVisible: undefined`를 받아 falsy로 판정하고 **`FACE_CROPPED`를 고른다 — 모든 기본 요청에서 얼굴이 사라진다.** 이 기능의 목적을 정면으로 뒤집는다.
 
-```ts
-  const { sectionType, productInfo, sceneHint, scenePrompt: directPrompt, baseImageUrl, instruction,
-          faceVisible, modelGender } = parsed.data;
-```
+Task 3 구현 중 route 테스트를 쓰다가 발견됐고 standalone Zod 재현으로 확인됐다. 코드에도 주석으로 남겼다 — `{}`로 "단순화"하면 조용히 회귀한다.
+
+내부 필드가 `undefined`인 경우(`wearing: { faceVisible: undefined }`)는 다르다 — 그때는 내부 스키마가 실행되어 `.default(true)`가 정상 적용된다. 그래서 Task 6이 `wearing: { faceVisible: slot.faceVisible, gender: slot.modelGender }`를 보내는 것은 안전하다.
+
+`parsed.data` 구조 분해에 `wearing`을 추가한다.
+
+**중첩 + `.default()`인 이유** (코드 품질 리뷰 반영): 평면 `faceVisible`/`modelGender`로 두면 같은 기본값이 세 곳에 생긴다 — `route.ts`의 `?? true`, `buildWearingInstruction`의 `gender = 'male'`, Task 6 `page.tsx`의 `?? true`. 두 옵션이 **서로 다른 계층**에서 기본값을 갖는 비대칭도 생긴다(`faceVisible`은 호출자, `gender`는 빌더). 그래서 호출부가 `gender: modelGender`로 `undefined`를 일부러 흘려보내 20줄 떨어진 다른 파일의 기본값을 발동시키는 형태가 된다 — 호출 지점에서 무슨 일이 벌어지는지 읽을 수 없다.
+
+Zod에 모으면 스키마 shape이 그대로 `WearingOpts`가 되어 `??`·이름 변경(`modelGender`→`gender`)·`undefined` 스레딩이 모두 사라진다. 설계 문서 §3이 "크롭만, 얼굴 없음"을 검토했다가 사용자가 뒤집은 기록이 있어, 그 결정이 다시 뒤집히면 기본값을 한 곳만 고치면 된다.
+
+또 중첩은 "wearing 전용"을 **구조로** 만든다. 평면이면 `{ sectionType: 'hero', faceVisible: false }`가 스키마를 통과해 조용히 무시된다.
+
+**단, Task 4의 `imageSlots`는 평평하게 유지한다.** 그 스키마는 Claude가 작성하는 문서이고 중첩 레벨마다 모델이 틀릴 여지가 생긴다. `compare_pair`의 `beforeHint` 선례도 평면이다. LLM이 쓰는 문서는 평면을, 내부 HTTP 경계는 타입 그룹화를 원한다 — 둘을 잇는 변환은 Task 6이 어차피 쓰는 객체 리터럴 하나다.
 
 - [ ] **Step 5: 인물 지시를 `finalScenePrompt`에 붙인다**
 
-`finalScenePrompt`가 확정되는 곳은 두 갈래다 — `directPrompt` 분기(450~454행)와 Claude 분기(456~514행). **두 분기가 합류한 직후, 517행 `imagePrompt: finalScenePrompt` 로그보다 앞에** 한 번만 붙인다:
+`finalScenePrompt`가 확정되는 곳은 두 갈래다 — `directPrompt`(scenePrompt 직결) 분기와 Claude 분기. **두 분기가 합류한 직후, `imagePrompt: finalScenePrompt`를 로깅하는 지점보다 앞에** 한 번만 붙인다:
 
 ```ts
     // wearing은 인물 착용컷이므로 검증된 인물 지시(모델·수위·포즈·색보존)를 말미에 붙인다.
     // 두 분기(directPrompt / Claude) 합류 후에 한 번만 붙여 중복을 막는다.
-    // 프롬프트 끝에 두는 이유: 뒤쪽 지시가 더 강하게 반영되고, claudePrompt가 이미
-    // PRODUCT_FIDELITY_INSTRUCTION으로 끝나므로 그 뒤에서 프레이밍을 확정해야 한다.
-    if (sectionType === 'wearing') {
-      finalScenePrompt = `${finalScenePrompt} ${buildWearingInstruction({
-        faceVisible: faceVisible ?? true,
-        gender: modelGender,
-      })}`;
+    // 말미에 두는 이유: 뒤쪽 지시가 더 강하게 반영된다고 보고 배치했다
+    // (시험 35장은 Gemini 직결 프롬프트였고 Claude 프리픽스와의 조합은 미검증 —
+    //  Task 8에서 얼굴 컷 구도를 확인한다). claudePrompt가 이미
+    // PRODUCT_FIDELITY_INSTRUCTION으로 끝나므로 그 뒤에서 프레이밍을 확정한다.
+    //
+    // !isEditMode 조건: 편집 모드에서는 사용자 지시("노을빛으로 바꿔줘")와
+    // COLOR_ACCURACY의 NOT sunset이 정면충돌한다. 현재 편집 요청을 보내는
+    // 코드가 모두 sectionType을 hero/lifestyle로 고정하므로 도달하지 않지만,
+    // PRO에 씬 편집이 생기면 모델 문제처럼 보이는 실패가 된다.
+    if (sectionType === 'wearing' && !isEditMode) {
+      finalScenePrompt = `${finalScenePrompt} ${buildWearingInstruction(wearing)}`;
     }
 ```
+
+`wearing`을 그대로 넘긴다 — Zod가 이미 기본값을 채웠으므로 `??`가 필요 없고, 스키마 shape이 `WearingOpts`와 일치한다.
 
 `finalScenePrompt`가 `let`으로 선언돼 있으므로(448행) 재할당이 가능하다. import도 추가한다:
 
@@ -469,10 +485,33 @@ import { /* ...기존... */, buildWearingInstruction } from './prompts';
 
 `user-prompt.ts`를 읽고 `sectionType`을 문자열로 서술하는 부분이 있으면 `wearing`에 대응하는 서술을 추가한다. `sectionType`을 그대로 흘려보내기만 한다면 변경이 필요 없다 — 그 경우 이 스텝은 no-op이며, 그렇게 판단한 근거를 보고에 적어라.
 
+- [ ] **Step 7-B: route 레벨 테스트를 추가한다**
+
+**이 계획의 초기 판단이 틀렸다.** "route handler를 테스트하려면 Supabase auth·Gemini·Claude를 모킹해야 하니 비싸다"고 적었는데, **그 하네스가 이미 커밋돼 있다**: `src/__tests__/api/generate-scene-image.test.ts`가 `requireAuth`·`checkRateLimit`·`getRateLimitKey`·`loadReferenceImages`·`generateFrameImage`·`getAnthropicClient`를 모킹하고 `POST`를 직접 import한다. `wearing`은 `compositeProductPng`가 null이라 `sharp`·`removeBackgroundTransparent` 모킹조차 필요 없다 — 이 route에서 가장 싸게 테스트되는 경로다.
+
+**같은 파일에 추가하라**(새 파일을 만들지 말 것 — `beforeEach`를 재사용하고 route의 행위 계약을 한곳에 모은다). `mockGenerateFrameImage.mock.calls[0][0].imagePrompt`를 단정하라 — 그 인자가 곧 `finalScenePrompt`를 읽는 지점이므로 **배치까지 간접적으로 검증된다.**
+
+| 테스트 | 단정 |
+|---|---|
+| `wearing` 기본값 | `imagePrompt`에 `FACE_VISIBLE`과 `MODEL_KO.male` 포함 (두 기본값을 고정) |
+| 정확히 한 번 | `p.indexOf(POSE_STATIC) === p.lastIndexOf(POSE_STATIC)` |
+| 앞이 아니라 뒤에 붙는다 | `p.startsWith('<모킹한 claude 프롬프트>')` |
+| `wearing.faceVisible: false` | `FACE_CROPPED` 포함, `FACE_VISIBLE` 미포함 |
+| `hero` | `imagePrompt`에 `POSE_STATIC` **미**포함 |
+| `scenePrompt` 직결 경로 | Claude 호출 없음, 그런데도 인물 블록이 정확히 한 번 |
+
+**마지막 행이 가장 중요하다.** `directPrompt` 분기가 부착 블록에 도달하는지 확인하는 유일한 자동 검증이며, 현재 아무것도 그것을 덮지 않는다.
+
+**순수 함수로 추출하지 마라.** `withWearingInstruction(prompt, sectionType, opts)` 같은 추출은 조건과 멱등성은 증명하지만 실제 위험인 **위치 불변식**은 증명하지 못하고, 오히려 눈에 보이는 인라인 재할당을 부수효과 없어 보이는 호출로 바꿔 옮기기 쉽게 만든다.
+
+- [ ] **Step 7-C: `wearing-route.test.ts`의 두 번째 테스트를 정리한다**
+
+`buildSceneUserPrompt('wearing', …)` 테스트는 이 커밋 전에 이미 통과했고, `sectionType`이 `string` 타입이라 `'wearng'`로도 통과한다. 이 태스크의 변경을 검증하지 않는다. 삭제하거나 `generate-scene-image-prompt.test.ts`(다른 `buildSceneUserPrompt` 케이스가 모여 있는 곳)로 옮겨라. 첫 번째 테스트(`SCENE_PROMPT_SYSTEM`에 `wearing:`)는 진짜 회귀 검증이므로 남긴다.
+
 - [ ] **Step 8: 테스트와 타입을 확인한다**
 
 ```bash
-npx vitest run src/__tests__/api/ai/
+npx vitest run src/__tests__/api/ai/ src/__tests__/api/generate-scene-image.test.ts
 npx tsc --noEmit -p tsconfig.json 2>&1 | grep "generate-scene-image"
 ```
 
@@ -805,11 +844,13 @@ promptHint에는 상황만 쓰게 한다 — 모델 외형·프레이밍·조명
 `sectionType: sceneTypeFor(slot?.slotType),` 바로 아래에 추가한다:
 
 ```ts
-                        // wearing 전용: 얼굴 노출과 모델 성별.
-                        // 자연어 sceneHint로는 서버가 수위를 판정할 수 없어 필드로 보낸다.
+                        // wearing 전용: 얼굴 노출과 모델 성별. 자연어 sceneHint로는
+                        // 서버가 수위를 판정할 수 없어 필드로 보낸다.
+                        // 기본값은 route.ts의 Zod가 채우므로 여기서 ??를 쓰지 않는다 —
+                        // 두 계층이 각각 기본값을 주면 한쪽만 바뀔 때 경로에 따라
+                        // 동작이 갈린다. undefined는 JSON에서 사라지고 Zod가 채운다.
                         ...(slot?.slotType === 'model_wearing' && {
-                          faceVisible: slot.faceVisible ?? true,
-                          modelGender: slot.modelGender,
+                          wearing: { faceVisible: slot.faceVisible, gender: slot.modelGender },
                         }),
 ```
 
@@ -1088,6 +1129,7 @@ git commit -m "feat(wearing): 제품컷 병치 + AI 고지 + 폴백 시 착용�
 | `faceVisible` 분포 | `true` 1개 이상 + `false` 1개 이상 |
 | beat 배정 | `hook`·`solution`·`usecase`에 얼굴, `detail`·`evidence`에 크롭 |
 | **렌더 반영** | 생성된 착용컷이 실제로 페이지에 보이는가 (Task 6 Step 5 검증) |
+| **얼굴 컷 구도** | 인물 상반신 구도인가, 아니면 제품 중심 크롭으로 밀렸는가 — 아래 설명 참조 |
 | 생성된 인물 | 한국인으로 보이는가. 중국·서양 카탈로그 느낌이 아닌가 |
 | 제품 색 | 화이트가 화이트로 나오는가 (살구색·핑크 아님) |
 | 포즈 | 동적 포즈가 없는가. 손이 뭉개지지 않았는가 |
@@ -1096,6 +1138,18 @@ git commit -m "feat(wearing): 제품컷 병치 + AI 고지 + 폴백 시 착용�
 | 병치 | 착용컷 아래에 제품 단독컷이 45% 폭으로 있는가 |
 | 연출 고지 | 하단 프레임 앞에 한 줄이 있는가 |
 | 경고 배너 | `wearing_coverage` 경고가 떠 있지 않은가 |
+
+**"얼굴 컷 구도" 항목이 왜 있는가 — 미검증 조합**
+
+`SCENE_PROMPT_SYSTEM`의 **전역** 규칙은 모든 섹션에 적용된다: *"The product from the reference image(s) MUST appear prominently"*, *"Create a COMPLETE scene with the product naturally integrated"*. 그런데 `FACE_VISIBLE`은 정반대를 말한다: *"this is a photo OF THE PERSON, not a product shot. The head and face occupy the upper third of the frame… Waist-up composition."*
+
+그리고 `FACE_VISIBLE`의 JSDoc이 이미 기록한다 — *"editorial photo / catalog photograph 같은 표현은 제품 중심 크롭을 유도해 역효과였다."* `SCENE_PROMPT_SYSTEM`이 바로 그 종류의 표현이고, 이제 그 fix **앞에** 놓였다.
+
+완화 전제는 "뒤쪽 지시가 지배한다"인데, **시험 35장이 검증한 것은 그것이 아니다.** 설계 문서 §2는 `gemini-2.5-flash-image`에 직접 보낸 프롬프트로 문구를 확정한 기록이며, "Claude가 쓴 제품 중심 프리픽스 + 인물 블록" 조합은 이 커밋에서 처음 생겼다.
+
+전제가 틀렸을 때의 결과: `faceVisible: true` 컷이 조용히 제품 중심 크롭으로 회귀한다. 블록이 막으려던 바로 그 결과이며, **`wearing_coverage`는 슬롯 개수만 세므로 통과한다.** `faceVisible: false`는 `FACE_CROPPED`와 "제품 prominent"가 양립하므로 영향이 적다.
+
+**프롬프트를 눈으로 고치지 마라**(`prompts.ts` 헤더가 금지한다). 회귀가 확인되면 수정 방향은 좁고 명확하다 — 부착 블록을 더 강화하는 것이 아니라, `SCENE_PROMPT_SYSTEM`의 Rules에 `wearing` 예외를 주는 것이다(예: *"for `wearing`, the person is the subject; the product is worn, not centered"*).
 
 - [ ] **Step 4: 어긋난 항목을 보고한다**
 
@@ -1107,7 +1161,7 @@ git commit -m "feat(wearing): 제품컷 병치 + AI 고지 + 폴백 시 착용�
 
 - [ ] `npx vitest run src/__tests__/lib/detail-page/ src/__tests__/api/ai/ src/__tests__/api/generate-pro-layout.test.ts` 전부 통과
 - [ ] `npx tsc --noEmit`에서 이번에 만진 파일의 오류 없음
-- [ ] `route.ts`가 Task 1 이후 520줄 이하 (Task 3이 약 15줄을 더한다)
+- [ ] `route.ts`가 550줄 이하 (Task 1 후 514줄 → Task 3이 25줄 추가해 539줄. 그중 9줄은 구조 분해가 113자 한 줄에서 여러 줄로 나뉜 것이며 lint가 요구한 것은 아니다)
 - [ ] 실물 생성에서 한국인 모델 착용컷이 얼굴 컷 1장 + 크롭 컷 1장 이상 **화면에 보이는지**
 
 ## 이 계획의 범위 밖
@@ -1119,4 +1173,6 @@ git commit -m "feat(wearing): 제품컷 병치 + AI 고지 + 폴백 시 착용�
 - **비의류 카테고리** — 화장품 "손에 든 튜브" 같은 형태는 미검증
 - **마켓플레이스 AI 인물 정책** — 미확인. 연출 고지로 완화하되 정책 확인은 별건
 - **`buildNoProductSuffix` 테스트** — Task 1에서 module-private에서 export로 바뀌며 테스트 가능해졌다(그전에는 핸들러 전체를 호출해야 했다). `productName?.trim()` 항등 절과 `SECTION_BG_HINTS[sectionType] ?? ''` 폴백에 분기가 있어 고정할 가치가 있으나, 이 계획의 범위가 아니다
+- **저장된 프롬프트 재사용 시 이중 부착** — `AssetsTab.tsx`와 `useListingStore.ts`가 `sceneData.data.prompt`를 슬롯에 저장한다. 지금은 그것을 `scenePrompt`로 되돌려 보내는 코드가 없어 무해하지만, "저장된 프롬프트로 재생성" 기능이 생기면 `wearing` 슬롯은 인물 블록이 두 번 들어간다. 그 기능을 만드는 티켓에서 다룰 것
+- **`buildSceneUserPrompt`의 `sectionType: string`** — 오타 난 섹션 타입이 조용히 Claude로 흘러간다. `route.ts`의 enum union으로 좁히면 Task 3 Step 7의 판단이 컴파일 오류로 드러났을 것이다
 - **`SECTION_BG_HINTS`의 타입 좁히기** — 현재 `Record<string, string>`이라 아무 키나 받고 미스는 `?? ''`로 조용히 넘어간다. `tsconfig`의 `noUncheckedIndexedAccess`가 꺼져 있어 타입 검사도 못 잡는다. `wearing`이 안전한 이유는 `COMPOSITE_SECTIONS`에 없어 `buildNoProductSuffix`에 도달하지 않기 때문이며, 타입으로 강제된 것이 아니다
