@@ -6,6 +6,7 @@ Generate a complete page layout as a JSON array of sections for mobile (390px wi
 Each section is a ClaudeLayoutContent object:
 {
   "type": "claude_layout",
+  "beat": "hook"|"problem"|"solution"|"compare"|"evidence"|"detail"|"usecase"|"option"|"assure",
   "title": "section title",
   "blocks": [...],
   "bgStyle": "white"|"light"|"dark"|"primary",
@@ -51,6 +52,11 @@ C2. 모든 subtext/sublabel은 [구체 사용 상황] + [제품 팩트(수치·�
 C3. 입력의 수치·소재(무게·용량·원단명 등)를 최소 3개 섹션의 카피에 녹이고, "스마트폰보다 가벼운"처럼 실감나는 비교 앵커를 1개 이상 쓰세요.
 C4. stat_row에는 실측 가능한 크기·무게·용량·시간·온도·비율만 넣으세요. 다음은 금지: (a) 값이 0이거나 "없음/무"인 항목 — 예: "소매 길이 0cm". 없다는 사실은 bullet_list로 말하세요("소매가 없어 겨드랑이 땀 자국이 남지 않음"). (b) 옵션·구성의 개수 — 예: "4단계 사이즈", "색상 2종", "3가지 구성"은 option_grid로.
 C5. 물리적 디테일 섹션을 1~2개 반드시 포함: 이미지에서 실제로 보이는 특징(지퍼·스트랩·수납·원단 텍스처·마감)을 골라 detail_closeup 슬롯 + image 블록 + 한 줄 팩트 설명으로 구성. 이미지에 없는 디테일은 만들지 마세요.
+C6. progress_bar는 입력에서 받은 실측 수치가 있을 때만 쓰세요. displayValue에는 반드시
+    단위가 붙은 실측치를 넣으세요(예: "180g", "30초", "95cm"). "높음"·"빠름"·"우수" 같은
+    정성 표현이나 근거 없는 퍼센트를 넣지 마세요 — 그런 항목은 자동 제거되어 섹션이
+    비게 됩니다. 퍼센트를 쓰려면 입력에 "숫자%" 형태로 그대로 등장해야 합니다.
+    측정하지 않은 성능은 bullet_list로 서술하세요.
 
 CONSISTENCY & PACING:
 D1. 옵션 내러티브: 옵션(색상·모델)이 2개 이상 제공되면 —
@@ -62,6 +68,32 @@ D1. 옵션 내러티브: 옵션(색상·모델)이 2개 이상 제공되면 —
     옵션이 1개 이하면 이 규칙은 무시하고 제품 이미지를 내용에 맞게 배정하세요.
 D2. 텍스트만 있는 섹션을 2개 연속 배치하지 마세요. 각 섹션은 이미지·차트·stat·아이콘 중 최소 1개의 시각 앵커를 포함해야 합니다.
 D3. 긍정 원칙: 인물이 등장하는 씬의 promptHint는 제품을 쓰는 즐거움·성취·편안함이 드러나야 합니다. 지침·통증·불편·좌절·땀에 지친 표정, 무릎을 짚거나 주저앉은 자세, 찡그린 표정을 쓰지 마세요. 문제 상황은 이미지가 아니라 카피로 말합니다. 예외: 비교 대상(타사 제품·기존 방식·개선 전)의 단점을 드러내는 표현. 우리 제품을 착용·사용하는 인물은 예외 없이 긍정적입니다.
+
+NARRATIVE (서사 — 이 페이지가 스펙 나열이 아니라 이야기가 되게 하는 규칙):
+N0. 모든 섹션에 beat 필드를 반드시 붙이세요. 누락하면 레이아웃이 거부됩니다.
+    hook=첫 화면(이게 뭐고 왜 봐야 하는가) / problem=기존 방식·대체재의 불편
+    solution=우리 제품이 그것을 어떻게 푸는가 / compare=기존 방식 대비 우위
+    evidence=관찰 가능한 근거 / detail=물리적 마감·소재·구조
+    usecase=언제 어디서 쓰는가 / option=색상·사이즈 등 선택지
+    assure=세탁·보관·제품정보
+N1. 먼저 상품이 어떤 유형인지 판단하고 아래 아크 중 하나를 골라 섹션을 배열하세요.
+    아크 이름은 출력하지 말고 순서만 따르세요. 상품에 맞게 비트를 가감해도 됩니다.
+    - 기능형 (성능이 구매 이유 — 원단·도구·가전):
+      hook → problem → solution → compare → evidence → detail → option → assure
+    - 감성형 (장면이 구매 이유 — 패션·리빙):
+      hook → usecase → detail → solution → compare → option → assure
+    - 신뢰형 (믿음이 구매 이유 — 식품·고가):
+      hook → detail → evidence → compare → usecase → option → assure
+N2. 첫 섹션의 beat는 반드시 hook, assure는 마지막 3개 섹션 안에 두세요.
+N3. compare 섹션을 최소 1개 만드세요. 반드시 columns 블록으로 2단 대비 구조를 쓰고
+    (좌: 기존 방식의 한계 / 우: 우리 제품), 카테고리 공지의 사실만 다루세요.
+    특정 경쟁사·브랜드 지목 금지. 배수·퍼센트·순위 표현 금지.
+    ○ "면 100%는 땀을 머금어 무거워진다"
+    ✗ "타사 대비 3배 빠른 건조"  ✗ "업계 1위 흡수력"  ✗ "흡수력 40% 향상"
+N4. problem 비트를 쓰면 solution 비트도 반드시 두세요. 문제만 제기하고 끝내지 마세요.
+N5. evidence 비트는 관찰 가능한 물리적 근거만 다루세요 (봉제 밀도, 자로 잰 치수,
+    물이 스며들지 않는 모습). 시험성적서·인증서류는 다루지 마세요.
+    evidence 섹션에는 detail_closeup 슬롯을 배정해 판매자가 직접 촬영할 수 있게 하세요.
 
 ${BENCHMARK_PATTERNS}
 
