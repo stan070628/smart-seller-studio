@@ -4,12 +4,14 @@ import { checkProhibitedPhrases } from '@/lib/ai/prompts/detail-page';
 import { normalizeImageBlocks } from './layout-image-blocks';
 import type { LayoutBlock } from '@/types/detail-page';
 import { collectOptionCoverage, type OptionSection } from './product-options';
+import { BEATS, checkNarrative, type NarrativeSection } from './narrative';
+import { sanitizeProgressBars } from './progress-hygiene';
 
 export interface Violation {
   code:
     | 'schema' | 'cjk' | 'broken_text' | 'empty_block'
     | 'duplicate' | 'section_count' | 'prohibited'
-    | 'option_compare' | 'option_coverage';
+    | 'option_compare' | 'option_coverage' | 'narrative';
   path: string;
   message: string;
   severity: 'error' | 'warning';
@@ -26,6 +28,14 @@ export interface ProLayoutOpts {
   statHygiene?: boolean;
   /** 옵션 모드일 때 imageIndex → 옵션명. (다음 작업에서 사용) */
   optionNameByImageIndex?: Map<number, string>;
+  /** 서사 검증 활성화 — 생성 경로 전용. draft/render는 사용자 편집본이라 켜지 않는다. */
+  narrative?: boolean;
+  /**
+   * progress_bar 수치 대조용 입력 원천.
+   * 지정하면 displayValue의 숫자가 이 문자열에 등장하는 item만 남긴다.
+   * undefined면 progress_bar를 건드리지 않는다 (빈 문자열과 구분된다).
+   */
+  provenanceSource?: string;
 }
 
 // ── CJK 정규식: test용(non-global, lastIndex 버그 회피)과 strip용(global) 분리 ──
@@ -63,6 +73,10 @@ const zClaudeSection = z.object({
   bgStyle: z.enum(['white', 'light', 'dark', 'primary']).optional(),
   padding: z.enum(['normal', 'compact', 'wide']).optional(),
   imageSlots: z.array(z.object({ slotType: z.string(), promptHint: z.string().optional(), imageRef: z.number().optional() })).optional(),
+  // 서사 비트. optional인 이유는 기존 draft 로드가 깨져서가 아니라(draft GET은 검증을
+  // 거치지 않는다), draft 저장·render 경로의 warnings에 스키마 노이즈를 만들지
+  // 않기 위해서다. 누락 검증은 narrative 플래그가 켜진 생성 경로에서만 한다.
+  beat: z.enum(BEATS).optional(),
 });
 
 // ── 헬퍼 ──
@@ -305,6 +319,19 @@ export function validateProLayout(sections: unknown, opts?: ProLayoutOpts): Vali
     }
   }
 
+  // ── 서사 검증 (생성 경로 전용) ──
+  if (opts?.narrative) {
+    for (const issue of checkNarrative(sections as NarrativeSection[])) {
+      violations.push({
+        code: 'narrative',
+        path: issue.sectionIndex !== undefined ? `sections[${issue.sectionIndex}]` : 'sections',
+        message: issue.message,
+        severity: issue.severity,
+        autoFixable: false,
+      });
+    }
+  }
+
   const isClean = !violations.some((v) => v.severity === 'error');
   return { violations, isClean };
 }
@@ -351,6 +378,12 @@ export function sanitizeProLayout(
   let cleaned = stripCjk(sections) as unknown[];
   // 2) stat_row 위생 (생성 경로 전용 — draft/render는 사용자 편집본이라 건드리지 않는다)
   if (opts?.statHygiene) cleaned = cleaned.map(sanitizeStatRows);
+  // 2-b) progress_bar 수치 위생 — 입력 원천에 없는 수치를 제거한다.
+  //      pruneBlocks(3단계)보다 앞에 와야 items가 빈 블록이 제거된다.
+  if (opts?.provenanceSource !== undefined) {
+    const src = opts.provenanceSource;
+    cleaned = cleaned.map((sec) => sanitizeProgressBars(sec, src));
+  }
   // 3) 빈/무효 블록 제거
   cleaned = cleaned.map(pruneBlocks);
   // 4) 연속 중복 섹션 제거

@@ -271,4 +271,32 @@ describe('compare 섹션의 금지 표현', () => {
     ]);
     expect(issues.some(i => i.rule === 'compare_claim')).toBe(false);
   });
+
+  it('leaf 경계에서 앞 leaf의 숫자와 뒤 leaf의 음절이 붙어 순위로 오탐하지 않는다', () => {
+    // 같은 배열(items) 안 인접 leaf는 사이에 다른 필드가 끼지 않아 공백 join이면
+    // "재고 30" + "위탁 판매" → "30 위탁"이 순위 정규식에 걸린다.
+    const section = sec('compare', [{ type: 'bullet_list', items: ['재고 30', '위탁 판매'] }]);
+    const issues = checkNarrative([sec('hook'), section, sec('assure')]);
+    expect(issues.some(i => i.rule === 'compare_claim')).toBe(false);
+  });
+
+  it('leaf 경계에서 앞 leaf의 숫자와 뒤 leaf의 음절이 붙어 배수로 오탐하지 않는다', () => {
+    // 공백으로 이어붙이면 "옵션 3" + "배기 성능" → "3 배기"가 배수 정규식에 걸린다.
+    const section = sec('compare', [{ type: 'bullet_list', items: ['옵션 3', '배기 성능'] }]);
+    const issues = checkNarrative([sec('hook'), section, sec('assure')]);
+    expect(issues.some(i => i.rule === 'compare_claim')).toBe(false);
+  });
+
+  it('퍼센트 인코딩 URL의 숫자를 퍼센트 주장으로 오탐하지 않는다', () => {
+    // "%ED%95%9C" 안의 "95%"가 퍼센트로, "타사 대비"가 비교 표지어로 잡혀
+    // 실전에서 흔한 "타사 대비 헤더 + 이미지 2단 비교" 형태가 오탐한다.
+    const section = sec('compare', [
+      { type: 'columns', cols: [
+        [{ type: 'subtext', text: '타사 대비' }],
+        [{ type: 'image', url: 'https://cdn.example.com/img/%ED%95%9C%EA%B5%AD.jpg' }],
+      ] },
+    ]);
+    const issues = checkNarrative([sec('hook'), section, sec('assure')]);
+    expect(issues.some(i => i.rule === 'compare_claim')).toBe(false);
+  });
 });

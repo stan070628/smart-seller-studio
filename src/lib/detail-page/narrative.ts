@@ -119,11 +119,23 @@ function forEachString(node: unknown, cb: (s: string) => void): void {
  * 섹션의 모든 leaf 문자열을 하나로 이어붙인다. 헤더와 표 셀처럼 서로 다른
  * leaf에 표지어와 수치가 나뉘어 있어도 compare_claim 판정은 섹션 전체
  * 기준으로 해야 하기 때문이다 (FORBIDDEN_COMPARE 주석 참고).
+ *
+ * 두 가지를 조심한다:
+ * 1) 구분자는 공백이 아니라 " | "를 쓴다 — FORBIDDEN_COMPARE의 정규식(예: 배수의
+ *    `\d+\s*배`)이 공백을 허용하므로, 공백으로 이어붙이면 앞 leaf의 끝 숫자와
+ *    뒤 leaf의 첫 음절이 우연히 붙어 매칭된다(예: ["재고 30", "위탁 판매"] →
+ *    "30 위" 순위 오탐, ["옵션 3", "배기 성능"] → "3 배" 배수 오탐). 마커 게이트
+ *    (섹션 전체에서 표지어 유무를 보는 것)는 공백이 아니어도 그대로 작동한다.
+ * 2) 이미지 URL은 판정 대상에서 뺀다 — `%ED%95%9C`처럼 퍼센트 인코딩된 URL의
+ *    "95%"가 퍼센트 주장으로 오인되고, "타사 대비" 헤더 + 이미지 2단 비교라는
+ *    compare 섹션의 전형적인 형태에서 실제로 발화한다.
  */
 function collectSectionText(blocks: unknown): string {
   const parts: string[] = [];
-  forEachString(blocks, (s) => parts.push(s));
-  return parts.join(' ');
+  forEachString(blocks, (s) => {
+    if (!/^https?:\/\//.test(s)) parts.push(s);
+  });
+  return parts.join(' | ');
 }
 
 /**
