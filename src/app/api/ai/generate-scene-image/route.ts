@@ -6,7 +6,7 @@ import { checkRateLimit, getRateLimitKey } from '@/lib/rate-limit';
 import { getAnthropicClient } from '@/lib/ai/claude';
 import { generateFrameImage } from '@/lib/ai/imagen';
 import { loadReferenceImages, type ReferenceImage } from '@/lib/ai/reference-images';
-import { buildSceneUserPrompt } from './prompt';
+import { buildSceneUserPrompt } from './user-prompt';
 import { removeBackgroundTransparent } from '@/lib/ai/remove-background';
 import {
   PRODUCT_FIDELITY_INSTRUCTION,

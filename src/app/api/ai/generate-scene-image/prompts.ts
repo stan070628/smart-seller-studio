@@ -1,15 +1,18 @@
 /**
- * generate-scene-image 프롬프트 단일 출처.
+ * generate-scene-image의 시스템 프롬프트 + Gemini 지시 상수 단일 출처.
+ * Claude에 보내는 사용자 프롬프트는 ./user-prompt.ts에 있다 — 새 문자열을 넣을 때
+ * 어느 쪽인지 먼저 판단할 것.
  *
  * 여기 있는 문자열은 실물 생성으로 검증된 것이다. 문구를 약화시키면 결과가 달라지므로
  * 수정 전에 반드시 실제 생성으로 재검증할 것. 특히 NOT ~ 형태의 부정문은
  * "AI가 수렴하는 기본값을 배제"하는 역할이며, 긍정 지시로 대체하면 효과가 사라진다.
  *
- * 선언 순서 주의: SCENE_PROMPT_SYSTEM이 PRODUCT_FIDELITY_INSTRUCTION을 보간한다.
+ * 검증 근거: docs/superpowers/specs/2026-07-26-pro-model-wearing-design.md
  */
 
 export const PRODUCT_FIDELITY_INSTRUCTION = `Using the attached product image(s) as a visual reference, study the product's overall shape, proportions, color palette, material texture, and key design details, then render it as a new photorealistic image naturally integrated in the scene. The product rendition should faithfully capture the reference's essential visual characteristics (form, color scheme, distinctive features) as an independent creative work — not a direct reproduction of the original photograph. IMPORTANT: Use EXACTLY the same quantity of items as shown in the reference image — do not add more items, do not duplicate products. SINGLE FRAME ONLY: Generate exactly one single continuous photograph — no split panels, diptychs, multi-view layouts, before/after comparisons, or composite image compositions. NO SPARKLE MARKS: Do NOT render any four-pointed star, sparkle, glitter, or diamond glyph anywhere in the image — not on the garment, product surface, or background. If such a mark appears in the reference image, treat it as an artifact and omit it. POSITIVE SUBJECT: If a person appears, they must look confident, comfortable, and at ease — relaxed or lightly positive expression, upright active posture. No grimacing, exhaustion, hunching over, hands on knees, slumping, distress, or discomfort.`;
 
+// 아래에서 PRODUCT_FIDELITY_INSTRUCTION을 보간한다 → 이 선언보다 먼저 와야 한다.
 export const SCENE_PROMPT_SYSTEM = `You are an expert e-commerce product photographer and AI image prompt engineer.
 
 Given one or more reference images of the SAME product (often photographed from different angles) and product information, create a highly detailed English prompt for Gemini image generation that will produce a professional commercial lifestyle scene.

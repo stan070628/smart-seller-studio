@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildSceneUserPrompt } from '@/app/api/ai/generate-scene-image/prompt';
+import { buildSceneUserPrompt } from '@/app/api/ai/generate-scene-image/user-prompt';
 
 describe('buildSceneUserPrompt', () => {
   it('sceneHint가 있으면 Art direction 라인을 포함한다', () => {

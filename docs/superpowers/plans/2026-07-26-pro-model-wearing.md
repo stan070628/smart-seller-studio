@@ -62,7 +62,7 @@ modelGender?: 'male' | 'female';    // 모델 성별
 |---|---|
 | `src/app/api/ai/generate-scene-image/prompts.ts` (생성) | 프롬프트 상수 단일 출처. 기존 8개 이동 + 인물 블록 신설 |
 | `src/app/api/ai/generate-scene-image/route.ts` (수정) | `wearing` sectionType, 인물 옵션 수신, 상수는 import |
-| `src/app/api/ai/generate-scene-image/prompt.ts` (수정) | `buildSceneUserPrompt`에 wearing 방향 |
+| `src/app/api/ai/generate-scene-image/user-prompt.ts` (수정) | `buildSceneUserPrompt`에 wearing 방향. Task 1에서 `prompt.ts`를 리네임했다 — `prompts.ts`와 한 글자 차이로 혼동됐다 |
 | `src/lib/detail-page/layout-validator.ts` (수정) | `imageSlots` 2필드, `wearing_coverage` |
 | `src/lib/detail-page/image-hygiene.ts` (수정) | 폴백 시 착용 주장 위생 |
 | `src/lib/ai/repair-pro-layout.ts` (수정) | `wearing_coverage` 수리 지시 |
@@ -115,7 +115,7 @@ modelGender?: 'male' | 'female';    // 모델 성별
  */
 ```
 
-옮긴 심볼을 모두 `export`한다.
+`route.ts`가 참조하는 5개(`PRODUCT_FIDELITY_INSTRUCTION`·`SCENE_PROMPT_SYSTEM`·`BACKGROUND_PROMPT_SYSTEM`·`COMPOSITE_REFINE_PROMPT`·`buildNoProductSuffix`)를 `export`한다. `NO_PRODUCT_BASE`·`SECTION_BG_HINTS`·`NO_CATEGORY_PROPS`는 `buildNoProductSuffix` 내부 전용이므로 module-private로 두어 공개 표면을 좁힌다.
 
 - [ ] **Step 3: `route.ts`에서 import로 교체한다**
 
@@ -152,7 +152,7 @@ Expected: 기존 테스트 전부 통과, tsc 출력 없음
 wc -l src/app/api/ai/generate-scene-image/route.ts src/app/api/ai/generate-scene-image/prompts.ts
 ```
 
-Expected: route.ts가 약 380~430줄로 줄어든다
+Expected: route.ts가 약 510~520줄로 줄어든다 (8개 심볼이 약 101줄, import 블록 7줄 추가 → 607 − 101 + 7 ≈ 513)
 
 - [ ] **Step 6: 커밋**
 
@@ -370,7 +370,7 @@ not a Chinese catalog)이 결정적이며 긍정 지시로 대체하면 효과�
 
 **Files:**
 - Modify: `src/app/api/ai/generate-scene-image/route.ts`
-- Modify: `src/app/api/ai/generate-scene-image/prompt.ts`
+- Modify: `src/app/api/ai/generate-scene-image/user-prompt.ts`
 - Test: `src/__tests__/api/ai/wearing-route.test.ts`
 
 - [ ] **Step 1: 실패하는 테스트를 작성한다**
@@ -379,7 +379,7 @@ not a Chinese catalog)이 결정적이며 긍정 지시로 대체하면 효과�
 
 ```ts
 import { describe, it, expect } from 'vitest';
-import { buildSceneUserPrompt } from '@/app/api/ai/generate-scene-image/prompt';
+import { buildSceneUserPrompt } from '@/app/api/ai/generate-scene-image/user-prompt';
 import { SCENE_PROMPT_SYSTEM } from '@/app/api/ai/generate-scene-image/prompts';
 
 describe('wearing 씬 프롬프트', () => {
@@ -463,7 +463,7 @@ import { /* ...기존... */, buildWearingInstruction } from './prompts';
 
 - [ ] **Step 7: `buildSceneUserPrompt`에 wearing을 반영한다**
 
-`prompt.ts`를 읽고 `sectionType`을 문자열로 서술하는 부분이 있으면 `wearing`에 대응하는 서술을 추가한다. `sectionType`을 그대로 흘려보내기만 한다면 변경이 필요 없다 — 그 경우 이 스텝은 no-op이며, 그렇게 판단한 근거를 보고에 적어라.
+`user-prompt.ts`를 읽고 `sectionType`을 문자열로 서술하는 부분이 있으면 `wearing`에 대응하는 서술을 추가한다. `sectionType`을 그대로 흘려보내기만 한다면 변경이 필요 없다 — 그 경우 이 스텝은 no-op이며, 그렇게 판단한 근거를 보고에 적어라.
 
 - [ ] **Step 8: 테스트와 타입을 확인한다**
 
@@ -1095,7 +1095,7 @@ git commit -m "feat(wearing): 제품컷 병치 + AI 고지 + 폴백 시 착용�
 
 - [ ] `npx vitest run src/__tests__/lib/detail-page/ src/__tests__/api/ai/ src/__tests__/api/generate-pro-layout.test.ts` 전부 통과
 - [ ] `npx tsc --noEmit`에서 이번에 만진 파일의 오류 없음
-- [ ] `route.ts`가 Task 1 이후 430줄 이하
+- [ ] `route.ts`가 Task 1 이후 520줄 이하 (Task 3이 약 15줄을 더한다)
 - [ ] 실물 생성에서 한국인 모델 착용컷이 얼굴 컷 1장 + 크롭 컷 1장 이상 **화면에 보이는지**
 
 ## 이 계획의 범위 밖
