@@ -195,6 +195,11 @@ export async function POST(req: NextRequest): Promise<Response> {
     }
 
     // 결정론적 정화(CJK 제거 + stat 위생 + 무효/빈 블록 prune + 중복 제거)
+    // 주의: stat_row/progress_bar 위생 삭제는 무음이다 — 블록이 통째로 사라지면
+    // 재검증에 걸릴 위반 자체가 없어 warnings에도 남지 않는다. provenanceSource가
+    // 빈 문자열이면(points 미입력) 모든 progress_bar가 조용히 증발한다. 제거
+    // 개수를 사용자에게 보고하려면 sanitizeProLayout이 제거 카운트를 반환하도록
+    // 확장해야 한다 (현재 범위 밖).
     let cleaned = sanitizeProLayout(sections, layoutOpts).sections;
     // error-severity 위반이 남으면 Claude로 1-pass 수리 후 재정화 (조건부)
     const { violations, isClean } = validateProLayout(cleaned, layoutOpts);

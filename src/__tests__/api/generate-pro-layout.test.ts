@@ -20,33 +20,43 @@ vi.mock('@/lib/ai/repair-pro-layout', () => ({
 
 import { POST } from '@/app/api/ai/generate-pro-layout/route';
 
-/** 옵션 균형이 맞는 유효 레이아웃 (비교 1 + 화이트 2 / 블랙 2) */
+/**
+ * 옵션 균형이 맞는 유효 레이아웃 (비교 1 + 화이트 2 / 블랙 2).
+ * narrative:true가 켜진 뒤로 beat도 서사 검증(narrative.ts의 checkNarrative)을
+ * 통과해야 repair 분기를 타지 않는다 — hook 시작 / compare 1개(columns 2단 포함)
+ * / assure 마지막 3개 안.
+ */
 function validLayout(): unknown[] {
-  const img = (title: string, ref: number) => ({
+  const img = (title: string, ref: number, beat: string) => ({
     type: 'claude_layout',
     title,
+    beat,
     blocks: [{ type: 'heading', text: title, size: 'xl' }, { type: 'image', attachedIndex: 0 }],
     imageSlots: [{ slotType: 'flux_lifestyle', promptHint: 'h', imageRef: ref }],
   });
   return [
-    img('히어로', 0),
-    img('소재', 1),
+    img('히어로', 0, 'hook'),
+    img('소재', 1, 'detail'),
     {
       type: 'claude_layout',
       title: '컬러',
+      beat: 'compare',
       blocks: [
         { type: 'option_grid', items: [{ label: '화이트' }, { label: '블랙' }] },
         { type: 'image', attachedIndex: 0 },
         { type: 'image', attachedIndex: 1 },
+        // narrative의 compare_structure 요구(columns 2단)를 만족시키기 위한 블록.
+        // option_grid 기반 옵션 커버리지 판정(product-options.ts)과는 별개 요구라 추가한다.
+        { type: 'columns', cols: [[{ type: 'subtext', text: '화이트' }], [{ type: 'subtext', text: '블랙' }]] },
       ],
       imageSlots: [
         { slotType: 'product_nukki', imageRef: 0 },
         { slotType: 'product_nukki', imageRef: 1 },
       ],
     },
-    img('디테일', 0),
-    img('활용', 1),
-    { type: 'claude_layout', title: '안내', blocks: [{ type: 'heading', text: '안내', size: 'xl' }] },
+    img('디테일', 0, 'detail'),
+    img('활용', 1, 'usecase'),
+    { type: 'claude_layout', title: '안내', beat: 'assure', blocks: [{ type: 'heading', text: '안내', size: 'xl' }] },
   ];
 }
 
@@ -120,5 +130,41 @@ describe('POST /api/ai/generate-pro-layout', () => {
     const json = await res.json() as { sections: Array<{ blocks: Array<{ type: string; items?: Array<{ label: string }> }> }> };
     const stat = json.sections[0]!.blocks.find((b) => b.type === 'stat_row');
     expect(stat!.items!.map((i) => i.label)).toEqual(['가슴둘레', '무게']);
+  });
+
+  it('서사를 갖춘 정상 경로는 repair를 타지 않고 warnings 키가 없다', async () => {
+    // beforeEach가 이미 validLayout()을 mock하지만, 이 테스트의 의도(정상 경로에는
+    // warnings가 아예 없어야 한다)를 명시적으로 드러내기 위해 다시 지정한다.
+    callClaudeMock.mockResolvedValue(JSON.stringify(validLayout()));
+
+    const res = await POST(request({
+      productInfo: { name: '민소매 티셔츠', points: [], category: '' },
+    }) as never);
+
+    expect(res.status).toBe(200);
+    const json = await res.json() as Record<string, unknown>;
+    expect(Array.isArray(json.sections)).toBe(true);
+    expect('warnings' in json).toBe(false);
+  });
+
+  it('서사 없는 레이아웃(beat 누락)은 repair 후에도 남은 위반을 warnings 배열로 응답에 싣는다', async () => {
+    // beat를 전부 제거하면 checkNarrative가 각 섹션에 beat_missing(error)을 낸다.
+    // repairProLayout mock은 identity라 재정화 후에도 위반이 그대로 남는다.
+    const noBeatLayout = validLayout().map((sec) => {
+      const { beat, ...rest } = sec as Record<string, unknown>;
+      return rest;
+    });
+    callClaudeMock.mockResolvedValue(JSON.stringify(noBeatLayout));
+
+    const res = await POST(request({
+      productInfo: { name: '민소매 티셔츠', points: [], category: '' },
+    }) as never);
+
+    expect(res.status).toBe(200);
+    const json = await res.json() as { warnings?: string[] };
+    expect(Array.isArray(json.warnings)).toBe(true);
+    expect(json.warnings!.length).toBeGreaterThan(0);
+    expect(json.warnings!.every((w) => typeof w === 'string' && /^[a-z_]+: /.test(w))).toBe(true);
+    expect(json.warnings!.some((w) => w.startsWith('narrative: '))).toBe(true);
   });
 });
