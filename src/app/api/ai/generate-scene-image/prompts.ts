@@ -114,11 +114,13 @@ export const COMPOSITE_REFINE_PROMPT =
 // ── 인물 착용컷 (sectionType: 'wearing') ──────────────────────────────
 // 실물 35장 생성으로 확정. 각 상수의 근거는 개별 JSDoc 참고.
 // 근거 문서: docs/superpowers/specs/2026-07-26-pro-model-wearing-design.md
+//
+// 작명 규칙: <제약 대상>_<값|기준>. 접두사는 무엇을 제약하는지를 말한다
+// (MODEL/FACE/POSE/COLOR — `MODEL`은 항상 패션 모델(인물)을 가리키며 AI 모델이 아니다).
+// 접미사는 그 대상에 지시하는 값(KO, VISIBLE, CROPPED, STATIC) 또는 그 대상을
+// 규정하는 기준·축(CONTEXT, ACCURACY)이다. 예: 배경 관련 상수를 추가하면 BACKGROUND_*.
 
-/**
- * 인물 외형 서술(성별별). 이 섹션에서 `MODEL`은 패션 모델(사람)을 가리키며 AI 모델이 아니다 —
- * 새 상수를 추가할 때도 역할이 이름에 드러나게 할 것(예: MODEL_CONTEXT, FACE_VISIBLE, POSE_STATIC).
- */
+/** 인물 외형 서술(성별별). */
 export const MODEL_KO = {
   male:
     'a Korean man in his late twenties with a clean modern Korean haircut — softly layered, ' +
@@ -129,9 +131,10 @@ export const MODEL_KO = {
 } as const;
 
 /**
- * 범아시아 평균 얼굴로 수렴하는 것을 막는 핵심 문구. MODEL_KO가 "Korean"이라고만 말해도
- * 그것만으로는 범아시아 평균 얼굴로 수렴해 "중국 사람처럼 보인다"는 피드백을 받았다 —
- * 이 상수의 "not a Western or Chinese catalog"가 실제로 그것을 막는다.
+ * "East Asian"에서 시작했으나 중국인처럼 보인다는 지적을 받았다. "Korean"으로 바꿔도
+ * (MODEL_KO) 범아시아 평균으로 애매하게 수렴했다 — 이 상수의 한국 화보 맥락·스타일링
+ * 명시(긍정 지시)와 "not a Western or Chinese catalog"(부정 지시)가 함께 작용해
+ * 한국 화보 전형으로 고정시켰다.
  */
 export const MODEL_CONTEXT =
   'Styled like a Korean lifestyle magazine editorial shot in Seoul, not a Western or Chinese catalog.';

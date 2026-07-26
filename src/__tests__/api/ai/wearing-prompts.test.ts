@@ -93,13 +93,19 @@ describe('buildWearingInstruction', () => {
     expect(buildWearingInstruction({ faceVisible: false, gender: 'male' })).toMatchInlineSnapshot(`"The person is a Korean man in his late twenties with a clean modern Korean haircut — softly layered, natural black hair, fair even skin tone, slim build. Styled like a Korean lifestyle magazine editorial shot in Seoul, not a Western or Chinese catalog. FRAMING IS CRITICAL: the frame starts at the collarbone and ends at the hips — the head and face are COMPLETELY OUTSIDE the frame, not visible at all. POSE CONSTRAINTS: both arms stay BELOW shoulder height — never raised, never overhead. Hands hang naturally relaxed with open fingers or rest in pockets — never clenched into fists. The person stands, leans or walks slowly — NO running, NO jumping, NO mid-action motion. COLOR ACCURACY IS CRITICAL: neutral daylight with accurate white balance. The garment's color must match the reference image exactly — a white garment renders as pure white. NOT golden hour, NOT sunset, NOT warm color cast."`);
   });
 
-  it('조각 경계에 붙어버린 단어나 중복 공백이 없다', () => {
+  it('조각이 앞 조각 끝에 공백 하나로 이어진다', () => {
+    // 범용 구두점 정규식(/[.,][^\s]/, /[a-z][A-Z]/)은 "e.g.,"·"1,000" 같은
+    // 이 파일의 기존 문체(buildNoProductSuffix, SECTION_BG_HINTS.lifestyle)에서
+    // 오탐한다. 모든 조각이 '.'로 끝나므로 각 조각 시작 직전 두 글자가 정확히
+    // '. '인지만 확인하면 조각 내용과 무관하게 붙음·중복 공백을 잡을 수 있다.
     for (const faceVisible of [true, false]) {
       for (const gender of ['male', 'female'] as const) {
         const out = buildWearingInstruction({ faceVisible, gender });
-        expect(out).not.toMatch(/[.,][^\s]/); // 'overhead.Hands'
-        expect(out).not.toMatch(/[a-z][A-Z]/); // 'buildStyled'
-        expect(out).not.toMatch(/ {2}/);
+        for (const frag of [MODEL_CONTEXT, faceVisible ? FACE_VISIBLE : FACE_CROPPED, POSE_STATIC, COLOR_ACCURACY]) {
+          const i = out.indexOf(frag);
+          expect(i).toBeGreaterThan(0); // 조각이 온전히 들어있다
+          expect(out.slice(i - 2, i)).toBe('. '); // 마침표 + 공백 하나(이중 공백·붙음 모두 배제)
+        }
       }
     }
   });
