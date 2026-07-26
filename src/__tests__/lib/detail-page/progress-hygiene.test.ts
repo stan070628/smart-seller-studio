@@ -89,6 +89,15 @@ describe('의도적으로 남겨둔 오탐·미탐 — 특성화 테스트', () 
     const source = '3종 원단 혼용, 두께 1.5mm';
     expect(isGroundedProgressItem({ label: '건조 속도', value: 90, displayValue: '3배 빠름' }, source)).toBe(true);
   });
+
+  it('범위 표기의 앞쪽 퍼센트는 제거된다 (의도된 오탐)', () => {
+    // 소스 "30~40% 신축"에서 PCT_TOKEN은 "40%"만 토큰화하고 "30"은 숫자로만
+    // 남아 퍼센트로 인식되지 않는다. 그래서 의미상 정당한 "30%" 주장이 차단된다.
+    // 과잉 제거 방향이라 이 모듈의 편향과 일치하므로 고치지 않는다.
+    const source = '30~40% 신축';
+    expect(isGroundedProgressItem({ label: '신축성', value: 30, displayValue: '30%' }, source)).toBe(false);
+    expect(isGroundedProgressItem({ label: '신축성', value: 40, displayValue: '40%' }, source)).toBe(true);
+  });
 });
 
 describe('cleanProgressBlocks', () => {

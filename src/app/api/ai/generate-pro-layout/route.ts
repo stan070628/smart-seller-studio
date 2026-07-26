@@ -126,10 +126,23 @@ export async function POST(req: NextRequest): Promise<Response> {
   const optionLines = optionMode
     ? options.map((o) => `이미지 ${o.imageIndex} = "${o.name}"`)
     : [];
-  // stat 위생은 생성 경로 전용 — draft/render는 사용자 편집본이라 켜지 않는다.
+  // provenance 원천: 사용자가 이 상품에 대해 입력한 값만 쓴다.
+  // analyzedSections(레퍼런스 페이지 추출 데이터)를 넣으면 "이 상품의 근거"가 아닌
+  // 숫자가 화이트리스트에 올라 판정이 느슨해진다 — 경쟁사 페이지의 수치가
+  // 우리 상품의 지어낸 수치를 정당화하는 구조가 되므로 제외한다.
+  // 대가: 원본 상세페이지에서 가져온 정당한 스펙도 제거된다. 미탐(지어낸 수치 통과)의
+  // 법적 리스크가 오탐(정당한 수치 제거)의 손실보다 크다고 판단한 선택이다.
+  const provenanceSource = productInfo.points.join(' ');
+
+  // stat 위생·서사 검증은 생성 경로 전용 — draft/render는 사용자 편집본이라 켜지 않는다.
   const layoutOpts = optionMode
-    ? { statHygiene: true, optionNameByImageIndex: optionNameByImageIndex(options) }
-    : { statHygiene: true };
+    ? {
+        statHygiene: true,
+        narrative: true,
+        provenanceSource,
+        optionNameByImageIndex: optionNameByImageIndex(options),
+      }
+    : { statHygiene: true, narrative: true, provenanceSource };
 
   const userPrompt = [
     `Product: "${productInfo.name}"`,
@@ -204,6 +217,14 @@ export async function POST(req: NextRequest): Promise<Response> {
           after.violations.filter((v) => v.severity === 'error').map((v) => `${v.code}: ${v.message}`),
         );
       }
+      // 잔존 error를 클라이언트에 전달해 결과 화면에서 알린다.
+      return NextResponse.json({
+        success: true,
+        sections: cleaned,
+        warnings: after.violations
+          .filter((v) => v.severity === 'error')
+          .map((v) => `${v.code}: ${v.message}`),
+      });
     }
     return NextResponse.json({ success: true, sections: cleaned });
   } catch (error) {

@@ -50,6 +50,13 @@ function percentSet(text: string): Set<string> {
  * 보므로 "3배 빠름"처럼 입력에 같은 숫자가 다른 단위로 존재하면 통과한다 — 알려진
  * 한계다.
  *
+ * 오탐(정당한 수치를 제거) 사례 하나: 소스가 "30~40% 신축"처럼 범위 표기면
+ * PCT_TOKEN이 "40%"만 토큰화하고 "30"은 숫자로만 남아 퍼센트로 인식되지 않는다.
+ * 그 결과 displayValue "30%"는 차단되고 "40%"는 통과한다 — 소스의 30도 의미상
+ * 퍼센트인데 표기상 단위가 붙어있지 않아서다. 한국 상품 텍스트에서 범위 표기가
+ * 흔해 실제로 발생하는 한계지만, 과잉 제거(오탐) 방향이라 이 모듈이 미탐보다
+ * 오탐을 택하는 편향과 일치하므로 고치지 않는다.
+ *
  * 부수 한계: 콤마가 포함된 숫자("1,000회")는 콤마에서 끊겨 {"1","000"}으로
  * 쪼개진다 — "1"은 가장 충돌하기 쉬운 토큰이라 오염 가능성이 있다.
  */
@@ -61,7 +68,10 @@ export function isGroundedProgressItem(item: ProgressItem, sourceText: string): 
   const nums = display.match(NUM_TOKEN);
   // 숫자가 없는 정성 표현("높음", "Omni-Wick")은 근거로 볼 수 없다
   if (!nums || nums.length === 0) return false;
-  if (!nums.every((n) => numberSet(source).has(n))) return false;
+  // source는 토큰과 무관하게 고정이므로 루프 밖에서 한 번만 계산한다
+  // (호이스팅 전엔 숫자 토큰마다 source 전체를 재스캔해 Set을 다시 만들었다).
+  const sourceNums = numberSet(source);
+  if (!nums.every((n) => sourceNums.has(n))) return false;
 
   // 퍼센트는 그 자체로 비율 주장이다 — 숫자만 일치해서는 안 되고 "숫자%" 형태로
   // 입력에 등장해야 한다.
