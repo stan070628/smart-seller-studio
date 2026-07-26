@@ -98,6 +98,11 @@ describe('buildWearingInstruction', () => {
     // 이 파일의 기존 문체(buildNoProductSuffix, SECTION_BG_HINTS.lifestyle)에서
     // 오탐한다. 모든 조각이 '.'로 끝나므로 각 조각 시작 직전 두 글자가 정확히
     // '. '인지만 확인하면 조각 내용과 무관하게 붙음·중복 공백을 잡을 수 있다.
+    //
+    // 범위 주의: 이 테스트는 join(' ')이 만드는 조각 사이 이음매만 본다.
+    // 상수 하나 안에서 '+'로 이어붙인 자리의 공백 누락(예: POSE_STATIC의
+    // 'overhead.' + 'Hands' → 'overhead.Hands')은 잡지 못하며, 그건 위
+    // 스냅샷이 유일한 방어선이다. 스냅샷을 지우지 마라.
     for (const faceVisible of [true, false]) {
       for (const gender of ['male', 'female'] as const) {
         const out = buildWearingInstruction({ faceVisible, gender });

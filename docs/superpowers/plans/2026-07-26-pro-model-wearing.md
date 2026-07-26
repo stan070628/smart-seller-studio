@@ -23,7 +23,7 @@
 계획을 쓰면서 실제 코드를 확인했고, 스펙의 전제 몇 개가 현실과 달랐다. 아래는 확인된 사실이며 각 태스크가 이것을 전제로 한다.
 
 **① `wearing`은 이미 `PRODUCT_FIDELITY_INSTRUCTION`으로 끝나는 프롬프트를 받는다.**
-`route.ts:512-514`에서 `compositeProductPng`가 없으면 `finalScenePrompt = claudePrompt`이고, `SCENE_PROMPT_SYSTEM`(58행)이 Claude에게 *"프롬프트는 반드시 이 지시로 끝나야 한다"*고 요구한다. 따라서 **`buildWearingInstruction`에 `PRODUCT_FIDELITY_INSTRUCTION`을 포함시키면 중복된다.** Task 2는 그것을 넣지 않는다.
+`route.ts`의 `compositeProductPng ? bgPrompt : claudePrompt` 분기에서 합성이 없으면 `finalScenePrompt = claudePrompt`이고, `SCENE_PROMPT_SYSTEM`의 `MUST end with this exact instruction` 규칙이 Claude에게 *"프롬프트는 반드시 이 지시로 끝나야 한다"*고 요구한다. (행 번호로 적지 않는다 — Task 1이 상수를 분리하며 전부 이동했고, Task 3이 또 15줄을 더한다.) 따라서 **`buildWearingInstruction`에 `PRODUCT_FIDELITY_INSTRUCTION`을 포함시키면 중복된다.** Task 2는 그것을 넣지 않는다.
 
 **② `realBySection`은 손댈 필요가 없다.**
 `page.tsx:1272`의 `findIndex`가 이미 `flux_lifestyle`/`detail_closeup`만 본다. `model_wearing`은 자동으로 실사진 override 대상이 아니다. 스펙 ⑦은 코드 변경 없이 이미 만족된다 — Task 6이 이것을 주석으로 고정한다.
@@ -97,7 +97,7 @@ modelGender?: 'male' | 'female';    // 모델 성별
 | `buildNoProductSuffix` | 127 부근 | 예 (453, 513행) |
 | `COMPOSITE_REFINE_PROMPT` | 236 | 예 |
 
-`SCENE_PROMPT_SYSTEM`이 템플릿 리터럴 안에서 `${PRODUCT_FIDELITY_INSTRUCTION}`을 보간하므로(58행) **선언 순서를 유지하라** — `PRODUCT_FIDELITY_INSTRUCTION`이 먼저 와야 한다.
+`SCENE_PROMPT_SYSTEM`이 템플릿 리터럴 안에서 `${PRODUCT_FIDELITY_INSTRUCTION}`을 보간한다(`CRITICAL: The generated prompt MUST end with this exact instruction` 줄). 따라서 **선언 순서를 유지하라** — `PRODUCT_FIDELITY_INSTRUCTION`이 먼저 와야 한다.
 
 - [ ] **Step 2: `prompts.ts`를 만든다**
 
@@ -255,8 +255,10 @@ describe('buildWearingInstruction', () => {
   });
 
   it('PRODUCT_FIDELITY_INSTRUCTION을 포함하지 않는다', () => {
-    // route.ts:512-514 — wearing은 compositeProductPng가 없어 claudePrompt를 쓰고,
-    // SCENE_PROMPT_SYSTEM(58행)이 그 프롬프트를 이 지시로 끝내라고 요구한다.
+    // wearing은 COMPOSITE_SECTIONS에 없어 compositeProductPng가 null이 되고,
+    // route.ts의 `compositeProductPng ? bgPrompt : claudePrompt` 분기에서
+    // claudePrompt를 쓴다. SCENE_PROMPT_SYSTEM의 `MUST end with this exact
+    // instruction` 규칙이 그 프롬프트를 이 지시로 끝내게 만든다.
     // 여기서 또 붙이면 같은 문단이 두 번 들어간다.
     const out = buildWearingInstruction({ faceVisible: true, gender: 'male' });
     expect(out).not.toContain(PRODUCT_FIDELITY_INSTRUCTION);
@@ -353,6 +355,8 @@ export function buildWearingInstruction({ faceVisible, gender = 'male' }: Wearin
 
 Run: `npx vitest run src/__tests__/api/ai/wearing-prompts.test.ts`
 Expected: PASS — 11 tests (상수 describe 5개 + `buildWearingInstruction` describe 6개)
+
+> **완료 후 기록:** 코드 품질 리뷰에서 이 11개가 전부 부분 문자열 검사라 뮤테이션에 무감각하다는 것이 실증됐다(핵심 문장 삭제·후행 공백 제거·조립 순서 교체 모두 통과). 인라인 스냅샷 2개와 조각 경계 검사 1개를 추가해 **최종 13개**가 됐다. 아래 코드블록은 초기 TDD 형태이며, **최종 형태는 `src/__tests__/api/ai/wearing-prompts.test.ts`를 직접 볼 것** — 이 문서에 복사해두면 또 어긋난다.
 
 - [ ] **Step 5: 커밋**
 
@@ -732,9 +736,17 @@ N6. 인물 착용컷(model_wearing) — 착용·사용이 구매 결정을 좌�
 ```bash
 npx tsc --noEmit -p tsconfig.json 2>&1 | grep -E "system-prompt|repair-pro-layout"
 npx vitest run src/__tests__/api/generate-pro-layout.test.ts
+npx vitest run src/__tests__/api/generate-pro-layout-patterns.test.ts
 ```
 
 Expected: tsc 출력 없음. `CLAUDE_SYSTEM`은 템플릿 리터럴이므로 백틱·`${}` 손상에 주의하라.
+
+**두 번째 테스트 파일이 중요하다.** `generate-pro-layout-patterns.test.ts`(커밋 `02590156`)는 프롬프트가 **존재하지 않는 규칙을 참조하는 것**을 잡는다 — 실제로 `"아래 R2를 따른다"`처럼 정의 없는 라벨을 가리키는 사고가 있었고, LLM은 없는 항목을 조용히 무시하므로 사람 눈에 안 띈다. `findDanglingRuleRefs`가 줄 머리의 `N6.` 형태를 정의로, 그 밖의 등장을 참조로 본다. `findDuplicateRuleLabels`는 번호 재사용을 잡는다.
+
+N6 작성 시 확인된 사실:
+- **N 라벨은 현재 N0~N5까지만 정의돼 있다** → N6은 중복이 아니다
+- **N6이 참조하는 `D3`는 실제로 존재한다**(`system-prompt.ts:114`) — 내용도 정확히 일치한다: *"문제 상황은 이미지가 아니라 카피로 말합니다"*. 그리고 D3는 이미 "인물이 등장하는 씬은 예외 없이 긍정적"을 규정하므로, **N6에서 표정·자세 긍정 원칙을 다시 쓰지 마라** — 중복이고 두 곳이 따로 낡는다
+- N6 안에서 다른 규칙을 새로 참조하려면 그 라벨이 정의돼 있는지 먼저 `grep`으로 확인하라
 
 - [ ] **Step 6: 커밋**
 
