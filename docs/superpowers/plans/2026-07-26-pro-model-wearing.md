@@ -684,7 +684,7 @@ Expected: FAIL — `wearing` 옵션과 `wearing_coverage` code가 없음
     // 두 컷이 같아지는데 개수 검증만으로는 통과한다.
     if (wearingSections >= 2 && !(sawFaceVisible && sawFaceCropped)) {
       violations.push({
-        code: 'wearing_coverage',
+        code: 'wearing_face_pair',
         path: 'sections',
         message:
           '인물 착용컷이 모두 같은 종류입니다. 하나는 faceVisible: true(얼굴 컷), 하나는 false(크롭 컷)로 지정하세요.',
@@ -825,6 +825,11 @@ N7. 인물 착용컷(model_wearing) — 착용이 구매를 좌우하고 제품�
      faceVisible을 생략하지 마라 — 생략하면 두 컷이 모두 얼굴 컷이 된다.
    - 두 씬의 promptHint가 겹치면 안 된다. 기존 슬롯을 삭제하지 마라.
    - promptHint에는 상황만 쓴다. 모델 외형·프레이밍·조명·포즈는 시스템이 붙인다.
+
+9. wearing_face_pair 이슈가 있으면 model_wearing 슬롯들의 faceVisible을 확인해
+   하나는 true(얼굴 컷), 하나는 false(크롭 컷)로 바꿔라. 슬롯을 추가하거나
+   삭제하지 마라 — 개수는 이미 맞다. faceVisible: false는 detail·evidence 비트
+   섹션의 슬롯에 주는 것이 자연스럽다.
 ```
 
 **"기존 슬롯을 삭제하지 마라"가 중요하다** — 그것이 없으면 가장 값싼 수리는 유일한 슬롯을 지워 카운트를 1→0으로 만드는 것이고, 검증은 통과한다.
@@ -881,11 +886,15 @@ promptHint에는 상황만 쓰게 한다 — 모델 외형·프레이밍·조명
 
 ## Task 6: `page.tsx` 결선
 
-**세 곳을 고쳐야 하고, 셋 중 하나라도 빠지면 조용히 실패한다.**
+**결선 세 곳 중 하나라도 빠지면 조용히 실패한다.** 그리고 Task 4가 남긴 카운트 구멍을 여기서 닫는다 — 검증과 렌더가 같은 판정을 쓰게 만드는 것이 이 태스크의 핵심이다.
 
 **Files:**
-- Modify: `src/app/listing/[id]/detail-maker-pro/page.tsx`
-- Modify: `src/app/api/ai/generate-pro-layout/route.ts`
+- Modify: `src/lib/detail-page/layout-validator.ts` — `GEN_SLOT_TYPES` export, 카운트를 첫-gen-슬롯 기준으로, `faceVisible` 쌍 검증
+- Modify: `src/__tests__/lib/detail-page/wearing-coverage.test.ts` — 위 두 변경에 대한 테스트
+- Modify: `src/app/listing/[id]/detail-maker-pro/page.tsx` — 결선 3곳, 요청 바디
+- Modify: `src/app/api/ai/generate-pro-layout/route.ts` — 경고 메시지, `wearing` 플래그
+
+**행 번호를 신뢰하지 마라.** 아래 스텝에 남아 있는 행 번호는 계획 작성 당시 기준이며 이후 커밋으로 이동했을 수 있다. `grep`으로 심볼을 찾아 실제 위치를 확인하고, **새로 쓰는 주석에는 행 번호를 넣지 마라.**
 
 - [ ] **Step 1: `GeneratedSection` 타입에 두 필드를 추가한다**
 
@@ -1012,9 +1021,12 @@ export const GEN_SLOT_TYPES = ['flux_lifestyle', 'detail_closeup', 'model_wearin
 
 ```ts
   wearing_coverage: '인물 착용컷이 1개뿐입니다. 다시 생성하면 얼굴 컷과 크롭 컷이 각각 만들어질 수 있습니다.',
+  wearing_face_pair: '인물 착용컷이 모두 같은 종류입니다. 다시 생성하면 얼굴 컷과 크롭 컷으로 나뉠 수 있습니다.',
 ```
 
-"다시 생성"을 안내하는 것이 맞다 — `prohibited`와 달리 이 위반은 재생성으로 해결될 수 있다(repair가 슬롯을 추가하거나, 다음 생성에서 Claude가 2개를 만든다).
+"다시 생성"을 안내하는 것이 맞다 — `prohibited`와 달리 이 위반은 재생성으로 해결될 수 있다(repair가 슬롯을 추가하거나 `faceVisible`을 바꾸거나, 다음 생성에서 Claude가 제대로 만든다).
+
+**code를 두 개로 나누는 이유:** `friendlyViolationWarnings`는 `v.code`로만 메시지를 찾고 `violation.message`를 버린다(그것이 `VIOLATION_CODE_MESSAGES`의 존재 이유다 — validator의 메시지는 repair 프롬프트용이라 사용자 문장이 아니다). 그래서 두 위반이 같은 code를 쓰면 **착용컷을 2장 만든 사용자가 "1개뿐입니다"를 보게 된다.** 사실과 다르고 실제 문제(둘 다 같은 종류)를 설명하지 않는다.
 
 - [ ] **Step 7: 생성 라우트에 `wearing` 플래그를 켠다**
 
@@ -1040,12 +1052,23 @@ Expected: tsc 출력 없음, 테스트 전부 통과
 - [ ] **Step 9: 커밋**
 
 ```bash
-git add "src/app/listing/[id]/detail-maker-pro/page.tsx" src/app/api/ai/generate-pro-layout/route.ts
-git commit -m "feat(wearing): model_wearing 결선 (생성·씬타입·렌더 3곳)
+git add src/lib/detail-page/layout-validator.ts \
+        src/__tests__/lib/detail-page/wearing-coverage.test.ts \
+        "src/app/listing/[id]/detail-maker-pro/page.tsx" \
+        src/app/api/ai/generate-pro-layout/route.ts
+git commit -m "feat(wearing): model_wearing 결선 + 검증을 렌더 판정에 일치시킴
 
-1376행의 렌더용 genSlotIdx가 별개로 존재한다 — 여기를 빠뜨리면
-이미지가 생성·업로드되고도 화면에서 사라진다.
-realBySection은 의도적으로 제외하며 그 이유를 주석으로 남겼다."
+GEN_SLOT_TYPES를 layout-validator에 두고 검증·생성·렌더가 모두 그것만
+보게 했다. 세 곳에 하드코딩돼 있던 것이 '검증 통과, 이미지 없음'의 원인이다.
+
+- wearing_coverage 카운트를 '첫 gen 슬롯이 model_wearing인 섹션'으로.
+  [flux_lifestyle, model_wearing] 배열이면 착용컷이 제품 사진으로
+  대체되는데 이전 카운트는 통과시켰다.
+- faceVisible 쌍 검증 추가. 개수가 맞아도 둘 다 얼굴 컷이면 의미가 없고,
+  faceVisible이 optional이라 생략하면 그렇게 된다.
+- 렌더용 genSlotIdx가 생성 루프와 별개로 존재한다 — 빠뜨리면 이미지가
+  생성·업로드되고도 화면에서 사라진다.
+- realBySection은 의도적으로 제외하며 이유를 주석으로 남겼다."
 ```
 
 ---
