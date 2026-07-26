@@ -1,8 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { validateProLayout, sanitizeProLayout } from '@/lib/detail-page/layout-validator';
 
-/** model_wearing 슬롯 n개를 서로 다른 섹션에 배치한 최소 레이아웃 */
-function withWearing(n: number): Record<string, unknown>[] {
+/**
+ * model_wearing 슬롯 n개를 서로 다른 섹션(0..n-1)에 배치한 최소 레이아웃.
+ * faces[i]가 섹션 i의 faceVisible 값이다 — true/false/undefined(필드 생략)를
+ * 각각 지정할 수 있다. faces를 생략하면 섹션 0은 true, 나머지는 false
+ * (기존 동작과 동일 — 둘 다 boolean이라 "생략" 케이스는 만들지 않는다).
+ */
+function withWearing(n: number, faces?: (boolean | undefined)[]): Record<string, unknown>[] {
   // 6 = section_count 검증의 하한(6~10). 이보다 줄이면 무관한 section_count
   // warning이 섞여 다음 사람이 엉뚱한 경고를 쫓게 된다.
   const secs = Array.from({ length: 6 }, (_, i) => ({
@@ -12,9 +17,12 @@ function withWearing(n: number): Record<string, unknown>[] {
     bgStyle: 'white',
   })) as Record<string, unknown>[];
   for (let i = 0; i < n; i++) {
-    secs[i]!.imageSlots = [
-      { slotType: 'model_wearing', promptHint: '해변 산책', faceVisible: i === 0, modelGender: 'male' },
-    ];
+    const faceVisible = faces ? faces[i] : i === 0;
+    const slot: Record<string, unknown> = { slotType: 'model_wearing', promptHint: '해변 산책', modelGender: 'male' };
+    // undefined면 필드 자체를 만들지 않는다 — "faceVisible 생략"과 "faceVisible: false"는
+    // 서버 기본값(true) 처리 경로가 다르므로 구분해야 한다(I-2).
+    if (faceVisible !== undefined) slot.faceVisible = faceVisible;
+    secs[i]!.imageSlots = [slot];
   }
   return secs;
 }
@@ -98,20 +106,25 @@ describe('wearing_coverage', () => {
   });
 
   it('두 섹션 모두 얼굴 컷이면(faceVisible 생략) wearing_face_pair 위반 — 두 컷이 같은 종류다', () => {
-    const secs = withWearing(0);
     // 둘 다 faceVisible 생략 → 서버 기본값 true로 처리되어 둘 다 얼굴 컷이 된다.
-    secs[0]!.imageSlots = [{ slotType: 'model_wearing', promptHint: '해변 산책', modelGender: 'male' }];
-    secs[1]!.imageSlots = [{ slotType: 'model_wearing', promptHint: '실내 짐', modelGender: 'male' }];
+    const secs = withWearing(2, [undefined, undefined]);
     const res = validateProLayout(secs, { wearing: true });
     expect(res.violations.some(v => v.code === 'wearing_face_pair')).toBe(true);
   });
 
   it('두 섹션 모두 크롭 컷이면(faceVisible: false) wearing_face_pair 위반', () => {
-    const secs = withWearing(0);
-    secs[0]!.imageSlots = [{ slotType: 'model_wearing', promptHint: '해변 산책', faceVisible: false, modelGender: 'male' }];
-    secs[1]!.imageSlots = [{ slotType: 'model_wearing', promptHint: '실내 짐', faceVisible: false, modelGender: 'male' }];
+    const secs = withWearing(2, [false, false]);
     const res = validateProLayout(secs, { wearing: true });
     expect(res.violations.some(v => v.code === 'wearing_face_pair')).toBe(true);
+  });
+
+  it('하나는 명시적 true, 하나는 생략이면 wearing_face_pair 위반 — 둘 다 얼굴 컷이 된다', () => {
+    // === false 대신 falsy 체크(!firstGen.faceVisible)로 뮤테이션해도 살아남는
+    // 케이스: 이 fixture는 "생략"과 "false"를 분리해야만 잡힌다. 두 값이 섞인
+    // 조합이 이전에 없어 그 뮤테이션이 죽지 않았다.
+    const secs = withWearing(2, [true, undefined]);
+    const res = validateProLayout(secs, { wearing: true });
+    expect(res.violations.map(v => v.code)).toContain('wearing_face_pair');
   });
 
   it('개수 위반과 쌍 위반은 서로 다른 code를 쓴다', () => {
@@ -122,10 +135,7 @@ describe('wearing_coverage', () => {
     expect(one.violations.map(v => v.code)).toContain('wearing_coverage');
     expect(one.violations.map(v => v.code)).not.toContain('wearing_face_pair');
 
-    // withWearing(2)는 섹션 1을 faceVisible: false(크롭 컷)로 만드므로,
-    // true로 뒤집어 두 섹션 모두 얼굴 컷(같은 종류)으로 만든다.
-    const bothFace = withWearing(2);
-    (bothFace[1]!.imageSlots as Record<string, unknown>[])[0]!.faceVisible = true;
+    const bothFace = withWearing(2, [true, true]);
     const two = validateProLayout(bothFace, { wearing: true });
     expect(two.violations.map(v => v.code)).toContain('wearing_face_pair');
     expect(two.violations.map(v => v.code)).not.toContain('wearing_coverage');

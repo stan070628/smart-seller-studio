@@ -6,20 +6,12 @@ import type { LayoutBlock } from '@/types/detail-page';
 import { collectOptionCoverage, type OptionSection } from './product-options';
 import { BEATS, checkNarrative, type NarrativeSection } from './narrative';
 import { sanitizeProgressBars } from './progress-hygiene';
-
-/**
- * AI가 씬을 생성하는 슬롯 타입. page.tsx가 섹션당 이 중 첫 번째 하나만
- * 생성하고 렌더하므로(find / findIndex), 검증도 같은 기준을 써야 한다.
- * 두 곳이 어긋나면 "검증 통과, 이미지 없음"이 조용히 발생한다.
- */
-export const GEN_SLOT_TYPES = ['flux_lifestyle', 'detail_closeup', 'model_wearing'] as const;
-export type GenSlotType = (typeof GEN_SLOT_TYPES)[number];
-const GEN_SLOT_SET: ReadonlySet<string> = new Set(GEN_SLOT_TYPES);
-
-/** GEN_SLOT_TYPES 소속 여부 타입가드. 호출부(검증/생성/렌더)가 모두 이것 하나만 본다. */
-export function isGenSlotType(t: unknown): t is GenSlotType {
-  return typeof t === 'string' && GEN_SLOT_SET.has(t);
-}
+// gen-slots.ts는 import 없는 leaf 모듈이다 — 정의를 거기 하나로 두고 여기서는
+// re-export만 한다. page.tsx(클라이언트 컴포넌트)가 이 이름들만 쓰려고 이
+// 파일을 통째로 import하면 아래 zod 스키마(zLayoutBlock 등)가 tree-shake되지
+// 않고 클라이언트 번들에 그대로 들어간다(esbuild 실측 313KB, 그중 310KB가 zod).
+export { GEN_SLOT_TYPES, isGenSlotType, type GenSlotType } from './gen-slots';
+import { isGenSlotType } from './gen-slots';
 
 export interface Violation {
   code:
@@ -442,9 +434,22 @@ export function validateProLayout(sections: unknown, opts?: ProLayoutOpts): Vali
         else sawFaceVisible = true;
       }
     }
+    // wearingSections는 1 또는 >=2 중 하나로만 아래 두 branch에 들어간다 —
+    // 두 code(wearing_coverage/wearing_face_pair)가 같은 레이아웃에서 동시에
+    // 나오지 않는다.
+    if (wearingSections === 1) {
+      violations.push({
+        code: 'wearing_coverage',
+        path: 'sections',
+        message:
+          '인물 착용컷이 1개입니다. 얼굴이 보이는 컷(faceVisible: true)과 얼굴을 뺀 크롭 컷(faceVisible: false)이 각각 필요하므로 2개 이상으로 만드세요.',
+        severity: 'error',
+        autoFixable: false,
+      });
+    }
     // faceVisible 쌍 검증: 개수가 맞아도 두 컷이 모두 같은 종류(둘 다 얼굴 또는
     // 둘 다 크롭)면 의미가 없다. faceVisible은 optional이고 생략 시 true로
-    // 처리되므로, Claude가 두 슬롯 모두 생략하면 개수 검증만으로는 통과한다.
+    // 처리되므로, Claude가 두 슬롯 모두 생략하면 위의 개수 검증만으로는 통과한다.
     // code를 wearing_coverage와 분리한다 — friendlyViolationWarnings(route.ts)가
     // code로만 사용자 문구를 찾고 message는 버리므로, 같은 code를 쓰면 2장을
     // 만든 사용자가 "1개뿐입니다"라는 틀린 원인을 보게 된다.
@@ -454,16 +459,6 @@ export function validateProLayout(sections: unknown, opts?: ProLayoutOpts): Vali
         path: 'sections',
         message:
           '인물 착용컷이 모두 같은 종류입니다. 하나는 faceVisible: true(얼굴 컷), 하나는 false(크롭 컷)로 지정하세요.',
-        severity: 'error',
-        autoFixable: false,
-      });
-    }
-    if (wearingSections === 1) {
-      violations.push({
-        code: 'wearing_coverage',
-        path: 'sections',
-        message:
-          '인물 착용컷이 1개입니다. 얼굴이 보이는 컷(faceVisible: true)과 얼굴을 뺀 크롭 컷(faceVisible: false)이 각각 필요하므로 2개 이상으로 만드세요.',
         severity: 'error',
         autoFixable: false,
       });

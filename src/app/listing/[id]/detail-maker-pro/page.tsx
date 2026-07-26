@@ -9,7 +9,9 @@ import { extractDetailCloseupShots, serializeShotChecklist, countUploaded, resol
 import type { ShotCard, ShootSlot } from '@/types/shot-guide';
 import ImageCleanupModal from '@/components/common/ImageCleanupModal';
 import { deriveOptions, isOptionMode } from '@/lib/detail-page/product-options';
-import { isGenSlotType } from '@/lib/detail-page/layout-validator';
+// gen-slots.ts는 import 없는 leaf 모듈이다 — layout-validator.ts를 대신 import하면
+// 거기 딸린 zod 스키마가 tree-shake되지 않고 클라이언트 번들에 그대로 들어간다.
+import { resolveGenSlot, sceneTypeFor } from '@/lib/detail-page/gen-slots';
 import {
   stripCloseupClaims,
   findReusedImages,
@@ -1260,8 +1262,9 @@ export default function DetailMakerProPage() {
                 .map((r) => (r.status === 'fulfilled' ? r.value : null));
             }
 
-            // Step 2: 생성형 슬롯(flux_lifestyle=라이프스타일, detail_closeup=디테일 접사)
-            // 섹션마다 Gemini 씬 생성. generate-scene-image: 누끼 → 배경 생성 → 합성.
+            // Step 2: 생성형 슬롯(flux_lifestyle=라이프스타일, detail_closeup=디테일 접사,
+            // model_wearing=인물 착용컷) 섹션마다 Gemini 씬 생성.
+            // generate-scene-image: 누끼 → 배경 생성 → 합성(model_wearing은 비합성 경로).
             const geminiUrlMap: Record<number, string> = {};
 
             // 재개 시 productImages(File) 없음 → 저장해둔 productImageUrls로 폴백
@@ -1291,24 +1294,17 @@ export default function DetailMakerProPage() {
             if (effectiveProductUrls.length > 0) {
               if (editBtn) editBtn.textContent = 'AI 이미지 생성 중...';
 
-              // GEN_SLOT_TYPES(layout-validator) 하나만 본다 — wearing_coverage 검증과
-              // 렌더 조립(genSlotIdx)이 모두 같은 목록을 쓰지 않으면 "검증 통과,
-              // 이미지 없음"이 조용히 발생한다.
-              const isGenSlot = (t?: string) => isGenSlotType(t);
-              // 슬롯 타입 → 씬 타입: detail_closeup은 매크로 접사('detail'),
-              // model_wearing은 인물 착용컷('wearing', 비합성 경로), 그 외 라이프스타일.
-              const sceneTypeFor = (t?: string) =>
-                t === 'detail_closeup' ? 'detail'
-                : t === 'model_wearing' ? 'wearing'
-                : 'lifestyle';
+              // resolveGenSlot(gen-slots.ts) 하나만 쓴다 — 이 생성 루프와 아래 렌더
+              // 조립부(genSlotIdx)가 서로 다른 판정을 쓰면 "검증 통과, 이미지 없음"이
+              // 조용히 재발한다.
               const genItems = generatedSections
-                .map((s, i) => ({ s, i }))
-                .filter(({ s, i }) => realBySection[i] === undefined && (s.imageSlots?.some(slot => isGenSlot(slot.slotType)) ?? false));
+                .map((s, i) => ({ s, i, genSlot: resolveGenSlot(s.imageSlots) }))
+                .filter(({ i, genSlot }) => realBySection[i] === undefined && genSlot !== null);
 
               await Promise.allSettled(
-                genItems.map(async ({ s, i }) => {
+                genItems.map(async ({ s, i, genSlot }) => {
                   try {
-                    const slot = s.imageSlots?.find(sl => isGenSlot(sl.slotType));
+                    const slot = genSlot ? s.imageSlots?.[genSlot.index] : undefined;
                     // 옵션 모드에선 다른 옵션 사진이 섞이면 Gemini가 색을 섞는다 →
                     // imageRef가 가리키는 1장만(같은 옵션명이면 최대 2장) 보낸다.
                     const options = deriveOptions(optionNames);
@@ -1331,18 +1327,22 @@ export default function DetailMakerProPage() {
                       refImages = primary ? [primary, ...available].slice(0, 2) : available.slice(0, 2);
                     }
                     if (refImages.length === 0) return;
+                    // sceneTypeFor가 model_wearing만 'wearing'으로 매핑하므로
+                    // sceneType === 'wearing'과 slot?.slotType === 'model_wearing'은
+                    // 같은 사실이다 — 한 번만 계산해 두 판정을 만들지 않는다.
+                    const sceneType = sceneTypeFor(slot?.slotType);
                     const sceneRes = await fetch('/api/ai/generate-scene-image', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
-                        sectionType: sceneTypeFor(slot?.slotType),
+                        sectionType: sceneType,
                         // wearing 전용: 얼굴 노출과 모델 성별. 자연어 sceneHint로는
                         // 서버가 수위를 판정할 수 없어 필드로 보낸다.
                         // 기본값은 route.ts의 Zod가 채우므로 여기서 ??를 쓰지 않는다 —
                         // 두 계층이 각각 기본값을 주면 한쪽만 바뀔 때 경로에 따라
                         // 동작이 갈린다. undefined는 JSON에서 사라지고 Zod가 채운다.
-                        ...(slot?.slotType === 'model_wearing' && {
-                          wearing: { faceVisible: slot.faceVisible, gender: slot.modelGender },
+                        ...(sceneType === 'wearing' && {
+                          wearing: { faceVisible: slot?.faceVisible, gender: slot?.modelGender },
                         }),
                         productImageUrls: refImages,
                         // scenePrompt(직결) 대신 sceneHint로 전달 → Claude 프롬프트 정교화
@@ -1396,9 +1396,10 @@ export default function DetailMakerProPage() {
             const detailSections = generatedSections.map((s, i) => {
               const geminiUrl = geminiUrlMap[i];
               const slots = s.imageSlots ?? [];
-              // 생성 씬을 만든 슬롯 위치에 넣는다. 판정은 GEN_SLOT_TYPES 하나로 —
-              // 이 조건이 wearing_coverage 검증과 어긋나면 "검증 통과, 이미지 없음"이 된다.
-              const genSlotIdx = slots.findIndex(sl => isGenSlotType(sl.slotType));
+              // 생성 씬을 만든 슬롯 위치에 넣는다. 위 생성 루프와 반드시 같은 함수
+              // (resolveGenSlot)를 써야 한다 — 각자 findIndex를 하드코딩하면
+              // "검증 통과, 이미지 없음"이 재발한다.
+              const genSlotIdx = resolveGenSlot(slots)?.index ?? -1;
 
               const attachedImages = slots
                 .map((slot, idx) => {
