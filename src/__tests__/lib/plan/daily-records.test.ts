@@ -58,6 +58,29 @@ describe('loadDailyRecords / saveDailyRecords', () => {
     saveDailyRecords([sameDay]);
     expect(loadDailyRecords()).toEqual([sameDay]);
   });
+
+  it('saveDailyRecords가 PLAN_START 이전 기록을 저장소에 보존한다', () => {
+    const stale = rec(dayOffsetStr(-3), 999, 12);
+    const fresh = rec(dayOffsetStr(0), 5, 1);
+    saveDailyRecords([stale, fresh]);
+
+    // 사용자가 새 기록을 추가하고 저장 — 인자에는 stale이 없다
+    const added = rec(dayOffsetStr(1), 8, 1);
+    saveDailyRecords([added, fresh]);
+
+    const raw = JSON.parse(localStorage.getItem('plan_daily_records') ?? '[]') as DailyRecord[];
+    expect(raw.map((r) => r.date)).toContain(stale.date);
+    expect(raw).toHaveLength(3);
+  });
+
+  it('보존된 이전 기록은 loadDailyRecords 결과에 나타나지 않는다', () => {
+    const stale = rec(dayOffsetStr(-3), 999, 12);
+    const fresh = rec(dayOffsetStr(0), 5, 1);
+    saveDailyRecords([stale, fresh]);
+    saveDailyRecords([fresh]);
+
+    expect(loadDailyRecords()).toEqual([fresh]);
+  });
 });
 
 describe('sumWeekRevenue', () => {
