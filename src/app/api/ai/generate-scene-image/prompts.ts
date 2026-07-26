@@ -110,3 +110,81 @@ export const COMPOSITE_REFINE_PROMPT =
   'redraw any object, and do NOT alter the product in any way. ONLY harmonize: match the lighting and color ' +
   'temperature between the product and the background, correct the contact shadow so the product sits ' +
   'naturally on the surface, and soften the cut-out edges. Output a single continuous photograph, no text.';
+
+// ── 인물 착용컷 (sectionType: 'wearing') ──────────────────────────────
+//
+// 아래 문구는 실물 35장 생성으로 확정한 것이다. 특히 NOT ~ 부정문은
+// "AI가 수렴하는 기본값을 명시적으로 배제"하는 역할이며, 이 파일의 상수들에서
+// 세 번 독립적으로 확인됐다:
+//   MODEL_CONTEXT의 not a Western or Chinese catalog → "Korean"만으로는
+//     범아시아 평균 얼굴로 수렴하는 것을 막음
+//   COLOR_ACCURACY의 NOT golden hour            → 화이트가 살구색이 되는 것을 막음
+//   POSE_STATIC의 NO running, NO jumping        → 동적 포즈에서 손이 뭉개지는 것을 막음
+// ("NOT a tidy product lineup" 류의 다른 부정문은 별도 기능(compare_pair)에서
+// 검증된 것으로 이 파일에는 없다.)
+// 긍정 지시로 대체하면 효과가 사라진다.
+
+/** 모델 세팅. "Korean"만 쓰면 범아시아 평균으로 수렴한다 */
+export const MODEL_KO = {
+  male:
+    'a Korean man in his late twenties with a clean modern Korean haircut — softly layered, ' +
+    'natural black hair, fair even skin tone, slim build',
+  female:
+    'a Korean woman in her late twenties with long straight black hair, natural dewy Korean makeup, ' +
+    'fair even skin tone, slim build',
+} as const;
+
+export const MODEL_CONTEXT =
+  'Styled like a Korean lifestyle magazine editorial shot in Seoul, not a Western or Chinese catalog.';
+
+/**
+ * 얼굴 포함. "editorial photo"/"catalog photograph" 같은 표현은 제품 중심 크롭을
+ * 유도해 역효과였다 — 인물 사진임을 명시해야 얼굴이 나온다.
+ */
+export const FACE_VISIBLE =
+  'A candid lifestyle PORTRAIT — this is a photo OF THE PERSON, not a product shot. ' +
+  'The head and face occupy the upper third of the frame, eyes meeting the camera, ' +
+  'an easy natural smile. Waist-up composition.';
+
+/** 얼굴 제외. 팔이 어깨 아래일 때만 안정적이다 (POSE_STATIC과 함께 써야 한다) */
+export const FACE_CROPPED =
+  'FRAMING IS CRITICAL: the frame starts at the collarbone and ends at the hips — ' +
+  'the head and face are COMPLETELY OUTSIDE the frame, not visible at all.';
+
+/** 제품 색 보존. 골든아워에서 화이트 민소매가 살구색으로 렌더된 것을 막는다 */
+export const COLOR_ACCURACY =
+  'COLOR ACCURACY IS CRITICAL: neutral daylight with accurate white balance. ' +
+  "The garment's color must match the reference image exactly — a white garment renders as pure white. " +
+  'NOT golden hour, NOT sunset, NOT warm color cast.';
+
+/**
+ * 포즈 제약. 동적 포즈는 손을 뭉개고(프레임 배제 지시도 통하지 않았다)
+ * 팔을 들면 프레임 기준이 밀려 크롭이 깨진다.
+ */
+export const POSE_STATIC =
+  'POSE CONSTRAINTS: both arms stay BELOW shoulder height — never raised, never overhead. ' +
+  'Hands hang naturally relaxed with open fingers or rest in pockets — never clenched into fists. ' +
+  'The person stands, leans or walks slowly — NO running, NO jumping, NO mid-action motion.';
+
+export interface WearingOpts {
+  faceVisible: boolean;
+  gender?: 'male' | 'female';
+}
+
+/**
+ * 인물 착용컷 지시를 조립한다. finalScenePrompt 뒤에 붙인다.
+ *
+ * PRODUCT_FIDELITY_INSTRUCTION은 넣지 않는다 — wearing은 COMPOSITE_SECTIONS에
+ * 없어 claudePrompt 경로를 타고, SCENE_PROMPT_SYSTEM이 그 프롬프트를 이미
+ * 그 지시로 끝내게 만든다. 여기서 또 붙이면 중복된다.
+ * (그 지시의 POSITIVE SUBJECT·NO SPARKLE MARKS 조항이 인물 씬에도 적용된다.)
+ */
+export function buildWearingInstruction({ faceVisible, gender = 'male' }: WearingOpts): string {
+  return [
+    `The person is ${MODEL_KO[gender]}.`,
+    MODEL_CONTEXT,
+    faceVisible ? FACE_VISIBLE : FACE_CROPPED,
+    POSE_STATIC,
+    COLOR_ACCURACY,
+  ].join(' ');
+}
