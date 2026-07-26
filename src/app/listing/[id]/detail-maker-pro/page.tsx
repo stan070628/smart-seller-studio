@@ -5,7 +5,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import type { AnalyzedSection } from '@/app/api/ai/analyze-detail-page/route';
 import type { LayoutBlock } from '@/types/detail-page';
 import { normalizeImageBlocks } from '@/lib/detail-page/layout-image-blocks';
-import { extractDetailCloseupShots, serializeShotChecklist, countUploaded } from '@/lib/detail-page/shot-guide';
+import { extractDetailCloseupShots, serializeShotChecklist, countUploaded, resolveSlotUrl } from '@/lib/detail-page/shot-guide';
 import type { ShotCard, ShootSlot } from '@/types/shot-guide';
 import ImageCleanupModal from '@/components/common/ImageCleanupModal';
 import { deriveOptions, isOptionMode } from '@/lib/detail-page/product-options';
@@ -1187,12 +1187,13 @@ export default function DetailMakerProPage() {
             // 실사진 override: 업로드된 detail_closeup이 그 섹션의 targeting gen 슬롯(genSlotIdx)일 때만
             const realBySection: Record<number, string> = {};
             for (const sl of slots) {
-              if (!sl.uploadedUrl) continue;
+              const u = resolveSlotUrl(sl);
+              if (!u) continue;
               const sec = generatedSections[sl.sectionIndex];
               const genSlotIdx = (sec?.imageSlots ?? []).findIndex(
                 x => x.slotType === 'flux_lifestyle' || x.slotType === 'detail_closeup',
               );
-              if (genSlotIdx === sl.slotIndex) realBySection[sl.sectionIndex] = sl.uploadedUrl;
+              if (genSlotIdx === sl.slotIndex) realBySection[sl.sectionIndex] = u;
             }
             Object.assign(geminiUrlMap, realBySection);
 
