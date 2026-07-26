@@ -77,6 +77,8 @@ export default function DetailMakerProPage() {
   const [productImageUrls, setProductImageUrls] = useState<string[]>([]);
   const [shotGuideLoading, setShotGuideLoading] = useState(false);
   const [draftId, setDraftId] = useState<string | null>(null);
+  const [retouchPreview, setRetouchPreview] = useState<{ index: number; url: string } | null>(null);
+  const [retouchLoading, setRetouchLoading] = useState<number | null>(null);
   const searchParams = useSearchParams();
 
   const [refPreviews, setRefPreviews] = useState<string[]>([]);
@@ -389,6 +391,29 @@ export default function DetailMakerProPage() {
     if (!j.success || !j.data?.url) { alert(j.error || '업로드 실패 (jpg/png/webp 형식으로 다시 시도하세요).'); return; }
     const url = j.data.url;
     setSlots(prev => prev.map((s, i) => i === index ? { ...s, uploadedUrl: url } : s));
+  }
+
+  async function handleRetouch(index: number) {
+    const src = slots[index]?.uploadedUrl;
+    if (!src) return;
+    setRetouchLoading(index);
+    try {
+      const r = await fetch('/api/ai/retouch-photo', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl: src }),
+      });
+      const j = await r.json() as { success: boolean; url?: string; error?: string };
+      if (!j.success || !j.url) { alert(j.error || '보정 실패'); return; }
+      setRetouchPreview({ index, url: j.url });
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '보정 실패');
+    } finally {
+      setRetouchLoading(null);
+    }
+  }
+  function applyRetouch(index: number, url: string) {
+    setSlots(prev => prev.map((s, i) => i === index ? { ...s, retouchedUrl: url } : s));
+    setRetouchPreview(null);
   }
 
   function copyShotChecklist() {
@@ -990,8 +1015,9 @@ export default function DetailMakerProPage() {
                 {slots[i]?.uploadedUrl ? (
                   <>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={slots[i]!.uploadedUrl!} alt="" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 6, border: '1px solid #374151' }} />
+                    <img src={slots[i]!.retouchedUrl ?? slots[i]!.uploadedUrl!} alt="" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 6, border: '1px solid #374151' }} />
                     <span style={{ fontSize: 12, color: '#4ade80' }}>완료</span>
+                    {slots[i]?.retouchedUrl ? <span style={{ fontSize: 12, color: '#60a5fa' }}>보정됨</span> : null}
                   </>
                 ) : null}
                 <label style={{ fontSize: 12, color: '#e2e8f0', border: '1px solid #374151', borderRadius: 6, padding: '4px 8px', cursor: 'pointer' }}>
@@ -999,7 +1025,31 @@ export default function DetailMakerProPage() {
                   <input type="file" accept="image/*" style={{ display: 'none' }}
                     onChange={(e) => { const f = e.target.files?.[0]; if (f) handleSlotUpload(i, f); e.currentTarget.value = ''; }} />
                 </label>
+                {slots[i]?.uploadedUrl && (
+                  <button type="button" onClick={() => handleRetouch(i)} disabled={retouchLoading === i}
+                    style={{ fontSize: 12, color: '#e2e8f0', border: '1px solid #374151', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', background: 'transparent' }}>
+                    {retouchLoading === i ? '보정 중…' : (slots[i]?.retouchedUrl ? '다시 보정' : 'AI 보정')}
+                  </button>
+                )}
               </div>
+              {retouchPreview?.index === i && (
+                <div style={{ marginTop: 8, padding: 8, border: '1px solid #374151', borderRadius: 6 }}>
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end' }}>
+                    <div><div style={{ fontSize: 11, color: '#a0a0b0' }}>원본</div>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={slots[i]!.uploadedUrl!} alt="" style={{ width: 96, height: 96, objectFit: 'cover', borderRadius: 6 }} /></div>
+                    <div><div style={{ fontSize: 11, color: '#60a5fa' }}>보정본</div>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={retouchPreview.url} alt="" style={{ width: 96, height: 96, objectFit: 'cover', borderRadius: 6 }} /></div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <button type="button" onClick={() => applyRetouch(i, retouchPreview.url)}
+                      style={{ fontSize: 12, color: '#fff', background: '#2563eb', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}>적용</button>
+                    <button type="button" onClick={() => setRetouchPreview(null)}
+                      style={{ fontSize: 12, color: '#e2e8f0', border: '1px solid #374151', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', background: 'transparent' }}>원본 유지</button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>
