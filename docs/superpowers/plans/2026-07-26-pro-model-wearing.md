@@ -1291,7 +1291,8 @@ git commit -m "feat(wearing): 제품컷 병치 + AI 고지 + 폴백 시 착용�
 | `model_wearing` 슬롯 개수 | 2개 이상 (또는 0개) |
 | `faceVisible` 분포 | `true` 1개 이상 + `false` 1개 이상 |
 | beat 배정 | `hook`·`solution`·`usecase`에 얼굴, `detail`·`evidence`에 크롭 |
-| **렌더 반영** | 생성된 착용컷이 실제로 페이지에 보이는가 (Task 6 Step 5 검증) |
+| **렌더 반영** | 생성된 착용컷이 실제로 페이지에 보이는가 — `genSlotIdx` 결선을 검증하는 **유일한** 수단 |
+| **착용컷 생성 여부** | 착용컷이 아예 생성됐는가 — 생성 루프의 슬롯 선택을 검증하는 유일한 수단 |
 | **얼굴 컷 구도** | 인물 상반신 구도인가, 아니면 제품 중심 크롭으로 밀렸는가 — 아래 설명 참조 |
 | 생성된 인물 | 한국인으로 보이는가. 중국·서양 카탈로그 느낌이 아닌가 |
 | 제품 색 | 화이트가 화이트로 나오는가 (살구색·핑크 아님) |
@@ -1336,6 +1337,11 @@ git commit -m "feat(wearing): 제품컷 병치 + AI 고지 + 폴백 시 착용�
 - **비의류 카테고리** — 화장품 "손에 든 튜브" 같은 형태는 미검증
 - **마켓플레이스 AI 인물 정책** — 미확인. 연출 고지로 완화하되 정책 확인은 별건
 - **`buildNoProductSuffix` 테스트** — Task 1에서 module-private에서 export로 바뀌며 테스트 가능해졌다(그전에는 핸들러 전체를 호출해야 했다). `productName?.trim()` 항등 절과 `SECTION_BG_HINTS[sectionType] ?? ''` 폴백에 분기가 있어 고정할 가치가 있으나, 이 계획의 범위가 아니다
+- **`page.tsx` 호출부의 회귀 방어 공백** — Task 6에서 순수 판정을 `gen-slots.ts`로 추출해 단위 테스트했지만, 뮤테이션 실험 결과 **호출부 세 곳은 여전히 잡히지 않는다**: 렌더 조립의 `genSlotIdx`, 생성 루프의 슬롯 선택, 요청 바디의 `wearing` 필드. 되돌려도 519 테스트가 전부 통과하고 `src/` 타입 오류도 0이다. `sceneTypeFor`의 **정의**만 보호된다(정의를 바꾸면 `gen-slots.test.ts` 2개가 실패).
+
+  원인은 `page.tsx`가 1500줄 넘는 클라이언트 컴포넌트이고 직접 테스트가 없다는 것이다. 닫으려면 컴포넌트 테스트나 요청 바디 조립을 순수 함수로 한 번 더 추출해야 하는데, 그 함수는 인자가 많고 `page.tsx` 컨텍스트에 얽혀 비용이 크다.
+
+  **현재는 Task 8 실물 검증이 세 지점을 모두 커버한다** — `genSlotIdx`가 틀리면 이미지가 화면에 없고, 생성 루프가 틀리면 착용컷이 생성되지 않고, 요청 바디가 틀리면 두 컷이 모두 얼굴 컷이 된다. Task 8 확인 항목이 그 셋을 각각 본다. 자동화가 필요해지면(예: 회귀가 실제로 발생하면) 그때 추출 비용을 지불하는 것이 맞다.
 - **저장된 프롬프트 재사용 시 이중 부착** — `AssetsTab.tsx`와 `useListingStore.ts`가 `sceneData.data.prompt`를 슬롯에 저장한다. 지금은 그것을 `scenePrompt`로 되돌려 보내는 코드가 없어 무해하지만, "저장된 프롬프트로 재생성" 기능이 생기면 `wearing` 슬롯은 인물 블록이 두 번 들어간다. 그 기능을 만드는 티켓에서 다룰 것
 - **`buildSceneUserPrompt`의 `sectionType: string`** — 오타 난 섹션 타입이 조용히 Claude로 흘러간다. `route.ts`의 enum union으로 좁히면 Task 3 Step 7의 판단이 컴파일 오류로 드러났을 것이다
 - **`SECTION_BG_HINTS`의 타입 좁히기** — 현재 `Record<string, string>`이라 아무 키나 받고 미스는 `?? ''`로 조용히 넘어간다. `tsconfig`의 `noUncheckedIndexedAccess`가 꺼져 있어 타입 검사도 못 잡는다. `wearing`이 안전한 이유는 `COMPOSITE_SECTIONS`에 없어 `buildNoProductSuffix`에 도달하지 않기 때문이며, 타입으로 강제된 것이 아니다
