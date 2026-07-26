@@ -137,6 +137,112 @@ describe('renderSection — claude_layout', () => {
     expect(html).not.toContain('<img');
   });
 
+  it('option_grid — 이미지가 카드 수보다 적으면 카드 이미지를 하나도 렌더하지 않는다', () => {
+    // 사이즈 안내 씬 회귀: 이미지 1장 + 카드 4개일 때 0번 카드에만 이미지가 박혀
+    // 그리드가 비대칭이 되던 버그. 전부 아니면 전무여야 한다.
+    const section = makeSection(
+      {
+        type: 'claude_layout',
+        title: 'M · L · XL · XXL',
+        blocks: [
+          {
+            type: 'option_grid',
+            items: [{ label: 'M' }, { label: 'L' }, { label: 'XL' }, { label: 'XXL' }],
+          },
+        ],
+      },
+      ['https://cdn.example.com/only-one.jpg'],
+    );
+    const html = renderSection(section, DEFAULT_THEME);
+    expect(html).not.toContain('only-one.jpg');
+    expect(html).not.toContain('<img');
+  });
+
+  it('option_grid — 카드 텍스트는 어절 단위로 줄바꿈된다(word-break:keep-all)', () => {
+    const section = makeSection({
+      type: 'claude_layout',
+      title: '사이즈',
+      blocks: [
+        {
+          type: 'option_grid',
+          items: [{ label: 'XXL', sublabel: '평소 35~36인치 또는 넉넉한 착용을 원할 때' }],
+        },
+      ],
+    });
+    const html = renderSection(section, DEFAULT_THEME);
+    // label(14px)·sublabel(12px) 양쪽 모두에 적용되어야 한다
+    expect(html).toContain('line-height:1.3;word-break:keep-all;');
+    expect(html).toContain('margin-top:4px;line-height:1.4;word-break:keep-all;');
+  });
+
+  it('option_grid — 행이 나뉘어도 카드 높이가 통일된다(grid-auto-rows:1fr)', () => {
+    const section = makeSection({
+      type: 'claude_layout',
+      title: '사이즈',
+      blocks: [
+        {
+          type: 'option_grid',
+          cols: 2,
+          items: [{ label: 'M' }, { label: 'L' }, { label: 'XL' }, { label: 'XXL' }],
+        },
+      ],
+    });
+    const html = renderSection(section, DEFAULT_THEME);
+    expect(html).toContain('grid-auto-rows:1fr');
+  });
+
+  it('heading·subtext의 개행이 줄바꿈으로 렌더된다', () => {
+    const section = makeSection({
+      type: 'claude_layout',
+      title: '개행',
+      blocks: [
+        { type: 'heading', text: '시원하지만 차갑지 않은\n반려동물 쿨매트', size: 'xl' },
+        { type: 'subtext', text: '첫 줄\n둘째 줄', align: 'left' },
+      ],
+    });
+    const html = renderSection(section, DEFAULT_THEME);
+    // 개행 문자는 그대로 두고 CSS로 렌더한다(에디터가 원본 텍스트를 편집하므로 <br> 치환 불가)
+    expect(html.match(/white-space:pre-line/g)).toHaveLength(2);
+    expect(html).toContain('시원하지만 차갑지 않은\n반려동물 쿨매트');
+  });
+
+  it('개행이 있는 heading은 가장 긴 줄 기준으로 xl을 유지한다', () => {
+    const section = makeSection({
+      type: 'claude_layout',
+      title: '개행 헤딩',
+      // 전체 23자지만 각 줄은 12자·8자 — 2줄 임팩트 헤드라인 의도다
+      blocks: [{ type: 'heading', text: '시원하지만 차갑지 않은\n반려동물 쿨매트', size: 'xl' }],
+    });
+    const html = renderSection(section, DEFAULT_THEME);
+    expect(html).toContain('font-size:38px');
+  });
+
+  it('한 줄이 16자를 넘는 heading은 여전히 lg로 강등된다', () => {
+    const section = makeSection({
+      type: 'claude_layout',
+      title: '문장형 헤딩',
+      blocks: [{ type: 'heading', text: '한 줄에 너무 긴 문장형 헤드라인이 들어간 경우입니다', size: 'xl' }],
+    });
+    const html = renderSection(section, DEFAULT_THEME);
+    expect(html).toContain('font-size:26px');
+  });
+
+  it('option_grid 카드 텍스트의 개행도 줄바꿈으로 렌더된다', () => {
+    const section = makeSection({
+      type: 'claude_layout',
+      title: '사이즈',
+      blocks: [
+        {
+          type: 'option_grid',
+          items: [{ label: 'M', sublabel: '허리 34cm · 총장 47cm\n평소 28~30인치' }],
+        },
+      ],
+    });
+    const html = renderSection(section, DEFAULT_THEME);
+    expect(html).toContain('허리 34cm · 총장 47cm\n평소 28~30인치');
+    expect(html.match(/white-space:pre-line/g)).toHaveLength(2); // label + sublabel
+  });
+
   it('heading xl은 38px 크기로 렌더링된다', () => {
     const section = makeSection({
       type: 'claude_layout',

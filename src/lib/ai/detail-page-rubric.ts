@@ -17,6 +17,8 @@ export const BLOCK_TYPE_RUBRIC = `BLOCK TYPE SELECTION RULES:
 - 단순 특징 나열 → bullet_list 또는 icon_grid (차트로 만들지 말 것)
 
 TEXT RULES:
+- option_grid 섹션의 heading에 옵션 라벨을 나열하지 말 것("M · L · XL · XXL", "화이트 / 블랙"). 카드가 이미 보여주는 정보라 헤드라인이 비는 것과 같다. 선택 기준이나 이득으로 다시 쓸 것.
+- 개행(\\n)은 heading·subtext·option_grid label/sublabel에서 줄바꿈으로 렌더된다. 어절·구 단위로만 끊을 것.
 - 모든 텍스트(제목/라벨/서브라벨/stat 값/promptHint/badge 등)는 한글 또는 영어만 사용.
 - 한자(漢字) 절대 금지. 한자가 필요하면 한글 음차로 재작성 (適當→적당, 溫度→온도, 品質→품질).
 - 390px 모바일 폭 최적화 — 넓은 가로 레이아웃/표 지양, 세로·wrap 레이아웃 사용.`;

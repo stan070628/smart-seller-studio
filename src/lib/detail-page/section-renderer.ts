@@ -32,6 +32,7 @@ import type { PaletteColors } from '@/lib/detail-page/palette-config';
 import { PALETTES } from '@/lib/detail-page/palette-config';
 import { editableMarkupText } from '@/lib/detail-page/inline-markup';
 import { YOUTUBE_ID_RE } from '@/lib/detail-page/youtube';
+import { isOptionGridCarrier } from '@/lib/detail-page/layout-image-blocks';
 
 // ─────────────────────────────────────────
 // 보안 헬퍼
@@ -727,7 +728,9 @@ function renderLayoutBlock(
     case 'heading': {
       // xl(38px)은 짧은 임팩트 헤드라인 전용. 문장형(16자 초과)이 xl이면 lg로 자동
       // 강등해 거대 폰트가 어색하게 줄바꿈되는 것을 막는다.
-      const textLen = (block.text ?? '').length;
+      // 개행은 렌더되므로(white-space:pre-line) 전체 길이가 아니라 가장 긴 줄로 잰다
+      // — "시원하지만 차갑지 않은\n반려동물 쿨매트"는 23자지만 의도된 2줄 헤드라인이다.
+      const textLen = Math.max(...(block.text ?? '').split('\n').map((line) => line.length));
       const effSize = block.size === 'xl' && textLen > 16 ? 'lg' : block.size;
       const sz = effSize === 'xl' ? '38px' : effSize === 'lg' ? '26px' : '19px';
       const fw = block.bold !== false ? '800' : '600';
@@ -738,11 +741,13 @@ function renderLayoutBlock(
           ? (isDark ? '#ffffff' : colors.accent)
           : colors.text;
       // word-break:keep-all → 한국어 단어 중간 절단("의 여유") 방지.
-      return `<div style="font-size:${sz};font-weight:${fw};color:${color};line-height:1.25;letter-spacing:-0.5px;margin-bottom:10px;word-break:keep-all;overflow-wrap:break-word;">${editableText(`${basePath}.text`, block.text)}</div>`;
+      // white-space:pre-line → 원본 텍스트의 개행을 살린다. <br> 치환이 아니라 CSS인
+      // 이유는 인라인 편집(data-edit-path)이 이 노드의 텍스트를 그대로 읽고 쓰기 때문이다.
+      return `<div style="font-size:${sz};font-weight:${fw};color:${color};line-height:1.25;letter-spacing:-0.5px;margin-bottom:10px;word-break:keep-all;overflow-wrap:break-word;white-space:pre-line;">${editableText(`${basePath}.text`, block.text)}</div>`;
     }
     case 'subtext': {
       const align = block.align === 'center' ? 'center' : 'left';
-      return `<div style="font-size:15px;color:${colors.textSub};line-height:1.65;text-align:${align};margin-bottom:10px;word-break:keep-all;overflow-wrap:break-word;">${editableText(`${basePath}.text`, block.text)}</div>`;
+      return `<div style="font-size:15px;color:${colors.textSub};line-height:1.65;text-align:${align};margin-bottom:10px;word-break:keep-all;overflow-wrap:break-word;white-space:pre-line;">${editableText(`${basePath}.text`, block.text)}</div>`;
     }
     case 'image': {
       const img = images[block.attachedIndex];
@@ -890,7 +895,10 @@ function renderLayoutBlock(
       // 사이즈·색상·용량 등 순서 없는 병렬 선택 옵션 — 화살표 없이 카드 그리드로 나열.
       // 컬러/구성처럼 옵션마다 대응 이미지가 있으면 카드 상단에 각각 표시한다
       // (attachedImages를 카드 인덱스로 매핑). 사이즈 등 이미지 없는 옵션은 텍스트만.
+      // 이미지 수가 카드 수와 정확히 같을 때만 카드 이미지를 그린다 — 부분 채움은
+      // 앞쪽 카드에만 이미지가 박혀 그리드를 비대칭으로 만든다(isOptionGridCarrier).
       const isDark = colors.text === '#ffffff';
+      const isCarrier = isOptionGridCarrier(block, images.length);
       const cols = block.cols ?? (block.items.length >= 3 ? 3 : 2);
       const items = block.items.map((item, i) => {
         const boxBg = item.highlight
@@ -902,18 +910,23 @@ function renderLayoutBlock(
         const textColor = item.highlight
           ? (isDark ? '#ffffff' : colors.accent)
           : colors.text;
-        const cardImg = images[i];
+        const cardImg = isCarrier ? images[i] : undefined;
         const cardImgUrl = cardImg?.url ? sanitizeUrl(cardImg.url) : '';
         const cardImgHtml = cardImgUrl
           ? `<div style="margin-bottom:8px;"><img src="${escapeHtml(cardImgUrl)}" alt="" style="width:100%;max-width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:8px;display:block;" /></div>`
           : '';
         const pad = cardImgUrl ? '8px' : '14px 8px';
-        return `<div style="background:${boxBg};border:1.5px solid ${boxBorder};border-radius:12px;padding:${pad};text-align:center;">
-          ${cardImgHtml}<div style="font-size:14px;font-weight:800;color:${textColor};line-height:1.3;">${editableText(`${basePath}.items.${i}.label`, item.label)}</div>
-          ${item.sublabel ? `<div style="font-size:12px;color:${colors.textSub};margin-top:4px;line-height:1.4;">${editableText(`${basePath}.items.${i}.sublabel`, item.sublabel)}</div>` : ''}
+        // 텍스트 전용 카드는 세로 중앙에 놓는다. grid-auto-rows로 카드 높이가
+        // 행마다 통일되므로, 그냥 두면 라벨이 카드 위쪽에 붙어 어긋나 보인다.
+        const justify = cardImgUrl ? 'flex-start' : 'center';
+        return `<div style="display:flex;flex-direction:column;justify-content:${justify};background:${boxBg};border:1.5px solid ${boxBorder};border-radius:12px;padding:${pad};text-align:center;box-sizing:border-box;">
+          ${cardImgHtml}<div style="font-size:14px;font-weight:800;color:${textColor};line-height:1.3;word-break:keep-all;white-space:pre-line;">${editableText(`${basePath}.items.${i}.label`, item.label)}</div>
+          ${item.sublabel ? `<div style="font-size:12px;color:${colors.textSub};margin-top:4px;line-height:1.4;word-break:keep-all;white-space:pre-line;">${editableText(`${basePath}.items.${i}.sublabel`, item.sublabel)}</div>` : ''}
         </div>`;
       }).join('');
-      return `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:8px;margin-bottom:16px;">${items}</div>`;
+      // grid-auto-rows:1fr — align-items 기본값(stretch)은 같은 행 안에서만 높이를
+      // 맞추므로, 2×2처럼 행이 나뉘면 행끼리 높이가 달라진다.
+      return `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);grid-auto-rows:1fr;gap:8px;margin-bottom:16px;">${items}</div>`;
     }
     case 'layout_bar_chart': {
       const svg = buildBarChartSvg(block);

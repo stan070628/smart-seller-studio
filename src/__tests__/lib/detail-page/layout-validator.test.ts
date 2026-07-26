@@ -392,3 +392,44 @@ describe('validateProLayout — 옵션 커버리지', () => {
     expect(v?.severity).toBe('warning');
   });
 });
+
+describe('validateProLayout — option_grid 이미지 정합성', () => {
+  /** option_grid 섹션 하나만 있는 최소 입력. 섹션 수 경고는 무시하고 option_image만 본다. */
+  function gridSection(itemCount: number, slotCount: number, withImageBlock = false): unknown {
+    const blocks: unknown[] = [
+      { type: 'option_grid', items: Array.from({ length: itemCount }, (_, i) => ({ label: `S${i}` })) },
+    ];
+    if (withImageBlock) blocks.unshift({ type: 'image', attachedIndex: 0 });
+    return {
+      type: 'claude_layout',
+      title: '옵션',
+      blocks,
+      imageSlots: Array.from({ length: slotCount }, (_, i) => ({ slotType: 'product_nukki', imageRef: i })),
+    };
+  }
+
+  function optionImageViolations(sec: unknown) {
+    return validateProLayout([sec]).violations.filter((v) => v.code === 'option_image');
+  }
+
+  it('슬롯 수와 카드 수가 다르면 카드 이미지가 표시되지 않으므로 warning', () => {
+    const v = optionImageViolations(gridSection(4, 1));
+    expect(v).toHaveLength(1);
+    expect(v[0].severity).toBe('warning');
+  });
+
+  it('슬롯이 없는 텍스트 전용 option_grid는 정상이다', () => {
+    expect(optionImageViolations(gridSection(4, 0))).toHaveLength(0);
+  });
+
+  it('슬롯 수와 카드 수가 같으면 정상이다', () => {
+    expect(optionImageViolations(gridSection(2, 2))).toHaveLength(0);
+  });
+
+  it('카드가 이미지를 그리는데 대형 image 블록도 있으면 중복이므로 warning', () => {
+    const v = optionImageViolations(gridSection(2, 2, true));
+    expect(v).toHaveLength(1);
+    expect(v[0].severity).toBe('warning');
+    expect(v[0].autoFixable).toBe(true);
+  });
+});

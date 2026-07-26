@@ -11,7 +11,7 @@ export interface Violation {
   code:
     | 'schema' | 'cjk' | 'broken_text' | 'empty_block'
     | 'duplicate' | 'section_count' | 'prohibited'
-    | 'option_compare' | 'option_coverage' | 'narrative';
+    | 'option_compare' | 'option_coverage' | 'option_image' | 'narrative';
   path: string;
   message: string;
   severity: 'error' | 'warning';
@@ -204,6 +204,47 @@ function sanitizeStatRows(sec: unknown): unknown {
   return s;
 }
 
+/**
+ * option_grid 카드 수와 섹션 이미지 슬롯 수의 정합성을 본다.
+ *
+ * 렌더러는 슬롯 수와 카드 수가 정확히 같을 때만 카드에 이미지를 그린다
+ * (isOptionGridCarrier). 그래서 어긋나면 이미지가 통째로 사라지고, 반대로
+ * 맞아떨어지는데 대형 image 블록까지 있으면 같은 이미지가 두 번 보인다.
+ * 둘 다 렌더는 깨지지 않고 sanitize가 흡수하므로 warning이다.
+ */
+function checkOptionGridImages(sec: unknown, base: string): Violation[] {
+  const s = sec as { blocks?: unknown; imageSlots?: unknown };
+  if (!Array.isArray(s.blocks)) return [];
+  const grid = s.blocks.find(
+    (b): b is { type: 'option_grid'; items: unknown[] } =>
+      !!b && typeof b === 'object' && (b as { type?: unknown }).type === 'option_grid'
+      && Array.isArray((b as { items?: unknown }).items),
+  );
+  if (!grid) return [];
+
+  const slotCount = Array.isArray(s.imageSlots) ? s.imageSlots.length : 0;
+  if (slotCount === 0) return []; // 텍스트 전용 옵션 카드 — 정상
+
+  if (slotCount !== grid.items.length) {
+    return [{
+      code: 'option_image', path: `${base}.imageSlots`,
+      message: `option_grid 카드 ${grid.items.length}개와 이미지 슬롯 ${slotCount}개가 달라 카드 이미지를 표시하지 않습니다.`,
+      severity: 'warning', autoFixable: true,
+    }];
+  }
+
+  let hasImage = false;
+  forEachBlock(sec, (block) => { if (block.type === 'image') hasImage = true; });
+  if (hasImage) {
+    return [{
+      code: 'option_image', path: `${base}.blocks`,
+      message: '카드가 이미지를 표시하는 option_grid 섹션에 대형 image 블록이 있어 이미지가 중복됩니다.',
+      severity: 'warning', autoFixable: true,
+    }];
+  }
+  return [];
+}
+
 /** 텍스트/항목이 비어 렌더링이 무의미한 블록인지 */
 export function isEmptyBlock(block: Record<string, unknown>): boolean {
   const t = block.type;
@@ -270,6 +311,9 @@ export function validateProLayout(sections: unknown, opts?: ProLayoutOpts): Vali
     forEachBlock(sec, (block, bpath) => {
       if (isEmptyBlock(block)) violations.push({ code: 'empty_block', path: `${base}.${bpath}`, message: `빈 블록(${String(block.type)})`, severity: 'warning', autoFixable: true });
     });
+
+    // option_grid ↔ 이미지 슬롯 정합성
+    violations.push(...checkOptionGridImages(sec, base));
   });
 
   // ── 옵션 커버리지 (고유 옵션이 2개 이상일 때만) ──
