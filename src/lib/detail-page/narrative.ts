@@ -162,7 +162,10 @@ function forEachValueUnitPair(node: unknown, cb: (pair: string) => void): void {
 function collectSectionText(blocks: unknown): string {
   const parts: string[] = [];
   forEachString(blocks, (s) => {
-    parts.push(s.replace(/https?:\/\/\S+/g, ' '));
+    // URL 치환자도 공백이면 leaf 내부에서 숫자+다음 음절이 붙어버린다
+    // (예: "옵션 3 https://... 배기 성능" → "옵션 3   배기 성능" → "3 배" 오탐).
+    // join 구분자와 동일하게 ' | '를 써서 leaf 분리 효과를 유지한다.
+    parts.push(s.replace(/https?:\/\/\S+/g, ' | '));
   });
   forEachValueUnitPair(blocks, (pair) => parts.push(pair));
   return parts.join(' | ');

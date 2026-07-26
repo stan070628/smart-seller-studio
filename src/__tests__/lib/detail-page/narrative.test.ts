@@ -312,6 +312,17 @@ describe('compare 섹션의 금지 표현', () => {
     expect(issues.some(i => i.rule === 'compare_claim')).toBe(false);
   });
 
+  it('한 leaf 안에서 URL을 공백으로 치환하면 앞뒤 숫자·음절이 붙어 배수로 오탐한다 (회귀 방지)', () => {
+    // 실측 오탐: "옵션 3 https://cdn.example.com/a.jpg 배기 성능"을 URL→공백 치환하면
+    // "옵션 3   배기 성능"이 되어 "3 배"가 배수 정규식에 걸린다. URL 치환자를
+    // 구분자와 동일한 ' | '로 바꾸면 "옵션 3  |  배기 성능"이 되어 걸리지 않는다.
+    const section = sec('compare', [
+      { type: 'subtext', text: '옵션 3 https://cdn.example.com/a.jpg 배기 성능' },
+    ]);
+    const issues = checkNarrative([sec('hook'), section, sec('assure')]);
+    expect(issues.some(i => i.rule === 'compare_claim')).toBe(false);
+  });
+
   it('stat_row처럼 value/unit이 별개 필드여도 "1위" 붙인 형태로 순위를 검출한다', () => {
     // " | " 구분자가 leaf 경계 오탐(위 두 테스트)을 막는 대가로 stat_row의
     // { value:'1', unit:'위' }를 "1"과 "위"로 갈라놓아 "판매 1위" 같은 실증 책임이

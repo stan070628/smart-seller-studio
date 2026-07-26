@@ -63,6 +63,36 @@ const RequestSchema = z.object({
     .default([]),
 });
 
+/**
+ * sections 안 모든 progress_bar 블록의 items 개수 합계.
+ * columns.cols 안에 중첩된 progress_bar도 세야 하므로 재귀한다.
+ * sanitizeProLayout 전후로 이 값을 비교해 위생 삭제 개수를 사용자에게 알린다
+ * (layout-validator.ts/progress-hygiene.ts는 삭제 개수를 반환하지 않으므로
+ * route.ts에서 별도로 세는 것이 최소 변경이다).
+ */
+function countProgressBarItems(sections: unknown[]): number {
+  let total = 0;
+  const walkBlocks = (blocks: unknown): void => {
+    if (!Array.isArray(blocks)) return;
+    for (const b of blocks) {
+      if (!b || typeof b !== 'object') continue;
+      const block = b as Record<string, unknown>;
+      if (block.type === 'progress_bar' && Array.isArray(block.items)) {
+        total += block.items.length;
+      }
+      if (Array.isArray(block.cols)) {
+        for (const col of block.cols) walkBlocks(col);
+      }
+    }
+  };
+  for (const sec of sections) {
+    if (sec && typeof sec === 'object') {
+      walkBlocks((sec as { blocks?: unknown }).blocks);
+    }
+  }
+  return total;
+}
+
 /** 첫 번째 완전한 JSON 배열을 추출 (코드펜스 무관) */
 function extractJsonArray(text: string): string | null {
   // 코드펜스 안에 있어도 첫 [ 부터 매칭하면 충분
@@ -195,12 +225,25 @@ export async function POST(req: NextRequest): Promise<Response> {
     }
 
     // 결정론적 정화(CJK 제거 + stat 위생 + 무효/빈 블록 prune + 중복 제거)
-    // 주의: stat_row/progress_bar 위생 삭제는 무음이다 — 블록이 통째로 사라지면
-    // 재검증에 걸릴 위반 자체가 없어 warnings에도 남지 않는다. provenanceSource가
-    // 빈 문자열이면(points 미입력) 모든 progress_bar가 조용히 증발한다. 제거
-    // 개수를 사용자에게 보고하려면 sanitizeProLayout이 제거 카운트를 반환하도록
-    // 확장해야 한다 (현재 범위 밖).
+    // 주의: stat_row/progress_bar 위생 삭제는 그 자체로는 무음이다 — 블록이 통째로
+    // 사라지면 재검증에 걸릴 위반 자체가 없어 repair 경로의 warnings에도 남지 않는다.
+    // provenanceSource가 빈 문자열이면(points 미입력) 모든 progress_bar가 조용히
+    // 증발한다. 그래서 sanitizeProLayout 전후로 progress_bar item 개수를 직접 세어
+    // (layout-validator.ts/progress-hygiene.ts는 건드리지 않고) 줄어든 만큼을
+    // hygieneWarnings로 남긴다.
+    const beforeHygieneCount = countProgressBarItems(sections);
     let cleaned = sanitizeProLayout(sections, layoutOpts).sections;
+
+    /** 최종 결과 기준 위생 삭제 개수를 사람이 읽을 경고로 변환한다 */
+    const buildHygieneWarnings = (finalSections: unknown[]): string[] => {
+      const afterCount = countProgressBarItems(finalSections);
+      if (afterCount >= beforeHygieneCount) return [];
+      const removed = beforeHygieneCount - afterCount;
+      return [
+        `근거 없는 수치 ${removed}개가 제거되었습니다. 상품 정보에 실측값을 입력하면 표시됩니다.`,
+      ];
+    };
+
     // error-severity 위반이 남으면 Claude로 1-pass 수리 후 재정화 (조건부)
     const { violations, isClean } = validateProLayout(cleaned, layoutOpts);
     if (!isClean) {
@@ -222,16 +265,28 @@ export async function POST(req: NextRequest): Promise<Response> {
           after.violations.filter((v) => v.severity === 'error').map((v) => `${v.code}: ${v.message}`),
         );
       }
-      // 잔존 error를 클라이언트에 전달해 결과 화면에서 알린다.
+      // 잔존 error + 위생 삭제 경고를 함께 클라이언트에 전달해 결과 화면에서 알린다.
+      const warnings = [
+        ...buildHygieneWarnings(cleaned),
+        ...after.violations
+          .filter((v) => v.severity === 'error')
+          .map((v) => `${v.code}: ${v.message}`),
+      ];
       return NextResponse.json({
         success: true,
         sections: cleaned,
-        warnings: after.violations
-          .filter((v) => v.severity === 'error')
-          .map((v) => `${v.code}: ${v.message}`),
+        ...(warnings.length > 0 ? { warnings } : {}),
       });
     }
-    return NextResponse.json({ success: true, sections: cleaned });
+
+    // repair를 타지 않은 정상 경로도 위생 삭제만큼은 알려야 한다 — repair 여부와
+    // 무관하게 일어나는 일이기 때문이다.
+    const hygieneWarnings = buildHygieneWarnings(cleaned);
+    return NextResponse.json({
+      success: true,
+      sections: cleaned,
+      ...(hygieneWarnings.length > 0 ? { warnings: hygieneWarnings } : {}),
+    });
   } catch (error) {
     console.error('[generate-pro-layout] 오류:', error);
     const msg = error instanceof Error ? error.message : String(error);

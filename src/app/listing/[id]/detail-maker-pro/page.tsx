@@ -67,6 +67,8 @@ export default function DetailMakerProPage() {
   const [productPoints, setProductPoints] = useState('');
   const [progress, setProgress] = useState<ProgressEvent | null>(null);
   const [generatedSections, setGeneratedSections] = useState<GeneratedSection[]>([]);
+  // 레이아웃 검증·위생에서 사용자가 알아야 할 사항 — repair 후 잔존 위반, 근거 없는 수치 제거 등
+  const [layoutWarnings, setLayoutWarnings] = useState<string[]>([]);
   const [fluxResults, setFluxResults] = useState<Record<number, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [isRegenerating, setIsRegenerating] = useState<number | null>(null);
@@ -236,7 +238,7 @@ export default function DetailMakerProPage() {
         }),
       });
 
-      const data = await res.json() as { success: boolean; sections?: GeneratedSection[]; error?: string; _debug?: string };
+      const data = await res.json() as { success: boolean; sections?: GeneratedSection[]; error?: string; _debug?: string; warnings?: string[] };
       if (!data.success || !data.sections) {
         const debugInfo = data._debug ? `\n[debug] ${data._debug}` : '';
         setError((data.error ?? '레이아웃 생성 실패') + debugInfo);
@@ -247,6 +249,7 @@ export default function DetailMakerProPage() {
       }
 
       setGeneratedSections(data.sections);
+      setLayoutWarnings(data.warnings ?? []);
       setScreen('result');
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -1096,6 +1099,27 @@ export default function DetailMakerProPage() {
   // ── Result Screen ──────────────────────────────────────────────────────────
   return (
     <div style={containerStyle}>
+      {layoutWarnings.length > 0 && (
+        <div style={{
+          background: '#2a1f10',
+          border: '1px solid #f59e0b',
+          borderRadius: '8px',
+          padding: '12px 14px',
+          marginBottom: '16px',
+          fontSize: '13px',
+          color: '#fbbf24',
+          lineHeight: 1.6,
+        }}>
+          <strong>생성 결과에서 확인할 점이 있습니다.</strong>
+          <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+            {layoutWarnings.map((w, i) => <li key={i}>{w}</li>)}
+          </ul>
+          <div style={{ marginTop: 6, color: '#a0a0b0' }}>
+            그대로 사용할 수 있지만, 다시 생성하면 개선될 수 있습니다.
+          </div>
+        </div>
+      )}
+
       <h1 style={{ fontSize: '18px', fontWeight: 800, marginBottom: '4px' }}>생성 완료</h1>
       <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '20px' }}>
         {generatedSections.length}개 섹션이 생성됐습니다.

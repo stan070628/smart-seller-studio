@@ -167,4 +167,53 @@ describe('POST /api/ai/generate-pro-layout', () => {
     expect(json.warnings!.every((w) => typeof w === 'string' && /^[a-z_]+: /.test(w))).toBe(true);
     expect(json.warnings!.some((w) => w.startsWith('narrative: '))).toBe(true);
   });
+
+  it('points가 비어 있으면 progress_bar 수치가 전부 위생 삭제되고 warnings에 실린다', async () => {
+    // provenanceSource = points.join(' ')가 빈 문자열이면 isGroundedProgressItem이
+    // 모든 숫자 대조에 실패해 progress_bar 항목이 전부 제거된다(progress-hygiene.ts).
+    // 블록째 사라지면 재검증에 걸릴 위반이 없어 narrative처럼 error warnings로는
+    // 안 잡힌다 — route.ts의 hygiene count 비교가 이걸 잡아야 한다.
+    const layout = validLayout();
+    (layout[0] as { blocks: unknown[] }).blocks.push({
+      type: 'progress_bar',
+      items: [
+        { label: '통기성', value: 80, displayValue: '92%' },
+        { label: '신축성', value: 70, displayValue: '88%' },
+      ],
+    });
+    callClaudeMock.mockResolvedValue(JSON.stringify(layout));
+
+    const res = await POST(request({
+      productInfo: { name: '민소매 티셔츠', points: [], category: '' },
+    }) as never);
+
+    expect(res.status).toBe(200);
+    const json = await res.json() as { sections: Array<{ blocks: Array<{ type: string }> }>; warnings?: string[] };
+    expect(json.sections[0]!.blocks.some((b) => b.type === 'progress_bar')).toBe(false);
+    expect(Array.isArray(json.warnings)).toBe(true);
+    expect(json.warnings!.some((w) => w.includes('근거 없는 수치 2개가 제거되었습니다'))).toBe(true);
+  });
+
+  it('상품 정보에 실제 등장하는 수치는 위생 삭제되지 않고 warnings도 없다', async () => {
+    // points에 "92%"가 실제로 등장하면 isGroundedProgressItem이 통과시킨다 —
+    // hygiene count diff가 0이어야 오탐 경고가 뜨지 않는다.
+    const layout = validLayout();
+    (layout[0] as { blocks: unknown[] }).blocks.push({
+      type: 'progress_bar',
+      items: [
+        { label: '통기성', value: 80, displayValue: '92%' },
+        { label: '신축성', value: 70, displayValue: '88%' },
+      ],
+    });
+    callClaudeMock.mockResolvedValue(JSON.stringify(layout));
+
+    const res = await POST(request({
+      productInfo: { name: '민소매 티셔츠', points: ['통기성 92%', '신축성 88%'], category: '' },
+    }) as never);
+
+    expect(res.status).toBe(200);
+    const json = await res.json() as { sections: Array<{ blocks: Array<{ type: string }> }>; warnings?: string[] };
+    expect(json.sections[0]!.blocks.some((b) => b.type === 'progress_bar')).toBe(true);
+    expect('warnings' in json).toBe(false);
+  });
 });
