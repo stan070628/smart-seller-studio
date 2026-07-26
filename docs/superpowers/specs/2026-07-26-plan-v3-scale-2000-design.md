@@ -196,7 +196,29 @@ export {
 의도된 상태이며, 파일 상단 주석에 기간(2026-04-27 ~ 2026-07-19)과 결과(목표 누적
 1,000만원 초과 달성)를 남긴다.
 
-### 6.1 변경 파일
+### 6.1 기존 실적 기록 격리
+
+`daily-records`는 `plan_daily_records` 키에 `{ date, revenue, week }` 형태로 저장된다.
+`week`는 저장 시점의 `PLAN_START` 기준으로 계산된 값이므로, `PLAN_START`를 v3로
+바꾸면 **v2 기간(2026-04-27 ~ 07-19)의 기록이 v3의 W1~12 실적으로 잘못 합산된다.**
+플랜탭 달성률과 대시보드 12주 차트가 모두 부풀려진다.
+
+`loadDailyRecords()`가 `date < PLAN_START`인 기록을 제외하도록 한다. 저장소 키를
+버전별로 나누는 방법도 있으나, 날짜 필터는 다음 플랜 교체에도 자동으로 유효하다.
+
+v2 기록은 localStorage에 남아 있되 화면에는 계산되지 않는다. 삭제하지 않는 이유는
+플랜을 되돌릴 여지를 남기기 위해서다.
+
+### 6.2 목표 라벨 상수화
+
+`PlanClient.tsx:1417`과 `:1742`에 `월 1,000만원`이 문자열로 박혀 있다.
+`PLAN_GOAL_MONTHLY = 2000`을 신설해 두 곳 모두 상수에서 렌더링한다.
+
+런레이트에서 역산(`WEEKLY_RUN_RATE[11] * MONTH_WEEKS` = 2,020)하지 않는다.
+화면에 표시할 목표는 `2,000만원`이라는 약속된 수치이고, 런레이트는 그 수치를
+넘기기 위한 설계값이다. 둘의 일치는 §7의 테스트로 보증한다.
+
+### 6.3 변경 파일
 
 | 파일 | 작업 |
 |---|---|
@@ -204,7 +226,8 @@ export {
 | `src/lib/plan/plans/v2-scale-1000.ts` | 신규 — 기존 내용 이관 |
 | `src/lib/plan/plans/v3-scale-2000.ts` | 신규 — 12주 WBS + 목표 배열 |
 | `src/lib/plan/constants.ts` | 배럴로 축소 |
-| `src/components/plan/PlanClient.tsx` | `maxTarget` 상수화 + 런레이트 KPI 추가 |
+| `src/lib/plan/daily-records.ts` | `loadDailyRecords()`에 `PLAN_START` 이전 기록 필터 추가 |
+| `src/components/plan/PlanClient.tsx` | `maxTarget`·목표 라벨 상수화 + 런레이트 KPI 추가 |
 
 ## 7. 테스트
 
@@ -213,6 +236,7 @@ export {
 | `src/__tests__/lib/plan/week.test.ts` | 하드코딩된 `2026-04-27` 기준 날짜를 `PLAN_START` 기준 오프셋 계산으로 교체 |
 | `src/lib/plan/__tests__/difficulty-curve.test.ts` | `RANGES`를 §5.2의 v3 곡선으로 갱신 |
 | `src/lib/plan/__tests__/plan-targets.test.ts` | 신규 |
+| `src/__tests__/lib/plan/daily-records.test.ts` | 기존 파일 — 픽스처 날짜를 `PLAN_START` 이후로 교체하고 §6.1 필터 케이스 추가 |
 
 `week.test.ts`는 현재 `getWeekForDate('2026-04-27')` 같은 절대 날짜를 쓰고 있어
 `PLAN_START`를 바꾸면 전부 깨진다. `PLAN_START`에 일수를 더해 기대값을 만드는
@@ -224,8 +248,18 @@ export {
 2. 두 배열 길이가 각각 12
 3. `WEEKLY_RUN_RATE`가 단조 증가
 4. `WEEKLY_TARGETS[11] === PLAN_MAX_TARGET`
-5. `WEEKLY_RUN_RATE[11] * MONTH_WEEKS >= 2000` (목표 달성 지점)
+5. `WEEKLY_RUN_RATE[11] * MONTH_WEEKS >= PLAN_GOAL_MONTHLY` (목표 달성 지점)
 6. `WBS_DATA`의 12개 주차 키가 모두 존재하고 각 주 과제가 6개 이상
+7. 모든 과제 id가 `v3-` 접두사를 갖고 전체 유일 (§5.1 충돌 방지)
+
+`daily-records.test.ts`는 이미 존재하며 픽스처가 `2026-04-22` 등 v2 기간 날짜를
+쓰고 있다. §6.1 필터를 넣으면 기존 케이스 3건이 깨지므로 픽스처 날짜를 `PLAN_START`
+이후로 교체한다. 추가할 검증 항목:
+
+1. `PLAN_START` 이전 날짜의 기록은 `loadDailyRecords()` 결과에서 제외된다
+2. `PLAN_START` 당일 기록은 포함된다
+
+잘못된 JSON 입력 시 빈 배열 반환(기존 케이스)은 그대로 유지한다.
 
 테스트는 경로를 지정해 실행한다(`npx vitest run src/lib/plan src/__tests__/lib/plan`).
 인자 없이 실행하면 라이브러리 테스트까지 돌아 무관한 실패가 대량 발생한다.
