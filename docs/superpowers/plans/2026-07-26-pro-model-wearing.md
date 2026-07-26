@@ -352,7 +352,7 @@ export function buildWearingInstruction({ faceVisible, gender = 'male' }: Wearin
 - [ ] **Step 4: 테스트가 통과하는지 확인한다**
 
 Run: `npx vitest run src/__tests__/api/ai/wearing-prompts.test.ts`
-Expected: PASS — 12 tests
+Expected: PASS — 11 tests (상수 describe 5개 + `buildWearingInstruction` describe 6개)
 
 - [ ] **Step 5: 커밋**
 
@@ -1106,3 +1106,5 @@ git commit -m "feat(wearing): 제품컷 병치 + AI 고지 + 폴백 시 착용�
 - **`compare_pair`** — 별도 스펙(`2026-07-26-pro-compare-pair-image-design.md`)
 - **비의류 카테고리** — 화장품 "손에 든 튜브" 같은 형태는 미검증
 - **마켓플레이스 AI 인물 정책** — 미확인. 연출 고지로 완화하되 정책 확인은 별건
+- **`buildNoProductSuffix` 테스트** — Task 1에서 module-private에서 export로 바뀌며 테스트 가능해졌다(그전에는 핸들러 전체를 호출해야 했다). `productName?.trim()` 항등 절과 `SECTION_BG_HINTS[sectionType] ?? ''` 폴백에 분기가 있어 고정할 가치가 있으나, 이 계획의 범위가 아니다
+- **`SECTION_BG_HINTS`의 타입 좁히기** — 현재 `Record<string, string>`이라 아무 키나 받고 미스는 `?? ''`로 조용히 넘어간다. `tsconfig`의 `noUncheckedIndexedAccess`가 꺼져 있어 타입 검사도 못 잡는다. `wearing`이 안전한 이유는 `COMPOSITE_SECTIONS`에 없어 `buildNoProductSuffix`에 도달하지 않기 때문이며, 타입으로 강제된 것이 아니다
