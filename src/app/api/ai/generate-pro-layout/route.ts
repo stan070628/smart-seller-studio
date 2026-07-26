@@ -14,6 +14,7 @@ import { callClaude, callClaudeVision, type ClaudeImage } from '@/lib/ai/claude-
 import { sanitizeProLayout, validateProLayout, stripCjk } from '@/lib/detail-page/layout-validator';
 import { isGroundedProgressItem, type ProgressItem } from '@/lib/detail-page/progress-hygiene';
 import { requiredSpecWarnings } from '@/lib/detail-page/required-specs';
+import { sectionCap } from '@/lib/detail-page/image-hygiene';
 import { repairProLayout } from '@/lib/ai/repair-pro-layout';
 import {
   uniqueOptionNames,
@@ -238,6 +239,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     imageCount > 0
       ? `제품 이미지 ${imageCount}장이 인덱스 0..${imageCount - 1}로 제공됩니다. 실물을 보고 색상·소재·디테일을 파악해 카피에 반영하고, 각 imageSlot의 imageRef에 그 슬롯에 가장 알맞은 이미지 인덱스를 지정하세요.`
       : '',
+    imageCount > 0 ? `섹션 수: 최대 ${sectionCap(imageCount)}개.` : '',
     optionLines.length > 0
       ? `옵션(색상/모델): ${optionLines.join(', ')}\n` +
         `옵션 비교 섹션을 정확히 1개 만들고, 나머지 이미지 섹션에는 ${uniqueOptionNames(options).join('·')}를 고르게 배분하세요. 모든 imageSlot에 imageRef를 명시하세요.`

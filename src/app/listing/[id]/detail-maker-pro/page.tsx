@@ -9,6 +9,12 @@ import { extractDetailCloseupShots, serializeShotChecklist, countUploaded, resol
 import type { ShotCard, ShootSlot } from '@/types/shot-guide';
 import ImageCleanupModal from '@/components/common/ImageCleanupModal';
 import { deriveOptions, isOptionMode } from '@/lib/detail-page/product-options';
+import {
+  stripCloseupClaims,
+  findReusedImages,
+  imageHygieneWarnings,
+  type SectionImages,
+} from '@/lib/detail-page/image-hygiene';
 
 type ScreenState = 'upload' | 'review' | 'generating' | 'result' | 'shootguide';
 
@@ -1356,6 +1362,13 @@ export default function DetailMakerProPage() {
 
             // Step 3: 섹션 조립. Claude가 imageSlots로 선언한 섹션에만 이미지를 배치한다.
             // (텍스트/공지/배송 등 슬롯 없는 섹션에 제품 사진을 강제로 넣지 않는다.)
+            // 조립하면서 이미지-카피 정합성 재료를 모은다 — 최종 URL이 정해지는 게
+            // 여기라, 생성 단계 validator는 볼 수 없는 정보다(image-hygiene.ts 참고).
+            let fallbackSections = 0;
+            let strippedClaims = 0;
+            const headingClaims: string[] = [];
+            const sectionImages: SectionImages[] = [];
+
             const detailSections = generatedSections.map((s, i) => {
               const geminiUrl = geminiUrlMap[i];
               const slots = s.imageSlots ?? [];
@@ -1384,10 +1397,25 @@ export default function DetailMakerProPage() {
               // 렌더러는 attachedImages를 직접 그리지 않고 blocks의 image 블록으로만
               // 그린다 → 실제 이미지 개수에 맞춰 attachedIndex 리매핑 + image 블록
               // 부재 시 주입. 이게 없으면 첫 섹션 외 나머지 슬롯 이미지가 누락된다.
-              const blocks = normalizeImageBlocks(
+              let blocks = normalizeImageBlocks(
                 (s as Record<string, unknown>).blocks as LayoutBlock[] | undefined,
                 attachedImages.length,
               );
+
+              // 씬 생성이 실패해 원본 전체컷으로 대체된 섹션에서는 "접사입니다" 류
+              // 문구가 거짓이 된다. 사진을 바꿀 수 없으니 카피를 사진에 맞춘다.
+              if (genSlotIdx >= 0 && !geminiUrl) {
+                fallbackSections++;
+                const stripped = stripCloseupClaims(blocks);
+                blocks = stripped.blocks as LayoutBlock[];
+                strippedClaims += stripped.removed;
+                headingClaims.push(...stripped.headingClaims);
+              }
+
+              sectionImages.push({
+                title: s.title ?? `섹션 ${i + 1}`,
+                urls: attachedImages.map((a) => a.url),
+              });
 
               return {
                 id: crypto.randomUUID(),
@@ -1404,6 +1432,18 @@ export default function DetailMakerProPage() {
                 attachedImages,
               };
             });
+
+            // 조립 결과 경고를 생성 단계 경고 뒤에 덧붙인다. 에디터로 넘어가기 전
+            // 이 화면에서 보여주므로, 셀러가 사진을 더 올릴지 그대로 갈지 판단할 수 있다.
+            const hygiene = imageHygieneWarnings({
+              reused: findReusedImages(sectionImages),
+              fallbackSections,
+              strippedClaims,
+              headingClaims,
+            });
+            if (hygiene.length > 0) {
+              setLayoutWarnings((prev) => [...prev, ...hygiene]);
+            }
 
             sessionStorage.setItem('pro_sections', JSON.stringify(detailSections));
             sessionStorage.setItem('pro_meta', JSON.stringify({

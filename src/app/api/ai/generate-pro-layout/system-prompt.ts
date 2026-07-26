@@ -45,7 +45,9 @@ DESIGN RULES:
 3. heading 'xl' for section headlines
 4. imageSlots map to section images
 5. For lifestyle images use slotType "flux_lifestyle" with descriptive promptHint in Korean
-6. Generate 6-10 sections for a complete detail page
+6. 섹션 수는 6~10개. 단 유저 프롬프트에 "섹션 수" 지시가 오면 그 상한을 우선하세요.
+   사진 수보다 섹션이 많으면 같은 사진을 여러 섹션에 크게 반복하게 되고, 구매자에게는
+   "아까 본 사진이 또 나온다"로 읽힙니다. 채울 컷이 없으면 섹션을 줄이세요.
 7. NEVER use Chinese characters (한자/漢字). Use Korean (한글) or English ONLY. This applies to ALL text: titles, labels, sublabels, stat values, promptHints, badge text, etc. Examples of FORBIDDEN characters: 適當 → write "적당", 溫度 → write "온도", 品質 → write "품질".
 8. Design for 390px mobile width — avoid wide horizontal layouts or tables that overflow narrow screens. Use vertical or wrapped layouts.
 9. process_flow는 시간/순서가 있는 단계에만 사용 (예: 봄→여름→가을, 세탁→건조→보관). 사이즈·색상·용량·구성처럼 순서가 없는 병렬 선택 옵션은 절대 process_flow로 만들지 말고 반드시 option_grid를 사용하세요. 사이즈 안내(S/M/L 등)는 항상 option_grid입니다.
