@@ -40,6 +40,12 @@ describe('v3 목표 배열', () => {
   it('12주차 런레이트의 월 환산이 목표 월매출 이상이다', () => {
     expect(WEEKLY_RUN_RATE[11] * MONTH_WEEKS).toBeGreaterThanOrEqual(PLAN_GOAL_MONTHLY);
   });
+
+  // 위 검증은 부등식이라 PLAN_GOAL_MONTHLY를 실수로 낮게 잡아도 통과한다.
+  // 화면에 표시되는 목표 문구가 조용히 틀리는 걸 막으려면 값 자체를 고정해야 한다.
+  it('화면에 표시하는 목표 월매출이 2,000만원이다', () => {
+    expect(PLAN_GOAL_MONTHLY).toBe(2000);
+  });
 });
 
 describe('v3 WBS 구조', () => {
