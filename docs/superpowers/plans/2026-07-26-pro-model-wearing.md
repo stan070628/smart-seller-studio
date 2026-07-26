@@ -585,6 +585,17 @@ describe('wearing_coverage', () => {
     expect(res.violations.some(v => v.code === 'wearing_coverage')).toBe(false);
   });
 
+  it('한 섹션에 2개를 넣으면 위반 — 섹션당 1장만 생성된다', () => {
+    // page.tsx가 섹션당 첫 gen 슬롯만 생성하므로 한 섹션의 2개는 실제로 1장이다.
+    const secs = withWearing(0);
+    secs[0]!.imageSlots = [
+      { slotType: 'model_wearing', promptHint: '해변 산책', faceVisible: true, modelGender: 'male' },
+      { slotType: 'model_wearing', promptHint: '실내 짐', faceVisible: false, modelGender: 'male' },
+    ];
+    const res = validateProLayout(secs, { wearing: true });
+    expect(res.violations.some(v => v.code === 'wearing_coverage')).toBe(true);
+  });
+
   it('위반은 error 등급이라 repair를 트리거한다', () => {
     const res = validateProLayout(withWearing(1), { wearing: true });
     const v = res.violations.find(x => x.code === 'wearing_coverage');
@@ -652,17 +663,21 @@ Expected: FAIL — `wearing` 옵션과 `wearing_coverage` code가 없음
   // 0개는 통과: 인물이 부적절한 상품(위생용품·속옷·의료기기)은 0개가 정답이며,
   //   카테고리를 하드코딩하지 않고도 "Claude가 필요하다고 판단했으면 2개"가 강제된다.
   if (opts?.wearing) {
-    let wearingSlots = 0;
+    // 슬롯 수가 아니라 "model_wearing을 가진 섹션 수"를 센다.
+    // page.tsx가 섹션당 첫 gen 슬롯 하나만 생성하고 렌더한다(find / findIndex).
+    // 한 섹션에 model_wearing을 2개 넣어도 실제로는 1장만 나오므로,
+    // 슬롯 수로 세면 그 경우가 통과해 검증이 실효성을 잃는다.
+    let wearingSections = 0;
     for (const sec of sections) {
       const slots = (sec as { imageSlots?: unknown }).imageSlots;
       if (!Array.isArray(slots)) continue;
-      for (const sl of slots) {
-        if (sl && typeof sl === 'object' && (sl as { slotType?: unknown }).slotType === 'model_wearing') {
-          wearingSlots += 1;
-        }
-      }
+      const hasWearing = slots.some(
+        (sl) => sl && typeof sl === 'object'
+          && (sl as { slotType?: unknown }).slotType === 'model_wearing',
+      );
+      if (hasWearing) wearingSections += 1;
     }
-    if (wearingSlots === 1) {
+    if (wearingSections === 1) {
       violations.push({
         code: 'wearing_coverage',
         path: 'sections',
@@ -684,7 +699,7 @@ npx vitest run src/__tests__/lib/detail-page/wearing-coverage.test.ts
 npx vitest run src/__tests__/lib/detail-page/
 ```
 
-Expected: 신규 9개 통과, 기존 전부 통과
+Expected: 신규 10개 통과, 기존 전부 통과
 
 **기존 테스트가 깨지면**: `wearing` 플래그 게이트가 빠졌는지 확인하라. 플래그 없이 검증하면 `imageSlots`를 쓰는 기존 fixture가 영향받는다.
 
@@ -750,13 +765,25 @@ N7. 인물 착용컷(model_wearing) — 착용·사용이 구매 결정을 좌�
 
 - [ ] **Step 3: `repair-pro-layout.ts`에 `wearing_coverage` 수리 지시를 추가한다**
 
-`wearing_coverage`는 `severity: 'error'`이므로 repair 패스가 돌지만, 규칙 7의 per-violation 지시에 항목이 없으면 무엇을 고칠지 모른다. 규칙 7에 추가한다:
+`wearing_coverage`는 `severity: 'error'`이므로 repair 패스가 돈다. 그리고 `repair-pro-layout.ts`가 위반을 `- [${v.code}] ${v.path}: ${v.message}` 형태로 프롬프트에 실어보내므로 **위반 메시지("2개 이상으로 만드세요")는 이미 전달된다.**
+
+그래도 세부 지시가 필요하다 — 어느 섹션에 추가할지, `faceVisible`을 어느 값으로 할지, 기존 슬롯을 지우지 말 것. 규칙 7이 narrative에 대해 세부 지시를 둔 것과 같은 이유다.
+
+**규칙 7에 넣지 말고 규칙 8을 새로 만들어라.** 규칙 7은 `narrative` 이슈 전용이며(`narrative 이슈가 있으면 다음을 고쳐라`), 거기에 다른 code의 지시를 섞으면 조건이 어긋난다. 규칙 7 다음, `Return ONLY the corrected JSON array` 앞에 추가한다:
 
 ```
-- wearing_coverage: model_wearing 슬롯이 1개뿐입니다. 다른 섹션에 하나를 더 만드세요.
-  기존 것이 faceVisible: true면 새것은 false로(detail 또는 evidence 비트 섹션에),
-  기존 것이 false면 새것은 true로(hook 또는 usecase 비트 섹션에) 두세요.
-  두 씬의 상황(promptHint)이 겹치면 안 됩니다. 기존 슬롯을 삭제하지 마세요.
+8. wearing_coverage 이슈가 있으면 다음을 고쳐라.
+```
+
+그 아래에:
+
+```
+   - model_wearing 슬롯을 가진 섹션이 1개뿐이면 다른 섹션에 하나를 더 만든다.
+     같은 섹션에 두 개를 넣지 마라 — 섹션당 한 장만 생성된다.
+   - 기존 것이 faceVisible: true면 새것은 false로(detail 또는 evidence 비트 섹션에),
+     기존 것이 false면 새것은 true로(hook 또는 usecase 비트 섹션에) 둔다.
+   - 두 씬의 promptHint가 겹치면 안 된다. 기존 슬롯을 삭제하지 마라.
+   - promptHint에는 상황만 쓴다. 모델 외형·프레이밍·조명·포즈는 시스템이 붙인다.
 ```
 
 - [ ] **Step 4: 정합성을 직접 확인한다**
@@ -887,6 +914,16 @@ promptHint에는 상황만 쓰게 한다 — 모델 외형·프레이밍·조명
             // 만들므로 업로드 사진은 전부 제품 접사이고, 그것이 인물 씬 자리를 먹으면 안 된다.
             const realBySection: Record<number, string> = {};
 ```
+
+- [ ] **Step 6-B: 사용자 경고 메시지를 등록한다**
+
+`generate-pro-layout/route.ts`의 `VIOLATION_CODE_MESSAGES`에 `wearing_coverage`가 없으면 `GENERIC_VIOLATION_MESSAGE`("일부 구성이 자동 검증 기준에 못 미칩니다")로 떨어져, **사용자가 무엇이 문제인지 알 수 없다.** repair가 실패했을 때만 보이는 경고이므로 구체적이어야 의미가 있다:
+
+```ts
+  wearing_coverage: '인물 착용컷이 1개뿐입니다. 다시 생성하면 얼굴 컷과 크롭 컷이 각각 만들어질 수 있습니다.',
+```
+
+"다시 생성"을 안내하는 것이 맞다 — `prohibited`와 달리 이 위반은 재생성으로 해결될 수 있다(repair가 슬롯을 추가하거나, 다음 생성에서 Claude가 2개를 만든다).
 
 - [ ] **Step 7: 생성 라우트에 `wearing` 플래그를 켠다**
 
