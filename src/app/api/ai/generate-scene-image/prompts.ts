@@ -32,6 +32,7 @@ Section type directions:
 - lifestyle: Product shown in its actual real-world use context. Creative authentic scene (e.g. fragrance diffuser hanging from a car rearview mirror, cutlery arranged on a fine dining table, skincare product on a marble bathroom counter). Natural or mood lighting.
 - detail: Extreme close-up macro shot of the product's most distinctive material, texture, or craftsmanship detail. Very shallow depth of field, soft bokeh.
 - feature: Aspirational scene that visually communicates the product's key function or benefit. Creative and conceptual but still photorealistic.
+- wearing: A real person wearing or using the product in a believable everyday Korean setting. Static pose only — the person stands, leans, or walks slowly. The product must be reproduced faithfully from the reference image.
 
 Return ONLY valid JSON: {"prompt": "your detailed English prompt here"}`;
 

@@ -14,6 +14,7 @@ import {
   BACKGROUND_PROMPT_SYSTEM,
   COMPOSITE_REFINE_PROMPT,
   buildNoProductSuffix,
+  buildWearingInstruction,
 } from './prompts';
 
 export const maxDuration = 120;
@@ -22,7 +23,7 @@ const RATE_LIMIT = { windowMs: 60_000, maxRequests: 8 };
 const EDIT_RATE_LIMIT = { windowMs: 60_000, maxRequests: 6 };
 
 const RequestBodySchema = z.object({
-  sectionType: z.enum(['hero', 'lifestyle', 'detail', 'feature']),
+  sectionType: z.enum(['hero', 'lifestyle', 'detail', 'feature', 'wearing']),
   // 신규: 멀티참조
   referenceImages: z
     .array(z.object({ base64: z.string(), mimeType: z.string().optional() }))
@@ -46,6 +47,10 @@ const RequestBodySchema = z.object({
   baseImageUrl: z.string().url().optional(),
   // 편집 지시어 또는 새 생성 art direction
   instruction: z.string().max(500).optional(),
+  /** wearing 전용: 얼굴이 보이는 컷인지. 기본 true */
+  faceVisible: z.boolean().optional(),
+  /** wearing 전용: 모델 성별. 기본 male */
+  modelGender: z.enum(['male', 'female']).optional(),
 });
 
 // lifestyle/detail/feature: 제품 합성 방식 (Gemini에 배경만 생성 → Sharp 합성)
@@ -295,7 +300,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { sectionType, productInfo, sceneHint, scenePrompt: directPrompt, baseImageUrl, instruction } = parsed.data;
+  const {
+    sectionType,
+    productInfo,
+    sceneHint,
+    scenePrompt: directPrompt,
+    baseImageUrl,
+    instruction,
+    faceVisible,
+    modelGender,
+  } = parsed.data;
   isEditMode = !!baseImageUrl; // Zod 검증된 값으로 덮어쓰기
 
   try {
@@ -419,6 +433,17 @@ export async function POST(req: NextRequest) {
       finalScenePrompt = compositeProductPng
         ? `${bgPrompt}${buildNoProductSuffix(sectionType, productInfo?.headline)}` // 합성 모드: 배경만 생성
         : claudePrompt; // fallback: Claude 프롬프트 그대로 (PRODUCT_FIDELITY_INSTRUCTION 이미 포함)
+    }
+
+    // wearing은 인물 착용컷이므로 검증된 인물 지시(모델·수위·포즈·색보존)를 말미에 붙인다.
+    // 두 분기(directPrompt / Claude) 합류 후에 한 번만 붙여 중복을 막는다.
+    // 프롬프트 끝에 두는 이유: 뒤쪽 지시가 더 강하게 반영되고, claudePrompt가 이미
+    // PRODUCT_FIDELITY_INSTRUCTION으로 끝나므로 그 뒤에서 프레이밍을 확정해야 한다.
+    if (sectionType === 'wearing') {
+      finalScenePrompt = `${finalScenePrompt} ${buildWearingInstruction({
+        faceVisible: faceVisible ?? true,
+        gender: modelGender,
+      })}`;
     }
 
     // Step 2: Gemini로 씬 생성 (합성 모드: 배경만 / fallback: 제품 포함)
