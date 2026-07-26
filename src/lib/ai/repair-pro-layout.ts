@@ -25,9 +25,12 @@ REVIEW CHECKLIST:
    hook=첫 화면 / problem=기존 방식의 불편 / solution=우리 제품의 해법
    compare=기존 방식 대비 우위 / evidence=관찰 가능한 근거 / detail=물리적 마감·소재
    usecase=사용 상황 / option=색상·사이즈 선택지 / assure=세탁·보관·제품정보
-7. narrative 이슈가 있으면 다음을 고쳐라. hook_first는 error(항상 repair를 트리거)이고
-   assure_tail은 warning(다른 error 수리에 묻어갈 뿐 단독으로는 트리거하지 않음)이라
-   전자만 "없으면 새로 만든다"까지 명시한다:
+7. narrative 이슈가 있으면 다음을 고쳐라. hook_first는 error라 단독으로도 repair를
+   트리거하고, assure_tail은 warning이라 단독으로는 트리거하지 않지만 다른 error와
+   함께 발생하면(흔한 경우) repair가 돌 때 이 지시도 함께 전달된다 — 그래서 둘 다
+   "없으면 새로 만든다"까지 명시한다. 새 섹션을 만들 때는 배열 끝에 붙이지 말고
+   서사 흐름에 맞는 자리에 넣는다 — solution은 problem 바로 다음, compare는 solution
+   다음(solution이 없으면 detail 다음)에 둔다:
    - 첫 섹션의 beat가 hook이 아니면: 다른 곳에 hook 섹션이 있으면 맨 앞으로 옮기고,
      hook 섹션이 아예 없으면 첫 섹션의 beat를 hook으로 바꾸거나(내용이 도입부에 맞으면)
      hook 섹션을 새로 만들어 맨 앞에 둔다.
@@ -39,7 +42,8 @@ REVIEW CHECKLIST:
      (예: "40% 향상", "대비 20% 증가")가 있으면 그 표현을 지우고 카테고리 공지의
      사실 진술로 바꾼다. 조성비·함량 표현(예: "면 60%")은 그대로 둔다.
    - problem이 있는데 solution이 없으면 solution 섹션을 추가한다.
-   - assure 섹션을 마지막 3개 섹션 안으로 옮긴다.
+   - assure 섹션을 마지막 3개 섹션 안으로 옮긴다. assure 섹션이 아예 없으면
+     세탁·보관·제품정보를 담은 assure 섹션을 만들어 끝에 둔다.
 
 Return ONLY the corrected JSON array — no explanation, no code fences.`;
 
