@@ -37,7 +37,7 @@ Available block types in blocks[]:
 - layout_bar_chart: { type, title?, unit?, groups: string[], groupColors: string[], items: [{label, values: number[]}], showLegend? }
 - spec_table: { type, columns: string[], rows: string[][], unit?, note? } — 실측 스펙 표. columns[0]은 행 머리 이름(예: "사이즈"), 각 row도 [머리값, ...셀] 순서로 열 개수를 맞춘다. 390px 가독성 한계라 열은 5개까지만 렌더되니 4열 이하를 권장한다.
   용도: ① 사이즈 실측표(사이즈 × 허리단면·총장·밑위) ② 소재 혼용률 ③ 제품 고시정보.
-  Key points에 없는 수치를 지어내지 말 것. 실측을 모르면 표를 만들지 말고 아래 R2를 따른다.
+  Key points에 없는 수치를 지어내지 말 것. 실측을 모르면 표를 만들지 말고 아래 C9를 따른다.
 
 DESIGN RULES:
 1. Use extracted chart data EXACTLY as provided — do not modify numbers
