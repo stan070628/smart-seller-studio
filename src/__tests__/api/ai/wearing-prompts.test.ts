@@ -11,8 +11,14 @@ import {
 } from '@/app/api/ai/generate-scene-image/prompts';
 
 describe('인물 프롬프트 상수', () => {
-  it('MODEL_KO는 성별 두 키를 갖는다', () => {
-    expect(Object.keys(MODEL_KO).sort()).toEqual(['female', 'male']);
+  it('MODEL_KO의 두 성별 서술 모두 피부톤과 체형을 명시한다', () => {
+    // 타입 시스템이 이미 강제하는 "키가 male/female 두 개"보다,
+    // 35장 생성 과정에서 필요하다고 확인된 속성(피부톤·체형 명시)을 검사한다 —
+    // 이 속성은 타입으로 표현되지 않아 런타임 검사가 아니면 회귀를 못 잡는다.
+    for (const desc of Object.values(MODEL_KO)) {
+      expect(desc).toContain('skin tone');
+      expect(desc).toContain('build');
+    }
   });
 
   it('MODEL_CONTEXT에 중국·서양 카탈로그 배제 문구가 있다', () => {
@@ -74,10 +80,27 @@ describe('buildWearingInstruction', () => {
   });
 
   it('PRODUCT_FIDELITY_INSTRUCTION을 포함하지 않는다', () => {
-    // route.ts:512-514 — wearing은 compositeProductPng가 없어 claudePrompt를 쓰고,
-    // SCENE_PROMPT_SYSTEM(58행)이 그 프롬프트를 이 지시로 끝내라고 요구한다.
-    // 여기서 또 붙이면 같은 문단이 두 번 들어간다.
+    // wearing은 COMPOSITE_SECTIONS에 없어 compositeProductPng가 null이 되고,
+    // route.ts의 `compositeProductPng ? bgPrompt : claudePrompt` 분기에서 claudePrompt를 쓴다.
+    // SCENE_PROMPT_SYSTEM의 `MUST end with this exact instruction` 규칙이
+    // 그 프롬프트를 이 지시로 끝내게 만들므로, 여기서 또 붙이면 같은 문단이 두 번 들어간다.
     const out = buildWearingInstruction({ faceVisible: true, gender: 'male' });
     expect(out).not.toContain(PRODUCT_FIDELITY_INSTRUCTION);
+  });
+
+  it('조립 결과가 프롬프트 원문과 일치한다 (문구 변경 시 스냅샷을 갱신하며 실물 재검증)', () => {
+    expect(buildWearingInstruction({ faceVisible: true, gender: 'female' })).toMatchInlineSnapshot(`"The person is a Korean woman in her late twenties with long straight black hair, natural dewy Korean makeup, fair even skin tone, slim build. Styled like a Korean lifestyle magazine editorial shot in Seoul, not a Western or Chinese catalog. A candid lifestyle PORTRAIT — this is a photo OF THE PERSON, not a product shot. The head and face occupy the upper third of the frame, eyes meeting the camera, an easy natural smile. Waist-up composition. POSE CONSTRAINTS: both arms stay BELOW shoulder height — never raised, never overhead. Hands hang naturally relaxed with open fingers or rest in pockets — never clenched into fists. The person stands, leans or walks slowly — NO running, NO jumping, NO mid-action motion. COLOR ACCURACY IS CRITICAL: neutral daylight with accurate white balance. The garment's color must match the reference image exactly — a white garment renders as pure white. NOT golden hour, NOT sunset, NOT warm color cast."`);
+    expect(buildWearingInstruction({ faceVisible: false, gender: 'male' })).toMatchInlineSnapshot(`"The person is a Korean man in his late twenties with a clean modern Korean haircut — softly layered, natural black hair, fair even skin tone, slim build. Styled like a Korean lifestyle magazine editorial shot in Seoul, not a Western or Chinese catalog. FRAMING IS CRITICAL: the frame starts at the collarbone and ends at the hips — the head and face are COMPLETELY OUTSIDE the frame, not visible at all. POSE CONSTRAINTS: both arms stay BELOW shoulder height — never raised, never overhead. Hands hang naturally relaxed with open fingers or rest in pockets — never clenched into fists. The person stands, leans or walks slowly — NO running, NO jumping, NO mid-action motion. COLOR ACCURACY IS CRITICAL: neutral daylight with accurate white balance. The garment's color must match the reference image exactly — a white garment renders as pure white. NOT golden hour, NOT sunset, NOT warm color cast."`);
+  });
+
+  it('조각 경계에 붙어버린 단어나 중복 공백이 없다', () => {
+    for (const faceVisible of [true, false]) {
+      for (const gender of ['male', 'female'] as const) {
+        const out = buildWearingInstruction({ faceVisible, gender });
+        expect(out).not.toMatch(/[.,][^\s]/); // 'overhead.Hands'
+        expect(out).not.toMatch(/[a-z][A-Z]/); // 'buildStyled'
+        expect(out).not.toMatch(/ {2}/);
+      }
+    }
   });
 });

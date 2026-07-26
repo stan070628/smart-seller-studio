@@ -112,19 +112,13 @@ export const COMPOSITE_REFINE_PROMPT =
   'naturally on the surface, and soften the cut-out edges. Output a single continuous photograph, no text.';
 
 // ── 인물 착용컷 (sectionType: 'wearing') ──────────────────────────────
-//
-// 아래 문구는 실물 35장 생성으로 확정한 것이다. 특히 NOT ~ 부정문은
-// "AI가 수렴하는 기본값을 명시적으로 배제"하는 역할이며, 이 파일의 상수들에서
-// 세 번 독립적으로 확인됐다:
-//   MODEL_CONTEXT의 not a Western or Chinese catalog → "Korean"만으로는
-//     범아시아 평균 얼굴로 수렴하는 것을 막음
-//   COLOR_ACCURACY의 NOT golden hour            → 화이트가 살구색이 되는 것을 막음
-//   POSE_STATIC의 NO running, NO jumping        → 동적 포즈에서 손이 뭉개지는 것을 막음
-// ("NOT a tidy product lineup" 류의 다른 부정문은 별도 기능(compare_pair)에서
-// 검증된 것으로 이 파일에는 없다.)
-// 긍정 지시로 대체하면 효과가 사라진다.
+// 실물 35장 생성으로 확정. 각 상수의 근거는 개별 JSDoc 참고.
+// 근거 문서: docs/superpowers/specs/2026-07-26-pro-model-wearing-design.md
 
-/** 모델 세팅. "Korean"만 쓰면 범아시아 평균으로 수렴한다 */
+/**
+ * 인물 외형 서술(성별별). 이 섹션에서 `MODEL`은 패션 모델(사람)을 가리키며 AI 모델이 아니다 —
+ * 새 상수를 추가할 때도 역할이 이름에 드러나게 할 것(예: MODEL_CONTEXT, FACE_VISIBLE, POSE_STATIC).
+ */
 export const MODEL_KO = {
   male:
     'a Korean man in his late twenties with a clean modern Korean haircut — softly layered, ' +
@@ -134,6 +128,11 @@ export const MODEL_KO = {
     'fair even skin tone, slim build',
 } as const;
 
+/**
+ * 범아시아 평균 얼굴로 수렴하는 것을 막는 핵심 문구. MODEL_KO가 "Korean"이라고만 말해도
+ * 그것만으로는 범아시아 평균 얼굴로 수렴해 "중국 사람처럼 보인다"는 피드백을 받았다 —
+ * 이 상수의 "not a Western or Chinese catalog"가 실제로 그것을 막는다.
+ */
 export const MODEL_CONTEXT =
   'Styled like a Korean lifestyle magazine editorial shot in Seoul, not a Western or Chinese catalog.';
 
