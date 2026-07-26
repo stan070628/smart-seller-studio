@@ -11,9 +11,9 @@ Each section is a ClaudeLayoutContent object:
   "blocks": [...],
   "bgStyle": "white"|"light"|"dark"|"primary",
   "padding": "normal"|"compact"|"wide",
-  "imageSlots": [{"slotType": "flux_lifestyle"|"product_nukki"|"detail_closeup", "promptHint": "...", "imageRef": 0}]
+  "imageSlots": [{"slotType": "flux_lifestyle"|"product_nukki"|"detail_closeup"|"model_wearing", "promptHint": "...", "imageRef": 0, "faceVisible": true, "modelGender": "male"}]
 }
-slotType: flux_lifestyle=착용/사용 라이프스타일 씬(AI 생성), product_nukki=제품 단독컷, detail_closeup=제품의 물리적 디테일(지퍼·스트랩·원단·수납) 접사 컷.
+slotType: flux_lifestyle=착용/사용 라이프스타일 씬(AI 생성), product_nukki=제품 단독컷, detail_closeup=제품의 물리적 디테일(지퍼·스트랩·원단·수납) 접사 컷, model_wearing=사람이 제품을 착용·사용한 씬(AI 생성). faceVisible로 얼굴 노출을, modelGender로 모델 성별을 지정한다.
 imageRef = 이 슬롯에 쓸 제품 이미지의 인덱스(0부터). 제공된 이미지를 실제로 보고, 그 섹션 내용/색상에 가장 맞는 이미지를 지정하세요. 예: 히어로·소재 섹션이 베이지를 다루면 베이지 이미지 인덱스를, 로즈 카드는 로즈 이미지 인덱스를.
 
 생성 절차: ① 하단 NARRATIVE의 아크 중 하나를 골라 섹션 구성을 정한다
@@ -171,6 +171,24 @@ N6. assure 비트는 세탁·보관·제품정보로 끝내지 말고, 사기 �
     Key points에 답할 근거가 있는 것만 다루세요. 근거가 없으면 그 항목은 빼고,
     "문의 주세요" 같은 회피 문구로 자리를 채우지 마세요 — 답이 없는 것보다 나쁩니다.
     bullet_list나 spec_table로 짧게 정리하고, 걱정을 부풀리는 문장은 쓰지 마세요.
+N7. 인물 착용컷(model_wearing) — 착용·사용이 구매 결정을 좌우하는 상품(의류·잡화·
+    신발·가방·액세서리·스포츠용품)이면 서로 다른 섹션에 최소 2개를 두세요: 얼굴이
+    보이는 컷(faceVisible: true)과 얼굴을 뺀 크롭 컷(faceVisible: false) 하나씩.
+    하나만 있으면 절반이 빕니다 — 얼굴 컷은 표정으로 "입고 싶다"를 만들고, 크롭 컷은
+    시선을 핏·마감에 붙잡습니다.
+    - hook·solution·usecase 비트 → faceVisible: true / detail·evidence 비트 → false.
+    - modelGender는 사이즈 표기·카피의 타깃으로 정하세요. 예: M~XXL이면 male, S/M/L에
+      여성 카피면 female.
+    - 한 섹션에 model_wearing은 하나만 두세요(섹션당 AI 씬은 1장만 생성됩니다). 두 씬의
+      promptHint는 겹치지 않게 하세요.
+    - promptHint에는 [상황]만 쓰세요 — 모델 외형·프레이밍·조명·포즈는 시스템이 붙이므로
+      겹쳐 쓰면 충돌합니다. 예: "여름 해변 보드워크 산책", "밝은 실내 짐에서 수건을
+      목에 걸치고 서 있는 모습".
+    - 동작이 큰 장면(달리기·점프·팔을 머리 위로 드는 동작)은 손과 프레임이 망가지니
+      쓰지 마세요 — 서 있거나 기대거나 천천히 걷는 장면만 쓰세요.
+    - 조명에 색을 넣지 마세요 — 노을·골든아워는 제품 색을 물들입니다.
+    - problem 비트에는 인물을 쓰지 마세요(D3: 문제는 카피로 말합니다).
+    - 인물이 부적절한 상품(위생용품·속옷·의료기기 등)은 0개로 두세요. 1개는 안 됩니다.
 
 ${BENCHMARK_PATTERNS}
 

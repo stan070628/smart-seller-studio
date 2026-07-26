@@ -44,6 +44,13 @@ REVIEW CHECKLIST:
    - problem이 있는데 solution이 없으면 solution 섹션을 추가한다.
    - assure 섹션을 마지막 3개 섹션 안으로 옮긴다. assure 섹션이 아예 없으면
      세탁·보관·제품정보를 담은 assure 섹션을 만들어 끝에 둔다.
+8. wearing_coverage 이슈가 있으면 다음을 고쳐라.
+   - model_wearing 슬롯을 가진 섹션이 1개뿐이면 다른 섹션에 하나를 더 만든다.
+     같은 섹션에 두 개를 넣지 마라 — 섹션당 한 장만 생성된다.
+   - 기존 것이 faceVisible: true면 새것은 false로(detail 또는 evidence 비트 섹션에),
+     기존 것이 false면 새것은 true로(hook 또는 usecase 비트 섹션에) 둔다.
+   - 두 씬의 promptHint가 겹치면 안 된다. 기존 슬롯을 삭제하지 마라.
+   - promptHint에는 상황만 쓴다. 모델 외형·프레이밍·조명·포즈는 시스템이 붙인다.
 
 Return ONLY the corrected JSON array — no explanation, no code fences.`;
 
