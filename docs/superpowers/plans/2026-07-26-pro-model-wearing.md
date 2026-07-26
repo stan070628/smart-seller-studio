@@ -66,7 +66,7 @@ modelGender?: 'male' | 'female';    // 모델 성별
 | `src/lib/detail-page/layout-validator.ts` (수정) | `imageSlots` 2필드, `wearing_coverage` |
 | `src/lib/detail-page/image-hygiene.ts` (수정) | 폴백 시 착용 주장 위생 |
 | `src/lib/ai/repair-pro-layout.ts` (수정) | `wearing_coverage` 수리 지시 |
-| `src/app/api/ai/generate-pro-layout/system-prompt.ts` (수정) | N6 규칙 |
+| `src/app/api/ai/generate-pro-layout/system-prompt.ts` (수정) | N7 규칙 |
 | `src/app/api/ai/generate-pro-layout/route.ts` (수정) | `wearing` 플래그 |
 | `src/app/listing/[id]/detail-maker-pro/page.tsx` (수정) | 결선 3곳, 요청 필드, AI 고지 |
 
@@ -700,7 +700,7 @@ git commit -m "feat(wearing): 슬롯 스키마 2필드 + wearing_coverage 검증
 
 ---
 
-## Task 5: `CLAUDE_SYSTEM`에 N6 규칙 추가
+## Task 5: `CLAUDE_SYSTEM`에 N7 규칙 추가
 
 **Files:**
 - Modify: `src/app/api/ai/generate-pro-layout/system-prompt.ts`
@@ -720,12 +720,12 @@ git commit -m "feat(wearing): 슬롯 스키마 2필드 + wearing_coverage 검증
 model_wearing=사람이 제품을 착용·사용한 씬(AI 생성). faceVisible로 얼굴 노출을, modelGender로 모델 성별을 지정한다.
 ```
 
-- [ ] **Step 2: NARRATIVE 블록에 N6을 추가한다**
+- [ ] **Step 2: NARRATIVE 블록에 N7을 추가한다**
 
 N5 다음, `${BENCHMARK_PATTERNS}` 앞에 삽입한다:
 
 ```
-N6. 인물 착용컷(model_wearing) — 착용·사용이 구매 결정을 좌우하는 상품(의류·잡화·신발·
+N7. 인물 착용컷(model_wearing) — 착용·사용이 구매 결정을 좌우하는 상품(의류·잡화·신발·
     가방·액세서리·스포츠용품)이면 서로 다른 섹션에 최소 2개를 두세요. 하나는 얼굴이
     보이는 컷(faceVisible: true), 하나는 얼굴을 뺀 크롭 컷(faceVisible: false)입니다.
     둘의 역할이 달라 하나만 있으면 절반이 빕니다 — 얼굴 컷은 표정으로 "입고 싶다"를
@@ -763,10 +763,10 @@ N6. 인물 착용컷(model_wearing) — 착용·사용이 구매 결정을 좌�
 
 `src/app/api/ai/generate-scene-image/prompts.ts`를 읽고 대조하라:
 
-- N6이 안내하는 `faceVisible` 의미가 `buildWearingInstruction`의 분기와 일치하는가?
-- N6의 "동작 금지"가 `POSE_STATIC`의 실제 금지 항목과 일치하는가?
-- N6의 "조명 색 금지"가 `COLOR_ACCURACY`와 일치하는가?
-- N6이 `promptHint`에 상황만 쓰라고 했는데, `buildWearingInstruction`이 실제로 모델·프레이밍·조명·포즈를 다 붙이는가?
+- N7이 안내하는 `faceVisible` 의미가 `buildWearingInstruction`의 분기와 일치하는가?
+- N7의 "동작 금지"가 `POSE_STATIC`의 실제 금지 항목과 일치하는가?
+- N7의 "조명 색 금지"가 `COLOR_ACCURACY`와 일치하는가?
+- N7이 `promptHint`에 상황만 쓰라고 했는데, `buildWearingInstruction`이 실제로 모델·프레이밍·조명·포즈를 다 붙이는가?
 
 **어긋나면 프롬프트를 임의로 바꾸지 말고 어긋난 사실을 보고하라.** 상수는 시험으로 검증된 것이다.
 
@@ -780,18 +780,26 @@ npx vitest run src/__tests__/api/generate-pro-layout-patterns.test.ts
 
 Expected: tsc 출력 없음. `CLAUDE_SYSTEM`은 템플릿 리터럴이므로 백틱·`${}` 손상에 주의하라.
 
-**두 번째 테스트 파일이 중요하다.** `generate-pro-layout-patterns.test.ts`(커밋 `02590156`)는 프롬프트가 **존재하지 않는 규칙을 참조하는 것**을 잡는다 — 실제로 `"아래 R2를 따른다"`처럼 정의 없는 라벨을 가리키는 사고가 있었고, LLM은 없는 항목을 조용히 무시하므로 사람 눈에 안 띈다. `findDanglingRuleRefs`가 줄 머리의 `N6.` 형태를 정의로, 그 밖의 등장을 참조로 본다. `findDuplicateRuleLabels`는 번호 재사용을 잡는다.
+**두 번째 테스트 파일이 중요하다.** `generate-pro-layout-patterns.test.ts`(커밋 `02590156`)는 프롬프트가 **존재하지 않는 규칙을 참조하는 것**을 잡는다 — 실제로 `"아래 R2를 따른다"`처럼 정의 없는 라벨을 가리키는 사고가 있었고, LLM은 없는 항목을 조용히 무시하므로 사람 눈에 안 띈다. `findDanglingRuleRefs`가 줄 머리의 `N7.` 형태를 정의로, 그 밖의 등장을 참조로 본다. `findDuplicateRuleLabels`는 번호 재사용을 잡는다.
 
-N6 작성 시 확인된 사실:
-- **N 라벨은 현재 N0~N5까지만 정의돼 있다** → N6은 중복이 아니다
-- **N6이 참조하는 `D3`는 실제로 존재한다**(`system-prompt.ts:114`) — 내용도 정확히 일치한다: *"문제 상황은 이미지가 아니라 카피로 말합니다"*. 그리고 D3는 이미 "인물이 등장하는 씬은 예외 없이 긍정적"을 규정하므로, **N6에서 표정·자세 긍정 원칙을 다시 쓰지 마라** — 중복이고 두 곳이 따로 낡는다
-- N6 안에서 다른 규칙을 새로 참조하려면 그 라벨이 정의돼 있는지 먼저 `grep`으로 확인하라
+**라벨 번호를 먼저 `grep`으로 확인하라.** 이 계획은 처음 `N6`으로 썼는데, 사용자가 별도 세션에서 커밋 `42f954ea`로 **`N6`(assure 비트는 사기 직전 질문을 먼저 다뤄라)을 이미 정의했다.** 그래서 `N7`로 바꿨다. **이 파일은 여러 작업에서 동시에 커지고 있으므로, 착수 시점에 다시 확인하라:**
+
+```bash
+grep -oE "^ *N[0-9]+\." src/app/api/ai/generate-pro-layout/system-prompt.ts | tr -d ' ' | sort -uV
+```
+
+비어 있는 가장 작은 번호를 쓰고, 이 계획의 `N7`과 다르면 **계획이 아니라 실제 파일을 따르라.** 중복은 `findDuplicateRuleLabels`가 잡는다.
+
+확인된 사실:
+- **`N7`이 참조하는 `D3`는 실제로 존재한다** — 내용도 정확히 일치한다: *"문제 상황은 이미지가 아니라 카피로 말합니다"*. 그리고 D3는 이미 *"인물이 등장하는 씬… 우리 제품을 착용·사용하는 인물은 예외 없이 긍정적"*을 규정하므로, **`N7`에서 표정·자세 긍정 원칙을 다시 쓰지 마라** — 중복이고 두 곳이 따로 낡는다
+- `N7` 안에서 다른 규칙을 새로 참조하려면 그 라벨이 정의돼 있는지 먼저 `grep`으로 확인하라. `findDanglingRuleRefs`가 정의 없는 참조를 잡지만, 애초에 만들지 않는 것이 낫다
+- **착수 전에 `git pull`/`git log`로 이 파일의 최신 상태를 확인하라.** 사용자가 병렬로 `system-prompt.ts`를 수정하고 있다(`42f954ea`가 C11·C12·N6을 추가했다)
 
 - [ ] **Step 6: 커밋**
 
 ```bash
 git add src/app/api/ai/generate-pro-layout/system-prompt.ts src/lib/ai/repair-pro-layout.ts
-git commit -m "feat(wearing): CLAUDE_SYSTEM N6 규칙 + repair 지시
+git commit -m "feat(wearing): CLAUDE_SYSTEM N7 규칙 + repair 지시
 
 promptHint에는 상황만 쓰게 한다 — 모델 외형·프레이밍·조명은
 검증된 상수가 붙이므로 겹쳐 쓰면 충돌한다."
@@ -1034,9 +1042,9 @@ function dropClaimSentences(text: string, isClaim: (t: string) => boolean): stri
                 blocks = stripped.blocks as LayoutBlock[];
 ```
 
-- [ ] **Step 6: 병치 규칙을 N6에 추가한다**
+- [ ] **Step 6: 병치 규칙을 N7에 추가한다**
 
-`section-renderer.ts:757`이 `block.width ?? '100%'`를 지원하고, `page.tsx:1379-1390`이 `genSlotIdx` 슬롯에만 AI 씬을 넣고 나머지 슬롯은 `imageRef` 제품 이미지를 넣으므로, 슬롯 두 개 + image 블록 두 개로 병치가 성립한다. N6 끝에 추가한다:
+`section-renderer.ts:757`이 `block.width ?? '100%'`를 지원하고, `page.tsx:1379-1390`이 `genSlotIdx` 슬롯에만 AI 씬을 넣고 나머지 슬롯은 `imageRef` 제품 이미지를 넣으므로, 슬롯 두 개 + image 블록 두 개로 병치가 성립한다. N7 끝에 추가한다:
 
 ```
     - model_wearing 슬롯이 있는 섹션에는 product_nukki 슬롯을 하나 더 두고(model_wearing이
