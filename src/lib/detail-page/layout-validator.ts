@@ -427,6 +427,14 @@ export function validateProLayout(sections: unknown, opts?: ProLayoutOpts): Vali
         (sl) => sl && typeof sl === 'object' && isGenSlotType((sl as { slotType?: unknown }).slotType),
       ) as { slotType?: string; faceVisible?: unknown } | undefined;
       if (firstGen?.slotType === 'model_wearing') {
+        // 병치 규칙(N7)이 imageSlots[0]=착용컷을 전제한다. product_nukki가 앞에
+        // 오면(예: [product_nukki, model_wearing]) firstGen은 여전히 model_wearing을
+        // 찾지만(GEN_SLOT_TYPES가 아니라서 product_nukki를 건너뛰므로), 실제 blocks의
+        // image 배열 순서는 imageSlots 순서를 그대로 따르므로 렌더가 뒤집힌다 —
+        // attachedIndex 0(제품 단독컷 자리)에 실제 제품 사진이, attachedIndex 1(45%
+        // 썸네일 자리)에 AI 착용컷이 들어간다. 순서가 틀리면 카운트하지 않아
+        // wearing_coverage를 발동시켜 repair가 순서를 바로잡게 한다.
+        if ((slots[0] as { slotType?: string } | undefined)?.slotType !== 'model_wearing') continue;
         wearingSections += 1;
         // faceVisible 생략은 generate-scene-image route의 Zod 기본값(true)으로
         // 처리되므로 얼굴 컷으로 센다.

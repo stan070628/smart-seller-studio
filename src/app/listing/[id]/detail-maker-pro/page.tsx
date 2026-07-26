@@ -1266,6 +1266,10 @@ export default function DetailMakerProPage() {
             // model_wearing=인물 착용컷) 섹션마다 Gemini 씬 생성.
             // generate-scene-image: 누끼 → 배경 생성 → 합성(model_wearing은 비합성 경로).
             const geminiUrlMap: Record<number, string> = {};
+            // geminiUrlMap은 realBySection(실제 업로드 사진)으로도 pre-seed되므로 "AI가
+            // 실제로 씬을 생성했다"는 신호로 쓸 수 없다. AI 고지(연출 고지) 판정은 이
+            // 집합만 본다 — 업로드 성공 시점에만 채운다.
+            const aiSceneSections = new Set<number>();
 
             // 재개 시 productImages(File) 없음 → 저장해둔 productImageUrls로 폴백
             const effectiveProductUrls: (string | null)[] =
@@ -1376,6 +1380,7 @@ export default function DetailMakerProPage() {
                     const uploadJson = await uploadRes.json() as { success: boolean; url?: string };
                     if (uploadJson.success && uploadJson.url) {
                       geminiUrlMap[i] = uploadJson.url;
+                      aiSceneSections.add(i);
                     }
                   } catch {
                     // 실패 시 제품 이미지 원본으로 fallback
@@ -1426,13 +1431,13 @@ export default function DetailMakerProPage() {
                 attachedImages.length,
               );
 
-              // 씬 생성이 실패해 원본 전체컷으로 대체된 섹션에서는 "접사입니다"·
-              // "모델이 착용한" 류 문구가 거짓이 된다. 사진을 바꿀 수 없으니 카피를
-              // 사진에 맞춘다. wearing 여부는 실패한 slot이 model_wearing이었는지로 판정한다.
+              // gen 슬롯(어떤 slotType이든)이 폴백되면 그 자리는 평범한 제품 사진이다 —
+              // 접사든 착용이든 사진 내용을 주장하는 문구는 모두 거짓이 된다.
+              // flux_lifestyle도 프롬프트상 "착용/사용 라이프스타일 씬"이므로
+              // model_wearing만 걸러서는 같은 결함이 남는다 — slotType으로 나누지 않는다.
               if (genSlotIdx >= 0 && !geminiUrl) {
                 fallbackSections++;
-                const wasWearing = slots[genSlotIdx]?.slotType === 'model_wearing';
-                const stripped = stripCloseupClaims(blocks, { wearing: wasWearing });
+                const stripped = stripCloseupClaims(blocks, { wearing: true });
                 blocks = stripped.blocks as LayoutBlock[];
                 strippedClaims += stripped.removed;
                 headingClaims.push(...stripped.headingClaims);
@@ -1471,13 +1476,19 @@ export default function DetailMakerProPage() {
               setLayoutWarnings((prev) => [...prev, ...hygiene]);
             }
 
-            // AI 생성 착용컷이 있으면 연출 고지를 붙인다. 제품 재현이 좋아도
-            // 스파클 글리프 같은 것이 간헐적으로 섞이므로(12장 중 2장) 구매자가 알 수 있어야 한다.
+            // AI가 실제로 씬을 생성한 섹션이 있으면 연출 고지를 붙인다. 제품 재현이
+            // 좋아도 스파클 글리프 같은 것이 간헐적으로 섞이므로(12장 중 2장) 구매자가
+            // 알 수 있어야 한다.
+            //
+            // aiSceneSections(업로드 성공 시점에만 채움)를 신호로 쓴다 — imageSlots
+            // 선언이나 geminiUrlMap을 쓰면 안 된다: 슬롯 선언은 생성이 전부 실패해도
+            // true라 판매자의 실제 사진 위에 "AI로 생성되었다"는 거짓 고지가 붙고,
+            // geminiUrlMap은 realBySection(실제 업로드 사진)으로 pre-seed되어 AI 신호가
+            // 아니다. 반대로 flux_lifestyle/detail_closeup만 성공해도(model_wearing
+            // 슬롯이 아예 없어도) 고지가 필요하므로 slotType으로 좁히지 않는다.
             // detailSections는 map 결과라 const다 — push 대신 스프레드로 새 배열을 만든다.
-            const hasWearing = generatedSections.some(
-              s => s.imageSlots?.some(sl => sl.slotType === 'model_wearing') ?? false,
-            );
-            const sectionsWithDisclosure = hasWearing
+            const hasAiScene = aiSceneSections.size > 0;
+            const sectionsWithDisclosure = hasAiScene
               ? [
                   ...detailSections,
                   {

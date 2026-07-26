@@ -105,6 +105,21 @@ describe('wearing_coverage', () => {
     expect(res.violations.some(v => v.code === 'wearing_coverage')).toBe(true);
   });
 
+  it('product_nukki가 model_wearing보다 앞이면 병치 순서가 뒤집혀 세지 않는다', () => {
+    // N7의 병치 규칙은 imageSlots[0]=model_wearing을 전제한다(attachedIndex 0=착용컷,
+    // attachedIndex 1=제품 단독컷 45%). product_nukki가 앞에 오면 attachedImages
+    // 순서가 뒤집혀 실제 제품 사진이 attachedIndex 0(큰 자리)에, AI 착용컷이
+    // attachedIndex 1(45% 썸네일)에 들어간다 — 렌더가 정반대가 된다.
+    const secs = withWearing(1); // 섹션 0에 순수 model_wearing 1개(정상 순서)
+    secs[1]!.imageSlots = [
+      { slotType: 'product_nukki', promptHint: '제품 단독컷' },
+      { slotType: 'model_wearing', promptHint: '실내', faceVisible: false, modelGender: 'male' },
+    ];
+    // 섹션 1은 순서가 뒤집혀 세지 않으므로 유효 착용 섹션은 섹션 0 하나뿐 → 위반
+    const res = validateProLayout(secs, { wearing: true });
+    expect(res.violations.some(v => v.code === 'wearing_coverage')).toBe(true);
+  });
+
   it('두 섹션 모두 얼굴 컷이면(faceVisible 생략) wearing_face_pair 위반 — 두 컷이 같은 종류다', () => {
     // 둘 다 faceVisible 생략 → 서버 기본값 true로 처리되어 둘 다 얼굴 컷이 된다.
     const secs = withWearing(2, [undefined, undefined]);

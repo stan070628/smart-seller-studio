@@ -40,17 +40,21 @@ export function hasCloseupClaim(text: string): boolean {
 }
 
 /**
- * "이 사진에 사람이 있다"고 주장하는 표현. model_wearing 슬롯이 생성 실패로 원본
- * 제품컷으로 대체되면 이 문장들이 거짓이 된다(접사 주장과 같은 문제, 같은 메커니즘).
+ * "이 사진에 사람이 있다"고 주장하는 표현. gen 슬롯(flux_lifestyle·detail_closeup·
+ * model_wearing)이 생성 실패로 원본 제품컷으로 대체되면 이 문장들이 거짓이 된다
+ * (접사 주장과 같은 문제, 같은 메커니즘).
  *
  * 좁게 잡는다 — "모델"은 한국 이커머스에서 제품 변형을 뜻하는 경우가 흔하고
  * ("구형 모델", "여러 모델이 있습니다"), "들고 있는"·"사용하는 모습"은 평범한
  * 제품 설명이다("한 손으로 들고 있는 무게", "사용하는 모습을 상상해보세요").
- * 그래서 사람을 가리키는 주어와 착용 동작이 함께 나오는 형태("모델이 착용/입/들/
- * 사용/신은"), 또는 사진 자체를 지칭하는 표현("~한 모습", "~컷")만 대상으로 한다.
+ * 단일 글자 어간(착|입|들|사용|신)으로 잡으면 "모델이 들어왔습니다"·"모델이 입고
+ * 예정입니다"(입고=입하) 같은 평범한 카피까지 잡히므로, 완전한 어절 단위로만
+ * 매칭한다. 그래서 사람을 가리키는 주어와 착용 동작이 함께 나오는 형태("모델(이)
+ * 착용/입은/입고 있/신은/신고 있/들고 있/사용한 모습/사용하는 모습"), 또는 사진
+ * 자체를 지칭하는 표현("착용(한) 모습", "착용컷/샷/사진/이미지")만 대상으로 한다.
  */
 const WEARING_MARKERS =
-  /모델이\s*(착용|입|들|사용|신)|착용한 모습|착용컷|입은 모습|입고 있는 모습/;
+  /모델(?:이|은|가)?\s*(?:착용|입은|입고 있|신은|신고 있|들고 있|사용한 모습|사용하는 모습)|착용\s*(?:한|된)?\s*모습|착용\s*(?:컷|샷|사진|이미지)|입은 모습|입고 있는 모습/;
 
 export function hasWearingClaim(text: string): boolean {
   return typeof text === 'string' && WEARING_MARKERS.test(text);
@@ -194,8 +198,10 @@ export function imageHygieneWarnings(opts: {
   }
 
   if (opts.fallbackSections > 0) {
+    // 접사 주장뿐 아니라 착용 주장(모델 착용/착용컷 등)도 같은 이유로 제거되므로
+    // '접사'로 못박지 않는다 — 두 종류를 하나의 문구로 표현한다.
     const tail = opts.strippedClaims > 0
-      ? ` 사진과 맞지 않는 '접사' 표현 ${opts.strippedClaims}곳은 자동으로 제거했습니다.`
+      ? ` 사진과 맞지 않는 표현 ${opts.strippedClaims}곳은 자동으로 제거했습니다.`
       : '';
     out.push(
       `연출 컷 생성에 실패해 ${opts.fallbackSections}개 섹션이 원본 사진으로 대체됐습니다.${tail}`,
@@ -204,7 +210,7 @@ export function imageHygieneWarnings(opts: {
 
   if (opts.headingClaims.length > 0) {
     out.push(
-      `제목에 남은 접사 표현은 자동으로 고치지 않았습니다: ${opts.headingClaims.map((h) => `"${h}"`).join(', ')}. ` +
+      `제목에 남은 표현은 자동으로 고치지 않았습니다: ${opts.headingClaims.map((h) => `"${h}"`).join(', ')}. ` +
       `사진과 맞지 않으면 에디터에서 직접 수정해주세요.`,
     );
   }
