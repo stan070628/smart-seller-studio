@@ -11,7 +11,7 @@ export interface Violation {
   code:
     | 'schema' | 'cjk' | 'broken_text' | 'empty_block'
     | 'duplicate' | 'section_count' | 'prohibited'
-    | 'option_compare' | 'option_coverage' | 'option_image' | 'narrative';
+    | 'option_compare' | 'option_coverage' | 'option_image' | 'narrative' | 'wearing_coverage';
   path: string;
   message: string;
   severity: 'error' | 'warning';
@@ -30,6 +30,8 @@ export interface ProLayoutOpts {
   optionNameByImageIndex?: Map<number, string>;
   /** 서사 검증 활성화 — 생성 경로 전용. draft/render는 사용자 편집본이라 켜지 않는다. */
   narrative?: boolean;
+  /** 인물 착용컷 커버리지 검증 — 생성 경로 전용 (statHygiene·narrative와 같은 선례) */
+  wearing?: boolean;
   /**
    * progress_bar 수치 대조용 입력 원천.
    * 지정하면 displayValue의 숫자가 이 문자열에 등장하는 item만 남긴다.
@@ -75,7 +77,14 @@ const zClaudeSection = z.object({
   blocks: z.array(zLayoutBlock),
   bgStyle: z.enum(['white', 'light', 'dark', 'primary']).optional(),
   padding: z.enum(['normal', 'compact', 'wide']).optional(),
-  imageSlots: z.array(z.object({ slotType: z.string(), promptHint: z.string().optional(), imageRef: z.number().optional() })).optional(),
+  imageSlots: z.array(z.object({
+    slotType: z.string(),
+    promptHint: z.string().optional(),
+    imageRef: z.number().optional(),
+    // model_wearing 전용. 자연어 promptHint를 파싱하면 조용히 실패하므로 필드로 받는다.
+    faceVisible: z.boolean().optional(),
+    modelGender: z.enum(['male', 'female']).optional(),
+  })).optional(),
   // 서사 비트. optional인 이유는 기존 draft 로드가 깨져서가 아니라(draft GET은 검증을
   // 거치지 않는다), draft 저장·render 경로의 warnings에 스키마 노이즈를 만들지
   // 않기 위해서다. 누락 검증은 narrative 플래그가 켜진 생성 경로에서만 한다.
@@ -384,6 +393,34 @@ export function validateProLayout(sections: unknown, opts?: ProLayoutOpts): Vali
         path: issue.sectionIndex !== undefined ? `sections[${issue.sectionIndex}]` : 'sections',
         message: issue.message,
         severity: issue.severity,
+        autoFixable: false,
+      });
+    }
+  }
+
+  // ── 인물 착용컷 커버리지 (생성 경로 전용) ──
+  // 1개면 위반: 얼굴 보이는 컷과 크롭 컷의 역할이 달라 둘 다 필요하다.
+  //   얼굴 컷은 표정으로 "입고 싶다"를 만들고, 크롭 컷은 시선을 제품에 붙잡아 핏을 보여준다.
+  // 0개는 통과: 인물이 부적절한 상품(위생용품·속옷·의료기기)은 0개가 정답이며,
+  //   카테고리를 하드코딩하지 않고도 "Claude가 필요하다고 판단했으면 2개"가 강제된다.
+  if (opts?.wearing) {
+    let wearingSlots = 0;
+    for (const sec of sections) {
+      const slots = (sec as { imageSlots?: unknown }).imageSlots;
+      if (!Array.isArray(slots)) continue;
+      for (const sl of slots) {
+        if (sl && typeof sl === 'object' && (sl as { slotType?: unknown }).slotType === 'model_wearing') {
+          wearingSlots += 1;
+        }
+      }
+    }
+    if (wearingSlots === 1) {
+      violations.push({
+        code: 'wearing_coverage',
+        path: 'sections',
+        message:
+          '인물 착용컷이 1개입니다. 얼굴이 보이는 컷(faceVisible: true)과 얼굴을 뺀 크롭 컷(faceVisible: false)이 각각 필요하므로 2개 이상으로 만드세요.',
+        severity: 'error',
         autoFixable: false,
       });
     }
