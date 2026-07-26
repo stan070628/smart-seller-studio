@@ -60,6 +60,9 @@ const zLayoutBlock: z.ZodType<unknown> = z.lazy(() =>
     z.object({ type: z.literal('icon_grid'), cols: z.union([z.literal(2), z.literal(3)]).optional(), items: z.array(z.object({ icon: z.string(), title: z.string(), subtitle: z.string().optional() })) }),
     z.object({ type: z.literal('option_grid'), cols: z.union([z.literal(2), z.literal(3)]).optional(), items: z.array(z.object({ label: z.string(), sublabel: z.string().optional(), highlight: z.boolean().optional() })) }),
     z.object({ type: z.literal('layout_bar_chart'), title: z.string().optional(), unit: z.string().optional(), groups: z.array(z.string()), groupColors: z.array(z.string()), items: z.array(z.object({ label: z.string(), values: z.array(z.number()) })), showLegend: z.boolean().optional() }),
+    // 실측 스펙 표. 열 수는 390px 가독성 한계라 렌더러가 5열로 자르지만,
+    // 스키마에서 막지는 않는다 — 잘라 보여주는 편이 블록 통째로 사라지는 것보다 낫다.
+    z.object({ type: z.literal('spec_table'), columns: z.array(z.string()), rows: z.array(z.array(z.string())), unit: z.string().optional(), note: z.string().optional() }),
     z.object({ type: z.literal('radar_chart'), axes: z.array(z.object({ label: z.string(), value: z.number(), max: z.number().optional() })), color: z.string().optional() }),
     z.object({ type: z.literal('timeline'), items: z.array(z.object({ stage: z.string(), icon: z.string().optional(), value: z.string().optional(), highlight: z.boolean().optional() })) }),
   ])
@@ -252,6 +255,9 @@ export function isEmptyBlock(block: Record<string, unknown>): boolean {
       (typeof block.text !== 'string' || block.text.trim() === '')) return true;
   const itemTypes = ['bullet_list', 'stat_row', 'icon_grid', 'option_grid', 'process_flow', 'progress_bar', 'timeline'];
   if (itemTypes.includes(t as string) && Array.isArray(block.items) && block.items.length === 0) return true;
+  // spec_table은 items가 아니라 columns/rows를 쓴다. 머리행만 있고 데이터가 없으면
+  // 빈 표 껍데기가 남으므로 rows 기준으로 판정한다.
+  if (t === 'spec_table' && (!Array.isArray(block.rows) || block.rows.length === 0)) return true;
   return false;
 }
 
