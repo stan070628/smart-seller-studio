@@ -3,6 +3,8 @@ import { validateProLayout, sanitizeProLayout } from '@/lib/detail-page/layout-v
 
 /** model_wearing 슬롯 n개를 서로 다른 섹션에 배치한 최소 레이아웃 */
 function withWearing(n: number): Record<string, unknown>[] {
+  // 6 = section_count 검증의 하한(6~10). 이보다 줄이면 무관한 section_count
+  // warning이 섞여 다음 사람이 엉뚱한 경고를 쫓게 된다.
   const secs = Array.from({ length: 6 }, (_, i) => ({
     type: 'claude_layout',
     title: `섹션 ${i}`,
@@ -57,7 +59,17 @@ describe('wearing_coverage', () => {
   it('위반은 error 등급이라 repair를 트리거한다', () => {
     const res = validateProLayout(withWearing(1), { wearing: true });
     const v = res.violations.find(x => x.code === 'wearing_coverage');
-    expect(v?.severity).toBe('error');
+    expect(v).toMatchObject({
+      code: 'wearing_coverage',
+      path: 'sections',
+      severity: 'error',
+      autoFixable: false,
+      // repair-pro-layout이 이 문장을 그대로 LLM에 전달한다 — 로그가 아니라 지시다.
+      message: expect.stringContaining('2개 이상'),
+    });
+    // isClean.toBe(false)만 보면 narrative 등 무관한 error로도 통과할 수 있어,
+    // error 코드 목록을 정확히 고정한다.
+    expect(res.violations.filter(v => v.severity === 'error').map(v => v.code)).toEqual(['wearing_coverage']);
     expect(res.isClean).toBe(false);
   });
 });
@@ -73,11 +85,20 @@ describe('imageSlots 신규 필드', () => {
     const slot = (sections[0] as { imageSlots: Record<string, unknown>[] }).imageSlots[0]!;
     expect(slot.faceVisible).toBe(true);
     expect(slot.modelGender).toBe('male');
+    // false가 truthy 기반 복사로 유실되면 모든 크롭 컷이 얼굴 컷이 된다.
+    expect((sections[1] as { imageSlots: Record<string, unknown>[] }).imageSlots[0]!.faceVisible).toBe(false);
   });
 
   it('modelGender에 잘못된 값이 오면 schema 위반', () => {
     const secs = withWearing(2);
     (secs[0]!.imageSlots as Record<string, unknown>[])[0]!.modelGender = 'other';
+    const res = validateProLayout(secs, { wearing: true });
+    expect(res.violations.some(v => v.code === 'schema')).toBe(true);
+  });
+
+  it('faceVisible에 boolean이 아닌 값이 오면 schema 위반', () => {
+    const secs = withWearing(2);
+    (secs[0]!.imageSlots as Record<string, unknown>[])[0]!.faceVisible = 'yes';
     const res = validateProLayout(secs, { wearing: true });
     expect(res.violations.some(v => v.code === 'schema')).toBe(true);
   });
