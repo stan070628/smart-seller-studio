@@ -668,6 +668,8 @@ Expected: FAIL — `wearing` 옵션과 `wearing_coverage` code가 없음
     // 한 섹션에 model_wearing을 2개 넣어도 실제로는 1장만 나오므로,
     // 슬롯 수로 세면 그 경우가 통과해 검증이 실효성을 잃는다.
     let wearingSections = 0;
+    let sawFaceVisible = false;
+    let sawFaceCropped = false;
     for (const sec of sections) {
       const slots = (sec as { imageSlots?: unknown }).imageSlots;
       if (!Array.isArray(slots)) continue;
@@ -676,6 +678,19 @@ Expected: FAIL — `wearing` 옵션과 `wearing_coverage` code가 없음
           && (sl as { slotType?: unknown }).slotType === 'model_wearing',
       );
       if (hasWearing) wearingSections += 1;
+    }
+    // faceVisible 쌍 검증: 개수가 맞아도 두 컷이 모두 얼굴 컷이면 의미가 없다.
+    // faceVisible은 optional이고 서버 기본값이 true이므로, Claude가 생략하면
+    // 두 컷이 같아지는데 개수 검증만으로는 통과한다.
+    if (wearingSections >= 2 && !(sawFaceVisible && sawFaceCropped)) {
+      violations.push({
+        code: 'wearing_coverage',
+        path: 'sections',
+        message:
+          '인물 착용컷이 모두 같은 종류입니다. 하나는 faceVisible: true(얼굴 컷), 하나는 false(크롭 컷)로 지정하세요.',
+        severity: 'error',
+        autoFixable: false,
+      });
     }
     if (wearingSections === 1) {
       violations.push({
@@ -726,7 +741,7 @@ git commit -m "feat(wearing): 슬롯 스키마 2필드 + wearing_coverage 검증
 14행의 `imageSlots` 스키마 예시에 새 필드를 넣고:
 
 ```
-  "imageSlots": [{"slotType": "flux_lifestyle"|"product_nukki"|"detail_closeup"|"model_wearing", "promptHint": "...", "imageRef": 0, "faceVisible": true, "modelGender": "male"}]
+  "imageSlots": [{"slotType": "flux_lifestyle"|"product_nukki"|"detail_closeup"|"model_wearing", "promptHint": "...", "imageRef": 0, "faceVisible": true|false (model_wearing 전용, 필수), "modelGender": "male"|"female" (model_wearing 전용)}]
 ```
 
 16행 부근 slotType 설명에 추가한다:
@@ -740,26 +755,40 @@ model_wearing=사람이 제품을 착용·사용한 씬(AI 생성). faceVisible�
 N5 다음, `${BENCHMARK_PATTERNS}` 앞에 삽입한다:
 
 ```
-N7. 인물 착용컷(model_wearing) — 착용·사용이 구매 결정을 좌우하는 상품(의류·잡화·신발·
-    가방·액세서리·스포츠용품)이면 서로 다른 섹션에 최소 2개를 두세요. 하나는 얼굴이
-    보이는 컷(faceVisible: true), 하나는 얼굴을 뺀 크롭 컷(faceVisible: false)입니다.
-    둘의 역할이 달라 하나만 있으면 절반이 빕니다 — 얼굴 컷은 표정으로 "입고 싶다"를
-    만들고, 크롭 컷은 시선을 제품에 붙잡아 핏·마감을 보여줍니다.
-    - hook·solution·usecase 비트 → faceVisible: true
-    - detail·evidence 비트 → faceVisible: false
-    - modelGender는 사이즈 표기와 카피에서 타깃을 읽어 정하세요.
-      예: M(95)~XXL(110)이면 male, S/M/L에 여성 카피면 female.
-    - 한 섹션에 model_wearing은 하나만 두세요. 섹션당 AI 씬은 1장만 생성됩니다.
+N7. 인물 착용컷(model_wearing) — 착용이 구매를 좌우하고 제품이 상반신(가슴~엉덩이)
+    프레임에 들어오는 상품(의류·잡화·가방·스포츠용품)이면 서로 다른 섹션에 2개,
+    많아도 3개를 두세요. 신발처럼 제품이 그 프레임 밖이거나 인물이 부적절한
+    상품(위생용품·속옷·의료기기)은 0개로 두세요. 1개는 안 됩니다.
+    - faceVisible을 반드시 명시하세요 — 하나는 true(얼굴 컷), 하나는 false(크롭 컷).
+      생략하면 얼굴 컷이 되어 두 컷이 같아집니다. 얼굴 컷은 표정으로 "입고 싶다"를
+      만들고, 크롭 컷은 시선을 제품에 붙잡아 핏·마감을 보여줍니다.
+    - hook·solution·usecase → true, detail·evidence → false. 상품에 따라 조정 가능.
+    - model_wearing을 그 섹션 imageSlots의 첫 번째에 두고, 같은 섹션에 flux_lifestyle·
+      detail_closeup을 함께 두지 마세요 — 섹션당 AI 씬은 첫 슬롯 하나만 생성됩니다.
+      크롭 컷은 C5·N5가 detail_closeup을 배정하지 않는 섹션에 두세요.
+    - modelGender: M(95)~XXL(110) 같은 한국 남성복 호수 표기면 male, 44/55/66이나
+      여성 카피면 female. 근거가 없으면 카테고리 주 구매층으로, 그래도 모호하면
+      female을 쓰세요 (생략하면 male로 처리됩니다).
     - promptHint에는 [상황]만 쓰세요. 모델 외형·프레이밍·조명·포즈는 시스템이 붙이므로
-      거기에 겹쳐 쓰면 충돌합니다.
-      예: "여름 해변 보드워크 산책", "밝은 실내 짐에서 수건을 목에 걸치고 서 있는 모습"
-    - 두 씬의 상황이 겹치면 안 됩니다.
-    - 동작이 큰 장면을 쓰지 마세요 — 달리기·점프·팔을 머리 위로 드는 동작은 손과
-      프레임이 망가집니다. 서 있거나 기대거나 천천히 걷는 장면만 쓰세요.
-    - 조명에 색을 넣지 마세요 — 노을·골든아워는 제품 색을 물들입니다.
-    - problem 비트에는 인물을 쓰지 마세요 (D3: 문제 상황은 카피로 말합니다).
-    - 인물이 부적절한 상품(위생용품·속옷·의료기기 등)은 0개로 두세요. 1개는 안 됩니다.
+      겹쳐 쓰면 충돌합니다. 예: "여름 해변 보드워크 산책".
+      두 씬의 상황이 겹치면 안 됩니다.
+    - 조명에 색을 넣지 마세요 — 노을·골든아워는 제품 색을 물들입니다. 달리기·점프·
+      팔을 머리 위로 드는 큰 동작도 쓰지 마세요 — 손과 프레임이 망가집니다.
+    - problem 비트에는 인물을 쓰지 마세요. D3의 비교 대상 예외도 problem에는 적용되지
+      않습니다.
 ```
+
+**이 초안은 프롬프트 설계 리뷰를 거쳐 고쳐진 것이다.** 초기 초안에서 바뀐 것과 이유:
+
+| 변경 | 이유 |
+|---|---|
+| **`faceVisible` 반드시 명시** | 초기 초안은 매핑만 알려주고 필수라고 하지 않았다. 스키마 예시의 유일한 구체 값이 `true`이고 서버 기본값도 `true`라, 생략하면 **두 컷이 모두 얼굴 컷이 되고 검증은 통과한다.** 규칙의 존재 이유가 무력화된다 |
+| **`model_wearing`을 첫 번째에, 다른 gen 슬롯과 공존 금지** | `C5`는 물리 디테일 섹션에 `detail_closeup`을, `N5`는 evidence 섹션에 `detail_closeup`을 요구한다. 초기 초안이 `detail`·`evidence`를 크롭 컷 자리로 지정해 **같은 섹션을 두 규칙이 다투게 만들었다.** 감성형 아크(패션)에는 `detail` 섹션이 하나뿐이라 충돌이 거의 확실하다. `page.tsx`는 첫 gen 슬롯만 생성하므로 `[detail_closeup, model_wearing]`이면 착용컷이 제품 사진으로 대체되고, 크롭 섹션 카피가 매크로 접사 위에 놓인다 |
+| **신발 제외 (프레임 조건)** | `FACE_VISIBLE`은 "Waist-up", `FACE_CROPPED`는 "collarbone to hips"다. 신발은 **두 모드 모두에서 프레임 밖**이다. `COLOR_ACCURACY`도 `garment` 문구다. 설계 문서 Risk 5가 "비의류 미검증"이라 했는데 초기 초안이 그 주의를 빠뜨리고 신발·액세서리를 목록에 넣었다 |
+| **상한 3개** | 초기 초안은 "최소 2개"만 말했다. 이 프롬프트의 다른 수량 규칙은 모두 상한이 있다(`D1(a)` 정확히 1개, `N5` 2개 이내). 적격 beat가 5개라 3~5개로 읽힐 수 있고, `wearing_coverage`는 1개일 때만 잡으므로 5개도 통과한다. 씬마다 Gemini 호출이고 6~10 섹션 페이지에서 실제 제품 사진을 밀어낸다 |
+| **`M(95)~XXL(110)` 복원 + 폴백** | 구현 중 `M~XXL`로 압축되며 **판별 정보가 사라졌다** — 여성복도 M~XXL을 쓴다. 신호는 한국 남성복의 95/100/105/110 호수 표기였다. 그리고 유니섹스·중성 카피에서 답이 없을 때 서버가 `male`로 기본값을 쓰므로 폴백을 명시한다 |
+| **"상품에 따라 조정 가능"** | 설계 문서는 beat 매핑을 **기본값이며 강제하지 않는다**고 설계했다(향수·액세서리는 `detail`에도 얼굴이 필요할 수 있다). 초기 초안이 화살표만 써서 절대 규칙처럼 읽혔다 |
+| **D3 관계 명시** | `D3`는 비교 대상의 단점 노출을 허용하는데 `N7`은 `problem`에 인물을 금지한다. 관계를 적어두지 않으면 두 규칙이 따로 낡는다 |
 
 **`promptHint`에 상황만 쓰게 하는 것이 중요하다.** 모델 외형·프레이밍·조명·포즈는 검증된 상수가 붙이므로, Claude가 거기에 지시를 겹쳐 쓰면 충돌한다.
 
@@ -771,6 +800,14 @@ N7. 인물 착용컷(model_wearing) — 착용·사용이 구매 결정을 좌�
 
 **규칙 7에 넣지 말고 규칙 8을 새로 만들어라.** 규칙 7은 `narrative` 이슈 전용이며(`narrative 이슈가 있으면 다음을 고쳐라`), 거기에 다른 code의 지시를 섞으면 조건이 어긋난다. 규칙 7 다음, `Return ONLY the corrected JSON array` 앞에 추가한다:
 
+**먼저 규칙 4에 예외를 추가하라.** 규칙 4는 `Keep all valid content unchanged. If a section is already correct, return it unchanged.`인데, 규칙 8은 **내용상 이미 올바른 섹션에 `imageSlot`을 추가하라고** 요구한다. 규칙 4가 규칙 7에는 예외를 명시했지만 규칙 8에는 없어 직접 충돌이고, 성실한 독자는 레이아웃을 그대로 반환한다 — 그러면 위반이 남고 사용자는 경고만 본다. 규칙 4 끝에 한 절을 더한다:
+
+```
+   기존 섹션의 imageSlots에 슬롯을 추가하는 것은 rule 8에서 허용된다.
+```
+
+그 다음 규칙 8을 만든다:
+
 ```
 8. wearing_coverage 이슈가 있으면 다음을 고쳐라.
 ```
@@ -778,13 +815,21 @@ N7. 인물 착용컷(model_wearing) — 착용·사용이 구매 결정을 좌�
 그 아래에:
 
 ```
-   - model_wearing 슬롯을 가진 섹션이 1개뿐이면 다른 섹션에 하나를 더 만든다.
-     같은 섹션에 두 개를 넣지 마라 — 섹션당 한 장만 생성된다.
+   - model_wearing 슬롯을 가진 섹션이 1개뿐이면 다른 섹션의 imageSlots에 하나를
+     추가한다. 새 섹션을 만들지 마라 — 섹션 수 상한을 넘길 수 있다.
+   - 그 섹션에 flux_lifestyle이나 detail_closeup이 이미 있으면 다른 섹션을 고르거나,
+     model_wearing을 imageSlots 배열의 첫 번째로 옮겨라. 섹션당 AI 씬은 첫 슬롯
+     하나만 생성된다.
    - 기존 것이 faceVisible: true면 새것은 false로(detail 또는 evidence 비트 섹션에),
      기존 것이 false면 새것은 true로(hook 또는 usecase 비트 섹션에) 둔다.
+     faceVisible을 생략하지 마라 — 생략하면 두 컷이 모두 얼굴 컷이 된다.
    - 두 씬의 promptHint가 겹치면 안 된다. 기존 슬롯을 삭제하지 마라.
    - promptHint에는 상황만 쓴다. 모델 외형·프레이밍·조명·포즈는 시스템이 붙인다.
 ```
+
+**"기존 슬롯을 삭제하지 마라"가 중요하다** — 그것이 없으면 가장 값싼 수리는 유일한 슬롯을 지워 카운트를 1→0으로 만드는 것이고, 검증은 통과한다.
+
+**"새 섹션을 만들지 마라"도 필요하다** — repair 프롬프트는 `DESIGN RULES`와 6~10 섹션 상한을 싣지 않으므로, 섹션을 추가하면 재검증에서 `section_count`에 걸린다. 규칙 7이 바로 위에서 섹션 생성 선례를 만들어 두었기 때문에 명시하지 않으면 그쪽으로 읽힌다.
 
 - [ ] **Step 4: 정합성을 직접 확인한다**
 
@@ -856,12 +901,61 @@ promptHint에는 상황만 쓰게 한다 — 모델 외형·프레이밍·조명
   }>;
 ```
 
-- [ ] **Step 2: `isGenSlot`에 `model_wearing`을 추가한다** (1283행)
+- [ ] **Step 2: gen 슬롯 타입 목록을 공유하고 `wearing_coverage` 카운트를 렌더 현실에 맞춘다**
+
+**Task 4가 남긴 구멍을 여기서 닫는다.** Task 4는 "`model_wearing`을 가진 섹션 수"를 세는데, `page.tsx`는 **첫 gen 슬롯 하나만** 생성·렌더한다. 그래서 슬롯 배열이 `[flux_lifestyle, model_wearing]`이면 카운트는 1로 잡히지만 실제로 생성되는 것은 라이프스타일 씬이고 착용컷은 제품 사진 로테이션으로 떨어진다 — **검증 통과, 착용컷 0장.** Task 4에서 고친 것과 똑같은 서명이다.
+
+N7이 "한 섹션에 `model_wearing`은 하나만"을 지시하지만 **다른 AI 생성 슬롯과 섞는 것은 금지하지 않으며**, `CLAUDE_SYSTEM`은 `option_grid`에 다중 슬롯을, C5는 `detail_closeup` 슬롯을 요구한다. 프롬프트 지시에 기대면 안 된다.
+
+먼저 `src/lib/detail-page/layout-validator.ts`에 목록을 export한다:
+
+```ts
+/**
+ * AI가 씬을 생성하는 슬롯 타입. page.tsx가 섹션당 이 중 첫 번째 하나만
+ * 생성하고 렌더하므로(find / findIndex), 검증도 같은 기준을 써야 한다.
+ * 두 곳이 어긋나면 "검증 통과, 이미지 없음"이 조용히 발생한다.
+ */
+export const GEN_SLOT_TYPES = ['flux_lifestyle', 'detail_closeup', 'model_wearing'] as const;
+```
+
+그리고 `wearing_coverage` 카운트를 **"첫 gen 슬롯이 `model_wearing`인 섹션 수"**로 바꾼다 — 렌더 predicate와 정확히 같은 판정이다:
+
+```ts
+      const firstGen = slots.find(
+        (sl) => sl && typeof sl === 'object'
+          && GEN_SLOT_TYPES.includes((sl as { slotType?: string }).slotType as never),
+      ) as { slotType?: string; faceVisible?: unknown } | undefined;
+      if (firstGen?.slotType === 'model_wearing') {
+        wearingSections += 1;
+        // faceVisible 생략은 서버에서 true로 처리되므로 얼굴 컷으로 센다.
+        if (firstGen.faceVisible === false) sawFaceCropped = true;
+        else sawFaceVisible = true;
+      }
+```
+
+테스트를 추가한다:
+
+```ts
+  it('flux_lifestyle이 앞에 오면 카운트하지 않는다 — 그 섹션은 라이프스타일 씬이 된다', () => {
+    const secs = withWearing(1); // 섹션 0에 순수 model_wearing 1개
+    secs[1]!.imageSlots = [
+      { slotType: 'flux_lifestyle', promptHint: '카페' },
+      { slotType: 'model_wearing', promptHint: '해변', faceVisible: false, modelGender: 'male' },
+    ];
+    // 섹션 1의 첫 gen 슬롯은 flux_lifestyle → 착용컷은 실제로 1장뿐 → 위반
+    const res = validateProLayout(secs, { wearing: true });
+    expect(res.violations.some(v => v.code === 'wearing_coverage')).toBe(true);
+  });
+```
+
+- [ ] **Step 2-B: `isGenSlot`을 공유 목록으로 바꾼다**
 
 ```ts
               const isGenSlot = (t?: string) =>
-                t === 'flux_lifestyle' || t === 'detail_closeup' || t === 'model_wearing';
+                GEN_SLOT_TYPES.includes(t as never);
 ```
+
+`layout-validator.ts`에서 `GEN_SLOT_TYPES`를 import한다. **하드코딩된 문자열 비교를 남기지 마라** — 그것이 두 predicate가 어긋난 원인이다.
 
 - [ ] **Step 3: `sceneTypeFor`에 매핑을 추가한다** (1286행)
 
@@ -894,12 +988,9 @@ promptHint에는 상황만 쓰게 한다 — 모델 외형·프레이밍·조명
 **이것이 가장 놓치기 쉬운 지점이다.** 1376행은 생성 루프와 별개로 렌더용 슬롯 위치를 다시 계산하며, 여기에 `model_wearing`이 없으면 이미지는 생성·업로드까지 되지만 **어느 슬롯에도 들어가지 않아 화면에서 사라진다.**
 
 ```ts
-              // 생성 씬(flux_lifestyle · detail_closeup · model_wearing)을 만든 슬롯 위치에 넣는다.
-              const genSlotIdx = slots.findIndex(
-                sl => sl.slotType === 'flux_lifestyle'
-                   || sl.slotType === 'detail_closeup'
-                   || sl.slotType === 'model_wearing',
-              );
+              // 생성 씬을 만든 슬롯 위치에 넣는다. 판정은 GEN_SLOT_TYPES 하나로 —
+              // 이 조건이 wearing_coverage 검증과 어긋나면 "검증 통과, 이미지 없음"이 된다.
+              const genSlotIdx = slots.findIndex(sl => isGenSlot(sl.slotType));
 ```
 
 - [ ] **Step 6: `realBySection`(1272행)은 고치지 않는다 — 주석만 남긴다**
