@@ -1,5 +1,46 @@
 # PRO 인물 착용컷 (model_wearing) 구현 계획
 
+> ## ⚠️ 이 계획은 실물 검증 후 철회됐다 (2026-07-27)
+>
+> Task 1~7을 구현하고 565 테스트를 통과시킨 뒤 실물로 검증한 결과, **`model_wearing` 전용 경로를 접고 인물 품질 상수를 모든 씬에 조건절로 적용하는 방향으로 바꿨다.** 아래 계획은 기록으로 남긴다.
+>
+> ### 실물이 보여준 것
+>
+> **① 기능의 입구가 도달하지 않았다.** `N7`(22줄)이 "의류면 착용컷 2개"를 지시했는데, 민소매 티셔츠(명백한 상의)로 실제 생성하니 Claude가 `model_wearing` 슬롯을 **하나도 만들지 않았다.** 생성된 AI 씬은 전부 `flux_lifestyle`이었다. 프롬프트 설계 리뷰가 "18줄에 이미 주의 예산 도달"이라 경고했고 그때 22줄이었다.
+>
+> **② 도달해도 제어가 안 됐다.** API 직접 호출에서 `gender: 'male'`을 보냈는데 **여성이 생성**됐다. Claude가 씬 프롬프트를 `"a confident young Korean woman"`으로 먼저 쓰고, 뒤에 붙인 `"The person is a Korean man"`이 이기지 못했다. **"뒤쪽 지시가 지배한다"는 이 계획의 전제가 반증됐다.** 프레이밍 지시(`FACE_VISIBLE`의 waist-up, `FACE_CROPPED`의 collarbone~hips)도 양쪽 다 무시됐다 — `SCENE_PROMPT_SYSTEM`의 "제품이 prominently 등장"이 이겼다. 코드 품질 리뷰가 예측한 실패 모드 그대로다.
+>
+> **③ `flux_lifestyle`이 이미 완벽한 착용컷을 만든다.** 한국인 남성이 흰 민소매 티셔츠(컬럼비아 로고까지 재현)를 입고 공원을 걷는 전신 샷, 흰색이 흰색으로, 정적 포즈, 스파클 없음. 반바지 상품에서도 소파·주방 씬이 나왔다. **그리고 그 자유 프레이밍이 이 계획의 상수보다 낫다** — 반바지를 waist-up으로 찍으면 제품이 안 보인다.
+>
+> ### 실물만 발견할 수 있었던 버그
+>
+> `max_tokens: 600`에서 Claude 응답이 잘려 **`wearing` 경로가 100% 실패**하고 있었다. `hero`(2.9MB)·`lifestyle`(574KB)은 통과하는데 인물 서술이 더해진 `wearing`만 넘쳤다. **565개 단위 테스트는 Claude를 모킹하므로 이것을 볼 수 없었다.** 1200으로 수정(`deb71fd4`).
+>
+> ### 새 방향
+>
+> `PRODUCT_FIDELITY_INSTRUCTION`이 이미 쓰는 패턴 — `POSITIVE SUBJECT: If a person appears, they must look confident...` — 을 따른다. **조건절이라 인물을 강제하지 않고 품질만 보장한다.** 새 슬롯 타입도, sectionType도, 검증도 필요 없다.
+>
+> | 유지 | 철회 |
+> |---|---|
+> | `MODEL_KO`·`MODEL_CONTEXT`·`POSE_STATIC`·`COLOR_ACCURACY` (조건절로 전환) | `FACE_VISIBLE`·`FACE_CROPPED` (프레이밍 고정) |
+> | `prompts.ts` 분리, `user-prompt.ts` 리네임 | `model_wearing` slotType, `wearing` sectionType |
+> | `gen-slots.ts` (판정 단일화) | `wearing_coverage`·`wearing_face_pair` |
+> | AI 연출 고지 (모든 AI 씬에 적용되므로 오히려 더 맞다) | `N7`, repair 규칙 8·9 |
+> | 폴백 위생 (`flux_lifestyle`도 인물 씬을 만들므로 여전히 필요) | |
+> | `max_tokens: 1200` + `stop_reason` 분기 | |
+>
+> ### 남는 교훈
+>
+> - **LLM에게 주는 지시는 단위 테스트로 검증할 수 없다.** 565개가 통과하는 동안 기능의 입구(`N7`)와 출구(`max_tokens`)가 모두 막혀 있었다
+> - **"뒤에 붙이면 이긴다"는 검증되지 않은 전제였다.** 35장 시험은 Gemini 직결 프롬프트였고 Claude 프리픽스와의 조합은 처음이었다
+> - **프레이밍을 고정하면 상품 카테고리가 좁아진다.** waist-up / collarbone~hips는 상의 전용이고 하의·신발·가방이 모두 배제된다
+
+---
+
+## (이하 원래 계획 — 기록용)
+
+# PRO 인물 착용컷 (model_wearing) 구현 계획
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** PRO 상세페이지에 한국인 모델 착용컷을 `beat`별로 배치한다. 얼굴이 보이는 컷과 얼굴을 뺀 크롭 컷을 각각 최소 1장.
