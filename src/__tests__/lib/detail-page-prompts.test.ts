@@ -518,3 +518,41 @@ describe('buildMobileCategorySystemPrompt', () => {
     expect(prompt).toContain('패션잡화');
   });
 });
+
+// ─── 과장·최상급·절대 보증 (프롬프트는 금지했지만 검사기엔 없던 것들) ────────
+describe('checkProhibitedPhrases — 과장 표현', () => {
+  it('과장 수식어를 잡는다', () => {
+    for (const w of ['역대급', '혁명적', '압도적', '유일무이', '독보적']) {
+      expect(checkProhibitedPhrases(`${w} 성능의 제품`).violations.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('근거가 붙은 순위·최초·유일 주장을 잡는다', () => {
+    expect(checkProhibitedPhrases('업계 1위 흡수력').violations[0]).toContain('1위');
+    expect(checkProhibitedPhrases('판매량 1위 상품').violations.length).toBe(1);
+    expect(checkProhibitedPhrases('국내 최초 도입한 공법').violations[0]).toContain('최초');
+    expect(checkProhibitedPhrases('세계 유일의 구조').violations[0]).toContain('유일');
+  });
+
+  it('절대 보증을 잡는다', () => {
+    expect(checkProhibitedPhrases('자외선 100% 차단').violations[0]).toContain('절대 보증');
+    expect(checkProhibitedPhrases('냄새를 완벽하게 제거합니다').violations.length).toBe(1);
+    expect(checkProhibitedPhrases('무조건 만족하실 겁니다').violations[0]).toContain('무조건');
+  });
+
+  // 오탐은 성가신 정도가 아니라 비용이다 — prohibited는 error severity라 repair를
+  // 한 번 더 돌리고 "직접 수정하세요" 경고까지 나간다.
+  it('일반 문맥의 같은 단어는 잡지 않는다', () => {
+    expect(checkProhibitedPhrases('최초 구매 시 사은품을 드립니다').violations).toEqual([]);
+    expect(checkProhibitedPhrases('인기 순위 1위부터 5위까지 모았습니다').violations).toEqual([]);
+    expect(checkProhibitedPhrases('면 100% 원단입니다').violations).toEqual([]);
+    expect(checkProhibitedPhrases('양반다리로 앉아도 무릎이 당기지 않음').violations).toEqual([]);
+    expect(checkProhibitedPhrases('실밥이 풀려 나온 곳이 없음').violations).toEqual([]);
+    expect(checkProhibitedPhrases('유일하게 남은 사이즈').violations).toEqual([]);
+  });
+
+  it('여러 유형이 섞이면 모두 보고한다', () => {
+    const r = checkProhibitedPhrases('업계 1위 압도적 성능, 자외선 100% 차단');
+    expect(r.violations.length).toBe(3);
+  });
+});

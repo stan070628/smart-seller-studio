@@ -74,7 +74,34 @@ const PROHIBITED_PHRASES_ABSOLUTE: readonly string[] = [
   '피부 속',
   // 선착순 (이벤트 조기 종료 가능성)
   '선착순',
+  // 과장 수식어. 아래 PATTERNS와 달리 단독으로 쓰여도 과장 광고라 문자열로 잡는다.
+  // 일반 서술에서 쓸 일이 거의 없어 오탐이 적다.
+  '역대급',
+  '혁명적',
+  '압도적',
+  '유일무이',
+  '독보적',
 ] as const;
+
+/**
+ * 문맥이 붙어야 위반이 되는 표현.
+ *
+ * 단어 하나로 잡으면 오탐이 심하다. "최초"는 "최초 구매 시"에도, "1위"는 "1위부터
+ * 5위까지"에도 들어간다. 오탐은 그냥 성가신 정도가 아니라 비용이다 — prohibited는
+ * error severity라 repair 패스를 한 번 더 돌리고, autoFixable이 false라 결국
+ * "에디터에서 직접 수정하세요" 경고까지 나간다. 근거가 붙은 주장 형태만 잡는다.
+ */
+const PROHIBITED_PATTERNS: ReadonlyArray<{ re: RegExp; label: string }> = [
+  // 순위·최초·유일 주장. 실증자료 없이 쓰면 표시광고법 위반이고, 있어도 쿠팡은
+  // 광고 문구로 제한한다.
+  { re: /(업계|국내|세계|시장|판매량|매출|후기|리뷰)\s*[1１]\s*위/, label: '1위 주장' },
+  { re: /(국내|세계|업계)\s*최초/, label: '최초 주장' },
+  { re: /(국내|세계|업계)\s*유일/, label: '유일 주장' },
+  // 절대 보증. "당기지 않음" 같은 착용감 서술은 잡지 않는다 — 강화어가 붙어
+  // 성능을 단정하는 형태만 대상이다.
+  { re: /(100\s*%|절대|전혀|완벽하게|영구히?)\s*(차단|방지|제거|안전|무해|손상되지)/, label: '절대 보증' },
+  { re: /무조건\s*(효과|만족|성공)/, label: '무조건 보증' },
+];
 
 export interface ProhibitedPhraseResult {
   violations: string[];
@@ -83,6 +110,10 @@ export interface ProhibitedPhraseResult {
 /**
  * AI 생성 텍스트에서 쿠팡 광고 정책상 절대 금지 표현을 검사한다.
  * 위반이 발견되면 해당 문구를 violations 배열에 담아 반환한다.
+ *
+ * 시스템 프롬프트는 오래전부터 "최초·1위·유일·혁명적·기적·압도적·역대급 금지"를
+ * 지시했지만 이 검사기에는 그 단어가 하나도 없었다 — 지시만 있고 확인이 없어
+ * 모델이 어겨도 아무도 몰랐다.
  */
 export function checkProhibitedPhrases(text: string): ProhibitedPhraseResult {
   const violations: string[] = [];
@@ -90,6 +121,10 @@ export function checkProhibitedPhrases(text: string): ProhibitedPhraseResult {
     if (text.includes(phrase)) {
       violations.push(phrase);
     }
+  }
+  for (const { re, label } of PROHIBITED_PATTERNS) {
+    const m = re.exec(text);
+    if (m) violations.push(`${label}: "${m[0]}"`);
   }
   return { violations };
 }
