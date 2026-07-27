@@ -51,10 +51,17 @@ export const CLUTTER =
   'each other at random angles, stacked in two loose layers with no free surface left. ' +
   'Candid unstaged snapshot of a real lived-in space, NOT a product photo.';
 
-/** 우측 배경 전용 — 제품은 Sharp로 합성하므로 Gemini가 그리면 안 된다. */
+/**
+ * 우측 배경 전용 — 제품은 Sharp로 합성하므로 Gemini가 그리면 안 된다.
+ *
+ * 빈 자리를 화면 아래쪽 중앙에 두라고 못박는 이유: 합성은 항상 바닥선(배경 높이의
+ * 88%)에 제품을 내려놓는다. 배경이 "선반 위"나 "의자 좌면"처럼 높은 곳을 비워두면
+ * 제품이 그 자리가 아니라 그 아래 바닥에 놓여 어긋난다.
+ */
 const RIGHT_NO_PRODUCT =
   'Empty surface with nothing on it. Do NOT draw any product, container, garment or package — ' +
-  'the subject will be composited in afterwards. Leave the center of the surface clear.';
+  'the subject will be composited in afterwards. The clear empty area must be at the LOWER ' +
+  'CENTER of the frame, at floor or table-top level, with nothing blocking it.';
 
 /**
  * 팔레트별 색보정 지시.

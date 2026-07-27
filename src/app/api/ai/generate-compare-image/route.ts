@@ -40,7 +40,13 @@ const RequestSchema = z.object({
   productName: z.string().max(200).optional(),
 });
 
-/** 제품 누끼를 배경 중앙 하단에 얹는다. 실패하면 배경만 반환한다. */
+/**
+ * 제품 누끼를 배경 바닥에 얹는다. 실패하면 배경만 반환한다.
+ *
+ * 배치·그림자는 generate-scene-image의 compositeProductOnBackground와 같은 방식이다.
+ * 처음에는 세로 62% 지점에 중앙 정렬했는데 실물 확인에서 제품이 공중에 뜬 것처럼
+ * 보였다 — 바닥선 기준으로 내리고 접지 그림자를 깔아야 "놓여 있는" 느낌이 난다.
+ */
 async function compositeProduct(background: Buffer, productPng: Buffer): Promise<Buffer> {
   const bg = await sharp(background).metadata();
   const bw = bg.width ?? 0;
@@ -57,21 +63,43 @@ async function compositeProduct(background: Buffer, productPng: Buffer): Promise
   // 배경 폭의 46%를 차지하게. 좌측의 여러 물건과 대비되도록 하나만 크게 놓는다.
   const targetW = Math.round(bw * 0.46);
   const scale = targetW / tw;
-  const targetH = Math.max(1, Math.round(th * scale));
-
   const resized = await sharp(trimmed)
-    .resize(targetW, targetH, { fit: 'inside' })
+    .resize(targetW, Math.max(1, Math.round(th * scale)), { fit: 'inside' })
     .png()
     .toBuffer();
   const rm = await sharp(resized).metadata();
   const rw = rm.width ?? targetW;
-  const rh = rm.height ?? targetH;
+  const rh = rm.height ?? targetW;
 
+  const groundLine = Math.round(bh * 0.88);
   const left = Math.max(0, Math.round((bw - rw) / 2));
-  // 바닥에서 살짝 띄워 잘리지 않게
-  const top = Math.max(0, Math.min(bh - rh, Math.round(bh * 0.62 - rh / 2)));
+  const top = Math.max(0, groundLine - rh);
 
-  return sharp(background).composite([{ input: resized, left, top }]).png().toBuffer();
+  // 접지 그림자: 제품 실루엣(알파)을 세로로 눌러 블러 + 반투명 검정으로 깔면
+  // 붙어있는 느낌이 생겨 잘라 붙인 듯한 티가 줄어든다.
+  const shadowH = Math.max(8, Math.round(rh * 0.16));
+  const shadowMask = await sharp(resized)
+    .ensureAlpha()
+    .extractChannel('alpha')
+    .resize(rw, shadowH, { fit: 'fill' })
+    .blur(16)
+    .linear(0.5, 0)
+    .toBuffer();
+  const shadow = await sharp({
+    create: { width: rw, height: shadowH, channels: 3, background: { r: 15, g: 15, b: 18 } },
+  })
+    .joinChannel(shadowMask)
+    .png()
+    .toBuffer();
+  const shadowTop = Math.min(bh - shadowH, Math.round(groundLine - shadowH / 2));
+
+  return sharp(background)
+    .composite([
+      { input: shadow, left, top: shadowTop },
+      { input: resized, left, top },
+    ])
+    .png()
+    .toBuffer();
 }
 
 export async function POST(req: NextRequest): Promise<Response> {
