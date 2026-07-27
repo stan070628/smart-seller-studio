@@ -155,3 +155,18 @@ describe('isComparePairSlot', () => {
     expect(resolveGenSlot([{ slotType: 'compare_pair' }])).toEqual({ index: 0, slotType: 'compare_pair' });
   });
 });
+
+describe('buildAfterBackgroundPrompt — 같은 방 지시', () => {
+  // 톤만 통일해서는 부족했다. 두 이미지를 독립 생성하면 색보정이 같아도 가구가
+  // 갈려 다른 방으로 읽힌다(실물: 좌 무지 크림 의자 / 우 플로럴 패턴 의자).
+  it('withReference가 켜지면 같은 방·같은 가구 지시가 들어간다', () => {
+    const p = buildAfterBackgroundPrompt({ afterHint: '정돈된 의자', palette: 'warm_cream', withReference: true });
+    expect(p).toContain('SAME room');
+    expect(p).toContain('upholstery pattern');
+  });
+
+  it('꺼져 있으면 넣지 않는다 — 레퍼런스 없이 그 문구를 주면 존재하지 않는 이미지를 가리킨다', () => {
+    const p = buildAfterBackgroundPrompt({ afterHint: '정돈된 의자', palette: 'warm_cream' });
+    expect(p).not.toContain('SAME room');
+  });
+});

@@ -130,10 +130,38 @@ export function buildBeforePrompt(opts: {
   ].join(' ');
 }
 
-/** 우측(우리 제품이 놓일 자리)의 배경 프롬프트 — 제품은 그리지 않는다 */
+/**
+ * 좌측 이미지를 참조로 넘길 때 붙이는 지시.
+ *
+ * 톤만 통일해서는 부족했다. 실물 확인에서 좌측은 무지 크림 의자, 우측은 플로럴
+ * 패턴 의자가 나와 두 사진이 다른 방으로 읽혔다 — promptHint에 "같은 침실 의자"라고
+ * 썼는데도 그랬다. 두 이미지를 독립적으로 생성하면 색보정이 같아도 가구가 갈린다.
+ * 좌측을 레퍼런스로 주고 "같은 방, 정리만 된 상태"로 지시해야 한 장면이 된다.
+ *
+ * 설계 문서 §2.4는 조명·색온도만 다뤘다. 시험이 세면대·선반 같은 단순 표면이라
+ * 가구 동일성 문제가 드러나지 않았던 것으로 보인다.
+ */
+const SAME_ROOM =
+  'This is the SAME room and the SAME furniture as the reference image, photographed from the ' +
+  'exact same angle and distance. Keep the furniture shape, upholstery pattern, wall, floor and ' +
+  'window identical to the reference. The ONLY difference: all the clutter has been cleared away.';
+
+/**
+ * 우측(우리 제품이 놓일 자리)의 배경 프롬프트 — 제품은 그리지 않는다.
+ * withReference를 켜면 좌측 이미지를 참조로 받는 전제의 문구가 붙는다.
+ */
 export function buildAfterBackgroundPrompt(opts: {
   afterHint: string;
   palette: PaletteName;
+  withReference?: boolean;
 }): string {
-  return [opts.afterHint, RIGHT_NO_PRODUCT, toneInstruction(opts.palette), VIEW].join(' ');
+  return [
+    opts.afterHint,
+    opts.withReference ? SAME_ROOM : '',
+    RIGHT_NO_PRODUCT,
+    toneInstruction(opts.palette),
+    VIEW,
+  ]
+    .filter(Boolean)
+    .join(' ');
 }

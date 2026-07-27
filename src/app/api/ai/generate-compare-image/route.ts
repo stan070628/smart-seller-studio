@@ -130,17 +130,18 @@ export async function POST(req: NextRequest): Promise<Response> {
   const palette = DEFAULT_THEME.palette;
 
   try {
-    // 좌우를 동시에 생성한다. 순차로 하면 Gemini 왕복이 그대로 더해진다.
-    const [beforeRes, afterBgRes] = await Promise.all([
-      generateFrameImage({
-        imagePrompt: buildBeforePrompt({ beforeHint, category, productName, palette }),
-      }),
-      generateFrameImage({
-        imagePrompt: buildAfterBackgroundPrompt({ afterHint, palette }),
-      }),
-    ]);
-
+    // 순차로 생성한다. 병렬이 빠르지만, 두 이미지를 독립적으로 만들면 색보정이 같아도
+    // 가구가 갈려서 다른 방으로 읽힌다(실물 확인: 좌측 무지 크림 의자 / 우측 플로럴
+    // 패턴 의자). 좌측을 먼저 만들고 그것을 레퍼런스로 넘겨야 한 장면이 된다.
+    const beforeRes = await generateFrameImage({
+      imagePrompt: buildBeforePrompt({ beforeHint, category, productName, palette }),
+    });
     const beforeBuf: Buffer = Buffer.from(beforeRes.imageBase64, 'base64');
+
+    const afterBgRes = await generateFrameImage({
+      imagePrompt: buildAfterBackgroundPrompt({ afterHint, palette, withReference: true }),
+      referenceImages: [{ base64: beforeRes.imageBase64, mimeType: beforeRes.mimeType }],
+    });
     let afterBuf: Buffer = Buffer.from(afterBgRes.imageBase64, 'base64');
 
     // 우측에 제품 합성. 누끼가 실패하면 배경만 쓴다(설계 §8) — 대비 자체는 유지된다.
