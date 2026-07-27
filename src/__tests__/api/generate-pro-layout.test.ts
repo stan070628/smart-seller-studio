@@ -63,7 +63,16 @@ function validLayout(): unknown[] {
     },
     img('디테일', 0, 'detail'),
     img('활용', 1, 'usecase'),
-    { type: 'claude_layout', title: '안내', beat: 'assure', blocks: [{ type: 'heading', text: '안내', size: 'xl' }] },
+    // assure에 icon_grid를 두는 이유: heading만 있으면 visual_anchor(텍스트 전용
+    // 섹션) 경고가 붙어 "정상 경로엔 warnings가 없다"를 검증하는 테스트가 깨진다.
+    // 규칙이 옳게 잡는 모양이므로 검사를 느슨하게 하는 대신 픽스처를 현실적으로 둔다.
+    {
+      type: 'claude_layout', title: '안내', beat: 'assure',
+      blocks: [
+        { type: 'heading', text: '안내', size: 'xl' },
+        { type: 'icon_grid', items: [{ icon: '', title: '세탁' }, { icon: '', title: '보관' }] },
+      ],
+    },
   ];
 }
 

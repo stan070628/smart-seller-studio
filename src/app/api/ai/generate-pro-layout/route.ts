@@ -137,13 +137,23 @@ const VIOLATION_CODE_MESSAGES: Record<string, string> = {
   // 쿠팡 광고 정책 위반 표현 — autoFixable:false라 재생성해도 같은 표현이 또 나올 수
   // 있다. "다시 생성"이 아니라 "에디터에서 직접 수정"을 안내해야 한다.
   prohibited: '광고 정책상 사용할 수 없는 표현이 남아 있습니다. 에디터에서 해당 문구를 직접 수정해주세요.',
+  visual_anchor: '글만 있는 섹션이 남아 있습니다. 다시 생성하면 이미지나 요약 카드가 들어갈 수 있습니다.',
+  count_mismatch: '제목이 말한 개수와 실제 항목 수가 다릅니다. 다시 생성하거나 에디터에서 제목을 고쳐주세요.',
 };
 const GENERIC_VIOLATION_MESSAGE = '일부 구성이 자동 검증 기준에 못 미칩니다. 다시 생성하면 개선될 수 있습니다.';
+
+/**
+ * error는 아니지만 셀러에게 보여야 하는 코드.
+ *
+ * 이 둘을 error로 두면 isClean이 깨져 repair를 매번 부르는데, 해법이 "다시 생성"으로
+ * 같아서 비용만 는다. warning으로 두되 여기서 건져 올려 배너에는 뜨게 한다.
+ */
+const SURFACED_WARNING_CODES = new Set(['visual_anchor', 'count_mismatch']);
 
 function friendlyViolationWarnings(violations: Array<{ code: string; severity: string }>): string[] {
   const messages = new Set<string>();
   for (const v of violations) {
-    if (v.severity !== 'error') continue;
+    if (v.severity !== 'error' && !SURFACED_WARNING_CODES.has(v.code)) continue;
     messages.add(VIOLATION_CODE_MESSAGES[v.code] ?? GENERIC_VIOLATION_MESSAGE);
   }
   return [...messages];

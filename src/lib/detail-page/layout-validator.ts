@@ -6,6 +6,7 @@ import type { LayoutBlock } from '@/types/detail-page';
 import { collectOptionCoverage, type OptionSection } from './product-options';
 import { BEATS, checkNarrative, type NarrativeSection } from './narrative';
 import { sanitizeProgressBars } from './progress-hygiene';
+import { hasVisualAnchor, countMismatch } from './section-shape';
 // gen-slots.ts는 import 없는 leaf 모듈이다 — 정의를 거기 하나로 두고 여기서는
 // re-export만 한다. page.tsx(클라이언트 컴포넌트)가 이 이름들만 쓰려고 이
 // 파일을 통째로 import하면 아래 zod 스키마(zLayoutBlock 등)가 tree-shake되지
@@ -16,7 +17,8 @@ export interface Violation {
   code:
     | 'schema' | 'cjk' | 'broken_text' | 'empty_block'
     | 'duplicate' | 'section_count' | 'prohibited'
-    | 'option_compare' | 'option_coverage' | 'option_image' | 'narrative';
+    | 'option_compare' | 'option_coverage' | 'option_image' | 'narrative'
+    | 'visual_anchor' | 'count_mismatch';
   path: string;
   message: string;
   severity: 'error' | 'warning';
@@ -329,6 +331,39 @@ export function validateProLayout(sections: unknown, opts?: ProLayoutOpts): Vali
     forEachBlock(sec, (block, bpath) => {
       if (isEmptyBlock(block)) violations.push({ code: 'empty_block', path: `${base}.${bpath}`, message: `빈 블록(${String(block.type)})`, severity: 'warning', autoFixable: true });
     });
+
+    // 시각 앵커 — D2는 프롬프트에만 있고 검사가 없어서, 헤드라인+문단+불릿뿐인
+    // 섹션이 그대로 통과했다(실제 생성물에서 텍스트 벽이 이탈 지점 1번이었다).
+    // autoFixable: repair가 기존 불릿을 icon_grid로 옮기는 식으로 고칠 수 있다.
+    const secBlocks = (sec as { blocks?: unknown }).blocks;
+    if (Array.isArray(secBlocks) && secBlocks.length > 0 && !hasVisualAnchor(secBlocks)) {
+      violations.push({
+        code: 'visual_anchor', path: `${base}.blocks`,
+        message: '이미지·차트·stat·아이콘·표가 하나도 없는 텍스트 전용 섹션',
+        // warning인 이유: error로 올리면 isClean이 깨져 repair 패스를 매번 부른다.
+        // 실제 생성물에서 19섹션 중 2개가 이 상태였으니 3회 중 2회는 Claude를 한 번
+        // 더 부르게 된다. 셀러에게 주는 해법("다시 생성")은 어느 쪽이든 같은데
+        // 비용만 는다. 대신 friendlyViolationWarnings가 이 코드를 따로 실어 보낸다.
+        severity: 'warning', autoFixable: true,
+      });
+    }
+
+    // 헤드라인이 "두 가지만"이라 해놓고 항목이 4개인 경우. 숫자가 본문과 어긋나면
+    // 그 자체로 신뢰가 깎인다.
+    const headings = Array.isArray(secBlocks)
+      ? (secBlocks as Array<Record<string, unknown>>).filter((b) => b?.type === 'heading')
+      : [];
+    for (const h of headings) {
+      if (typeof h.text !== 'string') continue;
+      const mm = countMismatch(h.text, secBlocks);
+      if (mm) {
+        violations.push({
+          code: 'count_mismatch', path: `${base}.blocks`,
+          message: `헤드라인은 ${mm.declared}가지인데 항목은 ${mm.actual}개: "${h.text}"`,
+          severity: 'warning', autoFixable: true,
+        });
+      }
+    }
 
     // option_grid ↔ 이미지 슬롯 정합성
     violations.push(...checkOptionGridImages(sec, base));
