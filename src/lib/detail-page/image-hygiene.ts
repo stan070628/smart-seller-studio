@@ -40,9 +40,10 @@ export function hasCloseupClaim(text: string): boolean {
 }
 
 /**
- * "이 사진에 사람이 있다"고 주장하는 표현. gen 슬롯(flux_lifestyle·detail_closeup·
- * model_wearing)이 생성 실패로 원본 제품컷으로 대체되면 이 문장들이 거짓이 된다
- * (접사 주장과 같은 문제, 같은 메커니즘).
+ * "이 사진에 사람이 있다"고 주장하는 표현. gen 슬롯(flux_lifestyle·detail_closeup)이
+ * 생성 실패로 원본 제품컷으로 대체되면 이 문장들이 거짓이 된다(접사 주장과 같은
+ * 문제, 같은 메커니즘). flux_lifestyle은 인물이 등장하는 착용/사용 씬도 만들 수
+ * 있으므로 실패 시 이 검증이 여전히 필요하다.
  *
  * 좁게 잡는다 — "모델"은 한국 이커머스에서 제품 변형을 뜻하는 경우가 흔하고
  * ("구형 모델", "여러 모델이 있습니다"), "들고 있는"·"사용하는 모습"은 평범한
@@ -76,7 +77,7 @@ export interface CloseupStripResult {
 }
 
 export interface StripOpts {
-  /** model_wearing 슬롯이 있던 섹션이면 true — 착용 주장도 함께 제거한다 */
+  /** true면 착용 주장(hasWearingClaim)도 함께 제거한다 */
   wearing?: boolean;
 }
 
@@ -86,7 +87,8 @@ export interface StripOpts {
  * 지우면 섹션에 제목이 없어지므로 셀러가 직접 고치는 편이 낫다.
  *
  * opts.wearing이 true면 착용 주장(hasWearingClaim)도 같은 방식으로 제거한다 —
- * model_wearing 슬롯이 생성 실패로 원본 제품컷으로 대체된 섹션에서 쓴다.
+ * gen 슬롯이 생성 실패로 원본 제품컷으로 대체된 섹션에서 쓴다. flux_lifestyle이
+ * 인물 씬도 만들 수 있으므로 호출부(page.tsx)는 이 옵션을 항상 켠다.
  * 옵션 없이 호출하면(하위 호환) 접사 주장만 대상이다.
  */
 export function stripCloseupClaims(blocks: unknown, opts?: StripOpts): CloseupStripResult {

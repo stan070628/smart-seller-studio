@@ -14,7 +14,6 @@ import {
   BACKGROUND_PROMPT_SYSTEM,
   COMPOSITE_REFINE_PROMPT,
   buildNoProductSuffix,
-  buildWearingInstruction,
 } from './prompts';
 
 export const maxDuration = 120;
@@ -23,7 +22,7 @@ const RATE_LIMIT = { windowMs: 60_000, maxRequests: 8 };
 const EDIT_RATE_LIMIT = { windowMs: 60_000, maxRequests: 6 };
 
 const RequestBodySchema = z.object({
-  sectionType: z.enum(['hero', 'lifestyle', 'detail', 'feature', 'wearing']),
+  sectionType: z.enum(['hero', 'lifestyle', 'detail', 'feature']),
   // 신규: 멀티참조
   referenceImages: z
     .array(z.object({ base64: z.string(), mimeType: z.string().optional() }))
@@ -47,18 +46,6 @@ const RequestBodySchema = z.object({
   baseImageUrl: z.string().url().optional(),
   // 편집 지시어 또는 새 생성 art direction
   instruction: z.string().max(500).optional(),
-  /**
-   * wearing 전용. 기본값은 여기 한 곳에만 둔다 — 호출자는 그대로 흘려보낸다.
-   * 주의: 최상위 .default()는 값을 그대로 대입할 뿐 내부 스키마를 다시 통과시키지
-   * 않으므로(zod 동작), wearing 필드 자체가 생략된 요청에서도 완전한 기본값이
-   * 적용되도록 여기서 전체 shape을 명시한다. {}만 주면 내부 필드 default가 씹힌다.
-   */
-  wearing: z
-    .object({
-      faceVisible: z.boolean().default(true),
-      gender: z.enum(['male', 'female']).default('male'),
-    })
-    .default({ faceVisible: true, gender: 'male' }),
 });
 
 // lifestyle/detail/feature: 제품 합성 방식 (Gemini에 배경만 생성 → Sharp 합성)
@@ -315,7 +302,6 @@ export async function POST(req: NextRequest) {
     scenePrompt: directPrompt,
     baseImageUrl,
     instruction,
-    wearing,
   } = parsed.data;
   isEditMode = !!baseImageUrl; // Zod 검증된 값으로 덮어쓰기
 
@@ -414,9 +400,9 @@ export async function POST(req: NextRequest) {
       });
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      // 1200: 600이면 wearing 씬에서 응답이 잘린다. SCENE_PROMPT_SYSTEM이 요구하는
-      // 조명·환경·소품·앵글·무드·색 서술에 인물 서술(모델 외형·프레이밍·포즈)이 더해지고,
-      // 프롬프트가 PRODUCT_FIDELITY_INSTRUCTION(약 200토큰)으로 끝나야 하기 때문이다.
+      // 1200: 600이면 인물이 등장하는 씬에서 응답이 잘린다. SCENE_PROMPT_SYSTEM이 요구하는
+      // 조명·환경·소품·앵글·무드·색 서술에 더해, 프롬프트가 PRODUCT_FIDELITY_INSTRUCTION
+      // (인물 품질 조건절 포함, 약 250토큰)으로 끝나야 하기 때문이다.
       // 잘리면 JSON에 닫는 중괄호가 없어 아래 파싱이 실패한다(실물 검증에서 발견).
       const claudeRes = await client.messages.create({
         model: 'claude-sonnet-4-6',
@@ -453,18 +439,6 @@ export async function POST(req: NextRequest) {
       finalScenePrompt = compositeProductPng
         ? `${bgPrompt}${buildNoProductSuffix(sectionType, productInfo?.headline)}` // 합성 모드: 배경만 생성
         : claudePrompt; // fallback: Claude 프롬프트 그대로 (PRODUCT_FIDELITY_INSTRUCTION 이미 포함)
-    }
-
-    // wearing은 인물 착용컷이므로 검증된 인물 지시(모델·수위·포즈·색보존)를 말미에 붙인다.
-    // 두 분기(directPrompt / Claude) 합류 후에 한 번만 붙여 중복을 막는다.
-    // 말미에 두는 이유: 뒤쪽 지시가 더 강하게 반영된다고 보고 배치했다
-    // (시험 35장은 Gemini 직결 프롬프트였고 Claude 프리픽스와의 조합은 미검증 —
-    //  Task 8에서 얼굴 컷 구도를 확인한다).
-    // isEditMode 제외: 편집 지시(예: "노을빛으로 바꿔줘")가 인물 블록의 COLOR_ACCURACY
-    // ("NOT golden hour, NOT sunset")와 정면충돌해 자기모순 프롬프트가 된다. 현재
-    // PRO 페이지에는 wearing 씬 편집 경로가 없어 도달하지 않지만, 생기면 이 가드가 필요하다.
-    if (sectionType === 'wearing' && !isEditMode) {
-      finalScenePrompt = `${finalScenePrompt} ${buildWearingInstruction(wearing)}`;
     }
 
     // Step 2: Gemini로 씬 생성 (합성 모드: 배경만 / fallback: 제품 포함)

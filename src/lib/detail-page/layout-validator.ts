@@ -11,14 +11,12 @@ import { sanitizeProgressBars } from './progress-hygiene';
 // 파일을 통째로 import하면 아래 zod 스키마(zLayoutBlock 등)가 tree-shake되지
 // 않고 클라이언트 번들에 그대로 들어간다(esbuild 실측 313KB, 그중 310KB가 zod).
 export { GEN_SLOT_TYPES, isGenSlotType, type GenSlotType } from './gen-slots';
-import { isGenSlotType } from './gen-slots';
 
 export interface Violation {
   code:
     | 'schema' | 'cjk' | 'broken_text' | 'empty_block'
     | 'duplicate' | 'section_count' | 'prohibited'
-    | 'option_compare' | 'option_coverage' | 'option_image' | 'narrative' | 'wearing_coverage'
-    | 'wearing_face_pair';
+    | 'option_compare' | 'option_coverage' | 'option_image' | 'narrative';
   path: string;
   message: string;
   severity: 'error' | 'warning';
@@ -37,8 +35,6 @@ export interface ProLayoutOpts {
   optionNameByImageIndex?: Map<number, string>;
   /** 서사 검증 활성화 — 생성 경로 전용. draft/render는 사용자 편집본이라 켜지 않는다. */
   narrative?: boolean;
-  /** 인물 착용컷 커버리지 검증 — 생성 경로 전용 (statHygiene·narrative와 같은 선례) */
-  wearing?: boolean;
   /**
    * progress_bar 수치 대조용 입력 원천.
    * 지정하면 displayValue의 숫자가 이 문자열에 등장하는 item만 남긴다.
@@ -88,9 +84,6 @@ const zClaudeSection = z.object({
     slotType: z.string(),
     promptHint: z.string().optional(),
     imageRef: z.number().optional(),
-    // model_wearing 전용. 자연어 promptHint를 파싱하면 조용히 실패하므로 필드로 받는다.
-    faceVisible: z.boolean().optional(),
-    modelGender: z.enum(['male', 'female']).optional(),
   })).optional(),
   // 서사 비트. optional인 이유는 기존 draft 로드가 깨져서가 아니라(draft GET은 검증을
   // 거치지 않는다), draft 저장·render 경로의 warnings에 스키마 노이즈를 만들지
@@ -400,74 +393,6 @@ export function validateProLayout(sections: unknown, opts?: ProLayoutOpts): Vali
         path: issue.sectionIndex !== undefined ? `sections[${issue.sectionIndex}]` : 'sections',
         message: issue.message,
         severity: issue.severity,
-        autoFixable: false,
-      });
-    }
-  }
-
-  // ── 인물 착용컷 커버리지 (생성 경로 전용) ──
-  // 1개면 위반: 얼굴 보이는 컷과 크롭 컷의 역할이 달라 둘 다 필요하다.
-  //   얼굴 컷은 표정으로 "입고 싶다"를 만들고, 크롭 컷은 시선을 제품에 붙잡아 핏을 보여준다.
-  // 0개는 통과: 인물이 부적절한 상품(위생용품·속옷·의료기기)은 0개가 정답이며,
-  //   카테고리를 하드코딩하지 않고도 "Claude가 필요하다고 판단했으면 2개"가 강제된다.
-  if (opts?.wearing) {
-    // 슬롯 수도, "model_wearing을 가진 섹션 수"도 아니라 "첫 gen 슬롯이
-    // model_wearing인 섹션 수"를 센다 — page.tsx가 섹션당 첫 gen 슬롯
-    // (GEN_SLOT_TYPES) 하나만 생성하고 렌더하기 때문이다(find / findIndex).
-    // [flux_lifestyle, model_wearing]처럼 다른 gen 슬롯이 앞에 오면 그 섹션은
-    // 실제로 라이프스타일 씬이 되고 착용컷은 0장인데, "가진 섹션 수"로 세면
-    // 통과해버린다.
-    let wearingSections = 0;
-    let sawFaceVisible = false;
-    let sawFaceCropped = false;
-    for (const sec of sections) {
-      const slots = (sec as { imageSlots?: unknown }).imageSlots;
-      if (!Array.isArray(slots)) continue;
-      const firstGen = slots.find(
-        (sl) => sl && typeof sl === 'object' && isGenSlotType((sl as { slotType?: unknown }).slotType),
-      ) as { slotType?: string; faceVisible?: unknown } | undefined;
-      if (firstGen?.slotType === 'model_wearing') {
-        // 병치 규칙(N7)이 imageSlots[0]=착용컷을 전제한다. product_nukki가 앞에
-        // 오면(예: [product_nukki, model_wearing]) firstGen은 여전히 model_wearing을
-        // 찾지만(GEN_SLOT_TYPES가 아니라서 product_nukki를 건너뛰므로), 실제 blocks의
-        // image 배열 순서는 imageSlots 순서를 그대로 따르므로 렌더가 뒤집힌다 —
-        // attachedIndex 0(제품 단독컷 자리)에 실제 제품 사진이, attachedIndex 1(45%
-        // 썸네일 자리)에 AI 착용컷이 들어간다. 순서가 틀리면 카운트하지 않아
-        // wearing_coverage를 발동시켜 repair가 순서를 바로잡게 한다.
-        if ((slots[0] as { slotType?: string } | undefined)?.slotType !== 'model_wearing') continue;
-        wearingSections += 1;
-        // faceVisible 생략은 generate-scene-image route의 Zod 기본값(true)으로
-        // 처리되므로 얼굴 컷으로 센다.
-        if (firstGen.faceVisible === false) sawFaceCropped = true;
-        else sawFaceVisible = true;
-      }
-    }
-    // wearingSections는 1 또는 >=2 중 하나로만 아래 두 branch에 들어간다 —
-    // 두 code(wearing_coverage/wearing_face_pair)가 같은 레이아웃에서 동시에
-    // 나오지 않는다.
-    if (wearingSections === 1) {
-      violations.push({
-        code: 'wearing_coverage',
-        path: 'sections',
-        message:
-          '인물 착용컷이 1개입니다. 얼굴이 보이는 컷(faceVisible: true)과 얼굴을 뺀 크롭 컷(faceVisible: false)이 각각 필요하므로 2개 이상으로 만드세요.',
-        severity: 'error',
-        autoFixable: false,
-      });
-    }
-    // faceVisible 쌍 검증: 개수가 맞아도 두 컷이 모두 같은 종류(둘 다 얼굴 또는
-    // 둘 다 크롭)면 의미가 없다. faceVisible은 optional이고 생략 시 true로
-    // 처리되므로, Claude가 두 슬롯 모두 생략하면 위의 개수 검증만으로는 통과한다.
-    // code를 wearing_coverage와 분리한다 — friendlyViolationWarnings(route.ts)가
-    // code로만 사용자 문구를 찾고 message는 버리므로, 같은 code를 쓰면 2장을
-    // 만든 사용자가 "1개뿐입니다"라는 틀린 원인을 보게 된다.
-    if (wearingSections >= 2 && !(sawFaceVisible && sawFaceCropped)) {
-      violations.push({
-        code: 'wearing_face_pair',
-        path: 'sections',
-        message:
-          '인물 착용컷이 모두 같은 종류입니다. 하나는 faceVisible: true(얼굴 컷), 하나는 false(크롭 컷)로 지정하세요.',
-        severity: 'error',
         autoFixable: false,
       });
     }

@@ -17,7 +17,6 @@ REVIEW CHECKLIST:
 3. Rewrite any Chinese characters into Korean — never delete text leaving a broken sentence.
 4. Keep all valid content unchanged. If a section is already correct, return it unchanged.
    Section ORDER may be changed ONLY when fixing a narrative issue (rule 7).
-   기존 섹션의 imageSlots에 슬롯을 추가하는 것은 rule 8에서 허용된다.
 5. 옵션 편중(option_coverage) 이슈가 있으면 imageSlots[].imageRef를 재배정해 옵션을 고르게 만든다. 단 섹션 내용과 옵션이 충돌하면 내용을 우선하고 다른 섹션에서 균형을 맞춘다. 비교 섹션(option_compare)은 옵션당 imageSlot 1개를 유지한다.
 6. 모든 섹션은 beat 필드를 가져야 한다. beat 값은 다음 중 하나다:
    hook, problem, solution, compare, evidence, detail, usecase, option, assure
@@ -45,21 +44,6 @@ REVIEW CHECKLIST:
    - problem이 있는데 solution이 없으면 solution 섹션을 추가한다.
    - assure 섹션을 마지막 3개 섹션 안으로 옮긴다. assure 섹션이 아예 없으면
      세탁·보관·제품정보를 담은 assure 섹션을 만들어 끝에 둔다.
-8. wearing_coverage 이슈가 있으면 다음을 고쳐라.
-   - model_wearing 슬롯을 가진 섹션이 1개뿐이면 다른 섹션의 imageSlots에 하나를
-     추가한다. 새 섹션을 만들지 마라 — 섹션 수 상한을 넘길 수 있다.
-   - 그 섹션에 flux_lifestyle이나 detail_closeup이 이미 있으면 다른 섹션을 고르거나,
-     model_wearing을 imageSlots 배열의 첫 번째로 옮겨라. 섹션당 AI 씬은 첫 슬롯
-     하나만 생성된다.
-   - 기존 것이 faceVisible: true면 새것은 false로(detail 또는 evidence 비트 섹션에),
-     기존 것이 false면 새것은 true로(hook 또는 usecase 비트 섹션에) 둔다.
-     faceVisible을 생략하지 마라 — 생략하면 두 컷이 모두 얼굴 컷이 된다.
-   - 두 씬의 promptHint가 겹치면 안 된다. 기존 슬롯을 삭제하지 마라.
-   - promptHint에는 상황만 쓴다. 모델 외형·프레이밍·조명·포즈는 시스템이 붙인다.
-9. wearing_face_pair 이슈가 있으면 model_wearing 슬롯들의 faceVisible을 확인해
-   하나는 true(얼굴 컷), 하나는 false(크롭 컷)로 바꿔라. 슬롯을 추가하거나
-   삭제하지 마라 — 개수는 이미 맞다. faceVisible: false는 detail·evidence 비트
-   섹션의 슬롯에 주는 것이 자연스럽다.
 
 Return ONLY the corrected JSON array — no explanation, no code fences.`;
 

@@ -2,12 +2,10 @@ import { describe, it, expect } from 'vitest';
 import {
   MODEL_KO,
   MODEL_CONTEXT,
-  FACE_VISIBLE,
-  FACE_CROPPED,
   COLOR_ACCURACY,
   POSE_STATIC,
+  PERSON_QUALITY,
   PRODUCT_FIDELITY_INSTRUCTION,
-  buildWearingInstruction,
 } from '@/app/api/ai/generate-scene-image/prompts';
 
 describe('인물 프롬프트 상수', () => {
@@ -35,83 +33,41 @@ describe('인물 프롬프트 상수', () => {
     // 달리기·점프에서 손이 뭉개진다
     expect(POSE_STATIC).toContain('NO running');
   });
+});
 
-  it('FACE_VISIBLE과 FACE_CROPPED는 서로 배타적인 지시다', () => {
-    expect(FACE_VISIBLE).toContain('PORTRAIT');
-    expect(FACE_CROPPED).toContain('COMPLETELY OUTSIDE the frame');
+describe('PERSON_QUALITY (조건절)', () => {
+  it('"If a person appears"로 시작해 인물 등장을 강제하지 않는다', () => {
+    expect(PERSON_QUALITY.startsWith('If a person appears')).toBe(true);
+  });
+
+  it('성별을 뒤에서 덮어쓰지 않고 male/female 서술을 나란히 제시한다', () => {
+    // 실물 검증에서 뒤쪽 덮어쓰기(예: "The person is a Korean man...")가
+    // 앞서 쓴 성별 묘사를 이기지 못했다 — 그래서 Claude가 씬에 맞게 고르도록
+    // 두 서술을 함께 준다.
+    expect(PERSON_QUALITY).toContain(MODEL_KO.male);
+    expect(PERSON_QUALITY).toContain(MODEL_KO.female);
+  });
+
+  it('MODEL_CONTEXT·POSE_STATIC·COLOR_ACCURACY를 모두 포함한다', () => {
+    expect(PERSON_QUALITY).toContain(MODEL_CONTEXT);
+    expect(PERSON_QUALITY).toContain(POSE_STATIC);
+    expect(PERSON_QUALITY).toContain(COLOR_ACCURACY);
   });
 });
 
-describe('buildWearingInstruction', () => {
-  it('얼굴 보이는 컷에 FACE_VISIBLE이 들어간다', () => {
-    const out = buildWearingInstruction({ faceVisible: true, gender: 'male' });
-    expect(out).toContain(FACE_VISIBLE);
-    expect(out).not.toContain(FACE_CROPPED);
+describe('PRODUCT_FIDELITY_INSTRUCTION', () => {
+  it('PERSON_QUALITY를 포함한다 — Claude 프롬프트 끝에 반드시 붙으므로, 인물 조건절이 ' +
+    '이 상수 하나에 있으면 storyboard 직결 경로(Claude 우회)에서도 Gemini에 도달한다', () => {
+    expect(PRODUCT_FIDELITY_INSTRUCTION).toContain(PERSON_QUALITY);
   });
 
-  it('크롭 컷에 FACE_CROPPED가 들어간다', () => {
-    const out = buildWearingInstruction({ faceVisible: false, gender: 'male' });
-    expect(out).toContain(FACE_CROPPED);
-    expect(out).not.toContain(FACE_VISIBLE);
-  });
-
-  it('성별에 맞는 모델 서술만 들어간다', () => {
-    const m = buildWearingInstruction({ faceVisible: true, gender: 'male' });
-    const f = buildWearingInstruction({ faceVisible: true, gender: 'female' });
-    expect(m).toContain(MODEL_KO.male);
-    expect(m).not.toContain(MODEL_KO.female);
-    expect(f).toContain(MODEL_KO.female);
-    expect(f).not.toContain(MODEL_KO.male);
-  });
-
-  it('색 보존·포즈 제약·모델 맥락은 항상 포함된다', () => {
-    for (const faceVisible of [true, false]) {
-      for (const gender of ['male', 'female'] as const) {
-        const out = buildWearingInstruction({ faceVisible, gender });
-        expect(out).toContain(COLOR_ACCURACY);
-        expect(out).toContain(POSE_STATIC);
-        expect(out).toContain(MODEL_CONTEXT);
-      }
-    }
-  });
-
-  it('성별이 없으면 male을 기본으로 쓴다', () => {
-    expect(buildWearingInstruction({ faceVisible: true })).toContain(MODEL_KO.male);
-  });
-
-  it('PRODUCT_FIDELITY_INSTRUCTION을 포함하지 않는다', () => {
-    // wearing은 COMPOSITE_SECTIONS에 없어 compositeProductPng가 null이 되고,
-    // route.ts의 `compositeProductPng ? bgPrompt : claudePrompt` 분기에서 claudePrompt를 쓴다.
-    // SCENE_PROMPT_SYSTEM의 `MUST end with this exact instruction` 규칙이
-    // 그 프롬프트를 이 지시로 끝내게 만들므로, 여기서 또 붙이면 같은 문단이 두 번 들어간다.
-    const out = buildWearingInstruction({ faceVisible: true, gender: 'male' });
-    expect(out).not.toContain(PRODUCT_FIDELITY_INSTRUCTION);
+  it('제품 개수·단일 프레임·스파클 금지 등 기존 지시를 그대로 유지한다', () => {
+    expect(PRODUCT_FIDELITY_INSTRUCTION).toContain('EXACTLY the same quantity');
+    expect(PRODUCT_FIDELITY_INSTRUCTION).toContain('SINGLE FRAME ONLY');
+    expect(PRODUCT_FIDELITY_INSTRUCTION).toContain('NO SPARKLE MARKS');
   });
 
   it('조립 결과가 프롬프트 원문과 일치한다 (문구 변경 시 스냅샷을 갱신하며 실물 재검증)', () => {
-    expect(buildWearingInstruction({ faceVisible: true, gender: 'female' })).toMatchInlineSnapshot(`"The person is a Korean woman in her late twenties with long straight black hair, natural dewy Korean makeup, fair even skin tone, slim build. Styled like a Korean lifestyle magazine editorial shot in Seoul, not a Western or Chinese catalog. A candid lifestyle PORTRAIT — this is a photo OF THE PERSON, not a product shot. The head and face occupy the upper third of the frame, eyes meeting the camera, an easy natural smile. Waist-up composition. POSE CONSTRAINTS: both arms stay BELOW shoulder height — never raised, never overhead. Hands hang naturally relaxed with open fingers or rest in pockets — never clenched into fists. The person stands, leans or walks slowly — NO running, NO jumping, NO mid-action motion. COLOR ACCURACY IS CRITICAL: neutral daylight with accurate white balance. The garment's color must match the reference image exactly — a white garment renders as pure white. NOT golden hour, NOT sunset, NOT warm color cast."`);
-    expect(buildWearingInstruction({ faceVisible: false, gender: 'male' })).toMatchInlineSnapshot(`"The person is a Korean man in his late twenties with a clean modern Korean haircut — softly layered, natural black hair, fair even skin tone, slim build. Styled like a Korean lifestyle magazine editorial shot in Seoul, not a Western or Chinese catalog. FRAMING IS CRITICAL: the frame starts at the collarbone and ends at the hips — the head and face are COMPLETELY OUTSIDE the frame, not visible at all. POSE CONSTRAINTS: both arms stay BELOW shoulder height — never raised, never overhead. Hands hang naturally relaxed with open fingers or rest in pockets — never clenched into fists. The person stands, leans or walks slowly — NO running, NO jumping, NO mid-action motion. COLOR ACCURACY IS CRITICAL: neutral daylight with accurate white balance. The garment's color must match the reference image exactly — a white garment renders as pure white. NOT golden hour, NOT sunset, NOT warm color cast."`);
-  });
-
-  it('조각이 앞 조각 끝에 공백 하나로 이어진다', () => {
-    // 범용 구두점 정규식(/[.,][^\s]/, /[a-z][A-Z]/)은 "e.g.,"·"1,000" 같은
-    // 이 파일의 기존 문체(buildNoProductSuffix, SECTION_BG_HINTS.lifestyle)에서
-    // 오탐한다. 모든 조각이 '.'로 끝나므로 각 조각 시작 직전 두 글자가 정확히
-    // '. '인지만 확인하면 조각 내용과 무관하게 붙음·중복 공백을 잡을 수 있다.
-    //
-    // 범위 주의: 이 테스트는 join(' ')이 만드는 조각 사이 이음매만 본다.
-    // 상수 하나 안에서 '+'로 이어붙인 자리의 공백 누락(예: POSE_STATIC의
-    // 'overhead.' + 'Hands' → 'overhead.Hands')은 잡지 못하며, 그건 위
-    // 스냅샷이 유일한 방어선이다. 스냅샷을 지우지 마라.
-    for (const faceVisible of [true, false]) {
-      for (const gender of ['male', 'female'] as const) {
-        const out = buildWearingInstruction({ faceVisible, gender });
-        for (const frag of [MODEL_CONTEXT, faceVisible ? FACE_VISIBLE : FACE_CROPPED, POSE_STATIC, COLOR_ACCURACY]) {
-          const i = out.indexOf(frag);
-          expect(i).toBeGreaterThan(0); // 조각이 온전히 들어있다
-          expect(out.slice(i - 2, i)).toBe('. '); // 마침표 + 공백 하나(이중 공백·붙음 모두 배제)
-        }
-      }
-    }
+    expect(PRODUCT_FIDELITY_INSTRUCTION).toMatchInlineSnapshot(`"Using the attached product image(s) as a visual reference, study the product's overall shape, proportions, color palette, material texture, and key design details, then render it as a new photorealistic image naturally integrated in the scene. The product rendition should faithfully capture the reference's essential visual characteristics (form, color scheme, distinctive features) as an independent creative work — not a direct reproduction of the original photograph. IMPORTANT: Use EXACTLY the same quantity of items as shown in the reference image — do not add more items, do not duplicate products. SINGLE FRAME ONLY: Generate exactly one single continuous photograph — no split panels, diptychs, multi-view layouts, before/after comparisons, or composite image compositions. NO SPARKLE MARKS: Do NOT render any four-pointed star, sparkle, glitter, or diamond glyph anywhere in the image — not on the garment, product surface, or background. If such a mark appears in the reference image, treat it as an artifact and omit it. POSITIVE SUBJECT: If a person appears, they must look confident, comfortable, and at ease — relaxed or lightly positive expression, upright active posture. No grimacing, exhaustion, hunching over, hands on knees, slumping, distress, or discomfort. They must be Korean — either a Korean man in his late twenties with a clean modern Korean haircut — softly layered, natural black hair, fair even skin tone, slim build, or a Korean woman in her late twenties with long straight black hair, natural dewy Korean makeup, fair even skin tone, slim build — whichever matches the scene and the product's likely wearer. Styled like a Korean lifestyle magazine editorial shot in Seoul, not a Western or Chinese catalog. POSE CONSTRAINTS: both arms stay BELOW shoulder height — never raised, never overhead. Hands hang naturally relaxed with open fingers or rest in pockets — never clenched into fists. The person stands, leans or walks slowly — NO running, NO jumping, NO mid-action motion. COLOR ACCURACY IS CRITICAL: neutral daylight with accurate white balance. The product's color must match the reference image exactly — a white item renders as pure white. NOT golden hour, NOT sunset, NOT warm color cast."`);
   });
 });

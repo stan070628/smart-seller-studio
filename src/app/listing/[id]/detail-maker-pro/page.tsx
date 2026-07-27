@@ -28,8 +28,6 @@ interface GeneratedSection {
     slotType: string;
     promptHint?: string;
     imageRef?: number;
-    faceVisible?: boolean;
-    modelGender?: 'male' | 'female';
   }>;
 }
 
@@ -1262,9 +1260,8 @@ export default function DetailMakerProPage() {
                 .map((r) => (r.status === 'fulfilled' ? r.value : null));
             }
 
-            // Step 2: 생성형 슬롯(flux_lifestyle=라이프스타일, detail_closeup=디테일 접사,
-            // model_wearing=인물 착용컷) 섹션마다 Gemini 씬 생성.
-            // generate-scene-image: 누끼 → 배경 생성 → 합성(model_wearing은 비합성 경로).
+            // Step 2: 생성형 슬롯(flux_lifestyle=라이프스타일, detail_closeup=디테일 접사)
+            // 섹션마다 Gemini 씬 생성. generate-scene-image: 누끼 → 배경 생성 → 합성.
             const geminiUrlMap: Record<number, string> = {};
             // geminiUrlMap은 realBySection(실제 업로드 사진)으로도 pre-seed되므로 "AI가
             // 실제로 씬을 생성했다"는 신호로 쓸 수 없다. AI 고지(연출 고지) 판정은 이
@@ -1279,10 +1276,8 @@ export default function DetailMakerProPage() {
               setError('일부 이미지 업로드에 실패했습니다. 옵션 배분이 정확하지 않을 수 있습니다.');
             }
             // 실사진 override: 업로드된 detail_closeup이 그 섹션의 targeting gen 슬롯(genSlotIdx)일 때만.
-            // model_wearing은 의도적으로 제외한다(GEN_SLOT_TYPES를 쓰지 않고 두 타입만 직접
-            // 나열) — shot-guide는 detail_closeup 슬롯만 촬영 카드로 만들므로 업로드 사진은
-            // 전부 제품 접사이고, 그것이 인물 씬 자리를 먹으면 "모델 착용컷이 없다"는 원래
-            // 문제가 그대로 돌아온다.
+            // GEN_SLOT_TYPES를 쓰지 않고 두 타입을 직접 나열한다 — shot-guide는
+            // detail_closeup 슬롯만 촬영 카드로 만들므로 업로드 사진은 전부 제품 접사다.
             const realBySection: Record<number, string> = {};
             for (const sl of slots) {
               const u = resolveSlotUrl(sl);
@@ -1331,23 +1326,12 @@ export default function DetailMakerProPage() {
                       refImages = primary ? [primary, ...available].slice(0, 2) : available.slice(0, 2);
                     }
                     if (refImages.length === 0) return;
-                    // sceneTypeFor가 model_wearing만 'wearing'으로 매핑하므로
-                    // sceneType === 'wearing'과 slot?.slotType === 'model_wearing'은
-                    // 같은 사실이다 — 한 번만 계산해 두 판정을 만들지 않는다.
                     const sceneType = sceneTypeFor(slot?.slotType);
                     const sceneRes = await fetch('/api/ai/generate-scene-image', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
                         sectionType: sceneType,
-                        // wearing 전용: 얼굴 노출과 모델 성별. 자연어 sceneHint로는
-                        // 서버가 수위를 판정할 수 없어 필드로 보낸다.
-                        // 기본값은 route.ts의 Zod가 채우므로 여기서 ??를 쓰지 않는다 —
-                        // 두 계층이 각각 기본값을 주면 한쪽만 바뀔 때 경로에 따라
-                        // 동작이 갈린다. undefined는 JSON에서 사라지고 Zod가 채운다.
-                        ...(sceneType === 'wearing' && {
-                          wearing: { faceVisible: slot?.faceVisible, gender: slot?.modelGender },
-                        }),
                         productImageUrls: refImages,
                         // scenePrompt(직결) 대신 sceneHint로 전달 → Claude 프롬프트 정교화
                         // (조명·앵글·무드 + anti-AI 규칙) 단계를 경유해 씬 품질을 높인다.
@@ -1433,8 +1417,8 @@ export default function DetailMakerProPage() {
 
               // gen 슬롯(어떤 slotType이든)이 폴백되면 그 자리는 평범한 제품 사진이다 —
               // 접사든 착용이든 사진 내용을 주장하는 문구는 모두 거짓이 된다.
-              // flux_lifestyle도 프롬프트상 "착용/사용 라이프스타일 씬"이므로
-              // model_wearing만 걸러서는 같은 결함이 남는다 — slotType으로 나누지 않는다.
+              // flux_lifestyle은 프롬프트상 자유 프레이밍의 인물 씬(착용/사용 라이프스타일)도
+              // 만들 수 있으므로 wearing 옵션은 항상 켠다 — slotType으로 나누지 않는다.
               if (genSlotIdx >= 0 && !geminiUrl) {
                 fallbackSections++;
                 const stripped = stripCloseupClaims(blocks, { wearing: true });
@@ -1484,8 +1468,8 @@ export default function DetailMakerProPage() {
             // 선언이나 geminiUrlMap을 쓰면 안 된다: 슬롯 선언은 생성이 전부 실패해도
             // true라 판매자의 실제 사진 위에 "AI로 생성되었다"는 거짓 고지가 붙고,
             // geminiUrlMap은 realBySection(실제 업로드 사진)으로 pre-seed되어 AI 신호가
-            // 아니다. 반대로 flux_lifestyle/detail_closeup만 성공해도(model_wearing
-            // 슬롯이 아예 없어도) 고지가 필요하므로 slotType으로 좁히지 않는다.
+            // 아니다. flux_lifestyle이 인물 씬을 만들었을 때도 고지가 필요하므로
+            // slotType으로 좁히지 않는다.
             // detailSections는 map 결과라 const다 — push 대신 스프레드로 새 배열을 만든다.
             const hasAiScene = aiSceneSections.size > 0;
             const sectionsWithDisclosure = hasAiScene

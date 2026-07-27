@@ -10,7 +10,67 @@
  * 검증 근거: docs/superpowers/specs/2026-07-26-pro-model-wearing-design.md
  */
 
-export const PRODUCT_FIDELITY_INSTRUCTION = `Using the attached product image(s) as a visual reference, study the product's overall shape, proportions, color palette, material texture, and key design details, then render it as a new photorealistic image naturally integrated in the scene. The product rendition should faithfully capture the reference's essential visual characteristics (form, color scheme, distinctive features) as an independent creative work — not a direct reproduction of the original photograph. IMPORTANT: Use EXACTLY the same quantity of items as shown in the reference image — do not add more items, do not duplicate products. SINGLE FRAME ONLY: Generate exactly one single continuous photograph — no split panels, diptychs, multi-view layouts, before/after comparisons, or composite image compositions. NO SPARKLE MARKS: Do NOT render any four-pointed star, sparkle, glitter, or diamond glyph anywhere in the image — not on the garment, product surface, or background. If such a mark appears in the reference image, treat it as an artifact and omit it. POSITIVE SUBJECT: If a person appears, they must look confident, comfortable, and at ease — relaxed or lightly positive expression, upright active posture. No grimacing, exhaustion, hunching over, hands on knees, slumping, distress, or discomfort.`;
+// ── 인물 품질 조건절 ────────────────────────────────────────────────────
+// 실물 35장 생성으로 확정된 인물 서술. 예전에는 sectionType: 'wearing' 전용
+// 경로(buildWearingInstruction)로 프레이밍까지 강제했으나, 실물 검증에서
+// (a) Claude가 그 슬롯 자체를 만들지 않았고 (b) 만들어도 gender/프레이밍
+// 지시가 뒤에서 이겨내지 못했다. 반면 flux_lifestyle(자유 프레이밍)는 이미
+// 한국인·정적 포즈·색보존이 된 착용컷을 만들었다 — 프레이밍만 자유롭게 두고
+// "인물이 나오면 이래야 한다"는 조건절만 남긴다.
+//
+// 작명 규칙: <제약 대상>_<값|기준>. 접두사는 무엇을 제약하는지를 말한다
+// (MODEL/POSE/COLOR — `MODEL`은 항상 패션 모델(인물)을 가리키며 AI 모델이 아니다).
+// 접미사는 그 대상에 지시하는 값(KO, STATIC) 또는 그 대상을 규정하는 기준·축
+// (CONTEXT, ACCURACY)이다. 예: 배경 관련 상수를 추가하면 BACKGROUND_*.
+
+/** 인물 외형 서술(성별별). */
+export const MODEL_KO = {
+  male:
+    'a Korean man in his late twenties with a clean modern Korean haircut — softly layered, ' +
+    'natural black hair, fair even skin tone, slim build',
+  female:
+    'a Korean woman in her late twenties with long straight black hair, natural dewy Korean makeup, ' +
+    'fair even skin tone, slim build',
+} as const;
+
+/**
+ * "East Asian"에서 시작했으나 중국인처럼 보인다는 지적을 받았다. "Korean"으로 바꿔도
+ * (MODEL_KO) 범아시아 평균으로 애매하게 수렴했다 — 이 상수의 한국 화보 맥락·스타일링
+ * 명시(긍정 지시)와 "not a Western or Chinese catalog"(부정 지시)가 함께 작용해
+ * 한국 화보 전형으로 고정시켰다.
+ */
+export const MODEL_CONTEXT =
+  'Styled like a Korean lifestyle magazine editorial shot in Seoul, not a Western or Chinese catalog.';
+
+/** 제품 색 보존. 골든아워에서 화이트 민소매가 살구색으로 렌더된 것을 막는다 */
+export const COLOR_ACCURACY =
+  'COLOR ACCURACY IS CRITICAL: neutral daylight with accurate white balance. ' +
+  "The product's color must match the reference image exactly — a white item renders as pure white. " +
+  'NOT golden hour, NOT sunset, NOT warm color cast.';
+
+/**
+ * 포즈 제약. 동적 포즈는 손을 뭉개고(프레임 배제 지시도 통하지 않았다)
+ * 팔을 들면 프레임 기준이 밀려 크롭이 깨진다.
+ */
+export const POSE_STATIC =
+  'POSE CONSTRAINTS: both arms stay BELOW shoulder height — never raised, never overhead. ' +
+  'Hands hang naturally relaxed with open fingers or rest in pockets — never clenched into fists. ' +
+  'The person stands, leans or walks slowly — NO running, NO jumping, NO mid-action motion.';
+
+/**
+ * 인물 품질 조건절. "If a person appears"로 시작해 인물을 강제하지 않는다 —
+ * Claude가 씬에 인물을 넣을지는 기존 판단(promptHint 등)에 맡기고, 넣었을 때만
+ * 한국인·정적 포즈·중립 조명을 보장한다. 성별은 뒤에서 덮어쓰지 않고(실물에서
+ * 실패한 방식) male/female 서술을 나란히 제시해 Claude가 씬에 맞게 고르게 한다.
+ */
+export const PERSON_QUALITY =
+  `If a person appears, they must look confident, comfortable, and at ease — relaxed or lightly ` +
+  `positive expression, upright active posture. No grimacing, exhaustion, hunching over, hands on ` +
+  `knees, slumping, distress, or discomfort. They must be Korean — either ${MODEL_KO.male}, or ` +
+  `${MODEL_KO.female} — whichever matches the scene and the product's likely wearer. ${MODEL_CONTEXT} ` +
+  `${POSE_STATIC} ${COLOR_ACCURACY}`;
+
+export const PRODUCT_FIDELITY_INSTRUCTION = `Using the attached product image(s) as a visual reference, study the product's overall shape, proportions, color palette, material texture, and key design details, then render it as a new photorealistic image naturally integrated in the scene. The product rendition should faithfully capture the reference's essential visual characteristics (form, color scheme, distinctive features) as an independent creative work — not a direct reproduction of the original photograph. IMPORTANT: Use EXACTLY the same quantity of items as shown in the reference image — do not add more items, do not duplicate products. SINGLE FRAME ONLY: Generate exactly one single continuous photograph — no split panels, diptychs, multi-view layouts, before/after comparisons, or composite image compositions. NO SPARKLE MARKS: Do NOT render any four-pointed star, sparkle, glitter, or diamond glyph anywhere in the image — not on the garment, product surface, or background. If such a mark appears in the reference image, treat it as an artifact and omit it. POSITIVE SUBJECT: ${PERSON_QUALITY}`;
 
 // 아래에서 PRODUCT_FIDELITY_INSTRUCTION을 보간한다 → 이 선언보다 먼저 와야 한다.
 export const SCENE_PROMPT_SYSTEM = `You are an expert e-commerce product photographer and AI image prompt engineer.
@@ -32,7 +92,6 @@ Section type directions:
 - lifestyle: Product shown in its actual real-world use context. Creative authentic scene (e.g. fragrance diffuser hanging from a car rearview mirror, cutlery arranged on a fine dining table, skincare product on a marble bathroom counter). Natural or mood lighting.
 - detail: Extreme close-up macro shot of the product's most distinctive material, texture, or craftsmanship detail. Very shallow depth of field, soft bokeh.
 - feature: Aspirational scene that visually communicates the product's key function or benefit. Creative and conceptual but still photorealistic.
-- wearing: A real person wearing or using the product in a believable everyday Korean setting. Static pose only — the person stands, leans, or walks slowly. The product must be reproduced faithfully from the reference image.
 
 Return ONLY valid JSON: {"prompt": "your detailed English prompt here"}`;
 
@@ -111,83 +170,3 @@ export const COMPOSITE_REFINE_PROMPT =
   'redraw any object, and do NOT alter the product in any way. ONLY harmonize: match the lighting and color ' +
   'temperature between the product and the background, correct the contact shadow so the product sits ' +
   'naturally on the surface, and soften the cut-out edges. Output a single continuous photograph, no text.';
-
-// ── 인물 착용컷 (sectionType: 'wearing') ──────────────────────────────
-// 실물 35장 생성으로 확정. 각 상수의 근거는 개별 JSDoc 참고.
-// 근거 문서: docs/superpowers/specs/2026-07-26-pro-model-wearing-design.md
-//
-// 작명 규칙: <제약 대상>_<값|기준>. 접두사는 무엇을 제약하는지를 말한다
-// (MODEL/FACE/POSE/COLOR — `MODEL`은 항상 패션 모델(인물)을 가리키며 AI 모델이 아니다).
-// 접미사는 그 대상에 지시하는 값(KO, VISIBLE, CROPPED, STATIC) 또는 그 대상을
-// 규정하는 기준·축(CONTEXT, ACCURACY)이다. 예: 배경 관련 상수를 추가하면 BACKGROUND_*.
-
-/** 인물 외형 서술(성별별). */
-export const MODEL_KO = {
-  male:
-    'a Korean man in his late twenties with a clean modern Korean haircut — softly layered, ' +
-    'natural black hair, fair even skin tone, slim build',
-  female:
-    'a Korean woman in her late twenties with long straight black hair, natural dewy Korean makeup, ' +
-    'fair even skin tone, slim build',
-} as const;
-
-/**
- * "East Asian"에서 시작했으나 중국인처럼 보인다는 지적을 받았다. "Korean"으로 바꿔도
- * (MODEL_KO) 범아시아 평균으로 애매하게 수렴했다 — 이 상수의 한국 화보 맥락·스타일링
- * 명시(긍정 지시)와 "not a Western or Chinese catalog"(부정 지시)가 함께 작용해
- * 한국 화보 전형으로 고정시켰다.
- */
-export const MODEL_CONTEXT =
-  'Styled like a Korean lifestyle magazine editorial shot in Seoul, not a Western or Chinese catalog.';
-
-/**
- * 얼굴 포함. "editorial photo"/"catalog photograph" 같은 표현은 제품 중심 크롭을
- * 유도해 역효과였다 — 인물 사진임을 명시해야 얼굴이 나온다.
- */
-export const FACE_VISIBLE =
-  'A candid lifestyle PORTRAIT — this is a photo OF THE PERSON, not a product shot. ' +
-  'The head and face occupy the upper third of the frame, eyes meeting the camera, ' +
-  'an easy natural smile. Waist-up composition.';
-
-/** 얼굴 제외. 팔이 어깨 아래일 때만 안정적이다 (POSE_STATIC과 함께 써야 한다) */
-export const FACE_CROPPED =
-  'FRAMING IS CRITICAL: the frame starts at the collarbone and ends at the hips — ' +
-  'the head and face are COMPLETELY OUTSIDE the frame, not visible at all.';
-
-/** 제품 색 보존. 골든아워에서 화이트 민소매가 살구색으로 렌더된 것을 막는다 */
-export const COLOR_ACCURACY =
-  'COLOR ACCURACY IS CRITICAL: neutral daylight with accurate white balance. ' +
-  "The garment's color must match the reference image exactly — a white garment renders as pure white. " +
-  'NOT golden hour, NOT sunset, NOT warm color cast.';
-
-/**
- * 포즈 제약. 동적 포즈는 손을 뭉개고(프레임 배제 지시도 통하지 않았다)
- * 팔을 들면 프레임 기준이 밀려 크롭이 깨진다.
- */
-export const POSE_STATIC =
-  'POSE CONSTRAINTS: both arms stay BELOW shoulder height — never raised, never overhead. ' +
-  'Hands hang naturally relaxed with open fingers or rest in pockets — never clenched into fists. ' +
-  'The person stands, leans or walks slowly — NO running, NO jumping, NO mid-action motion.';
-
-export interface WearingOpts {
-  faceVisible: boolean;
-  gender?: 'male' | 'female';
-}
-
-/**
- * 인물 착용컷 지시를 조립한다. finalScenePrompt 뒤에 붙인다.
- *
- * PRODUCT_FIDELITY_INSTRUCTION은 넣지 않는다 — wearing은 COMPOSITE_SECTIONS에
- * 없어 claudePrompt 경로를 타고, SCENE_PROMPT_SYSTEM이 그 프롬프트를 이미
- * 그 지시로 끝내게 만든다. 여기서 또 붙이면 중복된다.
- * (그 지시의 POSITIVE SUBJECT·NO SPARKLE MARKS 조항이 인물 씬에도 적용된다.)
- */
-export function buildWearingInstruction({ faceVisible, gender = 'male' }: WearingOpts): string {
-  return [
-    `The person is ${MODEL_KO[gender]}.`,
-    MODEL_CONTEXT,
-    faceVisible ? FACE_VISIBLE : FACE_CROPPED,
-    POSE_STATIC,
-    COLOR_ACCURACY,
-  ].join(' ');
-}

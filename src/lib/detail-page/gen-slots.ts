@@ -14,8 +14,14 @@
 /**
  * AI가 씬을 생성하는 슬롯 타입. page.tsx가 섹션당 이 중 첫 번째 하나만
  * 생성하고 렌더하므로(resolveGenSlot), 검증도 같은 기준을 써야 한다.
+ *
+ * model_wearing(인물 착용컷 전용 슬롯)은 제거했다 — 실물 검증에서 Claude가
+ * 그 슬롯 자체를 만들지 않았고, 만들어도 gender/프레이밍 지시가 무시됐다.
+ * flux_lifestyle이 이미 자유 프레이밍으로 완전한 착용컷을 만들고 있어
+ * (generate-scene-image/prompts.ts의 PERSON_QUALITY 조건절 참고), 전용 슬롯
+ * 없이도 같은 결과를 얻는다.
  */
-export const GEN_SLOT_TYPES = ['flux_lifestyle', 'detail_closeup', 'model_wearing'] as const;
+export const GEN_SLOT_TYPES = ['flux_lifestyle', 'detail_closeup'] as const;
 export type GenSlotType = (typeof GEN_SLOT_TYPES)[number];
 const GEN_SLOT_SET: ReadonlySet<string> = new Set(GEN_SLOT_TYPES);
 
@@ -41,15 +47,13 @@ export function resolveGenSlot(
 
 /**
  * 슬롯 타입 → generate-scene-image의 sectionType. detail_closeup은 매크로
- * 접사('detail'), model_wearing은 인물 착용컷('wearing', 비합성 경로), 그 외
- * (flux_lifestyle 포함)는 라이프스타일('lifestyle').
+ * 접사('detail'), 그 외(flux_lifestyle 포함)는 라이프스타일('lifestyle').
  *
- * GEN_SLOT_TYPES에 네 번째 타입이 추가되면 여기 분기가 없는 한 조용히
+ * GEN_SLOT_TYPES에 세 번째 타입이 추가되면 여기 분기가 없는 한 조용히
  * 'lifestyle'로 떨어진다 — 새 타입을 추가할 때는 이 함수도 함께 확인할 것.
- * (지금 세 멤버는 모두 명시 분기되거나, 'lifestyle'이 곧 정답인 flux_lifestyle뿐이다.)
+ * 두 멤버뿐이라 판정이 단순해졌지만, 검증·생성·렌더가 이 매핑 하나를
+ * 공유한다는 계약 자체는 그대로 유효하므로 남긴다.
  */
-export function sceneTypeFor(t?: string): 'detail' | 'wearing' | 'lifestyle' {
-  return t === 'detail_closeup' ? 'detail'
-    : t === 'model_wearing' ? 'wearing'
-    : 'lifestyle';
+export function sceneTypeFor(t?: string): 'detail' | 'lifestyle' {
+  return t === 'detail_closeup' ? 'detail' : 'lifestyle';
 }
