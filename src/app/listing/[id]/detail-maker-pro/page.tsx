@@ -11,7 +11,7 @@ import ImageCleanupModal from '@/components/common/ImageCleanupModal';
 import { deriveOptions, isOptionMode } from '@/lib/detail-page/product-options';
 // gen-slots.ts는 import 없는 leaf 모듈이다 — layout-validator.ts를 대신 import하면
 // 거기 딸린 zod 스키마가 tree-shake되지 않고 클라이언트 번들에 그대로 들어간다.
-import { resolveGenSlot, sceneTypeFor } from '@/lib/detail-page/gen-slots';
+import { resolveGenSlot, sceneTypeFor, isComparePairSlot } from '@/lib/detail-page/gen-slots';
 import {
   stripCloseupClaims,
   findReusedImages,
@@ -27,6 +27,8 @@ interface GeneratedSection {
   imageSlots?: Array<{
     slotType: string;
     promptHint?: string;
+    /** compare_pair 전용 — 좌측(기존 방식)의 어질러진 씬 */
+    beforeHint?: string;
     imageRef?: number;
   }>;
 }
@@ -1304,6 +1306,41 @@ export default function DetailMakerProPage() {
                 genItems.map(async ({ s, i, genSlot }) => {
                   try {
                     const slot = genSlot ? s.imageSlots?.[genSlot.index] : undefined;
+
+                    // compare_pair는 좌우 두 씬을 만들어 한 장으로 붙이는 별도 경로다.
+                    // beforeHint가 없으면 호출하지 않는다 — 좌측 없이 우측만 만들면
+                    // 대비가 아니라 그냥 제품 사진이다.
+                    if (isComparePairSlot(slot?.slotType)) {
+                      if (!slot?.beforeHint || !slot.promptHint) return;
+                      const cmpRes = await fetch('/api/ai/generate-compare-image', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          beforeHint: slot.beforeHint,
+                          afterHint: slot.promptHint,
+                          productImageUrls: effectiveProductUrls.filter((u): u is string => !!u).slice(0, 3),
+                          productName,
+                        }),
+                      });
+                      const cmpJson = await cmpRes.json() as {
+                        success: boolean;
+                        data?: { imageBase64: string; mimeType: string };
+                      };
+                      if (!cmpJson.success || !cmpJson.data) return;
+                      const up = await fetch('/api/image/upload-ai', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          imageBase64: cmpJson.data.imageBase64,
+                          mimeType: cmpJson.data.mimeType,
+                          role: 'compare',
+                        }),
+                      });
+                      const upJson = await up.json() as { success: boolean; url?: string };
+                      if (upJson.success && upJson.url) geminiUrlMap[i] = upJson.url;
+                      return;
+                    }
+
                     // 옵션 모드에선 다른 옵션 사진이 섞이면 Gemini가 색을 섞는다 →
                     // imageRef가 가리키는 1장만(같은 옵션명이면 최대 2장) 보낸다.
                     const options = deriveOptions(optionNames);

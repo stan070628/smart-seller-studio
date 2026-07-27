@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { GEN_SLOT_TYPES, isGenSlotType, resolveGenSlot, sceneTypeFor } from '@/lib/detail-page/gen-slots';
+import { GEN_SLOT_TYPES, isGenSlotType, resolveGenSlot, sceneTypeFor, isComparePairSlot } from '@/lib/detail-page/gen-slots';
 
 describe('resolveGenSlot', () => {
   it('여러 gen 슬롯 중 첫 번째를 찾는다 — flux_lifestyle이 앞이면 그것', () => {
@@ -44,13 +44,22 @@ describe('sceneTypeFor', () => {
     expect(sceneTypeFor(undefined)).toBe('lifestyle');
   });
 
-  // GEN_SLOT_TYPES에 세 번째 타입이 추가되면 sceneTypeFor에 분기를 더하지 않는 한
-  // 조용히 'lifestyle'로 떨어진다. 'lifestyle'이 정답인 멤버는 지금 flux_lifestyle
-  // 하나뿐임을 고정해서, 새 타입이 이 목록에 들어오는 순간 이 테스트가 실패하게
-  // 만든다 — "조용히 lifestyle로 떨어지는" 사고를 여기서 눈에 띄게 한다.
-  it('GEN_SLOT_TYPES 중 lifestyle로 매핑되는 멤버는 flux_lifestyle뿐이다', () => {
-    const fallsToLifestyle = GEN_SLOT_TYPES.filter((t) => sceneTypeFor(t) === 'lifestyle');
+  // GEN_SLOT_TYPES에 타입이 추가되면 sceneTypeFor에 분기를 더하지 않는 한 조용히
+  // 'lifestyle'로 떨어진다. generate-scene-image로 가는 멤버 중 'lifestyle'이 정답인
+  // 것은 flux_lifestyle 하나뿐임을 고정해, 새 타입이 들어오는 순간 실패하게 만든다.
+  //
+  // compare_pair는 제외한다 — 호출부에서 먼저 갈라져 generate-compare-image로 가므로
+  // sceneTypeFor에 도달하지 않는다. 여기 포함시키면 "도달하지도 않는 매핑"을 고정하게
+  // 되고, 정작 잡아야 할 다음 씬 타입 추가는 통과시켜 가드가 무의미해진다.
+  it('generate-scene-image로 가는 멤버 중 lifestyle 매핑은 flux_lifestyle뿐이다', () => {
+    const sceneSlots = GEN_SLOT_TYPES.filter((t) => !isComparePairSlot(t));
+    const fallsToLifestyle = sceneSlots.filter((t) => sceneTypeFor(t) === 'lifestyle');
     expect(fallsToLifestyle).toEqual(['flux_lifestyle']);
+  });
+
+  it('compare_pair는 별도 엔드포인트로 가므로 씬 타입 매핑 대상이 아니다', () => {
+    expect(isComparePairSlot('compare_pair')).toBe(true);
+    expect(GEN_SLOT_TYPES).toContain('compare_pair');
   });
 });
 

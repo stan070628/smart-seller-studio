@@ -21,9 +21,21 @@
  * (generate-scene-image/prompts.ts의 PERSON_QUALITY 조건절 참고), 전용 슬롯
  * 없이도 같은 결과를 얻는다.
  */
-export const GEN_SLOT_TYPES = ['flux_lifestyle', 'detail_closeup'] as const;
+export const GEN_SLOT_TYPES = ['flux_lifestyle', 'detail_closeup', 'compare_pair'] as const;
 export type GenSlotType = (typeof GEN_SLOT_TYPES)[number];
 const GEN_SLOT_SET: ReadonlySet<string> = new Set(GEN_SLOT_TYPES);
+
+/**
+ * compare_pair만 다른 엔드포인트(generate-compare-image)로 간다. 좌우 두 씬을
+ * 만들어 한 장으로 붙이는 처리라 generate-scene-image의 단일 씬 경로와 다르다.
+ *
+ * 그래도 GEN_SLOT_TYPES에 넣는 이유: resolveGenSlot이 "이 섹션에서 AI가 채울
+ * 슬롯"을 찾는 함수이고, 렌더 조립도 그 인덱스에 결과를 넣는다. 여기서 빠지면
+ * 이미지가 만들어져도 놓일 자리를 못 찾는다.
+ */
+export function isComparePairSlot(t: unknown): boolean {
+  return t === 'compare_pair';
+}
 
 /** GEN_SLOT_TYPES 소속 여부 타입가드. 호출부(검증/생성/렌더)가 모두 이것 하나만 본다. */
 export function isGenSlotType(t: unknown): t is GenSlotType {
@@ -55,5 +67,7 @@ export function resolveGenSlot(
  * 공유한다는 계약 자체는 그대로 유효하므로 남긴다.
  */
 export function sceneTypeFor(t?: string): 'detail' | 'lifestyle' {
+  // compare_pair는 호출부에서 먼저 갈라져 generate-compare-image로 가므로 여기
+  // 도달하지 않는다. 도달했다면 라우팅이 빠진 것이다.
   return t === 'detail_closeup' ? 'detail' : 'lifestyle';
 }

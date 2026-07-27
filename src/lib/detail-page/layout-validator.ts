@@ -83,6 +83,9 @@ const zClaudeSection = z.object({
   imageSlots: z.array(z.object({
     slotType: z.string(),
     promptHint: z.string().optional(),
+    // compare_pair 전용 — 좌측(기존 방식)의 어질러진 씬. promptHint는 우측 배경을
+    // 뜻하므로 두 힌트의 성격이 다르다. 다른 슬롯 타입에서는 쓰이지 않는다.
+    beforeHint: z.string().optional(),
     imageRef: z.number().optional(),
   })).optional(),
   // 서사 비트. optional인 이유는 기존 draft 로드가 깨져서가 아니라(draft GET은 검증을
