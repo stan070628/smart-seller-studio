@@ -63,7 +63,8 @@ export async function fetchDomeSnapshot(itemNo: number): Promise<DomeSnapshot | 
     // 형태로 던지므로, errors 객체 안의 dcode가 메시지 문자열에 그대로 직렬화되어 들어온다.
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes('ITEM_ERROR')) return null;
-    throw new DomeTransientError(msg);
+    // cause로 원본 오류를 보존한다 — cron이 실패를 로깅할 때 스택이 끊기면 안 된다.
+    throw new DomeTransientError(msg, { cause: err });
   }
 }
 
@@ -99,33 +100,55 @@ export async function buildVerifyResult(
   orderQty: number,
   logisticsSize: LogisticsSize,
 ): Promise<VerifyResult> {
-  const empty = {
-    deliIsFree: null, deliType: null, deliUnitQty: null, deliFee: null,
-    coupangP25: null, coupangSampleN: null,
-    unitDeliFee: null, effectiveCost: null,
-    breakEvenPrice: null, margin: null, marginRate: null,
-  };
-
   // 삭제됨 — 쿠팡을 조회할 이유가 없다
+  //
+  // 아래 다섯 분기는 모두 VerifyResult의 16개 필드를 spread 없이 전부 나열한다.
+  // spread(...empty, ...domeFields 등)로 합성하면 순서·오버라이드가 어긋나도
+  // TypeScript가 필드 누락은 잡아도 "잘못된 값"은 못 잡는다 — 이 함수는 매입 여부를
+  // 결정하므로 각 분기를 눈으로 통째로 감사할 수 있는 쪽을 택한다. 필드 순서는
+  // VerifyResult 선언 순서(shortlist-db.ts)로 다섯 분기 모두 동일하게 유지한다 —
+  // 그래야 나란히 놓고 비교된다.
   if (dome === null) {
     return {
-      ...empty,
       domeStatus: '삭제됨',
-      domePrice: null, domeInventory: null, domeMoq: null,
+      domePrice: null,
+      domeInventory: null,
+      domeMoq: null,
+      deliIsFree: null,
+      deliType: null,
+      deliUnitQty: null,
+      deliFee: null,
+      coupangP25: null,
+      coupangSampleN: null,
+      unitDeliFee: null,
+      effectiveCost: null,
+      breakEvenPrice: null,
+      margin: null,
+      marginRate: null,
       verdict: 'dead',
     };
   }
 
-  const domeFields = {
-    domeStatus: dome.status,
-    domePrice: dome.price,
-    domeInventory: dome.inventory,
-    domeMoq: dome.moq,
-  };
-
   // 판매중이 아니면 더 볼 것이 없다
   if (dome.status !== '판매중') {
-    return { ...empty, ...domeFields, verdict: 'dead' };
+    return {
+      domeStatus: dome.status,
+      domePrice: dome.price,
+      domeInventory: dome.inventory,
+      domeMoq: dome.moq,
+      deliIsFree: null,
+      deliType: null,
+      deliUnitQty: null,
+      deliFee: null,
+      coupangP25: null,
+      coupangSampleN: null,
+      unitDeliFee: null,
+      effectiveCost: null,
+      breakEvenPrice: null,
+      margin: null,
+      marginRate: null,
+      verdict: 'dead',
+    };
   }
 
   const policy = parseDeliPolicy(dome.deli);
@@ -137,32 +160,48 @@ export async function buildVerifyResult(
   // (실제 응답 표본에서는 이 경로가 관측된 적이 없다 — deli-policy.ts 주석 참고. 그래도
   //  분기 자체는 몇 줄이고, 쿠팡 API 호출 하나를 아끼는 효과도 있어 넣어 둔다.)
   if (isUnconfirmedPaidDelivery(dome.deli, policy.isFree)) {
-    return { ...empty, ...domeFields, verdict: 'unknown' };
+    return {
+      domeStatus: dome.status,
+      domePrice: dome.price,
+      domeInventory: dome.inventory,
+      domeMoq: dome.moq,
+      deliIsFree: null,
+      deliType: null,
+      deliUnitQty: null,
+      deliFee: null,
+      coupangP25: null,
+      coupangSampleN: null,
+      unitDeliFee: null,
+      effectiveCost: null,
+      breakEvenPrice: null,
+      margin: null,
+      marginRate: null,
+      verdict: 'unknown',
+    };
   }
 
   const unitDeli = unitDeliveryFee(policy, orderQty);
   const effectiveCost = dome.price + unitDeli;
   const be = breakEvenPrice(effectiveCost, logisticsSize);
 
-  const deliFields = {
-    deliIsFree: policy.isFree,
-    deliType: policy.type,
-    deliUnitQty: policy.unitQty,
-    deliFee: policy.fee,
-    unitDeliFee: unitDeli,
-    effectiveCost,
-    breakEvenPrice: be,
-  };
-
   const estimate = await estimateCoupangPrice(title);
 
   // 표본 부족 — 판정 불가. fail과 구분한다.
   if (estimate === null) {
     return {
-      ...domeFields,
-      ...deliFields,
+      domeStatus: dome.status,
+      domePrice: dome.price,
+      domeInventory: dome.inventory,
+      domeMoq: dome.moq,
+      deliIsFree: policy.isFree,
+      deliType: policy.type,
+      deliUnitQty: policy.unitQty,
+      deliFee: policy.fee,
       coupangP25: null,
       coupangSampleN: null,
+      unitDeliFee: unitDeli,
+      effectiveCost,
+      breakEvenPrice: be,
       margin: null,
       marginRate: null,
       verdict: 'unknown',
@@ -172,10 +211,19 @@ export async function buildVerifyResult(
   const margin = marginOf(estimate.p25, effectiveCost, logisticsSize);
 
   return {
-    ...domeFields,
-    ...deliFields,
+    domeStatus: dome.status,
+    domePrice: dome.price,
+    domeInventory: dome.inventory,
+    domeMoq: dome.moq,
+    deliIsFree: policy.isFree,
+    deliType: policy.type,
+    deliUnitQty: policy.unitQty,
+    deliFee: policy.fee,
     coupangP25: estimate.p25,
     coupangSampleN: estimate.sampleN,
+    unitDeliFee: unitDeli,
+    effectiveCost,
+    breakEvenPrice: be,
     margin,
     marginRate: Math.round((margin / estimate.p25) * 1000) / 10,
     verdict: estimate.p25 >= be ? 'pass' : 'fail',
@@ -186,6 +234,9 @@ export async function buildVerifyResult(
  * 1건을 검증하고 저장한다.
  * 도매꾹 일시 오류면 아무것도 저장하지 않고 false를 반환한다 —
  * verified_at을 갱신하지 않아야 다음 cron이 다시 시도한다.
+ *
+ * false는 실패가 아니라 "이번엔 건너뜀 — 다음 cron이 재시도"다.
+ * 호출부에서 에러로 취급해 사용자에게 알리지 말 것.
  *
  * 인자를 객체로 받는 이유: itemNo와 orderQty가 둘 다 number라
  * 위치 인자로 두면 뒤바뀌어도 컴파일이 통과한다.
