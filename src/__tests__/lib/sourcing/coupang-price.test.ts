@@ -1,5 +1,12 @@
-import { describe, it, expect } from 'vitest';
-import { breakEvenPrice, marginOf, LOGISTICS_FEE, COMMISSION_RATE } from '@/lib/sourcing/coupang-price';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  breakEvenPrice,
+  marginOf,
+  LOGISTICS_FEE,
+  COMMISSION_RATE,
+  buildSearchQueries,
+  estimateCoupangPrice,
+} from '@/lib/sourcing/coupang-price';
 import type { LogisticsSize } from '@/types/shortlist';
 
 describe('LOGISTICS_FEE', () => {
@@ -69,5 +76,99 @@ describe('breakEvenPrice 보장', () => {
     const be = breakEvenPrice(cost, size);
     const margin = be * (1 - COMMISSION_RATE) - LOGISTICS_FEE[size] - cost;
     expect(margin).toBeGreaterThanOrEqual(LOGISTICS_FEE[size] * 1.5);
+  });
+});
+
+describe('buildSearchQueries', () => {
+  it('판매자 태그를 제거한다', () => {
+    const qs = buildSearchQueries('[한원산업] 극세사 스포츠 방한장갑 바이크장갑 오토바이장갑');
+    expect(qs.join(' ')).not.toContain('한원산업');
+    expect(qs[0]).toBe('극세사 스포츠 방한장갑 바이크장갑');
+  });
+
+  it('제목 여러 구간을 검색어로 만든다', () => {
+    // 앞 4단어만 쓰면 상품 정체를 놓친다.
+    // "접이식 쓰레기통"으로 검색하면 캠핑용 대형 트래쉬박스가 잡혔다.
+    const qs = buildSearchQueries(
+      '접이식 쓰레기통 걸이형휴지통 휴대용휴지통 쓰레기봉투걸이 휴지통',
+    );
+    expect(qs.length).toBeGreaterThan(1);
+    expect(qs.some((q) => q.includes('쓰레기봉투걸이'))).toBe(true);
+  });
+
+  it('괄호와 모델코드를 제거한다', () => {
+    const qs = buildSearchQueries('(GTF58047) 캠핑러브 고강도 단조팩 세트 실버');
+    expect(qs[0]).not.toContain('GTF58047');
+    expect(qs[0]).not.toContain('(');
+  });
+
+  it('중복 구간은 한 번만 담는다', () => {
+    const qs = buildSearchQueries('장갑 방한 장갑 방한');
+    expect(new Set(qs).size).toBe(qs.length);
+  });
+
+  it('빈 제목이어도 빈 배열을 반환하지 않는다', () => {
+    expect(buildSearchQueries('123 45').length).toBeGreaterThan(0);
+  });
+});
+
+/** 네이버 쇼핑 API 응답 모양의 아이템을 만든다 */
+function item(lprice: number, mallName: string) {
+  return { title: 'x', lprice: String(lprice), mallName };
+}
+
+describe('estimateCoupangPrice', () => {
+  beforeEach(() => {
+    process.env.NAVER_CLIENT_ID = 'id';
+    process.env.NAVER_CLIENT_SECRET = 'secret';
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('쿠팡몰 항목만 골라 하위 25%를 반환한다', async () => {
+    const coupang = [4000, 5000, 5500, 6000, 7000, 8000, 9000, 20000].map((p) =>
+      item(p, '쿠팡'),
+    );
+    const noise = [100, 200, 300].map((p) => item(p, '기타몰'));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ items: [...coupang, ...noise] }),
+      }),
+    );
+
+    const result = await estimateCoupangPrice('메쉬 반장갑 등산 낚시 라이더');
+    expect(result).not.toBeNull();
+    expect(result!.p25).toBe(5500);
+    expect(result!.sampleN).toBeGreaterThanOrEqual(8);
+  });
+
+  it('쿠팡몰 표본이 3건 미만이면 null을 반환한다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ items: [item(5000, '쿠팡'), item(300, '기타몰')] }),
+      }),
+    );
+    expect(await estimateCoupangPrice('아주 희귀한 상품명')).toBeNull();
+  });
+
+  it('네이버 API가 실패해도 예외를 던지지 않고 null을 반환한다', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network')));
+    expect(await estimateCoupangPrice('메쉬 반장갑')).toBeNull();
+  });
+
+  it('1,000원 미만 항목은 표본에서 제외한다', async () => {
+    const items = [item(500, '쿠팡'), item(600, '쿠팡'), item(700, '쿠팡')];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ items }) }),
+    );
+    expect(await estimateCoupangPrice('저가 부속품')).toBeNull();
   });
 });

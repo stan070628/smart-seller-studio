@@ -76,3 +76,116 @@ export function marginOf(
     sellingPrice * (1 - COMMISSION_RATE) - LOGISTICS_FEE[size] - effectiveCost,
   );
 }
+
+/**
+ * 상품명에서 검색어 후보를 만든다.
+ *
+ * 도매꾹 상품명은 키워드 나열형이라 앞 4단어만 잘라 쓰면 상품 정체를 놓친다.
+ * 실제로 "접이식 쓰레기통 걸이형휴지통…"이 "접이식 쓰레기통"으로 검색되어
+ * 캠핑용 대형 트래쉬박스(중앙값 36,580원)를 잡았고, 실제 상품은 5,490원짜리
+ * 봉투걸이였다. 그래서 앞·중간·뒤 구간을 각각 검색해 결과를 합친다.
+ */
+export function buildSearchQueries(title: string, max = 4): string[] {
+  const cleaned = title
+    .replace(/\[[^\]]*\]/g, ' ')          // [판매자태그]
+    .replace(/\([^)]*\)/g, ' ')           // (부가설명)
+    .replace(/[A-Z]{2,}[-_]?\d{3,}/g, ' ') // 모델코드 GTF58047
+    .replace(/[/\\+&_]+/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  const words = cleaned
+    .split(/\s+/)
+    .filter((w) => w.length > 1 && !/^\d+$/.test(w));
+
+  if (words.length === 0) return [title.slice(0, 20)];
+
+  const starts = [0, 2, 4, Math.max(0, words.length - 4)];
+  const out: string[] = [];
+  for (const s of starts) {
+    const chunk = words.slice(s, s + 4).join(' ');
+    if (chunk.length > 3 && !out.includes(chunk)) out.push(chunk);
+  }
+  return out.slice(0, max);
+}
+
+/** 쿠팡 시세 추정 결과 */
+export interface CoupangPriceEstimate {
+  /** 하위 25% 가격 — 진입 기준가 */
+  p25: number;
+  /** 쿠팡몰 표본 수 */
+  sampleN: number;
+}
+
+/** 표본이 이보다 적으면 판정하지 않는다 */
+const MIN_SAMPLE = 3;
+
+/** 부속품·사은품 노이즈를 거르는 하한 */
+const MIN_PRICE = 1000;
+
+interface NaverShopItem {
+  lprice: string;
+  mallName: string;
+}
+
+async function searchNaverShop(query: string): Promise<NaverShopItem[]> {
+  const clientId = process.env.NAVER_CLIENT_ID;
+  const clientSecret = process.env.NAVER_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return [];
+
+  const url = new URL('https://openapi.naver.com/v1/search/shop.json');
+  url.searchParams.set('query', query);
+  url.searchParams.set('display', '100');
+  url.searchParams.set('sort', 'sim');
+
+  try {
+    const res = await fetch(url.toString(), {
+      headers: {
+        'X-Naver-Client-Id': clientId,
+        'X-Naver-Client-Secret': clientSecret,
+      },
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { items?: NaverShopItem[] };
+    return data.items ?? [];
+  } catch {
+    // 네트워크 오류는 표본 없음으로 처리한다. 호출자가 unknown 판정을 내린다.
+    return [];
+  }
+}
+
+/**
+ * 쿠팡 실판매가를 추정한다.
+ *
+ * 네이버 쇼핑에는 쿠팡 상품이 연동되어 들어온다. mallName이 '쿠팡'인 항목만
+ * 추리면 쿠팡 실판가를 근사할 수 있다.
+ *
+ * 하위 25%를 쓰는 이유 — 2026-07-31 실측 오차:
+ *   최저가   −34% ~ −73%  (스펙이 다른 저가 상품을 잡는다)
+ *   하위 25%  −11% ~  +9%  ← 채택
+ *   중앙값     0% ~ +324%  (고가 상품에 끌려간다)
+ *
+ * 표본이 MIN_SAMPLE 미만이면 null을 반환한다. 판정 불가와 탈락은 다르다.
+ */
+export async function estimateCoupangPrice(
+  title: string,
+): Promise<CoupangPriceEstimate | null> {
+  const prices: number[] = [];
+
+  for (const query of buildSearchQueries(title)) {
+    const items = await searchNaverShop(query);
+    for (const it of items) {
+      if (it.mallName !== '쿠팡') continue;
+      const p = parseInt(it.lprice, 10);
+      if (Number.isFinite(p) && p >= MIN_PRICE) prices.push(p);
+    }
+  }
+
+  if (prices.length < MIN_SAMPLE) return null;
+
+  prices.sort((a, b) => a - b);
+  return {
+    p25: prices[Math.floor(prices.length / 4)],
+    sampleN: prices.length,
+  };
+}
