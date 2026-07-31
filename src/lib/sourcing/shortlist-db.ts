@@ -210,15 +210,22 @@ export async function saveVerifyResult(itemNo: number, r: VerifyResult): Promise
 /** 검증 대상 목록 — cron이 오래된 것부터(verified_at ASC NULLS FIRST) 처리한다. */
 export async function listForVerify(
   limit: number,
-): Promise<{ itemNo: number; title: string; orderQty: number; logisticsSize: LogisticsSize }[]> {
+): Promise<{
+  itemNo: number;
+  title: string;
+  orderQty: number;
+  logisticsSize: LogisticsSize;
+  coupangP25: number | null;
+}[]> {
   const pool = getSourcingPool();
   const { rows } = await pool.query<{
     item_no: number;
     title: string;
     order_qty: number;
     logistics_size: string;
+    coupang_p25: number | null;
   }>(
-    `SELECT item_no, title, order_qty, logistics_size
+    `SELECT item_no, title, order_qty, logistics_size, coupang_p25
        FROM sourcing_shortlist
       WHERE is_archived = false
       ORDER BY verified_at ASC NULLS FIRST
@@ -230,6 +237,7 @@ export async function listForVerify(
     title: r.title,
     orderQty: r.order_qty,
     logisticsSize: r.logistics_size as LogisticsSize,
+    coupangP25: r.coupang_p25,
   }));
 }
 

@@ -91,6 +91,7 @@ export async function PATCH(
           title: item.title,
           orderQty: item.orderQty,
           logisticsSize: item.logisticsSize,
+          coupangP25: item.coupangP25,
         });
       }
     }

@@ -30,6 +30,11 @@ export interface VerifyTarget {
   title: string;
   orderQty: number;
   logisticsSize: LogisticsSize;
+  /**
+   * 행에 저장된 쿠팡 실판가 — 사용자가 직접 입력한 값이다.
+   * buildVerifyResult로 그대로 넘겨 판정에 쓴다. null이면 unknown으로 판정된다.
+   */
+  coupangP25: number | null;
 }
 
 /**
@@ -313,7 +318,7 @@ export async function buildVerifyResult(
 export async function verifyOne(target: VerifyTarget): Promise<boolean> {
   // title은 더 이상 판정에 쓰이지 않는다(estimateCoupangPrice 제거).
   // VerifyTarget에는 남겨 둔다 — 호출부·로그가 상품을 식별하는 데 쓴다.
-  const { itemNo, orderQty, logisticsSize } = target;
+  const { itemNo, orderQty, logisticsSize, coupangP25 } = target;
 
   let dome: DomeSnapshot | null;
   try {
@@ -323,10 +328,7 @@ export async function verifyOne(target: VerifyTarget): Promise<boolean> {
     throw err;
   }
 
-  // TODO(Task 2): target.coupangP25로 교체한다. listForVerify가 아직 저장된
-  // 쿠팡가를 함께 읽어오지 않아 지금은 null만 넘긴다 — 네이버 API 종료 이후의
-  // 실제 동작(항상 unknown)과 같으므로 이 단계에서 판정이 바뀌지는 않는다.
-  const result = await buildVerifyResult(dome, orderQty, logisticsSize, null);
+  const result = await buildVerifyResult(dome, orderQty, logisticsSize, coupangP25);
   await saveVerifyResult(itemNo, result);
   return true;
 }

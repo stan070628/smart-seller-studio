@@ -164,7 +164,7 @@ describe('verifyOne — 일시 오류일 때 저장하지 않는다', () => {
     } as never);
 
     const ok = await verifyOne({
-      itemNo: 123, title: '테스트', orderQty: 10, logisticsSize: 'xsmall',
+      itemNo: 123, title: '테스트', orderQty: 10, logisticsSize: 'xsmall', coupangP25: null,
     });
 
     expect(ok).toBe(false);
@@ -179,10 +179,45 @@ describe('verifyOne — 일시 오류일 때 저장하지 않는다', () => {
     } as never);
 
     const ok = await verifyOne({
-      itemNo: 123, title: '사라진 상품', orderQty: 10, logisticsSize: 'xsmall',
+      itemNo: 123, title: '사라진 상품', orderQty: 10, logisticsSize: 'xsmall', coupangP25: 9900,
     });
 
     expect(ok).toBe(true);
     expect(saveVerifyResult).toHaveBeenCalledWith(123, expect.objectContaining({ verdict: 'dead' }));
+  });
+});
+
+describe('verifyOne — target.coupangP25가 buildVerifyResult까지 전달된다 (round trip)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('저장된 쿠팡가를 그대로 결과에 담아 저장한다', async () => {
+    // DOME_ALIVE와 같은 조합(가격 3300원, 30개당 3000원 배송)이다. 위
+    // 'buildVerifyResult' describe의 첫 테스트에서 이 조합의 손익분기가
+    // 9471원으로 이미 검증돼 있다. 10500 >= 9471이므로 손으로 계산해도 pass다.
+    vi.mocked(getDomeggookClient).mockReturnValue({
+      getItemView: vi.fn().mockResolvedValue({
+        basis: { status: '판매중', title: '테스트 상품' },
+        price: { dome: 3300 },
+        qty: { inventory: 1186, domeMoq: 2 },
+        deli: { pay: '선결제', dome: { type: '수량별비례', tbl: '30+3000|30+3000' } },
+      }),
+    } as never);
+
+    const ok = await verifyOne({
+      itemNo: 999,
+      title: '테스트 상품',
+      orderQty: 10,
+      logisticsSize: 'xsmall',
+      coupangP25: 10500,
+    });
+
+    expect(ok).toBe(true);
+    // verifyOne이 target.coupangP25 대신 null을 넘기도록 되돌아가면 coupangP25는
+    // null, verdict는 'unknown'으로 저장되어 이 단언이 실패한다 — 그것이 이
+    // 테스트가 지키려는 회귀다(야간 cron이 사용자가 입력한 시세를 지우는 버그).
+    expect(saveVerifyResult).toHaveBeenCalledWith(
+      999,
+      expect.objectContaining({ coupangP25: 10500, verdict: 'pass' }),
+    );
   });
 });

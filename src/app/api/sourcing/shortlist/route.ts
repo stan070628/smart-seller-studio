@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
 
     // 삽입 직후 1회 검증한다. false가 나와도 실패가 아니라 다음 cron이 재시도하는
     // 상황일 뿐이므로 별도로 에러 처리하지 않는다.
-    await verifyOne({ itemNo, title, orderQty, logisticsSize: 'xsmall' });
+    await verifyOne({ itemNo, title, orderQty, logisticsSize: 'xsmall', coupangP25: null });
 
     return NextResponse.json({ item: await getShortlistItem(itemNo) }, { status: 201 });
   } catch (err) {

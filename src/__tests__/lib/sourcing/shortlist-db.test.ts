@@ -1,7 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { upsertShortlistCandidate } from '@/lib/sourcing/shortlist-db';
 
-const mockQuery = vi.fn();
+// listForVerify는 getSourcingPool()을 내부에서 부르므로 db 모듈을 모킹해야 한다.
+// mockQuery를 vi.hoisted로 감싸는 이유: vi.mock 팩토리는 파일 최상단으로
+// 호이스팅되므로, 평범한 `const mockQuery = vi.fn()`을 아래에 두면 팩토리가
+// 초기화 전의 변수를 참조해 `ReferenceError: Cannot access 'mockQuery' before
+// initialization`이 난다.
+const { mockQuery } = vi.hoisted(() => ({ mockQuery: vi.fn() }));
+
+vi.mock('@/lib/sourcing/db', () => ({
+  getSourcingPool: () => ({ query: mockQuery }),
+}));
+
+import { upsertShortlistCandidate, listForVerify } from '@/lib/sourcing/shortlist-db';
+
 const pool = { query: mockQuery } as never;
 
 describe('upsertShortlistCandidate', () => {
@@ -94,5 +105,17 @@ describe('upsertShortlistCandidate', () => {
     // listForVerify(verified_at ASC NULLS FIRST)에서 큐 맨 뒤로 밀린다.
     expect(sql).toContain('verified_at       = NULL');
     expect(sql).not.toContain('verified_at       = NOW()');
+  });
+});
+
+describe('listForVerify — 저장된 쿠팡가 동반 조회', () => {
+  beforeEach(() => mockQuery.mockReset());
+
+  it('SELECT에 coupang_p25가 포함된다', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    await listForVerify(5);
+    const [sql] = mockQuery.mock.calls[0];
+    // 재검증이 수동 입력값을 인자로 받아야 하므로 큐 조회가 함께 가져와야 한다
+    expect(sql).toContain('coupang_p25');
   });
 });
