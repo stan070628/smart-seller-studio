@@ -8,13 +8,26 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockRun, afterTasks } = vi.hoisted(() => ({
-  mockRun: vi.fn(),
-  afterTasks: [] as Promise<unknown>[],
-}));
+const { mockRun, afterTasks, mockCreateRequest } = vi.hoisted(() => {
+  let nextId = 100;
+  return {
+    mockRun: vi.fn(),
+    afterTasks: [] as Promise<unknown>[],
+    mockCreateRequest: vi.fn(async () => nextId++),
+  };
+});
 
 vi.mock('@/lib/sourcing-agent/keyword-pipeline', () => ({
   runKeywordPipeline: mockRun,
+}));
+
+vi.mock('@/lib/sourcing-agent/keyword-db', () => ({
+  createRequest: mockCreateRequest,
+}));
+
+// 이 팩토리는 바깥 변수를 참조하지 않으므로 hoisted가 필요 없다
+vi.mock('@/lib/sourcing/db', () => ({
+  getSourcingPool: () => ({ query: vi.fn() }),
 }));
 
 // 이 라우트는 유료 외부 API 호출을 촉발하므로 인증이 필수다.
@@ -49,6 +62,7 @@ function req(body: unknown): Request {
 describe('POST /api/sourcing/agent/run', () => {
   beforeEach(() => {
     mockRun.mockReset();
+    mockCreateRequest.mockClear();
     afterTasks.length = 0;
   });
 
@@ -61,11 +75,26 @@ describe('POST /api/sourcing/agent/run', () => {
     expect(body.data.accepted).toBe(2);
 
     // 응답은 즉시 돌아가고 파이프라인은 after()에 실린다. 웹 실행에는
-    // 텔레그램 chat_id가 없으므로 빈 문자열이 넘어가야 한다.
+    // 텔레그램 chat_id가 없으므로 빈 문자열이 넘어가야 한다. 라우트가 미리
+    // 만든 requestId도 그대로 이어 받아야 한다.
     await Promise.all(afterTasks);
     expect(mockRun).toHaveBeenCalledTimes(2);
-    expect(mockRun).toHaveBeenNthCalledWith(1, '등산 모자', '');
-    expect(mockRun).toHaveBeenNthCalledWith(2, '방한 장갑', '');
+    expect(mockRun).toHaveBeenNthCalledWith(1, '등산 모자', '', body.data.runs[0].requestId);
+    expect(mockRun).toHaveBeenNthCalledWith(2, '방한 장갑', '', body.data.runs[1].requestId);
+  });
+
+  it('키워드마다 requestId를 만들어 응답에 담는다', async () => {
+    mockRun.mockResolvedValue(undefined);
+    const res = await POST(req({ keywords: ['등산 스틱', '방한 장갑'] }));
+    const body = await res.json();
+
+    expect(body.data.runs).toHaveLength(2);
+    expect(body.data.runs[0].keyword).toBe('등산 스틱');
+    expect(typeof body.data.runs[0].requestId).toBe('number');
+
+    // 폴링이 이 ID로 조회하므로 파이프라인이 같은 행을 써야 한다
+    await Promise.all(afterTasks);
+    expect(mockRun).toHaveBeenCalledWith('등산 스틱', '', body.data.runs[0].requestId);
   });
 
   it('키워드가 비어 있으면 400이다', async () => {

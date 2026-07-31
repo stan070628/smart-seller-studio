@@ -26,6 +26,8 @@ export interface KeywordResult {
   china_url: string | null;
   china_margin_rate: number | null;
   created_at: string;
+  /** 개당 배송비 (사입 10개 기준 환산). Task 7 이전 행은 null */
+  unit_deli_fee: number | null;
 }
 
 export interface KeywordResultInsert {
@@ -41,6 +43,8 @@ export interface KeywordResultInsert {
   china_price_krw: number | null;
   china_url: string | null;
   china_margin_rate: number | null;
+  /** 개당 배송비 (사입 10개 기준 환산). 모르면 null */
+  unit_deli_fee: number | null;
 }
 
 /** 소싱 요청 레코드 생성 후 생성된 ID 반환 */
@@ -98,14 +102,16 @@ export async function saveKeywordResults(
            naver_price, naver_url,
            domeggook_product_name, domeggook_price, domeggook_url,
            domeggook_image_url, domeggook_margin_rate,
-           china_product_name, china_price_krw, china_url, china_margin_rate
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+           china_product_name, china_price_krw, china_url, china_margin_rate,
+           unit_deli_fee
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
         [
           requestId, r.rank,
           r.naver_price, r.naver_url,
           r.domeggook_product_name, r.domeggook_price, r.domeggook_url,
           r.domeggook_image_url, r.domeggook_margin_rate,
           r.china_product_name, r.china_price_krw, r.china_url, r.china_margin_rate,
+          r.unit_deli_fee,
         ],
       );
     }

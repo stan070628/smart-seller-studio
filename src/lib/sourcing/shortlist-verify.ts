@@ -1,11 +1,12 @@
 /**
  * shortlist-verify.ts
- * 쇼트리스트 1건을 검증한다. 도매꾹 생존 → 배송비 환산 → 쿠팡 시세 → 판정.
+ * 쇼트리스트 1건을 검증한다. 도매꾹 생존 → 배송비 환산 → 저장된 쿠팡 실판가 → 판정.
+ * 쿠팡 시세는 더 이상 조회하지 않는다 — buildVerifyResult 주석 참고(2026-07-31).
  */
 
 import { getDomeggookClient } from '@/lib/sourcing/domeggook-client';
 import { parseDeliPolicy, unitDeliveryFee } from '@/lib/sourcing/deli-policy';
-import { estimateCoupangPrice, breakEvenPrice, marginOf } from '@/lib/sourcing/coupang-price';
+import { breakEvenPrice, marginOf } from '@/lib/sourcing/coupang-price';
 import { saveVerifyResult, type VerifyResult } from '@/lib/sourcing/shortlist-db';
 import type { LogisticsSize } from '@/types/shortlist';
 
@@ -29,6 +30,11 @@ export interface VerifyTarget {
   title: string;
   orderQty: number;
   logisticsSize: LogisticsSize;
+  /**
+   * 행에 저장된 쿠팡 실판가 — 사용자가 직접 입력한 값이다.
+   * buildVerifyResult로 그대로 넘겨 판정에 쓴다. null이면 unknown으로 판정된다.
+   */
+  coupangP25: number | null;
 }
 
 /**
@@ -65,10 +71,12 @@ export interface ShortlistVerifyResult {
  * 배치 페이싱·데드라인 상수. cron과 수동 라우트가 각자 루프를 돌리지만 네이버
  * API 호출 규약과 타임아웃 방어 여유는 같아야 하므로 여기 한 곳에서 관리한다.
  *
- * verifyOne 1건은 네이버 쇼핑 API를 최대 4회 호출한다(estimateCoupangPrice가
- * 상품명을 구간별로 쪼개 검색 — coupang-price.ts 참고). 그 함수의 주석이
- * "배치 호출 시 호출부가 페이싱을 넣으라"고 명시하는 계약이고, 이 저장소의
- * 선례는 naver-prices/route.ts의 NAVER_CALL_DELAY_MS·delay 패턴이다.
+ * 2026-07-31 기준 이 상수의 원래 근거는 사라졌다. 예전에는 verifyOne 1건이
+ * estimateCoupangPrice를 통해 네이버 쇼핑 API를 최대 4회 호출했으나, 네이버
+ * 쇼핑 검색 API 종료로 그 호출이 제거됐다. 지금 verifyOne이 때리는 외부 API는
+ * 도매꾹뿐이다. 상수와 delay는 도매꾹 페이싱으로 그대로 쓰되(이 저장소 선례는
+ * naver-prices/route.ts의 NAVER_CALL_DELAY_MS·delay 패턴), 이름이 더 이상
+ * 대상을 정확히 가리키지 않는다는 점은 알고 있어야 한다.
  */
 export const NAVER_CALL_DELAY_MS = 200;
 
@@ -145,15 +153,25 @@ function isUnconfirmedPaidDelivery(deli: unknown, isFree: boolean): boolean {
 }
 
 /**
- * 검증 결과를 계산한다. 외부 호출은 estimateCoupangPrice 하나뿐이라 테스트하기 쉽다.
+ * 검증 결과를 계산한다.
+ *
+ * 2026-07-31 변경: 네이버 쇼핑 검색 API가 종료돼 estimateCoupangPrice가 영구히
+ * null을 반환한다(개발자센터 공지 32530. GET /v1/search/shop.json → 404 SE05,
+ * 같은 키로 blog.json은 200이라 쇼핑 endpoint만 사라진 것이 확인됐다. 유예도
+ * 대체 경로도 없다). 시세는 사용자가 직접 입력해 행에 저장되므로, 그 값을 인자로
+ * 받아 판정한다. 이 함수는 이제 외부 호출이 전혀 없다.
+ *
+ * title 인자를 없앤 이유: 오직 estimateCoupangPrice(title)를 위해서만 쓰였다.
+ * 그 호출이 사라지면서 인자가 완전히 죽었다.
  *
  * @param dome null이면 도매꾹에서 삭제된 상품
+ * @param storedCoupangP25 행에 저장된 쿠팡 실판가. null이면 판정 불가(unknown)
  */
 export async function buildVerifyResult(
-  title: string,
   dome: DomeSnapshot | null,
   orderQty: number,
   logisticsSize: LogisticsSize,
+  storedCoupangP25: number | null,
 ): Promise<VerifyResult> {
   // 삭제됨 — 쿠팡을 조회할 이유가 없다
   //
@@ -239,10 +257,9 @@ export async function buildVerifyResult(
   const effectiveCost = dome.price + unitDeli;
   const be = breakEvenPrice(effectiveCost, logisticsSize);
 
-  const estimate = await estimateCoupangPrice(title);
-
-  // 표본 부족 — 판정 불가. fail과 구분한다.
-  if (estimate === null) {
+  // 시세 미입력 — 판정 불가. fail과 구분한다.
+  // 원가·손익분기는 시세와 무관하게 계산되므로 여기서도 채운다.
+  if (storedCoupangP25 === null) {
     return {
       domeStatus: dome.status,
       domePrice: dome.price,
@@ -263,7 +280,7 @@ export async function buildVerifyResult(
     };
   }
 
-  const margin = marginOf(estimate.p25, effectiveCost, logisticsSize);
+  const margin = marginOf(storedCoupangP25, effectiveCost, logisticsSize);
 
   return {
     domeStatus: dome.status,
@@ -274,14 +291,16 @@ export async function buildVerifyResult(
     deliType: policy.type,
     deliUnitQty: policy.unitQty,
     deliFee: policy.fee,
-    coupangP25: estimate.p25,
-    coupangSampleN: estimate.sampleN,
+    coupangP25: storedCoupangP25,
+    // 표본 개념이 사라졌다 — 사람이 쿠팡에서 눈으로 본 값 1건이라 표본 수가 없다.
+    // 컬럼은 남기되 채우지 않는다.
+    coupangSampleN: null,
     unitDeliFee: unitDeli,
     effectiveCost,
     breakEvenPrice: be,
     margin,
-    marginRate: Math.round((margin / estimate.p25) * 1000) / 10,
-    verdict: estimate.p25 >= be ? 'pass' : 'fail',
+    marginRate: Math.round((margin / storedCoupangP25) * 1000) / 10,
+    verdict: storedCoupangP25 >= be ? 'pass' : 'fail',
   };
 }
 
@@ -297,7 +316,9 @@ export async function buildVerifyResult(
  * 위치 인자로 두면 뒤바뀌어도 컴파일이 통과한다.
  */
 export async function verifyOne(target: VerifyTarget): Promise<boolean> {
-  const { itemNo, title, orderQty, logisticsSize } = target;
+  // title은 더 이상 판정에 쓰이지 않는다(estimateCoupangPrice 제거).
+  // VerifyTarget에는 남겨 둔다 — 호출부·로그가 상품을 식별하는 데 쓴다.
+  const { itemNo, orderQty, logisticsSize, coupangP25 } = target;
 
   let dome: DomeSnapshot | null;
   try {
@@ -307,7 +328,7 @@ export async function verifyOne(target: VerifyTarget): Promise<boolean> {
     throw err;
   }
 
-  const result = await buildVerifyResult(title, dome, orderQty, logisticsSize);
+  const result = await buildVerifyResult(dome, orderQty, logisticsSize, coupangP25);
   await saveVerifyResult(itemNo, result);
   return true;
 }

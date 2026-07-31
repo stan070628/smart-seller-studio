@@ -56,6 +56,7 @@ export async function POST(req: NextRequest) {
         title: item.title,
         orderQty: item.orderQty,
         logisticsSize: item.logisticsSize,
+        coupangP25: item.coupangP25,
       },
     ];
   } else {

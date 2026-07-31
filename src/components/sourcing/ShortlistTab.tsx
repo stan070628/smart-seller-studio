@@ -359,7 +359,7 @@ export default function ShortlistTab() {
                 <th style={thStyle('right')}>도매가</th>
                 <th style={thStyle('right')}>배송</th>
                 <th style={thStyle('right')}>실효원가</th>
-                <th style={thStyle('right')}>쿠팡 p25</th>
+                <th style={thStyle('right')}>쿠팡 실판가</th>
                 <th style={thStyle('right')}>손익분기</th>
                 <th style={thStyle('right')}>마진율</th>
                 <th style={thStyle('center')}>사이즈</th>
@@ -410,10 +410,32 @@ export default function ShortlistTab() {
                     </td>
                     <td style={tdStyle()}>{won(it.effectiveCost)}</td>
                     <td style={tdStyle()}>
-                      {won(it.coupangP25)}
-                      {it.coupangSampleN !== null && (
-                        <span style={{ color: C.textSub, fontSize: 11 }}> (n={it.coupangSampleN})</span>
-                      )}
+                      {/*
+                        비제어(uncontrolled) 입력이다. key를 it.coupangP25에 걸어두는 이유:
+                        PATCH 성공 후 서버가 돌려준 최신 값으로 목록이 갱신되면(it.coupangP25 변경)
+                        React는 key가 같으면 이 input DOM 노드를 재사용하고 defaultValue는
+                        최초 마운트 때만 반영되므로, key 없이는 다른 세션·탭에서 값이 바뀌어도
+                        화면엔 내가 마지막으로 입력한 값이 그대로 남는다. key를 값에 묶어
+                        서버 값이 바뀔 때마다 강제로 리마운트시켜 항상 서버 진실을 보여준다.
+                      */}
+                      <input
+                        key={it.coupangP25 ?? 'empty'}
+                        defaultValue={it.coupangP25 ?? ''}
+                        onBlur={(e) => {
+                          const raw = e.target.value.replace(/[^0-9]/g, '');
+                          const next = raw === '' ? null : Number.parseInt(raw, 10);
+                          if (next !== (it.coupangP25 ?? null)) void patchItem(it.itemNo, { coupangP25: next });
+                        }}
+                        disabled={busy || dead}
+                        inputMode="numeric"
+                        aria-label={`${it.title} 쿠팡 실판가`}
+                        placeholder="미입력"
+                        style={{
+                          width: 96, padding: '5px 7px', textAlign: 'right',
+                          background: C.card, color: C.text,
+                          border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13,
+                        }}
+                      />
                     </td>
                     <td style={tdStyle()}>{won(it.breakEvenPrice)}</td>
                     <td style={{ ...tdStyle(), color: it.marginRate !== null && it.marginRate >= 30 ? C.success : C.text, fontWeight: 700 }}>
