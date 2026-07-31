@@ -33,6 +33,12 @@ interface Row {
   is_archived: boolean;
 }
 
+/**
+ * DB 행을 도메인 타입으로 변환한다.
+ *
+ * verdict·logistics_size·deli_type의 캐스트는 094_sourcing_shortlist.sql의
+ * CHECK 제약이 값 범위를 보장한다는 전제에 기댄다. 제약을 바꾸면 여기도 함께 봐야 한다.
+ */
 function toItem(r: Row): ShortlistItem {
   return {
     itemNo: r.item_no,
@@ -94,19 +100,23 @@ export async function getShortlistItem(itemNo: number): Promise<ShortlistItem | 
   return rows[0] ? toItem(rows[0]) : null;
 }
 
-/** 후보를 추가한다. 이미 있으면 아무것도 하지 않는다. */
+/**
+ * 후보를 추가한다.
+ * @returns 실제로 삽입됐으면 true, 이미 있어서 건너뛰었으면 false
+ */
 export async function insertShortlist(
   itemNo: number,
   title: string,
   orderQty: number,
-): Promise<void> {
+): Promise<boolean> {
   const pool = getSourcingPool();
-  await pool.query(
+  const result = await pool.query(
     `INSERT INTO sourcing_shortlist (item_no, title, order_qty)
      VALUES ($1, $2, $3)
      ON CONFLICT (item_no) DO NOTHING`,
     [itemNo, title, orderQty],
   );
+  return result.rowCount === 1;
 }
 
 /** 쇼트리스트에서 완전히 제거한다 (보관과 다르게 행 자체를 삭제) */
@@ -142,10 +152,16 @@ export async function patchShortlist(itemNo: number, patch: ShortlistPatch): Pro
   );
 }
 
-/** 모든 행의 사입 수량을 일괄 변경한다. */
-export async function setOrderQtyAll(orderQty: number): Promise<void> {
+/**
+ * 모든 행의 사입 수량을 일괄 변경한다.
+ * WHERE 절이 없는 것은 의도다 — 사입 수량은 리스트 전체에 적용되는 값이라
+ * 아카이브된 행까지 함께 갱신한다.
+ * @returns 갱신된 행 수
+ */
+export async function setOrderQtyAll(orderQty: number): Promise<number> {
   const pool = getSourcingPool();
-  await pool.query('UPDATE sourcing_shortlist SET order_qty = $1', [orderQty]);
+  const result = await pool.query('UPDATE sourcing_shortlist SET order_qty = $1', [orderQty]);
+  return result.rowCount ?? 0;
 }
 
 /** 검증 결과 저장용 필드 */
@@ -194,10 +210,15 @@ export async function saveVerifyResult(itemNo: number, r: VerifyResult): Promise
 /** 검증 대상 목록 — cron이 오래된 것부터(verified_at ASC NULLS FIRST) 처리한다. */
 export async function listForVerify(
   limit: number,
-): Promise<{ itemNo: number; orderQty: number; logisticsSize: LogisticsSize }[]> {
+): Promise<{ itemNo: number; title: string; orderQty: number; logisticsSize: LogisticsSize }[]> {
   const pool = getSourcingPool();
-  const { rows } = await pool.query<{ item_no: number; order_qty: number; logistics_size: string }>(
-    `SELECT item_no, order_qty, logistics_size
+  const { rows } = await pool.query<{
+    item_no: number;
+    title: string;
+    order_qty: number;
+    logistics_size: string;
+  }>(
+    `SELECT item_no, title, order_qty, logistics_size
        FROM sourcing_shortlist
       WHERE is_archived = false
       ORDER BY verified_at ASC NULLS FIRST
@@ -206,6 +227,7 @@ export async function listForVerify(
   );
   return rows.map((r) => ({
     itemNo: r.item_no,
+    title: r.title,
     orderQty: r.order_qty,
     logisticsSize: r.logistics_size as LogisticsSize,
   }));
