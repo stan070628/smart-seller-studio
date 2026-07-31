@@ -95,6 +95,37 @@ describe('buildDiscoverPrompt', () => {
     expect(p).toContain('낚시');
   });
 
+  it('실물 상품만 받도록 정보성·서비스 키워드를 금지한다', () => {
+    expect(p).toContain('물리적 상품만');
+    for (const kw of ['서비스', '자격증', '비용', '직업', '정보성']) {
+      expect(p).toContain(kw);
+    }
+  });
+
+  it('정보성 키워드를 나쁜 예시로 든다', () => {
+    for (const kw of ['강아지유치원비용', '반려동물관리사', '다이어트방법', '운동루틴']) {
+      expect(p).toContain(kw);
+    }
+  });
+
+  it('2~3단어 상품명 형태를 요구한다', () => {
+    expect(p).toContain('2~3단어');
+    expect(p).toContain('상품명 형태');
+  });
+
+  it('좋은 예시는 프롬프트가 스스로 금지한 품목을 쓰지 않는다', () => {
+    // 예시가 규제 차단 카테고리에 걸리면 모델에게 모순된 지시가 된다.
+    // (구 프롬프트의 좋은 예시 "휴대용 선풍기"는 새 프롬프트의 금지 예시와 정면 충돌했다)
+    const exampleLine = p.split('\n').find((l) => l.includes('2~3단어'));
+    expect(exampleLine).toBeDefined();
+    for (const banned of ['선풍기', '랜턴', '장난감', '간식', '영양제', '용기']) {
+      expect(exampleLine).not.toContain(banned);
+    }
+    for (const good of ['등산 스틱', '낚시 받침대', '방한 넥워머', '반려견 리드줄', '캠핑 수납 가방']) {
+      expect(exampleLine).toContain(good);
+    }
+  });
+
   it('JSON 응답 형식을 유지한다', () => {
     expect(p).toContain('"seeds"');
     expect(p).toContain('keyword');

@@ -21,6 +21,11 @@ function kstMonthLabel(base: Date, addMonths: number): string {
  * (선풍기 420건 · 장난감 466건 · 식품용기 169건).
  *
  * 시즌은 1688 리드타임(해운 약 30일)과 검증 4주를 고려해 2~4개월 뒤를 노린다.
+ *
+ * 규제 필터는 "어떤 카테고리인가"만 거르므로 "애초에 상품이 아닌 것"은 통과한다.
+ * 시드는 api/ai/keyword-discover에서 확장되기 때문에 "다이어트방법" 같은 정보성
+ * 키워드가 한 건만 섞여도 하위 파이프라인 전체가 오염된다. 그래서 실물 상품
+ * 조건과 2~3단어 형태를 별도로 못박는다.
  */
 export function buildDiscoverPrompt(now: Date): string {
   const from = kstMonthLabel(now, 2);
@@ -30,6 +35,10 @@ export function buildDiscoverPrompt(now: Date): string {
 
 【시즌】
 지금 소싱하면 판매 시점은 ${from} ~ ${to}이다. 그 시기에 팔릴 상품을 골라라.
+
+【반드시 제외할 것 — 실물 상품이 아니다】
+- 실제로 구매할 수 있는 물리적 상품만 (서비스, 자격증, 비용, 직업, 정보성 키워드 절대 제외)
+- 나쁜 예시: 강아지유치원비용, 반려동물관리사, 다이어트방법, 운동루틴
 
 【반드시 제외할 것 — 수입·판매 규제로 진입이 막힌다】
 - 전기·충전·배터리를 쓰는 모든 것 (예: 선풍기, 랜턴, 히터, 조명)
@@ -49,6 +58,7 @@ export function buildDiscoverPrompt(now: Date): string {
 색상·사이즈를 합친 옵션이 3개 이하로 팔 수 있는 상품. 의류는 프리사이즈나 밴딩처럼 사이즈 분기가 적은 것만.
 
 【형식】
+키워드는 2~3단어 상품명 형태 (예: 등산 스틱, 낚시 받침대, 방한 넥워머, 반려견 리드줄, 캠핑 수납 가방)
 상품 키워드 10개를 아래 JSON으로만 응답:
 {"seeds": [{"keyword": "키워드", "source": "youtube|instagram|threads|naver", "reason": "수요 근거 1문장"}]}`;
 }
