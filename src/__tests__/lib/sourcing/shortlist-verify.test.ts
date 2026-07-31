@@ -5,8 +5,23 @@ vi.mock('@/lib/sourcing/coupang-price', async (importOriginal) => {
   return { ...actual, estimateCoupangPrice: vi.fn() };
 });
 
-import { buildVerifyResult } from '@/lib/sourcing/shortlist-verify';
+vi.mock('@/lib/sourcing/domeggook-client', () => ({
+  getDomeggookClient: vi.fn(),
+}));
+
+vi.mock('@/lib/sourcing/shortlist-db', () => ({
+  saveVerifyResult: vi.fn(),
+}));
+
+import {
+  buildVerifyResult,
+  fetchDomeSnapshot,
+  verifyOne,
+  DomeTransientError,
+} from '@/lib/sourcing/shortlist-verify';
 import { estimateCoupangPrice } from '@/lib/sourcing/coupang-price';
+import { getDomeggookClient } from '@/lib/sourcing/domeggook-client';
+import { saveVerifyResult } from '@/lib/sourcing/shortlist-db';
 
 const DOME_ALIVE = {
   status: '판매중',
@@ -113,5 +128,71 @@ describe('buildVerifyResult', () => {
     expect(r.verdict).toBe('pass');
     expect(r.unitDeliFee).toBe(0);
     expect(r.effectiveCost).toBe(3300);
+  });
+});
+
+describe('fetchDomeSnapshot — 일시 오류와 삭제 구분', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('ITEM_ERROR 메시지면 삭제로 보고 null을 반환한다', async () => {
+    // domeggook-client가 errors 객체를 JSON.stringify해 메시지에 담는다
+    vi.mocked(getDomeggookClient).mockReturnValue({
+      getItemView: vi.fn().mockRejectedValue(
+        new Error('[도매꾹] 상품 123 상세 응답 오류: {"code":"40","dcode":"ITEM_ERROR"}'),
+      ),
+    } as never);
+
+    expect(await fetchDomeSnapshot(123)).toBeNull();
+  });
+
+  it('그 밖의 오류는 DomeTransientError로 던진다 — 삭제로 오판하면 안 된다', async () => {
+    vi.mocked(getDomeggookClient).mockReturnValue({
+      getItemView: vi.fn().mockRejectedValue(new Error('network timeout')),
+    } as never);
+
+    await expect(fetchDomeSnapshot(123)).rejects.toBeInstanceOf(DomeTransientError);
+  });
+
+  it('HTTP 오류도 DomeTransientError다', async () => {
+    vi.mocked(getDomeggookClient).mockReturnValue({
+      getItemView: vi.fn().mockRejectedValue(
+        new Error('[도매꾹] 상품 123 상세 조회 실패: 503 Service Unavailable'),
+      ),
+    } as never);
+
+    await expect(fetchDomeSnapshot(123)).rejects.toBeInstanceOf(DomeTransientError);
+  });
+});
+
+describe('verifyOne — 일시 오류일 때 저장하지 않는다', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('일시 오류면 false를 반환하고 아무것도 저장하지 않는다', async () => {
+    // 저장하면 verified_at이 갱신되어 다음 cron이 재시도하지 않는다
+    vi.mocked(getDomeggookClient).mockReturnValue({
+      getItemView: vi.fn().mockRejectedValue(new Error('network timeout')),
+    } as never);
+
+    const ok = await verifyOne({
+      itemNo: 123, title: '테스트', orderQty: 10, logisticsSize: 'xsmall',
+    });
+
+    expect(ok).toBe(false);
+    expect(saveVerifyResult).not.toHaveBeenCalled();
+  });
+
+  it('삭제된 상품이면 dead로 저장하고 true를 반환한다', async () => {
+    vi.mocked(getDomeggookClient).mockReturnValue({
+      getItemView: vi.fn().mockRejectedValue(
+        new Error('[도매꾹] 상품 123 상세 응답 오류: {"dcode":"ITEM_ERROR"}'),
+      ),
+    } as never);
+
+    const ok = await verifyOne({
+      itemNo: 123, title: '사라진 상품', orderQty: 10, logisticsSize: 'xsmall',
+    });
+
+    expect(ok).toBe(true);
+    expect(saveVerifyResult).toHaveBeenCalledWith(123, expect.objectContaining({ verdict: 'dead' }));
   });
 });
