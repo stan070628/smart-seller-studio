@@ -43,8 +43,8 @@ describe('buildVerifyResult', () => {
     expect(r.verdict).toBe('pass');
     expect(r.unitDeliFee).toBe(300);       // 30개당 3000원을 10개 주문 → 개당 300
     expect(r.effectiveCost).toBe(3600);    // 3300 + 300
-    expect(r.breakEvenPrice).toBe(8995);
-    expect(r.margin).toBe(3506);
+    expect(r.breakEvenPrice).toBe(9471); // 2026-07-31 VAT 반영
+    expect(r.margin).toBe(3226); // 2026-07-31 VAT 반영
   });
 
   it('쿠팡가가 손익분기에 미달하면 fail', async () => {
@@ -89,7 +89,7 @@ describe('buildVerifyResult', () => {
     expect(r.coupangP25).toBeNull();
     // 원가 계산은 되어 있어야 한다
     expect(r.effectiveCost).toBe(3600);
-    expect(r.breakEvenPrice).toBe(8995);
+    expect(r.breakEvenPrice).toBe(9471); // 2026-07-31 VAT 반영
   });
 
   it('사입 수량을 늘리면 개당 배송비가 줄어든다', async () => {
