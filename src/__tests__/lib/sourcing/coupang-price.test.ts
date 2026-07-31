@@ -144,7 +144,9 @@ describe('estimateCoupangPrice', () => {
     const result = await estimateCoupangPrice('메쉬 반장갑 등산 낚시 라이더');
     expect(result).not.toBeNull();
     expect(result!.p25).toBe(5500);
-    expect(result!.sampleN).toBeGreaterThanOrEqual(8);
+    // buildSearchQueries('메쉬 반장갑 등산 낚시 라이더')는 쿼리 3개를 만들고
+    // (mock이 모든 호출에 같은 8건을 반환하므로) 3 × 8 = 24건이 쌓인다.
+    expect(result!.sampleN).toBe(24);
   });
 
   it('쿠팡몰 표본이 3건 미만이면 null을 반환한다', async () => {
@@ -170,5 +172,28 @@ describe('estimateCoupangPrice', () => {
       vi.fn().mockResolvedValue({ ok: true, json: async () => ({ items }) }),
     );
     expect(await estimateCoupangPrice('저가 부속품')).toBeNull();
+  });
+
+  it('HTTP 오류 응답이면 표본 없이 null을 반환한다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: false, status: 429, json: async () => ({}) }),
+    );
+    expect(await estimateCoupangPrice('메쉬 반장갑 등산 낚시')).toBeNull();
+  });
+
+  it('검색어마다 호출하고 결과를 누적한다', async () => {
+    const title = '메쉬 반장갑 등산 낚시 라이더';
+    const queries = buildSearchQueries(title);
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ items: [4000, 5000, 5500].map((p) => item(p, '쿠팡')) }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await estimateCoupangPrice(title);
+
+    expect(fetchMock).toHaveBeenCalledTimes(queries.length);
+    expect(result!.sampleN).toBe(queries.length * 3);
   });
 });

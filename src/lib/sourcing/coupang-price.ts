@@ -5,6 +5,12 @@
  * 근거 문서:
  *   20-wiki/outputs/1688 진입 카테고리 필터 2026-07-28  — 마진 기준
  *   20-wiki/sources/로켓그로스 요금표 2026-07-28        — 물류비
+ *
+ * 기존 naver-shopping.ts와의 차이:
+ *   naver-shopping.searchNaverLowestPrice는 display=5·sort=asc로 정규화된
+ *   단일 최적 매칭(최저가 1건)을 뽑는다. 이 모듈은 display=100·sort=sim으로
+ *   모집단을 통째로 받아 mallName='쿠팡'만 추린 뒤 분위수(하위 25%)를
+ *   계산한다. 목적이 "가격 하나"가 아니라 "가격 분포"라 파라미터가 다르다.
  */
 
 import type { LogisticsSize } from '@/types/shortlist';
@@ -100,6 +106,8 @@ export function buildSearchQueries(title: string, max = 4): string[] {
 
   if (words.length === 0) return [title.slice(0, 20)];
 
+  // 4단어씩 자르되 시작점을 2단어씩 겹치게 잡는다(0,2,4,끝-4).
+  // 겹치지 않게 자르면 상품 정체가 구간 경계에 걸려 잘려나갈 수 있다.
   const starts = [0, 2, 4, Math.max(0, words.length - 4)];
   const out: string[] = [];
   for (const s of starts) {
@@ -117,7 +125,13 @@ export interface CoupangPriceEstimate {
   sampleN: number;
 }
 
-/** 표본이 이보다 적으면 판정하지 않는다 */
+/**
+ * 표본이 이보다 적으면 판정하지 않는다.
+ *
+ * 잠정값이다. 표본 3~5건 구간의 신뢰도는 설계 문서 단계에서 근거가 얇다고
+ * 명시된 채로 남아 있다 — 운영하며 coupang_sample_n과 실제 진입 결과를
+ * 대조해 보정할 예정이다. 지금 3을 "검증된 하한"으로 읽지 말 것.
+ */
 const MIN_SAMPLE = 3;
 
 /** 부속품·사은품 노이즈를 거르는 하한 */
@@ -131,7 +145,12 @@ interface NaverShopItem {
 async function searchNaverShop(query: string): Promise<NaverShopItem[]> {
   const clientId = process.env.NAVER_CLIENT_ID;
   const clientSecret = process.env.NAVER_CLIENT_SECRET;
-  if (!clientId || !clientSecret) return [];
+  if (!clientId || !clientSecret) {
+    // 조용히 삼키면 API 키가 만료돼도 모든 후보가 "표본 부족"으로만 보이고
+    // 원인이 로그에 안 남는다. 이 숫자가 매입 결정을 좌우하므로 반드시 남긴다.
+    console.error('[coupang-price] NAVER_CLIENT_ID 또는 NAVER_CLIENT_SECRET 미설정');
+    return [];
+  }
 
   const url = new URL('https://openapi.naver.com/v1/search/shop.json');
   url.searchParams.set('query', query);
@@ -145,11 +164,16 @@ async function searchNaverShop(query: string): Promise<NaverShopItem[]> {
         'X-Naver-Client-Secret': clientSecret,
       },
     });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      console.error(`[coupang-price] API 오류 (${res.status}): query="${query}"`);
+      return [];
+    }
     const data = (await res.json()) as { items?: NaverShopItem[] };
     return data.items ?? [];
-  } catch {
-    // 네트워크 오류는 표본 없음으로 처리한다. 호출자가 unknown 판정을 내린다.
+  } catch (err) {
+    // 네트워크 오류도 표본 없음으로 처리하지만(호출자가 unknown 판정을 내린다),
+    // 원인 추적을 위해 반드시 로그는 남긴다.
+    console.error(`[coupang-price] 요청 실패: query="${query}"`, err);
     return [];
   }
 }
@@ -166,12 +190,21 @@ async function searchNaverShop(query: string): Promise<NaverShopItem[]> {
  *   중앙값     0% ~ +324%  (고가 상품에 끌려간다)
  *
  * 표본이 MIN_SAMPLE 미만이면 null을 반환한다. 판정 불가와 탈락은 다르다.
+ *
+ * 이 함수 자체는 호출 간 지연을 넣지 않는다 — 이 저장소 관례는 지연을
+ * 호출부(라우트·cron)에 두는 것이다(src/app/api/sourcing/naver-prices/route.ts의
+ * NAVER_CALL_DELAY_MS 참고). 이 함수를 배치로 여러 건 돌릴 때는 호출부가
+ * 같은 방식으로 페이싱을 넣어야 한다. (Task 8 cron 작성 시 잊지 말 것.)
  */
 export async function estimateCoupangPrice(
   title: string,
 ): Promise<CoupangPriceEstimate | null> {
   const prices: number[] = [];
 
+  // 쿼리를 순차로 await한다. 상품 1건당 buildSearchQueries가 최대 4개를
+  // 만드므로 100건을 처리하면 최대 400회 순차 호출이 된다 — Promise.all로
+  // 바꾸고 싶어질 지점이지만, 네이버 쇼핑 API는 초당 호출 제한이 문서화돼
+  // 있지 않아 동시 호출 시 429 폭풍 위험이 있다. 직렬 호출은 의도한 설계다.
   for (const query of buildSearchQueries(title)) {
     const items = await searchNaverShop(query);
     for (const it of items) {
