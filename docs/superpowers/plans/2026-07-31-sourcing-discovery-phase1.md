@@ -1165,6 +1165,17 @@ git commit -m "feat(sourcing): 트렌드 시드 목록 조회 API"
 
 현재 파이프라인은 `searchNaverLowestPrice`(네이버 최저가)로 마진을 계산한다. 실측에서 네이버 시세가 **쿠팡 실판가의 2~3배**였고, 이 오판으로 마진율 판정이 59.8% → 11.7%로 뒤집힌 사례가 있다.
 
+> **2026-07-31 부수효과 — `china-matcher.ts`가 고아가 된다.**
+> `keyword-pipeline.ts`는 `matchOn1688`의 **유일한 소비자**다(확인함). 이 Task가 1688 자동 매칭을
+> 걷어내면 `src/lib/sourcing-agent/china-matcher.ts` 전체를 아무도 참조하지 않게 된다.
+>
+> **이 Task에서는 삭제하지 않는다.** 파일 삭제는 사용자 승인 사항이고, 2단계의 "1688 붙여넣기 파싱"과
+> 관련이 있는지 따로 판단해야 한다(자동 매칭과 수동 붙여넣기는 다른 기능이므로 아마 별개다).
+> import만 제거하고 파일은 그대로 둔다.
+>
+> 참고: Task 3이 `china-matcher.ts:206`을 운임 분리에 맞춰 고쳤다. 곧 고아가 될 파일이지만
+> 컴파일을 유지하려면 필요한 수정이었으므로 헛일은 아니다.
+
 - [ ] **Step 1: 실패 테스트 작성**
 
 `src/__tests__/lib/sourcing-agent/keyword-pipeline.test.ts` 신규 생성:
