@@ -11,6 +11,8 @@
 import { after } from 'next/server';
 import { runKeywordPipeline } from '@/lib/sourcing-agent/keyword-pipeline';
 import { requireAuth } from '@/lib/supabase/auth';
+import { createRequest } from '@/lib/sourcing-agent/keyword-db';
+import { getSourcingPool } from '@/lib/sourcing/db';
 
 export const maxDuration = 60;
 
@@ -53,19 +55,27 @@ export async function POST(request: Request) {
     );
   }
 
+  // 폴링이 "이번 실행분"만 보게 하려면 라우트가 ID를 알아야 한다.
+  // after() 안에서 만들면 응답에 담을 수 없다.
+  const pool = getSourcingPool();
+  const runs: { keyword: string; requestId: number }[] = [];
+  for (const kw of keywords) {
+    runs.push({ keyword: kw, requestId: await createRequest(pool, kw, NO_TELEGRAM_CHAT) });
+  }
+
   // 응답을 먼저 돌려주고 백그라운드에서 순차 실행한다.
   // 동시 실행하면 네이버·도매꾹 API에 순간 부하가 몰린다.
   after(
     (async () => {
-      for (const kw of keywords) {
+      for (const run of runs) {
         try {
-          await runKeywordPipeline(kw, NO_TELEGRAM_CHAT);
+          await runKeywordPipeline(run.keyword, NO_TELEGRAM_CHAT, run.requestId);
         } catch (err) {
-          console.error('[api/sourcing/agent/run] 파이프라인 실패:', kw, err);
+          console.error('[api/sourcing/agent/run] 파이프라인 실패:', run.keyword, err);
         }
       }
     })(),
   );
 
-  return Response.json({ success: true, data: { accepted: keywords.length } });
+  return Response.json({ success: true, data: { accepted: runs.length, runs } });
 }

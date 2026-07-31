@@ -144,14 +144,23 @@ function formatResultMessage(
   return lines.join('\n');
 }
 
-export async function runKeywordPipeline(keyword: string, chatId: string): Promise<void> {
+/**
+ * @param existingRequestId 이미 만들어 둔 요청 행 ID. 웹 실행은 폴링을 위해
+ *   라우트가 먼저 만들어 응답에 담으므로 그 ID를 그대로 이어 쓴다.
+ *   없으면(텔레그램 경로) 여기서 만든다.
+ */
+export async function runKeywordPipeline(
+  keyword: string,
+  chatId: string,
+  existingRequestId?: number,
+): Promise<void> {
   const pool = getSourcingPool();
 
   // 1. 분석 시작 메시지 전송
   await notify(chatId, `🔍 분석 시작합니다\n📦 ${keyword}\n잠시만 기다려주세요...`);
 
-  // 2. 요청 DB 저장
-  const requestId = await createRequest(pool, keyword, chatId);
+  // 2. 요청 DB 저장 (웹 실행은 라우트가 이미 만들어 둔 ID를 이어 쓴다)
+  const requestId = existingRequestId ?? (await createRequest(pool, keyword, chatId));
 
   try {
     // 3. 키워드 추출 → Domeggook 검색
