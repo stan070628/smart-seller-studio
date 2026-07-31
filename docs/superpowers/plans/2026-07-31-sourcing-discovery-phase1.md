@@ -1284,6 +1284,18 @@ git commit -m "fix(sourcing): 파이프라인 시세 기준을 네이버 최저�
 - Modify: `src/lib/sourcing-agent/keyword-pipeline.ts`
 - Test: `src/__tests__/lib/sourcing/shortlist-db.test.ts`
 
+> **2026-07-31 정정 — 이 Task의 테스트는 스키마를 검증하지 못한다.**
+> 아래 테스트는 `pool.query`를 통째로 mock하므로 SQL이 실제 DB와 맞는지 **전혀 확인하지 않는다.**
+> 초안에 실제로 두 가지 오류가 있었고 둘 다 이 테스트를 통과했을 것이다:
+>
+> | 오류 | 결과 |
+> |---|---|
+> | `INSERT INTO shortlist` — 실제 테이블명은 `sourcing_shortlist` | 런타임에 `relation does not exist` |
+> | `margin_rate`에 비율(`0.3259`)을 넣음 — 컬럼은 `numeric(5,1)` 백분율 | **0.3으로 반올림되어 값 소실** |
+>
+> 둘 다 아래 코드에 반영해 두었다. 구현 시 `supabase/migrations/094_sourcing_shortlist.sql`을
+> 직접 열어 컬럼명·타입·제약을 대조하라. **mock 테스트 통과를 스키마 검증으로 착각하지 마라.**
+
 - [ ] **Step 1: 실패 테스트 작성**
 
 `src/__tests__/lib/sourcing/shortlist-db.test.ts` 신규 생성:
@@ -1311,7 +1323,7 @@ describe('upsertShortlistCandidate', () => {
       effectiveCost: 3600,
       breakEvenPrice: 9471,
       margin: 3226,
-      marginRate: 0.3259,
+      marginRate: 32.6,   // 백분율 1자리 — DB가 numeric(5,1)이다
       verdict: 'pass',
     });
 
@@ -1333,7 +1345,7 @@ describe('upsertShortlistCandidate', () => {
       effectiveCost: 3600,
       breakEvenPrice: 9471,
       margin: 3226,
-      marginRate: 0.3259,
+      marginRate: 32.6,   // 백분율 1자리 — DB가 numeric(5,1)이다
       verdict: 'pass',
     });
     const [sql] = mockQuery.mock.calls[0];
@@ -1372,13 +1384,17 @@ export interface ShortlistCandidateInput {
  *
  * 이미 있는 항목이면 검증 결과만 갱신한다. **사용자 메모와 아카이브 상태는 덮지 않는다** —
  * 자동 적재가 사람의 판단을 지우면 안 되기 때문이다.
+ *
+ * marginRate 단위 주의: DB의 margin_rate는 numeric(5,1) — **백분율 1자리**다(예: 32.6).
+ * evaluateCandidate()는 비율(0.326)을 돌려주므로 호출부에서 변환해 넘긴다.
+ * 비율을 그대로 넣으면 0.3으로 반올림되어 값이 소실된다.
  */
 export async function upsertShortlistCandidate(
   pool: { query: (sql: string, params: unknown[]) => Promise<unknown> },
   c: ShortlistCandidateInput,
 ): Promise<void> {
   await pool.query(
-    `INSERT INTO shortlist (
+    `INSERT INTO sourcing_shortlist (
        item_no, title, dome_price, unit_deli_fee,
        coupang_p25, coupang_sample_n,
        effective_cost, break_even_price, margin, margin_rate,
@@ -1426,7 +1442,9 @@ Task 7에서 주석으로 비워둔 자리(`// pass 판정의 쇼트리스트 �
           effectiveCost: v.effectiveCost,
           breakEvenPrice: v.breakEvenPrice,
           margin: v.margin,
-          marginRate: v.marginRate,
+          // DB의 margin_rate는 백분율 1자리다. 비율을 그대로 넣으면 0.3으로 뭉개진다.
+          // 변환식은 shortlist-verify.ts:283과 동일하게 맞춘다.
+          marginRate: v.marginRate !== null ? Math.round(v.marginRate * 1000) / 10 : null,
           verdict: v.verdict,
         }).catch((e) =>
           console.warn('[keyword-pipeline] 쇼트리스트 적재 실패:', item.no, e),
