@@ -86,8 +86,16 @@ export default function ShortlistTab() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<VerifyNotice | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  /**
+   * 목록을 (재)조회한다.
+   *
+   * silent=true면 전체 로딩 화면(`loading`)을 켜지 않는다 — add·verifyAll·
+   * applyOrderQty·remove는 성공 후 목록 구성이 바뀌어 재조회가 맞지만, 그때마다
+   * 테이블을 통째로 언마운트하면 사이즈 변경처럼 잦은 조작마다 화면이 깜빡인다.
+   * 최초 마운트 시(loading=true 초기값)만 전체 로딩 화면을 보여준다.
+   */
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     try {
       const res = await fetch('/api/sourcing/shortlist');
       const data = await res.json();
@@ -99,7 +107,7 @@ export default function ShortlistTab() {
     } catch (e) {
       setError(e instanceof Error ? e.message : '목록을 불러오지 못했습니다.');
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
   }, []);
 
@@ -121,7 +129,7 @@ export default function ShortlistTab() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? '추가하지 못했습니다.');
       setInput('');
-      await load();
+      await load({ silent: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : '추가하지 못했습니다.');
     } finally {
@@ -148,7 +156,7 @@ export default function ShortlistTab() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? '재검증하지 못했습니다.');
       reportVerifyResult(data.skipped, data.remaining);
-      await load();
+      await load({ silent: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : '재검증하지 못했습니다.');
     } finally {
@@ -156,6 +164,12 @@ export default function ShortlistTab() {
     }
   };
 
+  /**
+   * PATCH /shortlist/[itemNo]는 서버에서 이미 재검증까지 마친 최신 항목을
+   * { item }으로 돌려준다. 전체 재조회 대신 해당 행만 교체한다 — 사이즈처럼
+   * 자주 바꾸는 값마다 GET을 다시 부르고 테이블을 통째로 갈아끼우면 그때마다
+   * 화면이 깜빡인다.
+   */
   const patchItem = async (itemNo: number, body: Record<string, unknown>) => {
     setBusy(true);
     setError(null);
@@ -167,7 +181,7 @@ export default function ShortlistTab() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? '수정하지 못했습니다.');
-      await load();
+      setItems((prev) => prev.map((it) => (it.itemNo === itemNo ? data.item : it)));
     } catch (e) {
       setError(e instanceof Error ? e.message : '수정하지 못했습니다.');
     } finally {
@@ -201,7 +215,7 @@ export default function ShortlistTab() {
       const verifyData = await verifyRes.json();
       if (verifyRes.ok) reportVerifyResult(verifyData.skipped, verifyData.remaining);
 
-      await load();
+      await load({ silent: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : '사입 수량 변경에 실패했습니다.');
     } finally {
@@ -217,7 +231,7 @@ export default function ShortlistTab() {
       const res = await fetch(`/api/sourcing/shortlist/${itemNo}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? '삭제하지 못했습니다.');
-      await load();
+      await load({ silent: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : '삭제하지 못했습니다.');
     } finally {
@@ -322,9 +336,12 @@ export default function ShortlistTab() {
         </div>
       )}
 
-      {/* 목록 테이블 */}
+      {/* 목록 테이블 — busy 중에는 언마운트하지 않고 살짝 흐리게만 표시한다 */}
       {!loading && items.length > 0 && (
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', overflowX: 'auto' }}>
+        <div style={{
+          background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', overflowX: 'auto',
+          opacity: busy ? 0.6 : 1, transition: 'opacity 0.15s',
+        }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 900 }}>
             <thead>
               <tr style={{ background: C.tableHeader, borderBottom: `1px solid ${C.border}` }}>
