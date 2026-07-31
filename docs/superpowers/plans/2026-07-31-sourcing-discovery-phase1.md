@@ -28,7 +28,7 @@
 
 | 경로 | 변경 |
 |---|---|
-| `src/lib/sourcing/coupang-price.ts` | `COMMISSION_RATE`를 `effectiveFeeRate()` 경유로 |
+| `src/lib/sourcing/coupang-price.ts` | `COMMISSION_RATE`를 `effectiveFeeRate()` 경유로, `LOGISTICS_FEE`를 `resolveRgShippingFee()` 경유로 |
 | `src/lib/sourcing/margin-1688.ts` | 과세가격에 운임 포함, 결과에 `dutiableValueKrw` 추가 |
 | `src/lib/sourcing/trend-discovery.ts` | 프롬프트를 함수화하고 규제·단가·SKU·시즌 조건 주입 |
 | `src/lib/sourcing-agent/keyword-pipeline.ts` | 시세 기준을 쿠팡 p25로 교체, `shortlist` 자동 적재, 1688 매칭 제거 |
@@ -54,6 +54,8 @@
 - Test: `src/__tests__/lib/sourcing/coupang-price.test.ts`
 
 기존 테스트가 `COMMISSION_RATE`를 import해 계산에 쓰므로 상수를 바꿔도 통과한다. **명시적 기대값 테스트를 추가**해야 회귀를 잡는다.
+
+> **2026-07-31 범위 정정.** 최초 작성 시 이 Task는 `COMMISSION_RATE`만 바꾸는 것으로 적혀 있었으나, 아래 기대값(9,470원)은 `LOGISTICS_FEE.xsmall = 1898`(VAT 포함)을 전제한다. 선행 커밋 `1bc6a664`가 `resolveRgShippingFee()`를 만들면서 `coupang-price.ts` 배선을 빠뜨려 실제 값은 1725(VAT 별도)였다. 따라서 이 Task는 `LOGISTICS_FEE`의 VAT 반영까지 포함한다. 또한 기존 하드코딩 기대값 5건(`7638` / `8535` / `9671` / `8891` / `3506`)은 옛 원가 모델의 값이므로 새 계산값으로 갱신한다 — Task 3 Step 4와 같은 원칙이다.
 
 - [ ] **Step 1: 실패 테스트 작성**
 
@@ -96,6 +98,22 @@ Expected: FAIL — `expected 0.108 to be close to 0.1188`
 ```typescript
 import { effectiveFeeRate } from '@/lib/tax';
 ```
+
+`getRgShippingFee` import를 VAT 반영판으로 교체하고, `LOGISTICS_FEE`의 세 항목을 모두 경유시킨다:
+
+```typescript
+import { resolveRgShippingFee, type RgSizeType } from '@/lib/roi/rg-fees';
+
+// resolveRgShippingFee(measuredFee, sizeType) — 이 상수는 실측 정산값을 쓰지
+// 않으므로 첫 인자는 null이다.
+export const LOGISTICS_FEE: Record<LogisticsSize, number> = {
+  xsmall: resolveRgShippingFee(null, RG_SIZE_KEY.xsmall),
+  small: resolveRgShippingFee(null, RG_SIZE_KEY.small),
+  medium: resolveRgShippingFee(null, RG_SIZE_KEY.medium),
+};
+```
+
+`LOGISTICS_FEE` 주석에 왜 VAT 반영판을 쓰는지 한 줄 덧붙인다 — 간이과세자는 매입세액 공제를 받지 못해 물류비 VAT가 그대로 원가가 된다.
 
 28번째 줄을 교체:
 
@@ -435,7 +453,7 @@ import { getTariffRate } from '@/lib/sourcing/tariff';
 - [ ] **Step 6: 전체 테스트**
 
 Run: `npx vitest run`
-Expected: PASS
+Expected: 실패가 7개 파일 / 14건을 넘지 않는다 (완료 기준의 래칫 참조). 늘었다면 이번 변경이 범인이다.
 
 - [ ] **Step 7: 커밋**
 
@@ -1425,7 +1443,7 @@ Expected: PASS — 2 tests
 - [ ] **Step 5: 전체 테스트**
 
 Run: `npx vitest run`
-Expected: PASS
+Expected: 실패가 7개 파일 / 14건을 넘지 않는다 (완료 기준의 래칫 참조). 늘었다면 이번 변경이 범인이다.
 
 - [ ] **Step 6: 커밋**
 
@@ -1844,7 +1862,7 @@ Expected: 빌드 성공
 - [ ] **Step 4: 전체 테스트**
 
 Run: `npx vitest run`
-Expected: PASS
+Expected: 실패가 7개 파일 / 14건을 넘지 않는다 (완료 기준의 래칫 참조). 늘었다면 이번 변경이 범인이다.
 
 - [ ] **Step 5: 커밋**
 
@@ -1896,7 +1914,23 @@ npm run dev
 
 ## 완료 기준
 
-- [ ] `npx vitest run` 전체 통과
+- [ ] 소싱 스위트 전체 통과
+
+  ```bash
+  npx vitest run src/__tests__/lib/sourcing/ src/lib/sourcing/__tests__/ \
+                 src/__tests__/lib/sourcing-agent/ src/__tests__/api/sourcing-*.test.ts
+  ```
+
+- [ ] `npx vitest run` 실패가 **7개 파일 / 14건을 넘지 않는다** (기존 부채 래칫)
+
+  > **왜 "전체 통과"가 아닌가.** 이 계획 착수 시점에 소싱과 무관한 영역(이미지 생성·키워드 AI·에셋 UI)에
+  > 이미 깨진 테스트가 있었다. 원인은 전부 코드가 움직인 뒤 테스트가 따라가지 않은 노후이며,
+  > 고치려면 각기 별도 조사가 필요해 이 계획에 묶으면 소싱 작업이 무관한 고고학에 발이 묶인다.
+  >
+  > 대신 **래칫**을 건다. 숫자가 늘면 범인은 이번 작업이다. 15건을 먼저 갚지 않고도 새 파손은 즉시 잡힌다.
+  >
+  > 착수 시 9개 파일 / 17건 → Task 1에서 `shortlist-verify` 2건, `dashboard-summary` 1건을 해소해
+  > 현재 7개 파일 / 14건. 남은 7개 파일은 아래 "이 계획에서 제외한 것" 표를 참조.
 - [ ] `npx tsc --noEmit` 에러 없음
 - [ ] `npm run build` 성공
 - [ ] `/sourcing`에서 시드를 골라 실행하면 소싱리스트에 `pass` 후보가 쌓인다
@@ -1911,3 +1945,21 @@ npm run dev
 | 발주 화면·실비 배분 | 첫 발주 직전에 만들면 된다 | 3단계 |
 | 액션 탭 | 재고가 도착해 판매 데이터가 쌓인 뒤에야 판정할 것이 생긴다 | 4단계 |
 | SKU 분기 자동 판별 | 도매꾹 목록 API에 옵션 정보가 없다. 상세 조회가 필요해 비용이 는다 | 미정 |
+| 기존 실패 테스트 7파일 14건 | 소싱과 무관한 영역(이미지·키워드 AI·에셋 UI)이고 각각 별도 조사가 필요하다 | 별도 과제 |
+| `ProductAdTable.tsx` 물류비 VAT 미반영 | Task 1 범위 밖. 광고전략 화면이 아직 `getRgShippingFee()`(VAT 별도)를 쓴다 | 별도 과제 |
+
+### 남은 기존 실패 테스트 (2026-07-31 기준 7파일 14건)
+
+| 파일 | 건수 | 확인된 원인 |
+|---|---|---|
+| `components/add-product-modal-naver.test.tsx` | 5 | `"네이버 상품"` 버튼을 못 찾음 — 해당 UI가 사라진 뒤 테스트 방치 |
+| `api/keyword-discover.test.ts` | 3 | `evaluateKeyword`가 spy가 아님 — mock 대상 export 형태 변경 |
+| `api/keyword-suggest-with-evaluate.test.ts` | 2 | 위와 같은 계열 |
+| `api/cleanup-image-region.test.ts` | 1 | 미조사 |
+| `api/image/analyze-detail-images.test.ts` | 1 | 미조사 |
+| `components/assets-tab.test.tsx` | 1 | 미조사 |
+| `components/detail-maker-thumbnail-panel.test.tsx` | 1 | 미조사 |
+
+> 해소된 것: `lib/sourcing/shortlist-verify.test.ts`(2건) · `api/dashboard-summary.test.ts`(1건).
+> 후자는 활성 플랜을 v2→v3로 교체한 뒤 테스트만 v2 값을 하드코딩한 채 남은 경우였다.
+> 대시보드 자체는 정상이었다 — 커밋 `39e6dfdf`.
