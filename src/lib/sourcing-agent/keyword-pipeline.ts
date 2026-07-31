@@ -3,6 +3,7 @@ import { extractKeywordsFromProduct } from '@/lib/sourcing/ai-keyword-extract';
 import { getDomeggookClient } from '@/lib/sourcing/domeggook-client';
 import { estimateCoupangPrice, breakEvenPrice, marginOf } from '@/lib/sourcing/coupang-price';
 import { parseDeliPolicy, unitDeliveryFee } from '@/lib/sourcing/deli-policy';
+import { upsertShortlistCandidate } from '@/lib/sourcing/shortlist-db';
 import {
   createRequest,
   completeRequest,
@@ -214,8 +215,28 @@ export async function runKeywordPipeline(keyword: string, chatId: string): Promi
         _sort: est?.p25 ?? 0,
       });
 
-      // pass 판정의 쇼트리스트 적재는 Task 8에서 붙인다.
-      // 여기서 미리 호출하면 아직 없는 함수를 참조해 컴파일이 깨진다.
+      if (v.verdict === 'pass') {
+        await upsertShortlistCandidate(pool, {
+          itemNo: item.no,
+          title: item.title,
+          domePrice: item.price,
+          unitDeliFee: deli,
+          // est는 null일 수 있다 (Task 7 참조). 다만 이 블록은 verdict === 'pass'일 때만
+          // 도달하고, p25가 null이면 evaluateCandidate가 unknown을 내므로 실제로는
+          // 항상 값이 있다. 그래도 타입을 좁혀야 컴파일된다.
+          coupangP25: est?.p25 ?? null,
+          coupangSampleN: est?.sampleN ?? 0,
+          effectiveCost: v.effectiveCost,
+          breakEvenPrice: v.breakEvenPrice,
+          margin: v.margin,
+          // DB의 margin_rate는 백분율 1자리다. 비율을 그대로 넣으면 0.3으로 뭉개진다.
+          // 변환식은 shortlist-verify.ts:283과 동일하게 맞춘다.
+          marginRate: v.marginRate !== null ? Math.round(v.marginRate * 1000) / 10 : null,
+          verdict: v.verdict,
+        }).catch((e) =>
+          console.warn('[keyword-pipeline] 쇼트리스트 적재 실패:', item.no, e),
+        );
+      }
     }
 
     // 5. 예상 판매가 내림차순 상위 5개 — 고단가 우선

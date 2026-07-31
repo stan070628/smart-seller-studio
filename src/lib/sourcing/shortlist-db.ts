@@ -232,3 +232,59 @@ export async function listForVerify(
     logisticsSize: r.logistics_size as LogisticsSize,
   }));
 }
+
+export interface ShortlistCandidateInput {
+  itemNo: number;
+  title: string;
+  domePrice: number;
+  unitDeliFee: number;
+  coupangP25: number | null;
+  coupangSampleN: number;
+  effectiveCost: number;
+  breakEvenPrice: number;
+  margin: number | null;
+  marginRate: number | null;
+  verdict: string;
+}
+
+/**
+ * 발굴 파이프라인이 판정한 후보를 쇼트리스트에 넣는다.
+ *
+ * 이미 있는 항목이면 검증 결과만 갱신한다. **사용자 메모와 아카이브 상태는 덮지 않는다** —
+ * 자동 적재가 사람의 판단을 지우면 안 되기 때문이다.
+ *
+ * marginRate 단위 주의: DB의 margin_rate는 numeric(5,1) — **백분율 1자리**다(예: 32.6).
+ * evaluateCandidate()는 비율(0.326)을 돌려주므로 호출부에서 변환해 넘긴다.
+ * 비율을 그대로 넣으면 0.3으로 반올림되어 값이 소실된다.
+ */
+export async function upsertShortlistCandidate(
+  pool: { query: (sql: string, params: unknown[]) => Promise<unknown> },
+  c: ShortlistCandidateInput,
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO sourcing_shortlist (
+       item_no, title, dome_price, unit_deli_fee,
+       coupang_p25, coupang_sample_n,
+       effective_cost, break_even_price, margin, margin_rate,
+       verdict, verified_at, added_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, NOW(), NOW())
+     ON CONFLICT (item_no) DO UPDATE SET
+       title             = EXCLUDED.title,
+       dome_price        = EXCLUDED.dome_price,
+       unit_deli_fee     = EXCLUDED.unit_deli_fee,
+       coupang_p25       = EXCLUDED.coupang_p25,
+       coupang_sample_n  = EXCLUDED.coupang_sample_n,
+       effective_cost    = EXCLUDED.effective_cost,
+       break_even_price  = EXCLUDED.break_even_price,
+       margin            = EXCLUDED.margin,
+       margin_rate       = EXCLUDED.margin_rate,
+       verdict           = EXCLUDED.verdict,
+       verified_at       = NOW()`,
+    [
+      c.itemNo, c.title, c.domePrice, c.unitDeliFee,
+      c.coupangP25, c.coupangSampleN,
+      c.effectiveCost, c.breakEvenPrice, c.margin, c.marginRate,
+      c.verdict,
+    ],
+  );
+}
