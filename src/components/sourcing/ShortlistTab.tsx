@@ -175,9 +175,16 @@ export default function ShortlistTab() {
     }
   };
 
-  /** 사입 수량을 전체에 일괄 적용한 뒤 재검증한다 (PATCH → verify 순서 고정). */
+  /**
+   * 사입 수량을 전체에 일괄 적용한 뒤 재검증한다 (PATCH → verify 순서 고정).
+   *
+   * busy 가드가 반드시 필요하다: 이 함수는 input의 onBlur와 onKeyDown(Enter) 둘 다에
+   * 걸려 있는데, Enter를 누르면 onKeyDown 핸들러가 먼저 실행되어 busy를 true로 만들고,
+   * 리렌더로 input이 disabled되는 순간 브라우저가 blur 이벤트를 발생시켜 onBlur
+   * 핸들러가 곧바로 다시 실행된다. 가드가 없으면 PATCH·재검증·목록 갱신이 두 번 돈다.
+   */
   const applyOrderQty = async (qty: number) => {
-    if (!Number.isInteger(qty) || qty <= 0 || items.length === 0) return;
+    if (busy || !Number.isInteger(qty) || qty <= 0 || items.length === 0) return;
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -263,6 +270,7 @@ export default function ShortlistTab() {
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && void add()}
           placeholder="도매꾹 상품번호 또는 URL 붙여넣기"
+          aria-label="도매꾹 상품번호 또는 URL"
           disabled={busy}
           style={{
             flex: 1, padding: '8px 10px', borderRadius: 6,
@@ -291,7 +299,7 @@ export default function ShortlistTab() {
           background: C.infoBg, color: C.info, fontSize: 13, lineHeight: 1.6,
         }}>
           {notice.skipped > 0 && (
-            <div>{notice.skipped}건은 도매꾹 조회에 실패해 기존 값을 유지했습니다. 다음 자동 검증에서 다시 시도합니다.</div>
+            <div>{notice.skipped}건은 도매꾹 응답을 받지 못해 기존 값을 유지했습니다. 다음 자동 검증에서 다시 시도합니다.</div>
           )}
           {notice.remaining > 0 && (
             <div>{notice.remaining}건은 시간이 모자라 처리하지 못했습니다. 다시 누르면 이어서 처리합니다.</div>
@@ -389,6 +397,7 @@ export default function ShortlistTab() {
                         value={it.logisticsSize}
                         onChange={(e) => void patchItem(it.itemNo, { logisticsSize: e.target.value as LogisticsSize })}
                         disabled={busy || dead}
+                        aria-label={`${it.title} 물류 사이즈`}
                         style={{
                           background: C.card, color: C.text,
                           border: `1px solid ${C.border}`, borderRadius: 4, padding: '3px 6px', fontSize: 12,
