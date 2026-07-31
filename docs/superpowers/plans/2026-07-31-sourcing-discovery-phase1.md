@@ -1309,11 +1309,14 @@ export function evaluateCandidate(input: CandidateInput): CandidateVerdict {
       const est = await estimateCoupangPrice(item.title);
       const deli = parseUnitDeliFee(item);
 
+      // estimateCoupangPrice는 표본이 MIN_SAMPLE(3) 미만이면 **null을 반환한다**.
+      // evaluateCandidate가 p25=null을 이미 unknown으로 처리하도록 설계돼 있으므로
+      // 여기서 분기하지 말고 그대로 흘려보낸다. est.p25로 직접 접근하면 터진다.
       const v = evaluateCandidate({
         domePrice: item.price,
         unitDeliFee: deli,
-        coupangP25: est.p25,
-        coupangSampleN: est.sampleN,
+        coupangP25: est?.p25 ?? null,
+        coupangSampleN: est?.sampleN ?? 0,
         logisticsSize: 'xsmall',
       });
 
@@ -1321,7 +1324,7 @@ export function evaluateCandidate(input: CandidateInput): CandidateVerdict {
 
       resultRows.push({
         rank: 0,
-        naver_price: est.p25,
+        naver_price: est?.p25 ?? null,
         naver_url: null,
         domeggook_product_name: item.title,
         domeggook_price: item.price,
@@ -1332,7 +1335,7 @@ export function evaluateCandidate(input: CandidateInput): CandidateVerdict {
         china_price_krw: null,
         china_url: null,
         china_margin_rate: null,
-        _sort: est.p25 ?? 0,
+        _sort: est?.p25 ?? 0,
       });
 
       // pass 판정의 쇼트리스트 적재는 Task 8에서 붙인다.
@@ -1538,8 +1541,11 @@ Task 7에서 주석으로 비워둔 자리(`// pass 판정의 쇼트리스트 �
           title: item.title,
           domePrice: item.price,
           unitDeliFee: deli,
-          coupangP25: est.p25,
-          coupangSampleN: est.sampleN,
+          // est는 null일 수 있다 (Task 7 참조). 다만 이 블록은 verdict === 'pass'일 때만
+          // 도달하고, p25가 null이면 evaluateCandidate가 unknown을 내므로 실제로는
+          // 항상 값이 있다. 그래도 타입을 좁혀야 컴파일된다.
+          coupangP25: est?.p25 ?? null,
+          coupangSampleN: est?.sampleN ?? 0,
           effectiveCost: v.effectiveCost,
           breakEvenPrice: v.breakEvenPrice,
           margin: v.margin,
