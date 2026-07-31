@@ -17,30 +17,25 @@
  *
  * 인증:
  *   - Authorization: Bearer {CRON_SECRET} 헤더 확인
- *   - CRON_SECRET 미설정 시 인증 생략 (개발 편의) — naver-prices/route.ts와 동일 관례
+ *   - CRON_SECRET 미설정 시 인증 생략 (개발 편의) — costco/cron/route.ts,
+ *     costco/naver-prices/route.ts와 동일 관례. (naver-prices/route.ts의 헤더
+ *     주석은 같은 관례를 문서화했지만 실제 구현이 빠져 있어 선례로 인용하지 않는다.)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { listForVerify } from '@/lib/sourcing/shortlist-db';
-import { verifyOne } from '@/lib/sourcing/shortlist-verify';
+import {
+  verifyOne,
+  delay,
+  NAVER_CALL_DELAY_MS,
+  DEADLINE_SAFETY_MARGIN_MS,
+  type ShortlistVerifyResult,
+} from '@/lib/sourcing/shortlist-verify';
 
 export const maxDuration = 300;
 
 /** 1회 실행 상한. 처리 못한 나머지는 verified_at ASC 정렬 덕에 다음 cron이 이어받는다. */
 const CRON_VERIFY_LIMIT = 100;
-
-/**
- * verifyOne 1건은 네이버 쇼핑 API를 최대 4회 호출한다(estimateCoupangPrice가
- * 상품명을 구간별로 쪼개 검색 — coupang-price.ts 참고). 100건이면 최대 400회다.
- * 그 함수의 주석이 "배치 호출 시 호출부가 페이싱을 넣으라"고 명시하므로,
- * naver-prices/route.ts의 선례(NAVER_CALL_DELAY_MS)를 그대로 따른다.
- */
-const NAVER_CALL_DELAY_MS = 200;
-const DEADLINE_SAFETY_MARGIN_MS = 30_000;
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -54,7 +49,8 @@ export async function GET(req: NextRequest) {
 
   if (targets.length === 0) {
     console.log('[cron/shortlist-verify] 검증 대상 없음');
-    return NextResponse.json({ verified: 0, skipped: 0, failed: 0, total: 0, remaining: 0 });
+    const empty: ShortlistVerifyResult = { verified: 0, skipped: 0, failed: 0, total: 0, remaining: 0 };
+    return NextResponse.json(empty);
   }
 
   const startedAt = Date.now();
@@ -98,5 +94,6 @@ export async function GET(req: NextRequest) {
       `실패=${failed}, 남음=${remaining}`,
   );
 
-  return NextResponse.json({ verified, skipped, failed, total: targets.length, remaining });
+  const result: ShortlistVerifyResult = { verified, skipped, failed, total: targets.length, remaining };
+  return NextResponse.json(result);
 }

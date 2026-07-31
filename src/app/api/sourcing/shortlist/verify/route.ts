@@ -14,32 +14,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { listForVerify, getShortlistItem } from '@/lib/sourcing/shortlist-db';
-import { verifyOne, type VerifyTarget } from '@/lib/sourcing/shortlist-verify';
+import {
+  verifyOne,
+  delay,
+  NAVER_CALL_DELAY_MS,
+  DEADLINE_SAFETY_MARGIN_MS,
+  type VerifyTarget,
+  type ShortlistVerifyResult,
+} from '@/lib/sourcing/shortlist-verify';
 
 export const maxDuration = 300;
 
 /** 1회 요청 상한. naver-prices류 라우트의 limit 관례(기본 50)를 그대로 따른다. */
 const MANUAL_VERIFY_LIMIT = 50;
-
-/**
- * verifyOne 1건은 네이버 쇼핑 API를 최대 4회 호출한다(estimateCoupangPrice가
- * 상품명을 구간별로 쪼개 검색 — coupang-price.ts 참고). 여러 건을 배치로 돌릴 때는
- * 호출부가 페이싱을 넣어야 한다는 게 그 함수의 주석이 명시한 계약이고, 이 저장소의
- * 선례는 naver-prices/route.ts의 NAVER_CALL_DELAY_MS다. 같은 값을 쓴다.
- */
-const NAVER_CALL_DELAY_MS = 200;
-
-/**
- * 데드라인 가드 — cron/shortlist-verify/route.ts와 동일 패턴.
- * 플랫폼 타임아웃에 걸리면 클라이언트는 본문 없는 raw 504를 받는다. 이미
- * saveVerifyResult로 건별 커밋된 결과는 남아 있는데도 사용자는 "실패"로 보고
- * 재시도하게 되므로, 안전마진 안에서 스스로 멈추고 remaining을 알려준다.
- */
-const DEADLINE_SAFETY_MARGIN_MS = 30_000;
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 const bodySchema = z.object({
   itemNo: z.number().int().positive().optional(),
@@ -77,6 +64,7 @@ export async function POST(req: NextRequest) {
 
   const startedAt = Date.now();
   const hardDeadlineMs = maxDuration * 1_000 - DEADLINE_SAFETY_MARGIN_MS;
+  const total = targets.length;
 
   // verified : 실제로 검증되어 저장된 건수
   // skipped  : verifyOne이 false를 반환한 건수 — 실패가 아니라 "이번엔 건너뜀,
@@ -84,6 +72,11 @@ export async function POST(req: NextRequest) {
   // remaining: 데드라인 때문에 이번 요청에서 아예 손도 못 댄 건수. skipped와 달리
   //            verifyOne을 호출조차 하지 않았다 — 남은 건 그대로 verified_at이
   //            안 갱신되므로 다음 수동 호출이나 cron이 오래된 순서 그대로 이어받는다.
+  //
+  // 이 세 카운터를 try 밖에서 선언하는 이유: verifyOne은 건별로 saveVerifyResult를
+  // 커밋한다. 50건 중 38번째에서 예외가 나도 앞의 37건은 이미 저장돼 있는데,
+  // catch에서 이 카운터를 못 돌려주면 응답은 "아무것도 안 됨"처럼 보인다.
+  // 그러면 사용자가 이미 끝난 절반을 다시 검증시키게 된다.
   let verified = 0;
   let skipped = 0;
   let processed = 0;
@@ -95,7 +88,7 @@ export async function POST(req: NextRequest) {
     for (const target of targets) {
       if (Date.now() - startedAt >= hardDeadlineMs) {
         console.warn(
-          `[shortlist/verify] deadline 도달, 조기 종료 (처리=${processed}/${targets.length})`,
+          `[shortlist/verify] deadline 도달, 조기 종료 (처리=${processed}/${total})`,
         );
         break;
       }
@@ -108,11 +101,21 @@ export async function POST(req: NextRequest) {
       if (targets.length > 1) await delay(NAVER_CALL_DELAY_MS);
     }
   } catch (err) {
-    console.error('[shortlist/verify] 재검증 실패', err);
-    return NextResponse.json({ error: '재검증하지 못했습니다.' }, { status: 500 });
+    console.error(`[shortlist/verify] 재검증 실패 (${processed}/${total} 처리됨)`, err);
+    // 부분 진행 상황을 ShortlistVerifyResult 필드 그대로 함께 반환한다 — verifyOne이
+    // 건별로 커밋하므로 이 시점에 verified·skipped는 이미 저장된 실제 결과다.
+    // 이걸 버리고 error만 돌려주면 "38건 중 37건 완료"가 "전부 실패"로 보여
+    // 사용자가 끝난 항목을 헛되이 다시 검증시키게 된다.
+    const partial: Partial<ShortlistVerifyResult> & { error: string } = {
+      error: '재검증 중 오류가 발생했습니다. 이미 처리된 항목은 저장되었습니다.',
+      verified,
+      skipped,
+      remaining: total - processed,
+      total,
+    };
+    return NextResponse.json(partial, { status: 500 });
   }
 
-  const remaining = targets.length - processed;
-
-  return NextResponse.json({ verified, skipped, total: targets.length, remaining });
+  const result: ShortlistVerifyResult = { verified, skipped, total, remaining: total - processed };
+  return NextResponse.json(result);
 }

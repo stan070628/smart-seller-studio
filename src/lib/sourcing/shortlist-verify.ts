@@ -31,6 +31,58 @@ export interface VerifyTarget {
   logisticsSize: LogisticsSize;
 }
 
+/**
+ * 재검증 배치 결과. 라우트 응답과 UI가 공유한다.
+ * cron(/api/sourcing/cron/shortlist-verify)과 수동(/api/sourcing/shortlist/verify)
+ * 라우트가 둘 다 이 형태로 응답한다 — 수동 라우트는 건별 try/catch로 격리하지
+ * 않으므로 failed를 집계하지 않아 그 필드만 없다.
+ */
+export interface ShortlistVerifyResult {
+  /** 검증을 마치고 저장된 건수 */
+  verified: number;
+  /**
+   * 도매꾹 일시 오류로 이번엔 건너뛴 건수.
+   * 실패가 아니다 — 아무것도 저장하지 않았으므로 다음 자동 검증이 다시 시도한다.
+   * UI에서 에러로 표시하지 말 것.
+   */
+  skipped: number;
+  /**
+   * 예상 못 한 예외가 난 건수. cron만 집계한다.
+   * 이건 실제 실패이며 로그를 봐야 한다.
+   */
+  failed?: number;
+  /**
+   * 시간이 모자라 손도 대지 못한 건수(데드라인 가드로 조기 종료된 나머지).
+   * skipped와 달리 verifyOne을 호출조차 하지 않았다. 다시 호출하면
+   * verified_at ASC 정렬 덕에 오래된 것부터 이어서 처리한다.
+   */
+  remaining: number;
+  /** 이번 배치의 대상 건수 */
+  total: number;
+}
+
+/**
+ * 배치 페이싱·데드라인 상수. cron과 수동 라우트가 각자 루프를 돌리지만 네이버
+ * API 호출 규약과 타임아웃 방어 여유는 같아야 하므로 여기 한 곳에서 관리한다.
+ *
+ * verifyOne 1건은 네이버 쇼핑 API를 최대 4회 호출한다(estimateCoupangPrice가
+ * 상품명을 구간별로 쪼개 검색 — coupang-price.ts 참고). 그 함수의 주석이
+ * "배치 호출 시 호출부가 페이싱을 넣으라"고 명시하는 계약이고, 이 저장소의
+ * 선례는 naver-prices/route.ts의 NAVER_CALL_DELAY_MS·delay 패턴이다.
+ */
+export const NAVER_CALL_DELAY_MS = 200;
+
+/**
+ * 데드라인 가드 안전마진. 플랫폼 함수 타임아웃(maxDuration) 직전에 스스로
+ * 멈추기 위한 여유분 — naver-prices/route.ts의 DEADLINE_SAFETY_MARGIN_MS와 동일 패턴.
+ */
+export const DEADLINE_SAFETY_MARGIN_MS = 30_000;
+
+/** 배치 루프에서 항목 사이 페이싱에 쓰는 지연 헬퍼. */
+export function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function toInt(v: unknown): number {
   if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
   if (typeof v === 'string') {
