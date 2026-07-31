@@ -41,12 +41,12 @@
       "schedule": "0 18 * * *"
     },
     {
-      "path": "/api/sourcing/agent/run",
-      "schedule": "0 21 * * *"
-    },
-    {
       "path": "/api/listing/sourcing/check-dead-urls",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/sourcing/cron/shortlist-verify",
+      "schedule": "0 16 * * *"
     }
   ]
 }
