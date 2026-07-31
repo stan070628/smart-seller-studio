@@ -28,6 +28,7 @@ import { countCoupangProducts, countNaverProducts } from '@/lib/dashboard/produc
 import { getCoupangClient } from '@/lib/listing/coupang-client';
 import { getNaverCommerceClient } from '@/lib/listing/naver-commerce-client';
 import { fetchCoupangSettlement, fetchNaverSettlement } from '@/lib/dashboard/settlement-clients';
+import { WEEKLY_TARGETS } from '@/lib/plan/constants';
 
 const mockAuth = requireAuth as ReturnType<typeof vi.fn>;
 const mockCountCoupang = countCoupangProducts as ReturnType<typeof vi.fn>;
@@ -95,7 +96,10 @@ describe('GET /api/dashboard/summary', () => {
     expect(body.data.pipeline.coupang.주문.count).toBeGreaterThanOrEqual(0);
     expect(body.data.pipeline.naver.주문.count).toBeGreaterThanOrEqual(0);
     expect(body.data.revenue12w.weeks).toEqual([1,2,3,4,5,6,7,8,9,10,11,12]);
-    expect(body.data.revenue12w.target).toEqual([0,50,150,300,400,550,700,800,870,920,970,1000]);
+    // 활성 플랜(lib/plan/constants)의 목표치를 그대로 실어 보내는지만 본다.
+    // 값 자체가 맞는지는 plan-targets.test.ts가 검증한다 — 여기에 배열을 하드코딩하면
+    // 플랜을 교체할 때마다 썩는다 (실제로 v2→v3 교체 때 이 줄이 깨졌다).
+    expect(body.data.revenue12w.target).toEqual([...WEEKLY_TARGETS]);
     expect(body.data.revenue12w.actual).toEqual(new Array(12).fill(null));
     expect(body.data.pipeline.coupang.주문.amount).toBe(10000); // C2 regression guard
   });
