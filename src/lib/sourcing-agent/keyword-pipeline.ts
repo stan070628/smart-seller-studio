@@ -215,10 +215,11 @@ export async function runKeywordPipeline(
 
       resultRows.push({
         rank: 0,
-        // 주의: 컬럼명은 naver_price지만 이제 담기는 값은 **쿠팡 p25**다.
-        // 시세 기준을 네이버 최저가에서 쿠팡 p25로 바꾸면서 컬럼은 재사용했다
-        // (마이그레이션 없이 교체). 컬럼명과 내용이 어긋난 상태이니 이 값을
-        // "네이버 가격"으로 읽지 말 것.
+        // naver_price는 이제 **항상 null이다.**
+        // 원래 네이버 최저가를 담다가 쿠팡 p25로 용도를 바꿔 재사용했으나(마이그레이션
+        // 없이 교체), 네이버 쇼핑 검색 API가 2026-07-31자로 종료돼 어느 쪽도 구할 수 없다.
+        // 시세는 사용자가 발굴 탭에서 직접 입력해 sourcing_shortlist.coupang_p25에 저장한다.
+        // 이 컬럼은 자동 시세가 복구되기 전까지 쓰이지 않는다.
         naver_price: null,
         naver_url: null,
         domeggook_product_name: item.title,
