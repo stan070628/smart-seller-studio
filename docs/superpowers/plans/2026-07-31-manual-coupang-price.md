@@ -513,14 +513,27 @@ git commit -m "feat(sourcing): 쿠팡 실판가 수동 입력 API"
   });
 ```
 
-파일 상단 mock에 `createRequest`를 추가한다:
+파일 상단 mock에 `createRequest`를 추가한다.
+
+**`vi.hoisted`를 반드시 쓴다.** `vi.mock` 팩토리는 파일 최상단으로 호이스팅되므로
+팩토리 안에서 참조하는 값도 함께 끌어올려야 한다. 평범한 `let nextId = 100`을 밖에
+두고 팩토리에서 쓰면 `ReferenceError: Cannot access 'nextId' before initialization`이
+난다 — 이 파일 상단 주석이 경고하는 바로 그 함정이다.
 
 ```typescript
-let nextId = 100;
+const { mockCreateRequest } = vi.hoisted(() => {
+  let nextId = 100;
+  return { mockCreateRequest: vi.fn(async () => nextId++) };
+});
+
 vi.mock('@/lib/sourcing-agent/keyword-db', () => ({
-  createRequest: vi.fn(async () => nextId++),
+  createRequest: mockCreateRequest,
 }));
-vi.mock('@/lib/sourcing/db', () => ({ getSourcingPool: () => ({ query: vi.fn() }) }));
+
+// 이 팩토리는 바깥 변수를 참조하지 않으므로 hoisted가 필요 없다
+vi.mock('@/lib/sourcing/db', () => ({
+  getSourcingPool: () => ({ query: vi.fn() }),
+}));
 ```
 
 - [ ] **Step 2: 실패 확인**
