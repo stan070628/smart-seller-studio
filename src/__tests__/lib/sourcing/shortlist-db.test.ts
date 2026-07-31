@@ -11,7 +11,12 @@ vi.mock('@/lib/sourcing/db', () => ({
   getSourcingPool: () => ({ query: mockQuery }),
 }));
 
-import { upsertShortlistCandidate, listForVerify } from '@/lib/sourcing/shortlist-db';
+import {
+  upsertShortlistCandidate,
+  listForVerify,
+  listShortlist,
+  patchShortlist,
+} from '@/lib/sourcing/shortlist-db';
 
 const pool = { query: mockQuery } as never;
 
@@ -117,5 +122,35 @@ describe('listForVerify — 저장된 쿠팡가 동반 조회', () => {
     const [sql] = mockQuery.mock.calls[0];
     // 재검증이 수동 입력값을 인자로 받아야 하므로 큐 조회가 함께 가져와야 한다
     expect(sql).toContain('coupang_p25');
+  });
+});
+
+describe('1688 저장', () => {
+  // mockQuery는 파일 전체가 공유하므로 리셋하지 않으면 앞 describe의 호출이
+  // mock.calls[0]에 남아 엉뚱한 SQL을 검사하게 된다.
+  beforeEach(() => mockQuery.mockReset());
+
+  it('patchShortlist가 1688 입력값을 저장한다', async () => {
+    mockQuery.mockResolvedValueOnce({ rowCount: 1 });
+    await patchShortlist(55788793, {
+      buyKrwTotal: 3867,
+      buyCnyTotal: 17.5,
+      orderQty1688: 2,
+      exchangeRate1688: 220.97,
+      intlShipPerUnit: 322,
+    });
+    const [sql, params] = mockQuery.mock.calls[0];
+    expect(sql).toContain('buy_krw_total');
+    expect(sql).toContain('pasted_at_1688 = now()');  // 붙여넣은 시각을 함께 찍는다
+    expect(params).toContain(3867);
+  });
+
+  it('SELECT_COLS에 1688 컬럼이 포함된다', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    await listShortlist();
+    const [sql] = mockQuery.mock.calls[0];
+    for (const c of ['buy_krw_total', 'order_qty_1688', 'intl_ship_per_unit']) {
+      expect(sql).toContain(c);
+    }
   });
 });

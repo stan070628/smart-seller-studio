@@ -54,5 +54,13 @@ export interface ShortlistItem {
   verdict: Verdict | null;
   verifiedAt: string | null;
 
+  /** 1688 사입 원가 — 붙여넣기 입력값. 원가는 cost-1688.ts가 계산한다 */
+  buyKrwTotal: number | null;
+  buyCnyTotal: number | null;
+  orderQty1688: number | null;
+  exchangeRate1688: number | null;
+  intlShipPerUnit: number | null;
+  pastedAt1688: string | null;
+
   isArchived: boolean;
 }

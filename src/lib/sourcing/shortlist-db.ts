@@ -30,6 +30,12 @@ interface Row {
   margin_rate: string | null;
   verdict: string | null;
   verified_at: Date | null;
+  buy_krw_total: number | null;
+  buy_cny_total: string | null;
+  order_qty_1688: number | null;
+  exchange_rate_1688: string | null;
+  intl_ship_per_unit: number | null;
+  pasted_at_1688: Date | null;
   is_archived: boolean;
 }
 
@@ -65,6 +71,13 @@ function toItem(r: Row): ShortlistItem {
     marginRate: r.margin_rate === null ? null : Number(r.margin_rate),
     verdict: r.verdict as Verdict | null,
     verifiedAt: r.verified_at ? r.verified_at.toISOString() : null,
+    buyKrwTotal: r.buy_krw_total,
+    // buy_cny_total·exchange_rate_1688은 numeric이라 pg가 문자열로 반환한다
+    buyCnyTotal: r.buy_cny_total === null ? null : Number(r.buy_cny_total),
+    orderQty1688: r.order_qty_1688,
+    exchangeRate1688: r.exchange_rate_1688 === null ? null : Number(r.exchange_rate_1688),
+    intlShipPerUnit: r.intl_ship_per_unit,
+    pastedAt1688: r.pasted_at_1688 ? r.pasted_at_1688.toISOString() : null,
     isArchived: r.is_archived,
   };
 }
@@ -75,7 +88,10 @@ const SELECT_COLS = `
   deli_is_free, deli_type, deli_unit_qty, deli_fee,
   coupang_p25, coupang_sample_n,
   order_qty, unit_deli_fee, effective_cost, logistics_size,
-  break_even_price, margin, margin_rate, verdict, verified_at, is_archived
+  break_even_price, margin, margin_rate, verdict, verified_at,
+  buy_krw_total, buy_cny_total, order_qty_1688,
+  exchange_rate_1688, intl_ship_per_unit, pasted_at_1688,
+  is_archived
 `;
 
 /** 쇼트리스트 전체 조회. 기본은 보관 처리되지 않은 항목만 */
@@ -132,6 +148,17 @@ export interface ShortlistPatch {
   isArchived?: boolean;
   /** 사용자가 쿠팡에서 직접 확인해 입력한 실판가. null이면 지운다 */
   coupangP25?: number | null;
+
+  /**
+   * 1688 결제 화면 붙여넣기 입력값. 원가·관세·손익분기는 저장하지 않고
+   * 조회 시 cost-1688.ts가 다시 계산한다 — 관세율이 바뀌면 저장값이 조용히 낡는다.
+   * 하나라도 오면 pasted_at_1688도 now()로 함께 찍힌다.
+   */
+  buyKrwTotal?: number | null;
+  buyCnyTotal?: number | null;
+  orderQty1688?: number | null;
+  exchangeRate1688?: number | null;
+  intlShipPerUnit?: number | null;
 }
 
 /** 사용자가 직접 편집 가능한 필드만 부분 갱신한다 */
@@ -145,6 +172,22 @@ export async function patchShortlist(itemNo: number, patch: ShortlistPatch): Pro
   if (patch.orderQty !== undefined) { sets.push(`order_qty = $${i++}`); vals.push(patch.orderQty); }
   if (patch.isArchived !== undefined) { sets.push(`is_archived = $${i++}`); vals.push(patch.isArchived); }
   if (patch.coupangP25 !== undefined) { sets.push(`coupang_p25 = $${i++}`); vals.push(patch.coupangP25); }
+
+  // 1688 입력값. 하나라도 왔으면 붙여넣은 시각을 함께 찍는다 —
+  // 저장된 값이 언제 기준인지 모르면 환율·시세가 낡았는지 판단할 수 없다.
+  const has1688 = patch.buyKrwTotal !== undefined
+    || patch.buyCnyTotal !== undefined
+    || patch.orderQty1688 !== undefined
+    || patch.exchangeRate1688 !== undefined
+    || patch.intlShipPerUnit !== undefined;
+
+  if (patch.buyKrwTotal !== undefined) { sets.push(`buy_krw_total = $${i++}`); vals.push(patch.buyKrwTotal); }
+  if (patch.buyCnyTotal !== undefined) { sets.push(`buy_cny_total = $${i++}`); vals.push(patch.buyCnyTotal); }
+  if (patch.orderQty1688 !== undefined) { sets.push(`order_qty_1688 = $${i++}`); vals.push(patch.orderQty1688); }
+  if (patch.exchangeRate1688 !== undefined) { sets.push(`exchange_rate_1688 = $${i++}`); vals.push(patch.exchangeRate1688); }
+  if (patch.intlShipPerUnit !== undefined) { sets.push(`intl_ship_per_unit = $${i++}`); vals.push(patch.intlShipPerUnit); }
+  if (has1688) sets.push('pasted_at_1688 = now()');
+
   if (sets.length === 0) return;
 
   vals.push(itemNo);
