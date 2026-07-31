@@ -230,6 +230,7 @@ export async function runKeywordPipeline(
         china_price_krw: null,
         china_url: null,
         china_margin_rate: null,
+        unit_deli_fee: deli,
         // 시세를 모르니 고단가 우선의 대용으로 도매가를 쓴다.
         // p25가 항상 null이라 그대로 두면 정렬이 no-op가 되어 순서가 임의가 된다.
         _sort: item.price,
