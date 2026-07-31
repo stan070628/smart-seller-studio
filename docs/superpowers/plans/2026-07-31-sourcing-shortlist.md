@@ -929,19 +929,23 @@ export async function getShortlistItem(itemNo: number): Promise<ShortlistItem | 
   return rows[0] ? toItem(rows[0]) : null;
 }
 
-/** 후보를 추가한다. 이미 있으면 아무것도 하지 않는다. */
+/**
+ * 후보를 추가한다.
+ * @returns 실제로 삽입됐으면 true, 이미 있어서 건너뛰었으면 false
+ */
 export async function insertShortlist(
   itemNo: number,
   title: string,
   orderQty: number,
-): Promise<void> {
+): Promise<boolean> {
   const pool = getSourcingPool();
-  await pool.query(
+  const result = await pool.query(
     `INSERT INTO sourcing_shortlist (item_no, title, order_qty)
      VALUES ($1, $2, $3)
      ON CONFLICT (item_no) DO NOTHING`,
     [itemNo, title, orderQty],
   );
+  return result.rowCount === 1;
 }
 
 export async function deleteShortlist(itemNo: number): Promise<void> {
@@ -975,10 +979,16 @@ export async function patchShortlist(itemNo: number, patch: ShortlistPatch): Pro
   );
 }
 
-/** 모든 행의 사입 수량을 일괄 변경한다. */
-export async function setOrderQtyAll(orderQty: number): Promise<void> {
+/**
+ * 모든 행의 사입 수량을 일괄 변경한다.
+ * WHERE 절이 없는 것은 의도다 — 사입 수량은 리스트 전체에 적용되는 값이라
+ * 아카이브된 행까지 함께 갱신한다.
+ * @returns 갱신된 행 수
+ */
+export async function setOrderQtyAll(orderQty: number): Promise<number> {
   const pool = getSourcingPool();
-  await pool.query('UPDATE sourcing_shortlist SET order_qty = $1', [orderQty]);
+  const result = await pool.query('UPDATE sourcing_shortlist SET order_qty = $1', [orderQty]);
+  return result.rowCount ?? 0;
 }
 
 /** 검증 결과 저장용 필드 */
@@ -1024,10 +1034,17 @@ export async function saveVerifyResult(itemNo: number, r: VerifyResult): Promise
 }
 
 /** 검증 대상 목록 — cron이 오래된 것부터 처리한다. */
-export async function listForVerify(limit: number): Promise<{ itemNo: number; orderQty: number; logisticsSize: LogisticsSize }[]> {
+export async function listForVerify(
+  limit: number,
+): Promise<{ itemNo: number; title: string; orderQty: number; logisticsSize: LogisticsSize }[]> {
   const pool = getSourcingPool();
-  const { rows } = await pool.query<{ item_no: number; order_qty: number; logistics_size: string }>(
-    `SELECT item_no, order_qty, logistics_size
+  const { rows } = await pool.query<{
+    item_no: number;
+    title: string;
+    order_qty: number;
+    logistics_size: string;
+  }>(
+    `SELECT item_no, title, order_qty, logistics_size
        FROM sourcing_shortlist
       WHERE is_archived = false
       ORDER BY verified_at ASC NULLS FIRST
@@ -1036,6 +1053,7 @@ export async function listForVerify(limit: number): Promise<{ itemNo: number; or
   );
   return rows.map((r) => ({
     itemNo: r.item_no,
+    title: r.title,
     orderQty: r.order_qty,
     logisticsSize: r.logistics_size as LogisticsSize,
   }));
@@ -1317,17 +1335,26 @@ export async function buildVerifyResult(
   };
 }
 
+/** 검증 대상 1건. listForVerify의 반환 요소를 그대로 넘길 수 있다. */
+export interface VerifyTarget {
+  itemNo: number;
+  title: string;
+  orderQty: number;
+  logisticsSize: LogisticsSize;
+}
+
 /**
  * 1건을 검증하고 저장한다.
  * 도매꾹 일시 오류면 아무것도 저장하지 않고 false를 반환한다 —
  * verified_at을 갱신하지 않아야 다음 cron이 다시 시도한다.
+ *
+ * 인자를 객체로 받는 이유: itemNo와 orderQty가 둘 다 number라
+ * 위치 인자로 두면 뒤바뀌어도 컴파일이 통과한다. 상품번호 자리에
+ * 사입 수량이 들어가면 엉뚱한 상품을 조회하게 된다.
  */
-export async function verifyOne(
-  itemNo: number,
-  title: string,
-  orderQty: number,
-  logisticsSize: LogisticsSize,
-): Promise<boolean> {
+export async function verifyOne(target: VerifyTarget): Promise<boolean> {
+  const { itemNo, title, orderQty, logisticsSize } = target;
+
   let dome: DomeSnapshot | null;
   try {
     dome = await fetchDomeSnapshot(itemNo);
@@ -1422,11 +1449,6 @@ export async function POST(req: NextRequest) {
   const orderQty = body.orderQty && body.orderQty > 0 ? body.orderQty : DEFAULT_ORDER_QTY;
 
   try {
-    const existing = await getShortlistItem(itemNo);
-    if (existing) {
-      return NextResponse.json({ error: '이미 리스트에 있습니다.', item: existing }, { status: 409 });
-    }
-
     const snapshot = await fetchDomeSnapshot(itemNo);
     if (snapshot === null) {
       return NextResponse.json(
@@ -1436,8 +1458,15 @@ export async function POST(req: NextRequest) {
     }
 
     const title = await resolveTitle(itemNo);
-    await insertShortlist(itemNo, title, orderQty);
-    await verifyOne(itemNo, title, orderQty, 'xsmall');
+    const inserted = await insertShortlist(itemNo, title, orderQty);
+    if (!inserted) {
+      return NextResponse.json(
+        { error: '이미 리스트에 있습니다.', item: await getShortlistItem(itemNo) },
+        { status: 409 },
+      );
+    }
+
+    await verifyOne({ itemNo, title, orderQty, logisticsSize: 'xsmall' });
 
     return NextResponse.json({ item: await getShortlistItem(itemNo) }, { status: 201 });
   } catch (err) {
@@ -1562,7 +1591,12 @@ export async function PATCH(
     if (body.logisticsSize !== undefined || body.orderQty !== undefined) {
       const item = await getShortlistItem(no);
       if (item) {
-        await verifyOne(no, item.title, item.orderQty, item.logisticsSize);
+        await verifyOne({
+          itemNo: no,
+          title: item.title,
+          orderQty: item.orderQty,
+          logisticsSize: item.logisticsSize,
+        });
       }
     }
 
@@ -1626,7 +1660,7 @@ export async function POST(req: NextRequest) {
       if (!item) {
         return NextResponse.json({ error: '리스트에 없는 상품입니다.' }, { status: 404 });
       }
-      const ok = await verifyOne(item.itemNo, item.title, item.orderQty, item.logisticsSize);
+      const ok = await verifyOne(item);
       return NextResponse.json({ verified: ok ? 1 : 0, skipped: ok ? 0 : 1 });
     }
 
@@ -1635,9 +1669,8 @@ export async function POST(req: NextRequest) {
     let skipped = 0;
 
     for (const t of targets) {
-      const item = await getShortlistItem(t.itemNo);
-      if (!item) continue;
-      const ok = await verifyOne(item.itemNo, item.title, item.orderQty, item.logisticsSize);
+      // listForVerify가 title까지 주므로 행마다 다시 조회하지 않는다
+      const ok = await verifyOne(t);
       ok ? verified++ : skipped++;
     }
 
@@ -1665,7 +1698,7 @@ export async function POST(req: NextRequest) {
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { listForVerify, getShortlistItem } from '@/lib/sourcing/shortlist-db';
+import { listForVerify } from '@/lib/sourcing/shortlist-db';
 import { verifyOne } from '@/lib/sourcing/shortlist-verify';
 
 /** 1회 크론당 검증 상한 */
@@ -1685,14 +1718,13 @@ export async function GET(req: NextRequest) {
     const targets = await listForVerify(BATCH_LIMIT);
 
     for (const t of targets) {
-      const item = await getShortlistItem(t.itemNo);
-      if (!item) continue;
       try {
-        const ok = await verifyOne(item.itemNo, item.title, item.orderQty, item.logisticsSize);
+        // listForVerify가 title까지 주므로 행마다 다시 조회하지 않는다
+        const ok = await verifyOne(t);
         ok ? verified++ : skipped++;
       } catch (err) {
         // 1건 실패가 전체를 멈추지 않게 한다
-        console.error(`[shortlist-cron] ${item.itemNo} 검증 실패`, err);
+        console.error(`[shortlist-cron] ${t.itemNo} 검증 실패`, err);
         skipped++;
       }
     }
@@ -2427,6 +2459,6 @@ git log --oneline feat-sourcing-shortlist ^main | head -20
 | 사입 수량 일괄 적용 | 7(PATCH), 9(UI) |
 | 테스트 (손익분기·배송비·검색어·시세추정) | 2, 3, 4, 6 |
 
-**타입 일관성 확인** — `LogisticsSize`, `Verdict`, `DeliPolicy`, `DeliType`, `ShortlistItem`, `VerifyResult`는 Task 1과 5에서 정의하고 이후 Task에서 같은 이름으로만 참조한다. 함수명은 `parseDeliPolicy`, `unitDeliveryFee`, `breakEvenPrice`, `marginOf`, `buildSearchQueries`, `estimateCoupangPrice`, `fetchDomeSnapshot`, `buildVerifyResult`, `verifyOne`으로 고정한다.
+**타입 일관성 확인** — `LogisticsSize`, `Verdict`, `DeliPolicy`, `DeliType`, `ShortlistItem`, `VerifyResult`, `VerifyTarget`은 Task 1·5·6에서 정의하고 이후 Task에서 같은 이름으로만 참조한다. 함수명은 `parseDeliPolicy`, `unitDeliveryFee`, `breakEvenPrice`, `marginOf`, `buildSearchQueries`, `estimateCoupangPrice`, `fetchDomeSnapshot`, `buildVerifyResult`, `verifyOne`으로 고정한다.
 
 **남은 확인 사항** — Task 7 Step 2에서 `domeggook-url-parser.ts`의 실제 export 이름을, Task 9 Step 2에서 `design-tokens.ts`의 실제 키 이름을 확인하고 맞춘다. 두 파일 모두 기존 코드라 이름을 단정하지 않았다.
