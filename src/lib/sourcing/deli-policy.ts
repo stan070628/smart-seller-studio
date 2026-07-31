@@ -54,6 +54,11 @@ export function parseDeliPolicy(deli: unknown): DeliPolicy {
   const fee = toInt(dome?.fee ?? raw.fee);
   if (fee > 0) return { isFree: false, type: 'fixed', unitQty: null, fee };
 
+  // 여기 도달 = 무료 신호도 없는데 fee·tbl도 못 읽은 경우. 즉 "유료인데 금액 불명"이다.
+  // 실제 응답 표본에서는 관측되지 않았으나 도매꾹 응답 형식이 바뀌면 이 경로로 떨어진다.
+  // 확인 불가를 무료로 접는 것이라 배송비가 0으로 잡혀 원가가 과소산정된다.
+  // 같은 저장소의 fetch-items/single/route.ts:parseDeliPay는 같은 상황을 반대로(유료로) 본다.
+  // TODO: shortlist-verify.ts에서 이 경로를 구분해 verdict='unknown'으로 보낼지 검토한다.
   return FREE;
 }
 

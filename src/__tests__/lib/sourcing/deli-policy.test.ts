@@ -40,6 +40,17 @@ describe('parseDeliPolicy', () => {
     expect(parseDeliPolicy(undefined).isFree).toBe(true);
     expect(parseDeliPolicy(null).isFree).toBe(true);
   });
+
+  // 아래 두 케이스는 "유료인데 금액 불명"이다. 현재는 무료로 접히며, 그 동작을 고정해 둔다.
+  // 이 동작을 바꾸려면 이 테스트가 함께 바뀌어야 한다 — 조용한 변경을 막기 위한 장치다.
+  it('선결제인데 dome이 없으면 현재는 무료로 접힌다', () => {
+    expect(parseDeliPolicy({ pay: '선결제' }).isFree).toBe(true);
+  });
+
+  it('tbl이 깨져 있으면 현재는 무료로 접힌다', () => {
+    const deli = { pay: '선결제', dome: { type: '수량별비례', tbl: 'abc+def' } };
+    expect(parseDeliPolicy(deli).isFree).toBe(true);
+  });
 });
 
 describe('unitDeliveryFee', () => {
