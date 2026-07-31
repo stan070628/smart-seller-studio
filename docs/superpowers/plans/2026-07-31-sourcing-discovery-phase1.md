@@ -1190,7 +1190,9 @@ describe('evaluateCandidate', () => {
     const r = evaluateCandidate({
       domePrice: 3300,
       unitDeliFee: 300,
-      coupangP25: 9900,
+      // 10,000원 하한(MIN_SELL_PRICE_KRW)을 넘어야 손익분기 비교까지 간다.
+      // 초안은 9,900이라 최소가에서 먼저 걸려 pass가 될 수 없었다 (2026-07-31 정정)
+      coupangP25: 10500,
       coupangSampleN: 91,
       logisticsSize: 'xsmall',
     });
@@ -1203,11 +1205,14 @@ describe('evaluateCandidate', () => {
     const r = evaluateCandidate({
       domePrice: 6930,
       unitDeliFee: 300,
-      coupangP25: 6515,
+      // 실효원가 7,230 → 손익분기 15,706. 10,000 하한은 넘고 손익분기는 못 넘는 값을 골라야
+      // below_breakeven 분기가 실제로 실행된다. 초안의 6,515는 최소가에서 단락됐다 (2026-07-31 정정)
+      coupangP25: 12000,
       coupangSampleN: 40,
       logisticsSize: 'xsmall',
     });
     expect(r.verdict).toBe('fail');
+    expect(r.failReason).toBe('below_breakeven');
   });
 
   it('쿠팡 표본이 3건 미만이면 unknown이다 (fail이 아니다)', () => {
@@ -1403,7 +1408,11 @@ export function evaluateCandidate(input: CandidateInput): CandidateVerdict {
 ```typescript
 /** 도매꾹 목록 항목에서 개당 배송비를 뽑는다. 알 수 없으면 0 */
 function parseUnitDeliFee(item: DomeggookListItem): number {
-  const raw = (item as { deli?: { dome?: { fee?: string } } }).deli?.dome?.fee;
+  // dome은 상세 조회(getItemView) 응답 형태이고, 이 루프가 다루는 DomeggookListItem
+  // (getItemList)은 deli.fee로 내려온다. 초안은 dome만 읽어 항상 0을 반환했다.
+  // deli-policy.ts:54의 `dome?.fee ?? raw.fee` 관례를 따른다. (2026-07-31 정정)
+  const d = (item as { deli?: { dome?: { fee?: string }; fee?: string } }).deli;
+  const raw = d?.dome?.fee ?? d?.fee;
   const fee = raw ? Number(raw) : 0;
   if (!Number.isFinite(fee) || fee <= 0) return 0;
   return Math.round(fee / 10); // 10개 사입 기준 개당 환산
@@ -2122,6 +2131,8 @@ npm run dev
 | `isViable` 기준 불일치 | `margin-1688.ts:95`·`costco-margin.ts:49`는 `netProfit > 0`인데 `coupang-price.ts`의 `TARGET_MARGIN_RATE`는 30%다. 같은 질문에 두 기준이 답한다 | 별도 과제 — 임계값을 바꾸면 두 모듈의 기존 테스트 의미가 조용히 달라지므로 단독 커밋으로 |
 | 관세·부가세 절사 처리 | 국고금 관리법 제47조상 반올림이 아니라 절사(과세표준 1원 미만, 징수세액 10원 미만)로 보이나, 관세액 **중간단계** 처리 규정을 확인하지 못했다. 차이는 건당 최대 9원 | 별도 과제 — 관세청 1차 자료 확인 후 |
 | 마이그레이션 디렉터리 이원화 | 스키마가 `supabase/migrations/`와 `src/db/migrations/` 두 곳에 나뉘어 있다 (`trend_seeds`는 후자) | 별도 과제 |
+| 판정 엔진 이원화 | `keyword-pipeline`의 `evaluateCandidate`는 10,000원 최소가 하한이 있고 `shortlist-verify`에는 없다. 같은 후보가 p25 9,900원일 때 전자는 `fail/under_min_price`, 후자는 `pass`다 | 별도 과제 — 의도된 차이일 수 있다(발굴은 "파볼 가치가 있나", 재검증은 "계속 들고 갈까"). 다만 지금은 우연이지 명시된 설계가 아니다 |
+| `china-matcher.ts` 처리 | Task 7이 `matchOn1688` 호출을 걷어내 `china-matcher.ts`(224줄)와 연쇄로 `image-similarity.ts`(119줄)가 고아가 된다. `puppeteer-core`·`@sparticuz/chromium-min`의 유일한 사용처이기도 하다 | 사용자 판단 — 2026-05-21에 이미 한 번 제거했다 되살린 이력이 있다(`docs/superpowers/plans/2026-05-21-1688-matching-vercel-fix.md`). 이번이 두 번째 제거다 |
 
 ### 남은 기존 실패 테스트 (2026-07-31 기준 7파일 14건)
 
