@@ -78,4 +78,21 @@ describe('upsertShortlistCandidate', () => {
       expect(sql).not.toContain(`${col} = EXCLUDED.${col}`);
     }
   });
+
+  it('verified_at을 NULL로 남겨 검증 큐 맨 앞에 세운다', async () => {
+    mockQuery.mockResolvedValueOnce({ rowCount: 1 });
+    await upsertShortlistCandidate(pool, {
+      itemNo: 1, title: 't', domePrice: 1000, unitDeliFee: 0,
+      coupangP25: 20000, coupangSampleN: 10,
+      effectiveCost: 1000, breakEvenPrice: 5000, margin: 1000,
+      marginRate: 5, verdict: 'pass',
+    });
+    const [sql] = mockQuery.mock.calls[0];
+
+    // 파이프라인은 사입 10개·극소형을 가정하고 계산하지만 검증 크론은 행의 실제
+    // order_qty·logistics_size로 계산한다. NOW()로 찍으면 가정값이 검증필로 위장되고
+    // listForVerify(verified_at ASC NULLS FIRST)에서 큐 맨 뒤로 밀린다.
+    expect(sql).toContain('verified_at       = NULL');
+    expect(sql).not.toContain('verified_at       = NOW()');
+  });
 });
