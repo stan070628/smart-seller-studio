@@ -8,6 +8,7 @@ import {
 } from './rg-fees';
 import { calcMargin, calcBreakevenRoas } from './calculations';
 import { calcMarginPerUnit } from '../ad-strategy/net-profit';
+import { effectiveFeeRate } from '../tax';
 
 describe('getRgShippingFee', () => {
   it('사이즈별 입출고비+배송비 합계를 반환한다', () => {
@@ -125,6 +126,34 @@ describe('ProductAdTable 원가 계산 — VAT 포함 물류비 사용', () => {
       resolveRgShippingFee(null, 'extra_small'),
     );
     expect(marginWithVatExclusiveFee - marginWithVatInclusiveFee).toBe(173);
+  });
+});
+
+describe('ProductAdTable 원가 계산 — VAT 포함 수수료율 사용', () => {
+  // ProductAdTable.tsx:323이 실제로 넘기는 조합을 그대로 재현한다. localStorage에는
+  // 고지 요율(VAT 별도)이 저장되어 있고, 계산 시점에 effectiveFeeRate로 변환된다.
+  const price = 20000;
+  const cost = 12000;
+  const listedFeeRate = 0.108;
+
+  it('20,000원 · 극소형 기준, 고지 요율과 실효 요율의 마진 차이는 216원이다', () => {
+    // 물류비는 양쪽 다 VAT 포함(1898)으로 고정해 수수료율 효과만 분리한다.
+    const shippingFee = resolveRgShippingFee(null, 'extra_small');
+    const marginWithListedRate = calcMarginPerUnit(price, cost, listedFeeRate, shippingFee);
+    const marginWithEffectiveRate = calcMarginPerUnit(price, cost, effectiveFeeRate(listedFeeRate), shippingFee);
+    expect(marginWithListedRate - marginWithEffectiveRate).toBe(216);
+  });
+
+  it('수수료·물류비 VAT를 모두 반영하지 않으면 건당 389원(216+173) 과대평가된다', () => {
+    // 수정 전(둘 다 VAT 별도) vs 수정 후(둘 다 VAT 포함) 전체 차이.
+    const marginBeforeFix = calcMarginPerUnit(price, cost, listedFeeRate, getRgShippingFee('extra_small'));
+    const marginAfterFix = calcMarginPerUnit(
+      price,
+      cost,
+      effectiveFeeRate(listedFeeRate),
+      resolveRgShippingFee(null, 'extra_small'),
+    );
+    expect(marginBeforeFix - marginAfterFix).toBe(389);
   });
 });
 

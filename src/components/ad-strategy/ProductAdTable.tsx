@@ -76,6 +76,7 @@ function SalesInput({ name, fallback, overrides, onSave }: {
   );
 }
 import { resolveRgShippingFee, RG_SIZE_SPECS, RG_SIZE_TYPES, type RgSizeType } from '@/lib/roi/rg-fees';
+import { effectiveFeeRate } from '@/lib/tax';
 import {
   calcMarginPerUnit,
   calcBreakEvenRoas,
@@ -303,6 +304,11 @@ export default function ProductAdTable({ products }: { products: ProductAdGrade[
           {products.map((p, i) => {
             const entry = get(p.name);
             const costPrice = entry?.costPrice;
+            // 저장값(feeRate)은 쿠팡이 고지하는 요율(VAT 별도)이다. 이 화면에서는
+            // 표시·편집되지 않는 값이라 저장 시점에 바꿀 이유가 없고, 이미 localStorage에
+            // 고지 요율로 저장된 기존 항목과 의미가 섞이는 것도 피해야 한다. 간이과세자는
+            // 매입세액 공제를 받지 못해 수수료 VAT가 그대로 비용이 되므로, 계산 시점에만
+            // effectiveFeeRate로 변환해 마진 계산에 넣는다.
             const feeRate = entry?.feeRate ?? DEFAULT_FEE_RATE;
             // 로켓그로스 물류비: 사이즈 유형이 지정된 경우에만 차감된다.
             // 미지정 시 0이므로 마진이 과대평가되고 손익분기 ROAS가 과소평가된다.
@@ -320,7 +326,9 @@ export default function ProductAdTable({ products }: { products: ProductAdGrade[
             let roasCell: React.ReactNode = <span style={{ color: '#9ca3af' }}>-</span>;
 
             if (costPrice !== undefined) {
-              const margin = calcMarginPerUnit(p.currentPrice, costPrice, feeRate, rgShippingFee);
+              const margin = calcMarginPerUnit(
+                p.currentPrice, costPrice, effectiveFeeRate(feeRate), rgShippingFee,
+              );
               const breakEven = calcBreakEvenRoas(p.currentPrice, margin);
               const { perUnit, monthly } = calcNetProfit({
                 monthlySales,
