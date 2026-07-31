@@ -783,14 +783,53 @@ git commit -m "feat(sourcing): 발굴 실행 상태 폴링 API"
 
 ---
 
-## Task 6: 죽은 자동 적재 블록을 제거한다
+## Task 6: 죽은 시세 조회와 자동 적재를 걷어낸다
 
 **Files:**
-- Modify: `src/lib/sourcing-agent/keyword-pipeline.ts:224-244`
+- Modify: `src/lib/sourcing-agent/keyword-pipeline.ts` (후보 루프, 정렬, 자동 적재 블록)
 
-`if (v.verdict === 'pass')` 블록은 p25가 영원히 `null`이라 절대 발동하지 않는다. 죽은 코드로 남기면 다음 사람이 "왜 안 쌓이지"를 다시 판다.
+세 가지가 모두 죽었다.
 
-- [ ] **Step 1: 제거**
+**(1) `estimateCoupangPrice` 호출이 순수한 낭비다.** 후보 루프가 후보마다 이 함수를 부르고, 그 안에서 `buildSearchQueries`가 만든 **최대 4개 검색어로 각각 HTTP 요청**을 보낸다. 전부 404로 실패한다(네이버 쇼핑 검색 API 종료). 키워드 10개 × 후보 10개면 **최대 400회의 실패 요청**이고, 매번 `[coupang-price] API 오류 (404)`가 로그에 쌓인다. 실측으로 키워드 1개(후보 5개) 실행이 21초 걸렸는데 그 상당 부분이 이 헛수고다.
+
+**(2) 정렬 기준이 무의미해졌다.** `_sort: est?.p25 ?? 0`이 항상 0이라 `.sort((a,b) => b._sort - a._sort)`는 아무것도 하지 않는다. 원래 의도인 "고단가 우선"이 죽은 채 후보 순서가 사실상 임의다.
+
+**(3) 자동 적재 블록이 발동하지 않는다.** `if (v.verdict === 'pass')`는 p25가 영원히 null이라 도달할 수 없다. 죽은 코드로 남기면 다음 사람이 "왜 안 쌓이지"를 다시 판다.
+
+- [ ] **Step 1: 시세 조회 제거**
+
+후보 루프에서 `const est = await estimateCoupangPrice(item.title);`을 삭제하고, `evaluateCandidate` 호출을 교체한다:
+
+```typescript
+    for (const item of candidates) {
+      const deli = parseUnitDeliFee(item);
+
+      // 쿠팡 시세는 더 이상 자동으로 못 구한다 — 네이버 쇼핑 검색 API가
+      // 2026-07-31자로 종료됐다(공지 32530, 유예·대체 없음). 부르면 후보 1건당
+      // 404 나는 HTTP 요청이 최대 4번 나가고 결과는 항상 null이다.
+      // 시세는 발굴 탭에서 사용자가 직접 입력한다.
+      const v = evaluateCandidate({
+        domePrice: item.price,
+        unitDeliFee: deli,
+        coupangP25: null,
+        coupangSampleN: 0,
+        logisticsSize: 'xsmall',
+      });
+```
+
+`resultRows.push`의 `naver_price`와 `_sort`도 함께 고친다:
+
+```typescript
+        naver_price: null,
+        ...
+        // 시세를 모르니 고단가 우선의 대용으로 도매가를 쓴다.
+        // p25가 항상 null이라 그대로 두면 정렬이 no-op가 되어 순서가 임의가 된다.
+        _sort: item.price,
+```
+
+`estimateCoupangPrice` import가 더 이상 쓰이지 않으면 제거한다. **`coupang-price.ts`의 함수 자체는 남긴다** — 다른 곳이 아직 참조한다.
+
+- [ ] **Step 2: 자동 적재 블록 제거**
 
 `if (v.verdict === 'pass') { await upsertShortlistCandidate(...) }` 블록 전체를 삭제하고, 그 자리에 이유를 남긴다:
 
@@ -803,7 +842,7 @@ git commit -m "feat(sourcing): 발굴 실행 상태 폴링 API"
 
 `upsertShortlistCandidate` import가 더 이상 쓰이지 않으면 제거한다. **`shortlist-db.ts`의 함수 자체는 남긴다** — Task 8의 담기 경로가 쓴다.
 
-- [ ] **Step 2: 확인**
+- [ ] **Step 3: 확인**
 
 Run: `npx tsc --noEmit`
 Expected: 에러 없음
@@ -811,14 +850,20 @@ Expected: 에러 없음
 Run: `npx vitest run src/__tests__/lib/sourcing-agent/keyword-pipeline.test.ts`
 Expected: PASS — `evaluateCandidate` 테스트는 판정 로직만 보므로 영향 없다
 
-- [ ] **Step 3: 커밋**
+- [ ] **Step 4: 커밋**
 
 ```bash
 git add src/lib/sourcing-agent/keyword-pipeline.ts
-git commit -m "chore(sourcing): 발동 불가능한 자동 적재 블록 제거
+git commit -m "perf(sourcing): 죽은 시세 조회 제거로 실행 시간·로그 낭비 해소
 
-coupangP25가 영원히 null이라 pass 판정이 나올 수 없다.
-죽은 코드로 남기면 '왜 안 쌓이지'를 다시 파게 된다."
+네이버 쇼핑 검색 API 종료로 estimateCoupangPrice는 후보 1건당
+404 나는 HTTP 요청을 최대 4번 보내고 항상 null을 반환한다.
+키워드 10개면 최대 400회의 실패 요청이 나가고 로그가 그만큼 쌓인다.
+
+정렬 기준(_sort)도 항상 0이 되어 고단가 우선 의도가 죽어 있었다.
+도매가로 대체한다.
+
+자동 적재 블록은 pass 판정이 나올 수 없어 도달 불가능하다. 제거한다."
 ```
 
 ---
