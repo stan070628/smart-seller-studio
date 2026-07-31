@@ -4,28 +4,30 @@ import React, { useState } from 'react';
 import { C } from '@/lib/design-tokens';
 
 // ── 탭 컴포넌트들 ─────────────────────────────────────────────────────────
+import DiscoveryTab from '@/components/sourcing/DiscoveryTab';
 import ShortlistTab from '@/components/sourcing/ShortlistTab';
 import CostcoTab from '@/components/sourcing/CostcoTab';
 import SourcingAgentTab from '@/components/sourcing/SourcingAgentTab';
 import SourcingMemoTab from '@/components/sourcing/SourcingMemoTab';
 
 // ─── 타입 ─────────────────────────────────────────────────────────────────────
-type Tab = 'shortlist' | 'costco' | 'agent' | 'memo';
+type Tab = 'discovery' | 'shortlist' | 'costco' | 'agent' | 'memo';
 
 const TABS: { key: Tab; label: string }[] = [
+  { key: 'discovery', label: '발굴' },
   { key: 'shortlist', label: '소싱리스트' },
   { key: 'costco', label: '코스트코' },
-  { key: 'agent', label: '봇결과' },
+  { key: 'agent', label: '분석결과' },
   { key: 'memo', label: '메모' },
 ];
 
 // ─── 메인 컴포넌트 ─────────────────────────────────────────────────────────────
 export default function SourcingDashboard() {
-  const [activeTab, setActiveTab] = useState<Tab>('shortlist');
+  const [activeTab, setActiveTab] = useState<Tab>('discovery');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', backgroundColor: C.bg, fontFamily: "'Noto Sans KR', sans-serif", color: C.text }}>
-      {/* ── 탭 (소싱리스트 / 코스트코 / 봇결과 / 메모) ───────────────────────── */}
+      {/* ── 탭 (발굴 / 소싱리스트 / 코스트코 / 분석결과 / 메모) ─────────────── */}
       <div style={{ display: 'flex', backgroundColor: C.card, borderBottom: `2px solid ${C.border}`, padding: '0 24px' }}>
         {TABS.map((tab) => (
           <button
@@ -46,6 +48,7 @@ export default function SourcingDashboard() {
       </div>
 
       <div style={{ flex: 1, padding: '20px 24px', overflow: 'auto' }}>
+        {activeTab === 'discovery' && <DiscoveryTab />}
         {activeTab === 'shortlist' && <ShortlistTab />}
         {activeTab === 'costco' && <CostcoTab />}
         {activeTab === 'agent' && <SourcingAgentTab />}
