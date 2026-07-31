@@ -145,6 +145,17 @@ describe('1688 저장', () => {
     expect(params).toContain(3867);
   });
 
+  it('국제배송비만 고치면 붙여넣은 시각을 건드리지 않는다', async () => {
+    // 국제배송비는 붙여넣기가 아니라 사람이 따로 넣는 값이다. 이걸로 시각이
+    // 갱신되면 pasted_at_1688이 "환율을 언제 가져왔나"를 더 이상 답하지 못한다.
+    mockQuery.mockResolvedValueOnce({ rowCount: 1 });
+    await patchShortlist(55788793, { intlShipPerUnit: 450 });
+    const [sql, params] = mockQuery.mock.calls[0];
+    expect(sql).toContain('intl_ship_per_unit');
+    expect(sql).not.toContain('pasted_at_1688');
+    expect(params).toContain(450);
+  });
+
   it('SELECT_COLS에 1688 컬럼이 포함된다', async () => {
     mockQuery.mockResolvedValueOnce({ rows: [] });
     await listShortlist();

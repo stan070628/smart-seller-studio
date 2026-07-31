@@ -173,13 +173,16 @@ export async function patchShortlist(itemNo: number, patch: ShortlistPatch): Pro
   if (patch.isArchived !== undefined) { sets.push(`is_archived = $${i++}`); vals.push(patch.isArchived); }
   if (patch.coupangP25 !== undefined) { sets.push(`coupang_p25 = $${i++}`); vals.push(patch.coupangP25); }
 
-  // 1688 입력값. 하나라도 왔으면 붙여넣은 시각을 함께 찍는다 —
+  // 붙여넣기에서 온 값이 하나라도 왔으면 붙여넣은 시각을 함께 찍는다 —
   // 저장된 값이 언제 기준인지 모르면 환율·시세가 낡았는지 판단할 수 없다.
+  //
+  // intlShipPerUnit은 일부러 뺐다. 국제배송비는 붙여넣기가 아니라 사람이 따로
+  // 넣는 값이라, 이걸로 시각을 갱신하면 pasted_at_1688이 "붙여넣은 때"가 아니라
+  // "마지막으로 뭔가 건드린 때"가 되어 환율 신선도를 판단할 수 없게 된다.
   const has1688 = patch.buyKrwTotal !== undefined
     || patch.buyCnyTotal !== undefined
     || patch.orderQty1688 !== undefined
-    || patch.exchangeRate1688 !== undefined
-    || patch.intlShipPerUnit !== undefined;
+    || patch.exchangeRate1688 !== undefined;
 
   if (patch.buyKrwTotal !== undefined) { sets.push(`buy_krw_total = $${i++}`); vals.push(patch.buyKrwTotal); }
   if (patch.buyCnyTotal !== undefined) { sets.push(`buy_cny_total = $${i++}`); vals.push(patch.buyCnyTotal); }
