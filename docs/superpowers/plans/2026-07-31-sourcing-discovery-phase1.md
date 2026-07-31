@@ -578,6 +578,30 @@ git commit -m "fix(sourcing): 관세 과세가격에 운임 포함, 품목별 �
 - Create: `src/lib/sourcing/intl-shipping.ts`
 - Test: `src/__tests__/lib/sourcing/intl-shipping.test.ts`
 
+> **2026-07-31 스펙 리뷰 결과.** 구현은 아래 코드와 바이트 단위로 동일하며 결함이 없었다.
+> 다만 **아래 사양 자체에서 세 가지가 나왔다.** 하나는 즉시 고쳤고 둘은 Phase 3 착수 전 확인 대상이다.
+>
+> **(1) 부동소수점 과다청구 — 고침 (커밋 `136accf3`).** `Math.ceil(weightKg * 2)`는 IEEE754 오차에
+> 노출된다. 과금무게는 보통 `수량 × 개당무게`로 만들어지는데 `25 × 1.1 = 27.500000000000004`이라
+> 27.5kg 발주가 28kg으로 청구돼 한 칸(550~800원)이 더 붙었다. 절상 전에 `WEIGHT_EPSILON_KG`(1e-9)를
+> 깎아 흡수한다. **아래 코드 블록은 이 수정을 반영하지 않은 원본이므로, 다시 실행할 때는 현재
+> 파일을 기준으로 삼아라.**
+>
+> **(2) 잔차 흡수 분기가 테스트에 전혀 안 걸린다.** 아래 3품목 테스트는 `diff`가 정확히 0이라
+> `allocateOrderCost`의 잔차 보정 블록이 **한 번도 실행되지 않는다.** 무작위 발주 3,000건에서는
+> 약 25%가 잔차 0이 아니다. 죽은 코드는 아니지만 검증된 적이 없다 — Phase 3 전에 테스트를 붙일 것.
+>
+> **(3) 운임 몫에는 잔차 보정이 없다.** 잔차 흡수는 `allocatedKrw`(배송비+고정비) 계열에만 있고
+> `shippingShare` 계열에는 없다. 위 3품목 예시에서 `Σ(dutiableFreightPerUnitKrw × qty)`가 15,268원으로
+> 실제 배송비 15,280원보다 **12원 적다.** 개당 정수 반올림에서 오는 구조적 드리프트라 완전 해소에는
+> 잔여분 추적이 필요하다. 금액은 미미하나 이 값이 Phase 3에서 **관세 과표**로 들어가므로 성격을 알고 쓸 것.
+>
+> **아울러 인터페이스 간극 하나.** 이 모듈은 `perUnitKrw`(배송비+고정비)와 `dutiableFreightPerUnitKrw`
+> (배송비만)를 주는데, Task 3의 `Margin1688Input`은 `dutiableFreightKrw`와 `nonDutiableFreightKrw`를
+> 요구한다. 비과세분은 소비자가 `perUnitKrw − dutiableFreightPerUnitKrw`로 직접 빼야 한다.
+> 값은 맞지만(glove: 449 − 184 = 265) 부호 실수를 부르기 쉬우므로, Phase 3에서
+> `nonDutiableFreightPerUnitKrw`를 직접 내주도록 넓히는 편이 낫다.
+
 - [ ] **Step 1: 실패 테스트 작성**
 
 `src/__tests__/lib/sourcing/intl-shipping.test.ts` 신규 생성:
