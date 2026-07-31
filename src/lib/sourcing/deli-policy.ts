@@ -59,6 +59,8 @@ export function parseDeliPolicy(deli: unknown): DeliPolicy {
   // 확인 불가를 무료로 접는 것이라 배송비가 0으로 잡혀 원가가 과소산정된다.
   // 같은 저장소의 fetch-items/single/route.ts:parseDeliPay는 같은 상황을 반대로(유료로) 본다.
   // TODO: shortlist-verify.ts에서 이 경로를 구분해 verdict='unknown'으로 보낼지 검토한다.
+  //       구분하려면 parseDeliPolicy 호출 전에 원본 deli에서 pay·who로 "원래 유료였는지"를
+  //       직접 재확인해야 한다. 반환된 DeliPolicy만으로는 진짜 무료와 이 경로를 구분할 수 없다.
   return FREE;
 }
 
