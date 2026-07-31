@@ -130,6 +130,8 @@ export interface ShortlistPatch {
   logisticsSize?: LogisticsSize;
   orderQty?: number;
   isArchived?: boolean;
+  /** 사용자가 쿠팡에서 직접 확인해 입력한 실판가. null이면 지운다 */
+  coupangP25?: number | null;
 }
 
 /** 사용자가 직접 편집 가능한 필드만 부분 갱신한다 */
@@ -142,6 +144,7 @@ export async function patchShortlist(itemNo: number, patch: ShortlistPatch): Pro
   if (patch.logisticsSize !== undefined) { sets.push(`logistics_size = $${i++}`); vals.push(patch.logisticsSize); }
   if (patch.orderQty !== undefined) { sets.push(`order_qty = $${i++}`); vals.push(patch.orderQty); }
   if (patch.isArchived !== undefined) { sets.push(`is_archived = $${i++}`); vals.push(patch.isArchived); }
+  if (patch.coupangP25 !== undefined) { sets.push(`coupang_p25 = $${i++}`); vals.push(patch.coupangP25); }
   if (sets.length === 0) return;
 
   vals.push(itemNo);

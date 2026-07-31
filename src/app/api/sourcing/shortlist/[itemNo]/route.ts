@@ -55,6 +55,7 @@ export async function PATCH(
     logisticsSize?: LogisticsSize;
     orderQty?: number;
     isArchived?: boolean;
+    coupangP25?: number | null;
   };
   try {
     body = await req.json();
@@ -77,13 +78,32 @@ export async function PATCH(
     }
   }
 
+  /** 쿠팡 실판가 상한 — 오타로 자릿수가 밀린 값을 거른다 */
+  const MAX_COUPANG_PRICE = 10_000_000;
+
+  if (body.coupangP25 !== undefined && body.coupangP25 !== null) {
+    if (!Number.isInteger(body.coupangP25) || body.coupangP25 < 0) {
+      return NextResponse.json({ error: '쿠팡 실판가는 0 이상의 정수여야 합니다.' }, { status: 400 });
+    }
+    if (body.coupangP25 > MAX_COUPANG_PRICE) {
+      return NextResponse.json(
+        { error: `쿠팡 실판가는 ${MAX_COUPANG_PRICE.toLocaleString()}원 이하여야 합니다.` },
+        { status: 400 },
+      );
+    }
+  }
+
   try {
     await patchShortlist(no, body);
 
-    // 원가에 영향을 주는 값(물류 사이즈·사입 수량)이 바뀌면 손익분기를 다시 계산한다.
-    // verifyOne이 false를 반환해도(도매꾹 일시 오류) 실패로 취급하지 않는다 —
-    // 다음 cron이 재시도한다.
-    if (body.logisticsSize !== undefined || body.orderQty !== undefined) {
+    // 원가·시세에 영향을 주는 값(물류 사이즈·사입 수량·쿠팡 실판가)이 바뀌면
+    // 손익분기·판정을 다시 계산한다. verifyOne이 false를 반환해도(도매꾹 일시 오류)
+    // 실패로 취급하지 않는다 — 다음 cron이 재시도한다.
+    if (
+      body.logisticsSize !== undefined ||
+      body.orderQty !== undefined ||
+      body.coupangP25 !== undefined
+    ) {
       const item = await getShortlistItem(no);
       if (item) {
         await verifyOne({
