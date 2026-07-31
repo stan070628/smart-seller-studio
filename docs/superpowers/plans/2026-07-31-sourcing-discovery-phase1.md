@@ -33,7 +33,6 @@
 | `src/lib/sourcing/trend-discovery.ts` | 프롬프트를 함수화하고 규제·단가·SKU·시즌 조건 주입 |
 | `src/lib/sourcing-agent/keyword-pipeline.ts` | 시세 기준을 쿠팡 p25로 교체, `shortlist` 자동 적재, 1688 매칭 제거 |
 | `src/components/sourcing/SourcingDashboard.tsx` | 탭 라벨·구성 변경 |
-| `vercel.json` | 존재하지 않는 `agent/run` 크론 제거 |
 
 **테스트 파일**
 
@@ -467,14 +466,23 @@ export function calc1688Margin(input: Margin1688Input): Margin1688Result {
     sellVatKrw: round0(sellVatKrw),
     netProfit: round0(netProfit),
     marginRate,
-    marginRatePct: round2(marginRate * 100),
-    isViable: marginRate >= 0.3,
+    marginRatePct: Math.round(marginRate * 1000) / 10,
+    isViable: netProfit > 0,
     channelFeeRate,
   };
 }
 ```
 
 > 기존 return 문의 나머지 필드(`sellVatKrw` 이후)는 현재 코드와 동일하게 유지한다. 위 코드는 전체 함수를 대체한다.
+>
+> **2026-07-31 정정.** 초안의 이 블록은 `marginRatePct: round2(marginRate * 100)`과
+> `isViable: marginRate >= 0.3`으로 적혀 있어 바로 위 산문("현재 코드와 동일하게 유지")과 충돌했다.
+> 실제 코드는 `Math.round(marginRate * 1000) / 10`과 `netProfit > 0`이고, 자매 모듈
+> `costco-margin.ts:48-49`도 같은 패턴이다. 이 Task의 목표는 과세운임·관세율이지 수익성 임계값이
+> 아니므로 **기존 동작을 유지**하도록 블록을 실제 코드에 맞췄다.
+>
+> 다만 `isViable`(이익 > 0)과 `coupang-price.ts`의 `TARGET_MARGIN_RATE`(30%)가 서로 다른 기준을
+> 쓰는 것은 사실이다. 별건으로 다룬다 — 아래 "이 계획에서 제외한 것" 참조.
 
 이어서 `src/lib/sourcing-agent/china-matcher.ts:206`을 고친다. 자동 매칭 경로는 관세사 수임료를 따로
 알지 못하므로 기존 상수를 전부 과세운임으로 본다 — 현재 동작을 그대로 보존하는 매핑이다:
@@ -1582,10 +1590,15 @@ git commit -m "feat(sourcing): pass 판정 후보를 쇼트리스트에 자동 �
 
 **Files:**
 - Create: `src/app/api/sourcing/agent/run/route.ts`
-- Modify: `vercel.json`
 - Test: `src/__tests__/api/sourcing-agent-run.test.ts`
 
-`vercel.json`에 등록된 `agent/run` 크론은 **파일이 없어 매번 404**였다. 시드를 골라서 실행하는 설계이므로 **크론 항목을 제거**하고 웹 실행용 POST만 만든다.
+시드를 골라서 실행하는 설계이므로 크론 진입점 없이 웹 실행용 POST만 만든다.
+
+> **2026-07-31 전제 정정.** 초안은 "`vercel.json`에 등록된 `agent/run` 크론이 파일이 없어 매번 404였다"고
+> 적었으나, 확인해 보니 **`vercel.json`에 그 항목이 이미 없다.** 등록된 크론 12개를 전수 점검한 결과
+> 전부 라우트 파일이 존재하고 `GET`을 export한다 — 죽은 크론은 하나도 없다.
+> 따라서 아래 Step 5는 이미 충족된 상태이며, 확인만 하고 넘어간다. **없는 항목을 찾다가
+> 새로 추가했다 지우는 짓을 하지 마라.**
 
 - [ ] **Step 1: 실패 테스트 작성**
 
@@ -1736,17 +1749,17 @@ async function notify(chatId: string, message: string): Promise<void> {
 Run: `npx vitest run src/__tests__/api/sourcing-agent-run.test.ts`
 Expected: PASS — 4 tests
 
-- [ ] **Step 5: 죽은 크론 제거**
-
-`vercel.json`에서 `/api/sourcing/agent/run` 항목을 삭제한다.
+- [ ] **Step 5: 죽은 크론 확인** (제거할 것이 이미 없다 — 위 전제 정정 참조)
 
 Run: `grep -n 'agent/run' vercel.json`
-Expected: 출력 없음
+Expected: 출력 없음 — **이미 그렇다.** `vercel.json`을 수정하지 마라.
+
+확인만 하고 넘어간다. 2026-07-31 기준 등록된 크론 12개는 전부 라우트 파일이 있고 `GET`을 export한다.
 
 - [ ] **Step 6: 커밋**
 
 ```bash
-git add src/app/api/sourcing/agent/run/route.ts src/lib/sourcing-agent/keyword-pipeline.ts src/__tests__/api/sourcing-agent-run.test.ts vercel.json
+git add src/app/api/sourcing/agent/run/route.ts src/lib/sourcing-agent/keyword-pipeline.ts src/__tests__/api/sourcing-agent-run.test.ts
 git commit -m "feat(sourcing): 발굴 웹 실행 라우트 추가, 404 크론 제거"
 ```
 
@@ -2058,7 +2071,7 @@ npm run dev
 - [ ] `npx tsc --noEmit` 에러 없음
 - [ ] `npm run build` 성공
 - [ ] `/sourcing`에서 시드를 골라 실행하면 소싱리스트에 `pass` 후보가 쌓인다
-- [ ] `grep -rn 'agent/run' vercel.json` 결과 없음
+- [ ] `grep -rn 'agent/run' vercel.json` 결과 없음 (착수 시점에 이미 충족 — 새로 넣지 않았는지 확인용)
 
 ## 이 계획에서 제외한 것
 
@@ -2070,7 +2083,10 @@ npm run dev
 | 액션 탭 | 재고가 도착해 판매 데이터가 쌓인 뒤에야 판정할 것이 생긴다 | 4단계 |
 | SKU 분기 자동 판별 | 도매꾹 목록 API에 옵션 정보가 없다. 상세 조회가 필요해 비용이 는다 | 미정 |
 | 기존 실패 테스트 7파일 14건 | 소싱과 무관한 영역(이미지·키워드 AI·에셋 UI)이고 각각 별도 조사가 필요하다 | 별도 과제 |
-| `ProductAdTable.tsx` 물류비 VAT 미반영 | Task 1 범위 밖. 광고전략 화면이 아직 `getRgShippingFee()`(VAT 별도)를 쓴다 | 별도 과제 |
+| `ProductAdTable.tsx` 물류비 VAT 미반영 | Task 1 범위 밖. 광고전략 화면이 아직 `getRgShippingFee()`(VAT 별도)를 쓴다 | 별도 과제 (2026-07-31 해소 — 커밋 `66c3dc40`·`94fd69e9`) |
+| `isViable` 기준 불일치 | `margin-1688.ts:95`·`costco-margin.ts:49`는 `netProfit > 0`인데 `coupang-price.ts`의 `TARGET_MARGIN_RATE`는 30%다. 같은 질문에 두 기준이 답한다 | 별도 과제 — 임계값을 바꾸면 두 모듈의 기존 테스트 의미가 조용히 달라지므로 단독 커밋으로 |
+| 관세·부가세 절사 처리 | 국고금 관리법 제47조상 반올림이 아니라 절사(과세표준 1원 미만, 징수세액 10원 미만)로 보이나, 관세액 **중간단계** 처리 규정을 확인하지 못했다. 차이는 건당 최대 9원 | 별도 과제 — 관세청 1차 자료 확인 후 |
+| 마이그레이션 디렉터리 이원화 | 스키마가 `supabase/migrations/`와 `src/db/migrations/` 두 곳에 나뉘어 있다 (`trend_seeds`는 후자) | 별도 과제 |
 
 ### 남은 기존 실패 테스트 (2026-07-31 기준 7파일 14건)
 
