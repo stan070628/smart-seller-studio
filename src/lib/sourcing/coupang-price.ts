@@ -14,18 +14,22 @@
  */
 
 import type { LogisticsSize } from '@/types/shortlist';
-import { getRgShippingFee, type RgSizeType } from '@/lib/roi/rg-fees';
+import { resolveRgShippingFee, type RgSizeType } from '@/lib/roi/rg-fees';
+import { effectiveFeeRate } from '@/lib/tax';
 
 /**
  * 쿠팡 판매수수료.
  * 주의: 이 값이 calculator/coupang-fees.ts 등 여러 곳에 각각 하드코딩되어 있다.
  * 정식 소스를 만드는 일은 별도 정리 과제로 둔다.
  *
+ * VAT 처리: 쿠팡 고지 요율은 VAT 별도다. 간이과세자는 매입세액 공제를 받지 못해
+ * VAT가 그대로 비용이 되므로 effectiveFeeRate()를 거쳐 실질 부담률을 쓴다.
+ *
  * export하는 이유: 수수료는 쿠팡이라는 외부 플랫폼의 사실이라 이 모듈 밖에서도
  * 재사용될 여지가 있다. 반면 TARGET_MARGIN_RATE·MARGIN_TO_LOGISTICS는 이
  * 모듈이 내리는 정책적 판단이라 캡슐화한다.
  */
-export const COMMISSION_RATE = 0.108;
+export const COMMISSION_RATE = effectiveFeeRate(0.108);
 
 /**
  * 쇼트리스트의 사이즈 값 → 로켓그로스 요율표(rg-fees.ts) 키.
@@ -41,11 +45,15 @@ const RG_SIZE_KEY: Record<LogisticsSize, RgSizeType> = {
 /**
  * 로켓그로스 입출고비+배송비 (원). 판매된 상품에만 부과된다.
  * 값은 rg-fees.ts에서 파생한다 — 요율표가 바뀌면 그 파일만 고치면 된다.
+ * VAT 처리: 로켓그로스 물류비도 VAT 별도 고지다. 간이과세자는 매입세액 공제를
+ * 받지 못해 물류비 VAT가 그대로 원가가 되므로 resolveRgShippingFee()로 실효원가를 쓴다.
+ * measuredFee(첫 인자)는 정산서 기반 실측값 자리인데, 이 상수는 사이즈 유형별
+ * 기본값만 다루므로 null을 넘겨 항상 사이즈 유형 기본값을 쓰게 한다.
  */
 export const LOGISTICS_FEE: Record<LogisticsSize, number> = {
-  xsmall: getRgShippingFee(RG_SIZE_KEY.xsmall),
-  small: getRgShippingFee(RG_SIZE_KEY.small),
-  medium: getRgShippingFee(RG_SIZE_KEY.medium),
+  xsmall: resolveRgShippingFee(null, RG_SIZE_KEY.xsmall),
+  small: resolveRgShippingFee(null, RG_SIZE_KEY.small),
+  medium: resolveRgShippingFee(null, RG_SIZE_KEY.medium),
 };
 
 /** 목표 마진율 — 광고 손익분기 ROAS 333% 이하를 만드는 하한 */
