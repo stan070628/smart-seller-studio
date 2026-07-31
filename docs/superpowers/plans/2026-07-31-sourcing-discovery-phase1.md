@@ -55,7 +55,7 @@
 
 기존 테스트가 `COMMISSION_RATE`를 import해 계산에 쓰므로 상수를 바꿔도 통과한다. **명시적 기대값 테스트를 추가**해야 회귀를 잡는다.
 
-> **2026-07-31 범위 정정.** 최초 작성 시 이 Task는 `COMMISSION_RATE`만 바꾸는 것으로 적혀 있었으나, 아래 기대값(9,470원)은 `LOGISTICS_FEE.xsmall = 1898`(VAT 포함)을 전제한다. 선행 커밋 `1bc6a664`가 `resolveRgShippingFee()`를 만들면서 `coupang-price.ts` 배선을 빠뜨려 실제 값은 1725(VAT 별도)였다. 따라서 이 Task는 `LOGISTICS_FEE`의 VAT 반영까지 포함한다. 또한 기존 하드코딩 기대값 5건(`7638` / `8535` / `9671` / `8891` / `3506`)은 옛 원가 모델의 값이므로 새 계산값으로 갱신한다 — Task 3 Step 4와 같은 원칙이다.
+> **2026-07-31 범위 정정.** 최초 작성 시 이 Task는 `COMMISSION_RATE`만 바꾸는 것으로 적혀 있었으나, 아래 기대값(9,471원)은 `LOGISTICS_FEE.xsmall = 1898`(VAT 포함)을 전제한다. 선행 커밋 `1bc6a664`가 `resolveRgShippingFee()`를 만들면서 `coupang-price.ts` 배선을 빠뜨려 실제 값은 1725(VAT 별도)였다. 따라서 이 Task는 `LOGISTICS_FEE`의 VAT 반영까지 포함한다. 또한 기존 하드코딩 기대값 5건(`7638` / `8535` / `9671` / `8891` / `3506`)은 옛 원가 모델의 값이므로 새 계산값으로 갱신한다 — Task 3 Step 4와 같은 원칙이다.
 
 - [ ] **Step 1: 실패 테스트 작성**
 
@@ -1042,7 +1042,7 @@ import { evaluateCandidate } from '@/lib/sourcing-agent/keyword-pipeline';
 
 describe('evaluateCandidate', () => {
   it('쿠팡 p25가 손익분기가 이상이면 pass다', () => {
-    // 실효원가 3,600 · 극소형 → 손익분기 9,470. p25 9,900
+    // 실효원가 3,600 · 극소형 → 손익분기 9,471. p25 9,900
     const r = evaluateCandidate({
       domePrice: 3300,
       unitDeliFee: 300,
@@ -1052,7 +1052,7 @@ describe('evaluateCandidate', () => {
     });
     expect(r.verdict).toBe('pass');
     expect(r.effectiveCost).toBe(3600);
-    expect(r.breakEvenPrice).toBe(9470);
+    expect(r.breakEvenPrice).toBe(9471); // 2026-07-31 VAT 반영 — Task 1 참조
   });
 
   it('p25가 손익분기 미달이면 fail이다', () => {
@@ -1309,9 +1309,9 @@ describe('upsertShortlistCandidate', () => {
       coupangP25: 9900,
       coupangSampleN: 91,
       effectiveCost: 3600,
-      breakEvenPrice: 9470,
-      margin: 3126,
-      marginRate: 0.3158,
+      breakEvenPrice: 9471,
+      margin: 3226,
+      marginRate: 0.3259,
       verdict: 'pass',
     });
 
@@ -1331,9 +1331,9 @@ describe('upsertShortlistCandidate', () => {
       coupangP25: 9900,
       coupangSampleN: 91,
       effectiveCost: 3600,
-      breakEvenPrice: 9470,
-      margin: 3126,
-      marginRate: 0.3158,
+      breakEvenPrice: 9471,
+      margin: 3226,
+      marginRate: 0.3259,
       verdict: 'pass',
     });
     const [sql] = mockQuery.mock.calls[0];
