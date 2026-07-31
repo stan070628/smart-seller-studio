@@ -304,8 +304,28 @@ git commit -m "feat(sourcing): 품목별 관세율과 과세운임 반영 계산
 ## Task 3: margin-1688에 과세운임·품목별 관세율 반영
 
 **Files:**
-- Modify: `src/lib/sourcing/margin-1688.ts:19-20, 50-56`
+- Modify: `src/lib/sourcing/margin-1688.ts:19-20, 22-32, 50-56`
+- Modify: `src/components/sourcing/MarginCalc.tsx`
+- Modify: `src/lib/sourcing-agent/china-matcher.ts:206`
 - Test: `src/lib/sourcing/__tests__/margin-1688.test.ts`
+
+> `shippingPerUnitKrw`를 쪼개면 **컴파일이 깨지는 호출부가 셋**이다. 값 불일치가 아니라 타입 오류라
+> `npx tsc --noEmit`으로 전부 드러난다. `MarginCalc.tsx`(58·82·114행)는 Step 5에서,
+> `china-matcher.ts`(206행)는 아래 Step 3 끝에서, 기존 테스트 6곳은 Step 4에서 처리한다.
+
+> **2026-07-31 범위 정정 두 건.** Task 2 코드 리뷰에서 나온 것으로, 초안대로 진행하면 둘 다 실제로 터진다.
+>
+> **(1) 운임을 과세분/비과세분으로 쪼갠다.** 초안은 `dutiableFreightKrw`에 `shippingPerUnitKrw`를 통째로 넣었다.
+> 그런데 `tariff.ts`가 스스로 "주의 2: 관세사 수임료는 과세운임이 아니다"라고 금지한 것을 첫 호출부가
+> 어기는 꼴이다. 게다가 Task 4의 `allocateOrderCost()`는 이미 운임을 두 갈래(`perUnitKrw` = 배송비+고정비,
+> `dutiableFreightPerUnitKrw` = 배송비만)로 내주므로, 어느 쪽을 넣어도 틀린다 —
+> 전자는 수임료에 세금을 물리고, 후자는 비과세분이 원가에서 통째로 증발한다.
+> 따라서 `Margin1688Input`의 `shippingPerUnitKrw`를 `dutiableFreightKrw` + `nonDutiableFreightKrw`로 나눈다.
+>
+> **(2) 세율 자동 반영은 카테고리가 아니라 품목명 기준이다.** 초안 Step 5는 카테고리 select에
+> `getTariffRate`를 물렸는데, 앱의 정규 카테고리 13종 중 표가 답을 바꾸는 것은 `패션의류` 하나뿐이다.
+> 세율을 가르는 품목(신발·우산·카페트)이 커머스 카테고리를 **가로지르기** 때문이다.
+> 반면 상품명에는 그 단어가 그대로 들어 있다. 그래서 품목명 입력란을 두고 거기에 문다.
 
 - [ ] **Step 1: 실패 테스트 작성**
 
@@ -317,7 +337,8 @@ describe('과세운임 반영 (2026-07-31)', () => {
     buyPriceRmb: 512.82,   // 10개입 박스, 개당 51.282위안
     packQty: 10,
     exchangeRate: 195,     // 개당 10,000원
-    shippingPerUnitKrw: 322,
+    dutiableFreightKrw: 322,     // 배송비 몫 — 과세 대상
+    nonDutiableFreightKrw: 0,    // 관세사 수임료 등 — 과세 대상 아님
     channel: 'coupang' as const,
     categoryName: null,
     sellPrice: 20000,
@@ -348,8 +369,24 @@ describe('과세운임 반영 (2026-07-31)', () => {
     expect(cloth.purchaseCostKrw).toBe(12830);
     expect(cloth.purchaseCostKrw - glove.purchaseCostKrw).toBe(567);
   });
+
+  it('비과세 부대비는 원가에는 들어가되 과세는 되지 않는다', () => {
+    // 관세사 수임료 22,000원을 10개에 배분 → 개당 2,200원
+    const r = calc1688Margin({ ...base, tariffRate: 0.08, nonDutiableFreightKrw: 2200 });
+
+    // 과세 쪽은 부대비가 0일 때와 완전히 동일해야 한다
+    expect(r.dutiableValueKrw).toBe(10322);
+    expect(r.tariffKrw).toBe(826);
+    expect(r.importVatKrw).toBe(1115);
+
+    // 원가에는 더해진다 — 12,263 + 2,200
+    expect(r.purchaseCostKrw).toBe(14463);
+  });
 });
 ```
+
+> 마지막 테스트가 이 Task의 핵심이다. 부대비를 과세가격에 넣으면 `tariffKrw`가 826이 아니라 1,002가 되고,
+> 원가에서 빼먹으면 `purchaseCostKrw`가 12,263에 머문다. 두 오류를 동시에 잡는다.
 
 - [ ] **Step 2: 실패 확인**
 
@@ -364,10 +401,24 @@ Expected: FAIL — `Property 'dutiableValueKrw' does not exist` 또는 `expected
 import { calcImportTax, IMPORT_VAT_RATE } from './tariff';
 ```
 
-기존 `export const IMPORT_VAT_RATE = 0.1;` 줄을 삭제하고 re-export로 교체:
+기존 `export const IMPORT_VAT_RATE = 0.1;` **와 `export const DEFAULT_TARIFF_RATE = 0.08;` 두 줄을 모두** 삭제하고 re-export로 교체한다:
 
 ```typescript
-export { IMPORT_VAT_RATE };
+import { calcImportTax, IMPORT_VAT_RATE, DEFAULT_TARIFF_RATE } from './tariff';
+export { IMPORT_VAT_RATE, DEFAULT_TARIFF_RATE };
+```
+
+> `DEFAULT_TARIFF_RATE`도 `tariff.ts`와 중복이다. 초안은 `IMPORT_VAT_RATE`만 통합하고 이걸 남겨 절반만
+> 정리하는 상태가 됐다. 소비자(`MarginCalc.tsx`, `china-matcher.ts`)는 계속 `margin-1688`에서 가져오므로
+> re-export만 하면 호출부는 손댈 필요가 없다.
+
+`Margin1688Input`의 `shippingPerUnitKrw`를 두 필드로 교체:
+
+```typescript
+  /** 과세운임 — 배송비 몫만. 관세 과표에 들어간다 */
+  dutiableFreightKrw: number;
+  /** 비과세 부대비 — 관세사 수임료 등. 원가에는 들어가되 과세되지 않는다 */
+  nonDutiableFreightKrw: number;
 ```
 
 `Margin1688Result` 인터페이스에 필드 추가 (`landedKrw` 바로 아래):
@@ -385,14 +436,16 @@ export function calc1688Margin(input: Margin1688Input): Margin1688Result {
   const landedKrw = perUnitRmb * input.exchangeRate;
 
   // 과세가격에 운임이 포함된다. 상품가만 쓰면 관세·부가세가 과소 계상된다.
+  // 단 배송비 몫만 넣는다 — 관세사 수임료를 과세가격에 넣으면 세금이 이중으로 붙는다.
   const tax = calcImportTax({
     goodsKrw: landedKrw,
-    dutiableFreightKrw: input.shippingPerUnitKrw,
+    dutiableFreightKrw: input.dutiableFreightKrw,
     tariffRate: input.tariffRate,
   });
 
-  // 운임은 이미 과세가격에 들어갔으므로 다시 더하지 않는다.
-  const purchaseCostKrw = tax.totalKrw;
+  // 과세운임은 이미 dutyPaidValueKrw에 들어갔으므로 다시 더하지 않는다.
+  // 비과세 부대비는 과세는 안 됐지만 실제로 지불한 돈이므로 여기서 더한다.
+  const purchaseCostKrw = tax.dutyPaidValueKrw + input.nonDutiableFreightKrw;
   const totalCostKrw = purchaseCostKrw + input.groceryRunningCost;
 
   const channelFeeRate = getCategoryFeeRate(input.categoryName, input.channel) ?? CHANNEL_FEE[input.channel];
@@ -423,31 +476,79 @@ export function calc1688Margin(input: Margin1688Input): Margin1688Result {
 
 > 기존 return 문의 나머지 필드(`sellVatKrw` 이후)는 현재 코드와 동일하게 유지한다. 위 코드는 전체 함수를 대체한다.
 
+이어서 `src/lib/sourcing-agent/china-matcher.ts:206`을 고친다. 자동 매칭 경로는 관세사 수임료를 따로
+알지 못하므로 기존 상수를 전부 과세운임으로 본다 — 현재 동작을 그대로 보존하는 매핑이다:
+
+```typescript
+    dutiableFreightKrw: DEFAULT_SHIPPING_PER_UNIT_KRW,
+    nonDutiableFreightKrw: 0,
+```
+
 - [ ] **Step 4: 통과 확인**
 
 Run: `npx vitest run src/lib/sourcing/__tests__/margin-1688.test.ts`
 Expected: PASS
 
-기존 테스트가 옛 계산값을 기대해 깨질 수 있다. 깨진 케이스는 **새 계산이 맞으므로 기대값을 갱신**한다. 갱신할 때 주석으로 `// 2026-07-31 과세운임 반영` 표시를 남긴다.
+기존 테스트가 두 가지 이유로 깨진다. 성격이 다르니 구분해서 처리한다.
 
-- [ ] **Step 5: MarginCalc 카테고리 연동**
+1. **컴파일 오류** — `shippingPerUnitKrw`를 쓰는 6곳(27·45·61·77·98행 근처). 전부
+   `dutiableFreightKrw`로 바꾸고 `nonDutiableFreightKrw: 0`을 추가한다. 기존 테스트는 전부
+   관세사 수임료가 없는 시나리오이므로 0이 맞고, 이 치환은 **값을 바꾸지 않는다.**
+2. **값 불일치** — 옛 계산은 관세를 상품가에만 물렸다. 새 계산이 맞으므로 **기대값을 갱신**하고
+   주석으로 `// 2026-07-31 과세운임 반영` 표시를 남긴다.
 
-`src/components/sourcing/MarginCalc.tsx`에서 관세율 입력이 카테고리를 따라가게 한다. import 추가:
+1번을 2번으로 착각해 기대값을 건드리면 안 된다. 1번은 값이 그대로여야 정상이다.
+
+- [ ] **Step 5: MarginCalc 배선**
+
+`src/components/sourcing/MarginCalc.tsx`를 두 가지 고친다.
+
+**(a) 운임 입력을 둘로 나눈다.** 기존 `NumField label="개당 국제배송 (원)"`이 `form.shippingPerUnitKrw`에 물려 있다. 이것을 두 칸으로 바꾼다:
+
+```tsx
+<NumField label="개당 과세운임 (원)" value={form.dutiableFreightKrw}
+          onChange={(v) => update('dutiableFreightKrw', v)} step={100}
+          hint="배송비 몫. 관세 과표에 포함된다" />
+<NumField label="개당 통관 부대비 (원)" value={form.nonDutiableFreightKrw}
+          onChange={(v) => update('nonDutiableFreightKrw', v)} step={100}
+          hint="관세사 수임료 등. 원가에는 들어가되 과세되지 않는다" />
+```
+
+`INITIAL`의 `shippingPerUnitKrw: 1000`도 `dutiableFreightKrw: 1000, nonDutiableFreightKrw: 0`으로 교체한다.
+
+**(b) 품목명으로 관세율을 채운다.** 카테고리가 아니라 품목명이다 — 세율을 가르는 품목(신발·우산·카페트)이 커머스 카테고리를 가로지르기 때문이다.
+
+import 추가:
 
 ```typescript
 import { getTariffRate } from '@/lib/sourcing/tariff';
 ```
 
-`update` 함수 아래에 핸들러 추가:
+`FormState`에 `itemName: string` 추가(`INITIAL`은 빈 문자열). `update` 함수 아래에 핸들러 추가:
 
 ```typescript
-  /** 카테고리를 바꾸면 관세율을 표 기준으로 맞춰준다 (수동 수정은 그대로 유지) */
-  function updateCategory(v: string) {
-    setForm((f) => ({ ...f, categoryName: v, tariffRate: getTariffRate(v) }));
+  /**
+   * 품목명을 바꾸면 관세율을 표 기준으로 맞춰준다.
+   * 카테고리가 아니라 품목명에 무는 이유: 세율이 갈리는 품목(신발 13%, 우산 13%,
+   * 카페트 10%)이 커머스 카테고리를 가로질러서, 카테고리로는 판별되지 않는다.
+   * 표에 없으면 기본값 8%가 들어오고, 사용자가 관세율 칸을 직접 고치면 그대로 남는다.
+   */
+  function updateItemName(v: string) {
+    setForm((f) => ({ ...f, itemName: v, tariffRate: getTariffRate(v) }));
   }
 ```
 
-카테고리 SelectField의 `onChange`를 `updateCategory`로 교체한다.
+품목명 텍스트 입력을 관세율 칸 **위에** 둔다 — 값이 흘러가는 방향과 화면 순서를 맞춘다:
+
+```tsx
+<TextField label="품목명" value={form.itemName} onChange={updateItemName}
+           placeholder="예: 3단 자동우산, 방한 장갑"
+           hint="관세율이 자동으로 채워진다. 아래에서 직접 고칠 수 있다" />
+```
+
+`TextField`가 없으면 `NumField`·`SelectField` 옆에 같은 스타일로 새로 만든다.
+
+카테고리 SelectField는 **그대로 둔다.** 그건 채널 수수료율(`getCategoryFeeRate`)이 쓰는 값이라 관세와 무관하다.
 
 - [ ] **Step 6: 전체 테스트**
 
@@ -1957,7 +2058,7 @@ npm run dev
 
 | 항목 | 이유 | 다음 단계 |
 |---|---|---|
-| 1688 붙여넣기 파싱 | 발굴이 먼저 돌아야 붙여넣을 후보가 생긴다 | 2단계 |
+| 1688 붙여넣기 파싱 | 발굴이 먼저 돌아야 붙여넣을 후보가 생긴다 | 2단계 — 프로토타입이 커밋 `eed33c82`에 있다 (`tools/margin-calculator/src/lib/parse-1688.ts`). 단가×수량≈합계 관계로 가격 구간이 섞인 텍스트에서 실제 적용 단가를 판별한다. 같은 커밋의 `grocery-cost.ts`(그로스 운영비 분해)·`fx.ts`(실시간 환율)도 함께 볼 것 |
 | 국제배송 설정 화면 | `intl-shipping.ts`는 만들되 UI는 발주 시점에 필요하다 | 2~3단계 |
 | 발주 화면·실비 배분 | 첫 발주 직전에 만들면 된다 | 3단계 |
 | 액션 탭 | 재고가 도착해 판매 데이터가 쌓인 뒤에야 판정할 것이 생긴다 | 4단계 |
