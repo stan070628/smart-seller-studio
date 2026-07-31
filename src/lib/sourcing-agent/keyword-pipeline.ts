@@ -1,9 +1,8 @@
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { extractKeywordsFromProduct } from '@/lib/sourcing/ai-keyword-extract';
 import { getDomeggookClient } from '@/lib/sourcing/domeggook-client';
-import { estimateCoupangPrice, breakEvenPrice, marginOf } from '@/lib/sourcing/coupang-price';
+import { breakEvenPrice, marginOf } from '@/lib/sourcing/coupang-price';
 import { parseDeliPolicy, unitDeliveryFee } from '@/lib/sourcing/deli-policy';
-import { upsertShortlistCandidate } from '@/lib/sourcing/shortlist-db';
 import {
   createRequest,
   completeRequest,
@@ -193,17 +192,17 @@ export async function runKeywordPipeline(
     const resultRows: Array<KeywordResultInsert & { _sort: number }> = [];
 
     for (const item of candidates) {
-      const est = await estimateCoupangPrice(item.title);
       const deli = parseUnitDeliFee(item);
 
-      // estimateCoupangPrice는 표본이 MIN_SAMPLE(3) 미만이면 **null을 반환한다**.
-      // evaluateCandidate가 p25=null을 이미 unknown으로 처리하도록 설계돼 있으므로
-      // 여기서 분기하지 말고 그대로 흘려보낸다. est.p25로 직접 접근하면 터진다.
+      // 쿠팡 시세는 더 이상 자동으로 못 구한다 — 네이버 쇼핑 검색 API가
+      // 2026-07-31자로 종료됐다(공지 32530, 유예·대체 없음). 부르면 후보 1건당
+      // 404 나는 HTTP 요청이 최대 4번 나가고 결과는 항상 null이다.
+      // 시세는 발굴 탭에서 사용자가 직접 입력한다.
       const v = evaluateCandidate({
         domePrice: item.price,
         unitDeliFee: deli,
-        coupangP25: est?.p25 ?? null,
-        coupangSampleN: est?.sampleN ?? 0,
+        coupangP25: null,
+        coupangSampleN: 0,
         logisticsSize: 'xsmall',
       });
 
@@ -216,7 +215,7 @@ export async function runKeywordPipeline(
         // 시세 기준을 네이버 최저가에서 쿠팡 p25로 바꾸면서 컬럼은 재사용했다
         // (마이그레이션 없이 교체). 컬럼명과 내용이 어긋난 상태이니 이 값을
         // "네이버 가격"으로 읽지 말 것.
-        naver_price: est?.p25 ?? null,
+        naver_price: null,
         naver_url: null,
         domeggook_product_name: item.title,
         domeggook_price: item.price,
@@ -227,31 +226,15 @@ export async function runKeywordPipeline(
         china_price_krw: null,
         china_url: null,
         china_margin_rate: null,
-        _sort: est?.p25 ?? 0,
+        // 시세를 모르니 고단가 우선의 대용으로 도매가를 쓴다.
+        // p25가 항상 null이라 그대로 두면 정렬이 no-op가 되어 순서가 임의가 된다.
+        _sort: item.price,
       });
 
-      if (v.verdict === 'pass') {
-        await upsertShortlistCandidate(pool, {
-          itemNo: item.no,
-          title: item.title,
-          domePrice: item.price,
-          unitDeliFee: deli,
-          // est는 null일 수 있다 (Task 7 참조). 다만 이 블록은 verdict === 'pass'일 때만
-          // 도달하고, p25가 null이면 evaluateCandidate가 unknown을 내므로 실제로는
-          // 항상 값이 있다. 그래도 타입을 좁혀야 컴파일된다.
-          coupangP25: est?.p25 ?? null,
-          coupangSampleN: est?.sampleN ?? 0,
-          effectiveCost: v.effectiveCost,
-          breakEvenPrice: v.breakEvenPrice,
-          margin: v.margin,
-          // DB의 margin_rate는 백분율 1자리다. 비율을 그대로 넣으면 0.3으로 뭉개진다.
-          // 변환식은 shortlist-verify.ts:283과 동일하게 맞춘다.
-          marginRate: v.marginRate !== null ? Math.round(v.marginRate * 1000) / 10 : null,
-          verdict: v.verdict,
-        }).catch((e) =>
-          console.warn('[keyword-pipeline] 쇼트리스트 적재 실패:', item.no, e),
-        );
-      }
+      // 자동 적재는 하지 않는다. 네이버 쇼핑 검색 API 종료(2026-07-31)로
+      // coupangP25가 영원히 null이라 pass 판정이 나올 수 없기 때문이다.
+      // 사용자가 발굴 탭에서 쿠팡 실판가를 확인하고 직접 담는다.
+      // 자동 시세가 복구되면 이 자리에 되살린다.
     }
 
     // 5. 예상 판매가 내림차순 상위 5개 — 고단가 우선
