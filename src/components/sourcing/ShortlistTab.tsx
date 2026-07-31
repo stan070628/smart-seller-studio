@@ -181,7 +181,17 @@ export default function ShortlistTab() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? '수정하지 못했습니다.');
-      setItems((prev) => prev.map((it) => (it.itemNo === itemNo ? data.item : it)));
+      // data는 res.json()의 반환값이라 타입이 any다 — 컴파일러가 null을 못 잡는다.
+      // PATCH가 성공한 직후 다른 탭·세션에서 같은 항목이 삭제되면 서버는 200과
+      // 함께 { item: null }을 돌려준다(getShortlistItem이 없는 행에 null을 반환).
+      // 그걸 그대로 배열에 넣으면 이후 렌더에서 it.verdict 접근 시 TypeError로
+      // 테이블 전체가 죽으므로, null이면 해당 행을 목록에서 제거한다 — 이미
+      // 서버에서 사라진 항목이므로 화면에서도 빼는 게 맞다.
+      setItems((prev) =>
+        data.item
+          ? prev.map((it) => (it.itemNo === itemNo ? data.item : it))
+          : prev.filter((it) => it.itemNo !== itemNo),
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : '수정하지 못했습니다.');
     } finally {
