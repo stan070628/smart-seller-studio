@@ -203,7 +203,9 @@ export async function matchOn1688(
     buyPriceRmb: best.priceRmb,
     exchangeRate: DEFAULT_EXCHANGE_RATE_KRW_PER_RMB,
     tariffRate: DEFAULT_TARIFF_RATE,
-    shippingPerUnitKrw: DEFAULT_SHIPPING_PER_UNIT_KRW,
+    // 자동 매칭 경로는 관세사 수임료를 따로 알지 못하므로 상수 전액을 과세운임으로 본다.
+    dutiableFreightKrw: DEFAULT_SHIPPING_PER_UNIT_KRW,
+    nonDutiableFreightKrw: 0,
     packQty: 1,
     channel: 'coupang',
     categoryName: null,

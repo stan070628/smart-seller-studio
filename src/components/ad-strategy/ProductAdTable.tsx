@@ -75,7 +75,8 @@ function SalesInput({ name, fallback, overrides, onSave }: {
     </div>
   );
 }
-import { getRgShippingFee, RG_SIZE_SPECS, RG_SIZE_TYPES, type RgSizeType } from '@/lib/roi/rg-fees';
+import { resolveRgShippingFee, RG_SIZE_SPECS, RG_SIZE_TYPES, type RgSizeType } from '@/lib/roi/rg-fees';
+import { effectiveFeeRate } from '@/lib/tax';
 import {
   calcMarginPerUnit,
   calcBreakEvenRoas,
@@ -144,7 +145,6 @@ function RgSizeSelect({
   value: RgSizeType | null;
   onChange: (v: RgSizeType | null) => void;
 }) {
-  const fee = getRgShippingFee(value);
   return (
     <select
       value={value ?? ''}
@@ -166,7 +166,7 @@ function RgSizeSelect({
       <option value="">사이즈 미지정 (물류비 0)</option>
       {RG_SIZE_TYPES.map((tp) => (
         <option key={tp} value={tp}>
-          {RG_SIZE_SPECS[tp].label} · {fmt(getRgShippingFee(tp))}원
+          {RG_SIZE_SPECS[tp].label} · {fmt(resolveRgShippingFee(null, tp))}원
         </option>
       ))}
     </select>
@@ -304,10 +304,18 @@ export default function ProductAdTable({ products }: { products: ProductAdGrade[
           {products.map((p, i) => {
             const entry = get(p.name);
             const costPrice = entry?.costPrice;
+            // 저장값(feeRate)은 쿠팡이 고지하는 요율(VAT 별도)이다. 이 화면에서는
+            // 표시·편집되지 않는 값이라 저장 시점에 바꿀 이유가 없고, 이미 localStorage에
+            // 고지 요율로 저장된 기존 항목과 의미가 섞이는 것도 피해야 한다. 간이과세자는
+            // 매입세액 공제를 받지 못해 수수료 VAT가 그대로 비용이 되므로, 계산 시점에만
+            // effectiveFeeRate로 변환해 마진 계산에 넣는다.
             const feeRate = entry?.feeRate ?? DEFAULT_FEE_RATE;
             // 로켓그로스 물류비: 사이즈 유형이 지정된 경우에만 차감된다.
             // 미지정 시 0이므로 마진이 과대평가되고 손익분기 ROAS가 과소평가된다.
-            const rgShippingFee = getRgShippingFee(entry?.rgSizeType);
+            // CostEntry에는 실측 정산액 필드가 없으므로 measuredFee는 항상 null —
+            // 사이즈 유형 기본값에 VAT를 반영한 실질 부담액이 쓰인다. 간이과세자는
+            // 매입세액 공제를 받지 못해 물류비 VAT가 그대로 원가가 되기 때문이다.
+            const rgShippingFee = resolveRgShippingFee(null, entry?.rgSizeType);
             const monthlySales = salesOverrides[p.name] ?? p.monthlySales;
             const isWinner = winnerOverrides[p.name] ?? p.isItemWinner;
             const winnerOverridden = p.name in winnerOverrides;
@@ -318,7 +326,9 @@ export default function ProductAdTable({ products }: { products: ProductAdGrade[
             let roasCell: React.ReactNode = <span style={{ color: '#9ca3af' }}>-</span>;
 
             if (costPrice !== undefined) {
-              const margin = calcMarginPerUnit(p.currentPrice, costPrice, feeRate, rgShippingFee);
+              const margin = calcMarginPerUnit(
+                p.currentPrice, costPrice, effectiveFeeRate(feeRate), rgShippingFee,
+              );
               const breakEven = calcBreakEvenRoas(p.currentPrice, margin);
               const { perUnit, monthly } = calcNetProfit({
                 monthlySales,

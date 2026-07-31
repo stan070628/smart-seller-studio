@@ -232,3 +232,71 @@ export async function listForVerify(
     logisticsSize: r.logistics_size as LogisticsSize,
   }));
 }
+
+export interface ShortlistCandidateInput {
+  itemNo: number;
+  title: string;
+  domePrice: number;
+  unitDeliFee: number;
+  coupangP25: number | null;
+  coupangSampleN: number;
+  effectiveCost: number;
+  breakEvenPrice: number;
+  margin: number | null;
+  marginRate: number | null;
+  verdict: string;
+}
+
+/**
+ * 발굴 파이프라인이 판정한 후보를 쇼트리스트에 넣는다.
+ *
+ * 이미 있는 항목이면 검증 결과만 갱신한다. **사용자 메모와 아카이브 상태는 덮지 않는다** —
+ * 자동 적재가 사람의 판단을 지우면 안 되기 때문이다.
+ *
+ * marginRate 단위 주의: DB의 margin_rate는 numeric(5,1) — **백분율 1자리**다(예: 32.6).
+ * evaluateCandidate()는 비율(0.326)을 돌려주므로 호출부에서 변환해 넘긴다.
+ * 비율을 그대로 넣으면 0.3으로 반올림되어 값이 소실된다.
+ *
+ * verified_at을 NULL로 두는 이유: 파이프라인은 사입 10개·극소형을 **가정하고** 계산한다.
+ * 반면 검증 크론은 행에 실제로 저장된 order_qty·logistics_size로 계산한다
+ * (shortlist-verify.ts:238-240). 사용자가 30개·중형으로 바꿔 둔 항목이 발굴에 다시 걸리면
+ * 파생값만 10개·극소형 기준으로 덮여 행 내부가 모순된다.
+ *
+ * NULL로 두면 두 가지가 동시에 해결된다.
+ *   - listForVerify가 `verified_at ASC NULLS FIRST`로 뽑으므로 **검증 큐 맨 앞**에 서서
+ *     행의 실제 설정으로 곧 재계산된다.
+ *   - 그 전까지 ShortlistTab이 "검증 이력 없음"으로 표시한다(ShortlistTab.tsx:48).
+ *     아직 검증되지 않은 가정값이므로 그 표시가 사실이다.
+ * NOW()로 찍으면 가정값이 검증필로 위장되고, 큐 맨 뒤로 밀려 한 바퀴 도는 동안 남는다.
+ */
+export async function upsertShortlistCandidate(
+  pool: { query: (sql: string, params: unknown[]) => Promise<unknown> },
+  c: ShortlistCandidateInput,
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO sourcing_shortlist (
+       item_no, title, dome_price, unit_deli_fee,
+       coupang_p25, coupang_sample_n,
+       effective_cost, break_even_price, margin, margin_rate,
+       verdict, verified_at, added_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, NULL, NOW())
+     ON CONFLICT (item_no) DO UPDATE SET
+       title             = EXCLUDED.title,
+       dome_price        = EXCLUDED.dome_price,
+       unit_deli_fee     = EXCLUDED.unit_deli_fee,
+       coupang_p25       = EXCLUDED.coupang_p25,
+       coupang_sample_n  = EXCLUDED.coupang_sample_n,
+       effective_cost    = EXCLUDED.effective_cost,
+       break_even_price  = EXCLUDED.break_even_price,
+       margin            = EXCLUDED.margin,
+       margin_rate       = EXCLUDED.margin_rate,
+       verdict           = EXCLUDED.verdict,
+       verified_at       = NULL`,
+    [
+      c.itemNo, c.title, c.domePrice, c.unitDeliFee,
+      c.coupangP25, c.coupangSampleN,
+      c.effectiveCost, c.breakEvenPrice, c.margin, c.marginRate,
+      c.verdict,
+    ],
+  );
+}

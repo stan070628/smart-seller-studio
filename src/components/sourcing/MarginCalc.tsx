@@ -11,6 +11,7 @@ import {
   type CompareResult,
   type Channel,
 } from '@/lib/sourcing/margin-1688';
+import { getTariffRate } from '@/lib/sourcing/tariff';
 
 const CATEGORY_OPTIONS = [
   '생활용품',
@@ -47,6 +48,8 @@ const RECO_STYLE: Record<
 interface FormState extends Omit<Margin1688Input, 'categoryName' | 'channel'> {
   categoryName: string;
   channel: Channel;
+  /** 관세율 자동 조회용. calc1688Margin에는 넘기지 않는다 */
+  itemName: string;
   wholesaleMarginPerUnitKrw: number;
   monthlySalesQty: number;
 }
@@ -55,7 +58,9 @@ const INITIAL: FormState = {
   buyPriceRmb: 0,
   exchangeRate: DEFAULT_EXCHANGE_RATE_KRW_PER_RMB,
   tariffRate: DEFAULT_TARIFF_RATE,
-  shippingPerUnitKrw: 1000,
+  itemName: '',
+  dutiableFreightKrw: 1000,
+  nonDutiableFreightKrw: 0,
   packQty: 1,
   channel: 'coupang',
   categoryName: '생활용품',
@@ -74,12 +79,23 @@ export default function MarginCalc() {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
+  /**
+   * 품목명을 바꾸면 관세율을 표 기준으로 맞춰준다.
+   * 카테고리가 아니라 품목명에 무는 이유: 세율이 갈리는 품목(신발 13%, 우산 13%,
+   * 카페트 10%)이 커머스 카테고리를 가로질러서, 카테고리로는 판별되지 않는다.
+   * 표에 없으면 기본값 8%가 들어오고, 사용자가 관세율 칸을 직접 고치면 그대로 남는다.
+   */
+  function updateItemName(v: string) {
+    setForm((f) => ({ ...f, itemName: v, tariffRate: getTariffRate(v) }));
+  }
+
   function handleCalculate() {
     const r = calc1688Margin({
       buyPriceRmb: form.buyPriceRmb,
       exchangeRate: form.exchangeRate,
       tariffRate: form.tariffRate,
-      shippingPerUnitKrw: form.shippingPerUnitKrw,
+      dutiableFreightKrw: form.dutiableFreightKrw,
+      nonDutiableFreightKrw: form.nonDutiableFreightKrw,
       packQty: Math.max(form.packQty, 1),
       channel: form.channel,
       categoryName: form.categoryName,
@@ -110,8 +126,16 @@ export default function MarginCalc() {
           <NumField label="1688 박스가 (위안)" value={form.buyPriceRmb} onChange={(v) => update('buyPriceRmb', v)} step={0.01} />
           <NumField label="입수 (개/박스)" value={form.packQty} onChange={(v) => update('packQty', v)} step={1} />
           <NumField label="환율 (원/위안)" value={form.exchangeRate} onChange={(v) => update('exchangeRate', v)} step={0.1} />
+          <TextField label="품목명" value={form.itemName} onChange={updateItemName}
+                     placeholder="예: 3단 자동우산, 방한 장갑"
+                     hint="관세율이 자동으로 채워진다. 아래에서 직접 고칠 수 있다" />
           <NumField label="관세율 (0.08 = 8%)" value={form.tariffRate} onChange={(v) => update('tariffRate', v)} step={0.01} />
-          <NumField label="개당 국제배송 (원)" value={form.shippingPerUnitKrw} onChange={(v) => update('shippingPerUnitKrw', v)} step={100} />
+          <NumField label="개당 과세운임 (원)" value={form.dutiableFreightKrw}
+                    onChange={(v) => update('dutiableFreightKrw', v)} step={100}
+                    hint="배송비 몫. 관세 과표에 포함된다" />
+          <NumField label="개당 통관 부대비 (원)" value={form.nonDutiableFreightKrw}
+                    onChange={(v) => update('nonDutiableFreightKrw', v)} step={100}
+                    hint="관세사 수임료 등. 원가에는 들어가되 과세되지 않는다" />
           <NumField label="개당 그로스 운영비 (원)" value={form.groceryRunningCost} onChange={(v) => update('groceryRunningCost', v)} step={100} hint="입고+보관+출고. 그로스 미사용 0" />
           <SelectField
             label="채널"
@@ -179,6 +203,30 @@ function NumField({
   );
 }
 
+function TextField({
+  label, value, onChange, placeholder, hint,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  hint?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="text-xs font-medium">{label}</span>
+      <input
+        type="text"
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+      />
+      {hint && <span className="mt-0.5 block text-[10px] text-gray-500">{hint}</span>}
+    </label>
+  );
+}
+
 function SelectField<T extends string>({
   label, value, options, onChange,
 }: {
@@ -210,6 +258,11 @@ function ResultCard({ r }: { r: Margin1688Result }) {
       <h2 className="mb-3 text-base font-semibold">실 마진 결과</h2>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
         <Row label="환율 적용 원가" value={`${r.landedKrw.toLocaleString()} 원`} />
+        {/*
+          과세가격을 보여주는 이유: 관세는 상품가가 아니라 여기에 세율을 곱한 값이다.
+          이 행이 없으면 상품가 10,000원에 8%인데 관세가 826원으로 찍혀 계산 오류처럼 보인다.
+        */}
+        <Row label="과세가격 (상품가+과세운임)" value={`${r.dutiableValueKrw.toLocaleString()} 원`} />
         <Row label="관세" value={`${r.tariffKrw.toLocaleString()} 원`} />
         <Row label="수입 VAT" value={`${r.importVatKrw.toLocaleString()} 원`} />
         <Row label="입고 직전 사입원가" value={`${r.purchaseCostKrw.toLocaleString()} 원`} />

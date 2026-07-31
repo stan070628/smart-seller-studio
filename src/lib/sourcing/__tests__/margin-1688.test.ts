@@ -28,7 +28,8 @@ describe('calc1688Margin — 1688 사입 실 마진', () => {
       buyPriceRmb: 10,
       exchangeRate: 200,
       tariffRate: 0.08,
-      shippingPerUnitKrw: 1000,
+      dutiableFreightKrw: 1000,
+      nonDutiableFreightKrw: 0,
       packQty: 1,
       channel: 'coupang',
       categoryName: '생활용품',
@@ -36,7 +37,9 @@ describe('calc1688Margin — 1688 사입 실 마진', () => {
       groceryRunningCost: 0,
     });
 
-    expect(r.purchaseCostKrw).toBeCloseTo(3376, 0);
+    // 2026-07-31 과세운임 반영: 과세가격 3,000(=2,000+1,000) → 관세 240, 부가세 324 → 3,564.
+    // 옛 값 3,376은 관세를 상품가 2,000에만 물려 188원 과소 계상한 결과다.
+    expect(r.purchaseCostKrw).toBeCloseTo(3564, 0);
     expect(r.netProfit).toBeGreaterThan(0);
     expect(r.marginRatePct).toBeGreaterThan(0);
   });
@@ -46,7 +49,8 @@ describe('calc1688Margin — 1688 사입 실 마진', () => {
       buyPriceRmb: 1000,
       exchangeRate: 200,
       tariffRate: 0.08,
-      shippingPerUnitKrw: 0,
+      dutiableFreightKrw: 0,
+      nonDutiableFreightKrw: 0,
       packQty: 100,
       channel: 'coupang',
       categoryName: '생활용품',
@@ -62,7 +66,8 @@ describe('calc1688Margin — 1688 사입 실 마진', () => {
       buyPriceRmb: 10,
       exchangeRate: 200,
       tariffRate: 0.08,
-      shippingPerUnitKrw: 1000,
+      dutiableFreightKrw: 1000,
+      nonDutiableFreightKrw: 0,
       packQty: 1,
       channel: 'coupang',
       categoryName: '생활용품',
@@ -70,7 +75,7 @@ describe('calc1688Margin — 1688 사입 실 마진', () => {
       groceryRunningCost: 1500,
     });
 
-    expect(r.totalCostKrw).toBeCloseTo(3376 + 1500, 0);
+    expect(r.totalCostKrw).toBeCloseTo(3564 + 1500, 0); // 2026-07-31 과세운임 반영
   });
 
   it('사입원가 > 시장가 → 마이너스 마진, isViable=false', () => {
@@ -78,7 +83,8 @@ describe('calc1688Margin — 1688 사입 실 마진', () => {
       buyPriceRmb: 100,
       exchangeRate: 200,
       tariffRate: 0.08,
-      shippingPerUnitKrw: 5000,
+      dutiableFreightKrw: 5000,
+      nonDutiableFreightKrw: 0,
       packQty: 1,
       channel: 'coupang',
       categoryName: '생활용품',
@@ -95,7 +101,8 @@ describe('calc1688Margin — 1688 사입 실 마진', () => {
       buyPriceRmb: 10,
       exchangeRate: 200,
       tariffRate: 0.08,
-      shippingPerUnitKrw: 1000,
+      dutiableFreightKrw: 1000,
+      nonDutiableFreightKrw: 0,
       packQty: 1,
       categoryName: '생활용품',
       sellPrice: 10000,
@@ -105,6 +112,58 @@ describe('calc1688Margin — 1688 사입 실 마진', () => {
     const naver = calc1688Margin({ ...base, channel: 'naver' });
     const coupang = calc1688Margin({ ...base, channel: 'coupang' });
     expect(naver.netProfit).toBeGreaterThan(coupang.netProfit);
+  });
+});
+
+describe('과세운임 반영 (2026-07-31)', () => {
+  const base = {
+    buyPriceRmb: 512.82,   // 10개입 박스, 개당 51.282위안
+    packQty: 10,
+    exchangeRate: 195,     // 개당 10,000원
+    dutiableFreightKrw: 322,     // 배송비 몫 — 과세 대상
+    nonDutiableFreightKrw: 0,    // 관세사 수임료 등 — 과세 대상 아님
+    channel: 'coupang' as const,
+    categoryName: null,
+    sellPrice: 20000,
+    groceryRunningCost: 0,
+  };
+
+  it('과세가격은 상품가 + 운임이다', () => {
+    const r = calc1688Margin({ ...base, tariffRate: 0.08 });
+    expect(r.landedKrw).toBe(10000);
+    expect(r.dutiableValueKrw).toBe(10322);
+  });
+
+  it('관세는 과세가격 기준으로 계산된다 (상품가 기준이 아님)', () => {
+    const r = calc1688Margin({ ...base, tariffRate: 0.08 });
+    expect(r.tariffKrw).toBe(826);     // 10322 × 0.08, 기존 버그면 800
+    expect(r.importVatKrw).toBe(1115); // (10322+826) × 0.1, 기존 버그면 1080
+  });
+
+  it('매입원가에 운임이 이중 계상되지 않는다', () => {
+    const r = calc1688Margin({ ...base, tariffRate: 0.08 });
+    // 과세가격 10,322 + 관세 826 + 부가세 1,115 = 12,263
+    expect(r.purchaseCostKrw).toBe(12263);
+  });
+
+  it('의류 13%가 장갑 8%보다 비싸다', () => {
+    const glove = calc1688Margin({ ...base, tariffRate: 0.08 });
+    const cloth = calc1688Margin({ ...base, tariffRate: 0.13 });
+    expect(cloth.purchaseCostKrw).toBe(12830);
+    expect(cloth.purchaseCostKrw - glove.purchaseCostKrw).toBe(567);
+  });
+
+  it('비과세 부대비는 원가에는 들어가되 과세는 되지 않는다', () => {
+    // 관세사 수임료 22,000원을 10개에 배분 → 개당 2,200원
+    const r = calc1688Margin({ ...base, tariffRate: 0.08, nonDutiableFreightKrw: 2200 });
+
+    // 과세 쪽은 부대비가 0일 때와 완전히 동일해야 한다
+    expect(r.dutiableValueKrw).toBe(10322);
+    expect(r.tariffKrw).toBe(826);
+    expect(r.importVatKrw).toBe(1115);
+
+    // 원가에는 더해진다 — 12,263 + 2,200
+    expect(r.purchaseCostKrw).toBe(14463);
   });
 });
 

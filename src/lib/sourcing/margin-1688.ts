@@ -12,18 +12,24 @@ import {
   getCategoryFeeRate,
   type Channel,
 } from './shared/channel-policy';
+import { calcImportTax, IMPORT_VAT_RATE, DEFAULT_TARIFF_RATE } from './tariff';
 
 export type { Channel };
 
+// 관세율·수입 부가세율의 단일 출처는 tariff.ts다. 여기서는 re-export만 한다 —
+// 값을 다시 선언하면 두 모듈이 조용히 어긋난다.
+export { IMPORT_VAT_RATE, DEFAULT_TARIFF_RATE };
+
 export const DEFAULT_EXCHANGE_RATE_KRW_PER_RMB = 195;
-export const DEFAULT_TARIFF_RATE = 0.08;
-export const IMPORT_VAT_RATE = 0.1;
 
 export interface Margin1688Input {
   buyPriceRmb: number;
   exchangeRate: number;
   tariffRate: number;
-  shippingPerUnitKrw: number;
+  /** 과세운임 — 배송비 몫만. 관세 과표에 들어간다 */
+  dutiableFreightKrw: number;
+  /** 비과세 부대비 — 관세사 수임료 등. 원가에는 들어가되 과세되지 않는다 */
+  nonDutiableFreightKrw: number;
   packQty: number;
   channel: Channel;
   categoryName: string | null;
@@ -34,6 +40,8 @@ export interface Margin1688Input {
 export interface Margin1688Result {
   perUnitRmb: number;
   landedKrw: number;
+  /** 과세가격 = 상품가 + 과세운임. 관세·부가세의 과표다 */
+  dutiableValueKrw: number;
   tariffKrw: number;
   importVatKrw: number;
   purchaseCostKrw: number;
@@ -50,9 +58,18 @@ export interface Margin1688Result {
 export function calc1688Margin(input: Margin1688Input): Margin1688Result {
   const perUnitRmb = input.buyPriceRmb / Math.max(input.packQty, 1);
   const landedKrw = perUnitRmb * input.exchangeRate;
-  const tariffKrw = landedKrw * input.tariffRate;
-  const importVatKrw = (landedKrw + tariffKrw) * IMPORT_VAT_RATE;
-  const purchaseCostKrw = landedKrw + tariffKrw + importVatKrw + input.shippingPerUnitKrw;
+
+  // 과세가격에 운임이 포함된다. 상품가만 쓰면 관세·부가세가 과소 계상된다.
+  // 단 배송비 몫만 넣는다 — 관세사 수임료를 과세가격에 넣으면 세금이 이중으로 붙는다.
+  const tax = calcImportTax({
+    goodsKrw: landedKrw,
+    dutiableFreightKrw: input.dutiableFreightKrw,
+    tariffRate: input.tariffRate,
+  });
+
+  // 과세운임은 이미 dutyPaidValueKrw에 들어갔으므로 다시 더하지 않는다.
+  // 비과세 부대비는 과세는 안 됐지만 실제로 지불한 돈이므로 여기서 더한다.
+  const purchaseCostKrw = tax.dutyPaidValueKrw + input.nonDutiableFreightKrw;
   const totalCostKrw = purchaseCostKrw + input.groceryRunningCost;
 
   const channelFeeRate = getCategoryFeeRate(input.categoryName, input.channel) ?? CHANNEL_FEE[input.channel];
@@ -65,8 +82,9 @@ export function calc1688Margin(input: Margin1688Input): Margin1688Result {
   return {
     perUnitRmb: round2(perUnitRmb),
     landedKrw: round0(landedKrw),
-    tariffKrw: round0(tariffKrw),
-    importVatKrw: round0(importVatKrw),
+    dutiableValueKrw: tax.dutiableValueKrw,
+    tariffKrw: tax.tariffKrw,
+    importVatKrw: tax.importVatKrw,
     purchaseCostKrw: round0(purchaseCostKrw),
     totalCostKrw: round0(totalCostKrw),
     channelFeeKrw: round0(channelFeeKrw),
