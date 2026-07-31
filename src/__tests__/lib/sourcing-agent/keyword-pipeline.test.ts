@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { evaluateCandidate } from '@/lib/sourcing-agent/keyword-pipeline';
+import { evaluateCandidate, parseUnitDeliFee } from '@/lib/sourcing-agent/keyword-pipeline';
+import type { DomeggookListItem } from '@/types/sourcing';
+
+/**
+ * 배송비 외의 필드는 parseUnitDeliFee가 보지 않으므로 최소값만 채운다.
+ * deli는 목록·상세 응답 형태가 달라 unknown 캐스트로 넣는다.
+ */
+function itemWithDeli(deli: unknown): DomeggookListItem {
+  return { no: 1, title: 't', price: 1000, deli } as unknown as DomeggookListItem;
+}
 
 describe('evaluateCandidate', () => {
   it('쿠팡 p25가 손익분기가 이상이면 pass다', () => {
@@ -64,5 +73,59 @@ describe('evaluateCandidate', () => {
     });
     expect(r.verdict).toBe('fail');
     expect(r.failReason).toBe('under_min_price');
+  });
+});
+
+/**
+ * 기대값은 모두 unitDeliveryFee(deli-policy.ts:73)의 식으로 손계산했다.
+ *   fixed  → ceil(fee / orderQty)
+ *   tiered → ceil(ceil(orderQty / unitQty) * fee / orderQty)
+ * 사입 수량 가정치는 10개(ASSUMED_ORDER_QTY)다.
+ */
+describe('parseUnitDeliFee', () => {
+  it('판매자 부담 무료배송(who=S)이면 배송비가 붙지 않는다', () => {
+    // 구 구현은 fee/10 = 250원을 얹어 손익분기를 올렸다. 이 회귀를 막는 케이스다.
+    expect(parseUnitDeliFee(itemWithDeli({ who: 'S', fee: '2500' }))).toBe(0);
+  });
+
+  it('신형 응답의 pay=무료도 무료로 본다', () => {
+    expect(parseUnitDeliFee(itemWithDeli({ pay: '무료', fee: '3000' }))).toBe(0);
+  });
+
+  it('고정 배송비는 사입 수량으로 나눈다', () => {
+    // fixed 2,500원 → ceil(2500 / 10) = 250
+    expect(parseUnitDeliFee(itemWithDeli({ who: 'P', fee: '2500' }))).toBe(250);
+  });
+
+  it('나누어떨어지지 않으면 올림한다 (내림·반올림이 아니다)', () => {
+    // fixed 1,234원 → ceil(1234 / 10) = 124. round였다면 123이다.
+    expect(parseUnitDeliFee(itemWithDeli({ who: 'P', fee: '1234' }))).toBe(124);
+  });
+
+  it('상세(getItemView) 형태의 deli.dome.fee도 읽는다', () => {
+    // fixed 3,000원 → ceil(3000 / 10) = 300
+    expect(parseUnitDeliFee(itemWithDeli({ who: 'P', dome: { fee: '3000' } }))).toBe(300);
+  });
+
+  it('구간 배송비는 구간 요금을 고정 배송비로 취급하지 않는다', () => {
+    // "30개당 3,000원" 구간을 10개 주문 → ceil(10/30) = 1구간 → 3,000원
+    //   개당 = ceil(3000 / 10) = 300
+    expect(parseUnitDeliFee(itemWithDeli({ who: 'P', tbl: '30+3000|30+3000' }))).toBe(300);
+  });
+
+  it('사입 수량이 구간을 넘으면 구간 배수만큼 올려 계산한다', () => {
+    // "3개당 1,500원" 구간을 10개 주문 → ceil(10/3) = 4구간 → 4 × 1,500 = 6,000원
+    //   개당 = ceil(6000 / 10) = 600. 구간을 무시했다면 150원이 나온다.
+    expect(parseUnitDeliFee(itemWithDeli({ who: 'P', tbl: '3+1500|3+1500' }))).toBe(600);
+  });
+
+  it('deli가 없으면 0이다', () => {
+    expect(parseUnitDeliFee(itemWithDeli(undefined))).toBe(0);
+  });
+
+  it('금액을 읽을 수 없으면 0이다', () => {
+    // parseDeliPolicy는 무료 신호도 fee·tbl도 못 읽으면 FREE로 접는다(deli-policy.ts:57-64).
+    // 실제로는 "유료인데 금액 불명"이라 원가가 과소산정되지만, 이 비대칭은 기존 동작이다.
+    expect(parseUnitDeliFee(itemWithDeli({ who: 'P', fee: '착불' }))).toBe(0);
   });
 });

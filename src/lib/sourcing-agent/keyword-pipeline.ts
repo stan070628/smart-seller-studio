@@ -2,6 +2,7 @@ import { getSourcingPool } from '@/lib/sourcing/db';
 import { extractKeywordsFromProduct } from '@/lib/sourcing/ai-keyword-extract';
 import { getDomeggookClient } from '@/lib/sourcing/domeggook-client';
 import { estimateCoupangPrice, breakEvenPrice, marginOf } from '@/lib/sourcing/coupang-price';
+import { parseDeliPolicy, unitDeliveryFee } from '@/lib/sourcing/deli-policy';
 import {
   createRequest,
   completeRequest,
@@ -19,6 +20,15 @@ const MIN_SELL_PRICE_KRW = 10000;
 const MIN_COUPANG_SAMPLE_N = 3;
 const TOP_N = 5;
 const DOMEGGOOK_PAGE_SIZE = 10;
+/**
+ * 검증 사입 수량 가정치(개). 개당 배송비 환산의 분모다.
+ *
+ * 발굴 파이프라인은 아직 쇼트리스트에 없는 후보를 다루므로 실제 사입 수량을 모른다.
+ * sourcing_shortlist.order_qty의 기본값이 10이라(094_sourcing_shortlist.sql:42)
+ * 같은 값을 가정해 적재 전후의 개당 배송비가 어긋나지 않게 한다.
+ * 적재 후 사용자가 수량을 바꾸면 재검증(shortlist-verify)이 그 값으로 다시 계산한다.
+ */
+const ASSUMED_ORDER_QTY = 10;
 
 export interface CandidateInput {
   domePrice: number;
@@ -233,13 +243,19 @@ export async function runKeywordPipeline(keyword: string, chatId: string): Promi
 /**
  * 도매꾹 목록 항목에서 개당 배송비를 뽑는다. 알 수 없으면 0.
  *
- * `deli.dome.fee`는 getItemView(상세) 응답 형태고, getItemList(목록) 응답은
- * `deli.fee`로 내려온다. 저장소 관례(deli-policy.ts:54)대로 둘 다 본다.
+ * 계산은 shortlist-verify와 동일하게 deli-policy에 위임한다. 직접 구현했던
+ * `fee / 10` 근사는 두 가지를 놓쳤다.
+ *   - 무료배송(`pay === '무료'` 또는 `who === 'S'`)에도 배송비를 얹어 손익분기를 올렸다.
+ *   - "30개당 3,000원" 같은 구간 배송비를 고정 배송비로 취급했다.
+ *
+ * `item.deli`를 그대로 넘겨도 되는 이유: parseDeliPolicy가 `dome?.fee ?? raw.fee`와
+ * `dome?.tbl ?? raw.tbl`을 모두 보므로, getItemView(상세)의 `deli.dome.fee` 형태와
+ * getItemList(목록)의 `deli.fee` 형태를 한 함수가 함께 처리한다.
+ *
+ * 테스트를 위해 export한다. 순수 함수이고, 같은 모듈의 evaluateCandidate와 동일한
+ * 관례다. 유일한 호출부인 runKeywordPipeline은 DB·텔레그램·도매꾹·쿠팡을 모두 물어
+ * 그 경유로 배송비 환산만 검증하기 어렵다.
  */
-function parseUnitDeliFee(item: DomeggookListItem): number {
-  const deli = item.deli as { dome?: { fee?: string | number }; fee?: string | number } | undefined;
-  const raw = deli?.dome?.fee ?? deli?.fee;
-  const fee = raw != null ? Number(raw) : 0;
-  if (!Number.isFinite(fee) || fee <= 0) return 0;
-  return Math.round(fee / 10); // 10개 사입 기준 개당 환산
+export function parseUnitDeliFee(item: DomeggookListItem): number {
+  return unitDeliveryFee(parseDeliPolicy(item.deli), ASSUMED_ORDER_QTY);
 }
