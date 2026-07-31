@@ -1,10 +1,19 @@
+/**
+ * 건당 마진 = 판매가 − 원가 − 수수료 − 배송비 − 로켓그로스 물류비
+ *
+ * rgShippingFee: 로켓그로스 입출고비+배송비 (사이즈 유형별 정액).
+ *   실측 정산액이 있으면 그 값을, 없으면 사이즈 기본값을 넘긴다.
+ *   → src/lib/roi/rg-fees.ts 의 resolveRgShippingFee()
+ *   판매자로켓(직접 배송) 건은 0을 넘기고 deliveryFee(택배비)만 반영한다.
+ */
 export function calcMargin(
   sellingPrice: number,
   costPrice: number,
   feeRate: number,
-  deliveryFee: number
+  deliveryFee: number,
+  rgShippingFee = 0
 ): number {
-  return sellingPrice - costPrice - sellingPrice * feeRate - deliveryFee;
+  return sellingPrice - costPrice - sellingPrice * feeRate - deliveryFee - rgShippingFee;
 }
 
 // 간이과세자: 부가세 미적용 (손익분기 = 판매가 ÷ 마진액 × 100)

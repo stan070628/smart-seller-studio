@@ -1,10 +1,21 @@
-/** 건당 마진 = 판매가 × (1 - 수수료율) - 원가 */
+/**
+ * 건당 마진 = 판매가 × (1 - 수수료율) - 원가 - 물류비
+ *
+ * shippingFee: 건당 정액 물류비.
+ *   로켓그로스는 사이즈별 입출고비+배송비(극소형 1,725원~),
+ *   판매자로켓은 택배비(3,500~6,500원)를 넘긴다.
+ *   → src/lib/roi/rg-fees.ts 의 resolveRgShippingFee()
+ *
+ * 이 값을 빼지 않으면 마진이 과대평가되고, 그 결과 손익분기 ROAS가
+ * 과소평가되어 적자 광고를 흑자로 오판하게 된다.
+ */
 export function calcMarginPerUnit(
   salePrice: number,
   costPrice: number,
   feeRate: number,
+  shippingFee = 0,
 ): number {
-  return Math.round(salePrice * (1 - feeRate) - costPrice);
+  return Math.round(salePrice * (1 - feeRate) - costPrice - shippingFee);
 }
 
 /**
