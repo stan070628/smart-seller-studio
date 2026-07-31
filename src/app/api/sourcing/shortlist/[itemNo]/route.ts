@@ -13,6 +13,8 @@ import { verifyOne } from '@/lib/sourcing/shortlist-verify';
 import type { LogisticsSize } from '@/types/shortlist';
 
 const SIZES: LogisticsSize[] = ['xsmall', 'small', 'medium'];
+/** 사입 수량 상한 — 이 이상은 사람이 직접 입력할 범위가 아니라 오타로 본다 */
+const MAX_ORDER_QTY = 100000;
 
 function parseItemNo(itemNo: string): number | null {
   const no = parseInt(itemNo, 10);
@@ -33,7 +35,7 @@ export async function DELETE(
     await deleteShortlist(no);
     return NextResponse.json({ ok: true });
   } catch (err) {
-    console.error('[shortlist] 삭제 실패', err);
+    console.error(`[shortlist] 삭제 실패 itemNo=${no}`, err);
     return NextResponse.json({ error: '삭제하지 못했습니다.' }, { status: 500 });
   }
 }
@@ -63,8 +65,16 @@ export async function PATCH(
   if (body.logisticsSize !== undefined && !SIZES.includes(body.logisticsSize)) {
     return NextResponse.json({ error: '알 수 없는 물류 사이즈입니다.' }, { status: 400 });
   }
-  if (body.orderQty !== undefined && body.orderQty < 1) {
-    return NextResponse.json({ error: '사입 수량은 1 이상이어야 합니다.' }, { status: 400 });
+  if (body.orderQty !== undefined) {
+    if (!Number.isInteger(body.orderQty) || body.orderQty < 1) {
+      return NextResponse.json({ error: '사입 수량은 1 이상의 정수여야 합니다.' }, { status: 400 });
+    }
+    if (body.orderQty > MAX_ORDER_QTY) {
+      return NextResponse.json(
+        { error: `사입 수량은 ${MAX_ORDER_QTY} 이하여야 합니다.` },
+        { status: 400 },
+      );
+    }
   }
 
   try {
@@ -87,7 +97,7 @@ export async function PATCH(
 
     return NextResponse.json({ item: await getShortlistItem(no) });
   } catch (err) {
-    console.error('[shortlist] 수정 실패', err);
+    console.error(`[shortlist] 수정 실패 itemNo=${no}`, err);
     return NextResponse.json({ error: '수정하지 못했습니다.' }, { status: 500 });
   }
 }

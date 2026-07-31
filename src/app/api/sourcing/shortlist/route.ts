@@ -13,10 +13,11 @@ import {
 } from '@/lib/sourcing/shortlist-db';
 import { fetchDomeSnapshot, verifyOne, DomeTransientError } from '@/lib/sourcing/shortlist-verify';
 import { extractItemNoFromUrl } from '@/lib/sourcing/domeggook-url-parser';
-import { getDomeggookClient } from '@/lib/sourcing/domeggook-client';
 
 /** 사입 수량 미지정 시 기본값 */
 const DEFAULT_ORDER_QTY = 10;
+/** 사입 수량 상한 — 이 이상은 사람이 직접 입력할 범위가 아니라 오타로 본다 */
+const MAX_ORDER_QTY = 100000;
 
 export async function GET(req: NextRequest) {
   const includeArchived = req.nextUrl.searchParams.get('archived') === 'true';
@@ -50,6 +51,19 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // orderQty는 선택 입력이다 — 누락·falsy·음수는 기본값으로 조용히 대체한다(추가 시엔
+  // 값을 몰라도 되게 하려는 의도). 다만 소수는 "정수 아님"이 명백한 오입력이라 대체하지
+  // 않고 400으로 거절한다. PATCH가 같은 필드를 무조건 400으로 거절하는 것과 다른데,
+  // PATCH는 사용자가 명시적으로 값을 바꾸겠다는 의도이므로 묵인할 이유가 없다.
+  if (body.orderQty !== undefined && !Number.isInteger(body.orderQty)) {
+    return NextResponse.json({ error: '사입 수량은 정수여야 합니다.' }, { status: 400 });
+  }
+  if (body.orderQty !== undefined && body.orderQty > MAX_ORDER_QTY) {
+    return NextResponse.json(
+      { error: `사입 수량은 ${MAX_ORDER_QTY} 이하여야 합니다.` },
+      { status: 400 },
+    );
+  }
   const orderQty = body.orderQty && body.orderQty > 0 ? body.orderQty : DEFAULT_ORDER_QTY;
 
   try {
@@ -61,8 +75,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const detail = await getDomeggookClient().getItemView(itemNo);
-    const title = detail.basis?.title ?? `상품 ${itemNo}`;
+    // fetchDomeSnapshot이 이미 상품 상세를 받아왔으므로 title만 얻으려고 다시
+    // getItemView를 부르지 않는다 — 두 번째 호출의 일시 오류가 DomeTransientError
+    // 감싸기를 우회해 503이 아닌 500으로 새는 것도 막는다.
+    const title = snapshot.title || `상품 ${itemNo}`;
 
     const inserted = await insertShortlist(itemNo, title, orderQty);
     if (!inserted) {
@@ -84,7 +100,7 @@ export async function POST(req: NextRequest) {
         { status: 503 },
       );
     }
-    console.error('[shortlist] 추가 실패', err);
+    console.error(`[shortlist] 추가 실패 itemNo=${itemNo}`, err);
     return NextResponse.json({ error: '추가하지 못했습니다.' }, { status: 500 });
   }
 }
@@ -97,8 +113,16 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: '잘못된 요청입니다.' }, { status: 400 });
   }
 
-  if (!body.orderQty || body.orderQty < 1) {
-    return NextResponse.json({ error: '사입 수량은 1 이상이어야 합니다.' }, { status: 400 });
+  // PATCH는 사용자가 값을 명시적으로 바꾸겠다는 요청이므로 POST의 기본값 대체와
+  // 달리 잘못된 입력을 그대로 400으로 거절한다.
+  if (typeof body.orderQty !== 'number' || !Number.isInteger(body.orderQty) || body.orderQty < 1) {
+    return NextResponse.json({ error: '사입 수량은 1 이상의 정수여야 합니다.' }, { status: 400 });
+  }
+  if (body.orderQty > MAX_ORDER_QTY) {
+    return NextResponse.json(
+      { error: `사입 수량은 ${MAX_ORDER_QTY} 이하여야 합니다.` },
+      { status: 400 },
+    );
   }
 
   try {

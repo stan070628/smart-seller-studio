@@ -16,6 +16,8 @@ export interface DomeSnapshot {
   inventory: number;
   moq: number;
   deli: unknown;
+  /** 상품명. 라우트가 상품명만 얻으려고 다시 조회하지 않도록 함께 담는다. */
+  title?: string;
 }
 
 /** 도매꾹 API가 일시적으로 실패했음을 나타낸다. dead로 오판하면 안 된다. */
@@ -56,6 +58,7 @@ export async function fetchDomeSnapshot(itemNo: number): Promise<DomeSnapshot | 
       inventory: toInt(detail.qty?.inventory),
       moq: toInt(detail.qty?.domeMoq) || 1,
       deli: detail.deli,
+      title: String(detail.basis?.title ?? ''),
     };
   } catch (err) {
     // 도매꾹은 없는 상품에 dcode=ITEM_ERROR를 준다.
