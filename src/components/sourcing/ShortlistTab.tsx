@@ -12,6 +12,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Loader2, Plus, RefreshCw, Trash2, ExternalLink, ChevronRight, ChevronDown } from 'lucide-react';
 import { C as BASE_C } from '@/lib/design-tokens';
+import SupplierCompare from '@/components/sourcing/SupplierCompare';
 import type { ShortlistItem, LogisticsSize, Verdict } from '@/types/shortlist';
 
 // 공통 토큰에 없는 시맨틱 색만 로컬로 확장한다 (CostcoMemoTab.tsx, DomeggookTab.tsx와 동일 관례).
@@ -193,8 +194,14 @@ export default function ShortlistTab() {
    * { item }으로 돌려준다. 전체 재조회 대신 해당 행만 교체한다 — 사이즈처럼
    * 자주 바꾸는 값마다 GET을 다시 부르고 테이블을 통째로 갈아끼우면 그때마다
    * 화면이 깜빡인다.
+   *
+   * 성공 여부를 boolean으로 돌려준다(throw하지 않는다). 대부분의 호출부는
+   * onBlur·onChange에서 `void patchItem(...)`으로 부르므로 예외를 던지면
+   * unhandled rejection이 된다. 반면 SupplierCompare의 저장 버튼은 성공했을
+   * 때만 붙여넣은 원문을 지워야 해서 결과를 알아야 한다 — 실패했는데 지우면
+   * 사용자가 다시 긁어와야 한다.
    */
-  const patchItem = async (itemNo: number, body: Record<string, unknown>) => {
+  const patchItem = async (itemNo: number, body: Record<string, unknown>): Promise<boolean> => {
     setBusy(true);
     setError(null);
     try {
@@ -216,8 +223,10 @@ export default function ShortlistTab() {
           ? prev.map((it) => (it.itemNo === itemNo ? data.item : it))
           : prev.filter((it) => it.itemNo !== itemNo),
       );
+      return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : '수정하지 못했습니다.');
+      return false;
     } finally {
       setBusy(false);
     }
@@ -528,10 +537,7 @@ export default function ShortlistTab() {
                   {isOpen && (
                     <tr>
                       <td colSpan={COLUMN_COUNT} style={{ padding: 0, background: C.tableHeader, borderTop: `1px solid ${C.border}` }}>
-                        {/* 임시 자리표시자 — Task 6에서 SupplierCompare로 교체한다 */}
-                        <div style={{ padding: 16, fontSize: 13, color: C.textSub }}>
-                          1688 영역
-                        </div>
+                        <SupplierCompare item={it} onPatch={patchItem} busy={busy} />
                       </td>
                     </tr>
                   )}
