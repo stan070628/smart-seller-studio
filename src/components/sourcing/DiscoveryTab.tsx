@@ -211,7 +211,9 @@ export default function DiscoveryTab() {
             display: 'inline-flex', alignItems: 'center', gap: 6,
             padding: '8px 14px', borderRadius: 6, fontSize: 14, fontWeight: 600,
             background: selectedCount > 0 ? C.accent : C.border,
-            color: selectedCount > 0 ? '#fff' : C.textMuted,
+            // 비활성 상태가 이 탭의 첫 화면이라 레이블이 읽혀야 한다.
+            // textMuted(#a1a1aa)는 border 배경 위에서 대비 2.0:1, textSub(#71717a)는 3.9:1.
+            color: selectedCount > 0 ? '#fff' : C.textSub,
             border: 'none',
             cursor: canRun ? 'pointer' : 'not-allowed',
           }}

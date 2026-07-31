@@ -258,6 +258,11 @@ function ResultCard({ r }: { r: Margin1688Result }) {
       <h2 className="mb-3 text-base font-semibold">실 마진 결과</h2>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
         <Row label="환율 적용 원가" value={`${r.landedKrw.toLocaleString()} 원`} />
+        {/*
+          과세가격을 보여주는 이유: 관세는 상품가가 아니라 여기에 세율을 곱한 값이다.
+          이 행이 없으면 상품가 10,000원에 8%인데 관세가 826원으로 찍혀 계산 오류처럼 보인다.
+        */}
+        <Row label="과세가격 (상품가+과세운임)" value={`${r.dutiableValueKrw.toLocaleString()} 원`} />
         <Row label="관세" value={`${r.tariffKrw.toLocaleString()} 원`} />
         <Row label="수입 VAT" value={`${r.importVatKrw.toLocaleString()} 원`} />
         <Row label="입고 직전 사입원가" value={`${r.purchaseCostKrw.toLocaleString()} 원`} />
