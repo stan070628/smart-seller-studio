@@ -10,6 +10,7 @@
 
 import { after } from 'next/server';
 import { runKeywordPipeline } from '@/lib/sourcing-agent/keyword-pipeline';
+import { requireAuth } from '@/lib/supabase/auth';
 
 export const maxDuration = 60;
 
@@ -20,6 +21,14 @@ const MAX_KEYWORDS = 10;
 const NO_TELEGRAM_CHAT = '';
 
 export async function POST(request: Request) {
+  // proxy.ts는 api/ 경로를 페이지 게이트에서 제외하므로 인증은 핸들러가 직접 한다.
+  // 읽기 전용인 형제 라우트들과 달리 이 라우트는 키워드 1개당 도매꾹 10건 ×
+  // 네이버 쇼핑 최대 4쿼리, 즉 10키워드 기준 최대 400회의 유료 외부 API 호출을
+  // 촉발한다. 미인증 호출 한 번이 네이버 일일 쿼터를 갉아먹으므로 본문 파싱보다
+  // 앞에서 막는다.
+  const authResult = await requireAuth();
+  if (authResult instanceof Response) return authResult;
+
   let payload: { keywords?: unknown };
   try {
     payload = await request.json();

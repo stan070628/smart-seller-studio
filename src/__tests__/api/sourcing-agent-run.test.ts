@@ -17,6 +17,12 @@ vi.mock('@/lib/sourcing-agent/keyword-pipeline', () => ({
   runKeywordPipeline: mockRun,
 }));
 
+// 이 라우트는 유료 외부 API 호출을 촉발하므로 인증이 필수다.
+// 기본은 인증된 사용자로 두고, 401 케이스만 개별 테스트에서 덮어쓴다.
+vi.mock('@/lib/supabase/auth', () => ({
+  requireAuth: vi.fn().mockResolvedValue({ userId: 'user-1' }),
+}));
+
 // next/server의 after()는 요청 스코프 밖에서 호출하면 던진다. 단위 테스트에는
 // 요청 스코프가 없으므로 after만 가로채 백그라운드 작업을 붙잡아 두고,
 // 테스트에서 직접 await해 실제 실행 여부를 검증한다.
@@ -73,6 +79,21 @@ describe('POST /api/sourcing/agent/run', () => {
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toContain('10');
+  });
+
+  it('미인증 요청은 401이고 파이프라인을 태우지 않는다', async () => {
+    const { requireAuth } = await import('@/lib/supabase/auth');
+    vi.mocked(requireAuth).mockResolvedValueOnce(
+      Response.json({ error: '인증이 필요합니다.' }, { status: 401 }) as never,
+    );
+
+    const res = await POST(req({ keywords: ['등산 모자'] }));
+    expect(res.status).toBe(401);
+
+    // 유료 API를 태우는 라우트이므로 미인증 호출은 after()에도 실리면 안 된다
+    expect(afterTasks).toHaveLength(0);
+    await Promise.all(afterTasks);
+    expect(mockRun).not.toHaveBeenCalled();
   });
 
   it('본문이 JSON이 아니면 400이다', async () => {
