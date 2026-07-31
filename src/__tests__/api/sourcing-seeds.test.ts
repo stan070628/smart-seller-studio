@@ -38,6 +38,21 @@ describe('GET /api/sourcing/seeds', () => {
     expect(body.data.lastCollectedAt).toBeNull();
   });
 
+  // pool.query가 mock이라 이 테스트는 "중복이 실제로 제거되는지"를 증명하지 못한다.
+  // 중복 제거는 Postgres가 하는 일이므로 여기서 검증할 수 있는 것은 쿼리가 여전히
+  // 중복 제거를 요구한다는 사실뿐이다. 조용한 원복을 막는 용도다.
+  it('키워드별 최신 1건만 남기도록 DISTINCT ON을 쓴다', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    await GET();
+
+    const sql = mockQuery.mock.calls[0][0] as string;
+    expect(sql).toContain('DISTINCT ON (keyword)');
+    // DISTINCT ON은 선행 ORDER BY가 대상 컬럼과 일치해야 하므로 안쪽 정렬이 필수다
+    expect(sql).toContain('ORDER BY keyword, created_at DESC');
+    // LIMIT은 중복 제거 뒤(바깥 쿼리)에 걸려야 서로 다른 키워드 30개가 나온다
+    expect(sql.indexOf('DISTINCT ON (keyword)')).toBeLessThan(sql.indexOf('LIMIT $1'));
+  });
+
   it('DB 오류 시 500과 메시지를 반환한다', async () => {
     mockQuery.mockRejectedValueOnce(new Error('connection refused'));
 
