@@ -79,8 +79,8 @@ describe('getCoupangCategoryNames', () => {
 });
 
 describe('resolveCoupangFee — 정상 매칭 (잠정 매핑)', () => {
-  it('식품 카테고리는 6.5%', () => {
-    expect(resolveCoupangFee('식품/가공식품/통조림').rate).toBe(0.065);
+  it('식품 카테고리는 10.6% (실측 2026-07-31)', () => {
+    expect(resolveCoupangFee('식품/가공식품/통조림').rate).toBe(0.106);
     expect(resolveCoupangFee('식품/가공식품/통조림').matched).toBe(true);
   });
   it('가전디지털/스마트폰은 4%', () => {
@@ -99,7 +99,7 @@ describe('resolveCoupangFee — 정상 매칭 (잠정 매핑)', () => {
   it('자동차용품 경로에 "차"가 있어도 식품으로 분류되지 않는다', () => {
     const r = resolveCoupangFee('자동차용품/차량용품/방향제');
     expect(r.categoryName).not.toBe('식품');
-    expect(r.rate).not.toBe(0.065);
+    expect(r.rate).not.toBe(0.106);
   });
   it('반려동물 사료 경로에 "먹"이 있어도 식품으로 분류되지 않는다', () => {
     const r = resolveCoupangFee('반려동물용품/강아지/먹이');
@@ -111,7 +111,7 @@ import { getCoupangFeeRateByCategoryName } from '@/lib/calculator/coupang-fees';
 
 describe('getCoupangFeeRateByCategoryName', () => {
   it('등록된 카테고리명은 해당 rate 반환', () => {
-    expect(getCoupangFeeRateByCategoryName('식품')).toBe(0.065);
+    expect(getCoupangFeeRateByCategoryName('식품')).toBe(0.106);
     expect(getCoupangFeeRateByCategoryName('주방용품')).toBe(0.108);
     expect(getCoupangFeeRateByCategoryName('디지털기기')).toBe(0.04);
   });
@@ -125,15 +125,15 @@ import { assertCoupangFeeMapInvariants, type CoupangFeeEntry } from '@/lib/calcu
 describe('assertCoupangFeeMapInvariants — 위반 fixture', () => {
   it('정렬 위반 (짧은 prefix가 긴 prefix 위) → throw', () => {
     const bad: CoupangFeeEntry[] = [
-      { prefix: '식품', rate: 0.065, categoryName: '식품' },
-      { prefix: '식품/가공식품', rate: 0.065, categoryName: '식품' },
+      { prefix: '식품', rate: 0.106, categoryName: '식품' },
+      { prefix: '식품/가공식품', rate: 0.106, categoryName: '식품' },
     ];
     expect(() => assertCoupangFeeMapInvariants(bad)).toThrow(/정렬 위반/);
   });
   it('중복 prefix → throw', () => {
     const bad: CoupangFeeEntry[] = [
-      { prefix: '식품', rate: 0.065, categoryName: '식품' },
-      { prefix: '식품', rate: 0.065, categoryName: '식품' },
+      { prefix: '식품', rate: 0.106, categoryName: '식품' },
+      { prefix: '식품', rate: 0.106, categoryName: '식품' },
     ];
     // 정렬 위반이 먼저 잡히지만, 동일 메시지 패턴은 둘 다 정렬/중복 메시지 중 하나
     expect(() => assertCoupangFeeMapInvariants(bad)).toThrow();
@@ -174,7 +174,7 @@ describe('회귀 — 원본 버그 (카테고리 78780)', () => {
     // 이전 정규식이 "차"(자동차) 한 글자를 substring 매칭해 6.5% 식품으로 오분류했던 원본 버그.
     const r = resolveCoupangFee('자동차용품/세차/관리용품/관리용품/광택/케미컬/유리발수코팅제');
     expect(r.rate).toBe(0.108);
-    expect(r.rate).not.toBe(0.065);
+    expect(r.rate).not.toBe(0.106);
     expect(r.categoryName).toBe('자동차용품');
     expect(r.matched).toBe(true);
     expect(r.matchedPrefix).toBe('자동차용품');
@@ -189,7 +189,7 @@ describe('회귀 — 원본 버그 (카테고리 78780)', () => {
     for (const path of cases) {
       const r = resolveCoupangFee(path);
       expect(r.categoryName).not.toBe('식품');
-      expect(r.rate).not.toBe(0.065);
+      expect(r.rate).not.toBe(0.106);
     }
   });
 

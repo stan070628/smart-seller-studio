@@ -27,10 +27,20 @@ describe('resolveRgShippingFee', () => {
     expect(resolveRgShippingFee(2100, 'extra_small')).toBe(2100);
   });
 
-  it('실측값이 없거나 0이면 사이즈 기본값으로 폴백한다', () => {
-    expect(resolveRgShippingFee(0, 'extra_small')).toBe(1725);
-    expect(resolveRgShippingFee(null, 'medium')).toBe(2740);
-    expect(resolveRgShippingFee(undefined, 'small')).toBe(1900);
+  it('실측값이 없거나 0이면 사이즈 기본값에 VAT를 반영해 폴백한다', () => {
+    // 고지값은 VAT 별도(소개서 2025-01, 6p). 간이과세자는 공제받지 못하므로 그대로 비용이다.
+    expect(resolveRgShippingFee(0, 'extra_small')).toBe(1898); // 1725 × 1.1
+    expect(resolveRgShippingFee(null, 'medium')).toBe(3014); // 2740 × 1.1
+    expect(resolveRgShippingFee(undefined, 'small')).toBe(2090); // 1900 × 1.1
+  });
+
+  it('실측값은 이미 실제 차감액이므로 VAT를 다시 곱하지 않는다', () => {
+    expect(resolveRgShippingFee(2100, 'small')).toBe(2100);
+  });
+
+  it('고지값 자체는 VAT 별도로 유지된다', () => {
+    expect(getRgShippingFee('small')).toBe(1900);
+    expect(getRgShippingFee('extra_small')).toBe(1725);
   });
 
   it('실측값도 사이즈도 없으면 0이다', () => {

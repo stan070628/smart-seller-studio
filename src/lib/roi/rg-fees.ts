@@ -11,7 +11,11 @@
  *
  * 신규 판매자 90일 무료 프로모션은 2026-07-31 종료되었으며,
  * 종료 시점 기준 **이미 입고된 재고에도 판매 시점에 부과**된다.
+ *
+ * 아래 요율은 모두 **VAT 별도 고지값**이다. 실질 부담액은 `resolveRgShippingFee`가 반환한다.
  */
+
+import { effectiveCost } from '@/lib/tax';
 
 export const RG_SIZE_TYPES = [
   'extra_small',
@@ -47,7 +51,11 @@ export const RG_SIZE_SPECS: Record<RgSizeType, RgSizeSpec> = {
   extra_large: { label: '특대형', inboundOutboundFee: 1240, deliveryFee: 1500, maxDimensionSum: 250, maxWeightKg: 30 },
 };
 
-/** 사이즈 유형별 개당 물류비 합계 (입출고비 + 배송비) */
+/**
+ * 사이즈 유형별 개당 물류비 합계 (입출고비 + 배송비).
+ *
+ * ⚠️ **고지 금액(VAT 별도)이다.** 실질 부담액이 필요하면 `resolveRgShippingFee`를 쓸 것.
+ */
 export function getRgShippingFee(sizeType: RgSizeType | null | undefined): number {
   if (!sizeType) return 0;
   const spec = RG_SIZE_SPECS[sizeType];
@@ -56,15 +64,21 @@ export function getRgShippingFee(sizeType: RgSizeType | null | undefined): numbe
 }
 
 /**
- * 실효 로켓그로스 물류비.
- * 실측값(정산서 기반)이 있으면 그것을 쓰고, 없으면 사이즈 유형 기본값으로 폴백한다.
+ * 실효 로켓그로스 물류비 — **VAT 포함 실질 부담액**.
+ *
+ * 로켓그로스 입출고·배송 비용은 VAT 별도로 고지된다
+ * (서비스 소개서 2025-01, 6p: "판매 완료 시 비용이 부과됩니다. (VAT별도)").
+ * 간이과세자는 이 VAT를 매입세액으로 공제받지 못하므로 그대로 비용이 된다.
+ *
+ * 실측값(정산서 기반)이 있으면 그것을 쓰고, 없으면 사이즈 유형 기본값에 VAT를 반영한다.
+ * 실측값은 이미 실제 차감액이므로 VAT를 다시 곱하지 않는다.
  */
 export function resolveRgShippingFee(
   measuredFee: number | null | undefined,
   sizeType: RgSizeType | null | undefined,
 ): number {
   if (measuredFee && measuredFee > 0) return measuredFee;
-  return getRgShippingFee(sizeType);
+  return effectiveCost(getRgShippingFee(sizeType));
 }
 
 /** 판매자센터 표기 명칭 → 내부 코드 */

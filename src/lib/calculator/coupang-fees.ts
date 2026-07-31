@@ -2,6 +2,12 @@
  * 쿠팡 카테고리 fullPath → 판매 수수료율 매핑
  * - segment 경계(`/`)를 존중하는 prefix 매칭
  * - 매핑 없으면 기본값(10.8%) + matched=false
+ *
+ * ⚠️ **모든 요율은 VAT 별도 고지값이다.** 판매자센터 표기가 "10.6 %, (VAT 별도, 정률)"이다.
+ * 실질 부담률은 과세 유형에 따라 달라지므로 `@/lib/tax`의 `effectiveFeeRate()`를 거쳐야 한다.
+ *
+ * ⚠️ **아래 요율 중 실측으로 검증된 것은 식품 계열뿐이다.** 나머지는 미검증이므로
+ * 해당 카테고리에 진입할 때 판매자센터에서 반드시 확인할 것.
  */
 
 export interface CoupangFeeEntry {
@@ -25,7 +31,8 @@ export const COUPANG_FEE_MAP: readonly CoupangFeeEntry[] = [
   { prefix: '가전디지털',               rate: 0.078, categoryName: '생활가전' }, // 1차 fallback
 
   // ── 1차 카테고리들 ────────────────────────────────────
-  { prefix: '식품',                    rate: 0.065, categoryName: '식품' },
+  // ✅ 실측 2026-07-31 — 식품>스낵/간식>스낵/시리얼>시리얼 (위트빅스) = 10.6%
+  { prefix: '식품',                    rate: 0.106, categoryName: '식품' },
   { prefix: '주방용품',                rate: 0.108, categoryName: '주방용품' },
   { prefix: '생활용품',                rate: 0.108, categoryName: '생활용품' },
   { prefix: '홈인테리어',              rate: 0.108, categoryName: '가구/인테리어' },
@@ -39,7 +46,9 @@ export const COUPANG_FEE_MAP: readonly CoupangFeeEntry[] = [
   { prefix: '완구/취미',               rate: 0.108, categoryName: '완구/취미' },
   { prefix: '문구/오피스',             rate: 0.108, categoryName: '문구/오피스' },
   { prefix: '반려동물용품',            rate: 0.108, categoryName: '반려동물용품' },
-  { prefix: '헬스/건강식품',           rate: 0.085, categoryName: '헬스/건강식품' },
+  // ✅ 실측 2026-07-31 — 식품>건강식품>헬스/다이어트식품 하위 2종(다이어트쉐이크·드링크믹스 RTD) = 10.6%
+  // '식품' prefix가 먼저 매치되므로 이 항목은 '헬스/건강식품'이 1차 카테고리로 오는 경우만 담당한다.
+  { prefix: '헬스/건강식품',           rate: 0.106, categoryName: '헬스/건강식품' },
 ];
 
 export const COUPANG_DEFAULT_FEE = {
