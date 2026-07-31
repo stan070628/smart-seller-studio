@@ -16,6 +16,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2, Play, RefreshCw, AlertTriangle } from 'lucide-react';
 import { C } from '@/lib/design-tokens';
+import { breakEvenPrice, marginOf, buildSearchQueries } from '@/lib/sourcing/coupang-price';
 
 interface Seed {
   id: number;
@@ -423,8 +424,14 @@ export default function DiscoveryTab() {
                   <span style={{ color: C.warning }}>실패 — {r.errorMessage ?? '알 수 없는 오류'}</span>
                 )}
               </div>
+              {/* key를 인덱스로 두면 폴링이 결과를 다시 받아올 때 입력 중인 값이
+                  다른 후보로 옮겨 붙을 수 있다. 후보를 고유하게 가리키는 URL을 쓴다. */}
               {r.results.map((c, i) => (
-                <CandidateRow key={i} c={c} />
+                <CandidateRow
+                  key={c.domeggook_url ?? `${r.requestId}-${i}`}
+                  c={c}
+                  divider={i > 0}
+                />
               ))}
             </article>
           ))}
@@ -434,15 +441,256 @@ export default function DiscoveryTab() {
   );
 }
 
+/** 발굴 탭이 가정하는 사입 수량 — 쇼트리스트 POST의 기본값(DEFAULT_ORDER_QTY)과 같다 */
+const ASSUMED_ORDER_QTY = 10;
+/** 진입 하한가 — keyword-pipeline의 MIN_SELL_PRICE_KRW와 같다 */
+const MIN_SELL_PRICE_KRW = 10000;
+/** 쿠팡 실판가 상한 — 쇼트리스트 PATCH의 MAX_COUPANG_PRICE와 같다. 자릿수 오타를 여기서 먼저 잡는다 */
+const MAX_COUPANG_PRICE = 10_000_000;
+
 /**
- * ⚠️ 임시 구현 — 완성된 코드가 아니다.
- * 가격 입력·손익분기 판정·담기 버튼·쿠팡 검색 링크는 Task 9에서 이 컴포넌트를
- * 통째로 교체하며 붙인다. 지금은 폴링이 가져온 후보가 화면에 닿는지만 확인한다.
+ * 도매꾹 상품 URL에서 상품번호를 뽑는다.
+ *
+ * 도매꾹 목록 API(getItemList)가 주는 url은 `http://domeggook.com/64494164` 꼴이다
+ * (DB의 기존 행 전부가 이 형태다 — 쿼리스트링도 끝 슬래시도 없다). 그래도 형태가
+ * 바뀌었을 때 NaN이나 0을 서버로 보내지 않도록 쿼리·해시·끝 슬래시를 털고
+ * 마지막 숫자 경로만 취한다. 못 읽으면 null을 돌려주고 호출부가 담기를 막는다.
  */
-function CandidateRow({ c }: { c: RunResult }) {
+function parseItemNo(url: string | null): number | null {
+  if (!url) return null;
+  const m = url.split(/[?#]/)[0].replace(/\/+$/, '').match(/(\d+)$/);
+  if (!m) return null;
+  const n = Number.parseInt(m[1], 10);
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
+/** Enter로 다음 후보의 가격 칸으로 이동한다. 마지막 칸에서는 움직이지 않는다 */
+function focusNextPriceInput(current: HTMLInputElement) {
+  const all = Array.from(document.querySelectorAll<HTMLInputElement>('[data-price-input]'));
+  const next = all[all.indexOf(current) + 1];
+  next?.focus();
+}
+
+/**
+ * 후보 한 줄 — 이 화면이 실제로 판정을 내리는 자리.
+ *
+ * 판정은 브라우저에서 breakEvenPrice·marginOf를 그대로 불러 즉시 계산한다.
+ * 이 값은 "타이핑하는 동안 보이는 피드백"이지 저장되는 값이 아니다 —
+ * 담을 때는 서버가 verifyOne으로 같은 산식을 다시 돌려 판정을 확정한다.
+ */
+function CandidateRow({ c, divider }: { c: RunResult; divider: boolean }) {
+  const [price, setPrice] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  // 담기 성공 여부와 실판가 저장 성공 여부는 별개다. POST가 되고 PATCH가 깨지면
+  // 상품은 소싱리스트에 들어갔지만 실판가는 비어 있다 — 그 상태를 "담김"으로만
+  // 표시하면 화면이 거짓말을 한다. 두 사실을 따로 들고 따로 보여준다.
+  const [saved, setSaved] = useState<{ existed: boolean } | null>(null);
+  const [savedPrice, setSavedPrice] = useState<number | null>(null);
+  const [priceError, setPriceError] = useState<string | null>(null);
+
+  const domePrice = c.domeggook_price ?? 0;
+  // 배송비를 빼면 손익분기가 실제보다 낮게 나와 통과하면 안 될 후보가 통과한다.
+  // Task 7 이전에 쌓인 행은 null이므로 그때는 배송비 미반영임을 화면에 알린다.
+  const deli = c.unit_deli_fee;
+  const effectiveCost = domePrice + (deli ?? 0);
+  const be = breakEvenPrice(effectiveCost, 'xsmall');
+
+  const digits = price.replace(/[^0-9]/g, '');
+  const p = digits ? Number.parseInt(digits, 10) : 0;
+  const priceValid = p > 0 && p <= MAX_COUPANG_PRICE;
+
+  let verdict: { label: string; why: string; color: string };
+  if (!digits) {
+    verdict = { label: '판정 불가', why: '실판가 미입력', color: C.warning };
+  } else if (!priceValid) {
+    verdict = {
+      label: '판정 불가',
+      why: `실판가는 1~${MAX_COUPANG_PRICE.toLocaleString()}원 사이여야 합니다`,
+      color: C.warning,
+    };
+  } else if (p < MIN_SELL_PRICE_KRW) {
+    // 미달은 후보 대부분이 지나가는 정상 결과다. 경고색을 쓰면 20개를 훑는 동안
+    // 화면이 온통 빨개져서 정작 봐야 할 '통과'가 묻힌다.
+    verdict = { label: '미달', why: '1만원 하한 미만', color: C.textSub };
+  } else if (p >= be) {
+    const m = marginOf(p, effectiveCost, 'xsmall');
+    verdict = {
+      label: '통과',
+      why: `개당 ${m.toLocaleString()}원 · ${((m / p) * 100).toFixed(1)}%`,
+      color: C.success,
+    };
+  } else {
+    verdict = { label: '미달', why: `손익분기 ${(be - p).toLocaleString()}원 부족`, color: C.textSub };
+  }
+
+  const itemNo = parseItemNo(c.domeggook_url);
+  // 도매꾹 원제는 판매자명·수식어가 붙어 있어("… 가방세트 해피포레") 쿠팡에서
+  // 그대로 검색하면 결과가 0건이다. 앞 4단어로 잘라 만든 검색어를 쓴다.
+  const searchQuery = buildSearchQueries(c.domeggook_product_name ?? '')[0] ?? '';
+
+  /** 실판가만 저장한다. 실패 사유를 문자열로 돌려주고 예외로 올리지 않는다 */
+  async function savePrice(no: number, value: number): Promise<string | null> {
+    try {
+      const res = await fetch(`/api/sourcing/shortlist/${no}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ coupangP25: value }),
+      });
+      if (!res.ok) {
+        const b = await res.json().catch(() => ({}));
+        return b.error ?? `서버 응답 ${res.status}`;
+      }
+      return null;
+    } catch (e) {
+      return errorText(e);
+    }
+  }
+
+  async function take() {
+    if (itemNo === null) {
+      setErr('상품 URL에서 상품번호를 읽지 못했습니다. 소싱리스트 탭에서 URL로 직접 추가하세요.');
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    try {
+      // 이 라우트는 itemNo/title 필드를 보지 않는다. 상품번호 또는 도매꾹 URL을
+      // input 하나로 받아 스스로 해석하고, 제목도 도매꾹에서 다시 받아 쓴다.
+      // 목록 API의 URL 형식(domeggook.com/64494164)은 서버의 URL 파서가 모르는
+      // 형태라 숫자 상품번호를 넘긴다.
+      const res = await fetch('/api/sourcing/shortlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: String(itemNo), orderQty: ASSUMED_ORDER_QTY }),
+      });
+
+      // 409는 실패가 아니다 — 이미 담겨 있다는 뜻이므로 실판가만 마저 채운다.
+      let existed = false;
+      if (!res.ok) {
+        if (res.status === 409) {
+          existed = true;
+        } else {
+          const b = await res.json().catch(() => ({}));
+          throw new Error(b.error ?? `서버 응답 ${res.status}`);
+        }
+      }
+
+      const failure = priceValid ? await savePrice(itemNo, p) : null;
+      setPriceError(failure);
+      setSavedPrice(priceValid && !failure ? p : null);
+      setSaved({ existed });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : '담지 못했습니다.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** 담긴 뒤에 실판가만 다시(또는 새로) 저장한다 */
+  async function retryPrice() {
+    if (itemNo === null || !priceValid) return;
+    setBusy(true);
+    const failure = await savePrice(itemNo, p);
+    setPriceError(failure);
+    if (!failure) setSavedPrice(p);
+    setBusy(false);
+  }
+
   return (
-    <div style={{ padding: '9px 13px', fontSize: 13, borderTop: `1px solid ${C.border}` }}>
-      {c.domeggook_product_name ?? '—'}
+    <div style={{
+      padding: 13,
+      // 헤더가 이미 아래쪽 선을 그으므로 첫 행은 선을 긋지 않는다(1px 겹침 방지).
+      borderTop: divider ? `1px solid ${C.border}` : 'none',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, flexWrap: 'wrap' }}>
+        <span style={{ fontWeight: 600, color: C.text }}>{c.domeggook_product_name ?? '—'}</span>
+        {c.domeggook_url && (
+          <a href={c.domeggook_url} target="_blank" rel="noreferrer"
+             style={{ fontSize: 12, color: C.textSub }}>도매꾹 ↗</a>
+        )}
+        {searchQuery && (
+          <a href={`https://www.coupang.com/np/search?q=${encodeURIComponent(searchQuery)}`}
+             target="_blank" rel="noreferrer"
+             title={`쿠팡에서 "${searchQuery}" 검색`}
+             style={{ fontSize: 12, color: C.accent }}>쿠팡에서 검색 ↗</a>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', gap: 22, flexWrap: 'wrap', margin: '9px 0 11px', fontSize: 13 }}>
+        <span style={{ color: C.textSub }}>도매가 <b style={{ color: C.text }}>{domePrice.toLocaleString()}원</b></span>
+        <span style={{ color: C.textSub }}>
+          개당 배송비 <b style={{ color: C.text }}>{deli == null ? '모름' : `${deli.toLocaleString()}원`}</b>
+        </span>
+        <span style={{ color: C.textSub }}>실효원가 <b style={{ color: C.text }}>{effectiveCost.toLocaleString()}원</b></span>
+        <span style={{ color: C.accent }}>손익분기 <b>{be.toLocaleString()}원</b></span>
+        {/* 배송비를 0으로 치고 계산한 손익분기는 실제보다 낮다 — 조용히 넘기면
+            통과하면 안 될 후보가 통과한 것으로 읽힌다. */}
+        {deli == null && (
+          <span style={{ color: C.warning, fontSize: 12 }}>배송비 미반영 — 실제 손익분기는 더 높다</span>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
+        <label style={{ fontSize: 12.5, color: C.textSub }}>쿠팡 실판가</label>
+        <input
+          value={price}
+          onChange={(e) => setPrice(e.target.value)}
+          onFocus={(e) => e.currentTarget.select()}
+          onKeyDown={(e) => { if (e.key === 'Enter') focusNextPriceInput(e.currentTarget); }}
+          inputMode="numeric"
+          aria-label={`${c.domeggook_product_name ?? '후보'} 쿠팡 실판가`}
+          data-price-input
+          style={{
+            width: 118, padding: '7px 9px', textAlign: 'right', fontWeight: 600,
+            border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13,
+          }}
+        />
+        <span style={{ fontSize: 12.5, fontWeight: 650, color: verdict.color }}>
+          {verdict.label} <span style={{ fontWeight: 500, opacity: 0.85 }}>— {verdict.why}</span>
+        </span>
+
+        {saved ? (
+          <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 9 }}>
+            <span style={{ color: C.success, fontWeight: 650, fontSize: 12.5 }}>
+              {saved.existed ? '✓ 이미 담겨 있음' : '✓ 담김'}
+              {savedPrice !== null && (
+                <span style={{ fontWeight: 500, opacity: 0.85 }}> · 실판가 {savedPrice.toLocaleString()}원</span>
+              )}
+            </span>
+            {priceValid && p !== savedPrice && (
+              <button onClick={() => void retryPrice()} disabled={busy}
+                      style={{
+                        padding: '5px 11px', fontSize: 12,
+                        border: `1px solid ${C.border}`, borderRadius: 6,
+                        background: 'transparent', color: C.text,
+                        cursor: busy ? 'default' : 'pointer',
+                      }}>
+                {busy ? '저장 중…' : '실판가 저장'}
+              </button>
+            )}
+          </span>
+        ) : (
+          <button onClick={() => void take()} disabled={busy}
+                  style={{
+                    marginLeft: 'auto', padding: '7px 13px', fontSize: 13,
+                    border: `1px solid ${C.border}`, borderRadius: 6,
+                    background: 'transparent', color: C.text,
+                    cursor: busy ? 'default' : 'pointer',
+                  }}>
+            {busy ? '담는 중…' : '소싱리스트에 담기'}
+          </button>
+        )}
+      </div>
+
+      {/* 담기는 됐는데 실판가만 못 넣은 상태. 두 호출이 한 트랜잭션이 아니라서
+          생기며, 되돌릴 필요는 없다 — 무엇이 빠졌는지와 어디서 채우는지만 말한다. */}
+      {priceError && (
+        <p style={{ marginTop: 8, fontSize: 12.5, color: C.warning }}>
+          실판가를 저장하지 못했습니다: {priceError} — 위 버튼으로 다시 시도하거나 소싱리스트 탭에서 입력하세요.
+        </p>
+      )}
+      {err && <p style={{ marginTop: 8, fontSize: 12.5, color: C.warning }}>{err}</p>}
     </div>
   );
 }
