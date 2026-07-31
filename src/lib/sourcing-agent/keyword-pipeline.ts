@@ -102,9 +102,13 @@ async function notify(chatId: string, message: string): Promise<void> {
   await sendTelegramMessage(chatId, message);
 }
 
+/**
+ * 시세 줄을 뺀 이유: 네이버 쇼핑 검색 API 종료로 p25를 자동으로 구할 수 없어
+ * 항상 0원이 찍혔다. 받는 사람에게 "예상 판매가 0원"은 거짓말이라 안내로 바꿨다.
+ * 시세는 발굴 탭에서 사용자가 직접 입력한다.
+ */
 function formatResultMessage(
   keyword: string,
-  estimatedPrice: number,
   results: KeywordResultInsert[],
 ): string {
   if (results.length === 0) {
@@ -114,7 +118,7 @@ function formatResultMessage(
   const lines: string[] = [
     `✅ 소싱 분석 완료`,
     `📦 ${keyword}`,
-    `💰 쿠팡 예상 판매가(p25): ${estimatedPrice.toLocaleString()}원`,
+    `💰 쿠팡 실판가는 발굴 탭에서 직접 확인해 주세요`,
     ``,
     `─────────────────`,
   ];
@@ -248,7 +252,7 @@ export async function runKeywordPipeline(
     await completeRequest(pool, requestId);
 
     // 7. 결과 전송
-    const message = formatResultMessage(keyword, top[0]?.naver_price ?? 0, top);
+    const message = formatResultMessage(keyword, top);
     await notify(chatId, message);
 
   } catch (err) {
