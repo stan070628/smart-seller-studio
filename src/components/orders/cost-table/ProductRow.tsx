@@ -30,7 +30,6 @@ interface Props {
   colCount: number;
   onToggleDetail: (productId: string) => void;
   onOpenDrawer: (productId: string) => void;
-  onSaveAdSpend: (productId: string, value: string) => void;
   onHide: (product: RowProduct) => void;
   onDelete: (product: RowProduct) => void;
   onEditChannel: (product: RowProduct, anchorEl: HTMLElement) => void;

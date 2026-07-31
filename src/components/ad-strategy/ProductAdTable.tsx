@@ -75,6 +75,7 @@ function SalesInput({ name, fallback, overrides, onSave }: {
     </div>
   );
 }
+import { getRgShippingFee, RG_SIZE_SPECS, RG_SIZE_TYPES, type RgSizeType } from '@/lib/roi/rg-fees';
 import {
   calcMarginPerUnit,
   calcBreakEvenRoas,
@@ -128,6 +129,47 @@ function RoasCell({ actual, breakEven }: { actual?: number; breakEven: number })
       </div>
       <div style={{ fontSize: '11px', color: '#9ca3af' }}>손익기준 {fmt(Math.round(breakEven))}%</div>
     </div>
+  );
+}
+
+/**
+ * 로켓그로스 사이즈 유형 선택.
+ * 지정하면 사이즈별 물류비(입출고비+배송비)가 마진에서 자동 차감된다.
+ * 미지정 시 물류비 0으로 계산되어 마진이 과대평가되므로 경고색으로 표시한다.
+ */
+function RgSizeSelect({
+  value,
+  onChange,
+}: {
+  value: RgSizeType | null;
+  onChange: (v: RgSizeType | null) => void;
+}) {
+  const fee = getRgShippingFee(value);
+  return (
+    <select
+      value={value ?? ''}
+      onChange={(e) => onChange((e.target.value || null) as RgSizeType | null)}
+      title="로켓그로스 사이즈 유형 — 물류비가 마진에서 차감됩니다"
+      style={{
+        marginTop: '4px',
+        display: 'block',
+        width: '100%',
+        border: `1px solid ${value ? '#d1d5db' : '#f0b100'}`,
+        borderRadius: '4px',
+        padding: '2px 4px',
+        fontSize: '11px',
+        color: value ? '#374151' : '#a16207',
+        background: value ? '#fff' : '#fffbeb',
+        cursor: 'pointer',
+      }}
+    >
+      <option value="">사이즈 미지정 (물류비 0)</option>
+      {RG_SIZE_TYPES.map((tp) => (
+        <option key={tp} value={tp}>
+          {RG_SIZE_SPECS[tp].label} · {fmt(getRgShippingFee(tp))}원
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -207,7 +249,7 @@ function CostInput({
 }
 
 export default function ProductAdTable({ products }: { products: ProductAdGrade[] }) {
-  const { get, upsert, DEFAULT_FEE_RATE } = useCostStore();
+  const { get, upsert, setRgSizeType, DEFAULT_FEE_RATE } = useCostStore();
   const [salesOverrides, setSalesOverrides] = useState<Record<string, number>>({});
   const [winnerOverrides, setWinnerOverrides] = useState<Record<string, boolean>>({});
 
@@ -263,6 +305,9 @@ export default function ProductAdTable({ products }: { products: ProductAdGrade[
             const entry = get(p.name);
             const costPrice = entry?.costPrice;
             const feeRate = entry?.feeRate ?? DEFAULT_FEE_RATE;
+            // 로켓그로스 물류비: 사이즈 유형이 지정된 경우에만 차감된다.
+            // 미지정 시 0이므로 마진이 과대평가되고 손익분기 ROAS가 과소평가된다.
+            const rgShippingFee = getRgShippingFee(entry?.rgSizeType);
             const monthlySales = salesOverrides[p.name] ?? p.monthlySales;
             const isWinner = winnerOverrides[p.name] ?? p.isItemWinner;
             const winnerOverridden = p.name in winnerOverrides;
@@ -273,7 +318,7 @@ export default function ProductAdTable({ products }: { products: ProductAdGrade[
             let roasCell: React.ReactNode = <span style={{ color: '#9ca3af' }}>-</span>;
 
             if (costPrice !== undefined) {
-              const margin = calcMarginPerUnit(p.currentPrice, costPrice, feeRate);
+              const margin = calcMarginPerUnit(p.currentPrice, costPrice, feeRate, rgShippingFee);
               const breakEven = calcBreakEvenRoas(p.currentPrice, margin);
               const { perUnit, monthly } = calcNetProfit({
                 monthlySales,
@@ -349,6 +394,10 @@ export default function ProductAdTable({ products }: { products: ProductAdGrade[
                   <CostInput
                     initialCost={costPrice}
                     onSave={(cost) => upsert(p.name, cost)}
+                  />
+                  <RgSizeSelect
+                    value={entry?.rgSizeType ?? null}
+                    onChange={(v) => setRgSizeType(p.name, v)}
                   />
                 </td>
                 <td style={{ padding: '10px 12px' }}>{profitCell}</td>

@@ -5,6 +5,7 @@ import { getSourcingPool } from '@/lib/sourcing/db';
 import { getCoupangClient } from '@/lib/listing/coupang-client';
 import type { CollectedData } from '@/lib/ad-strategy/types';
 import { matchAdProduct } from '@/lib/ad-strategy/match';
+import { resolveRgShippingFee, type RgSizeType } from '@/lib/roi/rg-fees';
 import {
   calcMargin,
   calcBreakevenRoas,
@@ -30,6 +31,8 @@ interface WingProduct {
 interface CostStat {
   costPrice: number;
   deliveryFee: number;
+  /** 로켓그로스 물류비 (입출고비+배송비). 실측 정산액 우선, 없으면 사이즈 기본값 */
+  rgShippingFee: number;
   feeRate: number;
 }
 
@@ -75,10 +78,10 @@ export async function GET(request: NextRequest) {
     const DEFAULT_FEE_RATE = 0.108;
 
     const skus: SkuRoiData[] = wingProducts.map((p) => {
-      const cost = costMap.get(p.vendorItemId) ?? { costPrice: 0, deliveryFee: 0, feeRate: DEFAULT_FEE_RATE };
+      const cost = costMap.get(p.vendorItemId) ?? { costPrice: 0, deliveryFee: 0, rgShippingFee: 0, feeRate: DEFAULT_FEE_RATE };
       const ads = adsMap.get(p.vendorItemId) ?? defaultAds();
 
-      const marginAmount = calcMargin(p.sellingPrice, cost.costPrice, cost.feeRate, cost.deliveryFee);
+      const marginAmount = calcMargin(p.sellingPrice, cost.costPrice, cost.feeRate, cost.deliveryFee, cost.rgShippingFee);
       const marginRate = p.sellingPrice > 0 ? marginAmount / p.sellingPrice : 0;
       const conversionRate = ads.clicks > 0 ? (p.salesCount / ads.clicks) * 100 : 0;
 
@@ -95,6 +98,7 @@ export async function GET(request: NextRequest) {
         sellingPrice: p.sellingPrice,
         costPrice: cost.costPrice,
         feeRate: cost.feeRate,
+        rgShippingFee: cost.rgShippingFee,
         deliveryFee: cost.deliveryFee,
         marginAmount,
         marginRate,
@@ -238,6 +242,8 @@ async function fetchCostMap(
     platform_fee_rate: number;
     weighted_avg_cost: number;
     weighted_avg_shipping: number;
+    weighted_avg_rg_shipping: number;
+    rg_size_type: string | null;
   }>(
     `SELECT
        pc.product_name,
@@ -252,12 +258,18 @@ async function fetchCostMap(
          SUM(ce.unit_shipping_fee * ce.quantity) FILTER (WHERE ce.id IS NOT NULL)
          / NULLIF(SUM(ce.quantity) FILTER (WHERE ce.id IS NOT NULL), 0),
          0
-       ) AS weighted_avg_shipping
+       ) AS weighted_avg_shipping,
+       COALESCE(
+         SUM(ce.unit_rg_shipping_fee * ce.quantity) FILTER (WHERE ce.id IS NOT NULL)
+         / NULLIF(SUM(ce.quantity) FILTER (WHERE ce.id IS NOT NULL), 0),
+         0
+       ) AS weighted_avg_rg_shipping,
+       pc.rg_size_type
      FROM product_costs pc
      LEFT JOIN cost_entries ce
        ON ce.product_cost_id = pc.id AND ce.user_id = $1
      WHERE pc.user_id = $1
-     GROUP BY pc.product_name, pc.seller_product_id, pc.platform_fee_rate`,
+     GROUP BY pc.product_name, pc.seller_product_id, pc.platform_fee_rate, pc.rg_size_type`,
     [userId],
   );
 
@@ -281,6 +293,11 @@ async function fetchCostMap(
       result.set(p.vendorItemId, {
         costPrice: Number(matched.weighted_avg_cost),
         deliveryFee: Number(matched.weighted_avg_shipping),
+        // 실측 정산액이 있으면 그것을, 없으면 사이즈 유형 기본 요율을 적용한다
+        rgShippingFee: resolveRgShippingFee(
+          Number(matched.weighted_avg_rg_shipping),
+          matched.rg_size_type as RgSizeType | null,
+        ),
         feeRate: Number(matched.platform_fee_rate),
       });
     }

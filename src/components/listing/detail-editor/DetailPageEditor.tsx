@@ -155,6 +155,8 @@ export interface DetailPageEditorProps {
   uploadedUrls?: string[];
   onSceneEdit?: (section: DetailSection, opts: { instruction: string; referenceImageUrls: string[] }) => Promise<void>;
   onSceneUseAsIs?: (section: DetailSection, url: string) => void;
+  /** claude_layout Gemini 이미지 슬롯 단일 재생성 */
+  onClaudeSlotRegenerate?: (sectionId: string, slotIdx: number, hint: string) => Promise<void>;
   editingSectionId?: string | null;
   sceneEditError?: { sectionId: string; message: string } | null;
   prevSceneUrlMap?: Map<string, string>;
@@ -174,6 +176,7 @@ const ADD_SECTION_OPTIONS: Array<{ type: SectionType; label: string }> = [
   { type: 'brand_header',   label: '브랜드 헤더' },
   { type: 'point',          label: '포인트' },
   { type: 'image_grid',     label: '이미지 그리드' },
+  { type: 'youtube',        label: '유튜브 영상' },
 ];
 
 export default function DetailPageEditor({
@@ -196,6 +199,7 @@ export default function DetailPageEditor({
   sceneEditError,
   prevSceneUrlMap,
   onSceneUndo,
+  onClaudeSlotRegenerate,
 }: DetailPageEditorProps) {
   // 섹션 추가 드롭다운 열림 여부
   const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -330,9 +334,9 @@ export default function DetailPageEditor({
     [sections, onSectionsChange],
   );
 
-  // claude_layout 섹션 콘텐츠/이미지 업데이트
+  // claude_layout/youtube 섹션 콘텐츠/이미지 업데이트
   const handleSectionUpdate = useCallback(
-    (id: string, updates: Partial<import('@/types/detail-page').ClaudeLayoutContent> & { attachedImages?: AttachedImage[] }) => {
+    (id: string, updates: (Partial<import('@/types/detail-page').ClaudeLayoutContent> | Partial<import('@/types/detail-page').YoutubeContent>) & { attachedImages?: AttachedImage[] }) => {
       const { attachedImages, ...contentUpdates } = updates;
       const updated = sections.map((s) => {
         if (s.id !== id) return s;
@@ -545,6 +549,7 @@ export default function DetailPageEditor({
                       sceneEditError={sceneEditError?.sectionId === section.id ? sceneEditError.message : null}
                       prevSceneUrl={prevSceneUrlMap?.get(section.id)}
                       onSceneUndo={onSceneUndo ? () => onSceneUndo(section.id) : undefined}
+                      onClaudeSlotRegenerate={onClaudeSlotRegenerate}
                       onSectionUpdate={handleSectionUpdate}
                     />
                   ))

@@ -18,7 +18,8 @@ export type SectionType =
   | 'why_icons'
   | 'certifications'
   | 'infographic_steps'
-  | 'claude_layout';
+  | 'claude_layout'
+  | 'youtube';
 
 export type PaletteName =
   | 'warm_cream'
@@ -176,6 +177,10 @@ export type LayoutBlock =
   // 사이즈·색상·용량 등 순서 없는 병렬 선택 옵션 (화살표 없는 카드 그리드). process_flow와 달리 흐름을 나타내지 않음.
   | { type: 'option_grid'; cols?: 2 | 3; items: Array<{ label: string; sublabel?: string; highlight?: boolean }> }
   | { type: 'layout_bar_chart'; title?: string; unit?: string; groups: string[]; groupColors: string[]; items: Array<{ label: string; values: number[] }>; showLegend?: boolean }
+  // 실측 스펙 표(사이즈표·소재 혼용률·제품 정보). 섹션 타입 SpecTableContent는
+  // {label,value} 1축이라 "사이즈 × 항목"처럼 2축인 실측표를 담지 못해 별도로 둔다.
+  // columns[0]은 행 머리(예: '사이즈'), 각 row도 [머리값, ...셀] 순서다.
+  | { type: 'spec_table'; columns: string[]; rows: string[][]; unit?: string; note?: string }
   // Phase 2 — 타입 정의만, 렌더러 미구현
   | { type: 'radar_chart'; axes: Array<{ label: string; value: number; max?: number }>; color?: string }
   | { type: 'timeline'; items: Array<{ stage: string; icon?: string; value?: string; highlight?: boolean }> }
@@ -187,6 +192,16 @@ export interface ClaudeLayoutContent {
   blocks: LayoutBlock[];
   bgStyle?: 'white' | 'light' | 'dark' | 'primary';
   padding?: 'normal' | 'compact' | 'wide';
+}
+
+export interface YoutubeContent {
+  type: 'youtube';
+  url: string;                          // 붙여넣은 원본 URL
+  videoId: string;                      // 파싱된 11자 ID
+  aspect: 'vertical' | 'horizontal';    // Shorts=9:16, 일반=16:9
+  caption?: string;                     // 예: "동영상제공:유투버varoachi"
+  enabled: boolean;                     // 표시/숨김 토글
+  exportThumbnailUrl?: string;          // export 렌더 직전 route가 채우는 합성 썸네일 호스팅 URL
 }
 
 export type SectionContent =
@@ -207,7 +222,8 @@ export type SectionContent =
   | WhyIconsContent
   | CertificationsContent
   | InfographicStepsContent
-  | ClaudeLayoutContent;
+  | ClaudeLayoutContent
+  | YoutubeContent;
 
 export interface DetailSection {
   id: string;
@@ -289,6 +305,9 @@ export function isInfographicStepsContent(c: SectionContent): c is InfographicSt
 }
 export function isClaudeLayoutContent(c: SectionContent): c is ClaudeLayoutContent {
   return c.type === 'claude_layout';
+}
+export function isYoutubeContent(c: SectionContent): c is YoutubeContent {
+  return c.type === 'youtube';
 }
 
 export interface RichSections {

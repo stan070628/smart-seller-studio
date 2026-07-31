@@ -9,7 +9,7 @@ import sharp from 'sharp';
 export interface ReferenceImage {
   /** data URL prefix 제외 base64 */
   base64: string;
-  mimeType: 'image/jpeg';
+  mimeType: 'image/jpeg' | 'image/png';
 }
 
 export interface LoadReferenceImagesInput {
@@ -27,6 +27,15 @@ export interface LoadReferenceImagesInput {
 
 const MAX_REFERENCES = 3;
 const MAX_EDGE = 1024;
+
+export interface LoadReferenceImagesOptions {
+  /**
+   * true: 무손실 PNG로 정규화(장변 1024 유지) — 배경제거(rembg) 입력 등
+   * 화질이 중요한 용도. q80 JPEG 재압축은 페더/미세 가장자리를 뭉갠다.
+   * 기본(false): 기존과 동일하게 JPEG q80 (LLM 컨텍스트용, 용량 우선).
+   */
+  lossless?: boolean;
+}
 
 /**
  * 서버가 fetch해도 되는 이미지 호스트 allowlist를 구성한다.
@@ -67,18 +76,23 @@ function isAllowedImageUrl(raw: string, allowed: Set<string>): boolean {
   return allowed.has(u.hostname.toLowerCase());
 }
 
-/** 단일 Buffer를 장변 1024px JPEG q80으로 정규화하여 base64 반환 */
-async function normalizeBuffer(buf: Buffer): Promise<string> {
-  const out = await sharp(buf)
-    .resize(MAX_EDGE, MAX_EDGE, { fit: 'inside', withoutEnlargement: true })
-    .jpeg({ quality: 80 })
-    .toBuffer();
+/** 단일 Buffer를 장변 1024px로 정규화하여 base64 반환 (기본 JPEG q80, lossless 시 PNG) */
+async function normalizeBuffer(buf: Buffer, lossless: boolean): Promise<string> {
+  const resized = sharp(buf).resize(MAX_EDGE, MAX_EDGE, {
+    fit: 'inside',
+    withoutEnlargement: true,
+  });
+  const out = lossless
+    ? await resized.png().toBuffer()
+    : await resized.jpeg({ quality: 80 }).toBuffer();
   return out.toString('base64');
 }
 
 export async function loadReferenceImages(
   input: LoadReferenceImagesInput,
+  options?: LoadReferenceImagesOptions,
 ): Promise<ReferenceImage[]> {
+  const lossless = options?.lossless ?? false;
   const buffers: Buffer[] = [];
 
   // 1. base64 직접 입력 (referenceImages → 단일 productImageBase64)
@@ -124,10 +138,11 @@ export async function loadReferenceImages(
 
   // 3. 상한 적용 + 정규화
   const limited = buffers.slice(0, MAX_REFERENCES);
+  const mimeType = lossless ? ('image/png' as const) : ('image/jpeg' as const);
   const normalized = await Promise.all(
     limited.map(async (b) => {
       try {
-        return { base64: await normalizeBuffer(b), mimeType: 'image/jpeg' as const };
+        return { base64: await normalizeBuffer(b, lossless), mimeType };
       } catch {
         return null;
       }

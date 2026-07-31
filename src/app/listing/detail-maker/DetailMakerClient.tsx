@@ -92,7 +92,7 @@ export default function DetailMakerClient() {
           fetch('/api/detail-page/render', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sections: proSections, theme: initialTheme }),
+            body: JSON.stringify({ sections: proSections, theme: initialTheme, mode: 'preview' }),
           })
             .then(r => r.json())
             .then(json => { if (json.html) setGeneratedHtml(json.html); })
@@ -332,7 +332,7 @@ export default function DetailMakerClient() {
       const res = await fetch('/api/detail-page/render', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sections: nextSections, theme: nextTheme }),
+        body: JSON.stringify({ sections: nextSections, theme: nextTheme, mode: 'preview' }),
       });
       const json = await res.json();
       if (res.ok) {
@@ -344,6 +344,50 @@ export default function DetailMakerClient() {
       setError('미리보기 갱신 중 오류가 발생했습니다.');
     } finally {
       setIsRendering(false);
+    }
+  }
+
+  // ─── claude_layout Gemini 이미지 슬롯 단일 재생성 ────────────────────────────
+  // 텍스트/블록은 그대로 두고, 지정한 이미지 슬롯 1장만 lifestyle 씬으로 다시 생성한다.
+  async function handleClaudeSlotRegenerate(sectionId: string, slotIdx: number, hint: string) {
+    const section = sections.find(s => s.id === sectionId);
+    if (!section || !isClaudeLayoutContent(section.content)) return;
+    setError(null);
+    try {
+      const sceneRes = await fetch('/api/ai/generate-scene-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sectionType: 'lifestyle',
+          productImageUrls: uploadedUrls.slice(0, 3),
+          sceneHint: hint.trim() || section.content.title,
+        }),
+      });
+      if (!sceneRes.ok) throw new Error('scene');
+      const sceneData = await sceneRes.json() as { success: boolean; data?: { imageBase64: string; mimeType: string } };
+      if (!sceneData.success || !sceneData.data) throw new Error('scene');
+
+      const uploadRes = await fetch('/api/image/upload-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: sceneData.data.imageBase64, mimeType: sceneData.data.mimeType, role: 'lifestyle' }),
+      });
+      if (!uploadRes.ok) throw new Error('upload');
+      const uploadData = await uploadRes.json() as { success: boolean; url?: string };
+      if (!uploadData.success || !uploadData.url) throw new Error('upload');
+      const newUrl = uploadData.url;
+
+      const nextSections = sections.map(s => {
+        if (s.id !== sectionId) return s;
+        const images = s.attachedImages.map((img, i) =>
+          i === slotIdx ? { ...img, url: newUrl, source: 'gemini' as const } : img,
+        );
+        return { ...s, attachedImages: images };
+      });
+      setSections(nextSections);
+      await refreshRenderedHtml(nextSections, theme);
+    } catch {
+      setError('이미지 재생성에 실패했습니다. 잠시 후 다시 시도해주세요.');
     }
   }
 
@@ -412,6 +456,8 @@ export default function DetailMakerClient() {
                 title: content.title,
                 points: content.points ?? [],
                 imageSlots,
+                // gemini 슬롯이 제품 정체성을 잃지 않도록 섹션별 제품 참조 URL 전달
+                productImageUrls: sectionRefUrls,
               }),
             });
             if (!layoutRes.ok) return null;
@@ -1080,21 +1126,53 @@ export default function DetailMakerClient() {
   }
 
   // ─── HTML 복사 / 다운로드 ────────────────────────────────────────────────────
-  /** 에디터 전용 data-* 속성을 제거하여 Coupang Wing 등 외부 플랫폼에 붙여넣기 가능한 HTML 반환 */
-  function getCleanHtml(): string {
-    return generatedHtml
+  /** 내보내기용 HTML — export 모드로 재렌더(유튜브 썸네일 등) 후 에디터 전용 data-* 제거 */
+  async function getCleanHtml(): Promise<string> {
+    let html = generatedHtml;
+    try {
+      const res = await fetch('/api/detail-page/render', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sections, theme, mode: 'export' }),
+      });
+      const json = await res.json();
+      if (res.ok && json.html) html = json.html;
+    } catch {
+      // 실패 시 현재 미리보기 HTML로 폴백 — 미리보기는 유튜브 iframe 등 export에 부적합한 마크업을 포함할 수 있으므로 사용자에게 알림
+      setError('내보내기 렌더에 실패해 미리보기 HTML로 대체했습니다. 다시 시도해주세요.');
+    }
+    return html
       .replace(/ data-section-id="[^"]*"/g, '')
       .replace(/ data-section-type="[^"]*"/g, '')
       .replace(/ data-section-label="[^"]*"/g, '')
       .replace(/ data-edit-path="[^"]*"/g, '');
   }
 
+  /**
+   * HTML 복사 — navigator.clipboard.write()에 Promise 페이로드를 담은 ClipboardItem을 "동기적으로" 전달해
+   * 클릭 이벤트의 transient user activation을 보존한다. await getCleanHtml() 이후 writeText를 호출하면
+   * (네트워크 왕복 이후이므로) Safari/Firefox에서 activation이 소실되어 조용히 실패 — 빈 클립보드로 이어진다.
+   */
   async function handleHtmlCopy() {
-    await navigator.clipboard.writeText(getCleanHtml()).catch(() => {});
+    try {
+      if (typeof window !== 'undefined' && 'ClipboardItem' in window && navigator.clipboard?.write) {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'text/plain': getCleanHtml().then((h) => new Blob([h], { type: 'text/plain' })),
+          }),
+        ]);
+      } else {
+        const html = await getCleanHtml();
+        await navigator.clipboard.writeText(html);
+      }
+    } catch {
+      setError('HTML 복사에 실패했습니다. 다시 시도해주세요.');
+    }
   }
 
-  function handleDownload() {
-    const blob = new Blob([getCleanHtml()], { type: 'text/html;charset=utf-8' });
+  async function handleDownload() {
+    const html = await getCleanHtml();
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -1175,6 +1253,7 @@ export default function DetailMakerClient() {
               sceneEditError={sceneEditError}
               prevSceneUrlMap={prevSceneUrls.current}
               onSceneUndo={handleSceneUndo}
+              onClaudeSlotRegenerate={handleClaudeSlotRegenerate}
             />
             {isGeneratingScenes && (
               <div style={{

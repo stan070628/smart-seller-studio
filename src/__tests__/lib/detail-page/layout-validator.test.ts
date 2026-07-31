@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateProLayout, sanitizeProLayout } from '@/lib/detail-page/layout-validator';
+import { validateProLayout, sanitizeProLayout, isNoiseStatItem } from '@/lib/detail-page/layout-validator';
 
 /** 유효한 최소 섹션(6개) 생성 헬퍼 */
 function validSections(count = 6): unknown[] {
@@ -125,5 +125,311 @@ describe('sanitizeProLayout', () => {
   it('교정 후 남은 위반을 warnings로 반환한다(예: 섹션 수 부족)', () => {
     const { warnings } = sanitizeProLayout([{ type: 'claude_layout', title: 'A', blocks: [{ type: 'heading', text: 'A', size: 'xl' }] }]);
     expect(warnings.some((w) => w.code === 'section_count')).toBe(true);
+  });
+});
+
+describe('sanitizeProLayout — stat_row 위생', () => {
+  /** stat_row 하나를 가진 섹션 */
+  function statSection(items: Array<{ label: string; value: string; unit?: string }>): unknown {
+    return {
+      type: 'claude_layout',
+      title: '지표',
+      blocks: [
+        { type: 'heading', text: '지표', size: 'xl' },
+        { type: 'stat_row', items },
+      ],
+    };
+  }
+
+  function statBlockOf(section: unknown): { items?: unknown[] } | undefined {
+    const blocks = (section as { blocks?: Array<{ type?: string; items?: unknown[] }> }).blocks ?? [];
+    return blocks.find((b) => b.type === 'stat_row');
+  }
+
+  it('statHygiene 없으면 아무것도 지우지 않는다', () => {
+    const secs = [statSection([
+      { label: '소매 길이', value: '0', unit: 'cm' },
+      { label: '사이즈', value: '4', unit: '단계' },
+      { label: '가슴둘레', value: '95~110', unit: 'cm' },
+    ])];
+    const { sections } = sanitizeProLayout(secs);
+    expect(statBlockOf(sections[0])!.items).toHaveLength(3);
+  });
+
+  it('치수 계열의 0값을 제거한다', () => {
+    const secs = [statSection([
+      { label: '소매 길이', value: '0', unit: 'cm' },
+      { label: '가슴둘레', value: '95~110', unit: 'cm' },
+      { label: '무게', value: '180', unit: 'g' },
+    ])];
+    const { sections } = sanitizeProLayout(secs, { statHygiene: true });
+    const items = statBlockOf(sections[0])!.items as Array<{ label: string }>;
+    expect(items.map((i) => i.label)).toEqual(['가슴둘레', '무게']);
+  });
+
+  it('치수가 아닌 0값은 남긴다 (설탕 0g은 정당한 지표)', () => {
+    const secs = [statSection([
+      { label: '설탕', value: '0', unit: 'g' },
+      { label: '열량', value: '25', unit: 'kcal' },
+    ])];
+    const { sections } = sanitizeProLayout(secs, { statHygiene: true });
+    expect(statBlockOf(sections[0])!.items).toHaveLength(2);
+  });
+
+  it('개수 단위가 unit에 있으면 제거한다', () => {
+    const secs = [statSection([
+      { label: '사이즈', value: '4', unit: '단계' },
+      { label: '가슴둘레', value: '95~110', unit: 'cm' },
+      { label: '무게', value: '180', unit: 'g' },
+    ])];
+    const { sections } = sanitizeProLayout(secs, { statHygiene: true });
+    const items = statBlockOf(sections[0])!.items as Array<{ label: string }>;
+    expect(items.map((i) => i.label)).toEqual(['가슴둘레', '무게']);
+  });
+
+  it('숫자와 개수 단위가 value에 결합된 경우도 제거한다', () => {
+    const secs = [statSection([
+      { label: '사이즈', value: '4단계' },
+      { label: '컬러', value: '2종' },
+      { label: '가슴둘레', value: '95~110', unit: 'cm' },
+      { label: '무게', value: '180', unit: 'g' },
+    ])];
+    const { sections } = sanitizeProLayout(secs, { statHygiene: true });
+    const items = statBlockOf(sections[0])!.items as Array<{ label: string }>;
+    expect(items.map((i) => i.label)).toEqual(['가슴둘레', '무게']);
+  });
+
+  it('없음/무/-/N/A 값을 제거한다', () => {
+    const secs = [statSection([
+      { label: '소매', value: '없음' },
+      { label: '부자재', value: '-' },
+      { label: '가슴둘레', value: '95~110', unit: 'cm' },
+      { label: '무게', value: '180', unit: 'g' },
+    ])];
+    const { sections } = sanitizeProLayout(secs, { statHygiene: true });
+    const items = statBlockOf(sections[0])!.items as Array<{ label: string }>;
+    expect(items.map((i) => i.label)).toEqual(['가슴둘레', '무게']);
+  });
+
+  it('남은 항목이 2개 미만이면 블록을 제거한다', () => {
+    const secs = [statSection([
+      { label: '소매 길이', value: '0', unit: 'cm' },
+      { label: '사이즈', value: '4', unit: '단계' },
+      { label: '무게', value: '180', unit: 'g' },
+    ])];
+    const { sections } = sanitizeProLayout(secs, { statHygiene: true });
+    expect(statBlockOf(sections[0])).toBeUndefined();
+  });
+
+  it('columns.cols 안의 stat_row도 정리하고, 2개 미만이면 배열에서 뺀다', () => {
+    const secs = [{
+      type: 'claude_layout',
+      title: '지표',
+      blocks: [
+        {
+          type: 'columns',
+          cols: [
+            [{ type: 'stat_row', items: [
+              { label: '소매 길이', value: '0', unit: 'cm' },
+              { label: '무게', value: '180', unit: 'g' },
+            ] }],
+            [{ type: 'heading', text: '오른쪽', size: 'md' }],
+          ],
+        },
+      ],
+    }];
+    const { sections } = sanitizeProLayout(secs, { statHygiene: true });
+    const cols = ((sections[0] as { blocks: Array<{ cols: unknown[][] }> }).blocks[0]!).cols;
+    // stat_row가 빠진 컬럼은 통째로 제거된다 (빈 flex 칸 렌더 방지)
+    expect(cols).toHaveLength(1);
+    expect(cols[0]).toHaveLength(1);
+  });
+});
+
+describe('isNoiseStatItem', () => {
+  const NOISE: Array<[string, string, string]> = [
+    ['소매 길이', '0', 'cm'],
+    ['사이즈', '4', '단계'],
+    ['사이즈', '4단계', ''],
+    ['컬러', '2종', ''],
+    ['색상', '2', '종'],
+    ['사이즈 단계', '4', ''],
+    ['소매', '없음', ''],
+    ['부자재', '-', ''],
+  ];
+
+  const LEGIT: Array<[string, string, string]> = [
+    ['설탕', '0', 'g'],
+    ['유해물질', '0', '%'],
+    ['두께 오차', '0', 'mm'],
+    ['길이 변형', '0', '%'],
+    ['주름', '0', '개'],
+    ['누적 판매', '12000', '개'],
+    ['보증 기간', '24', '개월'],
+    ['개봉 후 사용기간', '12', '개월'],
+    ['최종 등급', '3', ''],
+    ['각종 인증', '5', ''],
+    ['세트 구성 중량', '500', 'g'],
+    ['세트당 수량', '3', ''],
+    ['색상 유지력', '95', '%'],
+    ['단계별 온도 조절', '5', ''],
+    ['가슴둘레', '95~110', 'cm'],
+    ['무게', '180', 'g'],
+    ['폭발 위험', '0', '건'],
+  ];
+
+  it.each(NOISE)('노이즈로 판정: %s / %s / %s', (label, value, unit) => {
+    expect(isNoiseStatItem({ label, value, unit })).toBe(true);
+  });
+
+  it.each(LEGIT)('정당한 지표로 유지: %s / %s / %s', (label, value, unit) => {
+    expect(isNoiseStatItem({ label, value, unit })).toBe(false);
+  });
+});
+
+describe('validateProLayout — 옵션 커버리지', () => {
+  const nameByIdx = new Map<number, string>([[0, '화이트'], [1, '블랙']]);
+
+  function imgSection(title: string, refs: Array<number | undefined>): unknown {
+    return {
+      type: 'claude_layout',
+      title,
+      blocks: [{ type: 'heading', text: title, size: 'xl' }],
+      imageSlots: refs.map((r) => ({ slotType: 'flux_lifestyle', imageRef: r })),
+    };
+  }
+
+  function compareSection(): unknown {
+    return {
+      type: 'claude_layout',
+      title: '컬러',
+      blocks: [{ type: 'option_grid', items: [{ label: '화이트' }, { label: '블랙' }] }],
+      imageSlots: [
+        { slotType: 'product_nukki', imageRef: 0 },
+        { slotType: 'product_nukki', imageRef: 1 },
+      ],
+    };
+  }
+
+  /** 비교 1개 + 화이트 2 / 블랙 2 — 균형 잡힌 6섹션 */
+  function balanced(): unknown[] {
+    return [
+      imgSection('히어로', [0]),
+      imgSection('소재', [1]),
+      compareSection(),
+      imgSection('디테일', [0]),
+      imgSection('활용', [1]),
+      { type: 'claude_layout', title: '안내', blocks: [{ type: 'heading', text: '안내', size: 'xl' }] },
+    ];
+  }
+
+  it('opts가 없으면 옵션 검사를 하지 않는다', () => {
+    const secs = [imgSection('a', [0]), imgSection('b', [0]), ...balanced().slice(2)];
+    const res = validateProLayout(secs);
+    expect(res.violations.filter((v) => v.code.startsWith('option'))).toHaveLength(0);
+  });
+
+  it('옵션이 1개면 검사하지 않는다', () => {
+    const single = new Map<number, string>([[0, '화이트']]);
+    const res = validateProLayout(balanced(), { optionNameByImageIndex: single });
+    expect(res.violations.filter((v) => v.code.startsWith('option'))).toHaveLength(0);
+  });
+
+  it('균형 잡힌 레이아웃은 옵션 위반이 없다', () => {
+    const res = validateProLayout(balanced(), { optionNameByImageIndex: nameByIdx });
+    expect(res.violations.filter((v) => v.code.startsWith('option'))).toHaveLength(0);
+  });
+
+  it('비교 섹션이 없으면 error', () => {
+    const secs = balanced().filter((_, i) => i !== 2);
+    const res = validateProLayout(secs, { optionNameByImageIndex: nameByIdx });
+    const v = res.violations.find((x) => x.code === 'option_compare');
+    expect(v?.severity).toBe('error');
+    expect(res.isClean).toBe(false);
+  });
+
+  it('한 옵션이 비교 섹션 밖에 한 번도 안 나오면 error', () => {
+    const secs = balanced();
+    secs[1] = imgSection('소재', [0]);
+    secs[4] = imgSection('활용', [0]);
+    const res = validateProLayout(secs, { optionNameByImageIndex: nameByIdx });
+    const coverage = res.violations.filter((x) => x.code === 'option_coverage');
+    expect(coverage[0]?.severity).toBe('error');
+    expect(coverage[0]?.message).toContain('블랙');
+    // 미등장 옵션이 있으면 편차도 당연히 크다. 같은 원인에 위반을 2개 쌓지 않는다.
+    expect(coverage).toHaveLength(1);
+  });
+
+  it('등장 횟수 편차가 1을 넘으면 error', () => {
+    const secs = balanced();
+    secs[3] = imgSection('디테일', [0, 0, 0]);
+    const res = validateProLayout(secs, { optionNameByImageIndex: nameByIdx });
+    // 화이트 4 / 블랙 2 → 편차 2
+    expect(res.violations.some((x) => x.code === 'option_coverage')).toBe(true);
+  });
+
+  it('편차가 정확히 1이면 통과한다', () => {
+    const secs = balanced();
+    secs.push(imgSection('추가', [0]));
+    // 화이트 3 / 블랙 2 → 편차 1
+    const res = validateProLayout(secs, { optionNameByImageIndex: nameByIdx });
+    expect(res.violations.filter((v) => v.code === 'option_coverage')).toHaveLength(0);
+  });
+
+  it('비교 섹션 밖 슬롯에 imageRef가 없으면 error', () => {
+    const secs = balanced();
+    secs[0] = imgSection('히어로', [undefined]);
+    const res = validateProLayout(secs, { optionNameByImageIndex: nameByIdx });
+    const v = res.violations.find((x) => x.code === 'option_coverage' && x.message.includes('imageRef'));
+    expect(v?.severity).toBe('error');
+  });
+
+  it('비교 섹션이 2개 이상이면 warning (error 아님)', () => {
+    const secs = balanced();
+    secs.splice(3, 0, compareSection());
+    const res = validateProLayout(secs, { optionNameByImageIndex: nameByIdx });
+    const v = res.violations.find((x) => x.code === 'option_compare');
+    expect(v?.severity).toBe('warning');
+  });
+});
+
+describe('validateProLayout — option_grid 이미지 정합성', () => {
+  /** option_grid 섹션 하나만 있는 최소 입력. 섹션 수 경고는 무시하고 option_image만 본다. */
+  function gridSection(itemCount: number, slotCount: number, withImageBlock = false): unknown {
+    const blocks: unknown[] = [
+      { type: 'option_grid', items: Array.from({ length: itemCount }, (_, i) => ({ label: `S${i}` })) },
+    ];
+    if (withImageBlock) blocks.unshift({ type: 'image', attachedIndex: 0 });
+    return {
+      type: 'claude_layout',
+      title: '옵션',
+      blocks,
+      imageSlots: Array.from({ length: slotCount }, (_, i) => ({ slotType: 'product_nukki', imageRef: i })),
+    };
+  }
+
+  function optionImageViolations(sec: unknown) {
+    return validateProLayout([sec]).violations.filter((v) => v.code === 'option_image');
+  }
+
+  it('슬롯 수와 카드 수가 다르면 카드 이미지가 표시되지 않으므로 warning', () => {
+    const v = optionImageViolations(gridSection(4, 1));
+    expect(v).toHaveLength(1);
+    expect(v[0].severity).toBe('warning');
+  });
+
+  it('슬롯이 없는 텍스트 전용 option_grid는 정상이다', () => {
+    expect(optionImageViolations(gridSection(4, 0))).toHaveLength(0);
+  });
+
+  it('슬롯 수와 카드 수가 같으면 정상이다', () => {
+    expect(optionImageViolations(gridSection(2, 2))).toHaveLength(0);
+  });
+
+  it('카드가 이미지를 그리는데 대형 image 블록도 있으면 중복이므로 warning', () => {
+    const v = optionImageViolations(gridSection(2, 2, true));
+    expect(v).toHaveLength(1);
+    expect(v[0].severity).toBe('warning');
+    expect(v[0].autoFixable).toBe(true);
   });
 });

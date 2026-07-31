@@ -2,14 +2,27 @@
  * POST /api/ai/generate-pro-layout
  *
  * OCR 결과 + 상품 정보 → Claude Sonnet으로 전체 페이지 DSL 생성
+ *
+ * 응답: { success, sections, warnings? }. warnings는 위생 삭제·잔존 위반이
+ * 있을 때만 존재하는 사용자용 한국어 문구 배열이다(빈 배열이면 키 자체를 생략).
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAuth } from '@/lib/supabase/auth';
 import { checkRateLimit, getRateLimitKey } from '@/lib/rate-limit';
 import { callClaude, callClaudeVision, type ClaudeImage } from '@/lib/ai/claude-cli';
-import { sanitizeProLayout, validateProLayout } from '@/lib/detail-page/layout-validator';
+import { sanitizeProLayout, validateProLayout, stripCjk } from '@/lib/detail-page/layout-validator';
+import { isGroundedProgressItem, type ProgressItem } from '@/lib/detail-page/progress-hygiene';
+import { requiredSpecWarnings } from '@/lib/detail-page/required-specs';
+import { sectionCap } from '@/lib/detail-page/image-hygiene';
 import { repairProLayout } from '@/lib/ai/repair-pro-layout';
+import {
+  uniqueOptionNames,
+  isOptionMode,
+  optionNameByImageIndex,
+  type ProductOption,
+} from '@/lib/detail-page/product-options';
+import { CLAUDE_SYSTEM } from './system-prompt';
 
 export const maxDuration = 180;
 
@@ -46,66 +59,105 @@ const RequestSchema = z.object({
     .array(z.object({ base64: z.string().min(1), mimeType: z.string() }))
     .max(4)
     .default([]),
+  // 이미지에 붙은 옵션명. 이름이 붙은 이미지마다 한 항목(중복 허용).
+  productOptions: z
+    .array(z.object({
+      name: z.string().min(1).max(40),
+      imageIndex: z.number().int().min(0).max(3),
+    }))
+    .max(4)
+    .default([]),
 });
 
-const CLAUDE_SYSTEM = `You are a Korean e-commerce product detail page designer.
-Generate a complete page layout as a JSON array of sections for mobile (390px width).
-
-Each section is a ClaudeLayoutContent object:
-{
-  "type": "claude_layout",
-  "title": "section title",
-  "blocks": [...],
-  "bgStyle": "white"|"light"|"dark"|"primary",
-  "padding": "normal"|"compact"|"wide",
-  "imageSlots": [{"slotType": "flux_lifestyle"|"product_nukki"|"detail_closeup", "promptHint": "...", "imageRef": 0}]
+/**
+ * sections의 progress_bar 블록(columns.cols 재귀 포함)마다 items 배열로 콜백을 호출한다.
+ * countUngroundedProgressItems가 이 워커를 재사용한다.
+ */
+function forEachProgressBarItems(sections: unknown[], cb: (items: unknown[]) => void): void {
+  if (!Array.isArray(sections)) return; // sanitizeProLayout의 방어와 대칭 — 도달 불가하지만 비배열 입력에 안전
+  const walkBlocks = (blocks: unknown): void => {
+    if (!Array.isArray(blocks)) return;
+    for (const b of blocks) {
+      if (!b || typeof b !== 'object') continue;
+      const block = b as Record<string, unknown>;
+      if (block.type === 'progress_bar' && Array.isArray(block.items)) cb(block.items);
+      if (Array.isArray(block.cols)) {
+        for (const col of block.cols) walkBlocks(col);
+      }
+    }
+  };
+  for (const sec of sections) {
+    if (sec && typeof sec === 'object') walkBlocks((sec as { blocks?: unknown }).blocks);
+  }
 }
-slotType: flux_lifestyle=착용/사용 라이프스타일 씬(AI 생성), product_nukki=제품 단독컷, detail_closeup=제품의 물리적 디테일(지퍼·스트랩·원단·수납) 접사 컷.
-imageRef = 이 슬롯에 쓸 제품 이미지의 인덱스(0부터). 제공된 이미지를 실제로 보고, 그 섹션 내용/색상에 가장 맞는 이미지를 지정하세요. 예: 히어로·소재 섹션이 베이지를 다루면 베이지 이미지 인덱스를, 로즈 카드는 로즈 이미지 인덱스를.
 
-Available block types in blocks[]:
-- badge: { type, text, color?: 'primary'|'accent'|'neutral' }
-- heading: { type, text, size: 'xl'|'lg'|'md', bold?, color? }
-- subtext: { type, text, align?: 'left'|'center' }
-- image: { type, attachedIndex: 0..N } — attachedIndex는 "해당 섹션 imageSlots 내부의 0-기반 인덱스"이며 반드시 imageSlots.length 미만이어야 한다. imageSlots를 선언한 섹션은 blocks에 대응하는 image 블록을 반드시 하나 이상 포함하라.
-- stat_row: { type, items: [{label, value, unit?}] }
-- bullet_list: { type, items: string[], icon?: 'dot'|'check'|'arrow' }
-- columns: { type, cols: LayoutBlock[][], gap? }
-- divider: { type }
-- spacer: { type, height: number }
-- progress_bar: { type, items: [{label, value(0-100), displayValue?, highlight?}] }
-- process_flow: { type, direction?: 'horizontal'|'vertical', items: [{label, sublabel?, highlight?}] } — TIME/ORDER 흐름 단계 전용. 화살표로 연결됨.
-- icon_grid: { type, cols?: 2|3, items: [{icon, title, subtitle?}] }
-- option_grid: { type, cols?: 2|3, items: [{label, sublabel?, highlight?}] } — 사이즈/색상/용량/구성 등 순서 없는 병렬 선택 옵션. 화살표 없음. 컬러/구성처럼 옵션마다 제품 이미지가 다른 경우: imageSlots를 옵션 개수만큼(items 수와 동일) 선언하면 각 카드 상단에 이미지가 순서대로 렌더된다. 이 경우 같은 섹션에 별도의 대형 image 블록을 두지 말 것(카드가 이미지를 표시하므로 중복된다). 사이즈처럼 이미지가 불필요한 옵션은 imageSlots 없이 텍스트 카드만 사용.
-- layout_bar_chart: { type, title?, unit?, groups: string[], groupColors: string[], items: [{label, values: number[]}], showLegend? }
+/**
+ * sections 안 progress_bar item 중 provenance 대조(isGroundedProgressItem)에
+ * 실패하는(=근거 없는) 개수. sanitize 전/후 개수 diff가 아니라 원인을 직접 세는
+ * 이유: diff는 연속 중복 섹션 제거·스키마 무효 블록 제거처럼 provenance와 무관한
+ * 이유로 progress_bar가 사라지는 경우까지 "위생 삭제"로 오분류하고, kept<2일 때
+ * 근거 있는 항목까지 함께 비워지는 것도 구분 못 한다. 또 repair 경로에서는
+ * beforeCount(원본)와 afterCount(repair가 다시 쓴 결과)의 기준 자체가 달라져
+ * repair가 새로 추가한 progress_bar가 diff를 상쇄해 실제 삭제를 놓칠 수 있다.
+ * 원인 기준으로 세면 이 세 문제를 모두 피하고, repair 이전 원본 한 번만 계산해
+ * 양쪽 반환 경로에서 같은 값을 쓸 수 있다.
+ *
+ * sanitizeProLayout은 stripCjk → provenance 순으로 대조하므로, 완전히 같은 텍스트
+ * 기준으로 세려면 stripCjk를 거친 sections를 넘겨야 한다(호출부에서 처리).
+ * isGroundedProgressItem/layout-validator.ts는 이 함수가 import만 하고 수정하지
+ * 않는다.
+ *
+ * 알려진 미탐 한계: 원본 1회만 계산하므로, repair가 나중에 근거 없는 progress_bar를
+ * 새로 추가하면 이 카운트엔 반영되지 않아 그 삭제분은 보고되지 않는다. 미탐(경고를
+ * 덜 내는) 방향이라 사용자에게 거짓 안심을 주지는 않지만, 완전하지 않다는 점은
+ * 명시해둔다.
+ */
+function countUngroundedProgressItems(sections: unknown[], sourceText: string): number {
+  let total = 0;
+  forEachProgressBarItems(sections, (items) => {
+    total += (items as ProgressItem[]).filter(
+      (it) => it && typeof it === 'object' && !isGroundedProgressItem(it, sourceText),
+    ).length;
+  });
+  return total;
+}
 
-DESIGN RULES:
-1. Use extracted chart data EXACTLY as provided — do not modify numbers
-2. Use stat_row for large impact numbers
-3. heading 'xl' for section headlines
-4. imageSlots map to section images
-5. For lifestyle images use slotType "flux_lifestyle" with descriptive promptHint in Korean
-6. Generate 6-10 sections for a complete detail page
-7. NEVER use Chinese characters (한자/漢字). Use Korean (한글) or English ONLY. This applies to ALL text: titles, labels, sublabels, stat values, promptHints, badge text, etc. Examples of FORBIDDEN characters: 適當 → write "적당", 溫度 → write "온도", 品質 → write "품질".
-8. Design for 390px mobile width — avoid wide horizontal layouts or tables that overflow narrow screens. Use vertical or wrapped layouts.
-9. process_flow는 시간/순서가 있는 단계에만 사용 (예: 봄→여름→가을, 세탁→건조→보관). 사이즈·색상·용량·구성처럼 순서가 없는 병렬 선택 옵션은 절대 process_flow로 만들지 말고 반드시 option_grid를 사용하세요. 사이즈 안내(S/M/L 등)는 항상 option_grid입니다.
-10. icon_grid·timeline의 icon 필드는 반드시 빈 문자열("")로 두세요. 이모지(🌙🪶🎒 등)를 절대 넣지 마세요 — 렌더러가 번호 배지를 그립니다. 이모지는 저품질로 보입니다.
-11. heading 'xl'은 12자 이내의 짧고 강한 헤드라인 전용입니다. 문장형(예: "일상부터 하이킹까지 올라운드")은 'lg'를 쓰세요.
+/**
+ * 잔존 error-severity 위반을 사용자 문구로 변환한다. Violation.code(예: 'narrative',
+ * 'option_coverage')와 message는 개발자 진단용(예: "sections[1]에 beat 필드가
+ * 없습니다")이라 그대로 화면에 노출하면 셀러에게 버그처럼 보인다. code 단위로
+ * 사람이 읽을 문구에 매핑하고, 같은 문구가 여러 섹션에서 반복돼도 중복 제거한다
+ * (beat_missing이 9개 섹션에서 나면 narrative code가 9번 쌓이는 식이라 그대로
+ * 두면 배너에 9줄이 뜬다).
+ */
+const VIOLATION_CODE_MESSAGES: Record<string, string> = {
+  narrative: '페이지 구성이 권장 흐름(도입-근거-비교-안심)에 못 미칩니다. 다시 생성하면 개선될 수 있습니다.',
+  option_compare: '옵션 비교 섹션 구성에 문제가 있습니다. 다시 생성하면 개선될 수 있습니다.',
+  option_coverage: '옵션별 이미지 배분이 고르지 않습니다. 다시 생성하면 개선될 수 있습니다.',
+  // 쿠팡 광고 정책 위반 표현 — autoFixable:false라 재생성해도 같은 표현이 또 나올 수
+  // 있다. "다시 생성"이 아니라 "에디터에서 직접 수정"을 안내해야 한다.
+  prohibited: '광고 정책상 사용할 수 없는 표현이 남아 있습니다. 에디터에서 해당 문구를 직접 수정해주세요.',
+  visual_anchor: '글만 있는 섹션이 남아 있습니다. 다시 생성하면 이미지나 요약 카드가 들어갈 수 있습니다.',
+  count_mismatch: '제목이 말한 개수와 실제 항목 수가 다릅니다. 다시 생성하거나 에디터에서 제목을 고쳐주세요.',
+};
+const GENERIC_VIOLATION_MESSAGE = '일부 구성이 자동 검증 기준에 못 미칩니다. 다시 생성하면 개선될 수 있습니다.';
 
-COPYWRITING RULES (카피 품질 — CVR 직결):
-C0. 제품 이미지가 제공되면 반드시 실물을 관찰해 실제 색상·소재감·형태·디테일(지퍼·스트랩·장식·마감)을 카피에 구체적으로 반영하세요. 이미지에 보이지 않는 특징을 지어내지 마세요.
-C1. 다음 추상 클리셰를 금지: "~의 여유", "어디에나 잘 어울리는", "특별한 일상", "지금 만나보세요", "당신의 모든 순간". 이런 표현이 떠오르면 구체적 사실로 바꾸세요.
-C2. 모든 subtext/sublabel은 [구체 사용 상황] + [제품 팩트(수치·소재)] + [사용자 이득] 구조로. 예: "어디에나 잘 어울리는 데일리 톤" → "청바지·슬랙스 어디에도 무난한 웜 베이지".
-C3. 입력의 수치·소재(무게·용량·원단명 등)를 최소 3개 섹션의 카피에 녹이고, "스마트폰보다 가벼운"처럼 실감나는 비교 앵커를 1개 이상 쓰세요.
-C4. stat_row에는 진짜 임팩트 수치만. "색상 2종" 같은 무의미한 값은 stat_row가 아니라 option_grid로 표현하세요.
-C5. 물리적 디테일 섹션을 1~2개 반드시 포함: 이미지에서 실제로 보이는 특징(지퍼·스트랩·수납·원단 텍스처·마감)을 골라 detail_closeup 슬롯 + image 블록 + 한 줄 팩트 설명으로 구성. 이미지에 없는 디테일은 만들지 마세요.
+/**
+ * error는 아니지만 셀러에게 보여야 하는 코드.
+ *
+ * 이 둘을 error로 두면 isClean이 깨져 repair를 매번 부르는데, 해법이 "다시 생성"으로
+ * 같아서 비용만 는다. warning으로 두되 여기서 건져 올려 배너에는 뜨게 한다.
+ */
+const SURFACED_WARNING_CODES = new Set(['visual_anchor', 'count_mismatch']);
 
-CONSISTENCY & PACING:
-D1. 색상 내러티브: 대표 색상 1개를 정해 히어로·소재·착용 섹션은 그 색상 이미지만 쓰고, 두 색이 함께 나오는 곳은 컬러 비교 option_grid 단 한 곳으로 제한하세요.
-D2. 텍스트만 있는 섹션을 2개 연속 배치하지 마세요. 각 섹션은 이미지·차트·stat·아이콘 중 최소 1개의 시각 앵커를 포함해야 합니다.
-
-Return ONLY valid JSON array — no explanation, no code fences:
-[section1, section2, ...]`;
+function friendlyViolationWarnings(violations: Array<{ code: string; severity: string }>): string[] {
+  const messages = new Set<string>();
+  for (const v of violations) {
+    if (v.severity !== 'error' && !SURFACED_WARNING_CODES.has(v.code)) continue;
+    messages.add(VIOLATION_CODE_MESSAGES[v.code] ?? GENERIC_VIOLATION_MESSAGE);
+  }
+  return [...messages];
+}
 
 /** 첫 번째 완전한 JSON 배열을 추출 (코드펜스 무관) */
 function extractJsonArray(text: string): string | null {
@@ -159,11 +211,34 @@ export async function POST(req: NextRequest): Promise<Response> {
     );
   }
 
-  const { productInfo, analyzedSections, productImageCount, productImages } = parsed.data;
+  const { productInfo, analyzedSections, productImageCount, productImages, productOptions } = parsed.data;
   const images: ClaudeImage[] = productImages.length > 0
     ? productImages
     : [];
   const imageCount = images.length || productImageCount;
+
+  const options: ProductOption[] = productOptions;
+  const optionMode = isOptionMode(options);
+  const optionLines = optionMode
+    ? options.map((o) => `이미지 ${o.imageIndex} = "${o.name}"`)
+    : [];
+  // provenance 원천: 사용자가 이 상품에 대해 입력한 값만 쓴다.
+  // analyzedSections(레퍼런스 페이지 추출 데이터)를 넣으면 "이 상품의 근거"가 아닌
+  // 숫자가 화이트리스트에 올라 판정이 느슨해진다 — 경쟁사 페이지의 수치가
+  // 우리 상품의 지어낸 수치를 정당화하는 구조가 되므로 제외한다.
+  // 대가: 원본 상세페이지에서 가져온 정당한 스펙도 제거된다. 미탐(지어낸 수치 통과)의
+  // 법적 리스크가 오탐(정당한 수치 제거)의 손실보다 크다고 판단한 선택이다.
+  const provenanceSource = productInfo.points.join(' ');
+
+  // stat 위생·서사 검증은 생성 경로 전용 — draft/render는 사용자 편집본이라 켜지 않는다.
+  const layoutOpts = optionMode
+    ? {
+        statHygiene: true,
+        narrative: true,
+        provenanceSource,
+        optionNameByImageIndex: optionNameByImageIndex(options),
+      }
+    : { statHygiene: true, narrative: true, provenanceSource };
 
   const userPrompt = [
     `Product: "${productInfo.name}"`,
@@ -173,6 +248,11 @@ export async function POST(req: NextRequest): Promise<Response> {
       : '',
     imageCount > 0
       ? `제품 이미지 ${imageCount}장이 인덱스 0..${imageCount - 1}로 제공됩니다. 실물을 보고 색상·소재·디테일을 파악해 카피에 반영하고, 각 imageSlot의 imageRef에 그 슬롯에 가장 알맞은 이미지 인덱스를 지정하세요.`
+      : '',
+    imageCount > 0 ? `섹션 수: 최대 ${sectionCap(imageCount)}개.` : '',
+    optionLines.length > 0
+      ? `옵션(색상/모델): ${optionLines.join(', ')}\n` +
+        `옵션 비교 섹션을 정확히 1개 만들고, 나머지 이미지 섹션에는 ${uniqueOptionNames(options).join('·')}를 고르게 배분하세요. 모든 imageSlot에 imageRef를 명시하세요.`
       : '',
     analyzedSections.length > 0
       ? `Extracted data from reference pages:\n${analyzedSections
@@ -211,20 +291,77 @@ export async function POST(req: NextRequest): Promise<Response> {
       );
     }
 
-    // 결정론적 정화(CJK 제거 + 무효/빈 블록 prune + 중복 제거)
-    let cleaned = sanitizeProLayout(sections).sections;
+    // 위생 삭제 개수는 repair 이전 원본 기준으로 한 번만 센다(원인 기준 카운트라
+    // repair가 이후에 뭘 하든 이 값은 바뀌지 않는다 — countUngroundedProgressItems
+    // 주석 참고). sanitizeProLayout과 동일하게 stripCjk를 먼저 거친 텍스트로 대조한다.
+    const ungroundedCount = countUngroundedProgressItems(
+      stripCjk(sections) as unknown[],
+      layoutOpts.provenanceSource,
+    );
+    const hygieneWarnings: string[] = ungroundedCount > 0
+      ? [
+          `근거 없는 수치 ${ungroundedCount}개가 발견되어 해당 항목이 제거되었습니다. ` +
+          `상품 정보에 "통기성 92%"처럼 형식까지 동일하게 수치를 입력하면 표시됩니다.`,
+        ]
+      : [];
+
+    // 결정론적 정화(CJK 제거 + stat 위생 + 무효/빈 블록 prune + 중복 제거)
+    let cleaned = sanitizeProLayout(sections, layoutOpts).sections;
+
+    // 필수 스펙 커버리지. 입력(productInfo)만 보므로 생성 결과와 무관하게 값이 같다 —
+    // repair 경로·정상 경로 어디서 호출해도 동일하다. Violation으로 만들지 않는 이유는
+    // required-specs.ts 상단 주석 참고: error로 올리면 repair가 없는 수치를 지어내도록
+    // 압박하고, warning으로 올리면 friendlyViolationWarnings가 걸러 셀러에게 안 닿는다.
+    const specWarnings = requiredSpecWarnings(
+      productInfo.category,
+      productInfo.name,
+      productInfo.points,
+    );
+
     // error-severity 위반이 남으면 Claude로 1-pass 수리 후 재정화 (조건부)
-    const { violations, isClean } = validateProLayout(cleaned);
+    const { violations, isClean } = validateProLayout(cleaned, layoutOpts);
     if (!isClean) {
       console.warn('[generate-pro-layout] 위반 발견, repair 실행:', violations.length);
       const repaired = await repairProLayout(cleaned, violations, {
         name: productInfo.name,
         points: productInfo.points,
         category: productInfo.category,
+        optionLines: optionLines.length > 0 ? optionLines : undefined,
       });
-      cleaned = sanitizeProLayout(repaired).sections;
+      cleaned = sanitizeProLayout(repaired, layoutOpts).sections;
+
+      // 재정화 후에도 남으면 경고만 남기고 결과를 준다 — 루프를 만들지 않는다.
+      // 옵션 편중은 페이지를 못 쓰게 만드는 결함이 아니라 품질 저하다.
+      const after = validateProLayout(cleaned, layoutOpts);
+      if (!after.isClean) {
+        console.warn(
+          '[generate-pro-layout] repair 후에도 위반 잔존:',
+          after.violations.filter((v) => v.severity === 'error').map((v) => `${v.code}: ${v.message}`),
+        );
+      }
+      // 잔존 error + 위생 삭제 경고를 함께 클라이언트에 전달해 결과 화면에서 알린다.
+      // 진단용 code:message가 아니라 friendlyViolationWarnings가 만든 사용자 문구를 싣는다.
+      const warnings = [
+        ...hygieneWarnings,
+        ...specWarnings,
+        ...friendlyViolationWarnings(after.violations),
+      ];
+      return NextResponse.json({
+        success: true,
+        sections: cleaned,
+        ...(warnings.length > 0 ? { warnings } : {}),
+      });
     }
-    return NextResponse.json({ success: true, sections: cleaned });
+
+    // repair를 타지 않은 정상 경로도 위생 삭제·필수 스펙 누락은 알려야 한다 — repair
+    // 여부와 무관하게 일어나는 일이기 때문이다. (isClean이므로
+    // friendlyViolationWarnings는 항상 빈 배열이라 여기선 호출하지 않는다.)
+    const cleanWarnings = [...hygieneWarnings, ...specWarnings];
+    return NextResponse.json({
+      success: true,
+      sections: cleaned,
+      ...(cleanWarnings.length > 0 ? { warnings: cleanWarnings } : {}),
+    });
   } catch (error) {
     console.error('[generate-pro-layout] 오류:', error);
     const msg = error instanceof Error ? error.message : String(error);

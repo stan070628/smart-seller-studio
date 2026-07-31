@@ -14,6 +14,9 @@ import { proxyFetch } from '@/lib/proxy-fetch';
 
 const API_HOST = 'https://api-gateway.coupang.com';
 const API_DELAY = 200;
+// 로켓그로스(rg_open_api) 전용 요청 간격. RG는 분당 50회 한도라 일반 200ms(=300회/분)로는
+// 필연적으로 429가 난다. 1300ms(≈46회/분)로 한도 아래를 유지해 429 자체를 예방한다.
+const RG_API_DELAY = 1300;
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -217,10 +220,21 @@ export class CoupangClient {
 
       if (res.status !== 429 || attempt >= RETRY_DELAYS_SEC.length) break;
 
+      // 대기 시간 우선순위: Retry-After 헤더 > 응답 body의 "Try after N seconds" 메시지 > 기본 백오프.
+      // 쿠팡 로켓그로스(rg_open_api)는 Retry-After 헤더 없이 대기 시간을 body 메시지에만 담아
+      // 보내므로("ERROR: Too many request. Try after 45 seconds") 헤더만 보면 45초를 기다리지
+      // 못하고 짧은 기본 백오프로 재시도를 소진해 429가 그대로 표면화된다.
       const retryAfterHeader = Number(res.headers.get('Retry-After'));
-      const waitSec = Number.isFinite(retryAfterHeader) && retryAfterHeader > 0
-        ? retryAfterHeader
-        : RETRY_DELAYS_SEC[attempt];
+      const bodyWaitMatch = text.match(/after\s+(\d+)\s*second/i);
+      const bodyWaitSec = bodyWaitMatch ? Number(bodyWaitMatch[1]) : NaN;
+      const rawWaitSec =
+        Number.isFinite(retryAfterHeader) && retryAfterHeader > 0
+          ? retryAfterHeader
+          : Number.isFinite(bodyWaitSec) && bodyWaitSec > 0
+            ? bodyWaitSec
+            : RETRY_DELAYS_SEC[attempt];
+      // 과도한 블로킹 방지: 최대 60초로 캡(+1초 여유로 경계 오차 흡수)
+      const waitSec = Math.min(rawWaitSec + 1, 60);
       console.warn(`[coupang-retry] 429 attempt ${attempt + 1}/${RETRY_DELAYS_SEC.length}, sleeping ${waitSec}s → ${pathOnly}`);
       await sleep(waitSec * 1000);
     }
@@ -660,6 +674,41 @@ export class CoupangClient {
     };
   }
 
+  // ─── 지급 내역 (정산) 조회 ─────────────────────────────
+  /**
+   * settlement-histories — 월별(주 단위, 인식 기준) 정산 내역.
+   * provider가 marketplace_openapi로 revenue-history(openapi)와 다르나 HMAC 서명은 경로 기반이라 동일 request() 사용.
+   * 응답은 revenueRecognitionYearMonth 내 주(WEEKLY) 단위 배열. 필드(실응답 검증):
+   *   totalSale(정산매출) · serviceFee(수수료) · settlementTargetAmount(정산 대상액=매출-수수료)
+   *   · settlementAmount(1차 지급) · lastAmount(2차 지급) · deductionAmount(차감) · settlementDate(지급일)
+   * 월 대표값으로 각 금액을 합산, 최근 settlementDate를 반환. 데이터 없으면 null.
+   * 주의: "인식(구매확정) 기준"이라 이번 달은 정산된 주까지만 반영(부분).
+   */
+  async getSettlementHistories(yearMonth: string): Promise<{
+    settlementTargetAmount: number;
+    totalSale: number;
+    serviceFee: number;
+    settlementDate: string;
+  } | null> {
+    const url = `/v2/providers/marketplace_openapi/apis/api/v1/settlement-histories?vendorId=${this.vendorId}&revenueRecognitionYearMonth=${yearMonth}`;
+    await sleep(API_DELAY);
+    const res = await this.request<Array<Record<string, unknown>>>('GET', url);
+    const rows = Array.isArray(res.data) ? res.data : [];
+    if (rows.length === 0) return null;
+    let settlementTargetAmount = 0;
+    let totalSale = 0;
+    let serviceFee = 0;
+    let settlementDate = '';
+    for (const r of rows) {
+      settlementTargetAmount += Number(r.settlementTargetAmount ?? 0);
+      totalSale += Number(r.totalSale ?? 0);
+      serviceFee += Number(r.serviceFee ?? 0);
+      const d = String(r.settlementDate ?? '');
+      if (d > settlementDate) settlementDate = d;   // 최근 지급일
+    }
+    return { settlementTargetAmount, totalSale, serviceFee, settlementDate };
+  }
+
   /**
    * 로켓그로스 주문 목록 조회 (rg_open_api)
    *
@@ -695,7 +744,7 @@ export class CoupangClient {
     if (params.nextToken) parts.push(`nextToken=${encodeURIComponent(params.nextToken)}`);
 
     const url = `/v2/providers/rg_open_api/apis/api/v1/vendors/${this.vendorId}/rg/orders?${parts.join('&')}`;
-    await sleep(API_DELAY);
+    await sleep(RG_API_DELAY);
     const res = await this.request<Array<Record<string, unknown>>>('GET', url);
     if (res.code !== 'SUCCESS' && String(res.code) !== '200') {
       throw new Error(`로켓그로스 주문 조회 실패 (code: ${res.code}): ${res.message}`);
@@ -732,7 +781,7 @@ export class CoupangClient {
     if (params?.nextToken) parts.push(`nextToken=${encodeURIComponent(params.nextToken)}`);
     const qs = parts.length ? `?${parts.join('&')}` : '';
     const url = `/v2/providers/rg_open_api/apis/api/v1/vendors/${this.vendorId}/rg/inventory/summaries${qs}`;
-    await sleep(API_DELAY);
+    await sleep(RG_API_DELAY);
     const res = await this.request<Array<Record<string, unknown>>>('GET', url);
     if (res.code !== 'SUCCESS' && String(res.code) !== '200') {
       throw new Error(`RG 재고 조회 실패 (code: ${res.code}): ${res.message}`);

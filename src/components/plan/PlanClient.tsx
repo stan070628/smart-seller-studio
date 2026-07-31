@@ -24,10 +24,15 @@ import { C as BASE_C } from '@/lib/design-tokens';
 import {
   WBS_DATA,
   WEEKLY_TARGETS,
+  WEEKLY_RUN_RATE,
+  PLAN_MAX_TARGET,
+  PLAN_GOAL_MONTHLY,
+  MONTH_WEEKS,
 } from '@/lib/plan/constants';
 import {
   getCurrentWeek,
   getWeekForDate,
+  isPlanEnded,
 } from '@/lib/plan/week';
 import {
   loadDailyRecords,
@@ -1390,7 +1395,17 @@ function ProgressTab() {
   const overallPct = totalTarget > 0 ? Math.round((totalActual / totalTarget) * 100) : 0;
   const isBehind = overallPct < 70;
 
-  const maxTarget = 1000; // 전체 최대 목표
+  const maxTarget = PLAN_MAX_TARGET;
+
+  // 이번 주 런레이트 — 그 주의 주간 매출을 월로 환산한 값
+  const weekTarget = WEEKLY_RUN_RATE[currentWeek - 1] ?? 0;
+  const weekActual =
+    currentWeek === 1
+      ? weeklyActual[0] ?? 0
+      : (weeklyActual[currentWeek - 1] ?? 0) - (weeklyActual[currentWeek - 2] ?? 0);
+  const targetRunRate = Math.round(weekTarget * MONTH_WEEKS);
+  const actualRunRate = Math.round(weekActual * MONTH_WEEKS);
+  const planEnded = isPlanEnded();
 
   if (!mounted) return null;
 
@@ -1414,12 +1429,24 @@ function ProgressTab() {
             전체 목표 ({currentWeek}주차 기준)
           </div>
           <div style={{ fontSize: 28, fontWeight: 800, color: C.text }}>
-            월 1,000만원
+            월 {PLAN_GOAL_MONTHLY.toLocaleString()}만원
           </div>
           <div style={{ fontSize: 14, color: C.textSub, marginTop: 2 }}>
             현재 {currentWeek}주차 &nbsp;|&nbsp; 이번 주 목표 누적&nbsp;
             <strong style={{ color: C.text }}>{totalTarget.toLocaleString()}만원</strong>
           </div>
+          {planEnded ? (
+            <div style={{ fontSize: 13, color: C.textSub, marginTop: 6 }}>
+              12주 플랜 종료 &nbsp;·&nbsp; 목표 런레이트는 월&nbsp;
+              {targetRunRate.toLocaleString()}만원이었다
+            </div>
+          ) : (
+            <div style={{ fontSize: 13, color: C.textSub, marginTop: 6 }}>
+              이번 주 런레이트&nbsp;
+              <strong style={{ color: C.text }}>월 {actualRunRate.toLocaleString()}만원</strong>
+              &nbsp;/&nbsp; 목표 월 {targetRunRate.toLocaleString()}만원
+            </div>
+          )}
         </div>
 
         <div style={{ textAlign: 'center', minWidth: 120 }}>
@@ -1739,7 +1766,7 @@ export default function PlanClient() {
             }}
           >
             <Target size={14} color={C.accent} />
-            최종 목표: <strong style={{ color: C.text }}>월 1,000만원</strong>
+            최종 목표: <strong style={{ color: C.text }}>월 {PLAN_GOAL_MONTHLY.toLocaleString()}만원</strong>
           </div>
         </div>
 

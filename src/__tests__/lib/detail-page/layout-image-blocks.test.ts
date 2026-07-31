@@ -74,6 +74,39 @@ describe('normalizeImageBlocks', () => {
     expect(out.some(b => b.type === 'image')).toBe(false);
     expect(out).toHaveLength(2);
   });
+
+  it('캐리어 option_grid 섹션에 남아 있는 image 블록은 중복이므로 제거한다', () => {
+    const blocks: LayoutBlock[] = [
+      { type: 'image', attachedIndex: 0 },
+      { type: 'option_grid', items: [{ label: '베이지' }, { label: '로즈' }] },
+    ];
+    const out = normalizeImageBlocks(blocks, 2);
+    expect(out.some(b => b.type === 'image')).toBe(false);
+    expect(out).toHaveLength(1);
+  });
+
+  it('columns 안의 image 블록도 캐리어 섹션에서는 제거한다', () => {
+    const blocks: LayoutBlock[] = [
+      { type: 'columns', cols: [[{ type: 'image', attachedIndex: 0 }], [{ type: 'badge', text: 'NEW' }]] },
+      { type: 'option_grid', items: [{ label: '베이지' }, { label: '로즈' }] },
+    ];
+    const out = normalizeImageBlocks(blocks, 2);
+    const col = out[0] as Extract<LayoutBlock, { type: 'columns' }>;
+    expect(col.cols[0]).toHaveLength(0);
+    expect(col.cols[1]).toHaveLength(1);
+  });
+
+  it('카드 수와 이미지 수가 다른 option_grid는 캐리어가 아니므로 대형 image 블록을 주입한다', () => {
+    // 사이즈 안내 씬: 카드 4개인데 이미지는 1장 — 카드가 이미지를 그리지 않으므로
+    // 섹션의 시각 앵커는 대형 image 블록이 담당해야 한다.
+    const blocks: LayoutBlock[] = [
+      { type: 'heading', text: 'M · L · XL · XXL', size: 'lg' },
+      { type: 'option_grid', items: [{ label: 'M' }, { label: 'L' }, { label: 'XL' }, { label: 'XXL' }] },
+    ];
+    const out = normalizeImageBlocks(blocks, 1);
+    expect(out[0]).toEqual({ type: 'image', attachedIndex: 0, align: 'center' });
+    expect(out).toHaveLength(3);
+  });
 });
 
 describe('hasImageBlock / ensureImageBlock', () => {

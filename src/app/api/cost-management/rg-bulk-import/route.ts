@@ -69,6 +69,7 @@ export async function POST(request: NextRequest) {
       sold_at: string;
       quantity: number;
       selling_price: number;
+      sale_amount: number;
       coupang_order_item_id: string;
     }> = [];
 
@@ -89,15 +90,18 @@ export async function POST(request: NextRequest) {
             if (!match) continue;
             if (item.salesQuantity <= 0) continue;
             const key = `rg-${order.orderId}-${item.vendorItemId}`;
+            const lineAmount = item.unitSalesPrice * item.salesQuantity;
             const existing = orderItemMap.get(key);
             if (existing) {
               existing.quantity += item.salesQuantity * match.multiplier;
+              existing.sale_amount += lineAmount;
             } else {
               orderItemMap.set(key, {
                 product_cost_id: match.id,
                 sold_at: soldAt,
                 quantity: item.salesQuantity * match.multiplier,
                 selling_price: item.unitSalesPrice,
+                sale_amount: lineAmount,
                 coupang_order_item_id: key,
               });
             }
@@ -114,16 +118,67 @@ export async function POST(request: NextRequest) {
     for (const item of items) {
       const result = await pool.query(
         `INSERT INTO sale_records
-           (user_id, product_cost_id, sold_at, quantity, selling_price, channel, coupang_order_item_id, shipping_fee)
-         VALUES ($1, $2, $3, $4, $5, 'rocket_growth', $6, $7)
+           (user_id, product_cost_id, sold_at, quantity, selling_price, sale_amount, channel, coupang_order_item_id, shipping_fee)
+         VALUES ($1, $2, $3, $4, $5, $6, 'rocket_growth', $7, $8)
          ON CONFLICT (coupang_order_item_id) DO NOTHING`,
-        [user.userId, item.product_cost_id, item.sold_at, item.quantity, item.selling_price, item.coupang_order_item_id, resolveSaleShippingFee('rg')],
+        [user.userId, item.product_cost_id, item.sold_at, item.quantity, item.selling_price, item.sale_amount, item.coupang_order_item_id, resolveSaleShippingFee('rg')],
       );
       if ((result.rowCount ?? 0) > 0) imported++;
       else skipped++;
     }
 
-    return NextResponse.json({ success: true, data: { imported, skipped, total: items.length, voided: 0 } });
+    // ── 취소·반품 대조 무효화 ──────────────────────────────────────────────
+    // RG 주문 API는 취소를 플래그로 주지 않고 응답에서 사라지거나 수량이 줄어드는
+    // 식으로만 반영한다(2026-07-06 cancel-return-voiding 스펙 §4). 그래서 방금
+    // 조회한 "현재 유효 주문"(items)과 DB의 기존 RG 판매를 대조해:
+    //   - 현재 응답에 없는 키 → 전체 취소/삭제 → void
+    //   - 키는 있으나 수량·금액이 다름 → 부분 취소 → 현재값으로 갱신
+    // 안전장치: 조회가 하나라도 실패하면 위에서 throw되므로 여기 도달 = 전체 조회
+    // 성공. (API가 조용히 부분 응답하면 멀쩡한 주문을 잘못 void할 잔여 위험은 존재.
+    // 재활성은 범위 밖 — 잘못 void돼도 다음 임포트는 ON CONFLICT DO NOTHING이라 복구 안 됨.)
+    const currentByKey = new Map<string, { quantity: number; sale_amount: number }>();
+    for (const it of items) {
+      currentByKey.set(it.coupang_order_item_id, { quantity: it.quantity, sale_amount: it.sale_amount });
+    }
+    const { rows: existingRows } = await pool.query(
+      `SELECT id, coupang_order_item_id AS key, quantity, sale_amount
+         FROM sale_records
+        WHERE user_id = $1 AND channel = 'rocket_growth' AND voided_at IS NULL
+          AND sold_at BETWEEN $2 AND $3`,
+      [user.userId, from, to],
+    );
+    const voidKeys: string[] = [];
+    const adjustRows: Array<{ id: string; quantity: number; sale_amount: number }> = [];
+    for (const row of existingRows) {
+      // 현재 매핑 안 된 상품(채널 매핑 해제 등)은 이번 조회 범위에 없어 판단 불가 → 건드리지 않음
+      const vid = Number(row.key.split('-').pop());
+      if (!vendorItemMap.has(vid)) continue;
+      const cur = currentByKey.get(row.key);
+      if (!cur) {
+        voidKeys.push(row.key);
+      } else if (cur.quantity !== Number(row.quantity) || cur.sale_amount !== Number(row.sale_amount)) {
+        adjustRows.push({ id: row.id, quantity: cur.quantity, sale_amount: cur.sale_amount });
+      }
+    }
+    let voided = 0;
+    if (voidKeys.length > 0) {
+      const r = await pool.query(
+        `UPDATE sale_records SET voided_at = now()
+          WHERE user_id = $1 AND coupang_order_item_id = ANY($2::text[]) AND voided_at IS NULL`,
+        [user.userId, voidKeys],
+      );
+      voided = r.rowCount ?? 0;
+    }
+    let adjusted = 0;
+    for (const a of adjustRows) {
+      await pool.query(
+        `UPDATE sale_records SET quantity = $2, sale_amount = $3 WHERE id = $1`,
+        [a.id, a.quantity, a.sale_amount],
+      );
+      adjusted++;
+    }
+
+    return NextResponse.json({ success: true, data: { imported, skipped, total: items.length, voided, adjusted } });
   } catch (err) {
     const msg = err instanceof Error ? err.message : '서버 오류';
     return NextResponse.json({ success: false, error: msg }, { status: 500 });

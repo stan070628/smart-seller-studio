@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 import { requireAuth } from '@/lib/supabase/auth';
 import { sanitizeProLayout } from '@/lib/detail-page/layout-validator';
+import { deriveShootDraftSummary } from '@/lib/detail-page/shoot-draft';
 
 export const DraftUpsertSchema = z.object({
   id: z.string().uuid().optional(),
@@ -16,6 +17,7 @@ export const DraftUpsertSchema = z.object({
   sections: z.array(z.record(z.string(), z.unknown())),
   theme: z.record(z.string(), z.unknown()),
   thumbnailUrl: z.string().url().optional(),
+  shootSession: z.record(z.string(), z.unknown()).optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -34,7 +36,7 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) {
     return Response.json({ success: false, error: '입력값 검증 실패', details: parsed.error.flatten().fieldErrors }, { status: 400 });
   }
-  const { id, listingId, productName, sections, theme, thumbnailUrl } = parsed.data;
+  const { id, listingId, productName, sections, theme, thumbnailUrl, shootSession } = parsed.data;
 
   // claude_layout 섹션은 저장 전 정화(오염 저장 방지). sanitizeProLayout는 { sections, warnings } 반환.
   const safeSections = sections.map((s) =>
@@ -52,6 +54,9 @@ export async function POST(request: NextRequest) {
     thumbnail_url: thumbnailUrl ?? null,
     updated_at: new Date().toISOString(),
   };
+  if (shootSession !== undefined) {
+    (row as Record<string, unknown>).shoot_session = shootSession;
+  }
 
   try {
     const supabase = getSupabaseServerClient();
@@ -86,6 +91,24 @@ export async function GET(request: NextRequest) {
   const { userId } = authResult;
 
   const { searchParams } = new URL(request.url);
+  if (searchParams.get('list')) {
+    try {
+      const supabase = getSupabaseServerClient();
+      const { data, error } = await supabase
+        .from('detail_page_drafts')
+        .select('id, product_name, updated_at, shoot_session')
+        .eq('user_id', userId)
+        .not('shoot_session->>step', 'is', null)
+        .order('updated_at', { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      const drafts = (data ?? []).map((r) => deriveShootDraftSummary(r as never));
+      return Response.json({ success: true, drafts });
+    } catch (err) {
+      console.error('[GET /api/detail-page/draft?list]', err);
+      return Response.json({ success: false, error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    }
+  }
   const id = searchParams.get('id');
   const listingId = searchParams.get('listingId');
   if (!id && !listingId) {
@@ -104,7 +127,7 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabaseServerClient();
     let query = supabase
       .from('detail_page_drafts')
-      .select('id, listing_id, product_name, sections, theme, thumbnail_url, updated_at')
+      .select('id, listing_id, product_name, sections, theme, thumbnail_url, updated_at, shoot_session')
       .eq('user_id', userId);
     query = id ? query.eq('id', id) : query.eq('listing_id', listingId as string);
 
@@ -117,6 +140,7 @@ export async function GET(request: NextRequest) {
       draft: {
         id: d.id, listingId: d.listing_id, productName: d.product_name,
         sections: d.sections, theme: d.theme, thumbnailUrl: d.thumbnail_url, updatedAt: d.updated_at,
+        shootSession: d.shoot_session,
       },
     });
   } catch (err) {

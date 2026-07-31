@@ -43,6 +43,7 @@ interface ProductRow {
   weighted_avg_rg_shipping: number;
   total_purchase_amount: number;
   current_stock: number;
+  total_entry_stock: number;
   stock_value: number;
   total_realized_profit: number;
   total_sales_amount: number;
@@ -217,7 +218,7 @@ export default function CostManagementTab() {
   const toggleDetail = (id: string) =>
     setExpandedDetailIds((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) { next.delete(id); } else { next.add(id); }
       return next;
     });
   const [drawerProductId, setDrawerProductId] = useState<string | null>(null);
@@ -540,19 +541,6 @@ export default function CostManagementTab() {
       customTo !== '' &&
       customFrom.slice(0, 7) === customTo.slice(0, 7));
 
-  function getCurrentYearMonth(): string {
-    if (preset === 'this_month') {
-      const now = new Date();
-      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    }
-    if (preset === 'last_month') {
-      const now = new Date();
-      const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    }
-    return customFrom.slice(0, 7);
-  }
-
   function toggleGroup(sellerProductId: string) {
     setExpandedGroups((prev) => {
       const next = new Set(prev);
@@ -566,33 +554,48 @@ export default function CostManagementTab() {
     setProducts((prev) => prev.map((item) => item.id === productId ? { ...item, ...updates } : item));
   }
 
-  async function saveAdSpend(productId: string, value: string) {
+  // 성공 시 true, 실패 시 false 반환 — 호출부(상세 패널)가 낙관적 업데이트를 롤백할 수 있게 한다.
+  async function saveAdSpend(productId: string, adDate: string, value: string): Promise<boolean> {
     const num = parseFloat(value.replace(/,/g, ''));
-    if (isNaN(num) || num < 0) return;
-    const yearMonth = getCurrentYearMonth();
-    const res = await fetch(`/api/cost-management/products/${productId}/ad-spend`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ year_month: yearMonth, ad_spend: num }),
-    });
-    const json = await res.json();
-    if (json.success) {
-      setProducts((prev) =>
-        prev.map((p) =>
-          p.id === productId
-            ? (() => {
-                const newRoas = num > 0 ? (p.total_sales_amount / num) * 100 : 0;
-                return {
-                  ...p,
-                  ad_spend: num,
-                  ad_roas: newRoas,
-                  winner_status: determineWinnerStatus(p.sale_quantity, newRoas, p.breakeven_roas),
-                };
-              })()
-            : p,
-        ),
-      );
+    if (isNaN(num) || num < 0) return false;
+    let json;
+    try {
+      const res = await fetch(`/api/cost-management/products/${productId}/ad-spend`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ad_date: adDate, ad_spend: num }),
+      });
+      json = await res.json();
+    } catch {
+      toast.error('광고비 저장 실패');
+      return false;
     }
+    if (!json.success) {
+      toast.error(json.error ?? '광고비 저장 실패');
+      return false;
+    }
+    // 저장 후 해당 상품의 기간 광고비 합계를 재조회해 행 지표 갱신
+    const range = getDateRange(preset, customFrom, customTo);
+    if (!range) return true;
+    const listRes = await fetch(
+      `/api/cost-management/products/${productId}/ad-spend?from=${range.from}&to=${range.to}`,
+    );
+    const listJson = await listRes.json();
+    if (!listJson.success) return true;
+    const total = (listJson.data as Array<{ ad_spend: number }>).reduce((s, d) => s + d.ad_spend, 0);
+    setProducts((prev) =>
+      prev.map((p) => {
+        if (p.id !== productId) return p;
+        const newRoas = total > 0 ? (p.total_sales_amount / total) * 100 : 0;
+        return {
+          ...p,
+          ad_spend: total,
+          ad_roas: newRoas,
+          winner_status: determineWinnerStatus(p.sale_quantity, newRoas, p.breakeven_roas),
+        };
+      }),
+    );
+    return true;
   }
 
   return (
@@ -912,7 +915,6 @@ export default function CostManagementTab() {
                             colCount={COL_COUNT}
                             onToggleDetail={toggleDetail}
                             onOpenDrawer={setDrawerProductId}
-                            onSaveAdSpend={saveAdSpend}
                             onHide={() => toggleHide(child)}
                             onDelete={(prod) => deleteProduct(prod.id, prod.product_name)}
                             onEditChannel={(_prod, anchorEl) => setChannelEditTarget({ product: child, anchorEl })}
@@ -926,6 +928,7 @@ export default function CostManagementTab() {
                               product={child}
                               colSpan={COL_COUNT}
                               isEditablePeriod={isEditablePeriod}
+                              dateRange={getDateRange(preset, customFrom, customTo)}
                               onOpenDrawer={setDrawerProductId}
                               onSaveAdSpend={saveAdSpend}
                               channelFilter={channelFilter}
@@ -949,7 +952,6 @@ export default function CostManagementTab() {
                       colCount={COL_COUNT}
                       onToggleDetail={toggleDetail}
                       onOpenDrawer={setDrawerProductId}
-                      onSaveAdSpend={saveAdSpend}
                       onHide={() => toggleHide(p)}
                       onDelete={(prod) => deleteProduct(prod.id, prod.product_name)}
                       onEditChannel={(_prod, anchorEl) => setChannelEditTarget({ product: p, anchorEl })}
@@ -963,6 +965,7 @@ export default function CostManagementTab() {
                         product={p}
                         colSpan={COL_COUNT}
                         isEditablePeriod={isEditablePeriod}
+                        dateRange={getDateRange(preset, customFrom, customTo)}
                         onOpenDrawer={setDrawerProductId}
                         onSaveAdSpend={saveAdSpend}
                         channelFilter={channelFilter}
@@ -1015,10 +1018,10 @@ export default function CostManagementTab() {
       )}
       {showRgModal && (
         <RocketGrowthShipmentModal
-          products={products.filter((p) => p.current_stock > 0).map((p) => ({
+          products={products.filter((p) => p.total_entry_stock > 0).map((p) => ({
             id: p.id,
             product_name: p.product_name,
-            current_stock: p.current_stock,
+            current_stock: p.total_entry_stock,
           }))}
           onClose={() => setShowRgModal(false)}
           onCreated={load}

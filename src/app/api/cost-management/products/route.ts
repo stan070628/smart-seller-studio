@@ -5,7 +5,6 @@ import { calculateProductMetrics } from '@/lib/cost-management/calculations';
 import type { CostEntryRow } from '@/lib/cost-management/calculations';
 import { calculateFifo, ENTRY_CHANNEL, SALE_CHANNEL } from '@/lib/cost-management/fifo';
 import type { PurchaseBatch, SaleRow, FifoSummary } from '@/lib/cost-management/fifo';
-import { getYearMonths } from '@/lib/cost-management/ad-spend';
 import { calcBreakevenRoas, determineWinnerStatus } from '@/lib/roi/calculations';
 
 // ─────────────────────────────────────────
@@ -73,7 +72,7 @@ export async function GET(request: NextRequest) {
 
     // 판매는 전체 조회 (재고/FIFO 계산 기준)
     const { rows: allSales } = await pool.query(
-      `SELECT id, product_cost_id, sold_at, quantity, selling_price, coupon_discount, channel, shipping_fee FROM sale_records WHERE user_id = $1 AND voided_at IS NULL`,
+      `SELECT id, product_cost_id, sold_at, quantity, selling_price, sale_amount, coupon_discount, channel, shipping_fee FROM sale_records WHERE user_id = $1 AND voided_at IS NULL`,
       [user.userId],
     );
 
@@ -124,6 +123,7 @@ export async function GET(request: NextRequest) {
         sold_at: s.sold_at instanceof Date ? s.sold_at.toISOString().slice(0, 10) : String(s.sold_at).slice(0, 10),
         quantity: Number(s.quantity),
         selling_price: Number(s.selling_price),
+        sale_amount: s.sale_amount == null ? null : Number(s.sale_amount),
         coupon_discount: Number(s.coupon_discount ?? 0),
         channel: s.channel ?? SALE_CHANNEL.MANUAL,
         shipping_fee: Number(s.shipping_fee ?? 0),
@@ -131,16 +131,27 @@ export async function GET(request: NextRequest) {
       salesByProduct.set(s.product_cost_id, list);
     }
 
-    // product_ad_spend 테이블에서 기간 내 광고비 합산
-    const yearMonths = getYearMonths(from, to);
+    // product_ad_spend_daily 에서 기간 내 광고비 합산 (날짜 범위)
     const adSpendByProduct = new Map<string, number>();
-    if (yearMonths.length > 0) {
+    if (from && to) {
       const { rows: adRows } = await pool.query(
         `SELECT product_id, SUM(ad_spend)::float AS total_ad_spend
-         FROM product_ad_spend
-         WHERE user_id = $1 AND year_month = ANY($2::text[])
-         GROUP BY product_id`,
-        [user.userId, yearMonths],
+           FROM product_ad_spend_daily
+          WHERE user_id = $1 AND ad_date BETWEEN $2 AND $3
+          GROUP BY product_id`,
+        [user.userId, from, to],
+      );
+      for (const row of adRows) {
+        adSpendByProduct.set(row.product_id, Number(row.total_ad_spend));
+      }
+    } else {
+      // 전체 기간(all): 날짜 필터 없이 합산
+      const { rows: adRows } = await pool.query(
+        `SELECT product_id, SUM(ad_spend)::float AS total_ad_spend
+           FROM product_ad_spend_daily
+          WHERE user_id = $1
+          GROUP BY product_id`,
+        [user.userId],
       );
       for (const row of adRows) {
         adSpendByProduct.set(row.product_id, Number(row.total_ad_spend));
@@ -185,6 +196,10 @@ export async function GET(request: NextRequest) {
 
       const metrics = calculateProductMetrics(batchesToUse);
 
+      // RG 입고 등록 검증 기준과 일치: 채널 무관 원입고 수량 합계(판매 미차감)
+      // rg-shipments POST의 SUM(cost_entries.quantity)와 동일한 정의
+      const totalEntryStock = pEntries.reduce((s, e) => s + e.quantity, 0);
+
       // 채널 필터된 입고/판매로 FIFO 실행 → current_stock, stock_value 정확히 계산
       let fifoResult: FifoSummary = { current_stock: 0, stock_value: 0, total_realized_profit: 0, sale_details: [] };
       let fifoError = false;
@@ -213,9 +228,9 @@ export async function GET(request: NextRequest) {
       const periodRealizedProfit = fifoResult.sale_details
         .filter((d) => periodSaleIds.has(d.saleId))
         .reduce((sum, d) => sum + d.realized_profit, 0);
-      const periodSalesAmount = pFilteredSales.reduce((s, sale) => s + sale.selling_price * sale.quantity, 0);
+      const periodSalesAmount = pFilteredSales.reduce((s, sale) => s + (sale.sale_amount ?? sale.selling_price * sale.quantity), 0);
 
-      // product_ad_spend 에서 광고비 조회 및 ROAS 계산
+      // product_ad_spend_daily 에서 광고비 조회 및 ROAS 계산
       const adSpend = adSpendByProduct.get(p.id) ?? 0;
       const adRoas = adSpend > 0 ? (periodSalesAmount / adSpend) * 100 : 0;
 
@@ -246,6 +261,7 @@ export async function GET(request: NextRequest) {
         weighted_avg_rg_shipping: metrics.weighted_avg_rg_shipping,
         total_purchase_amount: periodPurchaseAmount,
         current_stock: fifoResult.current_stock,
+        total_entry_stock: totalEntryStock,
         stock_value: fifoResult.stock_value,
         total_realized_profit: periodRealizedProfit,
         total_sales_amount: periodSalesAmount,

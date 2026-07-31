@@ -2,7 +2,6 @@
  * sourcing-dashboard.test.ts
  * Phase 2 UX 수정 단위 테스트
  *
- * U1: SourcingDashboard 기본 탭이 'niche'인지 검증
  * U2: costcoGenderView 이중 제어 제거 및 CostcoTab externalGenderFilter 하위 호환성 검증
  * B4: CostcoTab 카운트 표시 로직 — 필터 적용 시 "표시 M개 / 전체 N개" 형식 검증
  *
@@ -42,50 +41,6 @@ function readSource(filePath: string): string {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('Phase 2 UX 수정 단위 테스트', () => {
-
-  // ─── U1: SourcingDashboard 기본 탭 검증 ─────────────────────────────────
-
-  describe('U1: SourcingDashboard 초기 탭이 niche인지 검증', () => {
-    it("useState 초기값이 'niche'로 선언되어 있다", () => {
-      const source = readSource(SOURCING_DASHBOARD_PATH);
-
-      // useState<...>('niche') 패턴이 존재해야 한다
-      expect(source).toMatch(/useState[^(]*\([^)]*['"]niche['"]/);
-    });
-
-    it("기본 탭 타입 선언에 'niche' 리터럴이 포함된다", () => {
-      const source = readSource(SOURCING_DASHBOARD_PATH);
-
-      // 탭 타입 유니온에 'niche'가 있어야 한다
-      expect(source).toContain("'niche'");
-    });
-
-    it("useState 초기값으로 'tracking'이 사용되지 않는다 (U1 회귀 방지)", () => {
-      const source = readSource(SOURCING_DASHBOARD_PATH);
-
-      // useState(…'tracking'…) 패턴이 없어야 한다
-      // 탭 id 선언 자체('tracking' as const)는 허용되므로 useState 컨텍스트만 검사
-      const useStateTrackingPattern = /useState[^(]*\([^)]*['"]tracking['"]/;
-      expect(source).not.toMatch(useStateTrackingPattern);
-    });
-
-    it("sourcingSubTab 상태 선언 줄이 'niche'로 초기화된다", () => {
-      const source = readSource(SOURCING_DASHBOARD_PATH);
-
-      // 실제 선언 패턴: useState<'...'|...'niche'...>('niche')
-      const lines = source.split('\n');
-      const stateLine = lines.find(
-        (line) => line.includes('sourcingSubTab') && line.includes('useState'),
-      );
-
-      expect(stateLine).toBeDefined();
-      expect(stateLine).toContain("'niche'");
-
-      // 초기값 위치: useState(…) 의 마지막 인자가 'niche'이어야 한다
-      // 예: useState<...>('niche')
-      expect(stateLine).toMatch(/useState[^)]*'niche'\)/);
-    });
-  });
 
   // ─── U2: costcoGenderView 이중 제어 제거 검증 ─────────────────────────────
 

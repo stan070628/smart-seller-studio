@@ -1,3 +1,5 @@
+import type { RgSizeType } from '@/lib/roi/rg-fees';
+
 export type UrgentActionType =
   | 'IMAGE_FIX'
   | 'BUDGET_INCREASE'
@@ -87,4 +89,10 @@ export interface CostEntry {
   productName: string;
   costPrice: number;   // 원가 (VAT 포함, 원)
   feeRate: number;     // 쿠팡 수수료율 (0~1, 기본 0.108)
+  /**
+   * 로켓그로스 사이즈 유형. 지정하면 사이즈별 물류비(입출고비+배송비)가
+   * 마진 계산에서 자동으로 차감된다. 미지정이면 0으로 계산되어 마진이 과대평가된다.
+   * → src/lib/roi/rg-fees.ts
+   */
+  rgSizeType?: RgSizeType | null;
 }

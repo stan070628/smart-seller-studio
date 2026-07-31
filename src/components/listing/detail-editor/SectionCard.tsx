@@ -18,11 +18,13 @@ import {
   isPointContent,
   isImageGridContent,
   isClaudeLayoutContent,
+  isYoutubeContent,
 } from '@/types/detail-page';
 import SectionInstructionPanel from './SectionInstructionPanel';
 import SectionImageAttachment from './SectionImageAttachment';
 import SceneEditPanel from './SceneEditPanel';
 import ClaudeLayoutEditor from '../detail-maker/ClaudeLayoutEditor';
+import YoutubeEditor from './YoutubeEditor';
 
 interface SectionCardProps {
   section: DetailSection;
@@ -45,8 +47,10 @@ interface SectionCardProps {
   sceneEditError?: string | null;
   prevSceneUrl?: string;
   onSceneUndo?: () => void;
-  /** claude_layout 섹션 콘텐츠/이미지 업데이트 */
-  onSectionUpdate?: (id: string, updates: Partial<import('@/types/detail-page').ClaudeLayoutContent> & { attachedImages?: AttachedImage[] }) => void;
+  /** claude_layout/youtube 섹션 콘텐츠/이미지 업데이트 */
+  onSectionUpdate?: (id: string, updates: (Partial<import('@/types/detail-page').ClaudeLayoutContent> | Partial<import('@/types/detail-page').YoutubeContent>) & { attachedImages?: AttachedImage[] }) => void;
+  /** claude_layout Gemini 이미지 슬롯 단일 재생성 */
+  onClaudeSlotRegenerate?: (sectionId: string, slotIdx: number, hint: string) => Promise<void>;
 }
 
 // 섹션 타입별 한국어 레이블
@@ -69,6 +73,7 @@ const SECTION_TYPE_LABELS: Record<SectionType, string> = {
   certifications: '인증 배지',
   infographic_steps: '사용법 인포그래픽',
   claude_layout: 'AI 레이아웃',
+  youtube: '유튜브 영상',
 };
 
 // 섹션 콘텐츠를 한 줄 요약 텍스트로 변환
@@ -111,6 +116,9 @@ function getSectionSummary(content: SectionContent): string {
   if (isClaudeLayoutContent(content)) {
     return content.title || `${content.blocks.length}개 블록`;
   }
+  if (content.type === 'youtube') {
+    return content.videoId ? `유튜브 ${content.videoId}` : '(URL 없음)';
+  }
   return '';
 }
 
@@ -125,6 +133,7 @@ export default function SectionCard({
   onSectionImageAiEdit,
   onSceneEdit,
   onSceneUseAsIs,
+  onClaudeSlotRegenerate,
   uploadedUrls = [],
   isSceneEditing = false,
   sceneEditError = null,
@@ -274,28 +283,30 @@ export default function SectionCard({
             </button>
           )}
 
-          {/* AI 수정 버튼 */}
-          <button
-            onClick={handleAiButtonClick}
-            title="AI로 수정"
-            style={{
-              padding: '4px 8px',
-              borderRadius: 5,
-              border: `1px solid ${showPanel ? C.accent : '#dddddd'}`,
-              background: showPanel ? `${C.accent}10` : 'transparent',
-              color: showPanel ? C.accent : C.textSub,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-              fontSize: 12,
-              flexShrink: 0,
-              transition: 'border-color 0.15s, background 0.15s, color 0.15s',
-            }}
-          >
-            <Sparkles size={13} />
-            <span>AI 수정</span>
-          </button>
+          {/* AI 수정 버튼 — 유튜브 섹션은 영상 임베드라 AI 편집이 의미 없고 content를 손상시킬 수 있어 숨김 */}
+          {section.type !== 'youtube' && (
+            <button
+              onClick={handleAiButtonClick}
+              title="AI로 수정"
+              style={{
+                padding: '4px 8px',
+                borderRadius: 5,
+                border: `1px solid ${showPanel ? C.accent : '#dddddd'}`,
+                background: showPanel ? `${C.accent}10` : 'transparent',
+                color: showPanel ? C.accent : C.textSub,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                fontSize: 12,
+                flexShrink: 0,
+                transition: 'border-color 0.15s, background 0.15s, color 0.15s',
+              }}
+            >
+              <Sparkles size={13} />
+              <span>AI 수정</span>
+            </button>
+          )}
 
           {/* 삭제 버튼 */}
           <button
@@ -340,6 +351,7 @@ export default function SectionCard({
             <ClaudeLayoutEditor
               section={section}
               referenceUrls={uploadedUrls}
+              onRegenerateSlot={onClaudeSlotRegenerate ? (slotIdx, hint) => onClaudeSlotRegenerate(section.id, slotIdx, hint) : undefined}
               onUpdate={(updates) => onSectionUpdate(section.id, updates)}
               onUploadFile={async (file) => {
                 const reader = new FileReader();
@@ -361,6 +373,14 @@ export default function SectionCard({
               }}
             />
           </div>
+        )}
+
+        {/* youtube 전용 편집 UI */}
+        {isYoutubeContent(section.content) && onSectionUpdate && (
+          <YoutubeEditor
+            section={section}
+            onUpdate={(updates) => onSectionUpdate(section.id, updates)}
+          />
         )}
 
         {/* 이미지 첨부 패널 */}

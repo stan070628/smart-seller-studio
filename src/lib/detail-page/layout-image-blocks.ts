@@ -10,6 +10,39 @@
 
 import type { LayoutBlock } from '@/types/detail-page';
 
+/**
+ * option_grid가 "이미지 캐리어"인지 — 카드마다 이미지를 직접 그리는지 판정한다.
+ *
+ * 개수가 정확히 일치할 때만 캐리어로 본다. 이미지가 카드보다 적으면 앞쪽 카드에만
+ * 이미지가 박혀 그리드가 비대칭이 되므로(사이즈 안내 씬에서 실제로 발생), 그 경우는
+ * 캐리어가 아니라고 보고 전 카드를 텍스트로 통일한다 — 전부 아니면 전무.
+ *
+ * 렌더러(section-renderer.ts option_grid)와 normalizeImageBlocks가 반드시 같은
+ * 조건을 봐야 카드 이미지와 대형 image 블록의 중복/누락이 생기지 않는다.
+ */
+export function isOptionGridCarrier(block: LayoutBlock, imageCount: number): boolean {
+  return (
+    block.type === 'option_grid' &&
+    imageCount > 0 &&
+    Array.isArray(block.items) &&
+    block.items.length === imageCount
+  );
+}
+
+/** blocks(columns 중첩 포함)에서 image 블록을 모두 제거 */
+function stripImageBlocks(blocks: LayoutBlock[]): LayoutBlock[] {
+  const out: LayoutBlock[] = [];
+  for (const b of blocks) {
+    if (b.type === 'image') continue;
+    if (b.type === 'columns') {
+      out.push({ ...b, cols: b.cols.map((col) => stripImageBlocks(col)) });
+      continue;
+    }
+    out.push(b);
+  }
+  return out;
+}
+
 /** blocks(columns 중첩 포함)에서 특정 슬롯 인덱스를 참조하는 image 블록이 있는지 */
 export function hasImageBlock(blocks: LayoutBlock[], idx: number): boolean {
   return blocks.some((b) => {
@@ -42,6 +75,12 @@ export function normalizeImageBlocks(
   imageCount: number,
 ): LayoutBlock[] {
   if (!Array.isArray(blocks)) return [];
+
+  // option_grid가 카드마다 이미지를 그리는 섹션에서는 대형 image 블록이 같은 이미지를
+  // 한 번 더 보여주는 중복이 된다. 주입을 건너뛰는 것만으로는 부족하다 — LLM이 직접
+  // 넣은 image 블록도 함께 걷어내야 한다.
+  if (blocks.some((b) => isOptionGridCarrier(b, imageCount))) return stripImageBlocks(blocks);
+
   let seen = 0;
   const remap = (arr: LayoutBlock[]): LayoutBlock[] =>
     arr.map((b) => {
@@ -57,10 +96,9 @@ export function normalizeImageBlocks(
       return b;
     });
   const remapped = remap(blocks);
-  // option_grid는 카드마다 이미지를 직접 렌더한다(attachedImages를 카드 인덱스로
-  // 소비). 그런 섹션에 대형 image 블록을 또 주입하면 이미지가 중복되므로 건너뛴다.
-  const hasImageCarrier = blocks.some((b) => b.type === 'option_grid');
-  if (imageCount > 0 && seen === 0 && !hasImageCarrier) {
+  // 여기까지 왔다면 캐리어가 아니다(= 카드는 텍스트만 그린다). 이미지가 있는데 image
+  // 블록이 하나도 없으면 섹션에 시각 앵커가 사라지므로 최상단에 주입한다.
+  if (imageCount > 0 && seen === 0) {
     return [{ type: 'image', attachedIndex: 0, align: 'center' }, ...remapped];
   }
   return remapped;

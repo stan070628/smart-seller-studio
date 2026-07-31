@@ -26,10 +26,13 @@ import type {
   ClaudeLayoutContent,
   LayoutBlock,
   AttachedImage,
+  YoutubeContent,
 } from '@/types/detail-page';
 import type { PaletteColors } from '@/lib/detail-page/palette-config';
 import { PALETTES } from '@/lib/detail-page/palette-config';
 import { editableMarkupText } from '@/lib/detail-page/inline-markup';
+import { YOUTUBE_ID_RE } from '@/lib/detail-page/youtube';
+import { isOptionGridCarrier } from '@/lib/detail-page/layout-image-blocks';
 
 // ─────────────────────────────────────────
 // 보안 헬퍼
@@ -72,6 +75,7 @@ const SECTION_LABELS: Record<DetailSection['type'], string> = {
   certifications: '인증 배지',
   infographic_steps: '사용법 인포그래픽',
   claude_layout: 'AI 레이아웃',
+  youtube: '유튜브 영상',
 };
 
 function sectionAttrs(section: DetailSection): string {
@@ -724,7 +728,9 @@ function renderLayoutBlock(
     case 'heading': {
       // xl(38px)은 짧은 임팩트 헤드라인 전용. 문장형(16자 초과)이 xl이면 lg로 자동
       // 강등해 거대 폰트가 어색하게 줄바꿈되는 것을 막는다.
-      const textLen = (block.text ?? '').length;
+      // 개행은 렌더되므로(white-space:pre-line) 전체 길이가 아니라 가장 긴 줄로 잰다
+      // — "시원하지만 차갑지 않은\n반려동물 쿨매트"는 23자지만 의도된 2줄 헤드라인이다.
+      const textLen = Math.max(...(block.text ?? '').split('\n').map((line) => line.length));
       const effSize = block.size === 'xl' && textLen > 16 ? 'lg' : block.size;
       const sz = effSize === 'xl' ? '38px' : effSize === 'lg' ? '26px' : '19px';
       const fw = block.bold !== false ? '800' : '600';
@@ -735,11 +741,13 @@ function renderLayoutBlock(
           ? (isDark ? '#ffffff' : colors.accent)
           : colors.text;
       // word-break:keep-all → 한국어 단어 중간 절단("의 여유") 방지.
-      return `<div style="font-size:${sz};font-weight:${fw};color:${color};line-height:1.25;letter-spacing:-0.5px;margin-bottom:10px;word-break:keep-all;overflow-wrap:break-word;">${editableText(`${basePath}.text`, block.text)}</div>`;
+      // white-space:pre-line → 원본 텍스트의 개행을 살린다. <br> 치환이 아니라 CSS인
+      // 이유는 인라인 편집(data-edit-path)이 이 노드의 텍스트를 그대로 읽고 쓰기 때문이다.
+      return `<div style="font-size:${sz};font-weight:${fw};color:${color};line-height:1.25;letter-spacing:-0.5px;margin-bottom:10px;word-break:keep-all;overflow-wrap:break-word;white-space:pre-line;">${editableText(`${basePath}.text`, block.text)}</div>`;
     }
     case 'subtext': {
       const align = block.align === 'center' ? 'center' : 'left';
-      return `<div style="font-size:15px;color:${colors.textSub};line-height:1.65;text-align:${align};margin-bottom:10px;word-break:keep-all;overflow-wrap:break-word;">${editableText(`${basePath}.text`, block.text)}</div>`;
+      return `<div style="font-size:15px;color:${colors.textSub};line-height:1.65;text-align:${align};margin-bottom:10px;word-break:keep-all;overflow-wrap:break-word;white-space:pre-line;">${editableText(`${basePath}.text`, block.text)}</div>`;
     }
     case 'image': {
       const img = images[block.attachedIndex];
@@ -887,7 +895,10 @@ function renderLayoutBlock(
       // 사이즈·색상·용량 등 순서 없는 병렬 선택 옵션 — 화살표 없이 카드 그리드로 나열.
       // 컬러/구성처럼 옵션마다 대응 이미지가 있으면 카드 상단에 각각 표시한다
       // (attachedImages를 카드 인덱스로 매핑). 사이즈 등 이미지 없는 옵션은 텍스트만.
+      // 이미지 수가 카드 수와 정확히 같을 때만 카드 이미지를 그린다 — 부분 채움은
+      // 앞쪽 카드에만 이미지가 박혀 그리드를 비대칭으로 만든다(isOptionGridCarrier).
       const isDark = colors.text === '#ffffff';
+      const isCarrier = isOptionGridCarrier(block, images.length);
       const cols = block.cols ?? (block.items.length >= 3 ? 3 : 2);
       const items = block.items.map((item, i) => {
         const boxBg = item.highlight
@@ -899,18 +910,23 @@ function renderLayoutBlock(
         const textColor = item.highlight
           ? (isDark ? '#ffffff' : colors.accent)
           : colors.text;
-        const cardImg = images[i];
+        const cardImg = isCarrier ? images[i] : undefined;
         const cardImgUrl = cardImg?.url ? sanitizeUrl(cardImg.url) : '';
         const cardImgHtml = cardImgUrl
           ? `<div style="margin-bottom:8px;"><img src="${escapeHtml(cardImgUrl)}" alt="" style="width:100%;max-width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:8px;display:block;" /></div>`
           : '';
         const pad = cardImgUrl ? '8px' : '14px 8px';
-        return `<div style="background:${boxBg};border:1.5px solid ${boxBorder};border-radius:12px;padding:${pad};text-align:center;">
-          ${cardImgHtml}<div style="font-size:14px;font-weight:800;color:${textColor};line-height:1.3;">${editableText(`${basePath}.items.${i}.label`, item.label)}</div>
-          ${item.sublabel ? `<div style="font-size:12px;color:${colors.textSub};margin-top:4px;line-height:1.4;">${editableText(`${basePath}.items.${i}.sublabel`, item.sublabel)}</div>` : ''}
+        // 텍스트 전용 카드는 세로 중앙에 놓는다. grid-auto-rows로 카드 높이가
+        // 행마다 통일되므로, 그냥 두면 라벨이 카드 위쪽에 붙어 어긋나 보인다.
+        const justify = cardImgUrl ? 'flex-start' : 'center';
+        return `<div style="display:flex;flex-direction:column;justify-content:${justify};background:${boxBg};border:1.5px solid ${boxBorder};border-radius:12px;padding:${pad};text-align:center;box-sizing:border-box;">
+          ${cardImgHtml}<div style="font-size:14px;font-weight:800;color:${textColor};line-height:1.3;word-break:keep-all;white-space:pre-line;">${editableText(`${basePath}.items.${i}.label`, item.label)}</div>
+          ${item.sublabel ? `<div style="font-size:12px;color:${colors.textSub};margin-top:4px;line-height:1.4;word-break:keep-all;white-space:pre-line;">${editableText(`${basePath}.items.${i}.sublabel`, item.sublabel)}</div>` : ''}
         </div>`;
       }).join('');
-      return `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:8px;margin-bottom:16px;">${items}</div>`;
+      // grid-auto-rows:1fr — align-items 기본값(stretch)은 같은 행 안에서만 높이를
+      // 맞추므로, 2×2처럼 행이 나뉘면 행끼리 높이가 달라진다.
+      return `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);grid-auto-rows:1fr;gap:8px;margin-bottom:16px;">${items}</div>`;
     }
     case 'layout_bar_chart': {
       const svg = buildBarChartSvg(block);
@@ -919,6 +935,41 @@ function renderLayoutBlock(
         ? `<div style="font-size:13px;font-weight:700;margin-bottom:10px;text-align:center;">${escapeHtml(block.title)}</div>`
         : '';
       return `<div style="margin-bottom:16px;">${titleHtml}<img src="data:image/svg+xml;base64,${b64}" alt="${escapeHtml(block.title ?? '차트')}" style="width:100%;max-width:100%;display:block;" /></div>`;
+    }
+    case 'spec_table': {
+      if (!Array.isArray(block.rows) || block.rows.length === 0) return '';
+      const isDark = colors.text === '#ffffff';
+      // 390px에서 읽히는 한계가 5열이다. 초과분은 잘라낸다 — 가로 스크롤을 걸면
+      // 마켓플레이스 붙여넣기(스타일 일부 제거)에서 표가 잘린 채 고정될 수 있다.
+      const MAX_COLS = 5;
+      const cols = (Array.isArray(block.columns) ? block.columns : []).slice(0, MAX_COLS);
+      const colCount = cols.length || Math.max(...block.rows.map(r => r.length));
+      const headBg = isDark ? 'rgba(255,255,255,0.16)' : `${colors.accent}12`;
+      const zebra = isDark ? 'rgba(255,255,255,0.06)' : '#fafafa';
+      const line = isDark ? 'rgba(255,255,255,0.22)' : '#e5e7eb';
+
+      const headHtml = cols.length > 0
+        ? `<thead><tr>${cols.map((c, i) => `<th scope="col" style="padding:9px 6px;font-size:12px;font-weight:800;color:${colors.text};background:${headBg};border-bottom:1px solid ${line};text-align:${i === 0 ? 'left' : 'center'};word-break:keep-all;">${editableText(`${basePath}.columns.${i}`, c)}</th>`).join('')}</tr></thead>`
+        : '';
+
+      const bodyHtml = block.rows.map((row, r) => {
+        const cells = (Array.isArray(row) ? row : []).slice(0, colCount);
+        // 행마다 길이가 달라도 열이 밀리지 않도록 빈 칸으로 채운다.
+        while (cells.length < colCount) cells.push('');
+        return `<tr style="background:${r % 2 === 1 ? zebra : 'transparent'};">${cells.map((cell, c) => {
+          const isHead = c === 0;
+          return `<td style="padding:9px 6px;font-size:12.5px;color:${isHead ? colors.text : colors.textSub};font-weight:${isHead ? 700 : 400};border-bottom:1px solid ${line};text-align:${isHead ? 'left' : 'center'};word-break:keep-all;font-variant-numeric:tabular-nums;">${editableText(`${basePath}.rows.${r}.${c}`, cell)}</td>`;
+        }).join('')}</tr>`;
+      }).join('');
+
+      const unitHtml = block.unit
+        ? `<div style="font-size:11px;color:${colors.textSub};margin-bottom:6px;text-align:right;">단위: ${escapeHtml(block.unit)}</div>`
+        : '';
+      const noteHtml = block.note
+        ? `<div style="font-size:11.5px;color:${colors.textSub};margin-top:8px;line-height:1.5;word-break:keep-all;">${editableText(`${basePath}.note`, block.note)}</div>`
+        : '';
+
+      return `<div style="margin-bottom:16px;">${unitHtml}<table style="width:100%;border-collapse:collapse;table-layout:fixed;">${headHtml}<tbody>${bodyHtml}</tbody></table>${noteHtml}</div>`;
     }
     case 'radar_chart': {
       if (block.axes.length === 0) return '';
@@ -973,7 +1024,51 @@ function renderClaudeLayout(
   return `<div ${sectionAttrs(section)} style="background-color:${bg};padding:${pad};width:100%;box-sizing:border-box;">${blocksHtml}</div>`;
 }
 
-export function renderSection(section: DetailSection, theme: DetailPageTheme): string {
+type RenderMode = 'preview' | 'export';
+
+function renderYoutube(content: YoutubeContent, section: DetailSection, mode: RenderMode): string {
+  if (!content.enabled || !YOUTUBE_ID_RE.test(content.videoId)) return '';
+  const caption = content.caption
+    ? `<p style="text-align:center;font-size:12px;color:#888888;margin:8px 0 0;">${escapeHtml(content.caption)}</p>`
+    : '';
+  const ratio = content.aspect === 'vertical' ? '9 / 16' : '16 / 9';
+  const maxW = content.aspect === 'vertical' ? '340px' : '100%';
+
+  if (mode === 'preview') {
+    return `<section ${sectionAttrs(section)} style="padding:16px 0;">
+      <div style="max-width:${maxW};margin:0 auto;aspect-ratio:${ratio};">
+        <iframe width="100%" height="100%" style="border:0;border-radius:12px;"
+          src="https://www.youtube.com/embed/${content.videoId}"
+          title="YouTube video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowfullscreen></iframe>
+      </div>${caption}
+    </section>`;
+  }
+
+  // export — 합성 썸네일 img + 링크
+  // 유튜브는 모든 영상에 16:9 썸네일만 제공하므로, 세로(Shorts) 섹션은 프리뷰의
+  // 9:16 프레이밍과 맞추기 위해 썸네일을 중앙 크롭한다(재생 버튼은 중앙 합성이라 크롭 후에도 보임).
+  const rawSrc = content.exportThumbnailUrl ?? `https://img.youtube.com/vi/${content.videoId}/hqdefault.jpg`;
+  const rawHref = content.url || `https://www.youtube.com/watch?v=${content.videoId}`;
+  const src = escapeHtml(sanitizeUrl(rawSrc));
+  const href = escapeHtml(sanitizeUrl(rawHref));
+  const thumbnailHtml = content.aspect === 'vertical'
+    ? `<div style="max-width:340px;margin:0 auto;aspect-ratio:9 / 16;overflow:hidden;border-radius:12px;">
+      <a href="${href}" target="_blank" rel="noopener" style="display:block;">
+        <img src="${src}" alt="유튜브 영상" style="width:100%;height:100%;object-fit:cover;display:block;" />
+      </a>
+    </div>`
+    : `<div style="max-width:100%;">
+      <a href="${href}" target="_blank" rel="noopener" style="display:block;">
+        <img src="${src}" alt="유튜브 영상" style="width:100%;border-radius:12px;display:block;" />
+      </a>
+    </div>`;
+  return `<section ${sectionAttrs(section)} style="padding:16px 0;">
+    ${thumbnailHtml}${caption}
+  </section>`;
+}
+
+export function renderSection(section: DetailSection, theme: DetailPageTheme, mode: RenderMode = 'export'): string {
   const colors = PALETTES[theme.palette];
   switch (section.type) {
     case 'hero':
@@ -1012,12 +1107,14 @@ export function renderSection(section: DetailSection, theme: DetailPageTheme): s
       return renderInfographicSteps(section.content as InfographicStepsContent, section, colors);
     case 'claude_layout':
       return renderClaudeLayout(section.content as ClaudeLayoutContent, section, colors);
+    case 'youtube':
+      return renderYoutube(section.content as YoutubeContent, section, mode);
   }
 }
 
-export function renderAllSections(sections: DetailSection[], theme: DetailPageTheme): string {
+export function renderAllSections(sections: DetailSection[], theme: DetailPageTheme, mode: RenderMode = 'export'): string {
   return [...sections]
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-    .map((s) => renderSection(s, theme))
+    .map((s) => renderSection(s, theme, mode))
     .join('\n');
 }
