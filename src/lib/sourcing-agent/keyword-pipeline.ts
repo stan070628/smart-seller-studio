@@ -97,6 +97,12 @@ export function evaluateCandidate(input: CandidateInput): CandidateVerdict {
   };
 }
 
+/** 웹 실행(chatId 없음)에서는 텔레그램을 부르지 않는다 */
+async function notify(chatId: string, message: string): Promise<void> {
+  if (!chatId) return;
+  await sendTelegramMessage(chatId, message);
+}
+
 function formatResultMessage(
   keyword: string,
   estimatedPrice: number,
@@ -142,7 +148,7 @@ export async function runKeywordPipeline(keyword: string, chatId: string): Promi
   const pool = getSourcingPool();
 
   // 1. 분석 시작 메시지 전송
-  await sendTelegramMessage(chatId, `🔍 분석 시작합니다\n📦 ${keyword}\n잠시만 기다려주세요...`);
+  await notify(chatId, `🔍 분석 시작합니다\n📦 ${keyword}\n잠시만 기다려주세요...`);
 
   // 2. 요청 DB 저장
   const requestId = await createRequest(pool, keyword, chatId);
@@ -170,7 +176,7 @@ export async function runKeywordPipeline(keyword: string, chatId: string): Promi
 
     if (candidates.length === 0) {
       await failRequest(pool, requestId, '도매꾹에서 매칭 상품을 찾지 못했습니다.');
-      await sendTelegramMessage(chatId, `❌ 분석 실패\n📦 ${keyword}\n도매꾹에서 매칭 상품을 찾지 못했습니다.`);
+      await notify(chatId, `❌ 분석 실패\n📦 ${keyword}\n도매꾹에서 매칭 상품을 찾지 못했습니다.`);
       return;
     }
 
@@ -251,13 +257,13 @@ export async function runKeywordPipeline(keyword: string, chatId: string): Promi
 
     // 7. 결과 전송
     const message = formatResultMessage(keyword, top[0]?.naver_price ?? 0, top);
-    await sendTelegramMessage(chatId, message);
+    await notify(chatId, message);
 
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[keyword-pipeline] 파이프라인 오류:', msg);
     await failRequest(pool, requestId, msg).catch(() => {});
-    await sendTelegramMessage(chatId, `❌ 분석 실패\n📦 ${keyword}\n${msg}`).catch(() => {});
+    await notify(chatId, `❌ 분석 실패\n📦 ${keyword}\n${msg}`).catch(() => {});
   }
 }
 

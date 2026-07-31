@@ -1,0 +1,86 @@
+/**
+ * sourcing-agent-run.test.ts
+ * 발굴 웹 실행 라우트(POST /api/sourcing/agent/run) 테스트.
+ *
+ * 레시피: shortlist-verify-routes.test.ts — vi.mock 팩토리는 파일 최상단으로
+ * 호이스팅되므로 그 안에서 참조할 mock은 vi.hoisted로 선언해야 한다.
+ */
+
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+const { mockRun, afterTasks } = vi.hoisted(() => ({
+  mockRun: vi.fn(),
+  afterTasks: [] as Promise<unknown>[],
+}));
+
+vi.mock('@/lib/sourcing-agent/keyword-pipeline', () => ({
+  runKeywordPipeline: mockRun,
+}));
+
+// next/server의 after()는 요청 스코프 밖에서 호출하면 던진다. 단위 테스트에는
+// 요청 스코프가 없으므로 after만 가로채 백그라운드 작업을 붙잡아 두고,
+// 테스트에서 직접 await해 실제 실행 여부를 검증한다.
+vi.mock('next/server', async () => {
+  const actual = await vi.importActual<typeof import('next/server')>('next/server');
+  return {
+    ...actual,
+    after: (task: Promise<unknown>) => {
+      afterTasks.push(task);
+    },
+  };
+});
+
+import { POST } from '@/app/api/sourcing/agent/run/route';
+
+function req(body: unknown): Request {
+  return new Request('http://localhost/api/sourcing/agent/run', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+describe('POST /api/sourcing/agent/run', () => {
+  beforeEach(() => {
+    mockRun.mockReset();
+    afterTasks.length = 0;
+  });
+
+  it('키워드 배열을 받아 각각 파이프라인을 돌린다', async () => {
+    mockRun.mockResolvedValue(undefined);
+    const res = await POST(req({ keywords: ['등산 모자', '방한 장갑'] }));
+    const body = await res.json();
+
+    expect(body.success).toBe(true);
+    expect(body.data.accepted).toBe(2);
+
+    // 응답은 즉시 돌아가고 파이프라인은 after()에 실린다. 웹 실행에는
+    // 텔레그램 chat_id가 없으므로 빈 문자열이 넘어가야 한다.
+    await Promise.all(afterTasks);
+    expect(mockRun).toHaveBeenCalledTimes(2);
+    expect(mockRun).toHaveBeenNthCalledWith(1, '등산 모자', '');
+    expect(mockRun).toHaveBeenNthCalledWith(2, '방한 장갑', '');
+  });
+
+  it('키워드가 비어 있으면 400이다', async () => {
+    const res = await POST(req({ keywords: [] }));
+    expect(res.status).toBe(400);
+  });
+
+  it('한 번에 처리할 키워드 수를 제한한다', async () => {
+    const many = Array.from({ length: 11 }, (_, i) => `키워드${i}`);
+    const res = await POST(req({ keywords: many }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('10');
+  });
+
+  it('본문이 JSON이 아니면 400이다', async () => {
+    const bad = new Request('http://localhost/api/sourcing/agent/run', {
+      method: 'POST',
+      body: 'not json',
+    });
+    const res = await POST(bad);
+    expect(res.status).toBe(400);
+  });
+});
