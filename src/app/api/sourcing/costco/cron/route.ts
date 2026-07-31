@@ -1,9 +1,12 @@
 /**
- * POST /api/sourcing/costco/cron
+ * GET|POST /api/sourcing/costco/cron
  * Vercel Cron: 매일 KST 06:00 (UTC 21:00) 자동 수집
  *
  * vercel.json:
  *   { "path": "/api/sourcing/costco/cron", "schedule": "0 21 * * *" }
+ *
+ * Vercel Cron은 GET으로 호출하므로 GET을 반드시 export해야 한다.
+ * POST만 있으면 405로 실패하며, 로그가 남지 않아 조용히 중단된다.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -12,8 +15,14 @@ import { fetchAllCostcoProducts } from '@/lib/sourcing/costco-client';
 import { recalculateSourcingScores } from '@/lib/sourcing/costco-scorer';
 import { PRICE_LOG_RETENTION_DAYS } from '@/lib/sourcing/costco-constants';
 import { upsertCostcoProduct } from '@/lib/sourcing/costco-upsert';
+import { checkPriceWatches } from '@/lib/sourcing/costco-price-watch';
 import type { Pool } from 'pg';
 import type { CostcoApiProduct } from '@/types/costco';
+
+/** Vercel Cron 진입점. 수동 트리거(POST)와 동일 로직을 공유한다. */
+export async function GET(req: NextRequest) {
+  return POST(req);
+}
 
 export async function POST(req: NextRequest) {
   // Vercel Cron 인증
@@ -48,9 +57,19 @@ export async function POST(req: NextRequest) {
 
       // 5. 소싱 스코어 재계산
       await recalculateSourcingScores(pool);
+
+      // 6. 매입가 감시 — 임계가 이하면 텔레그램 알림.
+      //    가격 로그 기록 후에 실행해야 직전가 대비 낙폭이 계산된다.
+      //    알림 실패가 수집 자체를 실패로 만들지 않도록 격리한다.
+      try {
+        const notified = await checkPriceWatches(pool);
+        if (notified > 0) console.log(`[costco/cron] 세일 알림 ${notified}건 발송`);
+      } catch (err) {
+        console.error('[costco/cron] 매입가 감시 실패:', err);
+      }
     }
 
-    // 6. 오래된 가격 로그 정리 (30일 초과)
+    // 7. 오래된 가격 로그 정리 (30일 초과)
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - PRICE_LOG_RETENTION_DAYS);
     await pool.query(
@@ -58,7 +77,7 @@ export async function POST(req: NextRequest) {
       [cutoff.toISOString().split('T')[0]],
     );
 
-    // 7. 수집 로그 완료 업데이트
+    // 8. 수집 로그 완료 업데이트
     await pool.query(
       `UPDATE public.costco_collection_logs
        SET finished_at = now(), status = $1, products_scraped = $2, errors = $3

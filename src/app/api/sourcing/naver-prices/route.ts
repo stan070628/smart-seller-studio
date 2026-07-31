@@ -36,6 +36,15 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Vercel Cron 진입점. 수동 트리거(POST)와 동일 로직을 공유한다.
+ * Vercel Cron은 GET으로 호출하므로 GET을 반드시 export해야 한다.
+ * body가 없으므로 limit은 기본값 50이 적용된다.
+ */
+export async function GET(req: NextRequest) {
+  return POST(req);
+}
+
 export async function POST(req: NextRequest) {
   const rawBody = await req.json().catch(() => ({}));
   const parsed = bodySchema.safeParse(rawBody);

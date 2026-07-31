@@ -28,6 +28,14 @@ interface DataLabResponse {
   }>;
 }
 
+/**
+ * Vercel Cron 진입점. 수동 트리거(POST)와 동일 로직을 공유한다.
+ * Vercel Cron은 GET으로 호출하므로 GET을 반드시 export해야 한다.
+ */
+export async function GET(req: NextRequest) {
+  return POST(req);
+}
+
 export async function POST(req: NextRequest) {
   // Cron 인증
   const authHeader = req.headers.get('authorization');
