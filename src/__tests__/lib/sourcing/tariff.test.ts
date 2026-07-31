@@ -27,8 +27,11 @@ describe('getTariffRate', () => {
   it('우산은 13%, 카페트는 10%다 — 배대지 고시표에서 누락돼 있던 행', () => {
     expect(getTariffRate('우산')).toBe(0.13);
     expect(getTariffRate('카페트')).toBe(0.1);
+    // 배대지 원문은 '카페트'지만 실제 상품명에는 '카펫'이 훨씬 흔하다. 둘 다 걸려야 한다
+    expect(getTariffRate('카펫')).toBe(0.1);
     // 실제 상품명은 이런 식으로 들어온다 (substring 매칭이므로 실사용 형태로 검증)
     expect(getTariffRate('3단 접이식 자동우산')).toBe(0.13);
+    expect(getTariffRate('거실 극세사 카펫')).toBe(0.1);
   });
 
   it('화장품·향수는 6.5%다 — 관세청 WTO 양허세율 기준, 배대지 고시(8%)보다 낮다', () => {
