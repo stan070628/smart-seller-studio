@@ -35,6 +35,15 @@ describe('shippingFeeKrw', () => {
     expect(shippingFeeKrw(0.1).fee).toBe(4180);  // 최소 0.5kg
   });
 
+  it('경계값에 딱 떨어지면 한 칸 더 올리지 않는다 — 부동소수점 과다청구 방지', () => {
+    // 25 × 1.1 = 27.500000000000004 (IEEE754). 엡실론이 없으면 28kg으로 청구된다
+    expect(shippingFeeKrw(25 * 1.1).billedKg).toBe(27.5);
+    expect(shippingFeeKrw(50 * 1.1).billedKg).toBe(55);
+    expect(shippingFeeKrw(90 * 1.1).billedKg).toBe(99);
+    // 경계를 진짜로 넘으면 정상적으로 올라가야 한다
+    expect(shippingFeeKrw(27.51).billedKg).toBe(28);
+  });
+
   it('선형 근사식과 다르다 — 11kg부터 증분이 꺾인다', () => {
     // 근사식 4580 + (15-1)*1423 = 24,502원이지만 실제는 23,190원
     expect(shippingFeeKrw(15.0).fee).toBe(23190);

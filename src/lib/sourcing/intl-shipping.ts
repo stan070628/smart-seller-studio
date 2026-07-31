@@ -80,9 +80,19 @@ export interface ShippingFee {
   billedKg: number;
 }
 
+/**
+ * 절상 전에 흡수할 부동소수점 오차.
+ *
+ * 과금무게는 보통 `수량 × 개당무게`로 만들어지는데, 이 곱셈이 IEEE754에서
+ * 경계값을 미세하게 넘긴다. 25 × 1.1 = 27.500000000000004이라 그냥 절상하면
+ * 27.5kg짜리 발주가 28kg으로 청구돼 한 칸(550~800원)이 더 붙는다.
+ * 실무 저울은 g 단위이므로 1e-9kg(=1μg)을 깎아도 실제 무게 판정은 바뀌지 않는다.
+ */
+const WEIGHT_EPSILON_KG = 1e-9;
+
 /** 과금무게 → 배송비. 0.5kg 단위로 절상한다 */
 export function shippingFeeKrw(weightKg: number): ShippingFee {
-  const steps = Math.max(1, Math.ceil(weightKg * 2));
+  const steps = Math.max(1, Math.ceil(weightKg * 2 - WEIGHT_EPSILON_KG));
   const billedKg = steps / 2;
 
   if (steps <= RATE_TABLE_KRW.length) {
