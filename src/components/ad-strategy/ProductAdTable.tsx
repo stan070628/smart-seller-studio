@@ -75,7 +75,7 @@ function SalesInput({ name, fallback, overrides, onSave }: {
     </div>
   );
 }
-import { getRgShippingFee, RG_SIZE_SPECS, RG_SIZE_TYPES, type RgSizeType } from '@/lib/roi/rg-fees';
+import { resolveRgShippingFee, RG_SIZE_SPECS, RG_SIZE_TYPES, type RgSizeType } from '@/lib/roi/rg-fees';
 import {
   calcMarginPerUnit,
   calcBreakEvenRoas,
@@ -144,7 +144,6 @@ function RgSizeSelect({
   value: RgSizeType | null;
   onChange: (v: RgSizeType | null) => void;
 }) {
-  const fee = getRgShippingFee(value);
   return (
     <select
       value={value ?? ''}
@@ -166,7 +165,7 @@ function RgSizeSelect({
       <option value="">사이즈 미지정 (물류비 0)</option>
       {RG_SIZE_TYPES.map((tp) => (
         <option key={tp} value={tp}>
-          {RG_SIZE_SPECS[tp].label} · {fmt(getRgShippingFee(tp))}원
+          {RG_SIZE_SPECS[tp].label} · {fmt(resolveRgShippingFee(null, tp))}원
         </option>
       ))}
     </select>
@@ -307,7 +306,10 @@ export default function ProductAdTable({ products }: { products: ProductAdGrade[
             const feeRate = entry?.feeRate ?? DEFAULT_FEE_RATE;
             // 로켓그로스 물류비: 사이즈 유형이 지정된 경우에만 차감된다.
             // 미지정 시 0이므로 마진이 과대평가되고 손익분기 ROAS가 과소평가된다.
-            const rgShippingFee = getRgShippingFee(entry?.rgSizeType);
+            // CostEntry에는 실측 정산액 필드가 없으므로 measuredFee는 항상 null —
+            // 사이즈 유형 기본값에 VAT를 반영한 실질 부담액이 쓰인다. 간이과세자는
+            // 매입세액 공제를 받지 못해 물류비 VAT가 그대로 원가가 되기 때문이다.
+            const rgShippingFee = resolveRgShippingFee(null, entry?.rgSizeType);
             const monthlySales = salesOverrides[p.name] ?? p.monthlySales;
             const isWinner = winnerOverrides[p.name] ?? p.isItemWinner;
             const winnerOverridden = p.name in winnerOverrides;

@@ -101,6 +101,33 @@ describe('calcMarginPerUnit — 물류비 반영', () => {
   });
 });
 
+describe('ProductAdTable 원가 계산 — VAT 포함 물류비 사용', () => {
+  // ProductAdTable.tsx가 실제로 넘기는 조합을 그대로 재현한다. CostEntry에는 실측
+  // 정산액 필드가 없으므로 measuredFee는 항상 null이고, 사이즈 유형 기본값에
+  // VAT를 반영한 실질 부담액(resolveRgShippingFee)이 쓰여야 한다.
+  it('극소형 기준 VAT 포함 물류비는 VAT 별도 고지값보다 173원 크다', () => {
+    const vatExclusive = getRgShippingFee('extra_small');
+    const vatInclusive = resolveRgShippingFee(null, 'extra_small');
+    expect(vatExclusive).toBe(1725);
+    expect(vatInclusive).toBe(1898);
+    expect(vatInclusive - vatExclusive).toBe(173);
+  });
+
+  it('VAT 별도 물류비로 마진을 계산하면 VAT 포함 대비 173원 과대평가된다', () => {
+    const price = 11480;
+    const cost = 7495;
+    const feeRate = 0.108;
+    const marginWithVatExclusiveFee = calcMarginPerUnit(price, cost, feeRate, getRgShippingFee('extra_small'));
+    const marginWithVatInclusiveFee = calcMarginPerUnit(
+      price,
+      cost,
+      feeRate,
+      resolveRgShippingFee(null, 'extra_small'),
+    );
+    expect(marginWithVatExclusiveFee - marginWithVatInclusiveFee).toBe(173);
+  });
+});
+
 describe('RG_SIZE_SPECS 정합성', () => {
   it('사이즈가 커질수록 요율이 낮아지지 않는다', () => {
     const order = ['extra_small', 'small', 'medium'] as const;
