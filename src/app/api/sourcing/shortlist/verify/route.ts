@@ -29,6 +29,14 @@ const MANUAL_VERIFY_LIMIT = 50;
  */
 const NAVER_CALL_DELAY_MS = 200;
 
+/**
+ * 데드라인 가드 — cron/shortlist-verify/route.ts와 동일 패턴.
+ * 플랫폼 타임아웃에 걸리면 클라이언트는 본문 없는 raw 504를 받는다. 이미
+ * saveVerifyResult로 건별 커밋된 결과는 남아 있는데도 사용자는 "실패"로 보고
+ * 재시도하게 되므로, 안전마진 안에서 스스로 멈추고 remaining을 알려준다.
+ */
+const DEADLINE_SAFETY_MARGIN_MS = 30_000;
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -67,21 +75,36 @@ export async function POST(req: NextRequest) {
     targets = await listForVerify(MANUAL_VERIFY_LIMIT);
   }
 
-  // verified: 실제로 검증되어 저장된 건수
-  // skipped: verifyOne이 false를 반환한 건수 — 실패가 아니라 "이번엔 건너뜀,
-  //          다음 cron이 재시도"다(도매꾹 일시 오류). 에러로 집계하지 않는다.
+  const startedAt = Date.now();
+  const hardDeadlineMs = maxDuration * 1_000 - DEADLINE_SAFETY_MARGIN_MS;
+
+  // verified : 실제로 검증되어 저장된 건수
+  // skipped  : verifyOne이 false를 반환한 건수 — 실패가 아니라 "이번엔 건너뜀,
+  //            다음 cron이 재시도"다(도매꾹 일시 오류). 에러로 집계하지 않는다.
+  // remaining: 데드라인 때문에 이번 요청에서 아예 손도 못 댄 건수. skipped와 달리
+  //            verifyOne을 호출조차 하지 않았다 — 남은 건 그대로 verified_at이
+  //            안 갱신되므로 다음 수동 호출이나 cron이 오래된 순서 그대로 이어받는다.
   let verified = 0;
   let skipped = 0;
+  let processed = 0;
 
   // verifyOne은 도매꾹 일시 오류(DomeTransientError)를 내부에서 이미 잡아 false로
   // 바꿔 돌려주므로(shortlist-verify.ts), 여기서 다시 잡을 필요가 없다. 이 catch는
   // 그 외의 예상 밖 오류(DB 오류 등)만을 위한 것이다.
   try {
     for (const target of targets) {
+      if (Date.now() - startedAt >= hardDeadlineMs) {
+        console.warn(
+          `[shortlist/verify] deadline 도달, 조기 종료 (처리=${processed}/${targets.length})`,
+        );
+        break;
+      }
+
       const ok = await verifyOne(target);
       if (ok) verified++;
       else skipped++;
 
+      processed++;
       if (targets.length > 1) await delay(NAVER_CALL_DELAY_MS);
     }
   } catch (err) {
@@ -89,5 +112,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '재검증하지 못했습니다.' }, { status: 500 });
   }
 
-  return NextResponse.json({ verified, skipped, total: targets.length });
+  const remaining = targets.length - processed;
+
+  return NextResponse.json({ verified, skipped, total: targets.length, remaining });
 }
