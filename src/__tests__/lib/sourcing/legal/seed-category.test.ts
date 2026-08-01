@@ -37,6 +37,17 @@ const BLOCKED: ReadonlyArray<[string, SeedCategoryId]> = [
   ['피처형 정수기', 'electric'],
 ];
 
+/**
+ * 실측 배치에 없었지만 키워드를 좁히거나 넓히면서 확인한 경계.
+ * BLOCKED와 섞지 않는다 — 그쪽은 "그날 실제로 뽑힌 26건"이라는 사실을 고정하는
+ * 배열이라 개수가 의미를 갖는다.
+ */
+const EDGE_BLOCKED: [string, SeedCategoryId][] = [
+  ['무선 청소기', 'electric'],    // '청소기'가 처음엔 빠져 있었다
+  ['충전식 손난로', 'electric'],  // '충전' → '충전식'으로 좁혀도 잡혀야 한다
+  ['카펫 유아 놀이매트', 'kids'], // '카펫'의 '펫' 때문에 kids를 건너뛰던 버그
+];
+
 /** 같은 배치에서 통과한 시드 */
 const PASSED = [
   '에어 텐트',
@@ -60,10 +71,18 @@ const CONTROL = [
   '주방 앞치마',
   '트레킹 폴',
   '반려동물 배변패드',
+  // 아래 셋은 구현 직후 오탐으로 드러나 키워드를 좁힌 사례다. 다시 넓히면 여기서 깨진다.
+  '차량용 쿠션',    // '쿠션' → '쿠션팩트'
+  '캠핑 방석 쿠션', // 같은 사유
+  '패딩 충전재',    // '충전' → '충전식'·'충전기'
 ] as const;
 
 describe('classifySeedKeyword — 실측 차단 시드', () => {
   it.each(BLOCKED)('%s → %s', (keyword, group) => {
+    expect(classifySeedKeyword(keyword)).toContain(group);
+  });
+
+  it.each(EDGE_BLOCKED)('%s → %s (경계)', (keyword, group) => {
     expect(classifySeedKeyword(keyword)).toContain(group);
   });
 
