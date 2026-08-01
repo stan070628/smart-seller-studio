@@ -11,6 +11,27 @@ import { devtools } from 'zustand/middleware';
 import { labelForHref, routeIdOf } from '@/lib/nav-items';
 import type { Tab } from '@/types/tab';
 
+/** isDirty가 아닌 탭의 최대 개수 */
+export const MAX_TABS = 6;
+
+/**
+ * 상한을 넘으면 오래된 탭부터 제거한다.
+ * isDirty 탭과 protectId 탭은 대상이 아니며 상한 계산에도 넣지 않는다.
+ */
+function evict(tabs: Tab[], protectId: string | null): Tab[] {
+  const counted = tabs.filter((t) => !t.isDirty);
+  const overflow = counted.length - MAX_TABS;
+  if (overflow <= 0) return tabs;
+
+  const victims = counted
+    .filter((t) => t.id !== protectId)
+    .sort((a, b) => a.lastActiveAt - b.lastActiveAt)
+    .slice(0, overflow)
+    .map((t) => t.id);
+
+  return tabs.filter((t) => !victims.includes(t.id));
+}
+
 export interface TabState {
   tabs: Tab[];
   activeId: string | null;
@@ -41,7 +62,7 @@ export const useTabStore = create<TabState>()(
           ? tabs.map((t) => (t.id === id ? { ...t, href, label, lastActiveAt: now } : t))
           : [...tabs, { id, href, label, lastActiveAt: now, isDirty: false }];
 
-        set({ tabs: next, activeId: id }, false, 'tab/openTab');
+        set({ tabs: evict(next, id), activeId: id }, false, 'tab/openTab');
       },
 
       closeTab: (id) => {
@@ -60,11 +81,9 @@ export const useTabStore = create<TabState>()(
       },
 
       setDirty: (id, dirty) => {
-        set(
-          (s) => ({ tabs: s.tabs.map((t) => (t.id === id ? { ...t, isDirty: dirty } : t)) }),
-          false,
-          'tab/setDirty',
-        );
+        const { tabs, activeId } = get();
+        const next = tabs.map((t) => (t.id === id ? { ...t, isDirty: dirty } : t));
+        set({ tabs: dirty ? next : evict(next, activeId) }, false, 'tab/setDirty');
       },
     }),
     { name: 'TabStore' },
