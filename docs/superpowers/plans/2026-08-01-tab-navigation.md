@@ -1347,7 +1347,7 @@ const mockFetch = vi.fn();
 beforeEach(() => {
   useCacheStore.setState({ entries: {}, scroll: {} });
   mockFetch.mockReset();
-  mockFetch.mockResolvedValue({ json: async () => ({ items: [1, 2, 3] }) });
+  mockFetch.mockResolvedValue({ ok: true, json: async () => ({ items: [1, 2, 3] }) });
   vi.stubGlobal('fetch', mockFetch);
 });
 
@@ -1472,7 +1472,19 @@ export function useCachedFetch<T = unknown>(
     let promise = inflight.get(url);
     if (!promise) {
       promise = fetch(url)
-        .then((res) => res.json())
+        .then(async (res) => {
+          // fetch는 4xx·5xx에서 reject하지 않는다.
+          // 여기서 걸러내지 않으면 오류 응답이 정상 데이터로 캐시된다.
+          //
+          // 상태를 먼저 본다. 프록시나 Next의 오류 페이지는 HTML을 주므로
+          // json()을 먼저 부르면 파싱 오류가 나서 상태 코드를 잃는다.
+          if (!res.ok) {
+            const body = await res.json().catch(() => null);
+            const message = (body as { error?: string } | null)?.error;
+            throw new Error(message ?? `요청이 실패했습니다 (${res.status})`);
+          }
+          return res.json();
+        })
         .finally(() => inflight.delete(url));
       inflight.set(url, promise);
     }
@@ -1566,7 +1578,7 @@ afterEach(() => {
 
 describe('동시 요청', () => {
   it('같은 주소를 동시에 부르면 한 번만 요청한다', async () => {
-    mockFetch.mockResolvedValue({ json: async () => ({ items: [1] }) });
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ items: [1] }) });
 
     const a = renderHook(() => useCachedFetch('t:list', '/api/t'));
     const b = renderHook(() => useCachedFetch('t:list', '/api/t'));
@@ -1604,7 +1616,7 @@ describe('실패', () => {
     const { result } = renderHook(() => useCachedFetch('t:list', '/api/t'));
     await waitFor(() => expect(result.current.error).toBe('실패'));
 
-    mockFetch.mockResolvedValue({ json: async () => ({ items: [7] }) });
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ items: [7] }) });
     await result.current.refetch();
 
     await waitFor(() => expect(result.current.error).toBeNull());
@@ -1960,7 +1972,31 @@ import { useCachedFetch } from '@/hooks/useCachedFetch';
 
 `load()`를 호출하던 자리를 전부 `refetch()`로 바꾼다. 대상은 `add`·`verifyAll`·`applyOrderQty`·`remove`이며, `load({ silent: true })` 형태도 `refetch()`로 통일한다. 캐시가 이전 목록을 계속 보여주므로 `silent` 구분이 필요 없다.
 
-`setLoading`·`setError`·`setItems` 호출이 남아 있으면 지운다. `loading`과 `error`는 이제 훅이 준다.
+`setLoading`·`setItems` 호출은 지운다. `loading`과 목록은 이제 훅이 준다.
+
+### 🔴 `setError`는 지우지 않는다 — 오류 출처가 둘이다
+
+훅의 `error`는 **조회 실패만** 담는다. 그런데 `ShortlistTab`은 쓰기 경로 다섯 곳에서 `setError`를 부른다 — `add`(`'추가하지 못했습니다.'`)·`verifyAll`·`patchItem`·`applyOrderQty`·`remove`, 그리고 각 작업 시작 시 `setError(null)`로 배너를 지운다. **훅은 이것들을 담을 자리가 없다.**
+
+로컬 상태를 남기고 두 출처를 합친다.
+
+```tsx
+  const [writeError, setWriteError] = useState<string | null>(null);
+  const {
+    data: items = [],
+    isLoading: loading,
+    error: loadError,
+    refetch,
+  } = useCachedFetch<ShortlistItem[]>('sourcing:shortlist', '/api/sourcing/shortlist', {
+    select: (json) => (json as { items: ShortlistItem[] }).items,
+    errorMessage: '목록을 불러오지 못했습니다.',
+  });
+
+  // 쓰기 오류를 먼저 보여준다 — 방금 한 행동의 결과가 더 급하다
+  const error = writeError ?? loadError;
+```
+
+기존 `setError(...)` 호출을 `setWriteError(...)`로 바꾸면 된다. 화면에 쓰는 `error`는 위에서 합친 값이다.
 
 - [ ] **Step 4: 통과 확인**
 
@@ -2094,10 +2130,29 @@ git commit -m "test(e2e): 탭 이동·캐시·복원 전체 흐름"
 
 | 단계 | 내용 | 비고 |
 |---|---|---|
-| **3** | 나머지 화면을 `useCachedFetch`로 점진 치환 | Task 11이 패턴이다. 화면마다 응답 형태(`items`·`rows`·`data`)만 다르다. **발굴 탭 등 자체 폴링 화면은 제외** |
+| **3** | 나머지 화면을 `useCachedFetch`로 점진 치환 | Task 11이 패턴이다. 화면마다 응답 형태(`items`·`rows`·`data`)만 다르다 |
 | **4** | `useScrollRestore`·`useTabDirty` 적용 | 스크롤 복원, 에디터·상품등록에 편집 표시 |
 
 3단계에서 화면을 치환할 때마다 **쓰기 경로에 `refetch()` 또는 `invalidate()`가 붙었는지 확인**한다. 빠뜨리면 저장 후 낡은 목록이 남는다.
+
+### 3단계 제외 대상 — 이 훅으로 치환할 수 없는 패턴
+
+효과 기반 GET 44곳 중 **약 26곳이 치환 가능**하고, 나머지는 다른 도구가 필요하다. 화면 #15쯤에서 발견하지 말고 미리 적어둔다.
+
+| 패턴 | 예 | 이유 |
+|---|---|---|
+| 여러 API 병합 | `OrdersTab.tsx:344` | 4개를 `allSettled`로 부르고 각각 오류 상태가 따로다. 결과를 병합·정렬해 하나의 목록으로 만든다 |
+| 런타임 개수만큼 호출 | `ShippingGroupModal.tsx:43` | `Promise.all`로 상품 N개를 부른다. **훅을 N번 부를 수 없다** |
+| 자체 폴링 | `DiscoveryTab.tsx:229` | 스스로 재예약하며 정체를 감지한다. 폴링이 이미 최신성을 보장한다 |
+| 이어붙이는 페이지네이션 | `useCostcoProducts.ts` | 무한 스크롤로 결과를 누적한다. 캐시가 "마지막 응답"만 담는 모델과 안 맞는다 |
+| 연쇄 의존 조회 | 4곳 | 앞 응답이 다음 요청의 입력이다 |
+| `.blob()` 응답 | 8곳 | 전부 버튼 핸들러에서 부른다. 애초에 효과 기반이 아니다 |
+
+### 3단계 전에 풀어야 할 두 가지
+
+**필터가 있는 화면의 캐시 키.** `CostcoTab.tsx:397`은 조건부 파라미터 8개에 검색어와 페이지까지 붙인다. 캐시 키가 그것을 전부 담으면 `<라우트>:<세부>` 규칙이 무너지고 Task 10의 접두사 해제가 안 걸린다. 게다가 `useCacheStore`에는 TTL도 LRU도 상한도 없어서 **키 입력 한 글자마다 엔트리가 하나씩 생긴다.** 새 키는 항상 캐시 미스라 `isLoading`이 매번 참이 되어 **SWR 이득이 0인 곳에서 캐시만 자란다.** 설계의 "메모리 상한은 탭 6개 제한이 대신한다"는 가정이 여기서 깨진다.
+
+**같은 엔드포인트를 두 경로가 쓰는 경우.** `/api/sourcing/costco`를 `CostcoTab`(치환 가능)과 `useCostcoProducts`(치환 불가)가 함께 부른다. 한쪽만 치환하면 캐시가 갈라지고, `CostcoTab.handleCollect`의 POST는 어느 쪽도 무효화하지 못한다.
 
 ---
 
