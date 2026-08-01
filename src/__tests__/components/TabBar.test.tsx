@@ -6,8 +6,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { renderToString } from 'react-dom/server';
 import TabBar from '@/components/TabBar';
 import { useTabStore } from '@/store/useTabStore';
+import { C } from '@/lib/design-tokens';
 
 const push = vi.fn();
 vi.mock('next/navigation', () => ({
@@ -37,10 +39,17 @@ describe('TabBar', () => {
     expect(container.querySelector('[data-testid="tab-bar"]')).toBeInTheDocument();
   });
 
-  it('탭이 없으면 아무것도 그리지 않는다', () => {
+  it('탭이 없으면 탭을 그리지 않되 자리는 남긴다', () => {
     const { container } = render(<TabBar />);
 
     expect(container.querySelector('[data-testid="tab-bar"]')).toBeNull();
+    expect(container.firstElementChild).toHaveStyle({ height: '36px' });
+  });
+
+  it('서버 렌더에서는 탭을 그리지 않는다 — 하이드레이션 불일치 방지', () => {
+    useTabStore.getState().openTab('/sourcing');
+
+    expect(renderToString(<TabBar />)).not.toContain('소싱');
   });
 
   it('탭을 클릭하면 그 href로 이동한다', async () => {
@@ -85,5 +94,38 @@ describe('TabBar', () => {
     render(<TabBar />);
 
     expect(screen.getByLabelText('편집 중')).toBeInTheDocument();
+  });
+
+  it('활성 탭만 강조 스타일을 갖는다', () => {
+    useTabStore.getState().openTab('/sourcing');
+    useTabStore.getState().openTab('/orders');
+    render(<TabBar />);
+
+    const activeTab = screen.getByText('주문/매출').closest('div')!;
+    const inactiveTab = screen.getByText('소싱').closest('div')!;
+
+    expect(activeTab).toHaveStyle({ backgroundColor: C.card });
+    expect(activeTab).toHaveStyle({ borderBottomColor: C.accent });
+    expect(inactiveTab).toHaveStyle({ color: C.textSub });
+  });
+
+  it('마지막 탭을 닫으면 대시보드로 간다', async () => {
+    useTabStore.getState().openTab('/sourcing');
+    render(<TabBar />);
+
+    await userEvent.click(screen.getByLabelText('소싱 탭 닫기'));
+
+    expect(push).toHaveBeenCalledWith('/dashboard');
+  });
+
+  it('첫 탭이 활성일 때 닫으면 오른쪽 탭의 주소로 이동한다', async () => {
+    useTabStore.getState().openTab('/sourcing');
+    useTabStore.getState().openTab('/orders?tab=cost');
+    useTabStore.getState().openTab('/sourcing'); // 첫 탭을 다시 활성화
+    render(<TabBar />);
+
+    await userEvent.click(screen.getByLabelText('소싱 탭 닫기'));
+
+    expect(push).toHaveBeenCalledWith('/orders?tab=cost');
   });
 });
