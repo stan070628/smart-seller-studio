@@ -8,6 +8,8 @@ import { act, renderHook } from '@testing-library/react';
 import { useTabStore } from '@/store/useTabStore';
 
 beforeEach(() => {
+  // persist 미들웨어가 붙은 뒤로 localStorage를 통한 파일 간 오염을 막는다
+  localStorage.clear();
   useTabStore.setState({ tabs: [], activeId: null });
 });
 

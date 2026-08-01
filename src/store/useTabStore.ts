@@ -7,12 +7,15 @@
  */
 
 import { create } from 'zustand';
-import { devtools } from 'zustand/middleware';
+import { devtools, persist } from 'zustand/middleware';
 import { labelForHref, routeIdOf } from '@/lib/nav-items';
 import type { Tab } from '@/types/tab';
 
 /** isDirty가 아닌 탭의 최대 개수 */
 export const MAX_TABS = 6;
+
+/** localStorage 키 */
+export const TAB_STORAGE_KEY = 'sss-tabs';
 
 /**
  * 상한을 넘으면 오래된 탭부터 제거한다.
@@ -49,54 +52,70 @@ export interface TabState {
 
 export const useTabStore = create<TabState>()(
   devtools(
-    (set, get) => ({
-      tabs: [],
-      activeId: null,
+    persist(
+      (set, get) => ({
+        tabs: [],
+        activeId: null,
 
-      openTab: (href) => {
-        const id = routeIdOf(href);
-        const label = labelForHref(href);
-        const now = Date.now();
-        const { tabs, activeId } = get();
-        const current = tabs.find((t) => t.id === id);
+        openTab: (href) => {
+          const id = routeIdOf(href);
+          const label = labelForHref(href);
+          const now = Date.now();
+          const { tabs, activeId } = get();
+          const current = tabs.find((t) => t.id === id);
 
-        // 이미 활성인 탭을 같은 주소로 다시 열면 아무것도 바꾸지 않는다.
-        // 불필요한 배열 재생성으로 구독자가 다시 렌더되는 것을 막는다.
-        if (current && current.href === href && current.label === label && activeId === id) return;
+          // 이미 활성인 탭을 같은 주소로 다시 열면 아무것도 바꾸지 않는다.
+          // 불필요한 배열 재생성으로 구독자가 다시 렌더되는 것을 막는다.
+          if (current && current.href === href && current.label === label && activeId === id) return;
 
-        const next = current
-          ? tabs.map((t) => (t.id === id ? { ...t, href, label, lastActiveAt: now } : t))
-          : [...tabs, { id, href, label, lastActiveAt: now, isDirty: false }];
+          const next = current
+            ? tabs.map((t) => (t.id === id ? { ...t, href, label, lastActiveAt: now } : t))
+            : [...tabs, { id, href, label, lastActiveAt: now, isDirty: false }];
 
-        set({ tabs: evict(next, [id]), activeId: id }, false, 'tab/openTab');
+          set({ tabs: evict(next, [id]), activeId: id }, false, 'tab/openTab');
+        },
+
+        closeTab: (id) => {
+          const { tabs, activeId } = get();
+          const idx = tabs.findIndex((t) => t.id === id);
+          if (idx === -1) return;
+
+          const next = tabs.filter((t) => t.id !== id);
+          // idx는 삭제 전 배열 기준, next는 삭제 후 배열이다.
+          // idx>=1 이면 next[idx-1]은 원래의 왼쪽 이웃과 같고,
+          // idx===0 이면 클램프되어 next[0] = 원래의 오른쪽 이웃이 된다.
+          const nextActive =
+            activeId === id ? (next[Math.max(0, idx - 1)]?.id ?? null) : activeId;
+
+          set({ tabs: next, activeId: nextActive }, false, 'tab/closeTab');
+        },
+
+        setDirty: (id, dirty) => {
+          const { tabs, activeId } = get();
+          const target = tabs.find((t) => t.id === id);
+          // 없는 탭이거나 이미 같은 값이면 아무것도 바꾸지 않는다.
+          // 상태를 안 바꾸는 호출이 밀어내기를 유발해선 안 된다.
+          if (!target || target.isDirty === dirty) return;
+
+          const next = tabs.map((t) => (t.id === id ? { ...t, isDirty: dirty } : t));
+          set({ tabs: dirty ? next : evict(next, [activeId, id]) }, false, 'tab/setDirty');
+        },
+      }),
+      {
+        name: TAB_STORAGE_KEY,
+        // 편집 상태는 세션을 넘기지 않는다
+        partialize: (s) => ({
+          tabs: s.tabs.map((t) => ({ ...t, isDirty: false })),
+          activeId: s.activeId,
+        }),
+        merge: (persisted, current) => {
+          const merged = { ...current, ...(persisted as Partial<TabState>) };
+          // 복원 시점에 상한을 다시 적용한다.
+          // 저장 당시 isDirty였던 탭이 false로 풀려 초과 상태로 들어올 수 있다.
+          return { ...merged, tabs: evict(merged.tabs, [merged.activeId]) };
+        },
       },
-
-      closeTab: (id) => {
-        const { tabs, activeId } = get();
-        const idx = tabs.findIndex((t) => t.id === id);
-        if (idx === -1) return;
-
-        const next = tabs.filter((t) => t.id !== id);
-        // idx는 삭제 전 배열 기준, next는 삭제 후 배열이다.
-        // idx>=1 이면 next[idx-1]은 원래의 왼쪽 이웃과 같고,
-        // idx===0 이면 클램프되어 next[0] = 원래의 오른쪽 이웃이 된다.
-        const nextActive =
-          activeId === id ? (next[Math.max(0, idx - 1)]?.id ?? null) : activeId;
-
-        set({ tabs: next, activeId: nextActive }, false, 'tab/closeTab');
-      },
-
-      setDirty: (id, dirty) => {
-        const { tabs, activeId } = get();
-        const target = tabs.find((t) => t.id === id);
-        // 없는 탭이거나 이미 같은 값이면 아무것도 바꾸지 않는다.
-        // 상태를 안 바꾸는 호출이 밀어내기를 유발해선 안 된다.
-        if (!target || target.isDirty === dirty) return;
-
-        const next = tabs.map((t) => (t.id === id ? { ...t, isDirty: dirty } : t));
-        set({ tabs: dirty ? next : evict(next, [activeId, id]) }, false, 'tab/setDirty');
-      },
-    }),
+    ),
     { name: 'TabStore' },
   ),
 );

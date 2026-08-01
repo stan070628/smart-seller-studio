@@ -13,6 +13,8 @@ let clock = 1_000;
 beforeEach(() => {
   clock = 1_000;
   vi.spyOn(Date, 'now').mockImplementation(() => (clock += 10));
+  // persist 미들웨어가 붙은 뒤로 localStorage를 통한 파일 간 오염을 막는다
+  localStorage.clear();
   useTabStore.setState({ tabs: [], activeId: null });
 });
 
