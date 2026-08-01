@@ -70,13 +70,15 @@ export default function TabBar() {
   function lastFetchedAt(routeId: string): number | null {
     const times = Object.entries(entries)
       .filter(([k]) => k.startsWith(`${routeId}:`))
-      .map(([, e]) => e.fetchedAt)
-      .filter((t) => t > 0);
+      .map(([, e]) => e.fetchedAt);
     return times.length ? Math.max(...times) : null;
   }
 
   function relative(ts: number): string {
-    const min = Math.floor((Date.now() - ts) / 60_000);
+    // 로컬 시계가 뒤로 가도 음수가 나오지 않게 막는다.
+    // 음수면 "방금"이 나와 낡은 데이터를 최신으로 오판하게 되므로,
+    // 그 방향의 오차보다는 0(방금)에 그대로 머무는 쪽이 안전하다.
+    const min = Math.max(0, Math.floor((Date.now() - ts) / 60_000));
     if (min < 1) return '방금';
     if (min < 60) return `${min}분 전`;
     return `${Math.floor(min / 60)}시간 전`;
@@ -111,6 +113,7 @@ export default function TabBar() {
     >
       {tabs.map((tab) => {
         const active = tab.id === activeId;
+        const stamp = lastFetchedAt(tab.id);
         return (
           <div
             key={tab.id}
@@ -142,12 +145,9 @@ export default function TabBar() {
             >
               {tab.label}
             </span>
-            {(() => {
-              const ts = lastFetchedAt(tab.id);
-              return ts ? (
-                <span style={{ fontSize: 10, color: C.textMuted }}>· {relative(ts)}</span>
-              ) : null;
-            })()}
+            {stamp && (
+              <span style={{ fontSize: 10, color: C.textMuted }}>· {relative(stamp)}</span>
+            )}
             <button
               type="button"
               aria-label={`${tab.label} 탭 닫기`}

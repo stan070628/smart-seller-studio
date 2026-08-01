@@ -159,4 +159,38 @@ describe('TabBar', () => {
 
     expect(screen.queryByText('· 방금')).toBeNull();
   });
+
+  it('접두사만 겹치는 캐시 키는 세지 않는다', () => {
+    useTabStore.getState().openTab('/label');
+    useCacheStore.getState().setEntry('labelmaker:jobs', { items: [] });
+    render(<TabBar />);
+
+    expect(screen.queryByText('· 방금')).toBeNull();
+  });
+
+  it('한 시간이 지나면 시간 단위로 보여준다', () => {
+    useTabStore.getState().openTab('/orders');
+    useCacheStore.setState({
+      entries: {
+        'orders:list': { data: {}, fetchedAt: Date.now() - 90 * 60_000, error: null },
+      },
+      scroll: {},
+    });
+    render(<TabBar />);
+
+    expect(screen.getByText('· 1시간 전')).toBeInTheDocument();
+  });
+
+  it('몇 분 지나면 분 단위로 보여준다', () => {
+    useTabStore.getState().openTab('/orders');
+    useCacheStore.setState({
+      entries: {
+        'orders:list': { data: {}, fetchedAt: Date.now() - 5 * 60_000, error: null },
+      },
+      scroll: {},
+    });
+    render(<TabBar />);
+
+    expect(screen.getByText('· 5분 전')).toBeInTheDocument();
+  });
 });
