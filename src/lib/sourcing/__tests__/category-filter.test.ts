@@ -21,6 +21,12 @@ describe('checkBlockedCategory — 회피 카테고리 RED 차단', () => {
     expect(checkBlockedCategory('건강기능식품 > 비타민')?.severity).toBe('RED');
   });
 
+  // 화장품책임판매업 등록이 없으면 못 판다. 목록에서 빠져 있어 새어 들어왔다.
+  it('"화장품" 카테고리 → RED', () => {
+    expect(checkBlockedCategory('화장품 > 스킨케어')?.severity).toBe('RED');
+    expect(checkBlockedCategory('생활용품 > 화장품용기')?.severity).toBe('RED');
+  });
+
   it('"생활용품" 카테고리 → null (안전)', () => {
     expect(checkBlockedCategory('생활용품 > 수납')).toBeNull();
   });

@@ -8,12 +8,17 @@
  * 전량 자동 실행하지 않는 이유: 하루 10시드 × 후보 5개면 5개월에 7,500개가 되어
  * 리스트가 오염되고 쓰지도 않을 후보에 API 비용이 나간다.
  *
+ * 인허가가 필요한 시드(전기·화장품·식품·아동)는 기본으로 숨긴다. 크론 프롬프트가
+ * 이미 제외를 지시하지만 실제 배치 26건 중 19건이 지시를 어겼으므로, 판정은
+ * 렌더 시점에 classifySeedKeyword로 다시 한다. 삭제가 아니라 숨김인 이유는
+ * 사장이 나중에 인증을 받을 수 있어서다 — 그룹 체크박스로 언제든 켤 수 있다.
+ *
  * 이 화면은 크론이 조용히 죽는 것을 잡으려고 만들었다. 그러므로 이 화면 자신의
  * 실패도 조용히 넘어가서는 안 된다 — 조회 실패와 실행 실패는 반드시 화면에 남긴다.
  * "요청이 실패했다"와 "수집된 시드가 없다"는 다른 사실이므로 구분해서 표시한다.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, Play, RefreshCw, AlertTriangle } from 'lucide-react';
 import { C } from '@/lib/design-tokens';
 import {
@@ -23,6 +28,12 @@ import {
   MIN_SELL_PRICE_KRW,
   DEFAULT_ORDER_QTY,
 } from '@/lib/sourcing/coupang-price';
+import {
+  classifySeedKeyword,
+  findSeedCategoryGroup,
+  SEED_CATEGORY_GROUPS,
+  type SeedCategoryId,
+} from '@/lib/sourcing/legal/seed-category';
 
 interface Seed {
   id: number;
@@ -57,8 +68,30 @@ const POLL_MS = 3000;
  *  실행 시작 기준이 아니다 — 키워드 10개면 정상 실행도 3분 반이 걸린다 */
 const STALL_MS = 3 * 60 * 1000;
 
+/**
+ * 규제 그룹 포함 여부를 담아 두는 localStorage 키.
+ *
+ * 인허가를 받은 뒤에도 매번 체크를 다시 켜야 한다면 필터가 방해물이 된다.
+ */
+const INCLUDED_GROUPS_KEY = 'sourcing.discovery.includedSeedCategories';
+
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/** 저장된 그룹 목록을 읽는다. SSR·손상된 값·삭제된 그룹 id는 전부 무시한다 */
+function readIncludedGroups(): SeedCategoryId[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(INCLUDED_GROUPS_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const known = new Set<string>(SEED_CATEGORY_GROUPS.map((g) => g.id));
+    return parsed.filter((v): v is SeedCategoryId => typeof v === 'string' && known.has(v));
+  } catch {
+    return [];
+  }
 }
 
 export default function DiscoveryTab() {
@@ -74,6 +107,13 @@ export default function DiscoveryTab() {
   const [runs, setRuns] = useState<Run[]>([]);
   const [polling, setPolling] = useState(false);
   const [pollError, setPollError] = useState<string | null>(null);
+
+  // 인허가가 필요해서 기본으로 숨기는 그룹 중, 사장이 "그래도 보겠다"고 켠 것.
+  // 초기값은 반드시 빈 Set이다 — useState 이니셜라이저에서 localStorage를 읽으면
+  // 서버 렌더 결과와 달라져 하이드레이션이 깨진다. 읽기는 아래 이펙트에서 한다.
+  const [includedGroups, setIncludedGroups] = useState<Set<SeedCategoryId>>(new Set());
+  // 하이드레이션 전에 빈 값을 저장해 기존 설정을 지우는 것을 막는다.
+  const groupsHydratedRef = useRef(false);
 
   // 폴링 대상 requestId는 실행 시점에 확정되고 폴링 중 변하지 않는다.
   // 이 값을 state로 두면 폴링 훅이 runs에 의존하게 되는데, 훅은 매 틱마다
@@ -109,6 +149,64 @@ export default function DiscoveryTab() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // 저장된 포함 설정 복원. 렌더 중이 아니라 이펙트에서 읽는다.
+  useEffect(() => {
+    const restored = readIncludedGroups();
+    groupsHydratedRef.current = true;
+    if (restored.length > 0) setIncludedGroups(new Set(restored));
+  }, []);
+
+  useEffect(() => {
+    if (!groupsHydratedRef.current || typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(INCLUDED_GROUPS_KEY, JSON.stringify([...includedGroups]));
+    } catch {
+      // 사파리 프라이빗 모드 등에서 저장이 막힐 수 있다. 화면 동작은 그대로 둔다.
+    }
+  }, [includedGroups]);
+
+  // 시드를 규제 그룹으로 분류한다. 크론 프롬프트가 이미 제외를 지시하지만
+  // 실제 배치 26건 중 19건이 그 지시를 어겼다 — 표시 여부는 코드가 정한다.
+  const classified = useMemo(
+    () => seeds.map((s) => ({ seed: s, groups: classifySeedKeyword(s.keyword) })),
+    [seeds],
+  );
+
+  // 걸린 그룹이 전부 켜져 있을 때만 보인다. 두 그룹에 걸린 시드는 두 그룹 다 켜야 한다.
+  const visible = useMemo(
+    () => classified.filter((c) => c.groups.every((g) => includedGroups.has(g))),
+    [classified, includedGroups],
+  );
+
+  // 몇 개를 왜 숨겼는지 반드시 화면에 쓴다. 조용히 버리면 오탐을 영영 모른다.
+  const hiddenSummary = useMemo(() => {
+    const hidden = classified.filter((c) => !c.groups.every((g) => includedGroups.has(g)));
+    // 한 시드가 두 그룹에 걸리면 양쪽에 센다 — 그래서 그룹별 합계가 총 숨김 수보다 클 수 있다.
+    const parts = SEED_CATEGORY_GROUPS.filter((g) => !includedGroups.has(g.id))
+      .map((g) => ({ g, n: hidden.filter((c) => c.groups.includes(g.id)).length }))
+      .filter((x) => x.n > 0)
+      .map((x) => `${x.g.shortLabel} ${x.n}`);
+    return { count: hidden.length, parts };
+  }, [classified, includedGroups]);
+
+  // 숨은 시드가 선택된 채로 남으면 사장이 보지 못한 키워드가 분석에 실려 나간다.
+  useEffect(() => {
+    const visibleIds = new Set(visible.map((v) => v.seed.id));
+    setChecked((prev) => {
+      const next = new Set([...prev].filter((id) => visibleIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [visible]);
+
+  function toggleGroup(id: SeedCategoryId) {
+    setIncludedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   // 실행 진행 상황 폴링.
   // 의존성이 polling 하나뿐인 것은 의도적이다 — 조회 대상 id는 pollIdsRef에 있고,
@@ -190,7 +288,9 @@ export default function DiscoveryTab() {
   }
 
   async function run() {
-    const picked = seeds.filter((s) => checked.has(s.id)).map((s) => s.keyword);
+    // 화면에 보이는 시드만 실행 대상이다. checked는 이미 정리되지만, 보이지 않는
+    // 키워드를 분석에 태우는 경로를 한 번 더 막는다.
+    const picked = visible.filter((v) => checked.has(v.seed.id)).map((v) => v.seed.keyword);
     const extra = manual.trim();
     const keywords = extra ? [...picked, extra] : picked;
     if (keywords.length === 0) return;
@@ -301,8 +401,50 @@ export default function DiscoveryTab() {
         </p>
       )}
 
+      {/* 인허가 없이는 못 파는 그룹은 기본으로 숨긴다. 지우지는 않는다 —
+          나중에 인증을 받으면 그때부터 바로 보여야 한다(캠핑 랜턴의 KC 인증은
+          우선 카테고리와 겹친다). */}
+      {seeds.length > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+          padding: '10px 8px', marginBottom: 4,
+          background: C.tableHeader, border: `1px solid ${C.border}`, borderRadius: 6,
+        }}>
+          {SEED_CATEGORY_GROUPS.map((g) => (
+            <label
+              key={g.id}
+              title={g.reason}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                fontSize: 12.5, color: C.text, cursor: 'pointer',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={includedGroups.has(g.id)}
+                onChange={() => toggleGroup(g.id)}
+              />
+              {g.label} 포함
+            </label>
+          ))}
+          {hiddenSummary.count > 0 && (
+            <span style={{ marginLeft: 'auto', fontSize: 12, color: C.textSub }}>
+              {hiddenSummary.count}개 숨김
+              {hiddenSummary.parts.length > 0 && ` — ${hiddenSummary.parts.join(' · ')}`}
+            </span>
+          )}
+        </div>
+      )}
+
+      {seeds.length > 0 && visible.length === 0 && (
+        <p style={{ color: C.textSub, fontSize: 13, padding: '8px 0' }}>
+          수집된 시드 {seeds.length}개가 모두 규제 그룹에 걸려 숨겨졌습니다.
+          위에서 그룹을 켜면 확인할 수 있습니다.
+        </p>
+      )}
+
       <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-        {seeds.map((s) => (
+        {visible.map(({ seed: s, groups }) => (
           <li
             key={s.id}
             style={{
@@ -317,6 +459,23 @@ export default function DiscoveryTab() {
               aria-label={`${s.keyword} 선택`}
             />
             <span style={{ fontWeight: 600, color: C.text, minWidth: 140 }}>{s.keyword}</span>
+            {/* 켜서 보고 있는 시드는 무엇을 보고 있는지 — 그룹과 필요한 인허가를 — 붙여 둔다 */}
+            {groups.map((id) => {
+              const g = findSeedCategoryGroup(id);
+              if (!g) return null;
+              return (
+                <span
+                  key={id}
+                  title={`${g.label} — ${g.reason}`}
+                  style={{
+                    fontSize: 11, color: C.warning, whiteSpace: 'nowrap',
+                    border: `1px solid ${C.border}`, borderRadius: 4, padding: '1px 6px',
+                  }}
+                >
+                  {g.label} · {g.reason}
+                </span>
+              );
+            })}
             <span style={{ fontSize: 12, color: C.textSub, minWidth: 80 }}>{s.source}</span>
             <span style={{ fontSize: 12, color: C.textSub }}>{s.reason}</span>
           </li>
