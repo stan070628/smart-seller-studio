@@ -23,6 +23,18 @@ beforeEach(() => {
 });
 
 describe('TabBar', () => {
+  // 이 테스트는 파일 안에서 반드시 가장 먼저 실행돼야 한다.
+  // TabBar는 모듈 스코프 변수 hasHydrated로 "하이드레이션을 이미 통과했는지"를
+  // 기억한다 (AppShell 재마운트 시 플레이스홀더 깜빡임을 없애기 위해서다).
+  // 아래의 다른 테스트가 먼저 client render(<TabBar />)를 한 번이라도 하면
+  // useEffect가 hasHydrated를 true로 굳혀버려서, 이 테스트가 기대하는
+  // "서버 렌더는 항상 마운트 전 상태로 시작한다"는 전제가 깨진다.
+  it('서버 렌더에서는 탭을 그리지 않는다 — 하이드레이션 불일치 방지', () => {
+    useTabStore.getState().openTab('/sourcing');
+
+    expect(renderToString(<TabBar />)).not.toContain('소싱');
+  });
+
   it('열린 탭을 모두 그린다', () => {
     useTabStore.getState().openTab('/sourcing');
     useTabStore.getState().openTab('/orders');
@@ -44,12 +56,6 @@ describe('TabBar', () => {
 
     expect(container.querySelector('[data-testid="tab-bar"]')).toBeNull();
     expect(container.firstElementChild).toHaveStyle({ height: '36px' });
-  });
-
-  it('서버 렌더에서는 탭을 그리지 않는다 — 하이드레이션 불일치 방지', () => {
-    useTabStore.getState().openTab('/sourcing');
-
-    expect(renderToString(<TabBar />)).not.toContain('소싱');
   });
 
   it('탭을 클릭하면 그 href로 이동한다', async () => {

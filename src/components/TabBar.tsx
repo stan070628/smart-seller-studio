@@ -14,6 +14,13 @@ import { useTabStore } from '@/store/useTabStore';
 
 export const TAB_BAR_HEIGHT = 36;
 
+/**
+ * 하이드레이션을 한 번 통과했는지 기억한다.
+ * AppShell이 라우트마다 재마운트되므로 컴포넌트 상태에 두면
+ * 이동할 때마다 플레이스홀더가 한 프레임 보인다.
+ */
+let hasHydrated = false;
+
 export default function TabBar() {
   const router = useRouter();
   const tabs = useTabStore((s) => s.tabs);
@@ -22,8 +29,11 @@ export default function TabBar() {
 
   // 서버에는 localStorage가 없어 탭이 0개인데 클라이언트는 복원된 탭을 그린다.
   // 마운트 전에는 탭을 그리지 않아 하이드레이션 불일치를 막는다.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const [mounted, setMounted] = useState(hasHydrated);
+  useEffect(() => {
+    hasHydrated = true;
+    setMounted(true);
+  }, []);
 
   // 마운트 전(서버 렌더·하이드레이션 직후)에도 자리는 잡아둔다.
   // 여기서 null을 반환하면 탭이 나타나는 순간 본문 전체가 36px 밀려 내려간다.

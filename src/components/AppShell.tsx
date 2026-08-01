@@ -2,12 +2,32 @@
 
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { C } from '@/lib/design-tokens';
 import AlertList from '@/components/alerts/AlertList';
 import { NAV_ITEMS } from '@/lib/nav-items';
 import TabBar from '@/components/TabBar';
 import { useTabStore } from '@/store/useTabStore';
+
+/**
+ * 주소 변화를 탭에 반영한다.
+ * useSearchParams를 쓰므로 정적 프리렌더를 막지 않도록 Suspense 안에 격리한다.
+ * AppShell 본체에 그대로 두면 AppShell을 쓰는 10개 레이아웃 전부가
+ * 프리렌더에서 bail out한다 (빌드 실패의 원인이었다).
+ */
+function TabSync() {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const openTab = useTabStore((s) => s.openTab);
+
+  // 사이드바 클릭·router.push·뒤로가기가 모두 여기로 모인다.
+  useEffect(() => {
+    const qs = searchParams.toString();
+    openTab(qs ? `${pathname}?${qs}` : pathname);
+  }, [pathname, searchParams, openTab]);
+
+  return null;
+}
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -23,8 +43,6 @@ export default function AppShell({
   mainDisplay = 'block',
 }: AppShellProps) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const openTab = useTabStore((s) => s.openTab);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showAlerts, setShowAlerts] = useState(false);
   const badgeRef = useRef<HTMLDivElement>(null);
@@ -33,13 +51,6 @@ export default function AppShell({
     if (href === '/dashboard') return pathname === '/dashboard';
     return pathname.startsWith(href);
   }
-
-  // 주소가 바뀔 때마다 탭에 반영한다.
-  // 사이드바 클릭·router.push·뒤로가기가 모두 여기로 모인다.
-  useEffect(() => {
-    const qs = searchParams.toString();
-    openTab(qs ? `${pathname}?${qs}` : pathname);
-  }, [pathname, searchParams, openTab]);
 
   async function fetchUnreadCount() {
     try {
@@ -320,6 +331,9 @@ export default function AppShell({
           minWidth: 0,
         }}
       >
+        <Suspense fallback={null}>
+          <TabSync />
+        </Suspense>
         <TabBar />
         {children}
       </div>
