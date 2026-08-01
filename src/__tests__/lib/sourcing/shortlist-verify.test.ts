@@ -34,13 +34,32 @@ describe('buildVerifyResult', () => {
   afterEach(() => vi.restoreAllMocks());
 
   it('판매중이고 쿠팡가가 손익분기를 넘으면 pass', async () => {
-    const r = await buildVerifyResult(DOME_ALIVE, 10, 'xsmall', 9900);
+    // 9,900원이었으나 1만원 하한 도입(2026-08-01)으로 하한에 먼저 걸려 fail이 된다.
+    // 손익분기 통과 경로를 검증하는 케이스라 하한 위 값으로 올린다.
+    const r = await buildVerifyResult(DOME_ALIVE, 10, 'xsmall', 10500);
 
     expect(r.verdict).toBe('pass');
     expect(r.unitDeliFee).toBe(300);       // 30개당 3000원을 10개 주문 → 개당 300
     expect(r.effectiveCost).toBe(3600);    // 3300 + 300
     expect(r.breakEvenPrice).toBe(9471); // 2026-07-31 VAT 반영
-    expect(r.margin).toBe(3226); // 2026-07-31 VAT 반영
+    expect(r.margin).toBe(3755); // 2026-07-31 VAT 반영
+  });
+
+  it('손익분기는 넘어도 1만원 하한 미만이면 fail — 하한이 손익분기보다 먼저다', async () => {
+    // 손익분기 9,471원 < 9,900원이므로 손익분기 기준으로는 통과다.
+    // 그래도 1만원 미만 가격대는 아예 진입하지 않기로 한 정책이라 fail이다.
+    const r = await buildVerifyResult(DOME_ALIVE, 10, 'xsmall', 9900);
+
+    expect(r.verdict).toBe('fail');
+    // 하한 미달이어도 원가·손익분기·마진은 그대로 채운다 — 화면이 근거를 보여줘야 한다
+    expect(r.coupangP25).toBe(9900);
+    expect(r.breakEvenPrice).toBe(9471);
+  });
+
+  it('정확히 1만원이면 하한을 통과한다 (경계값)', async () => {
+    // 하한은 "1만원 미만"이 fail이다. 1만원 자체는 진입 가능 구간이다.
+    const r = await buildVerifyResult(DOME_ALIVE, 10, 'xsmall', 10000);
+    expect(r.verdict).toBe('pass');
   });
 
   it('쿠팡가가 손익분기에 미달하면 fail', async () => {
@@ -111,7 +130,8 @@ describe('buildVerifyResult', () => {
   });
 
   it('배송비 정보 자체가 없는 경우(deli 필드 부재)는 확인 불가와 다르게 취급해 정상 진행한다', async () => {
-    const r = await buildVerifyResult({ ...DOME_ALIVE, deli: undefined }, 10, 'xsmall', 9900);
+    // 9,900원에서 10,500원으로 올린 이유는 위 pass 케이스와 같다 — 1만원 하한.
+    const r = await buildVerifyResult({ ...DOME_ALIVE, deli: undefined }, 10, 'xsmall', 10500);
 
     // deli 정보가 아예 없는 경우는 parseDeliPolicy가 기존에도 FREE로 처리해 왔다.
     // 이 테스트는 새 판정 로직이 이 기존 동작을 건드리지 않는다는 것을 고정한다.

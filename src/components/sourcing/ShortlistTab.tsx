@@ -10,8 +10,9 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Loader2, Plus, RefreshCw, Trash2, ExternalLink } from 'lucide-react';
+import { Loader2, Plus, RefreshCw, Trash2, ExternalLink, ChevronRight, ChevronDown } from 'lucide-react';
 import { C as BASE_C } from '@/lib/design-tokens';
+import SupplierCompare from '@/components/sourcing/SupplierCompare';
 import type { ShortlistItem, LogisticsSize, Verdict } from '@/types/shortlist';
 
 // 공통 토큰에 없는 시맨틱 색만 로컬로 확장한다 (CostcoMemoTab.tsx, DomeggookTab.tsx와 동일 관례).
@@ -38,6 +39,12 @@ const VERDICT_BADGE: Record<Verdict, { label: string; color: string }> = {
 
 const DEFAULT_ORDER_QTY = 10;
 const STALE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * 확장 행의 colSpan. thead의 <th> 개수와 반드시 같아야 한다 —
+ * 어긋나면 테이블 레이아웃이 통째로 틀어진다. 열을 더하거나 뺄 때 같이 고친다.
+ */
+const COLUMN_COUNT = 10;
 
 function won(n: number | null): string {
   return n === null ? '—' : `${n.toLocaleString('ko-KR')}원`;
@@ -85,6 +92,24 @@ export default function ShortlistTab() {
   const [orderQty, setOrderQty] = useState(DEFAULT_ORDER_QTY);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<VerifyNotice | null>(null);
+
+  /**
+   * 펼쳐진 행의 itemNo 집합.
+   *
+   * 표에 이미 열이 10개라 1688 정보를 열로 더하면 표가 못 쓰게 된다. 행을 펼쳐
+   * 두 공급처(도매꾹·1688)를 세로로 세운다. 여러 행을 동시에 펼칠 수 있게
+   * 단일 값이 아니라 Set으로 둔다 — 후보 두 개를 나란히 비교하는 게 실제 용법이다.
+   */
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+
+  const toggleExpand = (itemNo: number) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemNo)) next.delete(itemNo);
+      else next.add(itemNo);
+      return next;
+    });
+  };
 
   /**
    * 목록을 (재)조회한다.
@@ -169,8 +194,14 @@ export default function ShortlistTab() {
    * { item }으로 돌려준다. 전체 재조회 대신 해당 행만 교체한다 — 사이즈처럼
    * 자주 바꾸는 값마다 GET을 다시 부르고 테이블을 통째로 갈아끼우면 그때마다
    * 화면이 깜빡인다.
+   *
+   * 성공 여부를 boolean으로 돌려준다(throw하지 않는다). 대부분의 호출부는
+   * onBlur·onChange에서 `void patchItem(...)`으로 부르므로 예외를 던지면
+   * unhandled rejection이 된다. 반면 SupplierCompare의 저장 버튼은 성공했을
+   * 때만 붙여넣은 원문을 지워야 해서 결과를 알아야 한다 — 실패했는데 지우면
+   * 사용자가 다시 긁어와야 한다.
    */
-  const patchItem = async (itemNo: number, body: Record<string, unknown>) => {
+  const patchItem = async (itemNo: number, body: Record<string, unknown>): Promise<boolean> => {
     setBusy(true);
     setError(null);
     try {
@@ -192,8 +223,10 @@ export default function ShortlistTab() {
           ? prev.map((it) => (it.itemNo === itemNo ? data.item : it))
           : prev.filter((it) => it.itemNo !== itemNo),
       );
+      return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : '수정하지 못했습니다.');
+      return false;
     } finally {
       setBusy(false);
     }
@@ -372,36 +405,57 @@ export default function ShortlistTab() {
                 const dead = it.verdict === 'dead';
                 const badge = it.verdict ? VERDICT_BADGE[it.verdict] : null;
                 const stale = isStale(it.verifiedAt);
+                const isOpen = expanded.has(it.itemNo);
                 return (
+                  <React.Fragment key={it.itemNo}>
                   <tr
-                    key={it.itemNo}
                     style={{
                       borderTop: `1px solid ${C.border}`,
                       opacity: dead ? 0.45 : 1,
                     }}
                   >
                     <td style={{ padding: '10px 12px', maxWidth: 260 }}>
-                      <a
-                        href={`https://domeggook.com/${it.itemNo}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{
-                          color: C.text, textDecoration: 'none', fontWeight: 600,
-                          display: 'inline-flex', alignItems: 'center', gap: 4,
-                        }}
-                      >
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>
-                          {it.title}
-                        </span>
-                        <ExternalLink size={11} style={{ opacity: 0.5, flexShrink: 0 }} />
-                      </a>
-                      <div style={{ fontSize: 11, color: C.textSub, marginTop: 2 }}>
-                        #{it.itemNo}
-                        {stale && (
-                          <span style={{ marginLeft: 8, color: C.warning }} title={it.verifiedAt ? `마지막 검증: ${new Date(it.verifiedAt).toLocaleString('ko-KR')}` : '검증 이력 없음'}>
-                            ⏱ 검증 오래됨
-                          </span>
-                        )}
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                        <button
+                          onClick={() => toggleExpand(it.itemNo)}
+                          aria-expanded={isOpen}
+                          aria-label={`${it.title} 1688 사입 원가 ${isOpen ? '접기' : '펼치기'}`}
+                          style={{
+                            background: 'none', border: 'none', cursor: 'pointer',
+                            padding: 0, marginTop: 2, color: C.textSub, lineHeight: 0, flexShrink: 0,
+                          }}
+                        >
+                          {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                        </button>
+                        <div style={{ minWidth: 0 }}>
+                          <a
+                            href={`https://domeggook.com/${it.itemNo}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{
+                              color: C.text, textDecoration: 'none', fontWeight: 600,
+                              display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%',
+                            }}
+                          >
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>
+                              {it.title}
+                            </span>
+                            <ExternalLink size={11} style={{ opacity: 0.5, flexShrink: 0 }} />
+                          </a>
+                          <div style={{ fontSize: 11, color: C.textSub, marginTop: 2 }}>
+                            #{it.itemNo}
+                            {stale && (
+                              <span style={{ marginLeft: 8, color: C.warning }} title={it.verifiedAt ? `마지막 검증: ${new Date(it.verifiedAt).toLocaleString('ko-KR')}` : '검증 이력 없음'}>
+                                ⏱ 검증 오래됨
+                              </span>
+                            )}
+                            {it.buyKrwTotal !== null && (
+                              <span style={{ marginLeft: 8, color: C.textSub }} title="1688 사입 원가가 입력돼 있습니다">
+                                🇨🇳 1688
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </td>
                     <td style={tdStyle()}>{won(it.domePrice)}</td>
@@ -480,6 +534,14 @@ export default function ShortlistTab() {
                       </button>
                     </td>
                   </tr>
+                  {isOpen && (
+                    <tr>
+                      <td colSpan={COLUMN_COUNT} style={{ padding: 0, background: C.tableHeader, borderTop: `1px solid ${C.border}` }}>
+                        <SupplierCompare item={it} onPatch={patchItem} busy={busy} />
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                 );
               })}
             </tbody>

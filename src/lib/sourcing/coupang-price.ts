@@ -63,6 +63,19 @@ const TARGET_MARGIN_RATE = 0.3;
 const MARGIN_TO_LOGISTICS = 1.5;
 
 /**
+ * 목표 역산 기준 최소 판매가(원) — 이 값 미만으로는 팔지 않는다.
+ *
+ * breakEvenPrice와 달리 원가에서 계산되는 값이 아니라 사업상 정한 하한선이다.
+ * 원가가 아무리 싸서 손익분기를 넘겨도 1만원 미만 가격대는 진입하지 않는다.
+ * 그래서 판정에서 손익분기보다 먼저 본다.
+ *
+ * export하는 이유: 판정이 세 곳(keyword-pipeline·shortlist-verify·SupplierCompare)에서
+ * 내려지는데 각자 상수를 들고 있으면 값이 어긋난다. 실제로 keyword-pipeline과
+ * DiscoveryTab에 사본이 두 벌 있었다. 판정 상수의 정본은 이 파일이다.
+ */
+export const MIN_SELL_PRICE_KRW = 10000;
+
+/**
  * 진입 가능한 최소 판매가(원).
  *
  * 두 조건을 모두 만족해야 하므로 큰 쪽을 취한다.

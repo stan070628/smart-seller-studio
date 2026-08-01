@@ -16,7 +16,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2, Play, RefreshCw, AlertTriangle } from 'lucide-react';
 import { C } from '@/lib/design-tokens';
-import { breakEvenPrice, marginOf, buildSearchQueries } from '@/lib/sourcing/coupang-price';
+import {
+  breakEvenPrice,
+  marginOf,
+  buildSearchQueries,
+  MIN_SELL_PRICE_KRW,
+} from '@/lib/sourcing/coupang-price';
 
 interface Seed {
   id: number;
@@ -443,8 +448,6 @@ export default function DiscoveryTab() {
 
 /** 발굴 탭이 가정하는 사입 수량 — 쇼트리스트 POST의 기본값(DEFAULT_ORDER_QTY)과 같다 */
 const ASSUMED_ORDER_QTY = 10;
-/** 진입 하한가 — keyword-pipeline의 MIN_SELL_PRICE_KRW와 같다 */
-const MIN_SELL_PRICE_KRW = 10000;
 /** 쿠팡 실판가 상한 — 쇼트리스트 PATCH의 MAX_COUPANG_PRICE와 같다. 자릿수 오타를 여기서 먼저 잡는다 */
 const MAX_COUPANG_PRICE = 10_000_000;
 
