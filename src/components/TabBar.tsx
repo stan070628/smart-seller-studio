@@ -38,6 +38,9 @@ export default function TabBar() {
           flexShrink: 0,
           backgroundColor: C.bg,
           borderBottom: `1px solid ${C.border}`,
+          position: 'sticky',
+          top: 0,
+          zIndex: 20,
         }}
       />
     );
@@ -65,6 +68,9 @@ export default function TabBar() {
         borderBottom: `1px solid ${C.border}`,
         overflowX: 'auto',
         overflowY: 'hidden',
+        position: 'sticky',
+        top: 0,
+        zIndex: 20,
       }}
     >
       {tabs.map((tab) => {

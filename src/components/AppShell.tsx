@@ -1,11 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { C } from '@/lib/design-tokens';
 import AlertList from '@/components/alerts/AlertList';
 import { NAV_ITEMS } from '@/lib/nav-items';
+import TabBar from '@/components/TabBar';
+import { useTabStore } from '@/store/useTabStore';
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -21,6 +23,8 @@ export default function AppShell({
   mainDisplay = 'block',
 }: AppShellProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const openTab = useTabStore((s) => s.openTab);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showAlerts, setShowAlerts] = useState(false);
   const badgeRef = useRef<HTMLDivElement>(null);
@@ -29,6 +33,13 @@ export default function AppShell({
     if (href === '/dashboard') return pathname === '/dashboard';
     return pathname.startsWith(href);
   }
+
+  // 주소가 바뀔 때마다 탭에 반영한다.
+  // 사이드바 클릭·router.push·뒤로가기가 모두 여기로 모인다.
+  useEffect(() => {
+    const qs = searchParams.toString();
+    openTab(qs ? `${pathname}?${qs}` : pathname);
+  }, [pathname, searchParams, openTab]);
 
   async function fetchUnreadCount() {
     try {
@@ -309,6 +320,7 @@ export default function AppShell({
           minWidth: 0,
         }}
       >
+        <TabBar />
         {children}
       </div>
     </div>
