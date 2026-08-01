@@ -16,20 +16,26 @@ export const MAX_TABS = 6;
 
 /**
  * 상한을 넘으면 오래된 탭부터 제거한다.
- * isDirty 탭과 protectId 탭은 대상이 아니며 상한 계산에도 넣지 않는다.
+ * isDirty 탭은 상한 계산과 밀어내기 양쪽에서 빠진다.
+ * protect 탭은 상한 계산에는 들어가지만 희생자가 되지는 않는다.
  */
-function evict(tabs: Tab[], protectId: string | null): Tab[] {
+function evict(tabs: Tab[], protect: readonly (string | null)[]): Tab[] {
+  // 총 개수가 상한 이내면 dirty를 세어볼 필요도 없다
+  if (tabs.length <= MAX_TABS) return tabs;
+
   const counted = tabs.filter((t) => !t.isDirty);
   const overflow = counted.length - MAX_TABS;
   if (overflow <= 0) return tabs;
 
-  const victims = counted
-    .filter((t) => t.id !== protectId)
-    .sort((a, b) => a.lastActiveAt - b.lastActiveAt)
-    .slice(0, overflow)
-    .map((t) => t.id);
+  const victims = new Set(
+    counted
+      .filter((t) => !protect.includes(t.id))
+      .sort((a, b) => a.lastActiveAt - b.lastActiveAt)
+      .slice(0, overflow)
+      .map((t) => t.id),
+  );
 
-  return tabs.filter((t) => !victims.includes(t.id));
+  return tabs.filter((t) => !victims.has(t.id));
 }
 
 export interface TabState {
@@ -62,7 +68,7 @@ export const useTabStore = create<TabState>()(
           ? tabs.map((t) => (t.id === id ? { ...t, href, label, lastActiveAt: now } : t))
           : [...tabs, { id, href, label, lastActiveAt: now, isDirty: false }];
 
-        set({ tabs: evict(next, id), activeId: id }, false, 'tab/openTab');
+        set({ tabs: evict(next, [id]), activeId: id }, false, 'tab/openTab');
       },
 
       closeTab: (id) => {
@@ -82,8 +88,13 @@ export const useTabStore = create<TabState>()(
 
       setDirty: (id, dirty) => {
         const { tabs, activeId } = get();
+        const target = tabs.find((t) => t.id === id);
+        // 없는 탭이거나 이미 같은 값이면 아무것도 바꾸지 않는다.
+        // 상태를 안 바꾸는 호출이 밀어내기를 유발해선 안 된다.
+        if (!target || target.isDirty === dirty) return;
+
         const next = tabs.map((t) => (t.id === id ? { ...t, isDirty: dirty } : t));
-        set({ tabs: dirty ? next : evict(next, activeId) }, false, 'tab/setDirty');
+        set({ tabs: dirty ? next : evict(next, [activeId, id]) }, false, 'tab/setDirty');
       },
     }),
     { name: 'TabStore' },

@@ -5,7 +5,7 @@
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
-import { useTabStore } from '@/store/useTabStore';
+import { useTabStore, MAX_TABS } from '@/store/useTabStore';
 
 /** lastActiveAt이 겹치지 않도록 시간을 통제한다 */
 let clock = 1_000;
@@ -27,7 +27,7 @@ describe('상한', () => {
     const { result } = renderHook(() => useTabStore());
     SEVEN.forEach((href) => act(() => result.current.openTab(href)));
 
-    expect(result.current.tabs).toHaveLength(6);
+    expect(result.current.tabs).toHaveLength(MAX_TABS);
     expect(result.current.tabs.map((t) => t.id)).not.toContain('dashboard');
     expect(result.current.tabs.map((t) => t.id)).toContain('editor');
   });
@@ -47,6 +47,27 @@ describe('상한', () => {
     SEVEN.forEach((href) => act(() => result.current.openTab(href)));
 
     expect(result.current.activeId).toBe('editor');
+    expect(result.current.tabs.map((t) => t.id)).toContain('editor');
+  });
+
+  it('방금 연 탭이 가장 오래된 시각을 갖더라도 밀려나지 않는다', () => {
+    // 기존 6탭에 아주 큰 시각을 심어, 새로 여는 탭이 LRU 최하위가 되게 만든다
+    const ids = ['dashboard', 'sourcing', 'listing', 'label', 'orders', 'plan'];
+    useTabStore.setState({
+      tabs: ids.map((id) => ({
+        id,
+        href: `/${id}`,
+        label: id,
+        lastActiveAt: 999_999,
+        isDirty: false,
+      })),
+      activeId: 'dashboard',
+    });
+
+    const { result } = renderHook(() => useTabStore());
+    act(() => result.current.openTab('/editor'));
+
+    expect(result.current.tabs).toHaveLength(MAX_TABS);
     expect(result.current.tabs.map((t) => t.id)).toContain('editor');
   });
 });
@@ -70,7 +91,7 @@ describe('편집 보호', () => {
     expect(result.current.tabs).toHaveLength(7);
   });
 
-  it('편집이 끝나면 그때 상한을 다시 계산해 밀어낸다', () => {
+  it('편집이 끝나면 상한을 다시 계산하되 방금 끝낸 탭은 지킨다', () => {
     const { result } = renderHook(() => useTabStore());
     act(() => result.current.openTab('/dashboard'));
     act(() => result.current.setDirty('dashboard', true));
@@ -79,7 +100,27 @@ describe('편집 보호', () => {
 
     act(() => result.current.setDirty('dashboard', false));
 
-    expect(result.current.tabs).toHaveLength(6);
-    expect(result.current.tabs.map((t) => t.id)).not.toContain('dashboard');
+    expect(result.current.tabs).toHaveLength(MAX_TABS);
+    expect(result.current.tabs.map((t) => t.id)).toContain('dashboard');
+    expect(result.current.tabs.map((t) => t.id)).not.toContain('sourcing');
+  });
+
+  it('없는 탭에 setDirty를 불러도 초과 상태의 탭이 사라지지 않는다', () => {
+    const ids = ['dashboard', 'sourcing', 'listing', 'label', 'orders', 'plan', 'editor'];
+    useTabStore.setState({
+      tabs: ids.map((id, i) => ({
+        id,
+        href: `/${id}`,
+        label: id,
+        lastActiveAt: 100 + i,
+        isDirty: false,
+      })),
+      activeId: 'editor',
+    });
+
+    const { result } = renderHook(() => useTabStore());
+    act(() => result.current.setDirty('없는탭', false));
+
+    expect(result.current.tabs).toHaveLength(7);
   });
 });
