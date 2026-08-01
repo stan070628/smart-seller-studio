@@ -1,10 +1,6 @@
 {
   "crons": [
     {
-      "path": "/api/niche/cron",
-      "schedule": "0 1 * * *"
-    },
-    {
       "path": "/api/sourcing/cron/snapshot",
       "schedule": "0 15 * * *"
     },
