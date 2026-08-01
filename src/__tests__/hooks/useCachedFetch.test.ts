@@ -108,7 +108,7 @@ describe('HTTP 오류', () => {
 
     const { result } = renderHook(() => useCachedFetch('t:list', '/api/t'));
 
-    await waitFor(() => expect(result.current.error).toBe('요청이 실패했습니다 (503)'));
+    await waitFor(() => expect(result.current.error).toBe('요청을 처리하지 못했습니다. (503)'));
   });
 
   it('오류 응답이 JSON이 아니어도 상태 코드로 알린다', async () => {
@@ -122,6 +122,65 @@ describe('HTTP 오류', () => {
 
     const { result } = renderHook(() => useCachedFetch('t:list', '/api/t'));
 
-    await waitFor(() => expect(result.current.error).toBe('요청이 실패했습니다 (502)'));
+    await waitFor(() => expect(result.current.error).toBe('요청을 처리하지 못했습니다. (502)'));
+  });
+
+  it('errorMessage를 주면 그 문구를 기본값으로 쓴다', async () => {
+    mockFetch.mockResolvedValue({ ok: false, status: 500, json: async () => ({}) });
+
+    const { result } = renderHook(() =>
+      useCachedFetch('t:list', '/api/t', { errorMessage: '목록을 불러오지 못했습니다.' }),
+    );
+
+    await waitFor(() =>
+      expect(result.current.error).toBe('목록을 불러오지 못했습니다. (500)'),
+    );
+  });
+});
+
+describe('요청 순서', () => {
+  it('주소가 바뀌면 먼저 떠난 응답이 늦게 와도 무시한다', async () => {
+    let resolveFirst: (v?: unknown) => void = () => {};
+    mockFetch
+      .mockImplementationOnce(
+        () =>
+          new Promise((r) => {
+            resolveFirst = () => r({ ok: true, json: async () => ({ page: 1 }) });
+          }),
+      )
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ page: 2 }) });
+
+    const { rerender } = renderHook(({ url }) => useCachedFetch('t:list', url), {
+      initialProps: { url: '/api/t?page=1' },
+    });
+    rerender({ url: '/api/t?page=2' });
+    await waitFor(() =>
+      expect(useCacheStore.getState().entries['t:list']?.data).toEqual({ page: 2 }),
+    );
+
+    resolveFirst();
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(useCacheStore.getState().entries['t:list'].data).toEqual({ page: 2 });
+  });
+
+  it('refetch는 진행 중인 요청에 합류하지 않는다', async () => {
+    let resolveFirst: (v?: unknown) => void = () => {};
+    mockFetch
+      .mockImplementationOnce(
+        () =>
+          new Promise((r) => {
+            resolveFirst = () => r({ ok: true, json: async () => ({ items: ['이전'] }) });
+          }),
+      )
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ items: ['이전', '새것'] }) });
+
+    const { result } = renderHook(() => useCachedFetch('t:list', '/api/t'));
+
+    await result.current.refetch();
+    resolveFirst();
+
+    await waitFor(() => expect(result.current.data).toEqual({ items: ['이전', '새것'] }));
+    expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 });
