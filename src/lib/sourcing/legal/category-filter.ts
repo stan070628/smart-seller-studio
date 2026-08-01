@@ -13,6 +13,9 @@ const BLOCKED_CATEGORY_KEYWORDS = [
   '의약품', '의약외품',
   '건강기능식품',
   '주류', '담배',
+  // 화장품은 화장품책임판매업 등록 없이는 못 판다. 목록에서 빠져 있어 도매꾹
+  // 수집 경로로 계속 새어 들어왔다.
+  '화장품', '화장품용기',
 ] as const;
 
 export function checkBlockedCategory(categoryName?: string | null): LegalIssue | null {
