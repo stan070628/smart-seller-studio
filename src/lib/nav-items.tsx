@@ -93,10 +93,23 @@ export const NAV_ITEMS: NavItem[] = [
   },
 ];
 
-/** 경로에서 탭 식별자(첫 세그먼트)를 얻는다. 캐시 키 접두사와 같은 값이다. */
+/**
+ * 쿼리·해시를 떼고 경로를 정규화한다.
+ * routeIdOf와 labelForHref가 같은 기준을 쓰게 하는 유일한 지점이다.
+ */
+function normalize(href: string): { id: string; path: string } {
+  const segments = href.split(/[?#]/)[0].split('/').filter(Boolean);
+  if (segments.length === 0) return { id: 'dashboard', path: '/dashboard' };
+  return { id: segments[0], path: `/${segments.join('/')}` };
+}
+
+/**
+ * 경로에서 탭 식별자(첫 세그먼트)를 얻는다. 캐시 키 접두사와 같은 값이다.
+ * 첫 세그먼트는 항상 정적 라우트 이름이다 — 동적 최상위 세그먼트를 추가하면 캐시 키가 깨진다.
+ * 하위 경로는 부모와 같은 탭을 공유하며, 라벨만 현재 화면을 따라 바뀐다.
+ */
 export function routeIdOf(href: string): string {
-  const path = href.split('?')[0];
-  return path.split('/').filter(Boolean)[0] ?? 'dashboard';
+  return normalize(href).id;
 }
 
 /**
@@ -104,7 +117,7 @@ export function routeIdOf(href: string): string {
  * 하위 항목을 먼저 확인해 더 구체적인 라벨을 고른다.
  */
 export function labelForHref(href: string): string {
-  const path = href.split('?')[0];
+  const { path } = normalize(href);
 
   for (const item of NAV_ITEMS) {
     for (const child of item.children ?? []) {

@@ -22,6 +22,10 @@ describe('routeIdOf', () => {
   it('루트는 dashboard로 본다', () => {
     expect(routeIdOf('/')).toBe('dashboard');
   });
+
+  it('해시 프래그먼트를 무시한다', () => {
+    expect(routeIdOf('/orders#top')).toBe('orders');
+  });
 });
 
 describe('labelForHref', () => {
@@ -39,5 +43,25 @@ describe('labelForHref', () => {
 
   it('등록되지 않은 경로는 식별자를 라벨로 쓴다', () => {
     expect(labelForHref('/unknown-page')).toBe('unknown-page');
+  });
+
+  it('형제 경로가 하위 항목 라벨을 훔치지 않는다', () => {
+    expect(labelForHref('/listing/detail-maker-pro')).toBe('상품등록');
+  });
+
+  it('부모 경로 자체는 부모 라벨을 쓴다', () => {
+    expect(labelForHref('/listing')).toBe('상품등록');
+  });
+
+  it('부모 서브트리 밖에 있는 하위 항목도 찾는다', () => {
+    expect(labelForHref('/editor')).toBe('에디터');
+  });
+
+  it('루트는 대시보드 라벨을 쓴다', () => {
+    expect(labelForHref('/')).toBe('대시보드');
+  });
+
+  it('중복 슬래시를 정규화한다', () => {
+    expect(labelForHref('//listing')).toBe('상품등록');
   });
 });
