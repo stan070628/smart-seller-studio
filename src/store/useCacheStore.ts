@@ -28,11 +28,9 @@ export interface CacheState {
 }
 
 /**
- * 패턴이 `:*`로 끝나면 콜론까지 포함한 접두사 일치를,
- * 아니면 완전 일치를 확인한다.
- *
- * 콜론을 접두사에 포함시키는 이유: `'orders:*'`가 `'ordersXYZ:list'`처럼
- * 라우트 이름이 우연히 겹치는 다른 키까지 지우면 안 되기 때문이다.
+ * 키가 패턴에 걸리는지 본다.
+ * `orders:*` 형태만 접두사 패턴으로 인정한다 — `orders*`나 `*` 같은
+ * 비규격 패턴은 아무것도 지우지 않는다.
  */
 function matches(key: string, pattern: string): boolean {
   if (pattern.endsWith(':*')) return key.startsWith(pattern.slice(0, -1));
@@ -83,8 +81,12 @@ export const useCacheStore = create<CacheState>()(
             if (!pattern.endsWith(':*')) return { entries };
 
             const route = pattern.slice(0, -2);
+            // 스크롤 컨테이너가 여럿인 화면은 `orders#list`처럼 `#` 뒤에 세부를
+            // 붙인다 (설계 문서). 라우트 자체와 그 하위 컨테이너를 모두 지운다.
             const scroll = Object.fromEntries(
-              Object.entries(s.scroll).filter(([k]) => k !== route),
+              Object.entries(s.scroll).filter(
+                ([k]) => k !== route && !k.startsWith(`${route}#`),
+              ),
             );
             return { entries, scroll };
           },

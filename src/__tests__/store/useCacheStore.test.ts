@@ -45,6 +45,15 @@ describe('setError', () => {
     expect(e.data).toBeUndefined();
     expect(e.error).toBe('실패');
   });
+
+  it('실패해도 마지막으로 성공한 시각을 갱신하지 않는다', () => {
+    useCacheStore.getState().setEntry('orders:list', { rows: [1] });
+    const fetchedAt = useCacheStore.getState().entries['orders:list'].fetchedAt;
+
+    useCacheStore.getState().setError('orders:list', '실패');
+
+    expect(useCacheStore.getState().entries['orders:list'].fetchedAt).toBe(fetchedAt);
+  });
 });
 
 describe('invalidate', () => {
@@ -75,6 +84,13 @@ describe('invalidate', () => {
     useCacheStore.getState().invalidate('orders:*');
 
     expect(useCacheStore.getState().scroll['orders']).toBeUndefined();
+  });
+
+  it('접두사 삭제 시 같은 라우트의 하위 스크롤 컨테이너도 지운다', () => {
+    useCacheStore.getState().setScroll('orders#list', 300);
+    useCacheStore.getState().invalidate('orders:*');
+
+    expect(useCacheStore.getState().scroll['orders#list']).toBeUndefined();
   });
 
   it('없는 키를 지워도 오류가 나지 않는다', () => {
