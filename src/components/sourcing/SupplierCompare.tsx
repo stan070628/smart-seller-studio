@@ -25,7 +25,7 @@ import { Loader2 } from 'lucide-react';
 import { C as BASE_C } from '@/lib/design-tokens';
 import { parse1688Checkout, type Parsed1688 } from '@/lib/sourcing/parse-1688-checkout';
 import { calc1688UnitCost } from '@/lib/sourcing/cost-1688';
-import { marginOf } from '@/lib/sourcing/coupang-price';
+import { marginOf, MIN_SELL_PRICE_KRW } from '@/lib/sourcing/coupang-price';
 import type { ShortlistItem, LogisticsSize } from '@/types/shortlist';
 
 // 공통 토큰에 없는 시맨틱 색만 로컬로 확장한다 (ShortlistTab.tsx와 동일 관례).
@@ -83,8 +83,15 @@ const TONE_STYLE: Record<Tone, { color: string; background: string }> = {
 };
 
 /**
- * 판정. 상단 표의 verdict와 같은 규칙을 쓴다 — 쿠팡 실판가 ≥ 손익분기가면 통과.
- * (shortlist-verify.ts의 `storedCoupangP25 >= be ? 'pass' : 'fail'`와 동일)
+ * 판정. 상단 표의 verdict와 같은 규칙을 쓴다 — 1만원 하한을 넘고 쿠팡 실판가가
+ * 손익분기가 이상이면 통과. (shortlist-verify.ts의 buildVerifyResult와 동일)
+ *
+ * 하한을 손익분기보다 먼저 보는 이유: 하한은 판매가의 성질이지 공급처의 성질이
+ * 아니다. 1만원 미만 판매가는 원가가 아무리 싸도 진입하지 않기로 한 구간이라
+ * 손익분기 비교로 뒤집을 수 없다. 그래서 하한 미달이면 도매꾹 줄도 1688 줄도
+ * 똑같이 미달로 나온다 — 이 패널이 보여주려던 "도매꾹 미달 / 1688 통과" 역전이
+ * 그 구간에서는 성립하지 않는다는 뜻이므로, 사유 문장에 공급처 이야기가 아님을
+ * 못 박아 둔다. 그러지 않으면 1688 줄까지 미달인 것이 계산 오류처럼 보인다.
  */
 function judge(
   coupangP25: number | null,
@@ -97,6 +104,13 @@ function judge(
   }
   if (coupangP25 === null) {
     return { tone: 'hold', label: '판정 불가', why: '쿠팡 실판가 미입력' };
+  }
+  if (coupangP25 < MIN_SELL_PRICE_KRW) {
+    return {
+      tone: 'miss',
+      label: '미달',
+      why: `판매가 ${won(coupangP25)} · ${won(MIN_SELL_PRICE_KRW)} 하한 미만 (공급처와 무관)`,
+    };
   }
   if (coupangP25 >= breakEven) {
     const margin = marginOf(coupangP25, effectiveCost, size);

@@ -6,7 +6,7 @@
 
 import { getDomeggookClient } from '@/lib/sourcing/domeggook-client';
 import { parseDeliPolicy, unitDeliveryFee } from '@/lib/sourcing/deli-policy';
-import { breakEvenPrice, marginOf } from '@/lib/sourcing/coupang-price';
+import { breakEvenPrice, marginOf, MIN_SELL_PRICE_KRW } from '@/lib/sourcing/coupang-price';
 import { saveVerifyResult, type VerifyResult } from '@/lib/sourcing/shortlist-db';
 import type { LogisticsSize } from '@/types/shortlist';
 
@@ -300,7 +300,14 @@ export async function buildVerifyResult(
     breakEvenPrice: be,
     margin,
     marginRate: Math.round((margin / storedCoupangP25) * 1000) / 10,
-    verdict: storedCoupangP25 >= be ? 'pass' : 'fail',
+    // 하한(MIN_SELL_PRICE_KRW)을 손익분기보다 먼저 본다. 원가가 싸서 손익분기를
+    // 넘기더라도 1만원 미만 가격대는 아예 진입하지 않기로 한 정책이라, 그 구간은
+    // 손익분기 계산과 무관하게 fail이다.
+    // 하한 미달과 손익분기 미달을 verdict로 구분하지 않는 이유: Verdict 타입과
+    // sourcing_shortlist는 사유 컬럼을 두지 않는다. 둘의 구분은 행을 펼쳤을 때
+    // SupplierCompare.judge()가 적어 주는 문장이 맡는다.
+    verdict:
+      storedCoupangP25 >= MIN_SELL_PRICE_KRW && storedCoupangP25 >= be ? 'pass' : 'fail',
   };
 }
 

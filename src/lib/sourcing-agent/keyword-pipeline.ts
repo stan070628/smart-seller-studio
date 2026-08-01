@@ -1,7 +1,7 @@
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { extractKeywordsFromProduct } from '@/lib/sourcing/ai-keyword-extract';
 import { getDomeggookClient } from '@/lib/sourcing/domeggook-client';
-import { breakEvenPrice, marginOf } from '@/lib/sourcing/coupang-price';
+import { breakEvenPrice, marginOf, MIN_SELL_PRICE_KRW } from '@/lib/sourcing/coupang-price';
 import { parseDeliPolicy, unitDeliveryFee } from '@/lib/sourcing/deli-policy';
 import {
   createRequest,
@@ -14,8 +14,6 @@ import { sendTelegramMessage } from '@/lib/telegram/client';
 import type { DomeggookListItem } from '@/types/sourcing';
 import type { LogisticsSize, Verdict } from '@/types/shortlist';
 
-/** 목표 역산 기준 최소 판매가 */
-const MIN_SELL_PRICE_KRW = 10000;
 /** 쿠팡 표본이 이보다 적으면 판정하지 않는다 */
 const MIN_COUPANG_SAMPLE_N = 3;
 const TOP_N = 5;
