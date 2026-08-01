@@ -184,3 +184,28 @@ describe('요청 순서', () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('mutate', () => {
+  it('진행 중인 요청이 mutate 이후에 도착해도 캐시를 덮지 않는다', async () => {
+    // 마운트 시 뜬 최초 GET이 아직 응답하지 않은 상태를 만든다.
+    let resolveInFlight: (v?: unknown) => void = () => {};
+    mockFetch.mockImplementationOnce(
+      () =>
+        new Promise((r) => {
+          resolveInFlight = () => r({ ok: true, json: async () => ({ items: ['서버값'] }) });
+        }),
+    );
+
+    const { result } = renderHook(() => useCachedFetch('t:list', '/api/t'));
+
+    // 그 요청이 아직 진행 중인 사이에 로컬 수정을 반영한다 (예: PATCH 성공 직후의 캐시 갱신).
+    result.current.mutate(() => ({ items: ['로컬수정'] }));
+    expect(useCacheStore.getState().entries['t:list'].data).toEqual({ items: ['로컬수정'] });
+
+    // mutate 이전에 떠난 GET 응답이 뒤늦게 도착해도 방금 만든 로컬 값을 덮으면 안 된다.
+    resolveInFlight();
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(useCacheStore.getState().entries['t:list'].data).toEqual({ items: ['로컬수정'] });
+  });
+});

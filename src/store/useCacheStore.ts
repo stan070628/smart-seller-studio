@@ -22,6 +22,12 @@ export interface CacheState {
   scroll: Record<string, number>;
   setEntry(key: string, data: unknown): void;
   setError(key: string, error: string): void;
+  /**
+   * 서버 왕복 없이 캐시 내용만 바꾼다.
+   * fetchedAt과 error를 건드리지 않는다 — 서버에서 확인한 시각이 아니고,
+   * 조회 오류 상태와도 무관하기 때문이다.
+   */
+  setEntryLocal(key: string, data: unknown): void;
   /** 정확한 키 또는 `orders:*` 형태의 접두사 패턴 */
   invalidate(pattern: string): void;
   setScroll(key: string, y: number): void;
@@ -50,6 +56,22 @@ export const useCacheStore = create<CacheState>()(
           }),
           false,
           'cache/setEntry',
+        ),
+
+      setEntryLocal: (key, data) =>
+        set(
+          (s) => ({
+            entries: {
+              ...s.entries,
+              [key]: {
+                data,
+                fetchedAt: s.entries[key]?.fetchedAt ?? 0,
+                error: s.entries[key]?.error ?? null,
+              },
+            },
+          }),
+          false,
+          'cache/setEntryLocal',
         ),
 
       setError: (key, error) =>

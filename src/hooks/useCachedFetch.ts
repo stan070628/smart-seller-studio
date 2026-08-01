@@ -37,6 +37,13 @@ export interface UseCachedFetchResult<T> {
   error: string | null;
   fetchedAt: number | null;
   refetch: () => Promise<void>;
+  /**
+   * 서버 왕복 없이 캐시를 갱신한다. updater는 select 이전의 원본 JSON을 받는다.
+   *
+   * 진행 중인 재검증 응답은 버린다 — 그 요청은 이 변경 이전에 떠났으므로
+   * 도착하면 방금 만든 값을 덮어쓴다.
+   */
+  mutate: (updater: (prevJson: unknown) => unknown) => void;
 }
 
 /**
@@ -64,6 +71,7 @@ export function useCachedFetch<T = unknown>(
   const entry = useCacheStore((s) => s.entries[key]);
   const setEntry = useCacheStore((s) => s.setEntry);
   const setError = useCacheStore((s) => s.setError);
+  const setEntryLocal = useCacheStore((s) => s.setEntryLocal);
   const [isRevalidating, setIsRevalidating] = useState(false);
 
   /**
@@ -115,6 +123,21 @@ export function useCachedFetch<T = unknown>(
 
   const refetch = useCallback(() => run(true), [run]);
 
+  /**
+   * 서버 왕복 없이 캐시를 갱신한다.
+   *
+   * 세대 번호를 올려서, 이 변경 이전에 떠난 재검증 응답이 나중에 도착해도
+   * (mine !== generation.current이 되어) 방금 만든 값을 덮어쓰지 않게 막는다.
+   */
+  const mutate = useCallback(
+    (updater: (prevJson: unknown) => unknown) => {
+      ++generation.current;
+      const prev = useCacheStore.getState().entries[key]?.data;
+      setEntryLocal(key, updater(prev));
+    },
+    [key, setEntryLocal],
+  );
+
   useEffect(() => {
     if (!enabled) return;
 
@@ -146,5 +169,6 @@ export function useCachedFetch<T = unknown>(
     error: entry?.error ?? null,
     fetchedAt: entry?.fetchedAt || null,
     refetch,
+    mutate,
   };
 }
