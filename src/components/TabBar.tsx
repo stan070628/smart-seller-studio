@@ -7,7 +7,7 @@
  * 탭 상태만 알고 캐시는 모른다. 둘의 연결은 tab-cache-bridge가 맡는다.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 import { C } from '@/lib/design-tokens';
 import { useTabStore } from '@/store/useTabStore';
@@ -15,12 +15,23 @@ import { useCacheStore } from '@/store/useCacheStore';
 
 export const TAB_BAR_HEIGHT = 36;
 
+/** useHasHydrated가 구독할 것이 없다는 뜻으로 넘기는 빈 구독 함수 */
+function noopSubscribe() {
+  return () => {};
+}
+
 /**
- * 하이드레이션을 한 번 통과했는지 기억한다.
- * AppShell이 라우트마다 재마운트되므로 컴포넌트 상태에 두면
- * 이동할 때마다 플레이스홀더가 한 프레임 보인다.
+ * 하이드레이션을 통과했는지 판정한다.
+ * 서버 스냅샷은 항상 false, 클라이언트 스냅샷은 항상 true다.
+ * React가 하이드레이션 커밋 직후 클라이언트 스냅샷으로 자동 재렌더하므로,
+ * 최초 마운트(서버 HTML을 이어받는 하이드레이션)에서만 false→true로 한 번
+ * 바뀐다. AppShell이 라우트마다 재마운트돼도 그건 하이드레이션이 아니라
+ * 순수 클라이언트 렌더라 처음부터 true — setState를 쓰는 effect나
+ * 모듈 스코프 변수 없이도 "재마운트마다 한 프레임 깜빡임" 문제가 없다.
  */
-let hasHydrated = false;
+function useHasHydrated(): boolean {
+  return useSyncExternalStore(noopSubscribe, () => true, () => false);
+}
 
 export default function TabBar() {
   const router = useRouter();
@@ -30,18 +41,16 @@ export default function TabBar() {
 
   // 서버에는 localStorage가 없어 탭이 0개인데 클라이언트는 복원된 탭을 그린다.
   // 마운트 전에는 탭을 그리지 않아 하이드레이션 불일치를 막는다.
-  const [mounted, setMounted] = useState(hasHydrated);
-  useEffect(() => {
-    hasHydrated = true;
-    setMounted(true);
-  }, []);
+  const mounted = useHasHydrated();
 
   const entries = useCacheStore((s) => s.entries);
-  const [, forceTick] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
 
-  // 상대 시각 표시를 30초마다 갱신한다
+  // 상대 시각 표시를 30초마다 갱신한다.
+  // 렌더 중에 Date.now()를 직접 부르면 react-hooks/purity에 걸리고
+  // (React Compiler가 켜지면 시각이 얼어붙는다), 시각 자체를 상태로 둔다.
   useEffect(() => {
-    const id = setInterval(() => forceTick((n) => n + 1), 30_000);
+    const id = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(id);
   }, []);
 
@@ -66,19 +75,24 @@ export default function TabBar() {
     );
   }
 
-  /** 해당 라우트에서 가장 최근에 갱신된 시각 */
+  /**
+   * 해당 라우트에서 가장 오래된 캐시 키의 갱신 시각.
+   * 낡음 경고는 "지금 보는 값 중 가장 오래된 것"을 알려야 한다.
+   * 키가 여럿일 때 가장 최근 것을 보여주면(Math.max) 화면이 실제로는
+   * 갖고 있지 않은 신선도를 탭이 주장하게 된다.
+   */
   function lastFetchedAt(routeId: string): number | null {
     const times = Object.entries(entries)
       .filter(([k]) => k.startsWith(`${routeId}:`))
       .map(([, e]) => e.fetchedAt);
-    return times.length ? Math.max(...times) : null;
+    return times.length ? Math.min(...times) : null;
   }
 
   function relative(ts: number): string {
     // 로컬 시계가 뒤로 가도 음수가 나오지 않게 막는다.
     // 음수면 "방금"이 나와 낡은 데이터를 최신으로 오판하게 되므로,
     // 그 방향의 오차보다는 0(방금)에 그대로 머무는 쪽이 안전하다.
-    const min = Math.max(0, Math.floor((Date.now() - ts) / 60_000));
+    const min = Math.max(0, Math.floor((now - ts) / 60_000));
     if (min < 1) return '방금';
     if (min < 60) return `${min}분 전`;
     return `${Math.floor(min / 60)}시간 전`;

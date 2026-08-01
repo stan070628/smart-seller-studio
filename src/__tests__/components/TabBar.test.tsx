@@ -25,12 +25,9 @@ beforeEach(() => {
 });
 
 describe('TabBar', () => {
-  // 이 테스트는 파일 안에서 반드시 가장 먼저 실행돼야 한다.
-  // TabBar는 모듈 스코프 변수 hasHydrated로 "하이드레이션을 이미 통과했는지"를
-  // 기억한다 (AppShell 재마운트 시 플레이스홀더 깜빡임을 없애기 위해서다).
-  // 아래의 다른 테스트가 먼저 client render(<TabBar />)를 한 번이라도 하면
-  // useEffect가 hasHydrated를 true로 굳혀버려서, 이 테스트가 기대하는
-  // "서버 렌더는 항상 마운트 전 상태로 시작한다"는 전제가 깨진다.
+  // TabBar는 useSyncExternalStore(하이드레이션 판정용)로 서버/클라이언트 스냅샷을
+  // 나눈다 — 모듈 스코프 변수가 아니므로 이 테스트는 파일 안 실행 순서와 무관하게
+  // 항상 renderToString에서 서버 스냅샷(false)으로 시작한다.
   it('서버 렌더에서는 탭을 그리지 않는다 — 하이드레이션 불일치 방지', () => {
     useTabStore.getState().openTab('/sourcing');
 
@@ -192,5 +189,19 @@ describe('TabBar', () => {
     render(<TabBar />);
 
     expect(screen.getByText('· 5분 전')).toBeInTheDocument();
+  });
+
+  it('한 라우트에 캐시가 여럿이면 가장 오래된 시각을 보여준다', () => {
+    useTabStore.getState().openTab('/orders');
+    useCacheStore.setState({
+      entries: {
+        'orders:list': { data: {}, fetchedAt: Date.now() - 40 * 60_000, error: null },
+        'orders:costs': { data: {}, fetchedAt: Date.now(), error: null },
+      },
+      scroll: {},
+    });
+    render(<TabBar />);
+
+    expect(screen.getByText('· 40분 전')).toBeInTheDocument();
   });
 });

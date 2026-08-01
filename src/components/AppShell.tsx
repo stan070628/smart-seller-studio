@@ -80,8 +80,13 @@ export default function AppShell({
     return () => document.removeEventListener('mousedown', handler);
   }, [showAlerts]);
 
-  // 탭이 사라지면 그 라우트의 캐시를 해제한다
-  useEffect(() => startTabCacheBridge(), []);
+  // 탭이 사라지면 그 라우트의 캐시를 해제한다.
+  // effect가 아니라 렌더 중에 건다 — 자식 TabSync의 effect가 부모보다 먼저
+  // 실행되므로, effect에 두면 첫 밀어내기를 놓친다. startTabCacheBridge는
+  // 멱등해 여러 번 불려도 구독은 하나만 생긴다.
+  // useTabStore는 모듈 스코프 zustand라 서버에서도 존재하며, 서버 렌더에서
+  // 이 줄이 실행돼도 요청마다 새 프로세스/모듈 인스턴스이므로 누적되지 않는다.
+  startTabCacheBridge();
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
