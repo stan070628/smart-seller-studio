@@ -53,7 +53,16 @@ export function useCachedFetch<T = unknown>(
     let promise = inflight.get(url);
     if (!promise) {
       promise = fetch(url)
-        .then((res) => res.json())
+        .then(async (res) => {
+          const json = await res.json();
+          // fetch는 4xx·5xx에서 reject하지 않는다.
+          // 여기서 걸러내지 않으면 오류 응답이 정상 데이터로 캐시된다.
+          if (!res.ok) {
+            const message = (json as { error?: string })?.error;
+            throw new Error(message ?? `요청이 실패했습니다 (${res.status})`);
+          }
+          return json;
+        })
         .finally(() => inflight.delete(url));
       inflight.set(url, promise);
     }
