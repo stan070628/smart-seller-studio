@@ -17,7 +17,6 @@ export interface TabState {
   /** 화면 진입 시 호출. 없으면 생성, 있으면 href 갱신 후 활성화 */
   openTab(href: string): void;
   closeTab(id: string): void;
-  touchTab(id: string): void;
   setDirty(id: string, dirty: boolean): void;
 }
 
@@ -31,10 +30,14 @@ export const useTabStore = create<TabState>()(
         const id = routeIdOf(href);
         const label = labelForHref(href);
         const now = Date.now();
-        const { tabs } = get();
-        const exists = tabs.some((t) => t.id === id);
+        const { tabs, activeId } = get();
+        const current = tabs.find((t) => t.id === id);
 
-        const next = exists
+        // 이미 활성인 탭을 같은 주소로 다시 열면 아무것도 바꾸지 않는다.
+        // 불필요한 배열 재생성으로 구독자가 다시 렌더되는 것을 막는다.
+        if (current && current.href === href && current.label === label && activeId === id) return;
+
+        const next = current
           ? tabs.map((t) => (t.id === id ? { ...t, href, label, lastActiveAt: now } : t))
           : [...tabs, { id, href, label, lastActiveAt: now, isDirty: false }];
 
@@ -47,21 +50,13 @@ export const useTabStore = create<TabState>()(
         if (idx === -1) return;
 
         const next = tabs.filter((t) => t.id !== id);
+        // idx는 삭제 전 배열 기준, next는 삭제 후 배열이다.
+        // idx>=1 이면 next[idx-1]은 원래의 왼쪽 이웃과 같고,
+        // idx===0 이면 클램프되어 next[0] = 원래의 오른쪽 이웃이 된다.
         const nextActive =
           activeId === id ? (next[Math.max(0, idx - 1)]?.id ?? null) : activeId;
 
         set({ tabs: next, activeId: nextActive }, false, 'tab/closeTab');
-      },
-
-      touchTab: (id) => {
-        set(
-          (s) => ({
-            tabs: s.tabs.map((t) => (t.id === id ? { ...t, lastActiveAt: Date.now() } : t)),
-            activeId: id,
-          }),
-          false,
-          'tab/touchTab',
-        );
       },
 
       setDirty: (id, dirty) => {

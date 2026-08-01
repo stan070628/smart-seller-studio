@@ -3,7 +3,7 @@
  * 탭 열기·닫기·활성화 단위 테스트
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { useTabStore } from '@/store/useTabStore';
 
@@ -32,15 +32,32 @@ describe('openTab', () => {
   });
 
   it('다시 열면 lastActiveAt이 커진다', () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useTabStore());
+      act(() => result.current.openTab('/sourcing'));
+      const first = result.current.tabs[0].lastActiveAt;
+
+      vi.advanceTimersByTime(1000);
+      act(() => result.current.openTab('/orders'));
+      vi.advanceTimersByTime(1000);
+      act(() => result.current.openTab('/sourcing'));
+
+      const sourcing = result.current.tabs.find((t) => t.id === 'sourcing')!;
+      expect(sourcing.lastActiveAt).toBeGreaterThan(first);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('하위 경로로 이동하면 탭은 그대로고 라벨만 바뀐다', () => {
     const { result } = renderHook(() => useTabStore());
-    act(() => result.current.openTab('/sourcing'));
-    const first = result.current.tabs[0].lastActiveAt;
+    act(() => result.current.openTab('/listing'));
+    act(() => result.current.openTab('/listing/detail-maker'));
 
-    act(() => result.current.openTab('/orders'));
-    act(() => result.current.openTab('/sourcing'));
-
-    const sourcing = result.current.tabs.find((t) => t.id === 'sourcing')!;
-    expect(sourcing.lastActiveAt).toBeGreaterThanOrEqual(first);
+    expect(result.current.tabs).toHaveLength(1);
+    expect(result.current.tabs[0].id).toBe('listing');
+    expect(result.current.tabs[0].label).toBe('상품상세 자동만들기');
   });
 });
 
@@ -80,5 +97,46 @@ describe('closeTab', () => {
     act(() => result.current.closeTab('nope'));
 
     expect(result.current.tabs).toHaveLength(1);
+  });
+
+  it('첫 탭이 활성일 때 닫으면 오른쪽 탭이 활성화된다', () => {
+    const { result } = renderHook(() => useTabStore());
+    act(() => result.current.openTab('/sourcing'));
+    act(() => result.current.openTab('/orders'));
+    act(() => result.current.openTab('/sourcing')); // 첫 탭(idx 0)을 다시 활성화
+    act(() => result.current.closeTab('sourcing'));
+
+    expect(result.current.activeId).toBe('orders');
+  });
+
+  it('비활성 탭을 닫아도 활성 탭이 바뀌지 않는다', () => {
+    const { result } = renderHook(() => useTabStore());
+    act(() => result.current.openTab('/sourcing'));
+    act(() => result.current.openTab('/orders'));
+    act(() => result.current.closeTab('sourcing'));
+
+    expect(result.current.activeId).toBe('orders');
+  });
+});
+
+describe('setDirty', () => {
+  it('편집 표시를 켜고 끈다', () => {
+    const { result } = renderHook(() => useTabStore());
+    act(() => result.current.openTab('/editor'));
+
+    act(() => result.current.setDirty('editor', true));
+    expect(result.current.tabs[0].isDirty).toBe(true);
+
+    act(() => result.current.setDirty('editor', false));
+    expect(result.current.tabs[0].isDirty).toBe(false);
+  });
+
+  it('없는 탭에 호출해도 아무 일도 없다', () => {
+    const { result } = renderHook(() => useTabStore());
+    act(() => result.current.openTab('/editor'));
+    act(() => result.current.setDirty('nope', true));
+
+    expect(result.current.tabs).toHaveLength(1);
+    expect(result.current.tabs[0].isDirty).toBe(false);
   });
 });
