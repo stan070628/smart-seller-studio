@@ -43,7 +43,22 @@
 | `useTabDirty` | `src/hooks/useTabDirty.ts` | 현재 탭을 편집 중으로 표시 | `useTabStore` |
 | `useScrollRestore` | `src/hooks/useScrollRestore.ts` | 스크롤 위치 저장·복원 | `useCacheStore` |
 
-각 조각은 독립적으로 테스트 가능하다. `TabBar`는 스토어만 알고 캐시를 모르며, `useCachedFetch`는 탭을 모른다. 둘을 잇는 것은 `AppShell`의 구독 코드 한 곳이다.
+각 조각은 독립적으로 테스트 가능하다. **`useCachedFetch`는 탭을 모른다.** 탭 소멸과 캐시 해제를 잇는 것은 `tab-cache-bridge` 한 곳이다.
+
+`TabBar`는 탭 스토어와 캐시 스토어를 **둘 다** 읽는다 — 탭마다 마지막 갱신 시각을 보여주기 위해서다. 읽기만 하고 쓰지 않는다.
+
+### 화면은 캐시에 무엇을 할 수 있는가
+
+| 동작 | 허용 | 방법 |
+|---|---|---|
+| 조회 | ✅ | `useCachedFetch` |
+| 쓰기 후 재조회 | ✅ | `refetch()` |
+| 다른 라우트 무효화 | ✅ | `useCacheStore.getState().invalidate('orders:*')` |
+| **캐시 내용 직접 수정** | ❌ | **`useCachedFetch`가 주는 `mutate(updater)`를 쓴다** |
+
+마지막 항목이 중요하다. 화면이 `setEntry`를 직접 부르면 세 가지가 새어 나간다 — 캐시 키, 응답 JSON의 형태, 그리고 `fetchedAt`을 갱신할지 여부. `mutate`가 그 셋을 훅 안에 가둔다.
+
+**`fetchedAt`은 "서버에서 이 엔트리 전체를 확인한 시각"이다.** 한 행을 낙관적으로 고쳤다고 갱신하면 안 된다. 나머지 행은 여전히 낡았는데 탭 바가 "방금"이라고 말하게 된다.
 
 ## 탭 스토어
 
@@ -217,7 +232,7 @@ const { data: rows = [], isLoading: loading, isRevalidating } =
 | 단계 | 범위 | 완료 시 체감 |
 |---|---|---|
 | **1** | `nav-items` 분리 · `useTabStore` · `TabBar` · `AppShell` 연결 · localStorage 복원 | 탭으로 이동·복원 (캐시 없음) |
-| **2** | `useCacheStore` · `useCachedFetch` · 탭 닫힘 시 무효화 · **소싱·주문 적용** | 두 화면 즉시 전환 |
+| **2** | `useCacheStore` · `useCachedFetch` · 탭 닫힘 시 무효화 · **소싱 쇼트리스트 적용** | 그 화면 즉시 전환 |
 | **3** | 나머지 화면 점진 치환 | 전 화면 즉시 전환 |
 | **4** | `useScrollRestore` · `useTabDirty` 적용 (에디터·상품등록) | 스크롤·편집 보호 |
 
@@ -233,9 +248,12 @@ const { data: rows = [], isLoading: loading, isRevalidating } =
 | `persist` | 단위 | 저장·복원, `isDirty` 초기화 |
 | `useCachedFetch` | 단위 | 캐시 히트 시 즉시 반환, 백그라운드 갱신 후 교체, in-flight dedup, 실패 시 이전 데이터 유지, `invalidate` 패턴 매칭 |
 | 연결 | 단위 | 탭 닫힘 → 해당 접두사 캐시 해제 |
-| 전체 흐름 | e2e | 소싱에서 필터 지정 → 주문 이동 → 소싱 복귀 시 **API 호출 없이** 필터·목록 유지 → 새로고침 후 탭 복원 |
+| 탭 바 동작 | e2e | 탭 쌓임·클릭 이동·새로고침 복원·닫기·7번째 밀어내기 |
+| 캐시 이득 | 컴포넌트 | 두 번째 마운트에서 API 없이 즉시 목록 표시 (`ShortlistTab-cache.test.tsx`) |
 
-e2e에서 "API 호출 없이"는 `page.route()`로 요청 수를 세어 확인한다.
+**캐시 이득을 e2e로 검증하지 않는 이유.** 소싱 화면이 발굴·검증·실행 3단 탭 구조라 쇼트리스트까지 도달하는 경로가 길고, 그 경로가 바뀌면 탭 테스트가 함께 깨진다. 대신 컴포넌트 테스트가 "캐시가 있으면 두 번째 마운트에서 즉시 그린다"와 "로컬 수정은 갱신 시각을 바꾸지 않는다"를 잡는다.
+
+> ⚠️ **그 결과 "돌아오면 즉시 뜬다"는 약속에 종단 검증이 없다.** 화면 전환을 거쳐 캐시 이득을 확인하는 자동 테스트는 이 브랜치에 없으며, 브라우저 수동 확인으로만 검증됐다. 3단계에서 치환 화면이 늘면 그때 다시 판단한다.
 
 ## 위험과 대응
 

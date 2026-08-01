@@ -2154,6 +2154,34 @@ git commit -m "test(e2e): 탭 이동·캐시·복원 전체 흐름"
 
 **같은 엔드포인트를 두 경로가 쓰는 경우.** `/api/sourcing/costco`를 `CostcoTab`(치환 가능)과 `useCostcoProducts`(치환 불가)가 함께 부른다. 한쪽만 치환하면 캐시가 갈라지고, `CostcoTab.handleCollect`의 POST는 어느 쪽도 무효화하지 못한다.
 
+### 🔴 `select` 안에서 필터링하지 마라 — 조용히 낡은 결과가 남는다
+
+`useCachedFetch`는 `data`를 `[entry?.data]`에만 의존해 메모한다. `select`는 의존성에서 빠져 있다(매 렌더 새 함수라 넣으면 무한 재계산이 된다).
+
+그래서 아래처럼 쓰면 **`statusFilter`를 바꿔도 화면이 안 바뀐다.**
+
+```ts
+// ❌ 이렇게 하지 마라
+const { data: rows = [] } = useCachedFetch('orders:list', '/api/orders', {
+  select: (j) => (j as { rows: Order[] }).rows.filter((r) => r.status === statusFilter),
+});
+```
+
+`entry.data`가 그대로이므로 메모가 이전 필터의 배열을 그대로 돌려준다. **오류도, 로딩도, 네트워크 요청도 없다.** 이전 필터의 결과가 현재 값인 양 표시된다.
+
+```ts
+// ✅ select는 형태만 꺼내고, 필터링은 그 뒤에 한다
+const { data: rows = [] } = useCachedFetch('orders:list', '/api/orders', {
+  select: (j) => (j as { rows: Order[] }).rows,
+});
+const visible = useMemo(
+  () => rows.filter((r) => r.status === statusFilter),
+  [rows, statusFilter],
+);
+```
+
+**규칙: `select`는 렌더 밖 상수처럼 동작해야 한다.** 외부 상태를 클로저로 잡으면 안 된다.
+
 ---
 
 ## 자체 점검 결과
