@@ -89,7 +89,7 @@ export function useCachedFetch<T = unknown>(
       // 그 요청은 쓰기 이전에 떠났으므로 낡은 결과를 준다.
       let promise = force ? undefined : inflight.get(url);
       if (!promise) {
-        promise = fetch(url)
+        const started = fetch(url)
           .then(async (res) => {
             // fetch는 4xx·5xx에서 reject하지 않는다.
             // 여기서 걸러내지 않으면 오류 응답이 정상 데이터로 캐시된다.
@@ -102,8 +102,14 @@ export function useCachedFetch<T = unknown>(
               throw new Error(message ?? `${errorMessage} (${res.status})`);
             }
             return res.json();
-          })
-          .finally(() => inflight.delete(url));
+          });
+
+        // 이 요청이 아직 현재 인플라이트일 때만 지운다.
+        // force로 새 요청이 이미 자리를 차지했다면 그것을 지우면 안 된다 —
+        // 지우면 뒤이은 호출이 합류할 대상을 잃고 같은 요청을 다시 떠난다.
+        promise = started.finally(() => {
+          if (inflight.get(url) === promise) inflight.delete(url);
+        });
         inflight.set(url, promise);
       }
 
