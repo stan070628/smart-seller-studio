@@ -13,9 +13,8 @@ import {
 } from '@/lib/sourcing/shortlist-db';
 import { fetchDomeSnapshot, verifyOne, DomeTransientError } from '@/lib/sourcing/shortlist-verify';
 import { extractItemNoFromUrl } from '@/lib/sourcing/domeggook-url-parser';
+import { DEFAULT_ORDER_QTY } from '@/lib/sourcing/coupang-price';
 
-/** 사입 수량 미지정 시 기본값 */
-const DEFAULT_ORDER_QTY = 10;
 /** 사입 수량 상한 — 이 이상은 사람이 직접 입력할 범위가 아니라 오타로 본다 */
 const MAX_ORDER_QTY = 100000;
 

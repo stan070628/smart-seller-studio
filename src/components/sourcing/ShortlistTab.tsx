@@ -4,15 +4,24 @@
  * ShortlistTab.tsx
  * 소싱 쇼트리스트 탭 — "이 상품, 지금 사도 되나?"에 답하는 화면.
  *
- * 도매꾹 후보를 담아두고 도매가·배송비·쿠팡 시세를 근거로 손익분기와 마진을 보여준다.
+ * 도매꾹 후보를 담아두고 매입가·배송비·쿠팡 시세를 근거로 손익분기와 마진을 보여준다.
  * 판정(verdict)은 4가지: pass(통과) / fail(미달) / dead(판매종료) / unknown(판정 불가).
  * unknown은 실패가 아니라 "아직 모른다"이므로 fail과 다른 색·문구로 구분한다.
+ *
+ * 표의 판정은 **렌더 시점에** 두 공급처(도매꾹·1688) 중 좋은 쪽으로 계산한다.
+ * DB의 verdict 컬럼은 도매꾹 재검증 이력이라 이 표가 답하는 질문("지금 이 상품을
+ * 팔 수 있나")에 답하지 못한다 — 도매꾹 미달·1688 통과인 상품이 표에서는 빨간
+ * 미달로만 보였고, 목록을 훑으며 빨간 줄을 건너뛰면 1688로 팔 수 있는 상품을
+ * 정확히 놓쳤다.
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { Loader2, Plus, RefreshCw, Trash2, ExternalLink, ChevronRight, ChevronDown } from 'lucide-react';
 import { C as BASE_C } from '@/lib/design-tokens';
 import SupplierCompare from '@/components/sourcing/SupplierCompare';
+import { DEFAULT_ORDER_QTY } from '@/lib/sourcing/coupang-price';
+import { supplierCostsOf } from '@/lib/sourcing/shortlist-supplier-costs';
+import { judgeSupplier, pickBestSupplier } from '@/lib/sourcing/supplier-verdict';
 import type { ShortlistItem, LogisticsSize, Verdict } from '@/types/shortlist';
 
 // 공통 토큰에 없는 시맨틱 색만 로컬로 확장한다 (CostcoMemoTab.tsx, DomeggookTab.tsx와 동일 관례).
@@ -21,7 +30,11 @@ const C = {
   danger: '#dc2626',
   dangerBg: 'rgba(220,38,38,0.08)',
   gray: '#6b7280',
+  grayBg: 'rgba(107,114,128,0.10)',
   infoBg: 'rgba(37,99,235,0.08)',
+  /** 중국 공급처 식별색 — SupplierCompare.tsx와 같은 값을 쓴다 */
+  cn: '#ea580c',
+  cnBg: 'rgba(234,88,12,0.10)',
 } as const;
 
 const SIZE_LABEL: Record<LogisticsSize, string> = {
@@ -34,10 +47,11 @@ const VERDICT_BADGE: Record<Verdict, { label: string; color: string }> = {
   pass: { label: '✅ 통과', color: C.success },
   fail: { label: '❌ 미달', color: C.danger },
   dead: { label: '⚠ 판매종료', color: C.gray },
-  unknown: { label: '⚠ 표본부족', color: C.warning },
+  // '표본부족'이 아니라 '판정 불가'다 — 네이버 쇼핑 표본 개념이 사라진 뒤로 unknown의
+  // 원인은 "쿠팡 실판가 미입력" 아니면 "원가를 못 세움"이다. 사유는 툴팁이 말한다.
+  unknown: { label: '⚠ 판정 불가', color: C.warning },
 };
 
-const DEFAULT_ORDER_QTY = 10;
 const STALE_MS = 24 * 60 * 60 * 1000;
 
 /**
@@ -68,15 +82,15 @@ function deliPolicyText(it: ShortlistItem): string {
   return '배송비 정책 확인 안 됨';
 }
 
-/**
- * unknown 판정의 원인을 구분해서 툴팁으로 보여준다.
- * effectiveCost가 없으면 배송비 금액을 몰라 손익분기 자체를 못 세운 것이고,
- * effectiveCost는 있는데 unknown이면 쿠팡 표본이 부족해 시세를 못 정한 것이다.
- */
-function unknownReason(it: ShortlistItem): string {
-  return it.effectiveCost === null
-    ? '실효원가 계산 불가 — 배송비 금액이 확인되지 않았습니다.'
-    : '쿠팡 표본 부족 — 판정에 필요한 시세 표본이 모자랍니다.';
+/** 어느 공급처의 원가도 세우지 못한 경우의 사유. 판정 사유는 judgeSupplier가 적는다. */
+const NO_COST_REASON = '실효원가 계산 불가 — 배송비 금액이 확인되지 않았습니다.';
+
+/** 이긴 공급처의 배송비 칸에 붙일 설명 */
+function shipTitle(supplier: 'dome' | 'cn1688', estimated: boolean, it: ShortlistItem): string {
+  if (supplier === 'dome') return deliPolicyText(it);
+  return estimated
+    ? '개당 국제배송비 추정치 — 사이즈 가정 무게와 사입 수량의 해운 요율에서 나왔습니다. 행을 펼쳐 실제 청구액으로 고치세요.'
+    : '입력한 개당 국제배송비 (배대지 → 한국)';
 }
 
 interface VerifyNotice {
@@ -389,7 +403,8 @@ export default function ShortlistTab() {
             <thead>
               <tr style={{ background: C.tableHeader, borderBottom: `1px solid ${C.border}` }}>
                 <th style={thStyle('left')}>상품</th>
-                <th style={thStyle('right')}>도매가</th>
+                {/* '도매가'가 아니라 '매입가' — 공급처가 둘이라 이름이 한쪽에 묶이면 안 된다 */}
+                <th style={thStyle('right')}>매입가</th>
                 <th style={thStyle('right')}>배송</th>
                 <th style={thStyle('right')}>실효원가</th>
                 <th style={thStyle('right')}>쿠팡 실판가</th>
@@ -403,9 +418,34 @@ export default function ShortlistTab() {
             <tbody>
               {items.map((it) => {
                 const dead = it.verdict === 'dead';
-                const badge = it.verdict ? VERDICT_BADGE[it.verdict] : null;
                 const stale = isStale(it.verifiedAt);
                 const isOpen = expanded.has(it.itemNo);
+
+                /*
+                  이긴 공급처를 고르고 그 값으로 줄 전체를 그린다.
+
+                  상태만 좋은 쪽으로 바꾸면 "실효원가 48,400 · 손익분기 86,542 ·
+                  마진율 −331%인데 상태는 통과"가 되어 줄이 자기모순에 빠진다.
+                  그래서 매입가·배송·실효원가·손익분기·마진율·상태가 전부 같은
+                  공급처의 값이어야 한다.
+
+                  판매종료는 계산 대상이 아니다 — 도매꾹에서 내려간 상품이라
+                  저장된 dead 판정을 그대로 쓴다.
+                */
+                const { dome, cn1688 } = supplierCostsOf(it);
+                const best = dome ? pickBestSupplier(dome, cn1688) : cn1688;
+                const j = !dead && best ? judgeSupplier(it.coupangP25, best, it.logisticsSize) : null;
+
+                // best가 없으면(원가 자체를 못 세움) 저장된 값·판정으로 되돌아간다
+                const verdict: Verdict | null = dead ? 'dead' : (j?.verdict ?? it.verdict);
+                const badge = verdict ? VERDICT_BADGE[verdict] : null;
+                const badgeTitle = dead
+                  ? undefined
+                  : (j?.why ?? (it.verdict === 'unknown' ? NO_COST_REASON : undefined));
+
+                const shown = dead ? null : best;
+                const marginRatePct = shown ? (j?.marginRatePct ?? null) : it.marginRate;
+
                 return (
                   <React.Fragment key={it.itemNo}>
                   <tr
@@ -449,20 +489,64 @@ export default function ShortlistTab() {
                                 ⏱ 검증 오래됨
                               </span>
                             )}
-                            {it.buyKrwTotal !== null && (
-                              <span style={{ marginLeft: 8, color: C.textSub }} title="1688 사입 원가가 입력돼 있습니다">
-                                🇨🇳 1688
-                              </span>
-                            )}
+                            {/*
+                              여기 있던 '🇨🇳 1688' 표시는 매입가 칸의 배지로 합쳤다.
+                              한 배지가 색으로 두 가지를 말한다 — 주황은 "1688이 이겼다",
+                              회색은 "붙여넣었지만 도매꾹이 이겼다". 두 정보를 두 자리에
+                              나눠 두면 목록을 훑을 때 눈이 두 군데를 봐야 한다.
+                            */}
                           </div>
                         </div>
                       </div>
                     </td>
-                    <td style={tdStyle()}>{won(it.domePrice)}</td>
-                    <td style={tdStyle()} title={deliPolicyText(it)}>
-                      {it.unitDeliFee === null ? '—' : `+${it.unitDeliFee.toLocaleString('ko-KR')}`}
+                    <td style={tdStyle()}>
+                      {/*
+                        배지 하나가 두 가지를 말한다. 자리를 한 곳에 고정해야 눈이
+                        두 군데를 보지 않는다.
+                          주황 — 1688이 이겼다. 이 줄의 숫자가 왜 도매꾹 매입가와
+                                 안 맞는지를 그 자리에서 설명한다.
+                          회색 — 붙여넣기는 했는데 도매꾹이 이겼다. 목록이 20~30건이
+                                 되면 "이 상품 1688 확인했나"를 알 방법이 이것뿐이다.
+                                 표시가 없으면 확인한 걸 또 확인하거나, 안 한 걸
+                                 확인한 줄 알고 넘긴다.
+                        붙여넣지 않은 행은 아무것도 달지 않는다 — 그게 미확인 상태다.
+                      */}
+                      {cn1688 && (
+                        <span
+                          title={
+                            shown?.supplier === 'cn1688'
+                              ? '1688 사입 원가가 도매꾹보다 낮습니다. 이 줄의 매입가·배송·실효원가·손익분기·마진율·상태는 모두 1688 기준입니다.'
+                              : '1688 원가를 입력했지만 도매꾹이 더 쌉니다. 이 줄의 숫자는 도매꾹 기준입니다.'
+                          }
+                          style={{
+                            marginRight: 6, padding: '1px 5px', borderRadius: 4,
+                            background: shown?.supplier === 'cn1688' ? C.cnBg : C.grayBg,
+                            color: shown?.supplier === 'cn1688' ? C.cn : C.gray,
+                            fontSize: 10.5, fontWeight: 700,
+                            verticalAlign: 'middle', whiteSpace: 'nowrap',
+                          }}
+                        >
+                          1688
+                        </span>
+                      )}
+                      {won(shown ? shown.unitPriceKrw : it.domePrice)}
                     </td>
-                    <td style={tdStyle()}>{won(it.effectiveCost)}</td>
+                    <td
+                      style={tdStyle()}
+                      title={shown ? shipTitle(shown.supplier, shown.shipEstimated, it) : deliPolicyText(it)}
+                    >
+                      {/*
+                        추정 배송비는 '~'로 앞을 바꿔 사람이 넣은 값과 구분한다.
+                        구분되지 않으면 "추정치니까 나중에 고치자"가 생기지 않는다.
+                      */}
+                      {shown ? (
+                        <span style={shown.shipEstimated ? { color: C.warning } : undefined}>
+                          {shown.shipEstimated ? '~' : '+'}
+                          {shown.shipPerUnitKrw.toLocaleString('ko-KR')}
+                        </span>
+                      ) : it.unitDeliFee === null ? '—' : `+${it.unitDeliFee.toLocaleString('ko-KR')}`}
+                    </td>
+                    <td style={tdStyle()}>{won(shown ? shown.effectiveCostKrw : it.effectiveCost)}</td>
                     <td style={tdStyle()}>
                       {/*
                         비제어(uncontrolled) 입력이다. key를 it.coupangP25에 걸어두는 이유:
@@ -491,9 +575,9 @@ export default function ShortlistTab() {
                         }}
                       />
                     </td>
-                    <td style={tdStyle()}>{won(it.breakEvenPrice)}</td>
-                    <td style={{ ...tdStyle(), color: it.marginRate !== null && it.marginRate >= 30 ? C.success : C.text, fontWeight: 700 }}>
-                      {it.marginRate === null ? '—' : `${it.marginRate.toFixed(1)}%`}
+                    <td style={tdStyle()}>{won(shown ? shown.breakEvenPriceKrw : it.breakEvenPrice)}</td>
+                    <td style={{ ...tdStyle(), color: marginRatePct !== null && marginRatePct >= 30 ? C.success : C.text, fontWeight: 700 }}>
+                      {marginRatePct === null ? '—' : `${marginRatePct.toFixed(1)}%`}
                     </td>
                     <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                       <select
@@ -515,7 +599,7 @@ export default function ShortlistTab() {
                       {badge ? (
                         <span
                           style={{ color: badge.color, fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap' }}
-                          title={it.verdict === 'unknown' ? unknownReason(it) : undefined}
+                          title={badgeTitle}
                         >
                           {badge.label}
                         </span>

@@ -10,6 +10,8 @@
  * 24,502원을 내는데 실제는 23,190원으로 1,312원 과대평가한다.
  */
 
+import type { LogisticsSize } from '@/types/shortlist';
+
 /** 부피무게 제수. 항공 기준으로 안내되어 있다 */
 export const VOLUMETRIC_DIVISOR = 6000;
 
@@ -183,4 +185,59 @@ export function allocateOrderCost(input: AllocationInput): AllocationResult {
   }
 
   return { totalWeightKg, totalCostKrw, items };
+}
+
+/**
+ * 사이즈별 가정 개당 무게 (kg).
+ *
+ * 로켓그로스 사이즈 유형의 무게 **상한**(극소형 2kg / 소형 5kg / 중형 10kg)을
+ * 그대로 쓰지 않는 이유: 상한은 "그 유형에 들어가는 최대"라 대표값이 아니다.
+ * 극소형에 2kg을 쓰면 파우치 30개가 60kg이 되어 배송비가 상품가를 몇 배
+ * 넘어선다. 실제 극소형 소품은 0.1~0.5kg대다.
+ *
+ * 이 값들은 실측이 아니라 가정이다. 사장님이 실제 발주 무게를 확인하면
+ * 이 상수만 고치면 된다 — 추정값은 저장하지 않으므로 다음 조회부터 즉시 반영된다.
+ */
+export const ASSUMED_UNIT_WEIGHT_KG: Record<LogisticsSize, number> = {
+  xsmall: 0.3,
+  small: 1.0,
+  medium: 3.0,
+};
+
+export interface IntlShipEstimate {
+  /** 개당 국제배송비 */
+  perUnitKrw: number;
+  /** 발주 전체 배송비 */
+  totalKrw: number;
+  /** 과금에 쓰인 절상 무게 */
+  billedKg: number;
+  /** 요율표 범위를 넘어 외삽한 값인가 */
+  extrapolated: boolean;
+}
+
+/**
+ * 사이즈와 사입 수량으로 개당 국제배송비를 추정한다.
+ *
+ * 관세사 수임료는 넣지 않는다 — 배대지가 통관 대행을 포함하므로
+ * 별도로 얹으면 이중 계상이 된다.
+ *
+ * 개당 값이 수량에 따라 달라지는 것이 핵심이다. 요율이 무게에 체감하므로
+ * 많이 살수록 개당이 싸진다. 그래서 샘플 수량이 아니라 실제 사입 예정
+ * 수량(DEFAULT_ORDER_QTY)으로 계산해야 한다.
+ */
+export function estimateIntlShipPerUnitKrw(
+  size: LogisticsSize,
+  orderQty: number,
+): IntlShipEstimate | null {
+  if (orderQty <= 0) return null;
+
+  const totalWeightKg = ASSUMED_UNIT_WEIGHT_KG[size] * orderQty;
+  const { fee, estimated, billedKg } = shippingFeeKrw(totalWeightKg);
+
+  return {
+    perUnitKrw: Math.round(fee / orderQty),
+    totalKrw: fee,
+    billedKg,
+    extrapolated: estimated,
+  };
 }

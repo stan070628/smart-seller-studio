@@ -80,11 +80,11 @@ describe('evaluateCandidate', () => {
  * 기대값은 모두 unitDeliveryFee(deli-policy.ts:73)의 식으로 손계산했다.
  *   fixed  → ceil(fee / orderQty)
  *   tiered → ceil(ceil(orderQty / unitQty) * fee / orderQty)
- * 사입 수량 가정치는 10개(ASSUMED_ORDER_QTY)다.
+ * 사입 수량 가정치는 30개(DEFAULT_ORDER_QTY, coupang-price.ts)다.
  */
 describe('parseUnitDeliFee', () => {
   it('판매자 부담 무료배송(who=S)이면 배송비가 붙지 않는다', () => {
-    // 구 구현은 fee/10 = 250원을 얹어 손익분기를 올렸다. 이 회귀를 막는 케이스다.
+    // 구 구현은 fee/10 을 얹어 손익분기를 올렸다. 이 회귀를 막는 케이스다.
     expect(parseUnitDeliFee(itemWithDeli({ who: 'S', fee: '2500' }))).toBe(0);
   });
 
@@ -93,30 +93,30 @@ describe('parseUnitDeliFee', () => {
   });
 
   it('고정 배송비는 사입 수량으로 나눈다', () => {
-    // fixed 2,500원 → ceil(2500 / 10) = 250
-    expect(parseUnitDeliFee(itemWithDeli({ who: 'P', fee: '2500' }))).toBe(250);
+    // fixed 2,500원 → ceil(2500 / 30) = 84
+    expect(parseUnitDeliFee(itemWithDeli({ who: 'P', fee: '2500' }))).toBe(84);
   });
 
   it('나누어떨어지지 않으면 올림한다 (내림·반올림이 아니다)', () => {
-    // fixed 1,234원 → ceil(1234 / 10) = 124. round였다면 123이다.
-    expect(parseUnitDeliFee(itemWithDeli({ who: 'P', fee: '1234' }))).toBe(124);
+    // fixed 1,234원 → ceil(1234 / 30) = 42. round였다면 41이다.
+    expect(parseUnitDeliFee(itemWithDeli({ who: 'P', fee: '1234' }))).toBe(42);
   });
 
   it('상세(getItemView) 형태의 deli.dome.fee도 읽는다', () => {
-    // fixed 3,000원 → ceil(3000 / 10) = 300
-    expect(parseUnitDeliFee(itemWithDeli({ who: 'P', dome: { fee: '3000' } }))).toBe(300);
+    // fixed 3,000원 → ceil(3000 / 30) = 100
+    expect(parseUnitDeliFee(itemWithDeli({ who: 'P', dome: { fee: '3000' } }))).toBe(100);
   });
 
   it('구간 배송비는 구간 요금을 고정 배송비로 취급하지 않는다', () => {
-    // "30개당 3,000원" 구간을 10개 주문 → ceil(10/30) = 1구간 → 3,000원
-    //   개당 = ceil(3000 / 10) = 300
-    expect(parseUnitDeliFee(itemWithDeli({ who: 'P', tbl: '30+3000|30+3000' }))).toBe(300);
+    // "30개당 3,000원" 구간을 30개 주문 → ceil(30/30) = 1구간 → 3,000원
+    //   개당 = ceil(3000 / 30) = 100
+    expect(parseUnitDeliFee(itemWithDeli({ who: 'P', tbl: '30+3000|30+3000' }))).toBe(100);
   });
 
   it('사입 수량이 구간을 넘으면 구간 배수만큼 올려 계산한다', () => {
-    // "3개당 1,500원" 구간을 10개 주문 → ceil(10/3) = 4구간 → 4 × 1,500 = 6,000원
-    //   개당 = ceil(6000 / 10) = 600. 구간을 무시했다면 150원이 나온다.
-    expect(parseUnitDeliFee(itemWithDeli({ who: 'P', tbl: '3+1500|3+1500' }))).toBe(600);
+    // "3개당 1,500원" 구간을 30개 주문 → ceil(30/3) = 10구간 → 10 × 1,500 = 15,000원
+    //   개당 = ceil(15000 / 30) = 500. 구간을 무시했다면 50원이 나온다.
+    expect(parseUnitDeliFee(itemWithDeli({ who: 'P', tbl: '3+1500|3+1500' }))).toBe(500);
   });
 
   it('deli가 없으면 0이다', () => {

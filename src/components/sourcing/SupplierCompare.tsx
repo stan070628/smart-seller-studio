@@ -24,9 +24,10 @@ import React, { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { C as BASE_C } from '@/lib/design-tokens';
 import { parse1688Checkout, type Parsed1688 } from '@/lib/sourcing/parse-1688-checkout';
-import { calc1688UnitCost } from '@/lib/sourcing/cost-1688';
-import { marginOf, MIN_SELL_PRICE_KRW } from '@/lib/sourcing/coupang-price';
-import type { ShortlistItem, LogisticsSize } from '@/types/shortlist';
+import { supplierCostsOf } from '@/lib/sourcing/shortlist-supplier-costs';
+import { ASSUMED_UNIT_WEIGHT_KG } from '@/lib/sourcing/intl-shipping';
+import { judgeSupplier, type SupplierCost } from '@/lib/sourcing/supplier-verdict';
+import type { ShortlistItem, LogisticsSize, Verdict } from '@/types/shortlist';
 
 // 공통 토큰에 없는 시맨틱 색만 로컬로 확장한다 (ShortlistTab.tsx와 동일 관례).
 const C = {
@@ -83,44 +84,44 @@ const TONE_STYLE: Record<Tone, { color: string; background: string }> = {
 };
 
 /**
- * 판정. 상단 표의 verdict와 같은 규칙을 쓴다 — 1만원 하한을 넘고 쿠팡 실판가가
- * 손익분기가 이상이면 통과. (shortlist-verify.ts의 buildVerifyResult와 동일)
+ * 판정(Verdict)은 supplier-verdict.ts와 공유하고 색(Tone)은 이 패널 고유다.
  *
- * 하한을 손익분기보다 먼저 보는 이유: 하한은 판매가의 성질이지 공급처의 성질이
- * 아니다. 1만원 미만 판매가는 원가가 아무리 싸도 진입하지 않기로 한 구간이라
- * 손익분기 비교로 뒤집을 수 없다. 그래서 하한 미달이면 도매꾹 줄도 1688 줄도
- * 똑같이 미달로 나온다 — 이 패널이 보여주려던 "도매꾹 미달 / 1688 통과" 역전이
- * 그 구간에서는 성립하지 않는다는 뜻이므로, 사유 문장에 공급처 이야기가 아님을
- * 못 박아 둔다. 그러지 않으면 1688 줄까지 미달인 것이 계산 오류처럼 보인다.
+ * 미달에 경고색을 쓰지 않는 이유는 TONE_STYLE 주석 그대로 — 후보 대부분이
+ * 미달이라, 흔한 정상 결과에 경고색을 쓰면 진짜 봐야 할 것이 묻힌다.
  */
-function judge(
+const TONE_OF: Record<Verdict, Tone> = {
+  pass: 'pass',
+  fail: 'miss',
+  unknown: 'hold',
+  dead: 'hold',
+};
+
+const LABEL_OF: Record<Verdict, string> = {
+  pass: '통과',
+  fail: '미달',
+  unknown: '판정 불가',
+  dead: '판정 불가',
+};
+
+/**
+ * 공유 판정 규칙을 이 패널의 표현으로 옮긴다.
+ *
+ * 규칙 자체(1만원 하한이 손익분기보다 먼저, 하한 미달이면 공급처와 무관)는
+ * supplier-verdict.ts의 judgeSupplier에 있다. 예전에는 같은 규칙이 이 파일에
+ * 한 벌 더 있었고, 상단 표까지 세 번째 사본을 만들 참이었다.
+ *
+ * cost가 null이면 원가를 세우지 못한 것이다 — 판정을 시도할 입력 자체가 없다.
+ */
+function toJudgement(
   coupangP25: number | null,
-  breakEven: number | null,
-  effectiveCost: number | null,
+  cost: SupplierCost | null,
   size: LogisticsSize,
 ): Judgement {
-  if (breakEven === null || effectiveCost === null) {
+  if (!cost) {
     return { tone: 'hold', label: '판정 불가', why: '원가를 계산하지 못했습니다' };
   }
-  if (coupangP25 === null) {
-    return { tone: 'hold', label: '판정 불가', why: '쿠팡 실판가 미입력' };
-  }
-  if (coupangP25 < MIN_SELL_PRICE_KRW) {
-    return {
-      tone: 'miss',
-      label: '미달',
-      why: `판매가 ${won(coupangP25)} · ${won(MIN_SELL_PRICE_KRW)} 하한 미만 (공급처와 무관)`,
-    };
-  }
-  if (coupangP25 >= breakEven) {
-    const margin = marginOf(coupangP25, effectiveCost, size);
-    return {
-      tone: 'pass',
-      label: '통과',
-      why: `개당 ${won(margin)} · ${((margin / coupangP25) * 100).toFixed(1)}%`,
-    };
-  }
-  return { tone: 'miss', label: '미달', why: `손익분기 ${won(breakEven - coupangP25)} 부족` };
+  const j = judgeSupplier(coupangP25, cost, size);
+  return { tone: TONE_OF[j.verdict], label: LABEL_OF[j.verdict], why: j.why };
 }
 
 function Verdict({ j }: { j: Judgement }) {
@@ -195,28 +196,18 @@ export default function SupplierCompare({
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const ship = item.intlShipPerUnit ?? 0;
-  const saved = item.buyKrwTotal !== null && item.orderQty1688 !== null;
-
-  const cost = saved
-    ? calc1688UnitCost({
-        buyKrwTotal: item.buyKrwTotal!,
-        orderQty: item.orderQty1688!,
-        // 입력 필드명이 DB 컬럼명(intlShipPerUnit)과 일부러 다르다. 여기서 명시적으로 옮긴다
-        intlShipPerUnitKrw: ship,
-        itemName: item.title,
-        logisticsSize: item.logisticsSize,
-      })
-    : null;
+  // 원가 조립은 shortlist-supplier-costs.ts가 맡는다 — 상단 표와 같은 값이어야 한다.
+  // cost(1688 상세)는 관세·부가세 내역을 펼쳐 보여주는 데 쓴다.
+  const { dome: domeCost, cn1688: cnCost, cn1688Detail: cost } = supplierCostsOf(item);
 
   // 도매꾹 줄 — 판매종료는 원가를 따질 상황이 아니라 판정 대신 사실만 적는다
   const domeJudge: Judgement =
     item.verdict === 'dead'
       ? { tone: 'miss', label: '판매종료', why: '도매꾹에서 내려간 상품입니다' }
-      : judge(item.coupangP25, item.breakEvenPrice, item.effectiveCost, item.logisticsSize);
+      : toJudgement(item.coupangP25, domeCost, item.logisticsSize);
 
   const cnJudge: Judgement | null = cost
-    ? judge(item.coupangP25, cost.breakEvenPriceKrw, cost.effectiveCostKrw, item.logisticsSize)
+    ? toJudgement(item.coupangP25, cnCost, item.logisticsSize)
     : null;
 
   function runParse() {
@@ -310,7 +301,10 @@ export default function SupplierCompare({
                     }}
                     disabled={locked}
                     inputMode="numeric"
-                    placeholder="0"
+                    // 미입력이면 placeholder에 추정치를 그대로 띄운다. 흐린 글자라
+                    // "아직 안 넣은 값"으로 읽히면서도, 위 실효원가가 어느 숫자에서
+                    // 나왔는지가 같이 보인다.
+                    placeholder={cost.shipEstimated ? String(cost.intlShipPerUnitKrw) : '0'}
                     aria-label={`${item.title} 개당 국제배송비`}
                     style={{
                       width: 96, padding: '4px 7px', textAlign: 'right',
@@ -319,6 +313,18 @@ export default function SupplierCompare({
                       border: `1px solid ${C.border}`, borderRadius: 4,
                     }}
                   />
+                  {/*
+                    추정치임을 반드시 화면에 적는다. 사람이 넣은 값과 구분되지 않으면
+                    사후 수정을 유도할 수 없고, 아래 실효원가·손익분기가 실측처럼 읽힌다.
+                  */}
+                  {cost.shipEstimated && (
+                    <span
+                      style={{ fontSize: 11, color: C.warning, marginTop: 2, maxWidth: 200, lineHeight: 1.4 }}
+                      title={`개당 ${ASSUMED_UNIT_WEIGHT_KG[item.logisticsSize]}kg 가정 × 사입 ${item.orderQty}개의 해운 요율에서 나온 값입니다. 실측이 아닙니다.`}
+                    >
+                      ~{cost.intlShipPerUnitKrw.toLocaleString('ko-KR')}원 추정 — 실제 청구액으로 고치세요
+                    </span>
+                  )}
                 </Fig>
                 <Fig label="실효원가" value={won(cost.effectiveCostKrw)} />
                 <Fig label="손익분기가" value={won(cost.breakEvenPriceKrw)} accent />
