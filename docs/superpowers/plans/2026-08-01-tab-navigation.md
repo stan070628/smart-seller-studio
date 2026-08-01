@@ -168,7 +168,7 @@ import { NAV_ITEMS } from '@/lib/nav-items';
 - [ ] **Step 4: 통과 확인**
 
 Run: `npx vitest run src/__tests__/lib/nav-items.test.ts`
-Expected: PASS (9 tests)
+Expected: PASS (8 tests)
 
 Run: `npx tsc --noEmit`
 Expected: 오류 없음
@@ -304,7 +304,6 @@ export interface TabState {
   /** 화면 진입 시 호출. 없으면 생성, 있으면 href 갱신 후 활성화 */
   openTab(href: string): void;
   closeTab(id: string): void;
-  touchTab(id: string): void;
   setDirty(id: string, dirty: boolean): void;
 }
 
@@ -338,17 +337,6 @@ export const useTabStore = create<TabState>()(
           activeId === id ? (next[Math.max(0, idx - 1)]?.id ?? null) : activeId;
 
         set({ tabs: next, activeId: nextActive }, false, 'closeTab');
-      },
-
-      touchTab: (id) => {
-        set(
-          (s) => ({
-            tabs: s.tabs.map((t) => (t.id === id ? { ...t, lastActiveAt: Date.now() } : t)),
-            activeId: id,
-          }),
-          false,
-          'touchTab',
-        );
       },
 
       setDirty: (id, dirty) => {
@@ -627,6 +615,12 @@ export const useTabStore = create<TabState>()(
           tabs: s.tabs.map((t) => ({ ...t, isDirty: false })),
           activeId: s.activeId,
         }),
+        merge: (persisted, current) => {
+          const merged = { ...current, ...(persisted as Partial<TabState>) };
+          // 복원 시점에 상한을 다시 적용한다.
+          // 저장 당시 isDirty였던 탭이 false로 풀려 초과 상태로 들어올 수 있다.
+          return { ...merged, tabs: evict(merged.tabs, [merged.activeId]) };
+        },
       },
     ),
     { name: 'TabStore' },
@@ -634,12 +628,47 @@ export const useTabStore = create<TabState>()(
 );
 ```
 
-- [ ] **Step 4: 통과 확인**
+### 🔴 `merge`가 없으면 상한이 무기한 깨진다
+
+`partialize`가 저장 시 `isDirty`를 전부 `false`로 만든다. 그래서 **"non-dirty 6개 + dirty 1개 = 7탭"** 상태로 종료하면 재시작 때 **non-dirty 7탭**이 복원된다. 이는 예외가 아니라 편집 보호 기능이 정상적으로 만드는 상태다.
+
+그 상태에서 `AppShell`이 첫 렌더에 현재 경로로 `openTab`을 부르면 **멱등성 가드에 걸려 early return**하므로 `evict`가 돌지 않는다. 사용자가 다른 탭으로 이동해야만 6으로 수렴하며, **한 화면만 쓰는 세션에서는 상한이 영영 복구되지 않는다.**
+
+`merge`에서 `evict`를 한 번 태우면 복원 직후에 정리된다.
+
+- [ ] **Step 4: 복원 시 상한 적용 테스트 추가**
+
+```ts
+  it('저장 당시 편집 중이던 탭 때문에 초과 상태로 복원되면 그 자리에서 정리한다', () => {
+    // non-dirty 6개 + dirty 1개 = 7탭을 저장한 상황을 직접 만든다
+    const tabs = ['dashboard', 'sourcing', 'listing', 'label', 'orders', 'plan', 'editor'].map(
+      (id, i) => ({
+        id,
+        href: `/${id}`,
+        label: id,
+        lastActiveAt: 100 + i,
+        isDirty: false,
+      }),
+    );
+    localStorage.setItem(
+      TAB_STORAGE_KEY,
+      JSON.stringify({ state: { tabs, activeId: 'editor' }, version: 0 }),
+    );
+
+    useTabStore.persist.rehydrate();
+
+    expect(useTabStore.getState().tabs).toHaveLength(6);
+    expect(useTabStore.getState().tabs.map((t) => t.id)).not.toContain('dashboard');
+    expect(useTabStore.getState().activeId).toBe('editor');
+  });
+```
+
+- [ ] **Step 5: 통과 확인**
 
 Run: `npx vitest run src/__tests__/store/`
 Expected: PASS — 탭 스토어 테스트 3개 파일 전부 통과
 
-- [ ] **Step 5: 커밋**
+- [ ] **Step 6: 커밋**
 
 ```bash
 git add src/store/useTabStore.ts src/__tests__/store/useTabStore-persist.test.ts
@@ -758,6 +787,7 @@ Expected: FAIL — `Failed to resolve import "@/components/TabBar"`
  * 탭 상태만 알고 캐시는 모른다. 둘의 연결은 tab-cache-bridge가 맡는다.
  */
 
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { C } from '@/lib/design-tokens';
 import { useTabStore } from '@/store/useTabStore';
@@ -770,7 +800,12 @@ export default function TabBar() {
   const activeId = useTabStore((s) => s.activeId);
   const closeTab = useTabStore((s) => s.closeTab);
 
-  if (tabs.length === 0) return null;
+  // 서버에는 localStorage가 없어 탭이 0개인데 클라이언트는 복원된 탭을 그린다.
+  // 마운트 전에는 아무것도 그리지 않아 하이드레이션 불일치를 막는다.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  if (!mounted || tabs.length === 0) return null;
 
   function handleClose(e: React.MouseEvent, id: string) {
     e.stopPropagation();
@@ -870,6 +905,21 @@ git commit -m "feat(tabs): 탭 바 컴포넌트"
 **Files:**
 - Modify: `src/components/AppShell.tsx`
 - Test: `src/__tests__/components/AppShell-tabs.test.tsx`
+
+### 🔴 SSR 하이드레이션 불일치를 먼저 막는다
+
+`persist`(Task 4)가 붙은 스토어를 서버 렌더링되는 컴포넌트에서 읽으면 **서버와 클라이언트의 첫 렌더 결과가 달라진다.** 서버에는 `localStorage`가 없어 탭이 0개인데, 클라이언트는 복원된 탭을 그린다. Next.js가 하이드레이션 불일치 오류를 낸다.
+
+`TabBar`가 마운트 전에는 아무것도 그리지 않게 한다.
+
+```tsx
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  if (!mounted || tabs.length === 0) return null;
+```
+
+`TabBar`(Task 5)에 이 처리를 넣고, Task 5의 테스트는 `@testing-library/react`가 클라이언트 렌더만 하므로 그대로 통과한다. **Task 5를 구현할 때 함께 넣는다.**
 
 - [ ] **Step 1: 실패하는 테스트 작성**
 
@@ -971,7 +1021,30 @@ import { useTabStore } from '@/store/useTabStore';
       </div>
 ```
 
-> `mainOverflow='auto'`인 화면에서는 탭 바가 본문과 함께 스크롤된다. 탭 바를 고정하려면 이 `div`를 flex 컬럼으로 바꿔야 하는데, 기존 화면의 스크롤 동작이 바뀔 수 있다. **1단계에서는 그대로 두고**, 실제로 불편하면 별도로 다룬다.
+### 🔴 `/label`이 잘린다 — 배선 전에 먼저 고친다
+
+`src/app/label/layout.tsx`가 `<AppShell mainOverflow="hidden">`이라 메인 영역이 **블록 + `overflow: hidden`**이다. 그 안의 `LabelPageWrapper`는 `height: 100%`(= 100vh)를 쓴다. 여기에 탭 바 36px를 얹으면 콘텐츠가 `36px + 100vh`가 되는데 컨테이너가 `hidden`이라 **스크롤도 안 되고 하단 36px가 그냥 잘린다.** 라벨 편집기의 미리보기·인쇄 패널 바닥이 접근 불가가 된다.
+
+`/editor`는 `mainDisplay="flex"`라 안전하다. 같은 한 줄을 `/label`에도 준다.
+
+```tsx
+// src/app/label/layout.tsx
+return <AppShell mainOverflow="hidden" mainDisplay="flex">{children}</AppShell>;
+```
+
+컬럼 flex가 되면 `LabelPageWrapper`의 `height: 100%`가 flex-basis처럼 동작하고 기본 `flex-shrink: 1`이 남은 높이에 맞춰 줄여준다.
+
+### 탭 바를 스크롤에 고정한다
+
+`mainOverflow='auto'`인 화면에서 탭 바는 일반 블록 자식이라 본문과 함께 스크롤되어 사라진다. `TabBar`의 컨테이너 스타일에 세 줄을 더하면 해소된다.
+
+```tsx
+        position: 'sticky',
+        top: 0,
+        zIndex: 20,
+```
+
+블록+`auto` 경로에서는 스크롤포트가 메인 `div`이고 탭 바가 그 직계 자식이라 sticky가 정상 동작한다. flex+`hidden` 경로에서는 스크롤이 없어 무해하다. `zIndex: 20`이면 본문의 sticky 테이블 헤더(`zIndex: 1~2`) 위, 사이드바 알림 드롭다운(`zIndex: 1000`) 아래에 놓인다. **기존 스크롤 동작은 건드리지 않는다.**
 
 - [ ] **Step 4: 통과 확인**
 
@@ -980,6 +1053,41 @@ Expected: PASS (2 tests)
 
 Run: `npm run lint`
 Expected: 오류 없음
+
+- [ ] **Step 4-2: 🔴 프로덕션 빌드 확인 — dev 서버만으로는 못 잡는다**
+
+Run: `npm run build`
+Expected: EXIT 0
+
+**`useSearchParams()`는 정적 프리렌더를 무력화한다.** `AppShell`이 10개 라우트 레이아웃에서 쓰이므로, Suspense 경계 없이 이 훅을 부르면 정적 생성되는 페이지가 전부 빌드에서 터진다. **dev 모드는 정적 프리렌더를 하지 않으므로 이 문제를 구조적으로 감지할 수 없다.**
+
+그래서 `useSearchParams` 호출을 작은 자식 컴포넌트로 격리하고 `<Suspense>`로 감싼다. `AppShell` 본체는 프리렌더 안전한 상태로 남는다.
+
+```tsx
+/** 주소 변화를 탭에 반영한다. useSearchParams를 쓰므로 Suspense 안에 격리한다 */
+function TabSync() {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const openTab = useTabStore((s) => s.openTab);
+
+  useEffect(() => {
+    const qs = searchParams.toString();
+    openTab(qs ? `${pathname}?${qs}` : pathname);
+  }, [pathname, searchParams, openTab]);
+
+  return null;
+}
+```
+
+`AppShell` 안에서는 이렇게 쓴다.
+
+```tsx
+        <Suspense fallback={null}>
+          <TabSync />
+        </Suspense>
+        <TabBar />
+        {children}
+```
 
 - [ ] **Step 5: 직접 확인**
 
@@ -991,6 +1099,10 @@ Run: `npm run dev`
 3. 탭 클릭 → 해당 화면 이동
 4. 7개째 화면 열기 → 가장 오래된 탭이 사라짐
 5. **새로고침 → 탭 목록 유지**
+6. 🔴 **`/label` 진입 → 하단이 잘리지 않는지 확인.** 미리보기·인쇄 패널 바닥까지 보여야 한다
+7. 본문이 긴 화면(소싱 목록)에서 아래로 스크롤 → **탭 바가 상단에 붙어 있어야 한다**
+8. 화면 전환 시 본문이 위아래로 밀리는 순간이 없어야 한다
+9. 🔴 **브라우저 콘솔에 하이드레이션 경고가 없는지 확인.** `TabBar`의 `mounted` 가드는 단위 테스트로 겨냥할 수 없다 — zustand가 `getServerSnapshot`으로 항상 초기 상태를 주기 때문에 서버 렌더 테스트는 가드 없이도 통과한다. **이 가드가 실제로 일하는지는 브라우저 콘솔에서만 확인된다.** 탭이 여러 개 저장된 상태로 새로고침해서 볼 것
 
 - [ ] **Step 6: 커밋**
 
@@ -1510,14 +1622,13 @@ Expected: PASS (4 tests). 실패하면 Task 8의 `run` 함수를 고쳐 통과�
 
 `src/components/TabBar.tsx`에서 활성 탭에 마지막 갱신 시각을 보여준다. 스펙의 "낡은 값으로 판정" 대응이다.
 
-import에 추가:
+import에 추가 (`useEffect`·`useState`는 Task 5에서 이미 들어가 있다):
 
 ```tsx
-import { useEffect, useState } from 'react';
 import { useCacheStore } from '@/store/useCacheStore';
 ```
 
-컴포넌트 안, `if (tabs.length === 0)` 앞에 추가:
+컴포넌트 안, `if (!mounted || tabs.length === 0)` 앞에 추가:
 
 ```tsx
   const entries = useCacheStore((s) => s.entries);
