@@ -68,9 +68,10 @@ describe('캐시가 있을 때', () => {
 
 describe('enabled', () => {
   it('거짓이면 요청하지 않는다', () => {
-    renderHook(() => useCachedFetch('t:list', '/api/t', { enabled: false }));
+    const { result } = renderHook(() => useCachedFetch('t:list', '/api/t', { enabled: false }));
 
     expect(mockFetch).not.toHaveBeenCalled();
+    expect(result.current.isLoading).toBe(false);
   });
 });
 
@@ -108,5 +109,19 @@ describe('HTTP 오류', () => {
     const { result } = renderHook(() => useCachedFetch('t:list', '/api/t'));
 
     await waitFor(() => expect(result.current.error).toBe('요청이 실패했습니다 (503)'));
+  });
+
+  it('오류 응답이 JSON이 아니어도 상태 코드로 알린다', async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 502,
+      json: async () => {
+        throw new SyntaxError('Unexpected token < in JSON at position 0');
+      },
+    });
+
+    const { result } = renderHook(() => useCachedFetch('t:list', '/api/t'));
+
+    await waitFor(() => expect(result.current.error).toBe('요청이 실패했습니다 (502)'));
   });
 });

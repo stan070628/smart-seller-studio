@@ -54,14 +54,17 @@ export function useCachedFetch<T = unknown>(
     if (!promise) {
       promise = fetch(url)
         .then(async (res) => {
-          const json = await res.json();
           // fetch는 4xx·5xx에서 reject하지 않는다.
           // 여기서 걸러내지 않으면 오류 응답이 정상 데이터로 캐시된다.
+          //
+          // 상태를 먼저 본다. 프록시나 Next의 오류 페이지는 HTML을 주므로
+          // json()을 먼저 부르면 파싱 오류가 나서 상태 코드를 잃는다.
           if (!res.ok) {
-            const message = (json as { error?: string })?.error;
+            const body = await res.json().catch(() => null);
+            const message = (body as { error?: string } | null)?.error;
             throw new Error(message ?? `요청이 실패했습니다 (${res.status})`);
           }
-          return json;
+          return res.json();
         })
         .finally(() => inflight.delete(url));
       inflight.set(url, promise);
@@ -94,6 +97,7 @@ export function useCachedFetch<T = unknown>(
     if (entry?.data === undefined) return undefined;
     return select ? select(entry.data) : (entry.data as T);
     // select는 호출 측에서 매 렌더 새로 만들어지므로 의존성에서 뺀다.
+    // 그래서 select는 순수해야 한다 — 외부 상태를 클로저로 잡으면 결과가 낡은 채로 남는다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entry?.data]);
 
