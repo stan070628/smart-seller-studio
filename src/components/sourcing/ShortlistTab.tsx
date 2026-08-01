@@ -13,6 +13,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Loader2, Plus, RefreshCw, Trash2, ExternalLink, ChevronRight, ChevronDown } from 'lucide-react';
 import { C as BASE_C } from '@/lib/design-tokens';
 import SupplierCompare from '@/components/sourcing/SupplierCompare';
+import { DEFAULT_ORDER_QTY } from '@/lib/sourcing/coupang-price';
 import type { ShortlistItem, LogisticsSize, Verdict } from '@/types/shortlist';
 
 // 공통 토큰에 없는 시맨틱 색만 로컬로 확장한다 (CostcoMemoTab.tsx, DomeggookTab.tsx와 동일 관례).
@@ -37,7 +38,6 @@ const VERDICT_BADGE: Record<Verdict, { label: string; color: string }> = {
   unknown: { label: '⚠ 표본부족', color: C.warning },
 };
 
-const DEFAULT_ORDER_QTY = 10;
 const STALE_MS = 24 * 60 * 60 * 1000;
 
 /**

@@ -21,6 +21,7 @@ import {
   marginOf,
   buildSearchQueries,
   MIN_SELL_PRICE_KRW,
+  DEFAULT_ORDER_QTY,
 } from '@/lib/sourcing/coupang-price';
 
 interface Seed {
@@ -446,8 +447,6 @@ export default function DiscoveryTab() {
   );
 }
 
-/** 발굴 탭이 가정하는 사입 수량 — 쇼트리스트 POST의 기본값(DEFAULT_ORDER_QTY)과 같다 */
-const ASSUMED_ORDER_QTY = 10;
 /** 쿠팡 실판가 상한 — 쇼트리스트 PATCH의 MAX_COUPANG_PRICE와 같다. 자릿수 오타를 여기서 먼저 잡는다 */
 const MAX_COUPANG_PRICE = 10_000_000;
 
@@ -565,7 +564,7 @@ function CandidateRow({ c, divider }: { c: RunResult; divider: boolean }) {
       const res = await fetch('/api/sourcing/shortlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: String(itemNo), orderQty: ASSUMED_ORDER_QTY }),
+        body: JSON.stringify({ input: String(itemNo), orderQty: DEFAULT_ORDER_QTY }),
       });
 
       // 409는 실패가 아니다 — 이미 담겨 있다는 뜻이므로 실판가만 마저 채운다.
