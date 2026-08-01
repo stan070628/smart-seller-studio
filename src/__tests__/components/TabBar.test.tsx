@@ -9,6 +9,7 @@ import userEvent from '@testing-library/user-event';
 import { renderToString } from 'react-dom/server';
 import TabBar from '@/components/TabBar';
 import { useTabStore } from '@/store/useTabStore';
+import { useCacheStore } from '@/store/useCacheStore';
 import { C } from '@/lib/design-tokens';
 
 const push = vi.fn();
@@ -20,6 +21,7 @@ beforeEach(() => {
   localStorage.clear();
   push.mockClear();
   useTabStore.setState({ tabs: [], activeId: null });
+  useCacheStore.setState({ entries: {}, scroll: {} });
 });
 
 describe('TabBar', () => {
@@ -133,5 +135,28 @@ describe('TabBar', () => {
     await userEvent.click(screen.getByLabelText('소싱 탭 닫기'));
 
     expect(push).toHaveBeenCalledWith('/orders?tab=cost');
+  });
+
+  it('캐시가 있는 탭에 마지막 갱신 시각을 보여준다', () => {
+    useTabStore.getState().openTab('/sourcing');
+    useCacheStore.getState().setEntry('sourcing:shortlist', { items: [] });
+    render(<TabBar />);
+
+    expect(screen.getByText('· 방금')).toBeInTheDocument();
+  });
+
+  it('캐시가 없는 탭에는 시각을 보여주지 않는다', () => {
+    useTabStore.getState().openTab('/orders');
+    render(<TabBar />);
+
+    expect(screen.queryByText(/방금|분 전|시간 전/)).toBeNull();
+  });
+
+  it('다른 라우트의 캐시는 세지 않는다', () => {
+    useTabStore.getState().openTab('/orders');
+    useCacheStore.getState().setEntry('sourcing:shortlist', { items: [] });
+    render(<TabBar />);
+
+    expect(screen.queryByText('· 방금')).toBeNull();
   });
 });

@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { C } from '@/lib/design-tokens';
 import { useTabStore } from '@/store/useTabStore';
+import { useCacheStore } from '@/store/useCacheStore';
 
 export const TAB_BAR_HEIGHT = 36;
 
@@ -35,6 +36,15 @@ export default function TabBar() {
     setMounted(true);
   }, []);
 
+  const entries = useCacheStore((s) => s.entries);
+  const [, forceTick] = useState(0);
+
+  // 상대 시각 표시를 30초마다 갱신한다
+  useEffect(() => {
+    const id = setInterval(() => forceTick((n) => n + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
   // 마운트 전(서버 렌더·하이드레이션 직후)에도 자리는 잡아둔다.
   // 여기서 null을 반환하면 탭이 나타나는 순간 본문 전체가 36px 밀려 내려간다.
   // Task 6에서 AppShell이 주소마다 openTab을 부르므로 tabs=[] 상태는
@@ -54,6 +64,22 @@ export default function TabBar() {
         }}
       />
     );
+  }
+
+  /** 해당 라우트에서 가장 최근에 갱신된 시각 */
+  function lastFetchedAt(routeId: string): number | null {
+    const times = Object.entries(entries)
+      .filter(([k]) => k.startsWith(`${routeId}:`))
+      .map(([, e]) => e.fetchedAt)
+      .filter((t) => t > 0);
+    return times.length ? Math.max(...times) : null;
+  }
+
+  function relative(ts: number): string {
+    const min = Math.floor((Date.now() - ts) / 60_000);
+    if (min < 1) return '방금';
+    if (min < 60) return `${min}분 전`;
+    return `${Math.floor(min / 60)}시간 전`;
   }
 
   function handleClose(e: React.MouseEvent, id: string) {
@@ -116,6 +142,12 @@ export default function TabBar() {
             >
               {tab.label}
             </span>
+            {(() => {
+              const ts = lastFetchedAt(tab.id);
+              return ts ? (
+                <span style={{ fontSize: 10, color: C.textMuted }}>· {relative(ts)}</span>
+              ) : null;
+            })()}
             <button
               type="button"
               aria-label={`${tab.label} 탭 닫기`}
@@ -138,5 +170,3 @@ export default function TabBar() {
     </div>
   );
 }
-
-// 마지막 갱신 시각 표시는 Task 9에서 캐시가 생긴 뒤 붙인다. 지금은 표시할 값이 없다.
