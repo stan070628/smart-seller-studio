@@ -13,7 +13,8 @@ let clock = 1_000;
 beforeEach(() => {
   clock = 1_000;
   vi.spyOn(Date, 'now').mockImplementation(() => (clock += 10));
-  // persist 미들웨어가 붙은 뒤로 localStorage를 통한 파일 간 오염을 막는다
+  // persist 미들웨어가 붙은 뒤로 setState도 localStorage에 저장되므로,
+  // 테스트 간 오염을 막기 위해 매번 비운다 (vitest는 파일마다 jsdom을 새로 주므로 파일 간 오염은 없다)
   localStorage.clear();
   useTabStore.setState({ tabs: [], activeId: null });
 });
