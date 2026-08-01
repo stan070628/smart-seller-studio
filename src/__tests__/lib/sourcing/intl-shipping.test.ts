@@ -4,8 +4,12 @@ import {
   volumetricWeightKg,
   shippingFeeKrw,
   allocateOrderCost,
+  estimateIntlShipPerUnitKrw,
+  ASSUMED_UNIT_WEIGHT_KG,
   CUSTOMS_BROKER_FEE_KRW,
+  type IntlShipEstimate,
 } from '@/lib/sourcing/intl-shipping';
+import type { LogisticsSize } from '@/types/shortlist';
 
 describe('volumetricWeightKg', () => {
   it('가로×세로×높이 ÷ 6000이다', () => {
@@ -90,5 +94,58 @@ describe('allocateOrderCost', () => {
     });
     expect(r.items[0].dutiableFreightPerUnitKrw).toBe(1528);
     expect(r.items[0].perUnitKrw).toBe(3728);
+  });
+});
+
+/**
+ * estimateIntlShipPerUnitKrw는 수량이 0 이하면 null을 반환한다(전용 케이스가 따로 있다).
+ * 정상 수량 케이스에서는 null이 아님을 먼저 단언하고 값을 꺼낸다 —
+ * `!`만 붙이면 회귀 시 "null의 속성을 읽을 수 없다"로 원인이 흐려진다.
+ */
+function estimate(size: LogisticsSize, qty: number): IntlShipEstimate {
+  const r = estimateIntlShipPerUnitKrw(size, qty);
+  expect(r).not.toBeNull();
+  return r as IntlShipEstimate;
+}
+
+describe('estimateIntlShipPerUnitKrw', () => {
+  it('극소형 30개 — 9kg 구간 15,980원을 30으로 나눈다', () => {
+    const r = estimate('xsmall', 30);
+    expect(r.billedKg).toBe(9);
+    expect(r.totalKrw).toBe(15980);
+    expect(r.perUnitKrw).toBe(533);
+    expect(r.extrapolated).toBe(false);
+  });
+
+  it('사입 수량이 늘면 개당이 싸진다 — 요율이 무게에 체감하기 때문', () => {
+    const q10 = estimate('xsmall', 10).perUnitKrw;
+    const q30 = estimate('xsmall', 30).perUnitKrw;
+    const q50 = estimate('xsmall', 50).perUnitKrw;
+    expect(q10).toBe(743);
+    expect(q30).toBe(533);
+    expect(q50).toBe(464);
+    expect(q10).toBeGreaterThan(q30);
+    expect(q30).toBeGreaterThan(q50);
+  });
+
+  it('요율표를 넘어서면 외삽 표시를 세운다', () => {
+    // 극소형 100개 = 30kg. 표는 15.5kg까지다
+    const r = estimate('xsmall', 100);
+    expect(r.extrapolated).toBe(true);
+    expect(r.perUnitKrw).toBe(397);
+  });
+
+  it('사이즈마다 가정 무게가 다르다', () => {
+    expect(ASSUMED_UNIT_WEIGHT_KG.xsmall).toBe(0.3);
+    expect(ASSUMED_UNIT_WEIGHT_KG.small).toBe(1.0);
+    expect(ASSUMED_UNIT_WEIGHT_KG.medium).toBe(3.0);
+    // 같은 수량이면 무거운 사이즈가 비싸다
+    const q = 30;
+    expect(estimate('medium', q).perUnitKrw).toBeGreaterThan(estimate('xsmall', q).perUnitKrw);
+  });
+
+  it('수량이 0 이하면 계산하지 않는다', () => {
+    expect(estimateIntlShipPerUnitKrw('xsmall', 0)).toBeNull();
+    expect(estimateIntlShipPerUnitKrw('xsmall', -1)).toBeNull();
   });
 });

@@ -195,15 +195,18 @@ export default function SupplierCompare({
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const ship = item.intlShipPerUnit ?? 0;
   const saved = item.buyKrwTotal !== null && item.orderQty1688 !== null;
 
   const cost = saved
     ? calc1688UnitCost({
         buyKrwTotal: item.buyKrwTotal!,
         orderQty: item.orderQty1688!,
-        // 입력 필드명이 DB 컬럼명(intlShipPerUnit)과 일부러 다르다. 여기서 명시적으로 옮긴다
-        intlShipPerUnitKrw: ship,
+        // 국제배송비 환산의 분모다. 1688 주문 수량(샘플이면 2~3개)이 아니라 사입 예정 수량이다
+        sourcingOrderQty: item.orderQty,
+        // 입력 필드명이 DB 컬럼명(intlShipPerUnit)과 일부러 다르다. 여기서 명시적으로 옮긴다.
+        // null을 0으로 접지 않는 이유: 미입력이어야 추정이 작동한다.
+        // 0으로 접으면 "사람이 0이라고 못 박은 값"이 되어 추정이 막힌다.
+        intlShipPerUnitKrw: item.intlShipPerUnit,
         itemName: item.title,
         logisticsSize: item.logisticsSize,
       })
