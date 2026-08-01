@@ -8,6 +8,7 @@ import AlertList from '@/components/alerts/AlertList';
 import { NAV_ITEMS } from '@/lib/nav-items';
 import TabBar from '@/components/TabBar';
 import { useTabStore } from '@/store/useTabStore';
+import { startTabCacheBridge } from '@/store/tab-cache-bridge';
 
 /**
  * 주소 변화를 탭에 반영한다.
@@ -78,6 +79,9 @@ export default function AppShell({
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [showAlerts]);
+
+  // 탭이 사라지면 그 라우트의 캐시를 해제한다
+  useEffect(() => startTabCacheBridge(), []);
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
