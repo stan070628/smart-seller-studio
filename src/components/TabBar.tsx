@@ -135,8 +135,10 @@ export default function TabBar() {
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: 6,
-              padding: '0 10px 0 12px',
+              // 라벨과 닫기 버튼이 붙어 있으면 탭을 누르려다 ✕를 누른다.
+              // 간격과 좌우 여백을 함께 벌려 오조작을 줄인다.
+              gap: 10,
+              padding: '0 12px 0 14px',
               fontSize: 12,
               fontWeight: active ? 600 : 400,
               color: active ? C.text : C.textSub,
@@ -173,7 +175,9 @@ export default function TabBar() {
                 color: C.textMuted,
                 fontSize: 13,
                 lineHeight: 1,
-                padding: '2px 3px',
+                // 눌러야 할 곳을 키운다. 작으면 겨냥이 어렵고 빗나가면 탭이 눌린다
+                padding: '5px 7px',
+                borderRadius: 4,
               }}
             >
               ✕
