@@ -9,6 +9,8 @@ import { NAV_ITEMS } from '@/lib/nav-items';
 import TabBar from '@/components/TabBar';
 import { useTabStore } from '@/store/useTabStore';
 import { startTabCacheBridge } from '@/store/tab-cache-bridge';
+import useEditorStore from '@/store/useEditorStore';
+import { useListingStore } from '@/store/useListingStore';
 
 /**
  * 주소 변화를 탭에 반영한다.
@@ -67,6 +69,17 @@ export default function AppShell({
     fetchUnreadCount();
     const id = setInterval(fetchUnreadCount, POLL_INTERVAL_MS);
     return () => clearInterval(id);
+  }, []);
+
+  // 에디터·상품등록 스토어는 persist에 skipHydration: true를 줬다 — 두 스토어 모두
+  // app/editor, app/listing 아래(서버 렌더 트리)에서 쓰이는데, 저장값을 store 생성
+  // 시점에 동기로 복원하면 서버가 그린 기본값과 클라이언트 첫 렌더가 어긋나 하이드레이션이
+  // 깨진다(계산기 82de74fe에서 지연 초기화로 같은 문제를 겪었다). 마운트 이후(커밋 이후)
+  // 이 effect에서 한 번 복원해 첫 렌더는 항상 기본값으로 서버와 맞춘다.
+  // AppShell은 이 두 라우트를 포함한 모든 레이아웃에서 쓰이므로 여기 한 곳이면 충분하다.
+  useEffect(() => {
+    useEditorStore.persist.rehydrate();
+    useListingStore.persist.rehydrate();
   }, []);
 
   useEffect(() => {

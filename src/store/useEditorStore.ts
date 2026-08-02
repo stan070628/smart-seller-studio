@@ -4,7 +4,7 @@
  */
 
 import { create } from 'zustand';
-import { devtools } from 'zustand/middleware';
+import { createJSONStorage, devtools, persist, type PersistOptions } from 'zustand/middleware';
 import type { UploadedImage, ImageAnalysisResult } from '@/types/editor';
 import type { GeneratedFrame, FrameType } from '@/types/frames';
 import { type Theme, type ThemeKey, THEMES, DEFAULT_THEME } from '@/lib/themes';
@@ -13,6 +13,53 @@ import type { ProductExtractResult } from '@/lib/ai/prompts/product-extract';
 /** 고유 프레임 인스턴스 ID 생성 */
 function genFrameId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** localStorage 키. sss_ 접두사 관례를 따른다 (sss_tabs, sss_calc_* 등과 충돌 방지) */
+export const EDITOR_STORAGE_KEY = 'sss_editor';
+
+/**
+ * localStorage에 저장하는 부분 — 텍스트·설정값만 골라 담는 화이트리스트다.
+ * 아래 필드는 의도적으로 제외한다 (코드로 확인함, 27ade7f 조사 기준):
+ * - uploadedImages: File 객체(직렬화 불가) + blob URL(새로고침 후 깨짐)을 담는다
+ *   (src/types/editor.ts의 UploadedImage.url 주석: "브라우저 내에서만 유효한 ObjectURL")
+ * - frameImages: 슬롯 값이 blob:(로컬 업로드, FrameCard.tsx의 URL.createObjectURL) ·
+ *   data:(AI 생성 base64, generateFrameImage의 dataUrl) · https:(스토리지 URL)로 섞여 있다.
+ *   blob은 새로고침 후 깨진 이미지가 되고 data:는 용량을 금방 채운다 — 통째로 제외한다
+ * - frameImageFit / frameImageSettings: 위 두 필드에 딸린 슬롯별 설정이라
+ *   이미지 없이 남아봐야 무의미한 고아 데이터가 된다
+ * - isGenerating/isAnalyzing/isExtracting/isRecording/generatingImageForFrame: 로딩 플래그.
+ *   새로고침 시점엔 어떤 요청도 실제로 진행 중이지 않으므로 저장할 이유가 없다
+ * - selectedFrameType/selectedFrameId: 인스펙터 선택 상태, 세션을 넘길 만한 가치가 없다
+ */
+export type PersistedEditorState = {
+  reviewText: string;
+  productDescription: string;
+  frames: GeneratedFrame[];
+  theme: Theme;
+  imageAnalysis: ImageAnalysisResult | null;
+  productExtract: ProductExtractResult | null;
+  promptOutdatedFrames: FrameType[];
+};
+
+/** 저장값이 GeneratedFrame 배열의 모양인지 확인한다. 아니면 복원을 포기한다. */
+function isGeneratedFrameArray(value: unknown): value is GeneratedFrame[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (f) =>
+        f !== null &&
+        typeof f === 'object' &&
+        typeof (f as GeneratedFrame).id === 'string' &&
+        typeof (f as GeneratedFrame).frameType === 'string' &&
+        typeof (f as GeneratedFrame).headline === 'string' &&
+        typeof (f as GeneratedFrame).metadata === 'object',
+    )
+  );
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((v) => typeof v === 'string');
 }
 
 interface EditorStore {
@@ -84,8 +131,74 @@ interface EditorStore {
   setIsRecording: (value: boolean) => void;
 }
 
+/**
+ * persist 설정. useTabStore(sss_tabs)를 그대로 따른다:
+ * - storage.setItem은 실패(용량 초과·사파리 프라이빗 모드)를 삼킨다.
+ *   zustand는 setItem의 throw를 액션 호출자까지 전파하므로 여기서 막지 않으면
+ *   에디터의 모든 액션 호출이 QuotaExceededError로 죽는다.
+ * - skipHydration: true — 이 스토어는 Next.js 서버 렌더 트리(app/editor/page.tsx)
+ *   아래에서 쓰인다. store 생성 시점에 동기로 localStorage를 복원하면 서버가 그린
+ *   기본값과 클라이언트 첫 렌더가 달라져 하이드레이션이 깨진다(계산기 82de74fe에서
+ *   같은 문제를 지연 초기화로 겪었다). 복원은 AppShell의 useEffect에서
+ *   마운트 이후 한 번 rehydrate()로 수행한다.
+ */
+export const editorPersistOptions: PersistOptions<EditorStore, PersistedEditorState> = {
+  name: EDITOR_STORAGE_KEY,
+  skipHydration: true,
+  storage: createJSONStorage(() => ({
+    getItem: (name) => localStorage.getItem(name),
+    setItem: (name, value) => {
+      try {
+        localStorage.setItem(name, value);
+      } catch {
+        // 용량 초과·프라이빗 모드 등. 이번 세션은 저장 없이 동작한다
+      }
+    },
+    removeItem: (name) => localStorage.removeItem(name),
+  })),
+  partialize: (s) => ({
+    reviewText: s.reviewText,
+    productDescription: s.productDescription,
+    frames: s.frames,
+    theme: s.theme,
+    imageAnalysis: s.imageAnalysis,
+    productExtract: s.productExtract,
+    promptOutdatedFrames: Array.from(s.promptOutdatedFrames),
+  }),
+  merge: (persisted, current) => {
+    const saved = persisted as Partial<PersistedEditorState> | undefined;
+    if (!saved) return current;
+
+    return {
+      ...current,
+      reviewText: typeof saved.reviewText === 'string' ? saved.reviewText : current.reviewText,
+      productDescription:
+        typeof saved.productDescription === 'string'
+          ? saved.productDescription
+          : current.productDescription,
+      frames: isGeneratedFrameArray(saved.frames) ? saved.frames : current.frames,
+      theme:
+        saved.theme && typeof saved.theme === 'object' && typeof saved.theme.key === 'string'
+          ? saved.theme
+          : current.theme,
+      imageAnalysis:
+        saved.imageAnalysis && typeof saved.imageAnalysis === 'object'
+          ? saved.imageAnalysis
+          : current.imageAnalysis,
+      productExtract:
+        saved.productExtract && typeof saved.productExtract === 'object'
+          ? saved.productExtract
+          : current.productExtract,
+      promptOutdatedFrames: isStringArray(saved.promptOutdatedFrames)
+        ? new Set(saved.promptOutdatedFrames as FrameType[])
+        : current.promptOutdatedFrames,
+    };
+  },
+};
+
 const useEditorStore = create<EditorStore>()(
   devtools(
+    persist(
     (set, get) => ({
       uploadedImages: [],
       reviewText: '',
@@ -396,6 +509,8 @@ const useEditorStore = create<EditorStore>()(
           'addCustomFrame',
         ),
     }),
+    editorPersistOptions,
+    ),
     { name: 'EditorStore' },
   ),
 );
