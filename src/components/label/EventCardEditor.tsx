@@ -1,11 +1,23 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import EventCardPreview from './EventCardPreview';
 import { generatePdf, printLabel } from '@/lib/label/label-pdf';
 import LabelSaveLoad from './LabelSaveLoad';
+// 계산기(src/components/calculator/persist.ts)의 검증된 SSR-safe localStorage 헬퍼를 재사용한다.
+import { loadCalcState as loadPersistedState, saveCalcState as savePersistedState, CALC_SAVE_DEBOUNCE_MS } from '@/components/calculator/persist';
 
 type Brand = 'starbucks' | 'megacoffee';
+
+const STORAGE_KEY = 'sss_label_event';
+
+interface EventDraft {
+  brand?: Brand;
+  companyName?: string;
+  phone?: string;
+  prizeText?: string;
+  thanksMsg?: string;
+}
 
 const DEFAULT_PRIZE: Record<Brand, string> = {
   starbucks: '100% 전원 스타벅스 아메리카노 기프트콘 증정',
@@ -48,6 +60,25 @@ export default function EventCardEditor() {
     setBrand(b);
     setPrizeText(DEFAULT_PRIZE[b]);
   };
+
+  // 마운트 후 1회 복원. handleBrandChange를 거치면 brand가 바뀔 때 prizeText가
+  // 해당 브랜드의 기본 문구로 재설정되어, 사용자가 직접 고친 경품 문구를 복원 직후
+  // 덮어써버린다. 그래서 여기서는 각 필드를 직접 setter로만 복원한다.
+  useEffect(() => {
+    const saved = loadPersistedState<EventDraft>(STORAGE_KEY);
+    if (saved.brand === 'starbucks' || saved.brand === 'megacoffee') setBrand(saved.brand);
+    if (saved.companyName !== undefined) setCompanyName(saved.companyName);
+    if (saved.phone !== undefined) setPhone(saved.phone);
+    if (saved.prizeText !== undefined) setPrizeText(saved.prizeText);
+    if (saved.thanksMsg !== undefined) setThanksMsg(saved.thanksMsg);
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      savePersistedState(STORAGE_KEY, { brand, companyName, phone, prizeText, thanksMsg });
+    }, CALC_SAVE_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [brand, companyName, phone, prizeText, thanksMsg]);
 
   const handlePdf = async () => {
     if (!previewRef.current) return;
@@ -117,7 +148,7 @@ export default function EventCardEditor() {
               labelType="event"
               currentData={{ brand, companyName, phone, prizeText, thanksMsg }}
               onLoad={(data) => {
-                const d = data as { brand?: Brand; companyName?: string; phone?: string; prizeText?: string; thanksMsg?: string };
+                const d = data as EventDraft;
                 if (d.brand === 'starbucks' || d.brand === 'megacoffee') handleBrandChange(d.brand);
                 if (d.companyName !== undefined) setCompanyName(d.companyName);
                 if (d.phone !== undefined) setPhone(d.phone);

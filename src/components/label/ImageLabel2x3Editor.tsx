@@ -1,9 +1,22 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import ImageLabel2x3Preview from './ImageLabel2x3Preview';
 import LabelSaveLoad from './LabelSaveLoad';
 import { generatePdf, printLabel } from '@/lib/label/label-pdf';
+// 계산기(src/components/calculator/persist.ts)의 검증된 SSR-safe localStorage 헬퍼를 재사용한다.
+import { loadCalcState as loadPersistedState, saveCalcState as savePersistedState, CALC_SAVE_DEBOUNCE_MS } from '@/components/calculator/persist';
+
+const STORAGE_KEY = 'sss_label_img2x3';
+
+interface ImageDraft {
+  // imageUrl은 /api/label/upload-image가 Supabase Storage에 업로드한 뒤 반환하는
+  // 원격 URL이다(resizeImage 내부의 URL.createObjectURL은 치수 측정 직후 즉시 revoke되고
+  // 절대 state로 흘러들어오지 않는다) — blob: URL이 아니므로 새로고침 후에도 유효하다.
+  imageUrl?: string;
+  imagePosition?: { x: number; y: number };
+  imageZoom?: number;
+}
 
 const C = { border: '#e5e7eb', bg: '#f9fafb' };
 
@@ -33,6 +46,21 @@ export default function ImageLabel2x3Editor() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 마운트 후 1회 복원.
+  useEffect(() => {
+    const saved = loadPersistedState<ImageDraft>(STORAGE_KEY);
+    if (saved.imageUrl) setImageUrl(saved.imageUrl);
+    if (saved.imagePosition) setImagePosition(saved.imagePosition);
+    if (typeof saved.imageZoom === 'number') setImageZoom(saved.imageZoom);
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      savePersistedState(STORAGE_KEY, { imageUrl, imagePosition, imageZoom });
+    }, CALC_SAVE_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [imageUrl, imagePosition, imageZoom]);
 
   const resizeImage = (file: File): Promise<Blob> =>
     new Promise((resolve, reject) => {

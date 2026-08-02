@@ -1,10 +1,24 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import NutritionLabel2x3Preview from './NutritionLabel2x3Preview';
 import type { NutritionRow } from './nutrition-types';
 import LabelSaveLoad from './LabelSaveLoad';
 import { generatePdf, printLabel } from '@/lib/label/label-pdf';
+// 계산기(src/components/calculator/persist.ts)의 검증된 SSR-safe localStorage 헬퍼를 재사용한다.
+import { loadCalcState as loadPersistedState, saveCalcState as savePersistedState, CALC_SAVE_DEBOUNCE_MS } from '@/components/calculator/persist';
+
+const STORAGE_KEY = 'sss_label_nutrition';
+
+interface NutritionDraft {
+  productName?: string; itemInfo?: string; foodType?: string;
+  importer?: string; manufacturer?: string; originCountry?: string;
+  contentAmount?: string; expiryDate?: string; storageMethod?: string;
+  ingredients?: string; highlights?: string; returnAddress?: string; caution?: string;
+  unitCount?: string; unitWeight?: string; unitUnit?: string;
+  servingSize?: string; calories?: string; rows?: NutritionRow[];
+  footerText?: string;
+}
 
 const C = { border: '#e5e7eb', bg: '#f9fafb' };
 
@@ -80,6 +94,55 @@ export default function NutritionLabel2x3Editor() {
 
   const previewRef = useRef<HTMLDivElement>(null);
 
+  // 저장/불러오기 버튼(LabelSaveLoad)과 자동 복원(useEffect) 양쪽에서 쓰는 공용 적용 함수.
+  const applyDraft = (d: NutritionDraft) => {
+    if (d.productName !== undefined) setProductName(d.productName);
+    if (d.itemInfo !== undefined) setItemInfo(d.itemInfo);
+    if (d.foodType !== undefined) setFoodType(d.foodType);
+    if (d.importer !== undefined) setImporter(d.importer);
+    if (d.manufacturer !== undefined) setManufacturer(d.manufacturer);
+    if (d.originCountry !== undefined) setOriginCountry(d.originCountry);
+    if (d.contentAmount !== undefined) setContentAmount(d.contentAmount);
+    if (d.expiryDate !== undefined) setExpiryDate(d.expiryDate);
+    if (d.storageMethod !== undefined) setStorageMethod(d.storageMethod);
+    if (d.ingredients !== undefined) setIngredients(d.ingredients);
+    if (d.highlights !== undefined) setHighlights(d.highlights);
+    if (d.returnAddress !== undefined) setReturnAddress(d.returnAddress);
+    if (d.caution !== undefined) setCaution(d.caution);
+    if (d.unitCount !== undefined) setUnitCount(d.unitCount);
+    if (d.unitWeight !== undefined) setUnitWeight(d.unitWeight);
+    if (d.unitUnit !== undefined) setUnitUnit(d.unitUnit);
+    if (d.servingSize !== undefined) setServingSize(d.servingSize);
+    if (d.calories !== undefined) setCalories(d.calories);
+    if (d.rows) setRows(d.rows);
+    if (d.footerText !== undefined) setFooterText(d.footerText);
+  };
+
+  // 마운트 후 1회 복원. 서버 첫 렌더는 항상 빈 값이어야 하이드레이션이 어긋나지 않는다.
+  useEffect(() => {
+    const saved = loadPersistedState<NutritionDraft>(STORAGE_KEY);
+    if (Object.keys(saved).length > 0) applyDraft(saved);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 마운트 시 1회만 복원
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      savePersistedState(STORAGE_KEY, {
+        productName, itemInfo, foodType, importer, manufacturer,
+        originCountry, contentAmount, expiryDate, storageMethod,
+        ingredients, highlights, returnAddress, caution,
+        unitCount, unitWeight, unitUnit,
+        servingSize, calories, rows, footerText,
+      });
+    }, CALC_SAVE_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [
+    productName, itemInfo, foodType, importer, manufacturer, originCountry,
+    contentAmount, expiryDate, storageMethod, ingredients, highlights,
+    returnAddress, caution, unitCount, unitWeight, unitUnit,
+    servingSize, calories, rows, footerText,
+  ]);
+
   const applySubdivision = () => {
     const count = parseInt(unitCount, 10);
     const weight = parseFloat(unitWeight);
@@ -141,37 +204,7 @@ export default function NutritionLabel2x3Editor() {
                 unitCount, unitWeight, unitUnit,
                 servingSize, calories, rows, footerText,
               }}
-              onLoad={(data) => {
-                const d = data as {
-                  productName?: string; itemInfo?: string; foodType?: string;
-                  importer?: string; manufacturer?: string; originCountry?: string;
-                  contentAmount?: string; expiryDate?: string; storageMethod?: string;
-                  ingredients?: string; highlights?: string; returnAddress?: string; caution?: string;
-                  unitCount?: string; unitWeight?: string; unitUnit?: string;
-                  servingSize?: string; calories?: string; rows?: NutritionRow[];
-                  footerText?: string;
-                };
-                if (d.productName !== undefined) setProductName(d.productName);
-                if (d.itemInfo !== undefined) setItemInfo(d.itemInfo);
-                if (d.foodType !== undefined) setFoodType(d.foodType);
-                if (d.importer !== undefined) setImporter(d.importer);
-                if (d.manufacturer !== undefined) setManufacturer(d.manufacturer);
-                if (d.originCountry !== undefined) setOriginCountry(d.originCountry);
-                if (d.contentAmount !== undefined) setContentAmount(d.contentAmount);
-                if (d.expiryDate !== undefined) setExpiryDate(d.expiryDate);
-                if (d.storageMethod !== undefined) setStorageMethod(d.storageMethod);
-                if (d.ingredients !== undefined) setIngredients(d.ingredients);
-                if (d.highlights !== undefined) setHighlights(d.highlights);
-                if (d.returnAddress !== undefined) setReturnAddress(d.returnAddress);
-                if (d.caution !== undefined) setCaution(d.caution);
-                if (d.unitCount !== undefined) setUnitCount(d.unitCount);
-                if (d.unitWeight !== undefined) setUnitWeight(d.unitWeight);
-                if (d.unitUnit !== undefined) setUnitUnit(d.unitUnit);
-                if (d.servingSize !== undefined) setServingSize(d.servingSize);
-                if (d.calories !== undefined) setCalories(d.calories);
-                if (d.rows) setRows(d.rows);
-                if (d.footerText !== undefined) setFooterText(d.footerText);
-              }}
+              onLoad={(data) => applyDraft(data as NutritionDraft)}
             />
           </div>
 
