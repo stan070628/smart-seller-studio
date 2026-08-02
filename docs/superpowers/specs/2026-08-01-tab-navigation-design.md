@@ -64,7 +64,7 @@
 
 ```ts
 type Tab = {
-  id: string;          // 라우트 기준 식별자. 예: 'sourcing'
+  id: string;          // 경로 전체(쿼리 제외) 식별자. 예: 'sourcing', 'listing/detail-maker'
   href: string;        // 쿼리 포함 전체 경로. 예: '/sourcing?tab=discovery&page=3'
   label: string;       // 표시명. NAV_ITEMS에서 유도
   lastActiveAt: number;
@@ -88,7 +88,7 @@ type TabState = {
 
 | 규칙 | 동작 |
 |---|---|
-| 식별 단위 | **라우트 1개 = 탭 1개.** 같은 라우트를 다른 쿼리로 열면 새 탭이 아니라 기존 탭의 `href`를 갱신 |
+| 식별 단위 | **라우트 1개 = 탭 1개. 여기서 "라우트"는 경로 전체(쿼리·해시 제외)다** — `/listing`과 `/listing/detail-maker`는 서로 다른 라우트이므로 별개 탭을 갖는다. 같은 라우트를 다른 쿼리로 열면 새 탭이 아니라 기존 탭의 `href`를 갱신 |
 | 자동 추가 | 사이드바 등으로 화면에 진입하면 탭이 없을 때 생성 |
 | 최대 개수 | **`isDirty`가 아닌 탭 기준 6개.** 초과 시 그중 `lastActiveAt`이 가장 오래된 탭을 닫음 |
 | 편집 보호 | `isDirty === true`인 탭은 **상한 계산과 밀어내기 양쪽에서 제외**한다. 편집 내용을 말없이 버리지 않는다 |
@@ -109,7 +109,26 @@ type TabState = {
 
 ### 라벨 유도
 
-`AppShell`의 `NAV_ITEMS`에서 `href` 접두사 매칭으로 라벨을 얻는다. `NAV_ITEMS`를 `src/lib/nav-items.tsx`로 분리해 `TabBar`와 `AppShell`이 함께 쓴다. 매칭 실패 시 경로 첫 세그먼트를 라벨로 쓴다.
+`AppShell`의 `NAV_ITEMS`에서 `href` 접두사 매칭으로 라벨을 얻는다. `NAV_ITEMS`를 `src/lib/nav-items.tsx`로 분리해 `TabBar`와 `AppShell`이 함께 쓴다.
+
+`NAV_ITEMS`에 없는 하위 경로(`/listing/auto-register`, `/sourcing/margin-calculator` 등)는 `nav-items.tsx`의 `EXTRA_LABEL_RULES`에서 라벨을 얻는다. 사이드바에 노출하지 않으면서 탭에서는 구분되는 이름이 필요하기 때문이다. 그마저도 없으면 식별자(경로 전체)를 그대로 라벨로 쓴다.
+
+### 2026-08-02 개정 — 하위 경로도 별개 탭으로
+
+**애초 설계는 탭 식별자로 경로 첫 세그먼트만 썼다.** `/listing`과 `/listing/detail-maker`가 같은 탭 하나(`id: 'listing'`)를 공유하고, 화면이 바뀔 때 라벨만 따라 바뀌는 방식이었다.
+
+이 설계가 실사용에서 버그를 냈다. 상세만들기(`/listing/detail-maker`)로 작업하던 중 사이드바에서 상품등록(`/listing`)을 누르면, 둘 다 같은 탭 id를 두고 경쟁하므로 **상세만들기 탭 자체가 상품등록으로 갈아치워졌다.** 돌아갈 탭이 없어져 작업 화면을 잃는 문제였다 — 화면 상태를 서버에 저장해 주소로 복원 가능하게 만든 앞선 개선들이 이 버그 앞에서 무의미해졌다.
+
+**대응: 탭 식별자를 경로 전체(쿼리 제외)로 바꿨다.** `routeIdOf`가 첫 세그먼트 대신 `normalize(href).id`(경로 전체)를 반환한다. `/listing`과 `/listing/detail-maker`는 이제 별개 탭이다.
+
+| 항목 | 영향 | 대응 |
+|---|---|---|
+| 탭 상한(`MAX_TABS = 6`) | `/listing` 계열 하위 경로만으로 상한에 근접하기 쉬워짐 | **바꾸지 않았다.** 탭 하나가 약 170px, 탭 바 폭이 약 1,060px라 6개면 이미 거의 꽉 찬다(위 경고 참고). 상한을 늘리면 가로 스크롤이 상시 발생하는 화면이 된다. 대신 기존 LRU 밀어내기 + 가로 스크롤에 맡긴다 |
+| 라벨 | `NAV_ITEMS`에 없는 하위 경로(`auto-register`, `import-1688`, `margin-calculator` 등)가 전부 첫 세그먼트("listing", "sourcing")로 표시되어 탭이 분리돼도 구분이 안 됨 | `EXTRA_LABEL_RULES`(경로별 라벨 맵)를 추가. 사이드바에는 안 넣는다 — 이 화면들은 사이드바 메뉴가 아니라 다른 화면에서 진입하는 하위 흐름이라 사이드바에 노출하면 오히려 혼란 |
+| 캐시 키 접두사 | `id`에 슬래시가 들어가면(`listing/detail-maker`) `useCacheStore.invalidate`와 `TabBar`의 `startsWith` 매칭이 깨질까 우려 | 둘 다 순수 문자열 `startsWith` 비교라 슬래시 유무와 무관하게 동작함을 확인. 코드 변경 없음 |
+| 기존 테스트 | "하위 경로는 부모와 탭을 공유한다"를 단언하던 테스트들이 이제 반대 사실을 확인해야 함 | `nav-items.test.ts`·`useTabStore.test.ts`의 해당 테스트를 새 동작(별개 탭 생성) 단언으로 다시 씀. 버그 재현 시나리오를 그대로 딴 회귀 테스트를 추가 |
+
+**이 개정은 위 "탭 스토어" 절과 "라벨 유도" 절의 규칙을 뒤집는다.** 이후 하위 경로를 더 추가할 때는 `EXTRA_LABEL_RULES`에 라벨을 등록하는 것을 잊지 않는다 — 등록하지 않으면 탭에 `경로/전체/세그먼트` 형태의 식별자가 그대로 노출된다.
 
 ## 캐시 스토어와 훅
 

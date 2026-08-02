@@ -1,10 +1,14 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import CosmeticLabel2x3Preview from './CosmeticLabel2x3Preview';
 import LabelSaveLoad from './LabelSaveLoad';
 import type { CosmeticFields } from '@/lib/label/label-templates';
 import { generatePdf, printLabel } from '@/lib/label/label-pdf';
+// 계산기(src/components/calculator/persist.ts)의 검증된 SSR-safe localStorage 헬퍼를 재사용한다.
+import { loadCalcState as loadPersistedState, saveCalcState as savePersistedState, CALC_SAVE_DEBOUNCE_MS } from '@/components/calculator/persist';
+
+const STORAGE_KEY = 'sss_label_cosmetic';
 
 const C = { border: '#e5e7eb', bg: '#f9fafb' };
 
@@ -143,6 +147,17 @@ function SoapSection({
 export default function CosmeticLabel2x3Editor() {
   const [fields, setFields] = useState<CosmeticFields>(EMPTY_FIELDS);
   const previewRef = useRef<HTMLDivElement>(null);
+
+  // 마운트 후 1회 복원. 저장된 값이 없으면 EMPTY_FIELDS(플로럴 컬렉션 기본값)를 그대로 쓴다.
+  useEffect(() => {
+    const saved = loadPersistedState<Partial<CosmeticFields>>(STORAGE_KEY);
+    if (Object.keys(saved).length > 0) setFields((prev) => ({ ...prev, ...saved }));
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => savePersistedState(STORAGE_KEY, fields), CALC_SAVE_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [fields]);
 
   const set = <K extends keyof CosmeticFields>(key: K, value: CosmeticFields[K]) =>
     setFields((prev) => ({ ...prev, [key]: value }));

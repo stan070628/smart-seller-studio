@@ -20,6 +20,14 @@ export interface CacheEntry {
 export interface CacheState {
   entries: Record<string, CacheEntry>;
   scroll: Record<string, number>;
+  /**
+   * 화면 UI 상태 전용 슬라이스 (펼침 목록·선택 항목 등).
+   * `entries`(데이터 캐시)와 반드시 분리한다 — 같은 키 공간에 두면
+   * `invalidate('orders:*')`로 목록을 새로고침할 때마다 펼침 상태까지
+   * 초기화된다. 이 슬라이스는 `invalidate`가 손대지 않고, 탭이 닫힐 때만
+   * `clearUi`로 지운다 (useTabUiState, tab-cache-bridge 참고).
+   */
+  ui: Record<string, unknown>;
   setEntry(key: string, data: unknown): void;
   setError(key: string, error: string): void;
   /**
@@ -28,9 +36,12 @@ export interface CacheState {
    * 조회 오류 상태와도 무관하기 때문이다.
    */
   setEntryLocal(key: string, data: unknown): void;
-  /** 정확한 키 또는 `orders:*` 형태의 접두사 패턴 */
+  /** 정확한 키 또는 `orders:*` 형태의 접두사 패턴. `entries`·`scroll`만 지운다 */
   invalidate(pattern: string): void;
   setScroll(key: string, y: number): void;
+  setUi(key: string, value: unknown): void;
+  /** 정확한 키 또는 `orders:*` 형태의 접두사 패턴. `ui`만 지운다 */
+  clearUi(pattern: string): void;
 }
 
 /**
@@ -48,6 +59,7 @@ export const useCacheStore = create<CacheState>()(
     (set) => ({
       entries: {},
       scroll: {},
+      ui: {},
 
       setEntry: (key, data) =>
         set(
@@ -118,6 +130,18 @@ export const useCacheStore = create<CacheState>()(
 
       setScroll: (key, y) =>
         set((s) => ({ scroll: { ...s.scroll, [key]: y } }), false, 'cache/setScroll'),
+
+      setUi: (key, value) =>
+        set((s) => ({ ui: { ...s.ui, [key]: value } }), false, 'cache/setUi'),
+
+      clearUi: (pattern) =>
+        set(
+          (s) => ({
+            ui: Object.fromEntries(Object.entries(s.ui).filter(([k]) => !matches(k, pattern))),
+          }),
+          false,
+          'cache/clearUi',
+        ),
     }),
     { name: 'CacheStore' },
   ),

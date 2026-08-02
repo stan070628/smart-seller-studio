@@ -4,7 +4,7 @@
  */
 
 export type Tab = {
-  /** 라우트 첫 세그먼트. 탭의 고유 식별자 */
+  /** 경로 전체(쿼리·해시 제외). 탭의 고유 식별자 — routeIdOf 참고 */
   id: string;
   /** 쿼리스트링을 포함한 전체 경로 */
   href: string;

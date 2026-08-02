@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import LabelEditor from './LabelEditor';
 import EventCardEditor from './EventCardEditor';
 import ImageLabel2x2Editor from './ImageLabel2x2Editor';
@@ -9,13 +9,39 @@ import QualityLabel2x3Editor from './QualityLabel2x3Editor';
 import CosmeticLabel2x3Editor from './CosmeticLabel2x3Editor';
 import ImageLabel2x3Editor from './ImageLabel2x3Editor';
 import ImageLabel3x3Editor from './ImageLabel3x3Editor';
+// 계산기(src/components/calculator/persist.ts)에서 검증된 SSR-safe localStorage 헬퍼를 그대로 재사용한다.
+// 라벨 전용으로 파일을 옮기면 계산기 쪽 8개 파일의 import까지 고쳐야 해서, 이름만 라벨 맥락에 맞게 alias한다.
+import { loadCalcState as loadPersistedState, saveCalcState as savePersistedState } from '@/components/calculator/persist';
 
 const C = { border: '#e5e7eb', bg: '#f9fafb' };
 
 type LabelTab = 'quality' | 'event' | 'image2x2' | 'image2x3' | 'image3x3' | 'nutrition2x3' | 'quality2x3' | 'cosmetic2x3';
 
+const TAB_IDS: LabelTab[] = [
+  'quality', 'event', 'image2x2', 'image2x3', 'image3x3', 'nutrition2x3', 'quality2x3', 'cosmetic2x3',
+];
+
+const ACTIVE_TAB_KEY = 'sss_label_active_tab';
+
+interface ActiveTabDraft {
+  activeTab: LabelTab;
+}
+
 export default function LabelPageWrapper() {
+  // 첫 렌더는 서버와 동일하게 'quality'로 고정한다. 탭 목록 중 어느 것이 보이는가는
+  // 화면 전체 구조를 바꾸는 값이라, 서버 렌더 결과와 다르면 하이드레이션이 어긋난다.
+  // 복원은 마운트 이후 useEffect에서 한 번만 한다.
   const [activeTab, setActiveTab] = useState<LabelTab>('quality');
+
+  useEffect(() => {
+    const saved = loadPersistedState<ActiveTabDraft>(ACTIVE_TAB_KEY);
+    if (saved.activeTab && TAB_IDS.includes(saved.activeTab)) setActiveTab(saved.activeTab);
+  }, []);
+
+  // 탭 전환은 타이핑처럼 빈번하지 않으므로 디바운스 없이 즉시 저장한다 (계산기와 동일한 판단)
+  useEffect(() => {
+    savePersistedState(ACTIVE_TAB_KEY, { activeTab });
+  }, [activeTab]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>

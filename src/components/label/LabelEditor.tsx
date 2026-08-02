@@ -8,8 +8,15 @@ import LabelSaveLoad from './LabelSaveLoad';
 import CoupangProductPicker from './CoupangProductPicker';
 import { generatePdf, printLabel } from '@/lib/label/label-pdf';
 import type { QualityFields } from '@/lib/label/label-templates';
+// 계산기(src/components/calculator/persist.ts)의 검증된 SSR-safe localStorage 헬퍼를 재사용한다.
+import { loadCalcState as loadPersistedState, saveCalcState as savePersistedState, CALC_SAVE_DEBOUNCE_MS } from '@/components/calculator/persist';
 
 const DRAFT_KEY = 'label_editor_draft';
+
+interface LabelEditorDraft {
+  fields?: QualityFields;
+  imageUrl?: string;
+}
 
 const EMPTY_FIELDS: QualityFields = {
   productName: '',
@@ -50,41 +57,32 @@ export default function LabelEditor() {
   const searchParams = useSearchParams();
   const initialProductName = searchParams.get('productName') ?? '';
 
-  const [fields, setFields] = useState<QualityFields>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem(DRAFT_KEY);
-        if (saved) {
-          const parsed = JSON.parse(saved) as { fields?: QualityFields };
-          if (parsed.fields) return { ...parsed.fields, ...(initialProductName ? { productName: initialProductName } : {}) };
-        }
-      } catch { /* ignore */ }
-    }
-    return { ...EMPTY_FIELDS, productName: initialProductName };
-  });
-
-  const [imageUrl, setImageUrl] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem(DRAFT_KEY);
-        if (saved) {
-          const parsed = JSON.parse(saved) as { imageUrl?: string };
-          return parsed.imageUrl ?? '';
-        }
-      } catch { /* ignore */ }
-    }
-    return '';
-  });
+  // 첫 렌더는 서버와 동일해야 한다(하이드레이션 불일치 방지). localStorage 복원은
+  // 마운트 후 useEffect에서 한 번만 한다 — 지연 초기화(useState(() => ...))로 여기서
+  // 바로 localStorage를 읽으면 서버가 보낸 빈 값 HTML과 클라이언트 첫 렌더가 어긋난다.
+  const [fields, setFields] = useState<QualityFields>({ ...EMPTY_FIELDS, productName: initialProductName });
+  const [imageUrl, setImageUrl] = useState<string>('');
 
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // 마운트 후 1회 복원. URL의 productName 쿼리는 저장된 값보다 우선한다.
   useEffect(() => {
-    try {
-      localStorage.setItem(DRAFT_KEY, JSON.stringify({ fields, imageUrl }));
-    } catch { /* ignore */ }
+    const saved = loadPersistedState<LabelEditorDraft>(DRAFT_KEY);
+    if (saved.fields) {
+      setFields({ ...saved.fields, ...(initialProductName ? { productName: initialProductName } : {}) });
+    }
+    if (saved.imageUrl) setImageUrl(saved.imageUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 마운트 시 1회만 복원
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      savePersistedState(DRAFT_KEY, { fields, imageUrl });
+    }, CALC_SAVE_DEBOUNCE_MS);
+    return () => clearTimeout(t);
   }, [fields, imageUrl]);
 
   // 라벨 인쇄용 최적 해상도(1400px)로 자동 리사이즈 → JPEG 변환

@@ -33,6 +33,9 @@ export function startTabCacheBridge(): () => void {
 
     for (const id of gone) {
       useCacheStore.getState().invalidate(`${id}:*`);
+      // 데이터 캐시(invalidate)와 별개 경로. UI 상태(펼침 등)는 탭을 닫을 때만
+      // 지운다 — 새로고침(invalidate)마다 지우면 펼침이 계속 초기화된다.
+      useCacheStore.getState().clearUi(`${id}:*`);
     }
   });
 

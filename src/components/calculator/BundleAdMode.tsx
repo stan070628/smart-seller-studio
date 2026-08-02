@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Plus, Trash2, X, Search, Loader2 } from 'lucide-react';
 import { useListingStore } from '@/store/useListingStore';
 import { calcCoupangWing } from '@/lib/calculator/calculate';
+import { loadCalcState, saveCalcState, CALC_SAVE_DEBOUNCE_MS } from './persist';
 
 // ─── 데이터 모델 ──────────────────────────────────────────────────────────────
 interface BundleProduct {
@@ -18,6 +19,35 @@ interface BundleProduct {
   allocatedAdCost: number;
   netProfit: number;
   marginRate: number;
+}
+
+/** localStorage에 저장하는 상품 목록의 편집 가능한 필드만. allocatedAdCost·netProfit·marginRate는
+ *  매번 useMemo(computed)가 다시 계산하므로 저장 대상이 아니다. */
+type SavedBundleProduct = Pick<
+  BundleProduct,
+  'id' | 'sellerProductId' | 'name' | 'categoryCode' | 'sellingPrice' | 'costPrice' | 'monthlySales'
+>;
+
+const STORAGE_KEY = 'sss_calc_bundle_ad';
+
+interface BundleAdSavedState {
+  totalAdCost: string;
+  products: SavedBundleProduct[];
+}
+
+/** 저장값이 깨졌거나 모양이 바뀐 경우를 대비해 필수 필드 타입을 검증한다 */
+function isValidSavedProduct(p: unknown): p is SavedBundleProduct {
+  if (!p || typeof p !== 'object') return false;
+  const o = p as Record<string, unknown>;
+  return (
+    typeof o.id === 'string' &&
+    typeof o.sellerProductId === 'number' &&
+    typeof o.name === 'string' &&
+    typeof o.categoryCode === 'string' &&
+    typeof o.sellingPrice === 'number' &&
+    typeof o.costPrice === 'number' &&
+    typeof o.monthlySales === 'number'
+  );
 }
 
 // ─── 숫자 포맷 유틸 ───────────────────────────────────────────────────────────
@@ -174,9 +204,40 @@ function ProductPickerModal({ onAdd, onClose }: ProductPickerModalProps) {
 
 // ─── 메인 컴포넌트 ────────────────────────────────────────────────────────────
 export default function BundleAdMode() {
+  // 최초 렌더는 서버 렌더 결과와 동일해야 한다. 상품 목록은 "목록 없음" 안내문과 표 사이를
+  // 구조적으로 오가므로 지연 초기화로 즉시 복원하면 하이드레이션이 깨진다. 저장값은 마운트
+  // 이후 한 번에 복원한다 (모달로 하나씩 조립한 목록이라 이 화면에서 잃으면 가장 아픈 데이터 —
+  // 형태 검증까지 거쳐 안전하게 복원한다).
   const [totalAdCost, setTotalAdCost] = useState<string>('');
   const [products, setProducts] = useState<BundleProduct[]>([]);
   const [showModal, setShowModal] = useState(false);
+
+  useEffect(() => {
+    const saved = loadCalcState<BundleAdSavedState>(STORAGE_KEY);
+    if (typeof saved.totalAdCost === 'string') setTotalAdCost(saved.totalAdCost);
+    const restored = Array.isArray(saved.products) ? saved.products.filter(isValidSavedProduct) : [];
+    if (restored.length > 0) {
+      setProducts(
+        restored.map((p) => ({ ...p, allocatedAdCost: 0, netProfit: 0, marginRate: 0 })),
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 입력값이 바뀌면 디바운스 후 저장한다. 파생값(allocatedAdCost·netProfit·marginRate)은 뺀다.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      saveCalcState(STORAGE_KEY, {
+        totalAdCost,
+        products: products.map(
+          ({ id, sellerProductId, name, categoryCode, sellingPrice, costPrice, monthlySales }) => ({
+            id, sellerProductId, name, categoryCode, sellingPrice, costPrice, monthlySales,
+          }),
+        ),
+      });
+    }, CALC_SAVE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [totalAdCost, products]);
 
   // 총 광고비 숫자
   const totalAdCostNum = Number(totalAdCost.replace(/,/g, '')) || 0;

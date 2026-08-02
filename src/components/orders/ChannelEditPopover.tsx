@@ -1,6 +1,15 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useDraftPersist, loadDraft, clearDraft } from '@/hooks/useDraftPersist';
+import { channelEditDraftKey } from './draft-keys';
+
+interface ChannelEditDraft {
+  spidInput: string;
+  newChannelType: string;
+  newExternalId: string;
+  newUnitMultiplier: string;
+}
 
 interface ChannelEntry {
   id: string;
@@ -60,6 +69,33 @@ export default function ChannelEditPopover({
   const [savingSpid, setSavingSpid] = useState(false);
   const [spidError, setSpidError] = useState<string | null>(null);
   const [spidSaved, setSpidSaved] = useState(false);
+
+  // ── 초안 저장/복원 ──────────────────────────────────────────────
+  // 팝오버 자체(언제 뜨는지)는 CostManagementTab의 channelEditTarget이 관리하고,
+  // anchorEl(버튼 DOM 참조)은 애초에 재마운트 후 그대로 복원할 수 없다 —
+  // 여기서는 상품별로 "타이핑하던 값"만 다음에 같은 상품의 채널 편집을
+  // 다시 열었을 때 되살린다.
+  const draftKey = channelEditDraftKey(product.id);
+
+  useEffect(() => {
+    const saved = loadDraft<ChannelEditDraft>(draftKey);
+    if (saved.spidInput !== undefined) setSpidInput(saved.spidInput);
+    if (saved.newChannelType !== undefined) setNewChannelType(saved.newChannelType);
+    if (saved.newExternalId !== undefined) setNewExternalId(saved.newExternalId);
+    if (saved.newUnitMultiplier !== undefined) setNewUnitMultiplier(saved.newUnitMultiplier);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey]);
+
+  // 저장 성공 시 별도로 clearDraft를 부르지 않는다 — 두 저장(SPID·채널 추가) 모두
+  // 성공하면 관련 입력이 "기본값과 같아짐"(spidInput === initialSpid, newExternalId === '')
+  // 으로 이어져 shouldPersist가 스스로 false가 되고, 이 훅이 다음 디바운스/언마운트
+  // 시점에 알아서 지운다. 여기서 명시적으로 지우면 spid 입력 중 채널을 추가하는 것
+  // 같은 "한쪽만 저장된" 상태의 나머지 초안까지 함께 날아간다.
+  useDraftPersist(
+    draftKey,
+    { spidInput, newChannelType, newExternalId, newUnitMultiplier },
+    spidInput !== initialSpid || newExternalId !== '',
+  );
 
   useEffect(() => {
     const rect = anchorEl.getBoundingClientRect();

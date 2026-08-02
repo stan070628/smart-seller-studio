@@ -15,8 +15,16 @@ describe('routeIdOf', () => {
     expect(routeIdOf('/sourcing?tab=discovery&page=3')).toBe('sourcing');
   });
 
-  it('하위 경로도 첫 세그먼트로 묶는다', () => {
-    expect(routeIdOf('/listing/detail-maker')).toBe('listing');
+  it('하위 경로는 경로 전체를 식별자로 쓴다 — 부모와 별개 탭이 된다', () => {
+    expect(routeIdOf('/listing/detail-maker')).toBe('listing/detail-maker');
+  });
+
+  it('부모와 하위 경로는 서로 다른 식별자를 갖는다', () => {
+    expect(routeIdOf('/listing')).not.toBe(routeIdOf('/listing/detail-maker'));
+  });
+
+  it('쿼리가 붙어도 경로 전체를 식별자로 쓴다', () => {
+    expect(routeIdOf('/listing/detail-maker?draftId=42')).toBe('listing/detail-maker');
   });
 
   it('루트는 dashboard로 본다', () => {
@@ -63,5 +71,28 @@ describe('labelForHref', () => {
 
   it('중복 슬래시를 정규화한다', () => {
     expect(labelForHref('//listing')).toBe('상품등록');
+  });
+
+  it('NAV_ITEMS에 없는 하위 경로는 EXTRA_LABEL_RULES에서 구분되는 라벨을 얻는다', () => {
+    expect(labelForHref('/listing/auto-register')).toBe('쿠팡 자동등록');
+    expect(labelForHref('/listing/import-1688')).toBe('1688에서 가져오기');
+  });
+
+  it('동적 세그먼트가 낀 경로도 EXTRA_LABEL_RULES로 매칭된다', () => {
+    expect(labelForHref('/listing/abc123/detail-maker-pro')).toBe('PRO 상세페이지 만들기');
+  });
+
+  it('형제 하위 경로끼리 라벨이 겹치지 않는다 — 탭이 분리됐을 때 서로 구분돼야 한다', () => {
+    const labels = [
+      labelForHref('/listing/auto-register'),
+      labelForHref('/listing/import-1688'),
+      labelForHref('/listing/detail-maker'),
+    ];
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it('EXTRA_LABEL_RULES가 부모 항목의 접두사 매칭보다 우선한다', () => {
+    // /listing 접두사에 먼저 걸리면 전부 "상품등록"이 되어버린다
+    expect(labelForHref('/listing/auto-register')).not.toBe('상품등록');
   });
 });

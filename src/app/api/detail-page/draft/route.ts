@@ -10,6 +10,16 @@ import { requireAuth } from '@/lib/supabase/auth';
 import { sanitizeProLayout } from '@/lib/detail-page/layout-validator';
 import { deriveShootDraftSummary } from '@/lib/detail-page/shoot-draft';
 
+// 코드 배포와 DB 마이그레이션(100_...creative_state) 적용 시점이 어긋날 수 있다.
+// creative_state 컬럼이 아직 없는 DB에서 이 필드를 참조하면 Postgres가 42703(undefined_column)을
+// 던지는데, 이를 그냥 두면 creative_state 하나 때문에 sections/theme 자동저장·복원 전체가 500으로 죽는다.
+// 그래서 "이 에러가 정확히 creative_state 컬럼 부재로 인한 것인지"만 좁게 판별해 재시도 여부를 결정한다.
+function isMissingCreativeStateColumn(error: unknown): boolean {
+  const e = error as { code?: string; message?: string } | null;
+  if (!e) return false;
+  return e.code === '42703' && typeof e.message === 'string' && e.message.includes('creative_state');
+}
+
 export const DraftUpsertSchema = z.object({
   id: z.string().uuid().optional(),
   listingId: z.string().uuid().optional(),
@@ -18,6 +28,9 @@ export const DraftUpsertSchema = z.object({
   theme: z.record(z.string(), z.unknown()),
   thumbnailUrl: z.string().url().optional(),
   shootSession: z.record(z.string(), z.unknown()).optional(),
+  // 촬영기획(creativeBrief)·스토리보드·참고자료·생성된 썸네일·업로드 이미지·브랜드명/카테고리 등
+  // sections/theme에 속하지 않는 부가 편집 상태를 통째로 담는 확장 슬롯. 100_ 마이그레이션 참고.
+  creativeState: z.record(z.string(), z.unknown()).optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -36,7 +49,7 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) {
     return Response.json({ success: false, error: '입력값 검증 실패', details: parsed.error.flatten().fieldErrors }, { status: 400 });
   }
-  const { id, listingId, productName, sections, theme, thumbnailUrl, shootSession } = parsed.data;
+  const { id, listingId, productName, sections, theme, thumbnailUrl, shootSession, creativeState } = parsed.data;
 
   // claude_layout 섹션은 저장 전 정화(오염 저장 방지). sanitizeProLayout는 { sections, warnings } 반환.
   const safeSections = sections.map((s) =>
@@ -57,12 +70,24 @@ export async function POST(request: NextRequest) {
   if (shootSession !== undefined) {
     (row as Record<string, unknown>).shoot_session = shootSession;
   }
+  if (creativeState !== undefined) {
+    (row as Record<string, unknown>).creative_state = creativeState;
+  }
 
   try {
     const supabase = getSupabaseServerClient();
     if (id) {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('detail_page_drafts').update(row).eq('id', id).eq('user_id', userId).select('id').single();
+      // creative_state 컬럼이 없는(마이그레이션 100 미적용) DB에서는 이 필드를 빼고 한 번 더 시도한다.
+      // 정상 경로(컬럼 존재)에서는 이 분기를 타지 않으므로 매 요청마다 추가 비용은 없다.
+      if (error && isMissingCreativeStateColumn(error) && 'creative_state' in row) {
+        console.warn('[POST /api/detail-page/draft] creative_state 컬럼이 없어 해당 필드를 제외하고 재시도합니다. 마이그레이션 100_detail_page_drafts_creative_state 적용 여부를 확인하세요.', error);
+        const rowWithoutCreativeState: Record<string, unknown> = { ...(row as Record<string, unknown>) };
+        delete rowWithoutCreativeState.creative_state;
+        ({ data, error } = await supabase
+          .from('detail_page_drafts').update(rowWithoutCreativeState).eq('id', id).eq('user_id', userId).select('id').single());
+      }
       // PGRST116 = 행 없음(미소유/부재) → 404. 그 외 DB 오류는 500으로 escalate(로그 가시성 유지).
       if (error) {
         if ((error as { code?: string }).code === 'PGRST116') {
@@ -75,8 +100,15 @@ export async function POST(request: NextRequest) {
       }
       return Response.json({ id: (data as { id: string }).id });
     }
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('detail_page_drafts').insert(row).select('id').single();
+    if (error && isMissingCreativeStateColumn(error) && 'creative_state' in row) {
+      console.warn('[POST /api/detail-page/draft] creative_state 컬럼이 없어 해당 필드를 제외하고 재시도합니다. 마이그레이션 100_detail_page_drafts_creative_state 적용 여부를 확인하세요.', error);
+      const rowWithoutCreativeState: Record<string, unknown> = { ...(row as Record<string, unknown>) };
+      delete rowWithoutCreativeState.creative_state;
+      ({ data, error } = await supabase
+        .from('detail_page_drafts').insert(rowWithoutCreativeState).select('id').single());
+    }
     if (error) throw error;
     return Response.json({ id: (data as { id: string }).id }, { status: 201 });
   } catch (err) {
@@ -123,15 +155,24 @@ export async function GET(request: NextRequest) {
     return Response.json({ success: false, error: '유효하지 않은 listingId 형식입니다.' }, { status: 400 });
   }
 
+  const BASE_SELECT = 'id, listing_id, product_name, sections, theme, thumbnail_url, updated_at, shoot_session';
   try {
     const supabase = getSupabaseServerClient();
     let query = supabase
       .from('detail_page_drafts')
-      .select('id, listing_id, product_name, sections, theme, thumbnail_url, updated_at, shoot_session')
+      .select(`${BASE_SELECT}, creative_state`)
       .eq('user_id', userId);
     query = id ? query.eq('id', id) : query.eq('listing_id', listingId as string);
 
-    const { data, error } = await query.order('updated_at', { ascending: false }).limit(1).maybeSingle();
+    let { data, error } = await query.order('updated_at', { ascending: false }).limit(1).maybeSingle();
+    // creative_state 컬럼이 없는(마이그레이션 100 미적용) DB에서는 그 필드 없이 재조회한다.
+    // 정상 경로(컬럼 존재)에서는 이 분기를 타지 않는다.
+    if (error && isMissingCreativeStateColumn(error)) {
+      console.warn('[GET /api/detail-page/draft] creative_state 컬럼이 없어 해당 필드 없이 재조회합니다. 마이그레이션 100_detail_page_drafts_creative_state 적용 여부를 확인하세요.', error);
+      let fallbackQuery = supabase.from('detail_page_drafts').select(BASE_SELECT).eq('user_id', userId);
+      fallbackQuery = id ? fallbackQuery.eq('id', id) : fallbackQuery.eq('listing_id', listingId as string);
+      ({ data, error } = await fallbackQuery.order('updated_at', { ascending: false }).limit(1).maybeSingle());
+    }
     if (error) throw error;
     if (!data) return Response.json({ draft: null });
 
@@ -140,7 +181,7 @@ export async function GET(request: NextRequest) {
       draft: {
         id: d.id, listingId: d.listing_id, productName: d.product_name,
         sections: d.sections, theme: d.theme, thumbnailUrl: d.thumbnail_url, updatedAt: d.updated_at,
-        shootSession: d.shoot_session,
+        shootSession: d.shoot_session, creativeState: d.creative_state,
       },
     });
   } catch (err) {

@@ -1,11 +1,15 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import QualityLabel2x3Preview from './QualityLabel2x3Preview';
 import QualityFieldsForm from './QualityFieldsForm';
 import LabelSaveLoad from './LabelSaveLoad';
 import type { QualityFields } from '@/lib/label/label-templates';
 import { generatePdf, printLabel } from '@/lib/label/label-pdf';
+// 계산기(src/components/calculator/persist.ts)의 검증된 SSR-safe localStorage 헬퍼를 재사용한다.
+import { loadCalcState as loadPersistedState, saveCalcState as savePersistedState, CALC_SAVE_DEBOUNCE_MS } from '@/components/calculator/persist';
+
+const STORAGE_KEY = 'sss_label_quality2x3';
 
 const C = { border: '#e5e7eb', bg: '#f9fafb' };
 
@@ -27,6 +31,17 @@ const EMPTY_FIELDS: QualityFields = {
 export default function QualityLabel2x3Editor() {
   const [fields, setFields] = useState<QualityFields>(EMPTY_FIELDS);
   const previewRef = useRef<HTMLDivElement>(null);
+
+  // 마운트 후 1회 복원. 저장된 값이 없으면 EMPTY_FIELDS 기본값을 그대로 쓴다.
+  useEffect(() => {
+    const saved = loadPersistedState<Partial<QualityFields>>(STORAGE_KEY);
+    if (Object.keys(saved).length > 0) setFields((prev) => ({ ...prev, ...saved }));
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => savePersistedState(STORAGE_KEY, fields), CALC_SAVE_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [fields]);
 
   const handlePdf = async () => { if (previewRef.current) await generatePdf(previewRef.current); };
   const handlePrint = () => { if (previewRef.current) printLabel(previewRef.current); };

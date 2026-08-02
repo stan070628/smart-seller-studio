@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import { UrlInputStep } from '@/components/listing/auto-register/UrlInputStep';
 import { calcCoupangWing } from '@/lib/calculator/calculate';
 import { resolveCoupangFee } from '@/lib/calculator/coupang-fees';
@@ -62,6 +63,13 @@ function buildVariants(
     originalPrice: defaultOriginal,
     stock: defaultStock,
   }));
+}
+
+// FileReader로 만든 data:// 미리보기, blob: URL은 자동저장 대상에서 제외한다.
+// 직렬화 크기가 크고(사진 1장이 수백 KB~수 MB), 새로고침 후에는 원본 File이 이미 사라져
+// 되살려도 서버에 업로드된 적 없는 임시 문자열일 뿐이다. 원격(http/https) URL만 저장 대상으로 남긴다.
+function remoteOnly(urls: string[]): string[] {
+  return urls.filter((u) => typeof u === 'string' && /^https?:\/\//.test(u));
 }
 
 const INPUT = 'px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-full';
@@ -136,6 +144,9 @@ function cleanEditedDetailHtml(root: HTMLElement): string {
 }
 
 export default function AutoRegisterPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+
   const [urlDone, setUrlDone] = useState(false);
   const [product, setProduct] = useState<NormalizedProduct | null>(null);
   const [mappedFields, setMappedFields] = useState<MappedCoupangFields | null>(null);
@@ -310,6 +321,12 @@ export default function AutoRegisterPage() {
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [draftSaveFeedback, setDraftSaveFeedback] = useState<'saved' | 'error' | null>(null);
   const [draftSaveError, setDraftSaveError] = useState('');
+  // 디바운스 자동저장 상태 표시(수동 저장 버튼의 draftSaveFeedback과는 별개 — 서로 방해하지 않는다)
+  const [autoSaveState, setAutoSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 디바운스 타이머가 아직 발화하지 않은 "저장 대기 중" 페이로드의 최신 스냅샷.
+  // 화면 이동으로 언마운트될 때 이 값이 남아 있으면 즉시 flush한다.
+  const pendingSaveRef = useRef<{ id?: string; productName: string; sourceType?: string; draftData: Record<string, unknown> } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [submitResult, setSubmitResult] = useState<{ sellerProductId: number; wingsUrl: string } | null>(null);
@@ -332,6 +349,22 @@ export default function AutoRegisterPage() {
     fetch('/api/listing/coupang/drafts')
       .then((r) => r.json())
       .then((d: { drafts?: typeof drafts }) => setDrafts(d.drafts ?? []))
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // URL 파라미터로 임시저장 복원 (?draftId=). 상단 탭 바가 주소 전체를 기억하므로,
+  // 다른 화면에 갔다가 돌아오면 아래 draftId→URL 동기화 effect가 남겨둔 이 파라미터로 되돌아온다.
+  // 기존 "임시저장 목록에서 불러오기" UI가 쓰는 handleLoadDraft를 그대로 재사용한다 — 복원 로직을 두 벌 두지 않기 위해서다.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const qDraftId = url.searchParams.get('draftId');
+    if (!qDraftId) return;
+    fetch(`/api/listing/coupang/drafts/${qDraftId}`)
+      .then((r) => r.json())
+      .then((j: { draft?: (typeof drafts)[number] | null }) => {
+        if (j.draft) handleLoadDraft(j.draft);
+      })
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -393,16 +426,24 @@ export default function AutoRegisterPage() {
 
   // ── 임시저장 ──────────────────────────────────────────────────
 
-  async function handleSaveDraft() {
-    setIsSavingDraft(true);
-    const draftData = {
+  // 수동 저장 버튼과 자동저장 둘 다 이 함수로 draftData를 구성한다 — 저장 대상 필드를
+  // 한 곳에서만 정의해 "수동저장엔 있는데 자동저장엔 없는" 불일치를 막는다.
+  // editImages/detailImages는 FileReader가 만든 data:// URL을 걸러내고 원격 URL만 남긴다(remoteOnly).
+  // categorySearch·categoryResults·suggestedPrompts·bulk 입력 버퍼 등 화면 전용/파생 상태는
+  // 의도적으로 제외했다 — 파생값이거나(카테고리 검증 재실행으로 복구 가능) 유실돼도 무해한 임시 버퍼다.
+  function buildDraftData(): Record<string, unknown> {
+    const safeEditImages = remoteOnly(editImages);
+    return {
       name,
       categoryCode,
       brand,
       salePrice,
       originalPrice,
       stock,
-      thumbnail,
+      thumbnail: safeEditImages[0] ?? '', // 구버전 드래프트 호환 필드(단일 슬롯)
+      editImages: safeEditImages, // 썸네일 슬롯 2개 모두 보존
+      editInstruction,
+      customFeeRate,
       detailHtml,
       deliveryMethod,
       deliveryChargeType,
@@ -412,7 +453,7 @@ export default function AutoRegisterPage() {
       returnCode,
       notices,
       tags,
-      detailImages,
+      detailImages: remoteOnly(detailImages),
       manufacturer,
       adultOnly,
       taxType,
@@ -439,29 +480,46 @@ export default function AutoRegisterPage() {
           }
         : {}),
     };
+  }
+
+  // draft 저장 공통 fetch. keepalive를 지정하면 언마운트 이후에도 브라우저가 전송을 보장한다
+  // (unmount flush 전용 useEffect에서 사용). id가 없으면 새로 만들고 있으면 갱신한다.
+  async function persistDraft(
+    payload: { id?: string; productName: string; sourceType?: string; draftData: Record<string, unknown> },
+    opts: { keepalive?: boolean } = {},
+  ): Promise<string> {
+    if (payload.id) {
+      const res = await fetch(`/api/listing/coupang/drafts/${payload.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productName: payload.productName, draftData: payload.draftData }),
+        keepalive: opts.keepalive,
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return payload.id;
+    }
+    const res = await fetch('/api/listing/coupang/drafts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        productName: payload.productName,
+        sourceUrl: undefined,
+        sourceType: payload.sourceType,
+        draftData: payload.draftData,
+      }),
+      keepalive: opts.keepalive,
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const data = (await res.json()) as { id: string };
+    return data.id;
+  }
+
+  async function handleSaveDraft() {
+    setIsSavingDraft(true);
     try {
-      if (draftId) {
-        const res = await fetch(`/api/listing/coupang/drafts/${draftId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ productName: name, draftData }),
-        });
-        if (!res.ok) throw new Error(await res.text());
-      } else {
-        const res = await fetch('/api/listing/coupang/drafts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            productName: name,
-            sourceUrl: undefined,
-            sourceType: product?.source,
-            draftData,
-          }),
-        });
-        if (!res.ok) throw new Error(await res.text());
-        const data = (await res.json()) as { id: string };
-        setDraftId(data.id);
-      }
+      const draftData = buildDraftData();
+      const id = await persistDraft({ id: draftId ?? undefined, productName: name, sourceType: product?.source, draftData });
+      if (!draftId) setDraftId(id);
       // 목록 새로고침
       const listRes = await fetch('/api/listing/coupang/drafts');
       const listData = (await listRes.json()) as { drafts: typeof drafts };
@@ -476,6 +534,62 @@ export default function AutoRegisterPage() {
       setIsSavingDraft(false);
     }
   }
+
+  // 값이 바뀐 뒤 3초간 추가 입력이 없으면 자동으로 임시저장한다 (71개 필드짜리 폼이라
+  // detail-maker의 1.5초보다 여유를 둔다). urlDone 이전에는 실제 입력이 없으므로 저장하지 않는다.
+  // 저장 실패는 조용히 무시한다 — 서버가 죽어도 사용자는 계속 폼을 채울 수 있어야 한다.
+  const AUTO_SAVE_DEBOUNCE_MS = 3000;
+  useEffect(() => {
+    if (!urlDone) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    setAutoSaveState('saving');
+    const draftData = buildDraftData();
+    const payload = { id: draftId ?? undefined, productName: name, sourceType: product?.source, draftData };
+    // 디바운스 대기 중인 최신 페이로드를 기록 — 타이머가 발화하기 전에 언마운트되면
+    // 아래 flush 전용 useEffect가 이 값을 읽어 즉시 저장한다.
+    pendingSaveRef.current = payload;
+    saveTimerRef.current = setTimeout(() => {
+      pendingSaveRef.current = null; // 정상적으로 발화됨 → 더 이상 flush 대상 아님
+      persistDraft(payload)
+        .then((id) => {
+          setDraftId((prev) => prev ?? id);
+          setAutoSaveState('saved');
+        })
+        .catch(() => setAutoSaveState('idle'));
+    }, AUTO_SAVE_DEBOUNCE_MS);
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    urlDone, draftId, product, name, categoryCode, brand, manufacturer, adultOnly, taxType,
+    parallelImported, usedProduct, customFeeRate, salePrice, originalPrice, stock,
+    optionTypes, variants, editImages, editInstruction, detailHtml, detailImages,
+    deliveryMethod, deliveryChargeType, deliveryCharge, outboundCode, returnCode, notices, tags,
+  ]);
+
+  // 화면 이동(라우트 전환)으로 컴포넌트가 언마운트될 때, 디바운스 대기 중이던 마지막 편집을 flush한다.
+  // deps를 []로 둬서 이 cleanup은 "매 편집마다"가 아니라 "진짜 언마운트될 때"만 실행된다.
+  // sendBeacon 대신 fetch(keepalive: true)를 쓴다 — 기존 저장 API가 POST/PUT + JSON body 구조라
+  // Content-Type을 그대로 유지할 수 있고, keepalive만 추가하면 언마운트 이후에도 전송이 보장된다.
+  useEffect(() => {
+    return () => {
+      const pending = pendingSaveRef.current;
+      if (!pending) return;
+      // 언마운트된 컴포넌트에서는 setState(draftId 등)를 호출할 수 없으므로 응답은 읽지 않는다.
+      persistDraft(pending, { keepalive: true }).catch(() => {});
+      pendingSaveRef.current = null;
+    };
+  }, []);
+
+  // draftId가 서버에 발급되면 주소에 반영한다. 탭 바가 주소 전체를 기억하므로,
+  // 다른 화면으로 이동했다가 상품 자동등록으로 돌아오면 위쪽 복원 useEffect(?draftId=)가 자동으로 동작한다.
+  useEffect(() => {
+    if (!draftId) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('draftId') === draftId) return; // 이미 같은 값 → 불필요한 히스토리 조작 방지
+    params.set('draftId', draftId);
+    // push가 아닌 replace: push하면 편집할 때마다(=draftId가 바뀔 때마다) 뒤로가기 히스토리가 쌓인다.
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [draftId, pathname, router]);
 
   // ── 임시저장 불러오기 ────────────────────────────────────────
 
@@ -503,6 +617,9 @@ export default function AutoRegisterPage() {
       usedProduct?: 'NEW' | 'USED';
       optionTypes?: { name: string; values: string[] }[];
       variants?: { itemName: string; attributes: { attributeTypeName: string; attributeValueName: string }[]; salePrice: number; originalPrice: number; stock: number }[];
+      editImages?: string[];
+      editInstruction?: string;
+      customFeeRate?: string;
     };
     setDraftId(draft.id);
     setName(d.name ?? '');
@@ -511,7 +628,15 @@ export default function AutoRegisterPage() {
     setSalePrice(Number(d.salePrice) || 0);
     setOriginalPrice(Number(d.originalPrice) || 0);
     setStock(Number(d.stock) || 100);
-    setEditImages(d.thumbnail ? [d.thumbnail] : []);
+    // editImages(슬롯 2개)가 있으면 우선 복원. 이 필드 추가 이전에 저장된 구버전 드래프트는
+    // thumbnail(슬롯1만) 필드만 있으므로 그쪽으로 폴백한다.
+    if (Array.isArray(d.editImages) && d.editImages.length > 0) {
+      setEditImages(d.editImages);
+    } else {
+      setEditImages(d.thumbnail ? [d.thumbnail] : []);
+    }
+    if (typeof d.editInstruction === 'string') setEditInstruction(d.editInstruction);
+    if (typeof d.customFeeRate === 'string') setCustomFeeRate(d.customFeeRate);
     setDetailHtml(d.detailHtml ?? '');
     setDetailImages(Array.isArray(d.detailImages) ? d.detailImages : []);
     setDeliveryChargeType(d.deliveryChargeType ?? 'FREE');
@@ -2333,7 +2458,14 @@ export default function AutoRegisterPage() {
                 {draftSaveFeedback === 'error' && (
                   <p className="text-xs text-center text-red-600">{draftSaveError || '저장에 실패했습니다'}</p>
                 )}
-                {!draftSaveFeedback && !draftId && (
+                {/* 수동 저장 피드백이 없을 때만 자동저장 상태를 보여준다 — 서로 겹치지 않게 */}
+                {!draftSaveFeedback && autoSaveState === 'saving' && (
+                  <p className="text-xs text-center text-gray-400">자동저장 중...</p>
+                )}
+                {!draftSaveFeedback && autoSaveState === 'saved' && (
+                  <p className="text-xs text-center text-gray-400">자동저장됨 · 다른 화면으로 이동해도 안전합니다</p>
+                )}
+                {!draftSaveFeedback && autoSaveState === 'idle' && !draftId && (
                   <p className="text-xs text-center text-gray-400">임시저장 후 쿠팡에 제출할 수 있습니다</p>
                 )}
               </div>

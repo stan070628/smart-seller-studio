@@ -1,23 +1,50 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { getCoupangCategoryNames, getCoupangFeeRateByCategoryName } from '@/lib/calculator/coupang-fees';
 import { calcCompareAll, type CompareResult } from '@/lib/calculator/calculate';
 import { NumberInput, SelectInput, Card } from './shared';
+import { loadCalcState, saveCalcState, CALC_SAVE_DEBOUNCE_MS } from './persist';
 import { Trophy } from 'lucide-react';
 
 const categories = getCoupangCategoryNames();
 
+const STORAGE_KEY = 'sss_calc_compare';
+
+interface CompareSavedState {
+  costPrice: number;
+  sellingPrice: number;
+  shippingFee: number;
+  category: string;
+}
 
 interface CompareModeProps {
   initialCostPrice?: number;
 }
 
 export default function CompareMode({ initialCostPrice = 0 }: CompareModeProps) {
+  // 최초 렌더는 서버 렌더 결과와 동일해야 한다 (sellingPrice가 결과 테이블 표시 여부를
+  // 구조적으로 바꾼다). 저장값은 마운트 후 한 번에 복원한다.
   const [costPrice, setCostPrice] = useState(initialCostPrice);
   const [sellingPrice, setSellingPrice] = useState(0);
   const [shippingFee, setShippingFee] = useState(3000);
   const [category, setCategory] = useState(categories[0]);
+
+  useEffect(() => {
+    const saved = loadCalcState<CompareSavedState>(STORAGE_KEY);
+    if (typeof saved.costPrice === 'number') setCostPrice(saved.costPrice);
+    if (typeof saved.sellingPrice === 'number') setSellingPrice(saved.sellingPrice);
+    if (typeof saved.shippingFee === 'number') setShippingFee(saved.shippingFee);
+    if (saved.category && categories.includes(saved.category)) setCategory(saved.category);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      saveCalcState(STORAGE_KEY, { costPrice, sellingPrice, shippingFee, category });
+    }, CALC_SAVE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [costPrice, sellingPrice, shippingFee, category]);
 
   const results: CompareResult[] = useMemo(() => {
     if (!sellingPrice) return [];

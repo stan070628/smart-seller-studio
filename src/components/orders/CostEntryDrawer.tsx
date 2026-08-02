@@ -6,6 +6,8 @@ import SaleEntryPanel from './SaleEntryPanel';
 import { calculateSubdivision } from '@/lib/cost-management/subdivision';
 import { toast } from '@/components/ui/toast';
 import { confirmDialog } from '@/components/ui/confirm';
+import { useDraftPersist, loadDraft } from '@/hooks/useDraftPersist';
+import { costEntryDraftKey } from './draft-keys';
 
 interface Entry {
   id: string;
@@ -31,6 +33,38 @@ interface EntryForm {
 
 function emptyForm(): EntryForm {
   return { received_at: new Date().toISOString().slice(0, 10), quantity: '', unit_cost: '', unit_shipping_fee: '0', variant_name: '' };
+}
+
+interface SubForm {
+  received_at: string;
+  boxPrice: string;       // 포장당 가격(원)
+  itemsPerBox: string;    // 포장당 개수(개)
+  boxQuantity: string;    // 포장 수량(개)
+  subUnit: string;
+  unit_shipping_fee: string;
+  unit_rg_shipping_fee: string;
+}
+
+function emptySubForm(subdivisionUnit?: number | null): SubForm {
+  return {
+    received_at: new Date().toISOString().slice(0, 10),
+    boxPrice: '',
+    itemsPerBox: '',
+    boxQuantity: '1',
+    subUnit: subdivisionUnit ? String(subdivisionUnit) : '',
+    unit_shipping_fee: '0',
+    unit_rg_shipping_fee: '0',
+  };
+}
+
+/** localStorage에 저장·복원하는 초안 — "새 입고 건 추가" 진행 중일 때만 의미가 있다.
+ *  기존 건 수정(editingId)은 담지 않는다: 수정은 이미 값이 채워진 행을 잠깐 고치는
+ *  작업이라 되돌리는 비용이 낮고, 서버에서 그 사이 삭제된 건을 가리킬 위험까지
+ *  감수할 이유가 없다. */
+interface CostEntryDraft {
+  entryType: 'normal' | 'subdivision';
+  form: EntryForm;
+  subForm: SubForm;
 }
 
 function fmt(n: number) { return n.toLocaleString('ko-KR'); }
@@ -68,18 +102,32 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
   const [carryoverWarning, setCarryoverWarning] = useState(false);
 
   // 소분 모드 전용 상태
-  const [subForm, setSubForm] = useState({
-    received_at: new Date().toISOString().slice(0, 10),
-    boxPrice: '',       // 포장당 가격(원)
-    itemsPerBox: '',    // 포장당 개수(개)
-    boxQuantity: '1',   // 포장 수량(개)
-    subUnit: subdivisionUnit ? String(subdivisionUnit) : '',
-    unit_shipping_fee: '0',
-    unit_rg_shipping_fee: '0',
-  });
+  const [subForm, setSubForm] = useState<SubForm>(emptySubForm(subdivisionUnit));
   const [carryoverMeta, setCarryoverMeta] = useState({ quantity: 0, unitCost: 0 });
 
   const isSubdivisionProduct = (subdivisionUnit ?? 0) > 0;
+
+  // ── 초안 저장/복원 ──────────────────────────────────────────────
+  // 드로어 자체(열림 상태)는 CostManagementTab의 drawerProductId가 관리하고,
+  // 그 값은 일부러 복원하지 않는다(모달이 갑자기 뜨면 놀란다) — 여기서는
+  // "addingNew=true로 새 입고 건을 쓰던 중" 그 내용만 살린다.
+  const draftKey = costEntryDraftKey(productId);
+
+  useEffect(() => {
+    const saved = loadDraft<CostEntryDraft>(draftKey);
+    if (saved.form || saved.subForm) {
+      setAddingNew(true);
+      setEntryType(isSubdivisionProduct ? (saved.entryType ?? 'subdivision') : (saved.entryType ?? 'normal'));
+      if (saved.form) setForm(saved.form);
+      if (saved.subForm) setSubForm(saved.subForm);
+    }
+    // 마운트 시 한 번만 복원 — 지연 초기화(useState(() => ...))를 쓰지 않고
+    // 마운트 후 effect에서 복원한다(계산기 작업 82de74fe에서 지연 초기화가
+    // 하이드레이션을 깬 교훈).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey]);
+
+  const { clearNow: clearDraftNow } = useDraftPersist(draftKey, { entryType, form, subForm }, addingNew);
 
   const loadEntries = useCallback(async () => {
     setLoading(true);
@@ -166,6 +214,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
         setAddingNew(false);
         setEntryType('normal');
         setForm(emptyForm());
+        clearDraftNow();
       } else {
         toast.error(json.error ?? '저장에 실패했습니다.');
       }
@@ -203,15 +252,8 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
         refreshAll();
         setAddingNew(false);
         setEntryType('normal');
-        setSubForm({
-          received_at: new Date().toISOString().slice(0, 10),
-          boxPrice: '',
-          itemsPerBox: '',
-          boxQuantity: '1',
-          subUnit: subdivisionUnit ? String(subdivisionUnit) : '',
-          unit_shipping_fee: '0',
-          unit_rg_shipping_fee: '0',
-        });
+        setSubForm(emptySubForm(subdivisionUnit));
+        clearDraftNow();
       } else {
         toast.error(json.error ?? '저장에 실패했습니다.');
       }
@@ -429,7 +471,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
                           <button onClick={saveSubdivision} disabled={saving || !subPreview || subPreview.sellablePacks === 0} style={{ padding: '3px 10px', borderRadius: '4px', background: subPreview && subPreview.sellablePacks > 0 ? '#16a34a' : '#d4d4d4', color: subPreview && subPreview.sellablePacks > 0 ? '#fff' : '#71717a', border: 'none', fontSize: '10px', cursor: 'pointer' }}>
                             {saving ? '...' : '저장'}
                           </button>
-                          <button onClick={() => { setAddingNew(false); setEntryType('normal'); }} style={{ padding: '3px 5px', borderRadius: '4px', background: '#f3f4f6', border: 'none', fontSize: '10px', cursor: 'pointer', color: '#27272a' }}>취소</button>
+                          <button onClick={() => { setAddingNew(false); setEntryType('normal'); clearDraftNow(); }} style={{ padding: '3px 5px', borderRadius: '4px', background: '#f3f4f6', border: 'none', fontSize: '10px', cursor: 'pointer', color: '#27272a' }}>취소</button>
                         </div>
                       </td>
                     </tr>
@@ -466,7 +508,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
                           <button onClick={save} disabled={saving || !canSave} style={{ padding: '3px 7px', borderRadius: '4px', background: canSave ? '#16a34a' : '#d4d4d4', color: canSave ? '#fff' : '#71717a', border: 'none', fontSize: '10px', cursor: canSave ? 'pointer' : 'not-allowed' }}>
                             {saving ? '...' : '저장'}
                           </button>
-                          <button onClick={() => { setAddingNew(false); setForm(emptyForm()); }} style={{ padding: '3px 5px', borderRadius: '4px', background: '#f3f4f6', border: 'none', fontSize: '10px', cursor: 'pointer', color: '#27272a' }}>취소</button>
+                          <button onClick={() => { setAddingNew(false); setForm(emptyForm()); clearDraftNow(); }} style={{ padding: '3px 5px', borderRadius: '4px', background: '#f3f4f6', border: 'none', fontSize: '10px', cursor: 'pointer', color: '#27272a' }}>취소</button>
                         </div>
                       </td>
                     </tr>

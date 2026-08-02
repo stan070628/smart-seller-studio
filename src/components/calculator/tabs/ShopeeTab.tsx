@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   SHOPEE_DATA,
   SHOPEE_SERVICE_PROGRAMS,
@@ -9,6 +9,7 @@ import {
 } from '@/lib/calculator/fees';
 import { calcShopee } from '@/lib/calculator/calculate';
 import { NumberInput, SelectInput, ResultPanel, Card } from '../shared';
+import { loadCalcState, saveCalcState, CALC_SAVE_DEBOUNCE_MS } from '../persist';
 
 const countries = Object.keys(SHOPEE_DATA) as ShopeeCountry[];
 const programs = Object.keys(SHOPEE_SERVICE_PROGRAMS) as ShopeeProgram[];
@@ -19,11 +20,30 @@ const DEFAULT_RATES: Record<ShopeeCountry, number> = {
   '태국': 38,
 };
 
+const STORAGE_KEY = 'sss_calc_shopee';
+
+interface ShopeeSavedState {
+  country: ShopeeCountry;
+  costPriceKRW: number;
+  exchangeRate: number;
+  sellingPriceLocal: number;
+  category: string;
+  program: ShopeeProgram;
+  affiliateRate: number;
+  shippingFeeKRW: number;
+  adCostKRW: number;
+  isAdRunning: boolean;
+  conversionRate: number;
+}
+
 interface ShopeeTabProps {
   initialCostPrice?: number;
 }
 
 export default function ShopeeTab({ initialCostPrice = 0 }: ShopeeTabProps) {
+  // 최초 렌더는 서버 렌더 결과와 동일한 기존 기본값을 쓴다. sellingPriceLocal·exchangeRate는
+  // 환산 안내문·result 트리 구조까지 바꾸므로 지연 초기화로 즉시 복원하면 하이드레이션이 깨진다.
+  // 저장값은 마운트 후 한 번에 복원한다.
   const [country, setCountry] = useState<ShopeeCountry>('말레이시아');
   const [costPriceKRW, setCostPriceKRW] = useState(initialCostPrice);
   const [exchangeRate, setExchangeRate] = useState(DEFAULT_RATES['말레이시아']);
@@ -35,6 +55,36 @@ export default function ShopeeTab({ initialCostPrice = 0 }: ShopeeTabProps) {
   const [adCostKRW, setAdCostKRW] = useState(0);
   const [isAdRunning, setIsAdRunning] = useState(false);
   const [conversionRate, setConversionRate] = useState(3);
+
+  useEffect(() => {
+    const saved = loadCalcState<ShopeeSavedState>(STORAGE_KEY);
+    const restoredCountry = saved.country && countries.includes(saved.country) ? saved.country : null;
+    if (restoredCountry) setCountry(restoredCountry);
+    if (typeof saved.costPriceKRW === 'number') setCostPriceKRW(saved.costPriceKRW);
+    if (typeof saved.exchangeRate === 'number') setExchangeRate(saved.exchangeRate);
+    if (typeof saved.sellingPriceLocal === 'number') setSellingPriceLocal(saved.sellingPriceLocal);
+    const categoryCountry = restoredCountry ?? '말레이시아';
+    if (saved.category && Object.keys(SHOPEE_DATA[categoryCountry].commission).includes(saved.category)) {
+      setCategory(saved.category);
+    }
+    if (saved.program && programs.includes(saved.program)) setProgram(saved.program);
+    if (typeof saved.affiliateRate === 'number') setAffiliateRate(saved.affiliateRate);
+    if (typeof saved.shippingFeeKRW === 'number') setShippingFeeKRW(saved.shippingFeeKRW);
+    if (typeof saved.adCostKRW === 'number') setAdCostKRW(saved.adCostKRW);
+    if (typeof saved.isAdRunning === 'boolean') setIsAdRunning(saved.isAdRunning);
+    if (typeof saved.conversionRate === 'number') setConversionRate(saved.conversionRate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      saveCalcState(STORAGE_KEY, {
+        country, costPriceKRW, exchangeRate, sellingPriceLocal, category, program,
+        affiliateRate, shippingFeeKRW, adCostKRW, isAdRunning, conversionRate,
+      });
+    }, CALC_SAVE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [country, costPriceKRW, exchangeRate, sellingPriceLocal, category, program, affiliateRate, shippingFeeKRW, adCostKRW, isAdRunning, conversionRate]);
 
   const countryData = SHOPEE_DATA[country];
   const categoryOptions = Object.keys(countryData.commission);

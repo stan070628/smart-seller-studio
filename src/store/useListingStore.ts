@@ -4,7 +4,7 @@
  */
 
 import { create } from 'zustand';
-import { devtools } from 'zustand/middleware';
+import { createJSONStorage, devtools, persist, type PersistOptions } from 'zustand/middleware';
 import type { PlatformId, ProductListing } from '@/types/listing';
 import type { ProductOptions } from '@/types/product-option';
 import { parseSpecText } from '@/lib/utils/parseSpecText';
@@ -426,8 +426,121 @@ interface ListingStore {
   resetBothRegistration: () => void;
 }
 
+// ─── persist 설정 ────────────────────────────────────────────────────────────
+
+/** localStorage 키. sss_ 접두사 관례를 따른다 (sss_tabs, sss_calc_* 등과 충돌 방지) */
+export const LISTING_STORAGE_KEY = 'sss_listing_draft';
+
+/**
+ * sharedDraft에서 저장 대상이 아닌 필드를 뺀 모양.
+ * - rawImageFiles / detailImageFiles: File[] — JSON 직렬화 불가. 저장하면 {}가 되고
+ *   복원 후 업로드가 실패한다 (코드로 확인: useListingStore.ts의 SharedDraft 정의)
+ * - optionsLoading / optionsError: 도매꾹 옵션 조회의 로딩 플래그. 새로고침 시점엔
+ *   실제로 진행 중인 요청이 없으므로 저장할 이유가 없다 (true로 저장되면 로딩 표시가 굳는다)
+ *
+ * thumbnailImages/detailImages/pickedDetailImages는 실제로는 업로드 API가 돌려준
+ * 원격 URL만 담긴다 (ImageInputSection의 blob: objectURL은 컴포넌트 로컬 상태일 뿐
+ * sharedDraft로 올라오지 않음 — 코드로 확인함). 다만 방어적으로 http(s) 외 값은
+ * partialize에서 걸러낸다.
+ */
+type PersistedSharedDraft = Omit<
+  SharedDraft,
+  'rawImageFiles' | 'detailImageFiles' | 'optionsLoading' | 'optionsError'
+>;
+
+interface PersistedListingState {
+  sharedDraft: PersistedSharedDraft;
+}
+
+/** blob:/data: 등 세션에 묶인 값을 걸러내고 http(s) URL만 남긴다 */
+function keepRemoteUrls(urls: unknown): string[] {
+  if (!Array.isArray(urls)) return [];
+  return urls.filter((u): u is string => typeof u === 'string' && /^https?:\/\//i.test(u));
+}
+
+/** 새로고침 시점엔 실제로 진행 중인 요청이 없는 일시 상태 — 복원 시 idle로 되돌린다 */
+const IN_FLIGHT_DETAIL_STATUSES: ReadonlySet<string> = new Set([
+  'studio_editing',
+  'analyzing',
+  'generating',
+]);
+
+/** 저장값이 최소한 sharedDraft 모양인지 확인한다. 아니면 복원을 포기한다. */
+function isPersistedSharedDraftShape(value: unknown): value is PersistedSharedDraft {
+  if (value === null || typeof value !== 'object') return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.name === 'string' &&
+    Array.isArray(v.thumbnailImages) &&
+    Array.isArray(v.detailImages) &&
+    Array.isArray(v.tags) &&
+    typeof v.detailPageStatus === 'string' &&
+    typeof v.currentStep === 'number'
+  );
+}
+
+/**
+ * persist 설정. useTabStore(sss_tabs)를 그대로 따른다:
+ * - storage.setItem은 실패(용량 초과·사파리 프라이빗 모드)를 삼킨다
+ * - skipHydration: true — 이 스토어는 Next.js 서버 렌더 트리(app/listing/layout.tsx)
+ *   아래에서 쓰인다. 동기 복원은 서버 기본값과 클라이언트 첫 렌더를 어긋나게 해
+ *   하이드레이션을 깬다. 복원은 AppShell의 useEffect에서 마운트 이후 rehydrate()로 한다.
+ */
+export const listingPersistOptions: PersistOptions<ListingStore, PersistedListingState> = {
+  name: LISTING_STORAGE_KEY,
+  skipHydration: true,
+  storage: createJSONStorage(() => ({
+    getItem: (name) => localStorage.getItem(name),
+    setItem: (name, value) => {
+      try {
+        localStorage.setItem(name, value);
+      } catch {
+        // 용량 초과·프라이빗 모드 등. 이번 세션은 저장 없이 동작한다
+      }
+    },
+    removeItem: (name) => localStorage.removeItem(name),
+  })),
+  partialize: (s) => {
+    const persistable: Record<string, unknown> = { ...s.sharedDraft };
+    delete persistable.rawImageFiles;
+    delete persistable.detailImageFiles;
+    delete persistable.optionsLoading;
+    delete persistable.optionsError;
+    persistable.thumbnailImages = keepRemoteUrls(persistable.thumbnailImages);
+    persistable.detailImages = keepRemoteUrls(persistable.detailImages);
+    persistable.pickedDetailImages = keepRemoteUrls(persistable.pickedDetailImages);
+    return { sharedDraft: persistable as PersistedSharedDraft };
+  },
+  merge: (persisted, current) => {
+    const saved = (persisted as Partial<PersistedListingState> | undefined)?.sharedDraft;
+    if (!isPersistedSharedDraftShape(saved)) return current;
+
+    const detailPageStatus = IN_FLIGHT_DETAIL_STATUSES.has(saved.detailPageStatus)
+      ? 'idle'
+      : saved.detailPageStatus;
+    const detailPageEditStatus =
+      saved.detailPageEditStatus === 'editing' ? 'idle' : saved.detailPageEditStatus;
+
+    return {
+      ...current,
+      sharedDraft: {
+        ...current.sharedDraft,
+        ...saved,
+        detailPageStatus,
+        detailPageEditStatus,
+        // 저장하지 않은 필드는 초기값(빈 배열·false·null) 그대로 쓴다
+        rawImageFiles: current.sharedDraft.rawImageFiles,
+        detailImageFiles: current.sharedDraft.detailImageFiles,
+        optionsLoading: current.sharedDraft.optionsLoading,
+        optionsError: current.sharedDraft.optionsError,
+      },
+    };
+  },
+};
+
 export const useListingStore = create<ListingStore>()(
   devtools(
+    persist(
     (set, get) => ({
       // ─── 초기값 ────────────────────────────────────────────────────────────
       activePlatform: 'coupang',
@@ -1657,6 +1770,8 @@ export const useListingStore = create<ListingStore>()(
           'listing/reorderDetailPageSections'
         ),
     }),
+    listingPersistOptions,
+    ),
     { name: 'ListingStore' },
   ),
 );

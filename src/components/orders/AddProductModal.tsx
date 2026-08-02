@@ -3,6 +3,23 @@
 import React, { useState, useEffect } from 'react';
 import { X, Package, ChevronLeft } from 'lucide-react';
 import { toast } from '@/components/ui/toast';
+import { useDraftPersist, loadDraft } from '@/hooks/useDraftPersist';
+import { ADD_PRODUCT_DRAFT_KEY } from './draft-keys';
+
+/**
+ * 2단계(원가 단위 설정)에서 입력하는 값만 초안으로 남긴다.
+ * 1단계(쿠팡 등록상품 선택)는 매 마운트마다 새로 fetch하는 목록에서 클릭 한 번으로
+ * 고르는 동작이라 되돌리는 비용이 거의 없고, 오래된 로컬 선택을 최신 목록과
+ * 맞춰 복원하려 하면 already_registered 같은 표시가 어긋날 수 있다 — 그래서 뺐다.
+ * selectedCoupang은 표시에 필요한 최소 정보(id·이름)만 남긴다.
+ */
+interface AddProductDraft {
+  productName: string;
+  feeRate: string;
+  subdivisionUnit: string;
+  selectedCoupangId: number | null;
+  selectedCoupangName: string | null;
+}
 
 interface CoupangProduct {
   seller_product_id: number;
@@ -44,6 +61,35 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
       .finally(() => setLoadingCoupang(false));
   }, []);
 
+  // 2단계 입력 초안 복원 — 1단계 선택 목록(coupangProducts) fetch를 기다리지 않는다.
+  // selectedCoupang은 표시용 최소 객체로 재구성한다.
+  useEffect(() => {
+    const saved = loadDraft<AddProductDraft>(ADD_PRODUCT_DRAFT_KEY);
+    if (saved.productName === undefined) return;
+    setProductName(saved.productName);
+    if (saved.feeRate !== undefined) setFeeRate(saved.feeRate);
+    if (saved.subdivisionUnit !== undefined) setSubdivisionUnit(saved.subdivisionUnit);
+    setSelectedCoupang(
+      saved.selectedCoupangId != null
+        ? { seller_product_id: saved.selectedCoupangId, seller_product_name: saved.selectedCoupangName ?? '' }
+        : null,
+    );
+    setStep(2);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const { clearNow: clearAddProductDraftNow } = useDraftPersist(
+    ADD_PRODUCT_DRAFT_KEY,
+    {
+      productName,
+      feeRate,
+      subdivisionUnit,
+      selectedCoupangId: selectedCoupang?.seller_product_id ?? null,
+      selectedCoupangName: selectedCoupang?.seller_product_name ?? null,
+    },
+    step === 2,
+  );
+
   function goToStep2(coupang: CoupangProduct | null) {
     setSelectedCoupang(coupang);
     setProductName(coupang?.seller_product_name ?? '');
@@ -70,6 +116,7 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
       });
       const json = await res.json();
       if (json.success) {
+        clearAddProductDraftNow();
         onAdded();
         onClose();
       } else {
