@@ -100,13 +100,37 @@ export const NAV_ITEMS: NavItem[] = [
 function normalize(href: string): { id: string; path: string } {
   const segments = href.split(/[?#]/)[0].split('/').filter(Boolean);
   if (segments.length === 0) return { id: 'dashboard', path: '/dashboard' };
-  return { id: segments[0], path: `/${segments.join('/')}` };
+  const path = `/${segments.join('/')}`;
+  return { id: path.slice(1), path };
 }
 
 /**
- * 경로에서 탭 식별자(첫 세그먼트)를 얻는다. 캐시 키 접두사와 같은 값이다.
- * 첫 세그먼트는 항상 정적 라우트 이름이다 — 동적 최상위 세그먼트를 추가하면 캐시 키가 깨진다.
- * 하위 경로는 부모와 같은 탭을 공유하며, 라벨만 현재 화면을 따라 바뀐다.
+ * NAV_ITEMS에 없는 하위 경로의 라벨.
+ * 사이드바에는 노출하고 싶지 않지만(NAV_ITEMS에 넣으면 사이드바에도 나타난다)
+ * 탭에서는 구분되는 이름이 필요한 화면들이다. 동적 세그먼트가 낀 경로는
+ * 정확 매칭 대신 정규식으로 잡는다 (예: /listing/<상품id>/detail-maker-pro).
+ */
+const EXTRA_LABEL_RULES: { test: RegExp; label: string }[] = [
+  { test: /^\/listing\/auto-register$/, label: '쿠팡 자동등록' },
+  { test: /^\/listing\/import-1688$/, label: '1688에서 가져오기' },
+  { test: /^\/listing\/[^/]+\/detail-maker-pro$/, label: 'PRO 상세페이지 만들기' },
+  { test: /^\/sourcing\/margin-calculator$/, label: '1688 사입 마진 계산기' },
+  { test: /^\/sourcing\/trademark-precheck$/, label: '1688 발주 사전체크' },
+  { test: /^\/sourcing\/inbound-checklist\/print$/, label: '1688 입고 체크리스트 (인쇄)' },
+  { test: /^\/sourcing\/inbound-checklist$/, label: '1688 입고 체크리스트' },
+  { test: /^\/plan\/alerts$/, label: '알림' },
+  { test: /^\/plan\/retro$/, label: '회고' },
+  { test: /^\/label\/event$/, label: '이벤트 라벨' },
+];
+
+/**
+ * 경로에서 탭 식별자(쿼리·해시를 뗀 경로 전체)를 얻는다. 캐시 키 접두사와 같은 값이다.
+ *
+ * 2026-08-02 이전에는 첫 세그먼트만 썼다 — `/listing`과 `/listing/detail-maker`가
+ * 같은 식별자('listing')를 나눠 써서 탭 하나를 두고 서로 덮어썼다. 상세만들기로
+ * 작업하다 사이드바에서 상품등록을 누르면 상세만들기 탭 자체가 사라지는 버그였다.
+ * 이제 경로 전체를 식별자로 써서 하위 경로마다 별개 탭을 갖는다.
+ * (docs/superpowers/specs/2026-08-01-tab-navigation-design.md 참고)
  */
 export function routeIdOf(href: string): string {
   return normalize(href).id;
@@ -114,18 +138,25 @@ export function routeIdOf(href: string): string {
 
 /**
  * 경로에 맞는 탭 라벨을 얻는다.
- * 하위 항목을 먼저 확인해 더 구체적인 라벨을 고른다.
+ * 우선순위: NAV_ITEMS 하위 항목 → EXTRA_LABEL_RULES → NAV_ITEMS 최상위 항목 → 식별자 그대로.
+ * EXTRA_LABEL_RULES를 최상위 항목의 접두사 매칭보다 먼저 보는 이유 —
+ * 그러지 않으면 `/listing/auto-register`가 `/listing` 접두사에 먼저 걸려
+ * "상품등록"이라는 부모 라벨을 갖게 되고, 하위 경로가 여럿 열려도 전부
+ * 같은 이름으로 보이게 된다.
  */
 export function labelForHref(href: string): string {
-  const { path } = normalize(href);
+  const { id, path } = normalize(href);
 
   for (const item of NAV_ITEMS) {
     for (const child of item.children ?? []) {
       if (path === child.href || path.startsWith(`${child.href}/`)) return child.label;
     }
   }
+  for (const rule of EXTRA_LABEL_RULES) {
+    if (rule.test.test(path)) return rule.label;
+  }
   for (const item of NAV_ITEMS) {
     if (path === item.href || path.startsWith(`${item.href}/`)) return item.label;
   }
-  return routeIdOf(href);
+  return id;
 }

@@ -53,14 +53,47 @@ describe('openTab', () => {
     }
   });
 
-  it('하위 경로로 이동하면 탭은 그대로고 라벨만 바뀐다', () => {
+  it('하위 경로로 이동하면 부모와 별개 탭이 생긴다', () => {
     const { result } = renderHook(() => useTabStore());
     act(() => result.current.openTab('/listing'));
     act(() => result.current.openTab('/listing/detail-maker'));
 
-    expect(result.current.tabs).toHaveLength(1);
-    expect(result.current.tabs[0].id).toBe('listing');
-    expect(result.current.tabs[0].label).toBe('상품상세 자동만들기');
+    expect(result.current.tabs).toHaveLength(2);
+    expect(result.current.tabs.map((t) => t.id)).toEqual(['listing', 'listing/detail-maker']);
+    expect(result.current.tabs[1].label).toBe('상품상세 자동만들기');
+    expect(result.current.activeId).toBe('listing/detail-maker');
+  });
+
+  it('회귀: 상세만들기 작업 중 상품등록으로 이동해도 상세만들기 탭이 남는다', () => {
+    // 이 버그의 재현 시나리오 그대로: 상세만들기(하위 경로)로 작업하다
+    // 사이드바에서 상품등록(부모 경로)을 누르면, 예전에는 둘 다 id가
+    // 'listing'이라 상세만들기 탭이 상품등록으로 갈아치워졌다.
+    const { result } = renderHook(() => useTabStore());
+    act(() => result.current.openTab('/listing/detail-maker'));
+    act(() => result.current.openTab('/listing'));
+
+    expect(result.current.tabs).toHaveLength(2);
+    expect(result.current.tabs.map((t) => t.id)).toEqual(
+      expect.arrayContaining(['listing/detail-maker', 'listing']),
+    );
+
+    // 상세만들기 탭을 눌러 돌아갈 수 있다 — 사라지지 않았다
+    act(() => result.current.openTab('/listing/detail-maker'));
+    expect(result.current.activeId).toBe('listing/detail-maker');
+  });
+
+  it('서로 다른 하위 경로는 각각 별개 탭이 된다', () => {
+    const { result } = renderHook(() => useTabStore());
+    act(() => result.current.openTab('/listing/detail-maker'));
+    act(() => result.current.openTab('/listing/auto-register'));
+    act(() => result.current.openTab('/listing/import-1688'));
+
+    expect(result.current.tabs).toHaveLength(3);
+    expect(result.current.tabs.map((t) => t.label)).toEqual([
+      '상품상세 자동만들기',
+      '쿠팡 자동등록',
+      '1688에서 가져오기',
+    ]);
   });
 });
 
