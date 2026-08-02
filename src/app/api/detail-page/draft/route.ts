@@ -18,6 +18,9 @@ export const DraftUpsertSchema = z.object({
   theme: z.record(z.string(), z.unknown()),
   thumbnailUrl: z.string().url().optional(),
   shootSession: z.record(z.string(), z.unknown()).optional(),
+  // 촬영기획(creativeBrief)·스토리보드·참고자료·생성된 썸네일·업로드 이미지·브랜드명/카테고리 등
+  // sections/theme에 속하지 않는 부가 편집 상태를 통째로 담는 확장 슬롯. 100_ 마이그레이션 참고.
+  creativeState: z.record(z.string(), z.unknown()).optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -36,7 +39,7 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) {
     return Response.json({ success: false, error: '입력값 검증 실패', details: parsed.error.flatten().fieldErrors }, { status: 400 });
   }
-  const { id, listingId, productName, sections, theme, thumbnailUrl, shootSession } = parsed.data;
+  const { id, listingId, productName, sections, theme, thumbnailUrl, shootSession, creativeState } = parsed.data;
 
   // claude_layout 섹션은 저장 전 정화(오염 저장 방지). sanitizeProLayout는 { sections, warnings } 반환.
   const safeSections = sections.map((s) =>
@@ -56,6 +59,9 @@ export async function POST(request: NextRequest) {
   };
   if (shootSession !== undefined) {
     (row as Record<string, unknown>).shoot_session = shootSession;
+  }
+  if (creativeState !== undefined) {
+    (row as Record<string, unknown>).creative_state = creativeState;
   }
 
   try {
@@ -127,7 +133,7 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabaseServerClient();
     let query = supabase
       .from('detail_page_drafts')
-      .select('id, listing_id, product_name, sections, theme, thumbnail_url, updated_at, shoot_session')
+      .select('id, listing_id, product_name, sections, theme, thumbnail_url, updated_at, shoot_session, creative_state')
       .eq('user_id', userId);
     query = id ? query.eq('id', id) : query.eq('listing_id', listingId as string);
 
@@ -140,7 +146,7 @@ export async function GET(request: NextRequest) {
       draft: {
         id: d.id, listingId: d.listing_id, productName: d.product_name,
         sections: d.sections, theme: d.theme, thumbnailUrl: d.thumbnail_url, updatedAt: d.updated_at,
-        shootSession: d.shoot_session,
+        shootSession: d.shoot_session, creativeState: d.creative_state,
       },
     });
   } catch (err) {

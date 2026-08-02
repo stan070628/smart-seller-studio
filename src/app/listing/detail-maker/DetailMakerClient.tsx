@@ -27,6 +27,9 @@ export default function DetailMakerClient() {
   const [category, setCategory] = useState<Category>('basic');
   const [uploadedUrls, setUploadedUrls] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+  // 생성된 썸네일(유료 AI 호출 결과) — 자동저장 대상이라 관련 상태들보다 먼저 선언해 둔다.
+  // 실제 사용/파생 로직은 기존 위치("// 썸네일" 섹션)에 그대로 남아 있다.
+  const [generatedThumbnails, setGeneratedThumbnails] = useState<string[]>([]);
 
   // 결과
   const [sections, setSections] = useState<DetailSection[]>([]);
@@ -69,9 +72,21 @@ export default function DetailMakerClient() {
   const [draftId, setDraftId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // sections/theme/productName 외에는 서버에 흔적조차 남지 않던 부가 편집 상태.
+  // 촬영기획(creativeBrief)·스토리보드·참고자료·생성된 썸네일(유료 AI 호출 결과)·업로드 이미지·
+  // 브랜드명/카테고리 — 화면을 옮기면 영영 사라지던 것들을 여기 묶어 creativeState로 저장한다.
+  type CreativeState = {
+    creativeBrief: CreativeBrief | null;
+    storyboard: SceneStoryboardItem[] | null;
+    referenceText: string;
+    generatedThumbnails: string[];
+    uploadedUrls: string[];
+    brandName: string;
+    category: Category;
+  };
   // 디바운스 타이머가 아직 발화하지 않은 "저장 대기 중" 페이로드의 최신 스냅샷.
   // 화면 이동으로 언마운트될 때 이 값이 남아 있으면 즉시 flush한다 (아래 언마운트 전용 useEffect).
-  const pendingSaveRef = useRef<{ id?: string; productName?: string; sections: DetailSection[]; theme: DetailPageTheme } | null>(null);
+  const pendingSaveRef = useRef<{ id?: string; productName?: string; sections: DetailSection[]; theme: DetailPageTheme; creativeState: CreativeState } | null>(null);
 
   // PRO 모드에서 넘어온 섹션 + 메타 로드 (sessionStorage)
   useEffect(() => {
@@ -127,6 +142,17 @@ export default function DetailMakerClient() {
             setSections(restoredSections);
             setTheme(restoredTheme);
             if (j.draft.productName) setProductName(j.draft.productName);
+            // 부가 편집 상태 복원. 마이그레이션 이전 드래프트는 creativeState가 없거나 빈 객체이므로
+            // 필드별로 존재 여부를 확인해 없으면 현재(초기) 값을 그대로 둔다.
+            const cs = (j.draft.creativeState ?? {}) as Partial<CreativeState>;
+            if (cs.creativeBrief) setCreativeBrief(cs.creativeBrief);
+            if (cs.storyboard && cs.storyboard.length > 0) setStoryboard(cs.storyboard);
+            if (typeof cs.referenceText === 'string') setReferenceText(cs.referenceText);
+            // generatedThumbnails는 유료 AI 호출 결과 — 복원 못 하면 다시 만들 때마다 비용이 든다.
+            if (cs.generatedThumbnails && cs.generatedThumbnails.length > 0) setGeneratedThumbnails(cs.generatedThumbnails);
+            if (cs.uploadedUrls && cs.uploadedUrls.length > 0) setUploadedUrls(cs.uploadedUrls);
+            if (cs.brandName) setBrandName(cs.brandName);
+            if (cs.category) setCategory(cs.category);
             setDetailStep('editing');
             // 섹션 데이터만 복원하고 끝내면 화면은 여전히 "미리보기 없음" 빈 상태로 보인다.
             // 데이터는 돌아왔는데 화면만 비어 있는 건 사용자 입장에서 "작업물이 사라졌다"와 다를 게 없다.
@@ -153,20 +179,27 @@ export default function DetailMakerClient() {
     });
   }, [sections, storyboard]);
 
-  // sections/theme 변경 시 1.5s 디바운스 자동저장
+  // sections/theme + 부가 편집 상태 변경 시 1.5s 디바운스 자동저장.
+  // uploadedUrls·generatedThumbnails는 항상 원격 URL 문자열이라 저장해도 안전하다 —
+  // uploadedUrls는 /api/listing/upload-image, generatedThumbnails는 thumbnail-flow.ts의
+  // upload-ai/coupang-resize/add-text-badge를 거쳐 이미 Supabase에 영속화된 URL만 state에 들어온다.
+  // File 객체나 blob: URL이 이 state들에 담기는 경로는 없다 (직렬화 불가능한 값이라 저장 대상에서 자연히 제외됨).
   useEffect(() => {
     if (detailStep !== 'editing' || sections.length === 0) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     setSaveState('saving');
+    const creativeState: CreativeState = {
+      creativeBrief, storyboard, referenceText, generatedThumbnails, uploadedUrls, brandName, category,
+    };
     // 디바운스 대기 중인 최신 페이로드를 기록 — 타이머가 발화하기 전에 언마운트되면
     // 아래 flush 전용 useEffect가 이 값을 읽어 즉시 저장한다.
-    pendingSaveRef.current = { id: draftId ?? undefined, productName: productName || undefined, sections, theme };
+    pendingSaveRef.current = { id: draftId ?? undefined, productName: productName || undefined, sections, theme, creativeState };
     saveTimerRef.current = setTimeout(() => {
       pendingSaveRef.current = null; // 정상적으로 발화됨 → 더 이상 flush 대상 아님
       fetch('/api/detail-page/draft', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: draftId ?? undefined, productName: productName || undefined, sections, theme }),
+        body: JSON.stringify({ id: draftId ?? undefined, productName: productName || undefined, sections, theme, creativeState }),
       })
         .then((r) => r.json())
         .then((j) => {
@@ -176,7 +209,7 @@ export default function DetailMakerClient() {
         .catch(() => setSaveState('idle'));
     }, 1500);
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
-  }, [sections, theme, productName, draftId, detailStep]);
+  }, [sections, theme, productName, draftId, detailStep, creativeBrief, storyboard, referenceText, generatedThumbnails, uploadedUrls, brandName, category]);
 
   // 화면 이동(라우트 전환)으로 컴포넌트가 언마운트될 때, 디바운스 대기 중이던 마지막 편집을 flush한다.
   // deps를 []로 둬서 이 cleanup은 "매 편집마다"가 아니라 "진짜 언마운트될 때"만 실행된다.
@@ -212,7 +245,8 @@ export default function DetailMakerClient() {
   }, [draftId, pathname, router]);
 
   // 썸네일
-  const [generatedThumbnails, setGeneratedThumbnails] = useState<string[]>([]);
+  // generatedThumbnails는 자동저장 useEffect(위)가 참조하므로 여기서 상태만 앞서 선언한다
+  // (사용/파생 로직은 아래 "이미지 업로드" 섹션 이후 그대로 유지).
   const [isGeneratingThumbnail, setIsGeneratingThumbnail] = useState(false);
   const [editingThumbnailUrl, setEditingThumbnailUrl] = useState<string | null>(null);
   const [thumbnailError, setThumbnailError] = useState<string | null>(null);
