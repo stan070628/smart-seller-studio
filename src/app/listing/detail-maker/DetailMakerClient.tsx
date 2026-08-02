@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import { C } from '@/lib/design-tokens';
 import { DEFAULT_THEME } from '@/lib/detail-page/palette-config';
 import { contentToSections, mobileContentToSections, distributeImagesToSections } from '@/lib/detail-page/section-parser';
@@ -17,6 +18,9 @@ import type { DetailPageContent, MobileDetailPageContent } from '@/lib/ai/prompt
 type Category = 'basic' | 'fashion' | 'living' | 'food';
 
 export default function DetailMakerClient() {
+  const router = useRouter();
+  const pathname = usePathname();
+
   // 입력
   const [productName, setProductName] = useState('');
   const [brandName, setBrandName] = useState('');
@@ -65,6 +69,9 @@ export default function DetailMakerClient() {
   const [draftId, setDraftId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 디바운스 타이머가 아직 발화하지 않은 "저장 대기 중" 페이로드의 최신 스냅샷.
+  // 화면 이동으로 언마운트될 때 이 값이 남아 있으면 즉시 flush한다 (아래 언마운트 전용 useEffect).
+  const pendingSaveRef = useRef<{ id?: string; productName?: string; sections: DetailSection[]; theme: DetailPageTheme } | null>(null);
 
   // PRO 모드에서 넘어온 섹션 + 메타 로드 (sessionStorage)
   useEffect(() => {
@@ -112,10 +119,20 @@ export default function DetailMakerClient() {
         .then((j) => {
           if (j.draft) {
             setDraftId(j.draft.id);
-            setSections(j.draft.sections ?? []);
-            if (j.draft.theme && Object.keys(j.draft.theme).length > 0) setTheme(j.draft.theme);
+            const restoredSections: DetailSection[] = j.draft.sections ?? [];
+            // theme이 비어있으면 초기 useState 기본값을 그대로 쓴다 (이 effect는 마운트 시 1회만 실행되므로
+            // 클로저의 theme은 항상 초기값과 동일 — 재구성할 필요 없다)
+            const restoredTheme: DetailPageTheme =
+              j.draft.theme && Object.keys(j.draft.theme).length > 0 ? j.draft.theme : theme;
+            setSections(restoredSections);
+            setTheme(restoredTheme);
             if (j.draft.productName) setProductName(j.draft.productName);
             setDetailStep('editing');
+            // 섹션 데이터만 복원하고 끝내면 화면은 여전히 "미리보기 없음" 빈 상태로 보인다.
+            // 데이터는 돌아왔는데 화면만 비어 있는 건 사용자 입장에서 "작업물이 사라졌다"와 다를 게 없다.
+            if (restoredSections.length > 0) {
+              void refreshRenderedHtml(restoredSections, restoredTheme);
+            }
           }
         })
         .catch(() => {});
@@ -141,7 +158,11 @@ export default function DetailMakerClient() {
     if (detailStep !== 'editing' || sections.length === 0) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     setSaveState('saving');
+    // 디바운스 대기 중인 최신 페이로드를 기록 — 타이머가 발화하기 전에 언마운트되면
+    // 아래 flush 전용 useEffect가 이 값을 읽어 즉시 저장한다.
+    pendingSaveRef.current = { id: draftId ?? undefined, productName: productName || undefined, sections, theme };
     saveTimerRef.current = setTimeout(() => {
+      pendingSaveRef.current = null; // 정상적으로 발화됨 → 더 이상 flush 대상 아님
       fetch('/api/detail-page/draft', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -156,6 +177,39 @@ export default function DetailMakerClient() {
     }, 1500);
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
   }, [sections, theme, productName, draftId, detailStep]);
+
+  // 화면 이동(라우트 전환)으로 컴포넌트가 언마운트될 때, 디바운스 대기 중이던 마지막 편집을 flush한다.
+  // deps를 []로 둬서 이 cleanup은 "매 편집마다"가 아니라 "진짜 언마운트될 때"만 실행된다.
+  // sendBeacon 대신 fetch(keepalive: true)를 쓴 이유: 기존 저장 함수가 이미
+  // "POST + JSON body" 형태라 Content-Type을 그대로 유지할 수 있고, keepalive 옵션만 추가하면
+  // 언마운트 이후에도 브라우저가 요청 전송을 보장해준다. sendBeacon은 Content-Type 지정이 까다롭고
+  // 이 저장 API가 JSON body를 받는 구조와 맞지 않는다.
+  useEffect(() => {
+    return () => {
+      const pending = pendingSaveRef.current;
+      if (!pending) return;
+      fetch('/api/detail-page/draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(pending),
+        keepalive: true,
+      }).catch(() => {});
+      // 언마운트된 컴포넌트에서는 setState(draftId 등)를 호출할 수 없으므로 응답은 읽지 않는다.
+      pendingSaveRef.current = null;
+    };
+  }, []);
+
+  // draftId가 서버에 발급되면 주소에 반영한다. 탭 바가 주소 전체를 기억하므로,
+  // 다른 화면으로 이동했다가 상세만들기로 돌아오면 위쪽 복원 useEffect(?draftId=)가 자동으로 동작한다.
+  useEffect(() => {
+    if (!draftId) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('draftId') === draftId) return; // 이미 같은 값 → 불필요한 히스토리 조작 방지
+    params.set('draftId', draftId);
+    // push가 아닌 replace: push하면 편집할 때마다(=draftId가 바뀔 때마다) 뒤로가기 히스토리가 쌓인다.
+    // listingId 등 기존 쿼리는 URLSearchParams(window.location.search)로 읽어와 보존한다.
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [draftId, pathname, router]);
 
   // 썸네일
   const [generatedThumbnails, setGeneratedThumbnails] = useState<string[]>([]);
