@@ -14,6 +14,8 @@ import { callClaude, callClaudeVision, type ClaudeImage } from '@/lib/ai/claude-
 import { sanitizeProLayout, validateProLayout, stripCjk } from '@/lib/detail-page/layout-validator';
 import { isGroundedProgressItem, type ProgressItem } from '@/lib/detail-page/progress-hygiene';
 import { requiredSpecWarnings } from '@/lib/detail-page/required-specs';
+import { imageUsageWarnings, type ImageUsageSection } from '@/lib/detail-page/image-usage';
+import { riskyClaimWarnings } from '@/lib/detail-page/risky-claims';
 import { sectionCap } from '@/lib/detail-page/image-hygiene';
 import { repairProLayout } from '@/lib/ai/repair-pro-layout';
 import {
@@ -318,6 +320,17 @@ export async function POST(req: NextRequest): Promise<Response> {
       productInfo.points,
     );
 
+    // 미사용 이미지 라벨에 붙일 옵션명. imageIndex는 productImages 인덱스와 같다.
+    const optionNamesByIndex: string[] = [];
+    for (const o of options) optionNamesByIndex[o.imageIndex] = o.name;
+
+    // 정화·수리가 끝난 최종 섹션으로만 계산해야 한다. repair가 이미지 배치와 문구를
+    // 모두 바꿀 수 있어서, 그 전에 세면 셀러가 보는 결과와 어긋난다.
+    const postWarnings = (secs: unknown): string[] => [
+      ...imageUsageWarnings(secs as ImageUsageSection[], imageCount, optionNamesByIndex),
+      ...riskyClaimWarnings(secs),
+    ];
+
     // error-severity 위반이 남으면 Claude로 1-pass 수리 후 재정화 (조건부)
     const { violations, isClean } = validateProLayout(cleaned, layoutOpts);
     if (!isClean) {
@@ -345,6 +358,7 @@ export async function POST(req: NextRequest): Promise<Response> {
         ...hygieneWarnings,
         ...specWarnings,
         ...friendlyViolationWarnings(after.violations),
+        ...postWarnings(cleaned),
       ];
       return NextResponse.json({
         success: true,
@@ -356,7 +370,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     // repair를 타지 않은 정상 경로도 위생 삭제·필수 스펙 누락은 알려야 한다 — repair
     // 여부와 무관하게 일어나는 일이기 때문이다. (isClean이므로
     // friendlyViolationWarnings는 항상 빈 배열이라 여기선 호출하지 않는다.)
-    const cleanWarnings = [...hygieneWarnings, ...specWarnings];
+    const cleanWarnings = [...hygieneWarnings, ...specWarnings, ...postWarnings(cleaned)];
     return NextResponse.json({
       success: true,
       sections: cleaned,
