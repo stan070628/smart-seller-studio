@@ -1,98 +1,34 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { C } from '@/lib/design-tokens';
 import AlertList from '@/components/alerts/AlertList';
+import { NAV_ITEMS } from '@/lib/nav-items';
+import TabBar from '@/components/TabBar';
+import { useTabStore } from '@/store/useTabStore';
+import { startTabCacheBridge } from '@/store/tab-cache-bridge';
 
-type NavChild = { href: string; label: string; icon: React.ReactNode };
-type NavItem = { href: string; label: string; icon: React.ReactNode; children?: NavChild[] };
+/**
+ * 주소 변화를 탭에 반영한다.
+ * useSearchParams를 쓰므로 정적 프리렌더를 막지 않도록 Suspense 안에 격리한다.
+ * AppShell 본체에 그대로 두면 AppShell을 쓰는 10개 레이아웃 전부가
+ * 프리렌더에서 bail out한다 (빌드 실패의 원인이었다).
+ */
+function TabSync() {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const openTab = useTabStore((s) => s.openTab);
 
-const NAV_ITEMS: NavItem[] = [
-  {
-    href: '/dashboard',
-    label: '대시보드',
-    icon: (
-      <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <rect x="3" y="3" width="7" height="7" rx="1" strokeWidth="1.5" />
-        <rect x="14" y="3" width="7" height="7" rx="1" strokeWidth="1.5" />
-        <rect x="3" y="14" width="7" height="7" rx="1" strokeWidth="1.5" />
-        <rect x="14" y="14" width="7" height="7" rx="1" strokeWidth="1.5" />
-      </svg>
-    ),
-  },
-  {
-    href: '/sourcing',
-    label: '소싱',
-    icon: (
-      <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <circle cx="11" cy="11" r="7" strokeWidth="1.5" />
-        <path d="M20 20l-3-3" strokeWidth="1.5" strokeLinecap="round" />
-      </svg>
-    ),
-  },
-  {
-    href: '/listing',
-    label: '상품등록',
-    icon: (
-      <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path d="M20 7H4a1 1 0 00-1 1v10a1 1 0 001 1h16a1 1 0 001-1V8a1 1 0 00-1-1z" strokeWidth="1.5" />
-        <path d="M16 3l-4 4-4-4" strokeWidth="1.5" strokeLinecap="round" />
-      </svg>
-    ),
-    children: [
-      {
-        href: '/editor',
-        label: '에디터',
-        icon: (
-          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5" strokeWidth="1.5" strokeLinecap="round" />
-            <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        ),
-      },
-      {
-        href: '/listing/detail-maker',
-        label: '상품상세 자동만들기',
-        icon: (
-          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <rect x="4" y="4" width="16" height="16" rx="2" strokeWidth="1.5" />
-            <path d="M4 9h16M9 9v11" strokeWidth="1.5" strokeLinecap="round" />
-          </svg>
-        ),
-      },
-    ],
-  },
-  {
-    href: '/label',
-    label: '라벨 인쇄',
-    icon: (
-      <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <rect x="4" y="5" width="16" height="16" rx="2" strokeWidth="1.5" />
-        <path d="M16 3v4M8 3v4M4 9h16" strokeWidth="1.5" strokeLinecap="round" />
-      </svg>
-    ),
-  },
-  {
-    href: '/orders',
-    label: '주문/매출',
-    icon: (
-      <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    ),
-  },
-  {
-    href: '/plan',
-    label: '플랜',
-    icon: (
-      <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    ),
-  },
-];
+  // 사이드바 클릭·router.push·뒤로가기가 모두 여기로 모인다.
+  useEffect(() => {
+    const qs = searchParams.toString();
+    openTab(qs ? `${pathname}?${qs}` : pathname);
+  }, [pathname, searchParams, openTab]);
+
+  return null;
+}
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -143,6 +79,14 @@ export default function AppShell({
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [showAlerts]);
+
+  // 탭이 사라지면 그 라우트의 캐시를 해제한다.
+  // effect가 아니라 렌더 중에 건다 — 자식 TabSync의 effect가 부모보다 먼저
+  // 실행되므로, effect에 두면 첫 밀어내기를 놓친다. startTabCacheBridge는
+  // 멱등해 여러 번 불려도 구독은 하나만 생긴다.
+  // useTabStore는 모듈 스코프 zustand라 서버에서도 존재하며, 서버 렌더에서
+  // 이 줄이 실행돼도 요청마다 새 프로세스/모듈 인스턴스이므로 누적되지 않는다.
+  startTabCacheBridge();
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
@@ -396,6 +340,10 @@ export default function AppShell({
           minWidth: 0,
         }}
       >
+        <Suspense fallback={null}>
+          <TabSync />
+        </Suspense>
+        <TabBar />
         {children}
       </div>
     </div>

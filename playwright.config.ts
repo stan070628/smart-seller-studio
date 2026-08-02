@@ -4,6 +4,12 @@
  */
 
 import { defineConfig, devices } from '@playwright/test';
+import { loadEnvConfig } from '@next/env';
+
+// Next.js는 .env.local을 자동으로 읽지만 Playwright 테스트 프로세스는 읽지 않는다.
+// 여기서 한 번 로드해두면 process.env.JWT_SECRET 등이 실행 중인 dev 서버(src/proxy.ts)와
+// 항상 같은 값을 갖는다 — spec마다 .env.local을 직접 파싱하는 패턴을 막는다.
+loadEnvConfig(process.cwd());
 
 export default defineConfig({
   // 테스트 파일 경로

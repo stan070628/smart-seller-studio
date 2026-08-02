@@ -15,13 +15,14 @@
  * 정확히 놓쳤다.
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Loader2, Plus, RefreshCw, Trash2, ExternalLink, ChevronRight, ChevronDown } from 'lucide-react';
 import { C as BASE_C } from '@/lib/design-tokens';
 import SupplierCompare from '@/components/sourcing/SupplierCompare';
 import { DEFAULT_ORDER_QTY } from '@/lib/sourcing/coupang-price';
 import { supplierCostsOf } from '@/lib/sourcing/shortlist-supplier-costs';
 import { judgeSupplier, pickBestSupplier } from '@/lib/sourcing/supplier-verdict';
+import { useCachedFetch } from '@/hooks/useCachedFetch';
 import type { ShortlistItem, LogisticsSize, Verdict } from '@/types/shortlist';
 
 // 공통 토큰에 없는 시맨틱 색만 로컬로 확장한다 (CostcoMemoTab.tsx, DomeggookTab.tsx와 동일 관례).
@@ -99,13 +100,31 @@ interface VerifyNotice {
 }
 
 export default function ShortlistTab() {
-  const [items, setItems] = useState<ShortlistItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [input, setInput] = useState('');
   const [orderQty, setOrderQty] = useState(DEFAULT_ORDER_QTY);
-  const [error, setError] = useState<string | null>(null);
+  const [writeError, setWriteError] = useState<string | null>(null);
   const [notice, setNotice] = useState<VerifyNotice | null>(null);
+
+  const {
+    data: items = [],
+    isLoading: loading,
+    error: loadError,
+    refetch,
+    mutate,
+  } = useCachedFetch<ShortlistItem[]>('sourcing:shortlist', '/api/sourcing/shortlist', {
+    select: (json) => (json as { items: ShortlistItem[] }).items,
+    errorMessage: '목록을 불러오지 못했습니다.',
+  });
+
+  // 쓰기 오류를 먼저 보여준다 — 방금 한 행동의 결과가 더 급하다
+  const error = writeError ?? loadError;
+
+  // 목록 길이가 바뀔 때마다(0→N뿐 아니라 N→M도) 주문 수량 입력칸의 기본값을 맞춘다.
+  useEffect(() => {
+    if (items.length > 0) setOrderQty(items[0].orderQty);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items.length]);
 
   /**
    * 펼쳐진 행의 itemNo 집합.
@@ -125,39 +144,10 @@ export default function ShortlistTab() {
     });
   };
 
-  /**
-   * 목록을 (재)조회한다.
-   *
-   * silent=true면 전체 로딩 화면(`loading`)을 켜지 않는다 — add·verifyAll·
-   * applyOrderQty·remove는 성공 후 목록 구성이 바뀌어 재조회가 맞지만, 그때마다
-   * 테이블을 통째로 언마운트하면 사이즈 변경처럼 잦은 조작마다 화면이 깜빡인다.
-   * 최초 마운트 시(loading=true 초기값)만 전체 로딩 화면을 보여준다.
-   */
-  const load = useCallback(async (opts?: { silent?: boolean }) => {
-    if (!opts?.silent) setLoading(true);
-    try {
-      const res = await fetch('/api/sourcing/shortlist');
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? '목록을 불러오지 못했습니다.');
-      const list: ShortlistItem[] = data.items;
-      setItems(list);
-      if (list.length > 0) setOrderQty(list[0].orderQty);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '목록을 불러오지 못했습니다.');
-    } finally {
-      if (!opts?.silent) setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
   const add = async () => {
     if (!input.trim() || busy) return;
     setBusy(true);
-    setError(null);
+    setWriteError(null);
     setNotice(null);
     try {
       const res = await fetch('/api/sourcing/shortlist', {
@@ -168,9 +158,9 @@ export default function ShortlistTab() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? '추가하지 못했습니다.');
       setInput('');
-      await load({ silent: true });
+      await refetch();
     } catch (e) {
-      setError(e instanceof Error ? e.message : '추가하지 못했습니다.');
+      setWriteError(e instanceof Error ? e.message : '추가하지 못했습니다.');
     } finally {
       setBusy(false);
     }
@@ -188,16 +178,16 @@ export default function ShortlistTab() {
   const verifyAll = async () => {
     if (busy) return;
     setBusy(true);
-    setError(null);
+    setWriteError(null);
     setNotice(null);
     try {
       const res = await fetch('/api/sourcing/shortlist/verify', { method: 'POST' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? '재검증하지 못했습니다.');
       reportVerifyResult(data.skipped, data.remaining);
-      await load({ silent: true });
+      await refetch();
     } catch (e) {
-      setError(e instanceof Error ? e.message : '재검증하지 못했습니다.');
+      setWriteError(e instanceof Error ? e.message : '재검증하지 못했습니다.');
     } finally {
       setBusy(false);
     }
@@ -205,9 +195,16 @@ export default function ShortlistTab() {
 
   /**
    * PATCH /shortlist/[itemNo]는 서버에서 이미 재검증까지 마친 최신 항목을
-   * { item }으로 돌려준다. 전체 재조회 대신 해당 행만 교체한다 — 사이즈처럼
-   * 자주 바꾸는 값마다 GET을 다시 부르고 테이블을 통째로 갈아끼우면 그때마다
-   * 화면이 깜빡인다.
+   * { item }으로 돌려준다. 전체 재조회(refetch) 대신 해당 행만 교체한다 — 사이즈처럼
+   * 자주 바꾸는 값마다 네트워크 왕복을 또 만들 필요가 없다.
+   *
+   * items는 이제 useCachedFetch가 주는 파생값이라 로컬 setState로 바꿀 수 없다.
+   * 훅의 mutate로 캐시를 직접 갈아끼운다. 클로저로 캡처한 `items`를 여기서 읽으면
+   * 안 된다 — 이 핸들러는 렌더 시점에 만들어지므로 `items`는 그 순간의 배열로
+   * 고정되는데, await 도중 백그라운드 재검증(refetch)이 최신 목록으로 리렌더를
+   * 만들면 그 결과가 여기서 덮여 사라진다. mutate의 updater는 호출되는 그 순간의
+   * 캐시 값을 받으므로 이 경합이 없다. mutate는 세대 번호도 올려서 이 PATCH보다
+   * 먼저 떠난 재검증 응답이 늦게 도착해도 지금 쓴 값을 덮어쓰지 않는다.
    *
    * 성공 여부를 boolean으로 돌려준다(throw하지 않는다). 대부분의 호출부는
    * onBlur·onChange에서 `void patchItem(...)`으로 부르므로 예외를 던지면
@@ -217,7 +214,7 @@ export default function ShortlistTab() {
    */
   const patchItem = async (itemNo: number, body: Record<string, unknown>): Promise<boolean> => {
     setBusy(true);
-    setError(null);
+    setWriteError(null);
     try {
       const res = await fetch(`/api/sourcing/shortlist/${itemNo}`, {
         method: 'PATCH',
@@ -232,14 +229,17 @@ export default function ShortlistTab() {
       // 그걸 그대로 배열에 넣으면 이후 렌더에서 it.verdict 접근 시 TypeError로
       // 테이블 전체가 죽으므로, null이면 해당 행을 목록에서 제거한다 — 이미
       // 서버에서 사라진 항목이므로 화면에서도 빼는 게 맞다.
-      setItems((prev) =>
-        data.item
-          ? prev.map((it) => (it.itemNo === itemNo ? data.item : it))
-          : prev.filter((it) => it.itemNo !== itemNo),
-      );
+      mutate((json) => {
+        const prev = (json as { items: ShortlistItem[] } | undefined)?.items ?? [];
+        return {
+          items: data.item
+            ? prev.map((it) => (it.itemNo === itemNo ? data.item : it))
+            : prev.filter((it) => it.itemNo !== itemNo),
+        };
+      });
       return true;
     } catch (e) {
-      setError(e instanceof Error ? e.message : '수정하지 못했습니다.');
+      setWriteError(e instanceof Error ? e.message : '수정하지 못했습니다.');
       return false;
     } finally {
       setBusy(false);
@@ -257,7 +257,7 @@ export default function ShortlistTab() {
   const applyOrderQty = async (qty: number) => {
     if (busy || !Number.isInteger(qty) || qty <= 0 || items.length === 0) return;
     setBusy(true);
-    setError(null);
+    setWriteError(null);
     setNotice(null);
     try {
       const patchRes = await fetch('/api/sourcing/shortlist', {
@@ -272,9 +272,9 @@ export default function ShortlistTab() {
       const verifyData = await verifyRes.json();
       if (verifyRes.ok) reportVerifyResult(verifyData.skipped, verifyData.remaining);
 
-      await load({ silent: true });
+      await refetch();
     } catch (e) {
-      setError(e instanceof Error ? e.message : '사입 수량 변경에 실패했습니다.');
+      setWriteError(e instanceof Error ? e.message : '사입 수량 변경에 실패했습니다.');
     } finally {
       setBusy(false);
     }
@@ -283,14 +283,14 @@ export default function ShortlistTab() {
   const remove = async (itemNo: number) => {
     if (!confirm('쇼트리스트에서 삭제할까요?')) return;
     setBusy(true);
-    setError(null);
+    setWriteError(null);
     try {
       const res = await fetch(`/api/sourcing/shortlist/${itemNo}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? '삭제하지 못했습니다.');
-      await load({ silent: true });
+      await refetch();
     } catch (e) {
-      setError(e instanceof Error ? e.message : '삭제하지 못했습니다.');
+      setWriteError(e instanceof Error ? e.message : '삭제하지 못했습니다.');
     } finally {
       setBusy(false);
     }
