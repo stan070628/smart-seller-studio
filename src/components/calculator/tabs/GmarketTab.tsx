@@ -1,11 +1,25 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { GMARKET_CATEGORIES } from '@/lib/calculator/fees';
 import { calcGmarket } from '@/lib/calculator/calculate';
 import { NumberInput, SelectInput, ResultPanel, Card } from '../shared';
+import { loadCalcState, saveCalcState, CALC_SAVE_DEBOUNCE_MS } from '../persist';
 
 const categories = Object.keys(GMARKET_CATEGORIES) as string[];
+
+const STORAGE_KEY = 'sss_calc_gmarket';
+
+interface GmarketSavedState {
+  costPrice: number;
+  sellingPrice: number;
+  category: string;
+  shippingFee: number;
+  couponDiscount: number;
+  adCost: number;
+  isAdRunning: boolean;
+  conversionRate: number;
+}
 
 interface GmarketTabProps {
   initialCostPrice?: number;
@@ -13,6 +27,8 @@ interface GmarketTabProps {
 }
 
 export default function GmarketTab({ initialCostPrice = 0, initialShippingFee }: GmarketTabProps) {
+  // 최초 렌더는 서버 렌더 결과와 동일해야 하므로 기존 기본값 그대로 두고, 저장값은
+  // 마운트 후 한 번에 복원한다 (숫자 입력도 result 구조를 바꿔 지연 초기화 시 하이드레이션이 깨진다)
   const [costPrice, setCostPrice] = useState(initialCostPrice);
   const [sellingPrice, setSellingPrice] = useState(0);
   const [category, setCategory] = useState(categories[0]);
@@ -21,6 +37,28 @@ export default function GmarketTab({ initialCostPrice = 0, initialShippingFee }:
   const [adCost, setAdCost] = useState(0);
   const [isAdRunning, setIsAdRunning] = useState(false);
   const [conversionRate, setConversionRate] = useState(3);
+
+  useEffect(() => {
+    const saved = loadCalcState<GmarketSavedState>(STORAGE_KEY);
+    if (typeof saved.costPrice === 'number') setCostPrice(saved.costPrice);
+    if (typeof saved.sellingPrice === 'number') setSellingPrice(saved.sellingPrice);
+    if (saved.category && categories.includes(saved.category)) setCategory(saved.category);
+    if (typeof saved.shippingFee === 'number') setShippingFee(saved.shippingFee);
+    if (typeof saved.couponDiscount === 'number') setCouponDiscount(saved.couponDiscount);
+    if (typeof saved.adCost === 'number') setAdCost(saved.adCost);
+    if (typeof saved.isAdRunning === 'boolean') setIsAdRunning(saved.isAdRunning);
+    if (typeof saved.conversionRate === 'number') setConversionRate(saved.conversionRate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      saveCalcState(STORAGE_KEY, {
+        costPrice, sellingPrice, category, shippingFee, couponDiscount, adCost, isAdRunning, conversionRate,
+      });
+    }, CALC_SAVE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [costPrice, sellingPrice, category, shippingFee, couponDiscount, adCost, isAdRunning, conversionRate]);
 
   const result = useMemo(() => {
     if (!sellingPrice) return null;

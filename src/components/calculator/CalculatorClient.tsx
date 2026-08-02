@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Calculator, BarChart3, Package } from 'lucide-react';
 import CoupangTab from './tabs/CoupangTab';
 import NaverTab from './tabs/NaverTab';
@@ -9,6 +9,7 @@ import ElevenstTab from './tabs/ElevenstTab';
 import ShopeeTab from './tabs/ShopeeTab';
 import CompareMode from './CompareMode';
 import BundleAdMode from './BundleAdMode';
+import { loadCalcState, saveCalcState } from './persist';
 
 type Tab = 'coupang' | 'naver' | 'gmarket' | 'elevenst' | 'shopee';
 
@@ -19,11 +20,31 @@ const TABS: { id: Tab; label: string; color: string }[] = [
   { id: 'elevenst', label: '11번가', color: '#ff0038' },
   { id: 'shopee', label: 'Shopee', color: '#ee4d2d' },
 ];
+const TAB_IDS = TABS.map((t) => t.id);
+
+const STORAGE_KEY = 'sss_calc_active_tab';
+
+interface ActiveTabSavedState {
+  activeTab: Tab;
+}
 
 export default function CalculatorClient() {
+  // 각 플랫폼 탭 자신의 입력값은 탭별 storage key(sss_calc_coupang 등)로 이미 보존된다.
+  // activeTab은 "탭 목록 중 어느 것이 보이는가"라는 화면 전체 구조를 바꾸는 값이라,
+  // 서버 렌더 결과와 다르면 하이드레이션이 어긋날 수 있어 마운트 이후에만 복원한다.
   const [activeTab, setActiveTab] = useState<Tab>('coupang');
   const [showCompare, setShowCompare] = useState(false);
   const [showBundleAd, setShowBundleAd] = useState(false);
+
+  useEffect(() => {
+    const saved = loadCalcState<ActiveTabSavedState>(STORAGE_KEY);
+    if (saved.activeTab && TAB_IDS.includes(saved.activeTab)) setActiveTab(saved.activeTab);
+  }, []);
+
+  // 탭 전환은 타이핑처럼 빈번하지 않으므로 디바운스 없이 즉시 저장한다
+  useEffect(() => {
+    saveCalcState(STORAGE_KEY, { activeTab });
+  }, [activeTab]);
 
   return (
     <div className="flex min-h-full flex-col bg-[#f5f5f7]">
