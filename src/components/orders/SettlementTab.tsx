@@ -3,6 +3,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import ExpenseModal from './ExpenseModal';
 import { useUrlParam } from '@/hooks/useUrlParams';
+import { hasDraft } from '@/hooks/useDraftPersist';
+import { expenseDraftKey } from './draft-keys';
 
 interface Row {
   date: string;
@@ -159,6 +161,9 @@ export default function SettlementTab() {
                 <td style={td}>{r.platformFee ? `-${won(r.platformFee)}` : '0'}</td>
                 <td style={costTd} onClick={() => setModal({ date: r.date, purchase: r.purchase, adSpend: r.adSpend })} title="클릭해 비용 내역 보기·입력">
                   {cost(r) ? `-${won(cost(r))}` : '0'}
+                  {hasDraft(expenseDraftKey(r.date)) && (
+                    <span title="작성 중인 입력이 있어요" style={{ marginLeft: 4, fontSize: 10, color: '#c2410c' }}>✎</span>
+                  )}
                 </td>
                 <td style={{ ...td, fontWeight: 700, color: r.netProfit < 0 ? '#b91c1c' : '#14532d' }}>{won(r.netProfit)}</td>
               </tr>

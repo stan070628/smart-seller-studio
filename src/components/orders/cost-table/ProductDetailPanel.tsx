@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { hasCostManagementDraft } from '../draft-keys';
 
 interface DetailProduct {
   id: string;
@@ -48,6 +49,10 @@ export default function ProductDetailPanel({
   const [adByDate, setAdByDate] = useState<Record<string, number>>({});
   const [adLoading, setAdLoading] = useState(false);
   const [editingDate, setEditingDate] = useState<string | null>(null);
+  // editValue(광고비 인라인 셀 편집)는 localStorage 초안 대상에서 뺐다 — 아래
+  // onBlur={() => commitEdit(d)}가 포커스를 잃는 즉시(다른 탭 버튼 클릭 포함) 서버에
+  // 커밋하므로, 탭을 옮기는 그 동작 자체가 이미 저장을 트리거한다. 숫자 하나짜리
+  // 입력이라 되돌리는 비용도 낮아 별도 초안 저장의 이득이 작다고 판단했다.
   const [editValue, setEditValue] = useState('');
 
   // 프리미티브 값으로 추출해 객체 레퍼런스 변화에 따른 불필요한 재실행 방지
@@ -135,7 +140,15 @@ export default function ProductDetailPanel({
             return v === null || v === undefined ? '—' : `${fmt(v)}개`;
           })())}
 
-          <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+          <div style={{ display: 'flex', gap: 8, marginLeft: 'auto', alignItems: 'center' }}>
+            {hasCostManagementDraft(product.id) && (
+              <span
+                title="닫힌 채로 저장된 입력이 있어요. 열면 이어서 작성할 수 있어요."
+                style={{ fontSize: 11, color: '#c2410c', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 20, padding: '3px 8px', fontWeight: 600 }}
+              >
+                ✎ 작성 중
+              </span>
+            )}
             <button
               onClick={() => onOpenDrawer(product.id)}
               style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #e4e4e7', background: '#fff', fontSize: 12, cursor: 'pointer', color: '#3f3f46' }}

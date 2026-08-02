@@ -18,6 +18,8 @@ import ProductRowComponent from './cost-table/ProductRow';
 import ProductDetailPanel from './cost-table/ProductDetailPanel';
 import { useUrlParams, useUrlParam, useUrlFlag, useDebouncedUrlParam } from '@/hooks/useUrlParams';
 import { useTabUiState } from '@/hooks/useTabUiState';
+import { hasDraft } from '@/hooks/useDraftPersist';
+import { ADD_PRODUCT_DRAFT_KEY, SHIPPING_GROUP_DRAFT_KEY, RG_SHIPMENT_DRAFT_KEY } from './draft-keys';
 
 interface ChannelEntry {
   id: string;
@@ -806,20 +808,20 @@ export default function CostManagementTab() {
           onClick={() => setShowAddModal(true)}
           style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', background: '#be0014', color: '#fff', border: 'none', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
         >
-          <Plus size={13} /> 상품 추가
+          <Plus size={13} /> 상품 추가{hasDraft(ADD_PRODUCT_DRAFT_KEY) && <span title="작성 중인 입력이 있어요"> ✎</span>}
         </button>
         <button
           onClick={() => setShowShippingModal(true)}
           style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', background: '#fff', color: '#333', border: '1px solid #e5e5e5', fontSize: '12px', cursor: 'pointer' }}
         >
-          <Truck size={13} /> 배송비 그룹 생성
+          <Truck size={13} /> 배송비 그룹 생성{hasDraft(SHIPPING_GROUP_DRAFT_KEY) && <span title="작성 중인 입력이 있어요"> ✎</span>}
         </button>
         <div style={{ position: 'relative', display: 'flex', borderRadius: '8px', border: '1px solid #bae6fd' }}>
           <button
             onClick={() => setShowRgModal(true)}
             style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', background: '#fff', color: '#0369a1', border: 'none', fontSize: '12px', cursor: 'pointer', borderRadius: '8px 0 0 8px' }}
           >
-            <Package size={13} /> 로켓그로스 입고 등록
+            <Package size={13} /> 로켓그로스 입고 등록{hasDraft(RG_SHIPMENT_DRAFT_KEY) && <span title="작성 중인 입력이 있어요"> ✎</span>}
           </button>
           <button
             onClick={() => setShowRgHistory((prev) => !prev)}

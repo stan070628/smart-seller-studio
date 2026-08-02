@@ -4,6 +4,14 @@ import React, { useState, useEffect } from 'react';
 import { X, Truck } from 'lucide-react';
 import { distributeShippingFee } from '@/lib/cost-management/calculations';
 import { toast } from '@/components/ui/toast';
+import { useDraftPersist, loadDraft } from '@/hooks/useDraftPersist';
+import { SHIPPING_GROUP_DRAFT_KEY } from './draft-keys';
+
+interface ShippingGroupDraft {
+  groupName: string;
+  totalFee: string;
+  selectedProductIds: string[];
+}
 
 interface EntryForGroup {
   id: string;
@@ -33,6 +41,25 @@ export default function ShippingGroupModal({ products, onClose, onCreated }: Pro
   const [totalFee, setTotalFee] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // ── 초안 저장/복원 ──────────────────────────────────────────────
+  // 이 모달은 한 번에 하나만 열리는 전역 액션이라(상품별로 여러 개 동시에 열리지
+  // 않는다) 상품 id 없이 고정 키 하나를 쓴다.
+  useEffect(() => {
+    const saved = loadDraft<ShippingGroupDraft>(SHIPPING_GROUP_DRAFT_KEY);
+    if (saved.totalFee || (saved.selectedProductIds && saved.selectedProductIds.length > 0)) {
+      if (saved.groupName) setGroupName(saved.groupName);
+      if (saved.totalFee) setTotalFee(saved.totalFee);
+      if (saved.selectedProductIds) setSelectedProductIds(new Set(saved.selectedProductIds));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const { clearNow: clearShippingDraftNow } = useDraftPersist(
+    SHIPPING_GROUP_DRAFT_KEY,
+    { groupName, totalFee, selectedProductIds: [...selectedProductIds] },
+    totalFee !== '' || selectedProductIds.size > 0,
+  );
 
   useEffect(() => {
     async function loadEntries() {
@@ -99,6 +126,7 @@ export default function ShippingGroupModal({ products, onClose, onCreated }: Pro
       });
       const json = await res.json();
       if (json.success) {
+        clearShippingDraftNow();
         onCreated();
         onClose();
       } else {

@@ -1,10 +1,18 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Package } from 'lucide-react';
 import { distributeRgFee } from '@/lib/cost-management/rg-shipment';
 import { toast } from '@/components/ui/toast';
 import { confirmDialog } from '@/components/ui/confirm';
+import { useDraftPersist, loadDraft } from '@/hooks/useDraftPersist';
+import { RG_SHIPMENT_DRAFT_KEY } from './draft-keys';
+
+interface RgShipmentDraft {
+  shippedAt: string;
+  totalFee: string;
+  quantities: Record<string, string>;
+}
 
 interface ProductForRg {
   id: string;
@@ -25,6 +33,25 @@ export default function RocketGrowthShipmentModal({ products, onClose, onCreated
   const [totalFee, setTotalFee] = useState('');
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+
+  // ── 초안 저장/복원 ── 전역 액션 모달 하나뿐이라 고정 키를 쓴다(ShippingGroupModal과 동일).
+  useEffect(() => {
+    const saved = loadDraft<RgShipmentDraft>(RG_SHIPMENT_DRAFT_KEY);
+    const hasMeaningfulQty = saved.quantities && Object.values(saved.quantities).some((v) => v && v !== '0');
+    if (saved.totalFee || hasMeaningfulQty) {
+      if (saved.shippedAt) setShippedAt(saved.shippedAt);
+      if (saved.totalFee) setTotalFee(saved.totalFee);
+      if (saved.quantities) setQuantities(saved.quantities);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const hasMeaningfulQty = Object.values(quantities).some((v) => v && v !== '0');
+  const { clearNow: clearRgDraftNow } = useDraftPersist(
+    RG_SHIPMENT_DRAFT_KEY,
+    { shippedAt, totalFee, quantities },
+    totalFee !== '' || hasMeaningfulQty,
+  );
 
   const feeNum = Number(totalFee.replace(/,/g, '')) || 0;
 
@@ -68,6 +95,7 @@ export default function RocketGrowthShipmentModal({ products, onClose, onCreated
       });
       const json = await res.json();
       if (json.success) {
+        clearRgDraftNow();
         onCreated();
         onClose();
       } else {

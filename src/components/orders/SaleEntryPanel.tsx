@@ -5,6 +5,8 @@ import { Plus, Pencil, Trash2, CloudDownload } from 'lucide-react';
 import { buildSalePayload } from './sale-payload';
 import { toast } from '@/components/ui/toast';
 import { confirmDialog } from '@/components/ui/confirm';
+import { useDraftPersist, loadDraft } from '@/hooks/useDraftPersist';
+import { saleEntryDraftKey, couponPolicyDraftKey } from './draft-keys';
 
 interface DownloadCouponPolicy {
   rate: number;
@@ -51,6 +53,20 @@ interface ImportForm {
   to: string;
 }
 
+interface CouponPolicyForm {
+  rate: string;
+  max_discount: string;
+  min_price: string;
+}
+
+function defaultCouponPolicyForm(policy?: DownloadCouponPolicy | null): CouponPolicyForm {
+  return {
+    rate: String(Math.round((policy?.rate ?? 0.10) * 100)),
+    max_discount: String(policy?.max_discount ?? 1000),
+    min_price: String(policy?.min_price ?? 30000),
+  };
+}
+
 interface Props {
   productId: string;
   sellerProductId: number | null;
@@ -77,13 +93,18 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
   const [couponPolicy, setCouponPolicy] = useState<DownloadCouponPolicy | null>(
     downloadCouponPolicy ?? null
   );
-  const [couponPolicyForm, setCouponPolicyForm] = useState({
-    rate: String(Math.round((downloadCouponPolicy?.rate ?? 0.10) * 100)),
-    max_discount: String(downloadCouponPolicy?.max_discount ?? 1000),
-    min_price: String(downloadCouponPolicy?.min_price ?? 30000),
-  });
+  const [couponPolicyForm, setCouponPolicyForm] = useState<CouponPolicyForm>(
+    defaultCouponPolicyForm(downloadCouponPolicy)
+  );
   const [showCouponPolicyForm, setShowCouponPolicyForm] = useState(false);
   const [savingCouponPolicy, setSavingCouponPolicy] = useState(false);
+
+  // ── 초안 저장/복원 ──────────────────────────────────────────────
+  // 판매 입력(addingNew=true인 새 판매 건)과 다운로드쿠폰 정책 폼(showCouponPolicyForm)은
+  // 서로 독립된 초안이다 — 하나만 열어둔 채 탭을 옮겨도 서로 지우지 않는다.
+  // 판매 "수정"(editingId)은 CostEntryDrawer와 같은 이유로 초안에 담지 않는다.
+  const saleDraftKey = saleEntryDraftKey(productId);
+  const couponDraftKey = couponPolicyDraftKey(productId);
 
   // 쿠폰 자동완성
   type CouponItem = { couponId: number; promotionName: string; type: string; discount: number; endAt: string };
@@ -134,12 +155,28 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
   // downloadCouponPolicy prop이 변경될 때 내부 상태 동기화
   useEffect(() => {
     setCouponPolicy(downloadCouponPolicy ?? null);
-    setCouponPolicyForm({
-      rate: String(Math.round((downloadCouponPolicy?.rate ?? 0.10) * 100)),
-      max_discount: String(downloadCouponPolicy?.max_discount ?? 1000),
-      min_price: String(downloadCouponPolicy?.min_price ?? 30000),
-    });
+    setCouponPolicyForm(defaultCouponPolicyForm(downloadCouponPolicy));
   }, [downloadCouponPolicy]);
+
+  // 마운트 시 한 번 초안 복원 — 위 prop 동기화 effect보다 뒤에 선언해 초안이
+  // prop 기본값을 덮어쓰도록 한다(둘 다 마운트 시 실행되며, effect는 선언 순서대로
+  // 실행된다). 지연 초기화 대신 마운트 후 복원(계산기 작업의 교훈)을 따른다.
+  useEffect(() => {
+    const savedSale = loadDraft<{ form: SaleForm }>(saleDraftKey);
+    if (savedSale.form) {
+      setAddingNew(true);
+      setForm(savedSale.form);
+    }
+    const savedCoupon = loadDraft<{ couponPolicyForm: CouponPolicyForm }>(couponDraftKey);
+    if (savedCoupon.couponPolicyForm) {
+      setShowCouponPolicyForm(true);
+      setCouponPolicyForm(savedCoupon.couponPolicyForm);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saleDraftKey, couponDraftKey]);
+
+  const { clearNow: clearSaleDraftNow } = useDraftPersist(saleDraftKey, { form }, addingNew);
+  const { clearNow: clearCouponDraftNow } = useDraftPersist(couponDraftKey, { couponPolicyForm }, showCouponPolicyForm);
 
   async function save() {
     const payload = buildSalePayload(form);
@@ -158,6 +195,7 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
         setEditingId(null);
         setAddingNew(false);
         setForm(emptyForm());
+        clearSaleDraftNow();
       } else {
         toast.error(json.error ?? '저장에 실패했습니다.');
       }
@@ -211,6 +249,7 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
       if (json.success) {
         setCouponPolicy({ rate, max_discount, min_price });
         setShowCouponPolicyForm(false);
+        clearCouponDraftNow();
         toast.success('다운로드쿠폰 정책이 저장되었습니다. 재임포트 시 적용됩니다.');
       } else {
         toast.error(json.error ?? '저장 실패');
@@ -494,7 +533,7 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
                       style={{ padding: '3px 8px', borderRadius: '4px', background: canSave ? '#16a34a' : '#d4d4d4', color: canSave ? '#fff' : '#71717a', border: 'none', fontSize: '11px', cursor: canSave ? 'pointer' : 'not-allowed' }}>
                       {saving ? '저장중' : '저장'}
                     </button>
-                    <button onClick={() => { setAddingNew(false); setForm(emptyForm()); }}
+                    <button onClick={() => { setAddingNew(false); setForm(emptyForm()); clearSaleDraftNow(); }}
                       style={{ padding: '3px 8px', borderRadius: '4px', background: '#f3f4f6', border: 'none', fontSize: '11px', cursor: 'pointer', color: '#27272a' }}>
                       취소
                     </button>

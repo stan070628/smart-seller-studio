@@ -2,6 +2,14 @@
 
 import React, { useEffect, useState } from 'react';
 import { toast } from '@/components/ui/toast';
+import { useDraftPersist, loadDraft } from '@/hooks/useDraftPersist';
+import { expenseDraftKey } from './draft-keys';
+
+interface ExpenseDraft {
+  parcelCost: string;
+  boxCost: string;
+  boxMemo: string;
+}
 
 interface Props {
   date: string;      // YYYY-MM-DD
@@ -20,9 +28,24 @@ export default function ExpenseModal({ date, purchase, adSpend, onClose, onSaved
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const draftKey = expenseDraftKey(date);
+
   // 그날 기존 비용 로드 (박스메모까지 정확히 복원)
+  // localStorage에 제출 전 초안이 남아있으면 그것을 우선한다 — 그렇지 않으면
+  // 비동기 서버 응답이 나중에 도착해 방금 복원한 초안을 덮어써 버린다
+  // (초안이 곧 아직 저장하지 않은 더 최근 입력이라는 전제).
   useEffect(() => {
     let alive = true;
+    const draft = loadDraft<ExpenseDraft>(draftKey);
+    const hasDraftValues =
+      draft.parcelCost !== undefined || draft.boxCost !== undefined || draft.boxMemo !== undefined;
+    if (hasDraftValues) {
+      setParcelCost(draft.parcelCost ?? '');
+      setBoxCost(draft.boxCost ?? '');
+      setBoxMemo(draft.boxMemo ?? '');
+      setLoading(false);
+      return;
+    }
     (async () => {
       try {
         const res = await fetch(`/api/settlement/expenses?from=${date}&to=${date}`);
@@ -38,7 +61,14 @@ export default function ExpenseModal({ date, purchase, adSpend, onClose, onSaved
       }
     })();
     return () => { alive = false; };
-  }, [date]);
+  }, [date, draftKey]);
+
+  // 로딩 중(서버/초안 확인 전)이거나 세 필드가 모두 비어있으면 초안을 남기지 않는다.
+  const { clearNow: clearExpenseDraftNow } = useDraftPersist(
+    draftKey,
+    { parcelCost, boxCost, boxMemo },
+    !loading && (parcelCost !== '' || boxCost !== '' || boxMemo !== ''),
+  );
 
   const num = (s: string) => Math.trunc(Number(s) || 0);
 
@@ -51,7 +81,7 @@ export default function ExpenseModal({ date, purchase, adSpend, onClose, onSaved
         body: JSON.stringify({ parcelCost: num(parcelCost), boxCost: num(boxCost), boxMemo }),
       });
       const json = await res.json();
-      if (json.success) { toast.success('비용 저장됨'); onSaved(); }
+      if (json.success) { clearExpenseDraftNow(); toast.success('비용 저장됨'); onSaved(); }
       else toast.error(json.error ?? '저장 실패');
     } catch {
       toast.error('저장 실패');
