@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import ExpenseModal from './ExpenseModal';
+import { useUrlParam } from '@/hooks/useUrlParams';
 
 interface Row {
   date: string;
@@ -34,7 +35,9 @@ function shiftMonth(ym: string, delta: number): string {
 
 export default function SettlementTab() {
   const nowKst = new Date(Date.now() + 9 * 3600 * 1000);
-  const [ym, setYm] = useState(`${nowKst.getUTCFullYear()}-${String(nowKst.getUTCMonth() + 1).padStart(2, '0')}`);
+  const defaultYm = `${nowKst.getUTCFullYear()}-${String(nowKst.getUTCMonth() + 1).padStart(2, '0')}`;
+  // 정산 연월 — 스칼라라 URL 쿼리에 둔다. 탭 이동 후 돌아와도 보던 달 그대로 복원된다.
+  const [ym, setYm] = useUrlParam('ym', defaultYm);
   const [data, setData] = useState<DailyResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [modal, setModal] = useState<{ date: string; purchase: number; adSpend: number } | null>(null);
@@ -106,9 +109,9 @@ export default function SettlementTab() {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-        <button onClick={() => setYm((m) => shiftMonth(m, -1))} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #e5e5e5', background: '#fff', color: '#3f3f46', cursor: 'pointer' }}>‹ 이전달</button>
+        <button onClick={() => setYm(shiftMonth(ym, -1))} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #e5e5e5', background: '#fff', color: '#3f3f46', cursor: 'pointer' }}>‹ 이전달</button>
         <span style={{ fontWeight: 700, fontSize: 14 }}>{ym}</span>
-        <button onClick={() => setYm((m) => shiftMonth(m, 1))} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #e5e5e5', background: '#fff', color: '#3f3f46', cursor: 'pointer' }}>다음달 ›</button>
+        <button onClick={() => setYm(shiftMonth(ym, 1))} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #e5e5e5', background: '#fff', color: '#3f3f46', cursor: 'pointer' }}>다음달 ›</button>
         {loading && <span style={{ color: '#a1a1aa', fontSize: 12 }}>불러오는 중…</span>}
       </div>
 

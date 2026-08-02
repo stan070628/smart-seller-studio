@@ -16,6 +16,8 @@ import { buildImportSummary, type ImportSummary } from './import-summary';
 import GroupRow from './cost-table/GroupRow';
 import ProductRowComponent from './cost-table/ProductRow';
 import ProductDetailPanel from './cost-table/ProductDetailPanel';
+import { useUrlParams, useUrlParam, useUrlFlag, useDebouncedUrlParam } from '@/hooks/useUrlParams';
+import { useTabUiState } from '@/hooks/useTabUiState';
 
 interface ChannelEntry {
   id: string;
@@ -63,6 +65,9 @@ function fmt(n: number): string {
   return n.toLocaleString('ko-KR');
 }
 
+/** useTabUiState의 defaultValue로 매 렌더 새 Set을 만들지 않도록 고정 인스턴스를 쓴다. */
+const EMPTY_SET: Set<string> = new Set();
+
 // ─── 타입 ──────────────────────────────────────────────────────────────────
 
 interface OrderItem {
@@ -93,6 +98,16 @@ interface ApiRevenue {
 // ─── 유틸 ──────────────────────────────────────────────────────────────────
 
 type Preset = 'this_month' | 'last_month' | '3months' | '6months' | 'all' | 'custom';
+
+const PRESET_VALUES: readonly Preset[] = ['this_month', 'last_month', '3months', '6months', 'all', 'custom'];
+function isPreset(v: string): v is Preset {
+  return (PRESET_VALUES as readonly string[]).includes(v);
+}
+
+const CHANNEL_FILTER_VALUES = ['all', 'rg', 'wing', 'naver'] as const;
+function isChannelFilterValue(v: string): v is (typeof CHANNEL_FILTER_VALUES)[number] {
+  return (CHANNEL_FILTER_VALUES as readonly string[]).includes(v);
+}
 
 function toDateStr(d: Date): string {
   const y = d.getFullYear();
@@ -212,9 +227,11 @@ function fmtRevenue(n: number): string {
 export default function CostManagementTab() {
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-  const [expandedDetailIds, setExpandedDetailIds] = useState<Set<string>>(new Set());
+  // 검색어 — 로컬 값은 즉시 필터링에 쓰고, URL 반영만 디바운스한다(타이핑마다 주소가 안 바뀌게).
+  const [search, setSearch] = useDebouncedUrlParam('search', '');
+  // 펼침 목록(Set) — 탭 리마운트에도 살아남아야 하므로 URL이 아니라 UI 상태 슬라이스에 둔다.
+  const [expandedGroups, setExpandedGroups] = useTabUiState<Set<string>>('cost:expandedGroups', EMPTY_SET);
+  const [expandedDetailIds, setExpandedDetailIds] = useTabUiState<Set<string>>('cost:expandedDetailIds', EMPTY_SET);
   const toggleDetail = (id: string) =>
     setExpandedDetailIds((prev) => {
       const next = new Set(prev);
@@ -234,18 +251,27 @@ export default function CostManagementTab() {
     product: ProductRow;
     anchorEl: HTMLElement;
   } | null>(null);
-  const [preset, setPreset] = useState<Preset>('this_month');
-  const [customFrom, setCustomFrom] = useState('');
-  const [customTo, setCustomTo] = useState('');
+  // 기간 필터 — preset/from/to는 서로 묶여 있어(프리셋 바꾸면 커스텀 날짜를 정리) 한 번에 갱신한다.
+  const dateParams = useUrlParams({ preset: 'this_month', from: '', to: '' });
+  const rawPreset = dateParams.get('preset');
+  const preset: Preset = isPreset(rawPreset) ? rawPreset : 'this_month';
+  const customFrom = dateParams.get('from');
+  const customTo = dateParams.get('to');
+  // 프리셋만 바꾼다 — 커스텀 날짜는 건드리지 않는다. 원래 동작(상태가 계속 살아있어
+  // this_month↔custom을 오가도 입력한 날짜가 남아있던 것)과 그대로 맞춘다.
+  const setPreset = useCallback((p: Preset) => dateParams.set({ preset: p }), [dateParams]);
+  const setCustomFrom = useCallback((v: string) => dateParams.set({ from: v }), [dateParams]);
+  const setCustomTo = useCallback((v: string) => dateParams.set({ to: v }), [dateParams]);
   const [summary, setSummary] = useState({ total_purchase_amount: 0, total_sales_amount: 0, total_realized_profit: 0 });
   const [apiRevenue, setApiRevenue] = useState<ApiRevenue | null>(null);
   const [apiLoading, setApiLoading] = useState(false);
   const [apiWarnings, setApiWarnings] = useState<string[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [channelFilter, setChannelFilter] = useState<'all' | 'rg' | 'wing' | 'naver'>('all');
+  const [rawChannelFilter, setChannelFilter] = useUrlParam('channelFilter', 'all');
+  const channelFilter: 'all' | 'rg' | 'wing' | 'naver' = isChannelFilterValue(rawChannelFilter) ? rawChannelFilter : 'all';
   const [rgInventory, setRgInventory] = useState<Map<string, number | null>>(new Map());
   const [rgInventoryLoading, setRgInventoryLoading] = useState(false);
-  const [showHidden, setShowHidden] = useState(false);
+  const [showHidden, setShowHidden] = useUrlFlag('showHidden', false);
   const [hiddenCount, setHiddenCount] = useState(0);
   interface UndoToast { message: string; productsToRestore: ProductRow[]; }
   const [undoToast, setUndoToast] = useState<UndoToast | null>(null);
@@ -846,7 +872,7 @@ export default function CostManagementTab() {
       {hiddenCount > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
           <button
-            onClick={() => setShowHidden((prev) => !prev)}
+            onClick={() => setShowHidden(!showHidden)}
             style={{
               display: 'flex', alignItems: 'center', gap: '5px',
               padding: '5px 12px', borderRadius: '20px', fontSize: '12px',

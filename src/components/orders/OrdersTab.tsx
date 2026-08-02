@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Package, RefreshCw, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
 import { PLATFORM_INFO } from '@/types/orders';
+import { useUrlParam } from '@/hooks/useUrlParams';
 
 // ─── 쿠팡 주문 상태 → 내부 레이블 매핑 ────────────────────────
 
@@ -314,10 +315,19 @@ export default function OrdersTab() {
   const today = new Date();
   const defaultFrom = new Date(today);
   defaultFrom.setDate(defaultFrom.getDate() - 7);
+  const defaultFromStr = toDateStr(defaultFrom);
+  const defaultToStr = toDateStr(today);
 
-  const [from, setFrom] = useState(toDateStr(defaultFrom));
-  const [to, setTo] = useState(toDateStr(today));
-  const [statusFilter, setStatusFilter] = useState('');
+  // 기간·상태·펼침 행은 모두 스칼라(문자열)라 URL 쿼리에 둔다 — 탭 리마운트에도 복원된다.
+  const [from, setFrom] = useUrlParam('from', defaultFromStr);
+  const [to, setTo] = useUrlParam('to', defaultToStr);
+  const [statusFilter, setStatusFilter] = useUrlParam('status', '');
+  const [rawExpandedKey, setRawExpandedKey] = useUrlParam('expanded', '');
+  const expandedKey = rawExpandedKey === '' ? null : rawExpandedKey;
+  const setExpandedKey = useCallback(
+    (key: string | null) => setRawExpandedKey(key ?? ''),
+    [setRawExpandedKey],
+  );
   const [orders, setOrders] = useState<UnifiedOrder[]>([]);
   const [nextToken, setNextToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -325,7 +335,9 @@ export default function OrdersTab() {
   const [naverError, setNaverError] = useState<string | null>(null);
   const [rgError, setRgError] = useState<string | null>(null);
   const [tossError, setTossError] = useState<string | null>(null);
-  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  // 페이지 번호는 URL에 넣지 않는다 — 데이터가 바뀌면 옛 페이지가 빈 화면을 가리킬 수 있고,
+  // 실제로 조회를 새로 트리거하는 값도 아니라(from/to/status만 재조회 대상) 페이지네이션
+  // 위치까지 영구 기억할 필요는 적다고 판단했다. 탭 복귀 시 1페이지부터 다시 보는 편이 안전하다.
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 20;
 
