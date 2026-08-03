@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import InfoShotGuide from '@/components/listing/InfoShotGuide';
 import type { AnalyzedSection } from '@/app/api/ai/analyze-detail-page/route';
 import type { LayoutBlock } from '@/types/detail-page';
 import { normalizeImageBlocks } from '@/lib/detail-page/layout-image-blocks';
@@ -552,6 +553,8 @@ export default function DetailMakerProPage() {
             style={{ ...inputStyle, resize: 'vertical' as const }}
           />
         </div>
+
+        <InfoShotGuide productName={productName} />
 
         <div style={{ marginBottom: '20px' }}>
           <label
