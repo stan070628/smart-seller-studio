@@ -2,6 +2,8 @@
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import InfoShotGuide from '@/components/listing/InfoShotGuide';
+import LabelReader from '@/components/listing/LabelReader';
 import type { AnalyzedSection } from '@/app/api/ai/analyze-detail-page/route';
 import type { LayoutBlock } from '@/types/detail-page';
 import { normalizeImageBlocks } from '@/lib/detail-page/layout-image-blocks';
@@ -552,6 +554,21 @@ export default function DetailMakerProPage() {
             style={{ ...inputStyle, resize: 'vertical' as const }}
           />
         </div>
+
+        <InfoShotGuide productName={productName} />
+
+        <LabelReader
+          productName={productName}
+          onApplyKeyPoints={(pts) => {
+            // 기존 입력을 지우지 않고 뒤에 덧붙인다. 셀러가 이미 쓴 문장이
+            // 사라지면 신뢰를 잃는다.
+            setProductPoints((prev) => {
+              const existing = prev.split('\n').map(s => s.trim()).filter(Boolean);
+              const merged = [...existing, ...pts.filter(p => !existing.includes(p))];
+              return merged.join('\n');
+            });
+          }}
+        />
 
         <div style={{ marginBottom: '20px' }}>
           <label
