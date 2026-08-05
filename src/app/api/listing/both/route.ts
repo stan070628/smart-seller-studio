@@ -28,6 +28,26 @@ function isNaverPermissionError(msg: string) {
   return NAVER_PERMISSION_KEYWORDS.some((kw) => msg.includes(kw));
 }
 
+type NoticeCategoryMeta = {
+  noticeCategoryName: string;
+  noticeCategoryDetailNames: { noticeCategoryDetailName: string }[];
+};
+
+/**
+ * 카테고리 메타의 고시정보 그룹 중 하나를 고른다.
+ *
+ * cats[0] 고정은 위험하다 — 예를 들어 '데이크림'(56163)의 그룹 순서는
+ * [의료기기, 화장품, 기타 재화]라서 화장품에 의료기기 고시정보가 붙는다.
+ * 입력 notices의 noticeCategoryName과 일치하는 그룹이 있으면 그것을 쓴다.
+ */
+function pickNoticeCategory(
+  cats: NoticeCategoryMeta[],
+  userNotices?: { noticeCategoryName: string }[],
+): NoticeCategoryMeta {
+  const wanted = userNotices?.[0]?.noticeCategoryName;
+  return (wanted && cats.find((c) => c.noticeCategoryName === wanted)) || cats[0];
+}
+
 async function saveNaverDraft(name: string, payload: Record<string, unknown>, errorMessage: string): Promise<string> {
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase
@@ -61,7 +81,9 @@ const BothRegisterSchema = z.object({
   coupang: z.object({
     displayCategoryCode: z.number().int(),
     brand: z.string().default(''),
-    maximumBuyCount: z.number().int().min(1).default(999),
+    // default(999)를 두면 stock이 있어도 999가 우선해 실재고가 반영되지 않는다.
+    // 미입력 시 payload-mappers가 common.stock을 쓰도록 optional로 둔다.
+    maximumBuyCount: z.number().int().min(1).optional(),
     maximumBuyForPerson: z.number().int().min(0).default(0),
     outboundShippingPlaceCode: z.string().optional(),
     returnCenterCode: z.string().optional(),
@@ -71,7 +93,22 @@ const BothRegisterSchema = z.object({
     taxType: z.enum(['TAX', 'TAX_FREE', 'ZERO_TAX']).optional(),
     overseasPurchased: z.enum(['NOT_OVERSEAS_PURCHASED', 'OVERSEAS_PURCHASED']).optional(),
     parallelImported: z.enum(['NOT_PARALLEL_IMPORTED', 'PARALLEL_IMPORTED', 'CONFIRMED_CARRIED_OUT']).optional(),
-    notices: z.array(z.object({ noticeCategoryName: z.string(), content: z.string() })).optional(),
+    notices: z
+      .array(
+        z.object({
+          noticeCategoryName: z.string(),
+          // 카테고리 메타의 항목명. 이 값이 일치해야 자동 생성 골격의 기본값을 대체한다.
+          noticeCategoryDetailName: z.string().optional(),
+          content: z.string(),
+        }),
+      )
+      .optional(),
+    // 카테고리 필수속성. 없으면 쿠팡이 등록을 거부할 수 있다.
+    attributes: z
+      .array(z.object({ attributeTypeName: z.string(), attributeValueName: z.string() }))
+      .optional(),
+    // 검색어 태그(쿠팡 상한 20개). 비우면 검색 노출이 상품명에만 의존한다.
+    searchTags: z.array(z.string()).max(20).optional(),
   }).optional(),
   // 네이버 전용 필드 (platform이 'coupang'이면 생략 가능)
   naver: z.object({
@@ -176,6 +213,8 @@ async function registerCoupang(
     overseasPurchased: d.coupang.overseasPurchased,
     parallelImported: d.coupang.parallelImported,
     notices: d.coupang.notices,
+    attributes: d.coupang.attributes,
+    searchTags: d.coupang.searchTags,
   };
 
   // 카테고리 메타에서 고시정보 자동 생성 — getCategoryMeta 첫 번째 카테고리 사용
@@ -185,7 +224,7 @@ async function registerCoupang(
     const meta = await client.getCategoryMeta(d.coupang.displayCategoryCode);
     const cats = meta.noticeCategories as { noticeCategoryName: string; noticeCategoryDetailNames: { noticeCategoryDetailName: string }[] }[] | undefined;
     if (cats && cats.length > 0) {
-      const chosen = cats[0];
+      const chosen = pickNoticeCategory(cats, d.coupang.notices);
       autoNotices = chosen.noticeCategoryDetailNames.map((det) => ({
         noticeCategoryName: chosen.noticeCategoryName,
         noticeCategoryDetailName: det.noticeCategoryDetailName,
@@ -322,9 +361,9 @@ export async function POST(request: NextRequest) {
       let autoNotices: { noticeCategoryName: string; noticeCategoryDetailName: string; content: string }[] = [];
       try {
         const meta = await client.getCategoryMeta(d.coupang.displayCategoryCode);
-        const cats = meta.noticeCategories as { noticeCategoryName: string; noticeCategoryDetailNames: { noticeCategoryDetailName: string }[] }[] | undefined;
+        const cats = meta.noticeCategories as NoticeCategoryMeta[] | undefined;
         if (cats && cats.length > 0) {
-          const chosen = cats[0];
+          const chosen = pickNoticeCategory(cats, d.coupang.notices);
           autoNotices = chosen.noticeCategoryDetailNames.map((det) => ({
             noticeCategoryName: chosen.noticeCategoryName,
             noticeCategoryDetailName: det.noticeCategoryDetailName,
@@ -343,6 +382,8 @@ export async function POST(request: NextRequest) {
         overseasPurchased: d.coupang.overseasPurchased,
         parallelImported: d.coupang.parallelImported,
         notices: d.coupang.notices,
+        attributes: d.coupang.attributes,
+        searchTags: d.coupang.searchTags,
       };
       coupangPayload = buildCoupangPayload({ ...commonBase, salePrice: d.coupangPrice ?? d.salePrice }, coupangSpecific, client.vendor, optionsInput, autoNotices);
     }

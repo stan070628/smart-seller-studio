@@ -8,11 +8,16 @@ import { NextRequest } from 'next/server';
 // 네이버 클라이언트 Mock
 const mockRegisterProduct = vi.fn();
 const mockUploadImagesFromUrls = vi.fn();
+const mockGetDefaultAddressIds = vi.fn(async () => ({
+  shippingAddressId: 200320013,
+  returnAddressId: 200320012,
+}));
 
 vi.mock('@/lib/listing/naver-commerce-client', () => ({
   getNaverCommerceClient: vi.fn(() => ({
     registerProduct: mockRegisterProduct,
     uploadImagesFromUrls: mockUploadImagesFromUrls,
+    getDefaultAddressIds: mockGetDefaultAddressIds,
   })),
 }));
 

@@ -114,6 +114,8 @@ export interface CoupangProductPayload {
   returnAddressDetail: string;
   returnCharge: number;
   vendorUserId: string;
+  /** 검색어 태그. 비우면 검색 노출이 상품명에만 의존한다. 쿠팡 상한 20개. */
+  searchTags?: string[];
   items: CoupangProductItem[];
   // 하위 호환용 (이전 코드 참조 시)
   deliveryInfo?: Record<string, unknown>;
@@ -473,11 +475,25 @@ export class CoupangClient {
       throw new Error(res.message || `쿠팡 상품 등록 실패 (code: ${res.code})`);
     }
 
-    if (!res.data.sellerProductId) {
-      console.error('[registerProduct] sellerProductId 누락:', JSON.stringify(res.data));
+    // 쿠팡은 등록 성공 시 data에 sellerProductId를 숫자로 직접 반환한다 ({"data": 16335592821}).
+    // data.sellerProductId만 보면 항상 undefined가 되어, 등록됐는데 ID를 모르는 상태가 된다.
+    const raw = res.data as unknown;
+    const sellerProductId =
+      typeof raw === 'number'
+        ? raw
+        : typeof raw === 'string' && /^\d+$/.test(raw)
+          ? Number(raw)
+          : (raw as { sellerProductId?: number })?.sellerProductId;
+
+    if (!sellerProductId) {
+      console.error('[registerProduct] sellerProductId 파싱 실패:', JSON.stringify(raw));
+      throw new Error(
+        '쿠팡이 성공을 반환했으나 sellerProductId를 확인할 수 없습니다. ' +
+          '판매자센터에서 등록 여부를 직접 확인해주세요.',
+      );
     }
 
-    return res.data;
+    return { sellerProductId };
   }
 
   // ─── 상품 상세 조회 ───────────────────────────────────────
@@ -490,6 +506,22 @@ export class CoupangClient {
       throw new Error(`[쿠팡] 상품 조회 실패: ${res.message}`);
     }
     return res.data;
+  }
+
+  // ─── 승인 요청 ────────────────────────────────────────────
+
+  /**
+   * 등록·수정된 상품의 판매 승인을 요청한다.
+   *
+   * 등록 직후 상태는 SAVED(임시저장)이며 이 호출 없이는 판매가 시작되지 않는다.
+   * 상세설명을 수정하면 승인완료 상품도 임시저장으로 되돌아가므로 다시 요청해야 한다.
+   */
+  async requestApproval(sellerProductId: number): Promise<void> {
+    const url = `/v2/providers/seller_api/apis/api/v1/marketplace/seller-products/${sellerProductId}/approvals`;
+    const res = await this.request<unknown>('PUT', url);
+    if (res.code !== 'SUCCESS') {
+      throw new Error(`[쿠팡] 승인 요청 실패: ${res.message || res.code}`);
+    }
   }
 
   // ─── 상품 삭제 ────────────────────────────────────────────
@@ -513,7 +545,8 @@ export class CoupangClient {
       throw new Error(`[쿠팡] 상품 수정 실패: ${res.message}`);
     }
 
-    return res.data ?? { sellerProductId };
+    // 등록과 마찬가지로 data가 숫자로 오므로 그대로 반환하면 타입이 어긋난다.
+    return { sellerProductId };
   }
 
   // ─── 출고지/반품지 조회 ────────────────────────────────────

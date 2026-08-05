@@ -56,6 +56,15 @@ export interface NaverCategory {
   last: boolean;
 }
 
+export interface NaverAddressBook {
+  addressBookNo: number;
+  name: string;
+  /** RELEASE=출고지, REFUND_OR_EXCHANGE=반품교환지 */
+  addressType: 'RELEASE' | 'REFUND_OR_EXCHANGE' | string;
+  address: string;
+  phoneNumber1?: string;
+}
+
 // product-orders/query API 실제 응답 구조 (data 배열의 각 원소)
 interface NaverOrderRawItem {
   order: {
@@ -517,6 +526,38 @@ export class NaverCommerceClient {
       if (rawItems.length < PAGE_SIZE) break;
     }
     return { items: allItems };
+  }
+
+  // ─── 주소록 조회 ──────────────────────────────────────────
+
+  /**
+   * 판매자 주소록(출고지·반품교환지) 목록.
+   * 상품 등록 시 claimDeliveryInfo.shippingAddressId / returnAddressId 에 필요하다.
+   */
+  async getAddressBooks(): Promise<NaverAddressBook[]> {
+    const res = await this.request<{ addressBooks?: NaverAddressBook[] }>(
+      'GET',
+      '/external/v1/seller/addressbooks-for-page?page=1&size=100',
+    );
+    return res.addressBooks ?? [];
+  }
+
+  /**
+   * 기본 출고지/반품교환지 주소록 번호를 찾는다.
+   * 조회에 실패하면 빈 객체를 반환한다 — 주소록 없이도 등록은 되므로
+   * 여기서 예외를 던져 등록 전체를 막지 않는다.
+   */
+  async getDefaultAddressIds(): Promise<{ shippingAddressId?: number; returnAddressId?: number }> {
+    try {
+      const books = await this.getAddressBooks();
+      return {
+        shippingAddressId: books.find((b) => b.addressType === 'RELEASE')?.addressBookNo,
+        returnAddressId: books.find((b) => b.addressType === 'REFUND_OR_EXCHANGE')?.addressBookNo,
+      };
+    } catch (err) {
+      console.warn('[네이버] 주소록 조회 실패 — 주소록 없이 등록을 진행합니다:', err);
+      return {};
+    }
   }
 
   // ─── 카테고리 조회 ────────────────────────────────────────
