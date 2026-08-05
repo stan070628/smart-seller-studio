@@ -145,15 +145,27 @@ describe('buildCoupangPayload', () => {
     expect(images[0].imageType).toBe('REPRESENTATION');
   });
 
-  it('maximumBuyCount / maximumBuyForPerson 미지정 시 기본값 999 / 0 이 적용된다', () => {
+  // 쿠팡에는 별도 재고 필드가 없고 maximumBuyCount 가 판매 가능 수량 역할을 한다.
+  // 999 로 하드코딩하면 재고 2개짜리가 999개 주문 가능 상태로 등록된다.
+  it('maximumBuyCount 미지정 시 common.stock 이 판매 가능 수량으로 쓰인다', () => {
     const payload = buildCoupangPayload(
-      makeCommon(),
+      makeCommon({ stock: 2 }),
       makeCoupangSpecific({ maximumBuyCount: undefined, maximumBuyForPerson: undefined }),
       'vendor',
     );
 
-    expect(payload.items[0].maximumBuyCount).toBe(999);
+    expect(payload.items[0].maximumBuyCount).toBe(2);
     expect(payload.items[0].maximumBuyForPerson).toBe(0);
+  });
+
+  it('maximumBuyCount 를 명시하면 stock 보다 우선한다', () => {
+    const payload = buildCoupangPayload(
+      makeCommon({ stock: 2 }),
+      makeCoupangSpecific({ maximumBuyCount: 5 }),
+      'vendor',
+    );
+
+    expect(payload.items[0].maximumBuyCount).toBe(5);
   });
 
   it('outboundShippingPlaceCode / returnCenterCode 가 최상위 필드에 반영된다', () => {
