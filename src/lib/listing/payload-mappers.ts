@@ -80,14 +80,55 @@ export interface CoupangSpecificInput {
 // 네이버 전용 입력 타입
 // ─────────────────────────────────────────────────────────────
 
+/**
+ * 상품정보제공고시 유형. 카테고리마다 요구 유형이 다르다 — 의류는 WEAR.
+ * 전체 목록은 네이버 커머스API 문서 참조. 여기에는 이 앱이 실제로 쓰는 것만 둔다.
+ */
+export type NaverNoticeType = 'ETC' | 'WEAR' | 'SHOES' | 'BAG' | 'FASHION_ITEMS';
+
 export interface NaverSpecificInput {
   leafCategoryId: string;
   tags?: string[];
   exchangeFee?: number;
   returnFee?: number;
   manufacturerName?: string;  // 제조사/브랜드
-  countryOfOrigin?: string;   // 원산지 (예: 국산, 미국산)
+  countryOfOrigin?: string;   // 원산지 표기 문구 (예: 니카라과산((주)코스트코코리아))
+
+  /**
+   * 원산지 코드. 미지정 시 '03'(상세설명에 표시).
+   * '00'(국산)을 기본값으로 두면 수입품이 국산으로 등록되어 표시사항이 틀어진다.
+   * 코드 목록: GET /external/v1/product-origin-areas
+   */
+  originAreaCode?: string;
+  /** 수입사. originAreaCode 가 '02' 계열(수입산)이면 네이버가 필수로 요구한다 */
+  importer?: string;
+
+  /** 출고지 주소록 번호. 미지정 시 스토어 기본 출고지가 적용된다 */
+  shippingAddressId?: number;
+  /** 반품교환지 주소록 번호 */
+  returnAddressId?: number;
+
+  /** 상품정보제공고시 유형. 미지정 시 'ETC' */
+  noticeType?: NaverNoticeType;
+  /** 고시 항목값. 유형에 맞는 키를 넣으면 기본값 위에 덮어쓴다 */
+  noticeFields?: Record<string, string>;
 }
+
+// 고시 유형 → payload 상의 본문 키 ('WEAR' → 'wear', 'FASHION_ITEMS' → 'fashionItems')
+function noticeBodyKey(type: NaverNoticeType): string {
+  return type
+    .toLowerCase()
+    .replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
+}
+
+// 유형과 무관하게 모든 고시에 들어가는 공통 항목
+const NOTICE_COMMON_DEFAULTS: Record<string, string> = {
+  returnCostReason: '전자상거래법에 의한 반품 시 반품배송비 부담',
+  noRefundReason: '상세페이지 참조',
+  qualityAssuranceStandard: '소비자분쟁해결기준에 따름',
+  compensationProcedure: '소비자분쟁해결기준에 따름',
+  troubleShootingContents: '판매자 문의',
+};
 
 // ─────────────────────────────────────────────────────────────
 // 쿠팡 payload 조립
@@ -247,6 +288,10 @@ export function buildNaverPayload(
 ): Record<string, unknown> {
   const exchangeFee = specific.exchangeFee ?? 8000;
   const returnFee = specific.returnFee ?? common.returnCharge;
+  const asPhone = process.env.NAVER_AS_PHONE ?? '010-0000-0000';
+  const noticeType: NaverNoticeType = specific.noticeType ?? 'ETC';
+  // '00'(국산)을 기본값으로 두면 수입품이 국산으로 등록된다 → '03'(상세설명에 표시)
+  const originAreaCode = specific.originAreaCode ?? '03';
 
   // enabled variant 목록
   const enabledVariants = options?.variants.filter((v) => v.enabled) ?? [];
@@ -312,28 +357,40 @@ export function buildNaverPayload(
           afterServiceGuideContent: '판매자에게 문의해주세요.',
         },
         productInfoProvidedNotice: {
-          productInfoProvidedNoticeType: 'ETC',
-          etc: {
-            itemName: common.name,
-            modelName: '상세페이지 참조',
-            manufacturer: specific.manufacturerName || '상세페이지 참조',
-            afterServiceDirector: process.env.NAVER_AS_PHONE ?? '010-0000-0000',
-            returnCostReason: '전자상거래법에 의한 반품 시 반품배송비 부담',
-            noRefundReason: '상세페이지 참조',
-            qualityAssuranceStandard: '소비자분쟁해결기준에 따름',
-            compensationProcedure: '소비자분쟁해결기준에 따름',
-            troubleShootingContents: '판매자 문의',
+          productInfoProvidedNoticeType: noticeType,
+          [noticeBodyKey(noticeType)]: {
+            ...NOTICE_COMMON_DEFAULTS,
+            afterServiceDirector: asPhone,
+            // ETC 는 품명·모델명·제조사를 요구한다. 다른 유형의 필수 항목은
+            // 유형마다 달라 추측하지 않고 noticeFields 로 받는다.
+            ...(noticeType === 'ETC'
+              ? {
+                  itemName: common.name,
+                  modelName: '상세페이지 참조',
+                  manufacturer: specific.manufacturerName || '상세페이지 참조',
+                }
+              : {}),
+            ...specific.noticeFields,
           },
         },
         productCertificationInfos: [],
         originAreaInfo: {
-          originAreaCode: '00',
+          originAreaCode,
           content: specific.countryOfOrigin || '상세페이지 참조',
+          // 수입산 코드인데 importer 가 비면 네이버가 400 을 낸다. 값이 없으면
+          // 키 자체를 빼서 지어낸 수입사가 표시사항에 실리지 않게 한다.
+          ...(specific.importer ? { importer: specific.importer } : {}),
         },
         sellerCodeInfo: {},
         optionInfo,
         minorPurchasable: true,
-        seoInfo: {},
+        // 네이버는 sellerTags 를 seoInfo 아래에서만 읽는다. originProduct 직속에
+        // 넣으면 오류 없이 조용히 무시되어 태그가 통째로 유실된다.
+        seoInfo: {
+          ...(specific.tags && specific.tags.length > 0
+            ? { sellerTags: specific.tags.map((text) => ({ text })) }
+            : {}),
+        },
       },
       customerBenefit: {},
       // 옵션 있을 때는 최저 옵션가를 기본 판매가로 설정 (추가금액=0 조건 충족)
@@ -350,6 +407,10 @@ export function buildNaverPayload(
         claimDeliveryInfo: {
           returnDeliveryFee: returnFee,
           exchangeDeliveryFee: exchangeFee,
+          // 주소록 번호는 조회 API(GET /external/v1/seller/addressbooks-for-page)로
+          // 얻는다. 값이 없으면 키를 빼야 한다 — null 을 보내면 400.
+          ...(specific.shippingAddressId ? { shippingAddressId: specific.shippingAddressId } : {}),
+          ...(specific.returnAddressId ? { returnAddressId: specific.returnAddressId } : {}),
         },
       },
       // detailImages가 있으면 detailContent 끝에 이미지 태그를 추가한다
@@ -366,12 +427,6 @@ export function buildNaverPayload(
       channelProductDisplayStatusType: 'ON',
     },
   };
-
-  // sellerTags는 originProduct 직접 하위 (detailAttribute 안이 아님)
-  if (specific.tags && specific.tags.length > 0) {
-    (payload.originProduct as Record<string, unknown>).sellerTags =
-      specific.tags.map((text) => ({ text }));
-  }
 
   return payload;
 }

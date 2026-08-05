@@ -36,6 +36,10 @@ interface NaverDraftData {
   exchangeFee?: number;
   manufacturerName?: string;
   countryOfOrigin?: string;
+  originAreaCode?: string;
+  importer?: string;
+  noticeType?: NaverSpecificInput['noticeType'];
+  noticeFields?: Record<string, string>;
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
@@ -123,6 +127,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
       returnCharge,
     };
 
+    // 출고지/반품교환지는 스토어 주소록에서 가져온다. 누락되면 네이버가
+    // 주소록을 못 잡아 배송·반품 정보가 비어버린다.
+    const addressIds = await client.getDefaultAddressIds();
+
     const specific: NaverSpecificInput = {
       leafCategoryId,
       tags,
@@ -130,6 +138,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
       returnFee: returnCharge,
       manufacturerName,
       countryOfOrigin,
+      originAreaCode: d.originAreaCode,
+      importer: d.importer,
+      noticeType: d.noticeType,
+      noticeFields: d.noticeFields,
+      ...addressIds,
     };
 
     const payload = buildNaverPayload(common, specific);
