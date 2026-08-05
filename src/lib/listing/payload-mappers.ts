@@ -57,6 +57,8 @@ export interface CommonProductInput {
 
 export interface NoticeItem {
   noticeCategoryName: string;
+  /** 항목명. 카테고리 메타의 noticeCategoryDetailName과 일치시켜야 값이 반영된다. */
+  noticeCategoryDetailName?: string;
   content: string;
 }
 
@@ -74,6 +76,13 @@ export interface CoupangSpecificInput {
   overseasPurchased?: 'NOT_OVERSEAS_PURCHASED' | 'OVERSEAS_PURCHASED';
   parallelImported?: 'NOT_PARALLEL_IMPORTED' | 'PARALLEL_IMPORTED' | 'CONFIRMED_CARRIED_OUT';
   notices?: NoticeItem[];
+  /**
+   * 카테고리 필수속성(MANDATORY). 비우면 쿠팡이 등록을 거부할 수 있다.
+   * 예: 데이크림(56163)은 수량·개당 중량·개당 용량이 필수다.
+   */
+  attributes?: { attributeTypeName: string; attributeValueName: string }[];
+  /** 검색어 태그(최대 20개). 비우면 검색 노출이 상품명에만 의존한다. */
+  searchTags?: string[];
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -146,7 +155,10 @@ export function buildCoupangPayload(
   options?: OptionsInput,
   overrideNotices?: { noticeCategoryName: string; noticeCategoryDetailName: string; content: string }[],
 ): CoupangProductPayload {
-  const maximumBuyCount = specific.maximumBuyCount ?? 999;
+  // 쿠팡에는 별도 재고 필드가 없고 maximumBuyCount가 판매 가능 수량 역할을 한다.
+  // common.stock을 반영하지 않으면 실재고보다 많은 주문을 받아 품절 사고가 난다.
+  // (네이버는 stockQuantity로 stock을 이미 반영하고 있어 두 채널이 어긋나 있었다.)
+  const maximumBuyCount = specific.maximumBuyCount ?? common.stock ?? 999;
   const maximumBuyForPerson = specific.maximumBuyForPerson ?? 0;
 
   // 상세 내용 — TEXT(설명) + IMAGE(상세이미지) 분리
@@ -162,15 +174,29 @@ export function buildCoupangPayload(
     })),
   ];
 
-  // overrideNotices: getCategoryMeta()가 자동 생성한 카테고리별 필수 고시정보. 있으면 우선 사용.
-  // specific.notices: 사용자가 폼에서 직접 입력한 고시정보. overrideNotices 없을 때만 사용.
-  const notices =
-    overrideNotices ??
-    (specific.notices?.map((n) => ({
-      noticeCategoryName: n.noticeCategoryName,
-      noticeCategoryDetailName: n.noticeCategoryName,
-      content: n.content,
-    })) ?? []);
+  // overrideNotices: getCategoryMeta()가 자동 생성한 카테고리별 필수 항목 골격.
+  //   content가 '상세페이지 참조' 같은 기본값이므로 그대로 쓰면 실제 정보가 등록되지 않는다.
+  // specific.notices: 사용자가 입력한 실제 값.
+  // → 골격을 유지한 채 항목명이 일치하는 것만 실제 값으로 채운다.
+  //   화장품 전성분처럼 법정 표시 의무가 있는 항목이 기본값으로 등록되는 것을 막는다.
+  const userNotices = specific.notices ?? [];
+  const findUserContent = (detailName: string, categoryName: string) =>
+    userNotices.find(
+      (n) => (n.noticeCategoryDetailName ?? n.noticeCategoryName) === detailName,
+    )?.content ??
+    userNotices.find((n) => n.noticeCategoryName === categoryName && !n.noticeCategoryDetailName)
+      ?.content;
+
+  const notices = overrideNotices
+    ? overrideNotices.map((o) => {
+        const content = findUserContent(o.noticeCategoryDetailName, o.noticeCategoryName);
+        return content ? { ...o, content } : o;
+      })
+    : userNotices.map((n) => ({
+        noticeCategoryName: n.noticeCategoryName,
+        noticeCategoryDetailName: n.noticeCategoryDetailName ?? n.noticeCategoryName,
+        content: n.content,
+      }));
 
   // 이미지 배열 — 썸네일 + 상세 이미지를 함께 포함
   // (쿠팡은 vendorPath에 외부 URL 허용, contents IMAGE는 거부함)
@@ -196,16 +222,20 @@ export function buildCoupangPayload(
           // 옵션값 조합명: "블랙/XL"
           const variantLabel = variant.optionValues.join('/');
           // group 순서에 따라 attributes 생성
-          const attributes = options!.groups.map((group, idx) => ({
-            attributeTypeName: group.groupName,
-            attributeValueName: variant.optionValues[idx] ?? '',
-          }));
+          const attributes = [
+            ...options!.groups.map((group, idx) => ({
+              attributeTypeName: group.groupName,
+              attributeValueName: variant.optionValues[idx] ?? '',
+            })),
+            ...(specific.attributes ?? []),
+          ];
 
           return {
             itemName: variantLabel,
             originalPrice: common.originalPrice ?? variant.salePrices.coupang,
             salePrice: variant.salePrices.coupang,
-            maximumBuyCount,
+            // variant마다 재고가 다르므로 공통값이 아니라 variant.stock을 쓴다.
+            maximumBuyCount: specific.maximumBuyCount ?? variant.stock,
             maximumBuyForPerson,
             maximumBuyForPersonPeriod: 1,
             outboundShippingTimeDay: specific.outboundShippingTimeDay ?? 3,
@@ -236,7 +266,7 @@ export function buildCoupangPayload(
             overseasPurchased: specific.overseasPurchased ?? 'NOT_OVERSEAS_PURCHASED',
             parallelImported: specific.parallelImported ?? 'NOT_PARALLEL_IMPORTED',
             images,
-            attributes: [],
+            attributes: specific.attributes ?? [],
             contents,
             notices,
           },
@@ -251,7 +281,10 @@ export function buildCoupangPayload(
     brand: specific.brand,
     generalProductName: common.name,
     deliveryMethod: 'SEQUENCIAL',
-    deliveryCompanyCode: specific.deliveryCompanyCode ?? 'LOTTE',
+    // 'LOTTE'는 쿠팡이 인정하지 않는 코드다("유효하지 않은 택배사 코드"로 등록 전체가 실패한다).
+    // 환경변수로 지정하되, 없으면 검증된 CJGLS(CJ대한통운)를 쓴다.
+    deliveryCompanyCode:
+      specific.deliveryCompanyCode ?? process.env.COUPANG_DELIVERY_COMPANY_CODE ?? 'CJGLS',
     deliveryChargeType: common.deliveryCharge === 0 ? 'FREE' : 'NOT_FREE',
     deliveryCharge: common.deliveryCharge,
     freeShipOverAmount: 0,
@@ -269,6 +302,8 @@ export function buildCoupangPayload(
     returnAddressDetail: process.env.COUPANG_RETURN_ADDRESS_DETAIL ?? '',
     returnCharge: common.returnCharge,
     vendorUserId: process.env.COUPANG_VENDOR_USER_ID ?? '',
+    // 쿠팡 상한 20개. 비우면 검색 유입이 상품명 토큰에만 의존한다.
+    searchTags: (specific.searchTags ?? []).slice(0, 20),
     items,
   };
 }
