@@ -659,7 +659,8 @@ function CoupangRegisterForm({ onClose }: { onClose: () => void }) {
     noticeModelName: '',
     noticeOrigin: '상세페이지 참조',
     noticeManufacturer: '상세페이지 참조',
-    deliveryCompany: 'LOTTE',
+    // 쿠팡 배송사 코드 — 롯데택배는 'HYUNDAI'다(구 현대택배 시절 코드를 쿠팡이 유지 중). 'LOTTE'는 유효하지 않다.
+    deliveryCompany: 'HYUNDAI',
     deliveryChargeType: sharedDraft.deliveryChargeType || defaults.deliveryChargeType,
     deliveryCharge: sharedDraft.deliveryCharge || defaults.deliveryCharge,
     freeShipOverAmount: '0',
@@ -1155,7 +1156,7 @@ function CoupangRegisterForm({ onClose }: { onClose: () => void }) {
             <div>
               <label style={labelStyle}>택배사</label>
               <select style={inputStyle} value={form.deliveryCompany} onChange={(e) => update('deliveryCompany', e.target.value)}>
-                <option value="LOTTE">롯데택배 (쿠팡제휴)</option>
+                <option value="HYUNDAI">롯데택배 (쿠팡제휴)</option>
                 <option value="CJGLS">CJ대한통운</option>
                 <option value="KGB">로젠택배</option>
                 <option value="EPOST">우체국택배</option>
@@ -1381,7 +1382,7 @@ function CoupangEditForm({ onClose }: { onClose: () => void }) {
     originalPrice: String(item?.originalPrice ?? ''),
     deliveryChargeType: p?.deliveryChargeType ?? 'FREE',
     deliveryCharge: String(p?.deliveryCharge ?? 0),
-    deliveryCompany: p?.deliveryCompanyCode ?? 'CJGLS',
+    deliveryCompany: p?.deliveryCompanyCode ?? 'HYUNDAI',
     returnCharge: String(p?.returnCharge ?? 5000),
     exchangeCharge: String((p?.returnCharge ?? 5000) * 2),
     maximumBuyForPerson: String(item?.maximumBuyForPerson ?? 0),
@@ -1522,7 +1523,7 @@ function CoupangEditForm({ onClose }: { onClose: () => void }) {
             <div>
               <label style={labelStyle}>택배사</label>
               <select style={inputStyle} value={form.deliveryCompany} onChange={(e) => update('deliveryCompany', e.target.value)}>
-                <option value="LOTTE">롯데택배 (쿠팡제휴)</option>
+                <option value="HYUNDAI">롯데택배 (쿠팡제휴)</option>
                 <option value="CJGLS">CJ대한통운</option>
                 <option value="KGB">로젠택배</option>
                 <option value="EPOST">우체국택배</option>

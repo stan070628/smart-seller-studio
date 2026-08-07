@@ -286,7 +286,8 @@ export async function POST(request: NextRequest) {
       brand: d.brand,
       generalProductName: d.sellerProductName,
       deliveryMethod: 'SEQUENCIAL',
-      deliveryCompanyCode: d.deliveryCompanyCode ?? 'CJGLS',
+      // 쿠팡 배송사 코드 — 롯데택배는 'HYUNDAI'다(구 현대택배 시절 코드를 쿠팡이 유지 중). 'LOTTE'는 유효하지 않다.
+      deliveryCompanyCode: d.deliveryCompanyCode ?? 'HYUNDAI',
       deliveryChargeType: d.deliveryCharge === 0 ? 'FREE' : 'NOT_FREE',
       deliveryCharge: d.deliveryCharge,
       freeShipOverAmount: 0,
