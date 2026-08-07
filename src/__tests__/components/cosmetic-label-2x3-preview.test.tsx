@@ -107,6 +107,27 @@ describe('CosmeticLabel2x3Preview — 단일 품목', () => {
     expect(screen.getAllByText(/10~15분 후 미온수로/)).toHaveLength(CELLS);
   });
 
+  it('글자 크기 배율을 올리면 전성분·주의사항 글자가 그만큼 커진다', () => {
+    const base = migrateCosmeticFields(SINGLE_ITEM_FIELDS);
+    const { unmount } = render(<CosmeticLabel2x3Preview fields={base} />);
+    const before = screen.getAllByText(/정제수, 글리세린/)[0].style.fontSize;
+    const cautionBefore = screen.getAllByText(/상처 부위에는/)[0].style.fontSize;
+    unmount();
+
+    render(<CosmeticLabel2x3Preview fields={{ ...base, fontScale: 2 }} />);
+    const after = screen.getAllByText(/정제수, 글리세린/)[0].style.fontSize;
+    const cautionAfter = screen.getAllByText(/상처 부위에는/)[0].style.fontSize;
+
+    expect(parseFloat(after)).toBeCloseTo(parseFloat(before) * 2, 2);
+    expect(parseFloat(cautionAfter)).toBeCloseTo(parseFloat(cautionBefore) * 2, 2);
+  });
+
+  it('배율 1은 확장 전과 같은 글자 크기를 유지한다', () => {
+    render(<CosmeticLabel2x3Preview fields={migrateCosmeticFields(LEGACY_SOAP_FIELDS)} />);
+
+    expect(screen.getAllByText(/카프라에락/)[0].style.fontSize).toBe('4.8pt');
+  });
+
   it('사용기한 뒤에 개봉 후 사용기간 문구를 붙인다', () => {
     render(<CosmeticLabel2x3Preview fields={migrateCosmeticFields(SINGLE_ITEM_FIELDS)} />);
 

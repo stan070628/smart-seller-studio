@@ -90,6 +90,29 @@ describe('CosmeticLabel2x3Editor', () => {
     expect(alert).not.toHaveTextContent('제조번호');
   });
 
+  it('글자 크기 배율을 조절할 수 있다', async () => {
+    const user = userEvent.setup();
+    render(<CosmeticLabel2x3Editor />);
+
+    const scaleInput = screen.getByLabelText('글자 크기 배율 (1 = 기본)');
+    expect(scaleInput).toHaveValue(1);
+
+    await user.clear(scaleInput);
+    await user.type(scaleInput, '1.8');
+
+    expect(scaleInput).toHaveValue(1.8);
+  });
+
+  it('단일 품목 프리셋은 배율을 키워 남는 여백을 채운다', async () => {
+    const user = userEvent.setup();
+    render(<CosmeticLabel2x3Editor />);
+
+    await user.click(screen.getByRole('button', { name: /단일 품목/ }));
+
+    const scale = screen.getByLabelText('글자 크기 배율 (1 = 기본)') as HTMLInputElement;
+    expect(Number(scale.value)).toBeGreaterThan(1);
+  });
+
   it('브랜드·제조국·사용방법을 입력 필드로 노출한다', () => {
     render(<CosmeticLabel2x3Editor />);
 

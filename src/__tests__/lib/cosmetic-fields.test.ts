@@ -111,3 +111,24 @@ describe('migrateCosmeticFields — 신규 가변 구조', () => {
     expect(result.brandHeader).toBe('Australian Botanical');
   });
 });
+
+describe('migrateCosmeticFields — 글자 크기 배율', () => {
+  it('저장된 값이 없으면 배율 1이다 (기존 라벨과 동일한 크기)', () => {
+    expect(migrateCosmeticFields({}).fontScale).toBe(1);
+    expect(migrateCosmeticFields(LEGACY_SOAP_FIELDS).fontScale).toBe(1);
+  });
+
+  it('저장된 배율을 그대로 읽는다', () => {
+    expect(migrateCosmeticFields({ fontScale: 1.6 }).fontScale).toBe(1.6);
+  });
+
+  it('배율을 0.5~3 범위로 제한한다', () => {
+    expect(migrateCosmeticFields({ fontScale: 0.1 }).fontScale).toBe(0.5);
+    expect(migrateCosmeticFields({ fontScale: 9 }).fontScale).toBe(3);
+  });
+
+  it('숫자가 아닌 값은 1로 되돌린다', () => {
+    expect(migrateCosmeticFields({ fontScale: 'abc' }).fontScale).toBe(1);
+    expect(migrateCosmeticFields({ fontScale: NaN }).fontScale).toBe(1);
+  });
+});

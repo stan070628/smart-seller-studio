@@ -36,7 +36,12 @@ export interface CosmeticFields {
   phone: string;
   footerNote: string;
   recycleMark: string;
+  /** 라벨 전체 글자 크기 배율. 품목 수가 적으면 셀에 여백이 남으므로 키워서 채운다. */
+  fontScale: number;
 }
+
+const FONT_SCALE_MIN = 0.5;
+const FONT_SCALE_MAX = 3;
 
 /** 확장 이전 Preview 컴포넌트에 하드코딩돼 있던 호주 비누 값들 */
 const LEGACY_SOAP_META = {
@@ -53,8 +58,35 @@ const LEGACY_SOAP_META = {
   recycleMark: '♻종이/PE',
 } as const;
 
+/**
+ * 전성분 칸을 넘친 만큼 배율을 줄여 되돌린다.
+ *
+ * 글자를 키우면 글자 높이와 줄 수가 함께 늘어, 텍스트 블록 높이는 배율의 제곱에 비례한다.
+ * 그래서 넘친 비율의 제곱근만큼 줄이면 한 번에 거의 맞는다. 0.98은 반올림과 줄바꿈
+ * 위치 변화로 한 줄이 더 생기는 경우를 흡수하는 여유분이다.
+ *
+ * 측정값이 0이면 아직 레이아웃 전(또는 jsdom)이므로 손대지 않는다.
+ */
+export function fitScale(
+  current: number,
+  contentHeight: number,
+  availableHeight: number,
+): number {
+  if (!contentHeight || !availableHeight) return current;
+  if (contentHeight <= availableHeight) return current;
+
+  const shrunk = current * Math.sqrt(availableHeight / contentHeight) * 0.98;
+  return Math.max(FONT_SCALE_MIN, +shrunk.toFixed(3));
+}
+
 function str(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : fallback;
+}
+
+function scale(value: unknown): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n) || n === 0) return 1;
+  return Math.min(FONT_SCALE_MAX, Math.max(FONT_SCALE_MIN, n));
 }
 
 /** 레거시 soap1~soap4 구조를 items 배열로 옮긴다 */
@@ -118,5 +150,6 @@ export function migrateCosmeticFields(raw: unknown): CosmeticFields {
     phone: str(src.phone),
     footerNote: str(src.footerNote, LEGACY_SOAP_META.footerNote),
     recycleMark: str(src.recycleMark, LEGACY_SOAP_META.recycleMark),
+    fontScale: scale(src.fontScale),
   };
 }

@@ -147,6 +147,11 @@ export default function CosmeticLabel2x3Editor() {
   const [fields, setFields] = useState<CosmeticFields>(EMPTY_FIELDS);
   const previewRef = useRef<HTMLDivElement>(null);
   const itemCountId = useId();
+  const fontScaleId = useId();
+  // 배율은 숫자 상태 하나로는 소수점을 칠 수 없다. "1."은 숫자로 1이라
+  // 입력칸이 즉시 "1"로 되돌아가 뒷자리를 이어 칠 수 없기 때문이다.
+  // 타이핑 중에는 문자열 초안을 그대로 보여주고, 포커스를 잃으면 숫자 상태로 되돌린다.
+  const [fontScaleDraft, setFontScaleDraft] = useState<string | null>(null);
 
   // 마운트 후 1회 복원. 확장 이전에 저장된 비누 4종 구조도 마이그레이션을 거쳐 그대로 살아난다.
   useEffect(() => {
@@ -175,6 +180,7 @@ export default function CosmeticLabel2x3Editor() {
     });
 
   const applySoapPreset = (col: 'floral' | 'creamy') => {
+    setFontScaleDraft(null);
     setFields((prev) => ({
       ...prev,
       ...SOAP_META,
@@ -188,6 +194,7 @@ export default function CosmeticLabel2x3Editor() {
 
   // 국내 소분 판매용 단일 품목 골격. 표시사항 값은 원 제품 라벨을 보고 채운다.
   const applySingleItemPreset = () => {
+    setFontScaleDraft(null);
     setFields((prev) => ({
       ...prev,
       collection: 'custom',
@@ -206,6 +213,10 @@ export default function CosmeticLabel2x3Editor() {
       caution: KOREA_COSMETIC_CAUTION,
       footerNote: 'Made in Korea',
       recycleMark: '',
+      // 4종을 나눠 담던 폰트 기준값은 단일 품목에선 너무 작아 셀 절반이 빈다.
+      // 배율 s를 걸면 줄 수와 줄 높이가 함께 늘어 텍스트 높이는 s²에 비례한다.
+      // 전성분이 긴 제품에서도 잘리지 않는 선으로 1.4에서 출발하고, 나머지는 슬라이더로 맞춘다.
+      fontScale: 1.4,
     }));
   };
 
@@ -245,7 +256,7 @@ export default function CosmeticLabel2x3Editor() {
             <LabelSaveLoad
               labelType="cosmetic2x3"
               currentData={fields as unknown as Record<string, unknown>}
-              onLoad={(data) => setFields(migrateCosmeticFields(data))}
+              onLoad={(data) => { setFontScaleDraft(null); setFields(migrateCosmeticFields(data)); }}
             />
           </div>
 
@@ -310,6 +321,43 @@ export default function CosmeticLabel2x3Editor() {
                 onChange={(patch) => setItem(i, patch)}
               />
             ))}
+          </div>
+
+          {/* 글자 크기 */}
+          <div style={SECTION}>
+            <div style={SECTION_TITLE}>글자 크기</div>
+            <div style={{ marginBottom: 4 }}>
+              <label htmlFor={fontScaleId} style={LABEL}>글자 크기 배율 (1 = 기본)</label>
+              <input
+                id={fontScaleId}
+                type="number"
+                step={0.1}
+                min={0.5}
+                max={3}
+                style={INPUT}
+                value={fontScaleDraft ?? fields.fontScale}
+                onChange={(e) => {
+                  setFontScaleDraft(e.target.value);
+                  const n = Number(e.target.value);
+                  if (Number.isFinite(n) && n > 0) set('fontScale', n);
+                }}
+                onBlur={() => setFontScaleDraft(null)}
+              />
+            </div>
+            <input
+              type="range"
+              aria-label="글자 크기 배율 슬라이더"
+              min={0.5}
+              max={3}
+              step={0.1}
+              value={fields.fontScale}
+              onChange={(e) => { setFontScaleDraft(null); set('fontScale', Number(e.target.value)); }}
+              style={{ width: '100%' }}
+            />
+            <p style={{ fontSize: 10, color: '#9ca3af', marginTop: 4 }}>
+              품목이 적으면 셀에 여백이 남습니다. 배율을 올려 채우되, 미리보기에서 내용이
+              잘리지 않는지 확인하세요.
+            </p>
           </div>
 
           {/* 제품 정보 */}
