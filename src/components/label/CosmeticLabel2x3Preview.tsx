@@ -1,7 +1,7 @@
 'use client';
 
 import { forwardRef } from 'react';
-import type { CosmeticFields } from '@/lib/label/label-templates';
+import type { CosmeticFields } from '@/lib/label/cosmetic-fields';
 
 interface Props {
   fields: CosmeticFields;
@@ -22,22 +22,20 @@ const CREAMY = {
   accent: '#c8a878',
   bars: ['#ede8d8', '#f8c898', '#d4c4a8', '#f8d870'],
 };
+// 비누 컬렉션이 아닌 임의 화장품용 중립 테마
+const CUSTOM = {
+  header: '#2f2f33',
+  sub: '#8a8a92',
+  accent: '#8a8a92',
+  bars: ['#d8d8de', '#c8c8d0', '#e0e0e6', '#cfcfd6'],
+};
+
+const THEMES = { floral: FLORAL, creamy: CREAMY, custom: CUSTOM } as const;
 
 function LabelCell({ fields }: { fields: CosmeticFields }) {
-  const theme = fields.collection === 'floral' ? FLORAL : CREAMY;
-  const collectionLabel =
-    fields.collection === 'floral'
-      ? '플로럴 컬렉션 Variety Pack 4종'
-      : '크리미 컬렉션 Variety Pack 4종';
-  const optionLabel =
-    fields.collection === 'floral' ? 'Option 01 · Floral' : 'Option 02 · Creamy';
-
-  const soaps = [
-    { en: fields.soap1En, ko: fields.soap1Ko, ing: fields.soap1Ingredients },
-    { en: fields.soap2En, ko: fields.soap2Ko, ing: fields.soap2Ingredients },
-    { en: fields.soap3En, ko: fields.soap3Ko, ing: fields.soap3Ingredients },
-    { en: fields.soap4En, ko: fields.soap4Ko, ing: fields.soap4Ingredients },
-  ];
+  const theme = THEMES[fields.collection] ?? FLORAL;
+  const items = fields.items;
+  const cols = Math.max(items.length, 1);
 
   const s: Record<string, React.CSSProperties> = {
     cell: {
@@ -71,19 +69,11 @@ function LabelCell({ fields }: { fields: CosmeticFields }) {
     },
     cols: {
       display: 'grid',
-      gridTemplateColumns: 'repeat(4, 1fr)',
+      // 품목 수에 따라 열이 바뀐다. 1종이면 전성분이 셀 폭 전체를 쓴다.
+      gridTemplateColumns: `repeat(${cols}, 1fr)`,
       gridTemplateRows: '1mm auto auto auto 1fr',
       flex: 1,
       overflow: 'hidden',
-    },
-    fl: {
-      fontSize: '5pt',
-      fontWeight: 700,
-      color: theme.accent,
-      borderBottom: '0.2pt solid #e5e1d8',
-      paddingBottom: '0.3mm',
-      marginTop: '1mm',
-      marginBottom: '0.3mm',
     },
     fv: { fontSize: '4.8pt', color: '#444', lineHeight: 1.5 },
     sharedRow: {
@@ -116,53 +106,59 @@ function LabelCell({ fields }: { fields: CosmeticFields }) {
     },
   };
 
+  const divider = (i: number) =>
+    i < items.length - 1 ? '0.3pt solid #ddd9d0' : undefined;
+
+  const expiry = fields.expiryDate || '—';
+  const expiryText = fields.expiryNote ? `${expiry} ${fields.expiryNote}` : expiry;
+
   return (
     <div style={s.cell}>
       {/* 헤더 */}
       <div style={s.header}>
         <span style={{ fontSize: '5pt', letterSpacing: '0.6pt', fontWeight: 300 }}>
-          Australian Botanical
+          {fields.brandHeader}
         </span>
         <span style={{ fontSize: '5pt', color: theme.bars[0], fontWeight: 700 }}>
-          {optionLabel}
+          {fields.optionLabel}
         </span>
       </div>
-      <div style={s.subhd}>{collectionLabel}</div>
+      <div style={s.subhd}>{fields.collectionLabel}</div>
 
-      {/* 4칸 — 행 단위 그리드: 각 행이 4열에서 동일 높이 공유 */}
+      {/* 품목 칸 — 행 단위 그리드: 각 행이 모든 열에서 동일 높이 공유 */}
       <div style={s.cols}>
         {/* 행1: 색상 바 */}
-        {soaps.map((_, i) => (
+        {items.map((_, i) => (
           <div key={`bar-${i}`} style={{
-            background: theme.bars[i],
-            borderRight: i < 3 ? '0.3pt solid #ddd9d0' : undefined,
+            background: theme.bars[i % theme.bars.length],
+            borderRight: divider(i),
           }} />
         ))}
         {/* 행2: 영문명 */}
-        {soaps.map((soap, i) => (
+        {items.map((item, i) => (
           <div key={`en-${i}`} style={{
             padding: '1mm 1mm 0',
-            borderRight: i < 3 ? '0.3pt solid #ddd9d0' : undefined,
+            borderRight: divider(i),
             overflow: 'hidden',
           }}>
-            <div style={{ fontSize: '4.8pt', color: '#bbb', lineHeight: 1.3 }}>{soap.en}</div>
+            <div style={{ fontSize: '4.8pt', color: '#bbb', lineHeight: 1.3 }}>{item.en}</div>
           </div>
         ))}
         {/* 행3: 한국명 */}
-        {soaps.map((soap, i) => (
+        {items.map((item, i) => (
           <div key={`ko-${i}`} style={{
             padding: '0.3mm 1mm 0.5mm',
-            borderRight: i < 3 ? '0.3pt solid #ddd9d0' : undefined,
+            borderRight: divider(i),
             overflow: 'hidden',
           }}>
-            <div style={{ fontSize: '6pt', fontWeight: 700, color: '#2a3a22', lineHeight: 1.2 }}>{soap.ko}</div>
+            <div style={{ fontSize: '6pt', fontWeight: 700, color: '#2a3a22', lineHeight: 1.2 }}>{item.ko}</div>
           </div>
         ))}
         {/* 행4: 전성분 라벨 */}
-        {soaps.map((_, i) => (
+        {items.map((_, i) => (
           <div key={`fl-${i}`} style={{
             padding: '0.5mm 1mm 0.2mm',
-            borderRight: i < 3 ? '0.3pt solid #ddd9d0' : undefined,
+            borderRight: divider(i),
           }}>
             <div style={{
               fontSize: '5pt', fontWeight: 700, color: theme.accent,
@@ -171,13 +167,13 @@ function LabelCell({ fields }: { fields: CosmeticFields }) {
           </div>
         ))}
         {/* 행5: 전성분 값 (남은 공간 모두) */}
-        {soaps.map((soap, i) => (
+        {items.map((item, i) => (
           <div key={`fv-${i}`} style={{
             padding: '0 1mm 1mm',
             overflow: 'hidden',
-            borderRight: i < 3 ? '0.3pt solid #ddd9d0' : undefined,
+            borderRight: divider(i),
           }}>
-            <div style={s.fv}>{soap.ing}</div>
+            <div style={s.fv}>{item.ingredients}</div>
           </div>
         ))}
       </div>
@@ -187,8 +183,8 @@ function LabelCell({ fields }: { fields: CosmeticFields }) {
         {[
           { label: '내용량', value: fields.weight },
           { label: '제조번호', value: fields.lotNumber || '—' },
-          { label: '사용기한', value: (fields.expiryDate || '—') + ' 또는 개봉 후 24개월' },
-          { label: '제조국', value: '호주 (Australia)' },
+          { label: '사용기한', value: expiryText },
+          { label: '제조국', value: fields.countryOfOrigin },
         ].map(({ label, value }) => (
           <div key={label}>
             <div style={s.cl}>{label}</div>
@@ -201,15 +197,11 @@ function LabelCell({ fields }: { fields: CosmeticFields }) {
       <div style={s.cautionRow}>
         <div>
           <div style={s.cl}>사용방법</div>
-          <div style={s.cv}>
-            물에 적셔 거품을 낸 후 세정 부위에 고르게 펴 바르고 깨끗한 물로 헹구어 냅니다. 사용 후 건조한 곳에 보관하세요.
-          </div>
+          <div style={s.cv}>{fields.usage}</div>
         </div>
         <div>
           <div style={s.cl}>사용 시 주의사항</div>
-          <div style={s.cv}>
-            1. 눈에 들어갔을 때는 즉시 씻어내십시오. 2. 어린이 손이 닿지 않는 곳에 보관하십시오. 3. 직사광선을 피해 보관하십시오. 4. 이상이 나타나면 사용을 중단하고 전문의와 상담하십시오. 5. 상처가 있는 부위에는 사용을 자제하십시오.
-          </div>
+          <div style={s.cv}>{fields.caution}</div>
         </div>
       </div>
 
@@ -217,10 +209,10 @@ function LabelCell({ fields }: { fields: CosmeticFields }) {
       <div style={s.ft}>
         <div style={{ fontSize: '3.8pt', color: '#888', lineHeight: 1.55 }}>
           <strong>책임판매업자:</strong> {fields.importer || '—'}{fields.importerAddress ? ` · ${fields.importerAddress}` : ''} · ☎ {fields.phone || '—'}<br />
-          제조원: Australian Botanical Soap · 143 Scanlon Drive, Epping VIC 3076, Australia
+          제조원: {fields.manufacturer}
         </div>
         <div style={{ fontSize: '3.8pt', fontWeight: 700, color: '#555', textAlign: 'right', whiteSpace: 'nowrap' }}>
-          ♻종이/PE<br />Made in Australia
+          {fields.recycleMark}<br />{fields.footerNote}
         </div>
       </div>
     </div>

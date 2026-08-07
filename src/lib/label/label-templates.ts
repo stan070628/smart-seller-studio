@@ -13,19 +13,9 @@ export interface QualityFields {
   extra: string;
 }
 
-export interface CosmeticFields {
-  collection: 'floral' | 'creamy';
-  soap1En: string; soap1Ko: string; soap1Ingredients: string;
-  soap2En: string; soap2Ko: string; soap2Ingredients: string;
-  soap3En: string; soap3Ko: string; soap3Ingredients: string;
-  soap4En: string; soap4Ko: string; soap4Ingredients: string;
-  weight: string;
-  lotNumber: string;
-  expiryDate: string;
-  importer: string;
-  importerAddress: string;
-  phone: string;
-}
+// 화장품 라벨 필드는 품목 수 가변 구조로 옮겨갔다. 레거시 비누 4종 구조의 마이그레이션까지
+// 한곳에서 다루기 위해 cosmetic-fields.ts에 둔다.
+export type { CosmeticFields, CosmeticItem } from './cosmetic-fields';
 
 export interface LabelTemplate {
   id: string;
