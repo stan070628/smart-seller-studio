@@ -9,7 +9,7 @@ interface Props {
 }
 
 const CELL_WIDTH_MM = 105;
-const CELL_HEIGHT_MM = 99;
+const CELL_HEIGHT_MM = 97;
 
 const GRID_STYLE: React.CSSProperties = {
   display: 'grid',
@@ -17,10 +17,10 @@ const GRID_STYLE: React.CSSProperties = {
   gridTemplateRows: `repeat(3, ${CELL_HEIGHT_MM}mm)`,
   columnGap: 0,
   rowGap: 0,
-  padding: 0,
+  padding: '3mm 0',
   width: '210mm',
   height: '297mm',
-  overflow: 'hidden',
+  overflow: 'visible',
   boxSizing: 'border-box' as const,
   background: '#fff',
 };
