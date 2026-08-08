@@ -61,3 +61,51 @@ export function checkLineArithmetic(receipt: ExtractedReceipt): CheckResult {
     badLineNos,
   };
 }
+
+/**
+ * 검산 3 — 품목 수량의 합이 "총 판매 상품수"와 같은가.
+ *
+ * 총 판매 상품수는 줄 수가 아니라 수량 합계이며, 할인 줄은 여기서 빠진다.
+ * 영수증 B에서 실증됐다 — 전체 수량 합은 39이지만 총 판매 상품수는 29다.
+ */
+export function checkItemCount(receipt: ExtractedReceipt): CheckResult {
+  if (receipt.total_item_count == null) return skipped();
+
+  const actual = receipt.lines
+    .filter((l) => !l.is_discount)
+    .reduce((sum, l) => sum + l.quantity, 0);
+  const expected = receipt.total_item_count;
+  const diff = actual - expected;
+
+  return { status: diff === 0 ? 'pass' : 'fail', expected, actual, diff };
+}
+
+/**
+ * 검산 4 — 세금 3종의 합이 결제 총액과 같고, 면세 상품 금액 합이 면세액과 같은가.
+ *
+ * 두 조건을 함께 본다. 앞은 세 값을 제대로 읽었는지를, 뒤는 줄별 과세 구분이
+ * 맞는지를 검사한다. 영수증 B의 면세 26,280원이 우유 7,590 + 계란 18,690으로
+ * 정확히 떨어지는 것이 확인됐다.
+ */
+export function checkTaxBreakdown(receipt: ExtractedReceipt): CheckResult {
+  const { tax_exempt_total, taxable_total, vat, receipt_total } = receipt;
+  if (tax_exempt_total == null || taxable_total == null || vat == null || receipt_total == null) {
+    return skipped();
+  }
+
+  const actual = tax_exempt_total + taxable_total + vat;
+  const diff = actual - receipt_total;
+
+  const exemptFromLines = receipt.lines
+    .filter((l) => l.tax_type === 'exempt')
+    .reduce((sum, l) => sum + l.amount, 0);
+  const exemptMatches = exemptFromLines === tax_exempt_total;
+
+  return {
+    status: diff === 0 && exemptMatches ? 'pass' : 'fail',
+    expected: receipt_total,
+    actual,
+    diff,
+    badLineNos: [],
+  };
+}
