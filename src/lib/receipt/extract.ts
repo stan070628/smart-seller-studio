@@ -58,6 +58,33 @@ receipt_total은 "합계 (VAT 포함)" 값. total_item_count는 "총 판매 상�
 
 회원번호와 카드번호는 절대 추출하지 마라.`;
 
+/** structured outputs가 지원하지 않는 JSON Schema 키워드 */
+const UNSUPPORTED_KEYWORDS = ['minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf'] as const;
+
+/**
+ * zod가 붙이는 수치 제약을 걷어낸다.
+ *
+ * `z.number().int()`는 안전 정수 범위를 minimum/maximum으로 내보내는데,
+ * Anthropic structured outputs는 그 키워드를 지원하지 않아 400이 난다.
+ * zod 스키마 자체는 로컬 검증에 그대로 쓰고 API로 나가는 쪽만 손질한다.
+ */
+function stripUnsupportedKeywords(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(stripUnsupportedKeywords);
+  if (node === null || typeof node !== 'object') return node;
+
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+    if ((UNSUPPORTED_KEYWORDS as readonly string[]).includes(key)) continue;
+    out[key] = stripUnsupportedKeywords(value);
+  }
+  return out;
+}
+
+/** API로 보낼 JSON Schema. 미지원 키워드가 제거되어 있다 */
+export function receiptJsonSchema(): Record<string, unknown> {
+  return stripUnsupportedKeywords(z.toJSONSchema(RECEIPT_SCHEMA)) as Record<string, unknown>;
+}
+
 /**
  * 영수증을 claude-opus-5 고해상도 상한(2,576px)에 맞춘다.
  *
@@ -113,7 +140,7 @@ export async function extractReceipt(input: ExtractInput): Promise<ExtractedRece
     max_tokens: 8000,
     output_config: {
       effort: 'high',
-      format: { type: 'json_schema', schema: z.toJSONSchema(RECEIPT_SCHEMA) },
+      format: { type: 'json_schema', schema: receiptJsonSchema() },
     },
     messages: [
       { role: 'user', content: [...contents, { type: 'text', text: RECEIPT_PROMPT }] },

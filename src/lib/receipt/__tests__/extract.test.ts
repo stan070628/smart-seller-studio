@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { RECEIPT_SCHEMA, RECEIPT_PROMPT } from '@/lib/receipt/extract';
+import { RECEIPT_SCHEMA, RECEIPT_PROMPT, receiptJsonSchema } from '@/lib/receipt/extract';
 import { RECEIPT_B } from '@/lib/receipt/__tests__/fixtures';
 
 describe('RECEIPT_SCHEMA', () => {
@@ -57,5 +57,35 @@ describe('RECEIPT_PROMPT', () => {
   it('두 줄 구조와 CPN 규칙을 담고 있다', () => {
     expect(RECEIPT_PROMPT).toContain('CPN');
     expect(RECEIPT_PROMPT).toContain('상품수 소계');
+  });
+});
+
+describe('receiptJsonSchema — API가 실제로 받는 것', () => {
+  function collectKeys(node: unknown, acc = new Set<string>()): Set<string> {
+    if (Array.isArray(node)) { node.forEach((n) => collectKeys(n, acc)); return acc; }
+    if (node === null || typeof node !== 'object') return acc;
+    for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+      acc.add(k);
+      collectKeys(v, acc);
+    }
+    return acc;
+  }
+
+  it('수치 제약 키워드를 포함하지 않는다 — structured outputs가 거부한다', () => {
+    const keys = collectKeys(receiptJsonSchema());
+    for (const banned of ['minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf']) {
+      expect(keys.has(banned)).toBe(false);
+    }
+  });
+
+  it('구조는 보존한다 — 필드가 사라지지 않았다', () => {
+    const schema = receiptJsonSchema() as { properties: Record<string, unknown> };
+    expect(Object.keys(schema.properties)).toContain('lines');
+    expect(Object.keys(schema.properties)).toContain('receipt_total');
+    expect(Object.keys(schema.properties)).toContain('total_item_count');
+  });
+
+  it('integer 타입 자체는 남는다', () => {
+    expect(JSON.stringify(receiptJsonSchema())).toContain('"integer"');
   });
 });
