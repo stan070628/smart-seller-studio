@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS receipt_draft_lines (
   line_no            int NOT NULL,
   item_code          text,
   item_label         text NOT NULL,
-  quantity           numeric(10,2) NOT NULL,
+  quantity           numeric(10,2) NOT NULL CHECK (quantity > 0),
   unit_price         int,
   amount             int NOT NULL,
   is_discount        boolean NOT NULL DEFAULT false,
@@ -54,8 +54,8 @@ CREATE TABLE IF NOT EXISTS receipt_draft_lines (
                        CHECK (decision IN ('pending','ingest','skip')),
   product_cost_id    uuid REFERENCES product_costs(id) ON DELETE SET NULL,
   entry_type         text CHECK (entry_type IN ('normal','subdivision')),
-  items_per_box      int,
-  subdivision_unit   int,
+  items_per_box      int CHECK (items_per_box > 0),
+  subdivision_unit   int CHECK (subdivision_unit > 0),
   cost_entry_id      uuid,
   created_at         timestamptz NOT NULL DEFAULT now()
 );
@@ -74,9 +74,9 @@ CREATE TABLE IF NOT EXISTS costco_item_map (
   default_decision   text NOT NULL DEFAULT 'ask'
                        CHECK (default_decision IN ('ingest','skip','ask')),
   default_entry_type text CHECK (default_entry_type IN ('normal','subdivision')),
-  items_per_box      int,
-  subdivision_unit   int,
-  times_used         int NOT NULL DEFAULT 0,
+  items_per_box      int CHECK (items_per_box > 0),
+  subdivision_unit   int CHECK (subdivision_unit > 0),
+  times_used         int NOT NULL DEFAULT 0 CHECK (times_used >= 0),
   last_seen_at       timestamptz,
   created_at         timestamptz NOT NULL DEFAULT now(),
   updated_at         timestamptz NOT NULL DEFAULT now()
@@ -87,7 +87,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_costco_item_map_code
 
 -- ── 역추적 ────────────────────────────────────────────────────
 ALTER TABLE cost_entries
-  ADD COLUMN IF NOT EXISTS source_receipt_line_id uuid;
+  ADD COLUMN IF NOT EXISTS source_receipt_line_id uuid
+    REFERENCES receipt_draft_lines(id) ON DELETE SET NULL;
 
 CREATE INDEX IF NOT EXISTS idx_cost_entries_source_receipt
   ON cost_entries (source_receipt_line_id)
@@ -96,3 +97,19 @@ CREATE INDEX IF NOT EXISTS idx_cost_entries_source_receipt
 COMMENT ON TABLE receipt_drafts IS '코스트코 영수증 초안. spec 2026-08-08';
 COMMENT ON TABLE receipt_draft_lines IS '영수증 품목 1줄. 확정 단위. spec 2026-08-08';
 COMMENT ON TABLE costco_item_map IS '코스트코 품번 → 판매상품 학습형 매핑. spec 2026-08-08';
+
+-- RLS: 활성화하되 정책 없음. 서버 API는 owner 연결로 우회하고
+-- Supabase 클라이언트 직접 접근만 차단한다 (054 negotiation_logs 원칙, 089 daily_expenses 동일).
+ALTER TABLE receipt_drafts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE receipt_draft_lines ENABLE ROW LEVEL SECURITY;
+ALTER TABLE costco_item_map ENABLE ROW LEVEL SECURITY;
+
+DROP TRIGGER IF EXISTS trg_receipt_drafts_updated_at ON receipt_drafts;
+CREATE TRIGGER trg_receipt_drafts_updated_at
+  BEFORE UPDATE ON receipt_drafts
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+DROP TRIGGER IF EXISTS trg_costco_item_map_updated_at ON costco_item_map;
+CREATE TRIGGER trg_costco_item_map_updated_at
+  BEFORE UPDATE ON costco_item_map
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
