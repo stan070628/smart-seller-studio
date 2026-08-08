@@ -468,7 +468,7 @@ export function checkLineArithmetic(receipt: ExtractedReceipt): CheckResult {
 - [ ] **Step 4: 테스트 통과 확인**
 
 Run: `npx vitest run src/lib/receipt/__tests__/verify.test.ts`
-Expected: PASS — 10 tests
+Expected: PASS — 9 tests
 
 - [ ] **Step 5: 커밋**
 
@@ -613,7 +613,7 @@ export function checkTaxBreakdown(receipt: ExtractedReceipt): CheckResult {
 - [ ] **Step 4: 테스트 통과 확인**
 
 Run: `npx vitest run src/lib/receipt/__tests__/verify.test.ts`
-Expected: PASS — 19 tests
+Expected: PASS — 18 tests
 
 - [ ] **Step 5: 커밋**
 
@@ -734,7 +734,7 @@ export function verifyReceipt(receipt: ExtractedReceipt): VerifyResult {
 - [ ] **Step 4: 테스트 통과 확인**
 
 Run: `npx vitest run src/lib/receipt/__tests__/verify.test.ts`
-Expected: PASS — 24 tests
+Expected: PASS — 23 tests
 
 - [ ] **Step 5: 커밋**
 
@@ -1213,12 +1213,12 @@ git commit -m "feat(receipt): 상품명에서 포장 수량 추출"
 - [ ] **Step 1: 신규 테스트 전체 실행**
 
 Run: `npx vitest run src/lib/receipt`
-Expected: PASS — 4 files, 56 tests
+Expected: PASS — 4 files, 55 tests
 
 - [ ] **Step 2: 기존 테스트가 깨지지 않았는지 확인**
 
 Run: `npx vitest run`
-Expected: 이 계획 착수 전과 같은 결과 + 신규 56건. 실패 0
+Expected: 이 계획 착수 전과 같은 결과 + 신규 55건. 실패 0
 
 착수 전 개수를 모른다면 먼저 `git stash`로 되돌려 한 번 재보고 비교한다.
 

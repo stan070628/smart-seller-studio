@@ -156,10 +156,26 @@
 ### 4-4. `cost_entries` 컬럼 추가
 
 ```sql
-ALTER TABLE cost_entries ADD COLUMN source_receipt_line_id uuid;
+ALTER TABLE cost_entries
+  ADD COLUMN IF NOT EXISTS source_receipt_line_id uuid
+    REFERENCES receipt_draft_lines(id) ON DELETE SET NULL;
 ```
 
 입고 한 건이 어느 영수증 몇 번째 줄에서 왔는지 되짚을 수 있게 한다. "이 원가 어디서 나온 거지"를 물었을 때 영수증 사진까지 한 번에 열린다.
+
+**`ON DELETE SET NULL`이어야 한다.** `CASCADE`는 영수증 초안을 지웠을 때 실제 회계 데이터인 `cost_entries`까지 지운다. 반대로 FK를 아예 안 걸면 초안 삭제 후 dangling 포인터가 남아 조회가 조용히 실패하고, 화면이 "출처 삭제됨"이라고 말할 수도 없다.
+
+> **`receipt_draft_lines.cost_entry_id`는 반대로 FK를 걸지 않는다.** 대칭처럼 보이지만 판단이 다르다. 확정을 취소해 `cost_entries` 행을 지웠을 때 `ON DELETE SET NULL`이 걸려 있으면 `cost_entry_id`가 NULL이 되고, 그러면 **"확정한 적 없음"과 구분이 사라진다.** NULL 여부가 §3-2 멱등성 판정의 근거이므로 그 구분이 무너지면 같은 줄이 두 번 확정될 수 있다.
+
+### 4-5. 추가 제약
+
+| 항목 | 내용 |
+|---|---|
+| RLS | 3테이블 전부 `ENABLE ROW LEVEL SECURITY`, 정책 없음. 서버 API는 owner 연결로 통과하고 Supabase 클라이언트 직접 접근만 차단한다 (`054` negotiation_logs 원칙, `089` daily_expenses와 동일) |
+| 양수 CHECK | `quantity` · `items_per_box` · `subdivision_unit` `> 0`, `times_used >= 0`. **`amount`와 `unit_price`에는 걸지 않는다** — 할인 줄이 음수다 |
+| `updated_at` 트리거 | `receipt_drafts` · `costco_item_map`에 `handle_updated_at()` 연결. 없으면 두 컬럼이 영원히 `created_at`과 같은 값으로 남는다 |
+
+**보류한 제약 하나를 기록해둔다.** `is_discount = true`면 `amount < 0`이라는 CHECK를 검토했으나 걸지 않았다 — 실물에서 확인한 할인 형태가 아직 한 종류뿐이라(수량 동일·단가 차감형) 하드 제약이 이르다. Open Question 2번과 같은 사안이다.
 
 ---
 
