@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { checkTotalSum, checkLineArithmetic, checkItemCount, checkTaxBreakdown } from '@/lib/receipt/verify';
+import { checkTotalSum, checkLineArithmetic, checkItemCount, checkTaxBreakdown, verifyReceipt } from '@/lib/receipt/verify';
 import { RECEIPT_A, RECEIPT_B } from '@/lib/receipt/__tests__/fixtures';
 
 describe('checkTotalSum — 품목 금액 합 = 결제 총액', () => {
@@ -131,5 +131,48 @@ describe('checkTaxBreakdown — 면세 + 과세 + 부가세 = 합계', () => {
 
   it('세금 항목을 하나라도 못 읽었으면 건너뛴다', () => {
     expect(checkTaxBreakdown({ ...RECEIPT_A, vat: null }).status).toBe('skipped');
+  });
+});
+
+describe('verifyReceipt — 4종 통합 판정', () => {
+  it('영수증 A는 matched다', () => {
+    const r = verifyReceipt(RECEIPT_A);
+    expect(r.status).toBe('matched');
+    expect(r.totalSum.status).toBe('pass');
+    expect(r.lineArithmetic.status).toBe('pass');
+    expect(r.itemCount.status).toBe('pass');
+    expect(r.taxBreakdown.status).toBe('pass');
+  });
+
+  it('영수증 B는 matched다', () => {
+    expect(verifyReceipt(RECEIPT_B).status).toBe('matched');
+  });
+
+  it('하나라도 fail이면 mismatch다', () => {
+    const broken = {
+      ...RECEIPT_A,
+      lines: RECEIPT_A.lines.map((l) => (l.line_no === 1 ? { ...l, amount: 40783 } : l)),
+    };
+    expect(verifyReceipt(broken).status).toBe('mismatch');
+  });
+
+  it('기준값이 전부 없으면 unreadable이다', () => {
+    const blank = {
+      ...RECEIPT_A,
+      receipt_total: null,
+      total_item_count: null,
+      tax_exempt_total: null,
+      taxable_total: null,
+      vat: null,
+      lines: RECEIPT_A.lines.map((l) => ({ ...l, unit_price: null })),
+    };
+    expect(verifyReceipt(blank).status).toBe('unreadable');
+  });
+
+  it('일부만 건너뛰고 나머지가 통과하면 matched다', () => {
+    const partial = { ...RECEIPT_A, total_item_count: null };
+    const r = verifyReceipt(partial);
+    expect(r.status).toBe('matched');
+    expect(r.itemCount.status).toBe('skipped');
   });
 });

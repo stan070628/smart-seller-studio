@@ -109,3 +109,44 @@ export function checkTaxBreakdown(receipt: ExtractedReceipt): CheckResult {
     badLineNos: [],
   };
 }
+
+export type VerifyStatus = 'matched' | 'mismatch' | 'unreadable';
+
+export interface VerifyResult {
+  status: VerifyStatus;
+  totalSum: CheckResult;
+  lineArithmetic: CheckResult;
+  itemCount: CheckResult;
+  taxBreakdown: CheckResult;
+}
+
+/**
+ * 검산 4종을 모두 돌려 종합 판정을 낸다.
+ *
+ * 판정 규칙:
+ *   하나라도 fail  → mismatch
+ *   전부 skipped   → unreadable (읽은 게 없어 검증 자체가 불가능)
+ *   그 외          → matched
+ *
+ * mismatch라고 확정을 막지는 않는다. 봉투값 하나 때문에 기능 전체가 잠기면
+ * 아무도 쓰지 않는다. 막는 것이 아니라 보이게 하는 것이 목적이다.
+ */
+export function verifyReceipt(receipt: ExtractedReceipt): VerifyResult {
+  const totalSum = checkTotalSum(receipt);
+  const lineArithmetic = checkLineArithmetic(receipt);
+  const itemCount = checkItemCount(receipt);
+  const taxBreakdown = checkTaxBreakdown(receipt);
+
+  const all = [totalSum, lineArithmetic, itemCount, taxBreakdown];
+
+  let status: VerifyStatus;
+  if (all.some((c) => c.status === 'fail')) {
+    status = 'mismatch';
+  } else if (all.every((c) => c.status === 'skipped')) {
+    status = 'unreadable';
+  } else {
+    status = 'matched';
+  }
+
+  return { status, totalSum, lineArithmetic, itemCount, taxBreakdown };
+}
