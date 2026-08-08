@@ -2,8 +2,17 @@
  * 줄 수정 유효성.
  *
  * 부분 수정이므로 **패치 단독이 아니라 현재 값과 합친 결과**를 판정한다.
- * entry_type만 subdivision으로 바꾸는 요청은 이미 items_per_box가 저장돼
- * 있으면 유효하고 없으면 무효다 — 패치만 보면 이 구분을 할 수 없다.
+ *
+ * 🔴 **미완성 상태를 막지 않는다.** 사람은 "입고할 것"을 먼저 정하고 상품을
+ * 나중에 고른다. 저장 시점에 상품을 요구하면 그 순서를 밟을 수 없고, 실제로
+ * 2026-08-09 실물 사용에서 「입고」 버튼이 전혀 눌리지 않는 교착이 났다.
+ *
+ * **완결성은 확정 시점이 판정한다** — `selectConfirmable()`이 `no_product`·
+ * `no_entry_type`·`missing_subdivision_params`로 걸러낸다. 같은 규칙을 두 곳에
+ * 두면, 저장을 막는 쪽이 화면의 입력 순서를 강제하게 된다.
+ *
+ * 여기서 막는 것은 **순서와 무관하게 항상 틀린 것**뿐이다: 확정된 줄 수정,
+ * 할인 줄 수정, 음수·0인 소분 값.
  */
 
 export interface LineState {
@@ -59,23 +68,13 @@ export function validateLinePatch(patch: LinePatch, current: LineState): Validat
     return { next: current, errors };
   }
 
-  if (next.decision === 'ingest') {
-    if (!next.product_cost_id) errors.push('입고할 상품을 선택해야 합니다.');
-    if (!next.entry_type) errors.push('입고 방식을 선택해야 합니다.');
+  // 값 자체가 틀린 것만 막는다. "입고인데 상품이 없다"처럼 아직 덜 채운 상태는
+  // 정상적인 중간 단계이므로 통과시킨다 — 확정 시점에 selectConfirmable()이 판정한다
+  if (next.items_per_box != null && next.items_per_box < 1) {
+    errors.push('박스당 개수는 1 이상이어야 합니다.');
   }
-
-  if (next.entry_type === 'subdivision') {
-    if (next.items_per_box != null && next.items_per_box < 1) {
-      errors.push('박스당 개수는 1 이상이어야 합니다.');
-    }
-    if (next.subdivision_unit != null && next.subdivision_unit < 1) {
-      errors.push('소분 단위는 1 이상이어야 합니다.');
-    }
-    if (!next.items_per_box || !next.subdivision_unit) {
-      if (!errors.some((e) => e.includes('1 이상'))) {
-        errors.push('소분 입고에는 박스당 개수와 소분 단위가 모두 필요합니다.');
-      }
-    }
+  if (next.subdivision_unit != null && next.subdivision_unit < 1) {
+    errors.push('소분 단위는 1 이상이어야 합니다.');
   }
 
   return { next, errors };
