@@ -79,3 +79,39 @@ export function selectConfirmable(
 
   return { confirmable, skipped };
 }
+
+/** `costco_item_map`에 upsert할 값 */
+export interface MappingUpsert {
+  item_code: string;
+  item_label: string;
+  product_cost_id: string;
+  default_decision: 'ingest';
+  default_entry_type: 'normal' | 'subdivision';
+  items_per_box: number | null;
+  subdivision_unit: number | null;
+}
+
+/**
+ * 확정한 줄에서 기억시킬 값을 뽑는다.
+ *
+ * 확정했다는 것은 사람이 "이 품번은 이 상품으로 입고한다"를 승인했다는 뜻이므로
+ * `default_decision`은 언제나 `ingest`다. 개인용(`skip`)이나 매번 묻기(`ask`)는
+ * 확정 경로가 아니라 줄 수정 경로에서 기억시킨다.
+ *
+ * 품번이 없는 줄(봉투값 등)은 기억할 키가 없으므로 null을 낸다.
+ */
+export function mappingUpsertFrom(
+  line: ConfirmCandidate & { item_code: string | null; item_label: string },
+): MappingUpsert | null {
+  if (!line.item_code || !line.product_cost_id || !line.entry_type) return null;
+
+  return {
+    item_code: line.item_code,
+    item_label: line.item_label,
+    product_cost_id: line.product_cost_id,
+    default_decision: 'ingest',
+    default_entry_type: line.entry_type,
+    items_per_box: line.items_per_box,
+    subdivision_unit: line.subdivision_unit,
+  };
+}

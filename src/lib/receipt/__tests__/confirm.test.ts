@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { selectConfirmable, type ConfirmCandidate } from '@/lib/receipt/confirm';
+import { selectConfirmable, mappingUpsertFrom, type ConfirmCandidate } from '@/lib/receipt/confirm';
 
 function line(over: Partial<ConfirmCandidate> = {}): ConfirmCandidate {
   return {
@@ -74,5 +74,44 @@ describe('selectConfirmable', () => {
     const r = selectConfirmable([line({ line_no: 1 }), line({ line_no: 2 })], [2]);
     expect(r.confirmable.map((l) => l.line_no)).toEqual([2]);
     expect(r.skipped).toEqual([]);
+  });
+});
+
+describe('mappingUpsertFrom', () => {
+  const base = {
+    line_no: 1, is_discount: false, decision: 'ingest' as const,
+    product_cost_id: 'prod-1', entry_type: 'normal' as const,
+    items_per_box: null, subdivision_unit: null, cost_entry_id: null,
+  };
+
+  it('품번과 확정 값을 기억할 형태로 낸다', () => {
+    const r = mappingUpsertFrom({ ...base, item_code: '713160', item_label: 'KS노랑타월36CT' });
+    expect(r).toEqual({
+      item_code: '713160',
+      item_label: 'KS노랑타월36CT',
+      product_cost_id: 'prod-1',
+      default_decision: 'ingest',
+      default_entry_type: 'normal',
+      items_per_box: null,
+      subdivision_unit: null,
+    });
+  });
+
+  it('소분 파라미터도 함께 기억한다', () => {
+    const r = mappingUpsertFrom({
+      ...base, item_code: '713160', item_label: 'KS노랑타월36CT',
+      entry_type: 'subdivision', items_per_box: 36, subdivision_unit: 10,
+    });
+    expect(r?.items_per_box).toBe(36);
+    expect(r?.subdivision_unit).toBe(10);
+  });
+
+  it('품번이 없으면 기억할 수 없다', () => {
+    expect(mappingUpsertFrom({ ...base, item_code: null, item_label: '봉투' })).toBeNull();
+  });
+
+  it('확정 시 default_decision은 항상 ingest다', () => {
+    const r = mappingUpsertFrom({ ...base, item_code: '999', item_label: 'x' });
+    expect(r?.default_decision).toBe('ingest');
   });
 });
