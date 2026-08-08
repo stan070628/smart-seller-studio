@@ -44,10 +44,18 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     );
   }
 
+  const imagePaths = (draft.image_paths ?? []) as string[];
+  if (imagePaths.length === 0) {
+    return NextResponse.json(
+      { success: false, error: '이미지가 없는 초안은 판독할 수 없습니다.' },
+      { status: 422 },
+    );
+  }
+
   // 1) 이미지 내려받기
   const supabase = getSupabaseServerClient();
   const images: { data: Buffer; mimeType: AllowedMimeType }[] = [];
-  for (const path of draft.image_paths as string[]) {
+  for (const path of imagePaths) {
     const { data, error } = await supabase.storage.from(STORAGE_BUCKET).download(path);
     if (error || !data) {
       return NextResponse.json(
