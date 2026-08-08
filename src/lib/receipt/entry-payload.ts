@@ -40,6 +40,13 @@ export interface BuildEntryPayloadInput {
   subdivisionUnit?: number;
 }
 
+export function buildEntryPayload(
+  input: BuildEntryPayloadInput & { entryType: 'normal' },
+): NormalEntryPayload;
+export function buildEntryPayload(
+  input: BuildEntryPayloadInput & { entryType: 'subdivision' },
+): SubdivisionEntryPayload;
+export function buildEntryPayload(input: BuildEntryPayloadInput): EntryPayload;
 export function buildEntryPayload(input: BuildEntryPayloadInput): EntryPayload {
   const { lines, lineNo, receivedAt, entryType, itemsPerBox, subdivisionUnit } = input;
 
