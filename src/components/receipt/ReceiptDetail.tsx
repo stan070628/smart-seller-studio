@@ -55,6 +55,8 @@ export default function ReceiptDetail({ draftId }: { draftId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  /** 폐기는 두 번 눌러야 실행된다. window.confirm은 모바일에서 거칠고 테스트도 어렵다 */
+  const [discardArmed, setDiscardArmed] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -122,6 +124,18 @@ export default function ReceiptDetail({ draftId }: { draftId: string }) {
       setError(e instanceof Error ? e.message : '확정 실패');
     } finally {
       setConfirming(false);
+    }
+  }
+
+  async function discard() {
+    try {
+      const res = await fetch(`/api/receipts/${draftId}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (!json.success) { setError(json.error ?? '폐기 실패'); setDiscardArmed(false); return; }
+      router.push('/m/receipt');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '폐기 실패');
+      setDiscardArmed(false);
     }
   }
 
@@ -221,6 +235,23 @@ export default function ReceiptDetail({ draftId }: { draftId: string }) {
       {d.lines.map((l) => (
         <ReceiptLineRow key={l.id} line={l} products={products} onPatch={patchLine} />
       ))}
+
+      {/* 잘못 찍은 영수증에 출구를 준다. 확정된 줄이 하나라도 있으면 서버가 409로 막는다 */}
+      {d.status === 'draft' && (
+        <button
+          onClick={() => (discardArmed ? void discard() : setDiscardArmed(true))}
+          onBlur={() => setDiscardArmed(false)}
+          style={{
+            width: '100%', height: '40px', marginTop: '16px', borderRadius: '10px',
+            border: discardArmed ? 'none' : '1px solid #d1d5db',
+            backgroundColor: discardArmed ? '#b91c1c' : '#fff',
+            color: discardArmed ? '#fff' : '#6b7280',
+            fontSize: '13px', fontWeight: 700,
+          }}
+        >
+          {discardArmed ? '한 번 더 누르면 폐기됩니다' : '이 영수증 폐기'}
+        </button>
+      )}
 
       {d.progress.ready > 0 && (
         <div style={{

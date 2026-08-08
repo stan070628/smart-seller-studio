@@ -283,6 +283,47 @@ describe('ReceiptDetail', () => {
     await waitFor(() => expect(retried).toBe(true));
   });
 
+  it('🔴 폐기는 두 번 눌러야 한다 — 한 번에 지워지지 않는다', async () => {
+    mockDetail(detail());
+    let deleted = 0;
+    server.use(http.delete(`/api/receipts/${DRAFT_ID}`, () => {
+      deleted++;
+      return HttpResponse.json({ success: true });
+    }));
+
+    render(<ReceiptDetail draftId={DRAFT_ID} />);
+    const btn = await screen.findByText('이 영수증 폐기');
+
+    fireEvent.click(btn);
+    expect(deleted).toBe(0);   // 첫 클릭은 확인만
+    expect(await screen.findByText('한 번 더 누르면 폐기됩니다')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('한 번 더 누르면 폐기됩니다'));
+    await waitFor(() => expect(deleted).toBe(1));
+    expect(push).toHaveBeenCalledWith('/m/receipt');
+  });
+
+  it('폐기가 거절되면 사유를 보여주고 되돌린다', async () => {
+    mockDetail(detail());
+    server.use(http.delete(`/api/receipts/${DRAFT_ID}`, () =>
+      HttpResponse.json({ success: false, error: '폐기할 수 있는 초안이 아닙니다.' }, { status: 409 })));
+
+    render(<ReceiptDetail draftId={DRAFT_ID} />);
+    fireEvent.click(await screen.findByText('이 영수증 폐기'));
+    fireEvent.click(screen.getByText('한 번 더 누르면 폐기됩니다'));
+
+    expect(await screen.findByText('폐기할 수 있는 초안이 아닙니다.')).toBeInTheDocument();
+    expect(screen.getByText('이 영수증 폐기')).toBeInTheDocument();
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('완료된 초안에는 폐기 버튼이 없다', async () => {
+    mockDetail(detail({ status: 'done', progress: { total: 1, confirmed: 1, ready: 0, blocked: 0, undecided: 0 } }));
+    render(<ReceiptDetail draftId={DRAFT_ID} />);
+    await screen.findByText('라운드티');
+    expect(screen.queryByText('이 영수증 폐기')).not.toBeInTheDocument();
+  });
+
   it('판독 중이면 자동 처리 안내를 보여준다', async () => {
     mockDetail(detail({
       ocr_status: 'pending', lines: [],
