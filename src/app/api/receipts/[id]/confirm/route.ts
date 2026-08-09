@@ -4,6 +4,7 @@ import { getSourcingPool } from '@/lib/sourcing/db';
 import { selectConfirmable, mappingUpsertFrom, type ConfirmCandidate } from '@/lib/receipt/confirm';
 import { buildEntryPayload } from '@/lib/receipt/entry-payload';
 import { createCostEntry } from '@/lib/cost-management/create-entry';
+import { syncDraftStatus } from '@/lib/receipt/draft-status';
 import type { AttributedLine } from '@/lib/receipt/discount';
 import type { TaxType } from '@/lib/receipt/types';
 
@@ -189,18 +190,7 @@ export async function POST(
       }
     }
 
-    // 확정을 기다리는 줄이 남지 않았으면 초안을 완료로 표시한다
-    const { rows: remaining } = await pool.query(
-      `SELECT count(*)::int AS n FROM receipt_draft_lines
-       WHERE draft_id = $1 AND decision = 'ingest' AND cost_entry_id IS NULL`,
-      [id],
-    );
-    if (remaining[0].n === 0) {
-      await pool.query(
-        `UPDATE receipt_drafts SET status = 'done', updated_at = now() WHERE id = $1`,
-        [id],
-      );
-    }
+    await syncDraftStatus(pool, id);
 
     return NextResponse.json({ success: true, data: { created, skipped, failed } });
   } catch (err) {

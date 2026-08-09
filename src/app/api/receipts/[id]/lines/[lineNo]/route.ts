@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { validateLinePatch, type LineState, type LinePatch } from '@/lib/receipt/line-patch';
+import { syncDraftStatus } from '@/lib/receipt/draft-status';
 
 /** 패치로 받아들이는 필드. 이 밖의 키는 무시한다 */
 const PATCHABLE = [
@@ -99,6 +100,10 @@ export async function PATCH(
            decisionToRemember, next.entry_type, next.items_per_box, next.subdivision_unit],
         );
       }
+
+      // 줄이 바뀌면 초안의 열림/닫힘도 바뀔 수 있다.
+      // 마지막 줄을 「제외」로 정하면 닫히고, 닫힌 초안에 할 일이 생기면 열린다
+      await syncDraftStatus(client, id);
 
       await client.query('COMMIT');
     } catch (txErr) {
