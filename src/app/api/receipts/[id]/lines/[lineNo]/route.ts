@@ -65,6 +65,9 @@ export async function PATCH(
       return NextResponse.json({ success: false, error: errors.join(' '), errors }, { status: 422 });
     }
 
+    /** 같은 품번이라 함께 채워진 줄 번호. 화면이 무엇이 바뀌었는지 알려줄 수 있다 */
+    let filled: number[] = [];
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -78,7 +81,14 @@ export async function PATCH(
          next.items_per_box, next.subdivision_unit],
       );
 
-      if (remember && row.item_code) {
+      // 🔵 상품을 고르는 순간 기억한다. 확정까지 기다리지 않는다 —
+      // 다음 장보기에서 같은 품번이 나오면 상품 선택을 생략하는 것이 목적이고,
+      // 확정 여부는 그 목적과 무관하다.
+      //
+      // `remember`는 상품 없이 결정만 기억시킬 때 쓴다("이 품번은 늘 개인용").
+      const shouldRemember = (remember || next.product_cost_id != null) && row.item_code;
+
+      if (shouldRemember) {
         // 확정 경로와 달리 skip도 기억한다 — "이 품번은 늘 개인용"을 저장할 유일한 경로다.
         // pending은 "매번 물어라"이므로 ask로 옮긴다
         const decisionToRemember = next.decision === 'pending' ? 'ask' : next.decision;
@@ -101,9 +111,37 @@ export async function PATCH(
         );
       }
 
+      // 같은 품번의 다른 줄에도 상품을 채운다.
+      //
+      // 코스트코는 같은 상품을 수량으로 묶지 않고 여러 줄로 인쇄할 때가 있다
+      // (콜맨웨건 1개 × 2줄). 그때마다 상품을 다시 고르게 하는 것은 군더더기다.
+      //
+      // **아직 상품이 없는 줄만** 채운다 — 사람이 다른 상품을 지정했다면
+      // 그 선택을 덮어쓰지 않는다. `decision`도 건드리지 않는다:
+      // 같은 품번이라도 어떤 줄은 팔고 어떤 줄은 개인용일 수 있다.
+      let filledLineNos: number[] = [];
+      if (next.product_cost_id && row.item_code) {
+        const { rows: filled } = await client.query(
+          `UPDATE receipt_draft_lines SET
+             product_cost_id = $3, entry_type = $4, items_per_box = $5, subdivision_unit = $6
+           WHERE draft_id = $1
+             AND item_code = $2
+             AND id <> $7
+             AND is_discount = false
+             AND cost_entry_id IS NULL
+             AND product_cost_id IS NULL
+           RETURNING line_no`,
+          [id, row.item_code, next.product_cost_id, next.entry_type,
+           next.items_per_box, next.subdivision_unit, row.id],
+        );
+        filledLineNos = filled.map((r) => r.line_no as number);
+      }
+
       // 줄이 바뀌면 초안의 열림/닫힘도 바뀔 수 있다.
       // 마지막 줄을 「제외」로 정하면 닫히고, 닫힌 초안에 할 일이 생기면 열린다
       await syncDraftStatus(client, id);
+
+      filled = filledLineNos;
 
       await client.query('COMMIT');
     } catch (txErr) {
@@ -113,7 +151,7 @@ export async function PATCH(
       client.release();
     }
 
-    return NextResponse.json({ success: true, data: next });
+    return NextResponse.json({ success: true, data: next, filled_line_nos: filled });
   } catch (err) {
     const msg = err instanceof Error ? err.message : '수정 실패';
     return NextResponse.json({ success: false, error: msg }, { status: 500 });
