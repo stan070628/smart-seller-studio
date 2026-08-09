@@ -2,6 +2,15 @@ import type { NextConfig } from "next";
 import path from "path";
 
 const nextConfig: NextConfig = {
+  /**
+   * 개발 서버를 LAN IP로 접근할 때 필요하다.
+   * Next.js는 기본적으로 dev 리소스(/_next/*)의 cross-origin 요청을 막는데,
+   * 그러면 폰에서 HTML은 받지만 JS 번들을 못 받아 React가 붙지 않는다 —
+   * 화면은 보이는데 버튼이 전부 죽는다.
+   *
+   * 프로덕션 빌드에는 영향이 없다.
+   */
+  allowedDevOrigins: ['192.168.0.183', '192.168.0.*', 'localhost'],
   experimental: {
     serverActions: {
       bodySizeLimit: '10mb',
