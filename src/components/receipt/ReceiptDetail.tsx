@@ -151,7 +151,7 @@ export default function ReceiptDetail({ draftId }: { draftId: string }) {
   }
 
   if (error && !d) return <div role="alert" style={{ padding: '16px', color: '#b91c1c' }}>{error}</div>;
-  if (!d) return <div style={{ padding: '16px', color: '#6b7280' }}>불러오는 중…</div>;
+  if (!d) return <div style={{ padding: '16px', color: '#374151' }}>불러오는 중…</div>;
 
   // verify_detail은 검사별 결과 + status 문자열이 섞인 객체다. 검사만 걸러낸다
   const failedChecks: [string, CheckDetail][] = Object.entries(d.verify_detail ?? {})
@@ -163,19 +163,19 @@ export default function ReceiptDetail({ draftId }: { draftId: string }) {
     <div style={{ padding: '16px', paddingBottom: '96px' }}>
       <button
         onClick={() => router.push('/m/receipt')}
-        style={{ background: 'none', border: 'none', color: '#4b5563', fontSize: '13px',
+        style={{ background: 'none', border: 'none', color: '#374151', fontSize: '13px', fontWeight: 600,
                  padding: 0, marginBottom: '12px' }}
       >← 목록</button>
 
       <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '14px',
                     border: '1px solid #e5e7eb', marginBottom: '12px' }}>
-        <div style={{ fontSize: '16px', fontWeight: 700 }}>
+        <div style={{ fontSize: '16px', fontWeight: 700, color: '#111827' }}>
           {d.purchased_at ? String(d.purchased_at).slice(0, 10) : '날짜 미확인'}
           {d.store_name && (
-            <span style={{ fontSize: '13px', color: '#6b7280', fontWeight: 400 }}> · {d.store_name}</span>
+            <span style={{ fontSize: '13px', color: '#374151', fontWeight: 400 }}> · {d.store_name}</span>
           )}
         </div>
-        <div style={{ marginTop: '4px', fontSize: '13px', color: '#4b5563' }}>
+        <div style={{ marginTop: '4px', fontSize: '13px', color: '#374151' }}>
           합계 {won(d.receipt_total)} · 총 {d.total_item_count ?? '—'}개 · 품목 {d.progress.total}줄
         </div>
       </div>
@@ -215,7 +215,7 @@ export default function ReceiptDetail({ draftId }: { draftId: string }) {
 
       {d.badge.busy && (
         <div style={{ backgroundColor: '#eef0f2', borderRadius: '10px', padding: '14px',
-                      textAlign: 'center', color: '#4b5563', fontSize: '13px', marginBottom: '12px' }}>
+                      textAlign: 'center', color: '#374151', fontSize: '13px', marginBottom: '12px' }}>
           {d.badge.label}입니다. 10분 주기로 자동 처리됩니다.
         </div>
       )}
@@ -245,7 +245,7 @@ export default function ReceiptDetail({ draftId }: { draftId: string }) {
             width: '100%', height: '40px', marginTop: '16px', borderRadius: '10px',
             border: discardArmed ? 'none' : '1px solid #d1d5db',
             backgroundColor: discardArmed ? '#b91c1c' : '#fff',
-            color: discardArmed ? '#fff' : '#6b7280',
+            color: discardArmed ? '#fff' : '#374151',
             fontSize: '13px', fontWeight: 700,
           }}
         >

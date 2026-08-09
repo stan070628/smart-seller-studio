@@ -56,7 +56,7 @@ export default function ReceiptLineRow({ line, products, onPatch }: Props) {
   if (line.is_discount) {
     return (
       <div style={{
-        padding: '8px 14px', fontSize: '12px', color: '#b45309',
+        padding: '8px 14px', fontSize: '12px', color: '#92400e', fontWeight: 600,
         backgroundColor: '#fffaf0', borderLeft: '3px solid #f59e0b',
         marginBottom: '8px', borderRadius: '4px',
       }}>
@@ -73,15 +73,15 @@ export default function ReceiptLineRow({ line, products, onPatch }: Props) {
       opacity: busy ? 0.6 : 1,
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-        <span style={{ fontSize: '14px', fontWeight: 700, color: '#1a1c1c', flex: 1 }}>
+        <span style={{ fontSize: '14px', fontWeight: 700, color: '#111827', flex: 1 }}>
           {line.item_label}
         </span>
-        <span style={{ fontSize: '14px', fontWeight: 700, whiteSpace: 'nowrap' }}>
+        <span style={{ fontSize: '14px', fontWeight: 700, whiteSpace: 'nowrap', color: '#111827' }}>
           {won(line.net_amount)}
         </span>
       </div>
 
-      <div style={{ marginTop: '3px', fontSize: '11px', color: '#6b7280' }}>
+      <div style={{ marginTop: '3px', fontSize: '12px', color: '#374151' }}>
         {line.item_code ?? '품번 없음'} · {line.quantity}개
         {line.net_amount !== line.amount && (
           <span style={{ color: '#b45309', fontWeight: 700 }}> · 할인 전 {won(line.amount)}</span>
@@ -104,7 +104,7 @@ export default function ReceiptLineRow({ line, products, onPatch }: Props) {
                   flex: 1, height: '34px', borderRadius: '8px', fontSize: '13px', fontWeight: 700,
                   border: line.decision === d ? 'none' : '1px solid #d1d5db',
                   backgroundColor: line.decision === d ? (d === 'ingest' ? '#1a7f37' : '#6b7280') : '#fff',
-                  color: line.decision === d ? '#fff' : '#4b5563',
+                  color: line.decision === d ? '#fff' : '#374151',
                 }}
               >
                 {d === 'ingest' ? '입고' : '제외'}
@@ -128,7 +128,7 @@ export default function ReceiptLineRow({ line, products, onPatch }: Props) {
                 width: '100%', height: '32px', marginTop: '8px', borderRadius: '8px',
                 border: line.remembered_decision === 'skip' ? 'none' : '1px solid #d1d5db',
                 backgroundColor: line.remembered_decision === 'skip' ? '#4b5563' : '#fff',
-                color: line.remembered_decision === 'skip' ? '#fff' : '#6b7280',
+                color: line.remembered_decision === 'skip' ? '#fff' : '#374151',
                 fontSize: '12px', fontWeight: 700,
               }}
             >
@@ -175,7 +175,7 @@ export default function ReceiptLineRow({ line, products, onPatch }: Props) {
                       flex: 1, height: '30px', borderRadius: '8px', fontSize: '12px', fontWeight: 700,
                       border: line.entry_type === t ? 'none' : '1px solid #d1d5db',
                       backgroundColor: line.entry_type === t ? '#374151' : '#fff',
-                      color: line.entry_type === t ? '#fff' : '#4b5563',
+                      color: line.entry_type === t ? '#fff' : '#374151',
                     }}
                   >
                     {t === 'normal' ? '일반' : '소분'}
@@ -185,7 +185,7 @@ export default function ReceiptLineRow({ line, products, onPatch }: Props) {
 
               {line.entry_type === 'subdivision' && (
                 <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
-                  <label style={{ flex: 1, fontSize: '11px', color: '#6b7280' }}>
+                  <label style={{ flex: 1, fontSize: '12px', color: '#374151', fontWeight: 600 }}>
                     박스당 개수
                     <input
                       type="number" min={1} inputMode="numeric"
@@ -199,7 +199,7 @@ export default function ReceiptLineRow({ line, products, onPatch }: Props) {
                                boxSizing: 'border-box' }}
                     />
                   </label>
-                  <label style={{ flex: 1, fontSize: '11px', color: '#6b7280' }}>
+                  <label style={{ flex: 1, fontSize: '12px', color: '#374151', fontWeight: 600 }}>
                     소분 단위
                     <input
                       type="number" min={1} inputMode="numeric"

@@ -121,10 +121,10 @@ export default function ReceiptList() {
         >{error}</div>
       )}
 
-      {loading && <div style={{ color: '#6b7280', fontSize: '14px' }}>불러오는 중…</div>}
+      {loading && <div style={{ color: '#374151', fontSize: '14px' }}>불러오는 중…</div>}
 
       {!loading && drafts.length === 0 && (
-        <div style={{ textAlign: 'center', color: '#6b7280', fontSize: '14px', padding: '48px 0' }}>
+        <div style={{ textAlign: 'center', color: '#374151', fontSize: '14px', padding: '48px 0' }}>
           대기 중인 영수증이 없습니다.<br />장을 보고 오면 여기에 쌓입니다.
         </div>
       )}
@@ -144,7 +144,7 @@ export default function ReceiptList() {
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '15px', fontWeight: 700, color: '#1a1c1c' }}>
+              <span style={{ fontSize: '15px', fontWeight: 700, color: '#111827' }}>
                 {d.purchased_at ? String(d.purchased_at).slice(0, 10) : '날짜 미확인'}
               </span>
               <span style={{
@@ -153,12 +153,12 @@ export default function ReceiptList() {
               }}>{d.badge.label}</span>
             </div>
 
-            <div style={{ marginTop: '6px', fontSize: '13px', color: '#4b5563' }}>
+            <div style={{ marginTop: '6px', fontSize: '13px', color: '#374151' }}>
               {d.store_name ?? '매장 미확인'} · {won(d.receipt_total)} · 사진 {d.image_count}장
             </div>
 
             {d.progress.total > 0 && (
-              <div style={{ marginTop: '8px', fontSize: '12px', color: '#6b7280' }}>
+              <div style={{ marginTop: '8px', fontSize: '12px', color: '#374151' }}>
                 품목 {d.progress.total} · 확정 {d.progress.confirmed}
                 {d.progress.ready > 0 && (
                   <span style={{ color: '#1a7f37', fontWeight: 700 }}> · 확정 대기 {d.progress.ready}</span>
