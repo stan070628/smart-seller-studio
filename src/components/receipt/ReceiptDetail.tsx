@@ -69,18 +69,29 @@ export default function ReceiptDetail({ draftId }: { draftId: string }) {
     }
   }, [draftId]);
 
+  /**
+   * 상품 목록을 다시 읽는다.
+   *
+   * 마운트 때 한 번만 읽으면, 화면을 열어둔 채 상품을 새로 만들었을 때
+   * 드롭다운에 나타나지 않는다 — 2026-08-09 실사용에서 실제로 걸렸다.
+   * 상품을 등록하고 곧바로 영수증을 확정하는 흐름에서는 반드시 발생한다.
+   *
+   * 실패해도 조용히 넘긴다. 줄 검토는 계속할 수 있다.
+   */
+  const loadProducts = useCallback(async () => {
+    try {
+      const res = await fetch('/api/cost-management/products/options');
+      const json = await res.json();
+      if (json.success) setProducts(json.data);
+    } catch {
+      // 무시 — 이전 목록으로 계속 쓴다
+    }
+  }, []);
+
   useEffect(() => {
     void load();
-    void (async () => {
-      try {
-        const res = await fetch('/api/cost-management/products/options');
-        const json = await res.json();
-        if (json.success) setProducts(json.data);
-      } catch {
-        // 상품 목록 실패는 치명적이지 않다 — 줄 검토는 계속할 수 있다
-      }
-    })();
-  }, [load]);
+    void loadProducts();
+  }, [load, loadProducts]);
 
   const busy = d?.badge.busy ?? false;
   useEffect(() => {
@@ -98,8 +109,9 @@ export default function ReceiptDetail({ draftId }: { draftId: string }) {
     const json = await res.json();
     if (!json.success) { setError(json.error ?? '수정 실패'); return; }
     setError(null);
-    await load();
-  }, [draftId, load]);
+    // 줄을 고칠 때마다 상품 목록도 다시 읽는다 — 그 사이 새로 만든 상품이 보이도록
+    await Promise.all([load(), loadProducts()]);
+  }, [draftId, load, loadProducts]);
 
   async function confirm() {
     setConfirming(true);

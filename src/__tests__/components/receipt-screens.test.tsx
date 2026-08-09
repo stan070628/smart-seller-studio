@@ -276,6 +276,38 @@ describe('ReceiptDetail', () => {
     await waitFor(() => expect(body).toEqual({ decision: 'skip' }));
   });
 
+  it('🔴 줄을 고치면 상품 목록도 다시 읽는다 — 새로 만든 상품이 보이도록', async () => {
+    // 처음엔 상품 1개, 두 번째 조회부터 2개를 준다
+    let optionsCalls = 0;
+    server.use(
+      http.get(`/api/receipts/${DRAFT_ID}`, () =>
+        HttpResponse.json({ success: true, data: detail() })),
+      http.get('/api/cost-management/products/options', () => {
+        optionsCalls++;
+        const data = [{ id: 'p-1', product_name: '커클랜드 타월', subdivision_unit: 10 }];
+        if (optionsCalls > 1) {
+          data.push({ id: 'p-2', product_name: '예일 후드티', subdivision_unit: null });
+        }
+        return HttpResponse.json({ success: true, data });
+      }),
+      http.patch(`/api/receipts/${DRAFT_ID}/lines/1`, () =>
+        HttpResponse.json({ success: true, data: {} })),
+    );
+
+    render(<ReceiptDetail draftId={DRAFT_ID} />);
+    await screen.findByText('라운드티');
+    await waitFor(() => expect(optionsCalls).toBe(1));
+
+    // 마운트 시점엔 새 상품이 없다
+    expect(screen.queryByText('예일 후드티')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('제외'));
+
+    // 줄 수정 후 목록을 다시 읽어 새 상품이 나타난다
+    await waitFor(() => expect(optionsCalls).toBe(2));
+    expect(await screen.findByText('예일 후드티')).toBeInTheDocument();
+  });
+
   it('소분을 고르면 박스당 개수와 소분 단위를 묻는다', async () => {
     mockDetail(detail({ lines: [line({ entry_type: 'subdivision', items_per_box: 36, subdivision_unit: 10 })] }));
     render(<ReceiptDetail draftId={DRAFT_ID} />);

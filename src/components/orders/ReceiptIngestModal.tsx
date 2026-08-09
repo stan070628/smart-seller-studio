@@ -99,18 +99,24 @@ export default function ReceiptIngestModal({ onClose, onConfirmed }: Props) {
     }
   }, []);
 
+  /**
+   * 상품 목록을 다시 읽는다. 마운트 때 한 번만 읽으면 화면을 열어둔 채
+   * 상품을 새로 만들었을 때 드롭다운에 나타나지 않는다.
+   */
+  const loadProducts = useCallback(async () => {
+    try {
+      const res = await fetch('/api/cost-management/products/options');
+      const json = await res.json();
+      if (json.success) setProducts(json.data);
+    } catch {
+      // 무시 — 이전 목록으로 계속 쓴다
+    }
+  }, []);
+
   useEffect(() => {
     void loadList();
-    void (async () => {
-      try {
-        const res = await fetch('/api/cost-management/products/options');
-        const json = await res.json();
-        if (json.success) setProducts(json.data);
-      } catch {
-        // 상품 목록 실패는 치명적이지 않다 — 검토는 계속할 수 있다
-      }
-    })();
-  }, [loadList]);
+    void loadProducts();
+  }, [loadList, loadProducts]);
 
   useEffect(() => {
     if (selected) void loadDetail(selected);
@@ -126,9 +132,9 @@ export default function ReceiptIngestModal({ onClose, onConfirmed }: Props) {
     const json = await res.json();
     if (!json.success) { setError(json.error ?? '수정 실패'); return; }
     setError(null);
-    await loadDetail(selected);
-    await loadList();
-  }, [selected, loadDetail, loadList]);
+    // 줄을 고칠 때마다 상품 목록도 다시 읽는다 — 그 사이 새로 만든 상품이 보이도록
+    await Promise.all([loadDetail(selected), loadList(), loadProducts()]);
+  }, [selected, loadDetail, loadList, loadProducts]);
 
   async function confirm() {
     if (!selected) return;
