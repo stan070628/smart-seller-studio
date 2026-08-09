@@ -296,7 +296,16 @@ export async function POST(
     const timestamp = Date.now()
     // 원본 파일명에서 확장자 제거 후 JPEG 확장자 붙임
     const baseName = fileField.name.replace(/\.[^.]+$/, "")
-    const safeBaseName = baseName.replace(/[^a-zA-Z0-9_\-가-힣]/g, "_").slice(0, 100)
+    // Supabase Storage 키는 non-ASCII를 거부한다 ("Invalid key"). 한글 파일명이
+    // 그대로 들어가면 업로드가 전량 502로 실패하므로 ASCII만 남긴다.
+    // (상품 폴더·파일명이 한글이라 실사용에서 반드시 걸린다)
+    const asciiBaseName = baseName
+      .replace(/[^a-zA-Z0-9_-]/g, "_")
+      .replace(/_{2,}/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 60)
+    // 한글만으로 된 파일명은 위 치환 후 빈 문자열이 된다 → timestamp로 구분되므로 고정값 사용
+    const safeBaseName = asciiBaseName || "image"
     const storedFileName = `${timestamp}_${safeBaseName}.jpg`
     const storagePath = `listings/${userId}/${storedFileName}`
 
