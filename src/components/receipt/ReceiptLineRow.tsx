@@ -26,6 +26,8 @@ export interface LineData {
   items_per_box: number | null;
   subdivision_unit: number | null;
   cost_entry_id: string | null;
+  /** 이 품번에 저장된 기본값. 없으면 아직 기억한 적이 없다 */
+  remembered_decision: 'ingest' | 'skip' | 'ask' | null;
 }
 
 export interface ProductOption {
@@ -109,6 +111,32 @@ export default function ReceiptLineRow({ line, products, onPatch }: Props) {
               </button>
             ))}
           </div>
+
+          {/*
+            제외한 품목을 다음 영수증에서도 자동으로 빼주는 장치.
+            품번이 없는 줄(봉투값 등)은 기억할 키가 없어 뜨지 않는다.
+            다시 누르면 「매번 물어봄」으로 되돌아간다 — 잘못 눌러도 되돌릴 수 있어야 한다.
+          */}
+          {line.decision === 'skip' && line.item_code && (
+            <button
+              disabled={busy}
+              onClick={() => void patch({
+                decision: 'skip',
+                remember: line.remembered_decision !== 'skip',
+              })}
+              style={{
+                width: '100%', height: '32px', marginTop: '8px', borderRadius: '8px',
+                border: line.remembered_decision === 'skip' ? 'none' : '1px solid #d1d5db',
+                backgroundColor: line.remembered_decision === 'skip' ? '#4b5563' : '#fff',
+                color: line.remembered_decision === 'skip' ? '#fff' : '#6b7280',
+                fontSize: '12px', fontWeight: 700,
+              }}
+            >
+              {line.remembered_decision === 'skip'
+                ? '✓ 이 품번은 항상 제외 — 눌러서 해제'
+                : '이 품번은 항상 제외'}
+            </button>
+          )}
 
           {line.decision === 'ingest' && (
             <>

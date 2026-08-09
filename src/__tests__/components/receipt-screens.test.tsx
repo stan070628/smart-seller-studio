@@ -35,6 +35,7 @@ function line(over: Record<string, unknown> = {}) {
     is_discount: false, applies_to_line_no: null,
     decision: 'ingest', product_cost_id: 'p-1', entry_type: 'normal',
     items_per_box: null, subdivision_unit: null, cost_entry_id: null,
+    remembered_decision: null,
     ...over,
   };
 }
@@ -281,6 +282,58 @@ describe('ReceiptDetail', () => {
     render(<ReceiptDetail draftId={DRAFT_ID} />);
     fireEvent.click(await screen.findByText('다시 판독'));
     await waitFor(() => expect(retried).toBe(true));
+  });
+
+  it('🔴 제외한 줄에 「항상 제외」 버튼이 뜬다', async () => {
+    mockDetail(detail({ lines: [line({ decision: 'skip', product_cost_id: null })] }));
+    render(<ReceiptDetail draftId={DRAFT_ID} />);
+    expect(await screen.findByText('이 품번은 항상 제외')).toBeInTheDocument();
+  });
+
+  it('입고로 둔 줄에는 뜨지 않는다', async () => {
+    mockDetail(detail());
+    render(<ReceiptDetail draftId={DRAFT_ID} />);
+    await screen.findByText('라운드티');
+    expect(screen.queryByText('이 품번은 항상 제외')).not.toBeInTheDocument();
+  });
+
+  it('🔴 품번이 없는 줄에는 뜨지 않는다 — 기억할 키가 없다', async () => {
+    mockDetail(detail({ lines: [line({ decision: 'skip', item_code: null, product_cost_id: null })] }));
+    render(<ReceiptDetail draftId={DRAFT_ID} />);
+    await screen.findByText('라운드티');
+    expect(screen.queryByText('이 품번은 항상 제외')).not.toBeInTheDocument();
+  });
+
+  it('🔴 누르면 remember:true로 기억시킨다', async () => {
+    mockDetail(detail({ lines: [line({ decision: 'skip', product_cost_id: null })] }));
+    let body: Record<string, unknown> | null = null;
+    server.use(http.patch(`/api/receipts/${DRAFT_ID}/lines/1`, async ({ request }) => {
+      body = (await request.json()) as Record<string, unknown>;
+      return HttpResponse.json({ success: true, data: {} });
+    }));
+
+    render(<ReceiptDetail draftId={DRAFT_ID} />);
+    fireEvent.click(await screen.findByText('이 품번은 항상 제외'));
+
+    await waitFor(() => expect(body).toEqual({ decision: 'skip', remember: true }));
+  });
+
+  it('🔴 이미 기억된 품번은 해제 상태로 보이고, 누르면 기억을 지운다', async () => {
+    mockDetail(detail({
+      lines: [line({ decision: 'skip', product_cost_id: null, remembered_decision: 'skip' })],
+    }));
+    let body: Record<string, unknown> | null = null;
+    server.use(http.patch(`/api/receipts/${DRAFT_ID}/lines/1`, async ({ request }) => {
+      body = (await request.json()) as Record<string, unknown>;
+      return HttpResponse.json({ success: true, data: {} });
+    }));
+
+    render(<ReceiptDetail draftId={DRAFT_ID} />);
+    const btn = await screen.findByText('✓ 이 품번은 항상 제외 — 눌러서 해제');
+    fireEvent.click(btn);
+
+    // remember:false가 기억을 「매번 물어봄」으로 되돌린다
+    await waitFor(() => expect(body).toEqual({ decision: 'skip', remember: false }));
   });
 
   it('🔴 폐기는 두 번 눌러야 한다 — 한 번에 지워지지 않는다', async () => {

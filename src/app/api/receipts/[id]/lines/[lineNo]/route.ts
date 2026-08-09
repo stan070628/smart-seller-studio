@@ -37,7 +37,14 @@ export async function PATCH(
   }
 
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
-  const remember = body?.remember === true;
+
+  /**
+   * `true`  — 이 줄의 결정을 품번에 기억시킨다
+   * `false` — 기억을 지운다(= `ask`, 매번 물어봄)
+   * 생략    — 상품을 골랐다면 자동으로 기억한다
+   */
+  const remember: boolean | undefined =
+    typeof body?.remember === 'boolean' ? body.remember : undefined;
   const patch: LinePatch = {};
   for (const k of PATCHABLE) {
     if (k in (body ?? {})) (patch as Record<string, unknown>)[k] = body[k];
@@ -85,13 +92,20 @@ export async function PATCH(
       // 다음 장보기에서 같은 품번이 나오면 상품 선택을 생략하는 것이 목적이고,
       // 확정 여부는 그 목적과 무관하다.
       //
-      // `remember`는 상품 없이 결정만 기억시킬 때 쓴다("이 품번은 늘 개인용").
-      const shouldRemember = (remember || next.product_cost_id != null) && row.item_code;
+      // `remember: true`는 상품 없이 결정만 기억시킬 때 쓴다("이 품번은 늘 개인용").
+      // `remember: false`는 그 기억을 지운다 — 화면에서 되돌릴 경로가 없으면
+      // 잘못 누른 「항상 제외」가 영구히 남는다.
+      const shouldTouchMemory =
+        (remember === true || remember === false || next.product_cost_id != null) &&
+        !!row.item_code;
 
-      if (shouldRemember) {
+      if (shouldTouchMemory) {
         // 확정 경로와 달리 skip도 기억한다 — "이 품번은 늘 개인용"을 저장할 유일한 경로다.
-        // pending은 "매번 물어라"이므로 ask로 옮긴다
-        const decisionToRemember = next.decision === 'pending' ? 'ask' : next.decision;
+        // pending과 「기억 지움」은 "매번 물어라"이므로 ask로 옮긴다
+        const decisionToRemember =
+          remember === false ? 'ask'
+          : next.decision === 'pending' ? 'ask'
+          : next.decision;
         await client.query(
           `INSERT INTO costco_item_map
              (user_id, item_code, item_label, product_cost_id, default_decision,

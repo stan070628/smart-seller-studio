@@ -46,12 +46,18 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     }
     const draft = drafts[0];
 
+    // `remembered_decision`은 이 품번에 저장된 기본값이다.
+    // 화면이 「항상 제외」 토글의 현재 상태를 그리려면 필요하다.
     const { rows } = await pool.query(
-      `SELECT id, line_no, item_code, item_label, quantity, unit_price, amount,
-              is_discount, applies_to_line_id, tax_type, decision, product_cost_id,
-              entry_type, items_per_box, subdivision_unit, cost_entry_id
-       FROM receipt_draft_lines WHERE draft_id = $1 ORDER BY line_no`,
-      [id],
+      `SELECT l.id, l.line_no, l.item_code, l.item_label, l.quantity, l.unit_price, l.amount,
+              l.is_discount, l.applies_to_line_id, l.tax_type, l.decision, l.product_cost_id,
+              l.entry_type, l.items_per_box, l.subdivision_unit, l.cost_entry_id,
+              m.default_decision AS remembered_decision
+       FROM receipt_draft_lines l
+       LEFT JOIN costco_item_map m
+         ON m.item_code = l.item_code AND m.user_id = $2
+       WHERE l.draft_id = $1 ORDER BY l.line_no`,
+      [id, user.userId],
     );
 
     // 할인 귀속을 line_no로 되돌린다 — netAmountOf가 그 형태를 쓴다
