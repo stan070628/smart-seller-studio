@@ -139,6 +139,12 @@ export interface CoupangProductItem {
   attributes: { attributeTypeName: string; attributeValueName: string }[];
   contents: { contentsType: string; contentDetails: { content: string; detailType: string }[] }[];
   notices: { noticeCategoryName: string; noticeCategoryDetailName: string; content: string }[];
+  /**
+   * 검색어 태그. 쿠팡은 이 필드를 **item(옵션) 레벨에서만** 받는다.
+   * 상품 최상위(CoupangProductPayload.searchTags)에 넣으면 조용히 무시되어
+   * 등록은 성공하는데 검색어만 전부 비는 상태가 된다. 2026-08-09 실측 확인.
+   */
+  searchTags?: string[];
 }
 
 export interface CoupangApiResponse<T = unknown> {

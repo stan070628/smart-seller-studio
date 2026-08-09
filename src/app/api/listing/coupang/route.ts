@@ -78,6 +78,10 @@ const VariantSchema = z.object({
   salePrice: z.number().int().min(100),
   originalPrice: z.number().int().min(100).optional(),
   stock: z.number().int().min(0).default(100),
+  // 옵션 전용 이미지. 첫 장이 그 옵션의 대표이미지가 된다.
+  // 색상 옵션은 이걸 안 주면 모든 옵션이 같은 대표이미지를 갖게 되어
+  // "블랙인데 대표컷이 그린"처럼 소비자를 오인시킨다.
+  images: z.array(z.string().url()).min(1).max(10).optional(),
 });
 
 const RegisterSchema = z.object({
@@ -173,19 +177,16 @@ export async function POST(request: NextRequest) {
         }))
       : [{ contentsType: 'TEXT' as const, contentDetails: [{ content: d.description || d.sellerProductName, detailType: 'TEXT' as const }] }];
 
-    // 이미지 목록 (썸네일 + 상세) — 모든 item이 공유
-    const itemImages = [
-      ...d.thumbnailImages.map((url, i) => ({
+    // URL 목록 → 쿠팡 이미지 배열. 첫 장이 대표(REPRESENTATION), 나머지는 추가(DETAIL).
+    const buildImages = (urls: string[]) =>
+      urls.map((url, i) => ({
         imageOrder: i,
-        imageType: i === 0 ? 'REPRESENTATION' as const : 'DETAIL' as const,
+        imageType: i === 0 ? ('REPRESENTATION' as const) : ('DETAIL' as const),
         vendorPath: url,
-      })),
-      ...d.detailImages.map((url: string, i: number) => ({
-        imageOrder: d.thumbnailImages.length + i,
-        imageType: 'DETAIL' as const,
-        vendorPath: url,
-      })),
-    ];
+      }));
+
+    // 옵션이 자기 이미지를 지정하지 않았을 때 쓰는 공용 이미지 (썸네일 + 상세)
+    const itemImages = buildImages([...d.thumbnailImages, ...d.detailImages]);
 
     // 공통 notice 목록 — getCategoryMeta 실제값으로 재교정
     // draft 로드나 AI 오류로 잘못된 값(예: "의류", "품명")이 들어와도 여기서 최종 교정됨
@@ -251,10 +252,13 @@ export async function POST(request: NextRequest) {
             taxType: d.taxType ?? 'TAX',
             overseasPurchased: d.overseasPurchased ?? 'NOT_OVERSEAS_PURCHASED',
             parallelImported: d.parallelImported ?? 'NOT_PARALLEL_IMPORTED',
-            images: itemImages,
+            images: v.images ? buildImages(v.images) : itemImages,
             attributes: v.attributes,
             contents,
-            notices: idx === 0 ? itemNotices : [],
+            searchTags: d.searchTags ?? [],
+            // 쿠팡은 옵션(item)마다 고시정보를 요구한다. 첫 옵션에만 넣으면
+            // "'2 번 옵션 의 고시정보' 입력해야 합니다"로 등록 전체가 거부된다.
+            notices: itemNotices,
           }))
         : [
             {
@@ -271,6 +275,7 @@ export async function POST(request: NextRequest) {
               overseasPurchased: d.overseasPurchased ?? 'NOT_OVERSEAS_PURCHASED',
               parallelImported: d.parallelImported ?? 'NOT_PARALLEL_IMPORTED',
               images: itemImages,
+              searchTags: d.searchTags ?? [],
               attributes: [],
               contents,
               notices: itemNotices,
@@ -306,6 +311,9 @@ export async function POST(request: NextRequest) {
       returnCharge: d.returnCharge,
       vendorUserId: process.env.COUPANG_VENDOR_USER_ID ?? '',
       items,
+      // 쿠팡은 최상위 searchTags를 무시한다. 실제로 반영되는 곳은 items[].searchTags다.
+      // (2026-08-09 실측: 최상위에만 넣었더니 조회 시 searchTags가 undefined였다)
+      // 하위 호환을 위해 남겨두되, 검색어는 위 items 쪽이 담당한다.
       searchTags: d.searchTags ?? [],
     };
 
