@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { buildTableItems, type GroupRow as GroupRowType } from '@/lib/cost-management/product-grouping';
 import { determineWinnerStatus } from '@/lib/roi/calculations';
-import { Plus, Truck, Package, Search, TrendingUp, TrendingDown, AlertCircle, CloudDownload, Eye, EyeOff, Receipt } from 'lucide-react';
+import { Plus, Truck, Package, Search, TrendingUp, TrendingDown, AlertCircle, CloudDownload, Eye, EyeOff, Receipt, ClipboardPaste } from 'lucide-react';
 import { toast } from '@/components/ui/toast';
 import { confirmDialog } from '@/components/ui/confirm';
 import CostEntryDrawer from './CostEntryDrawer';
@@ -11,6 +11,7 @@ import ShippingGroupModal from './ShippingGroupModal';
 import AddProductModal from './AddProductModal';
 import RocketGrowthShipmentModal from './RocketGrowthShipmentModal';
 import ReceiptIngestModal from './ReceiptIngestModal';
+import AdSpendPasteModal from './AdSpendPasteModal';
 import RgShipmentHistoryPopover from './RgShipmentHistoryPopover';
 import ChannelEditPopover from './ChannelEditPopover';
 import { buildImportSummary, type ImportSummary } from './import-summary';
@@ -246,6 +247,7 @@ export default function CostManagementTab() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showRgModal, setShowRgModal] = useState(false);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [showAdPasteModal, setShowAdPasteModal] = useState(false);
   const [showRgHistory, setShowRgHistory] = useState(false);
   const [importingAll, setImportingAll] = useState(false);
   const [importResult, setImportResult] = useState<ImportSummary | null>(null);
@@ -820,6 +822,13 @@ export default function CostManagementTab() {
           <Receipt size={13} /> 영수증 입고
         </button>
         <button
+          onClick={() => setShowAdPasteModal(true)}
+          title="쿠팡 광고관리 표를 붙여넣어 상품별 광고비를 하루치로 입력합니다"
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', background: '#fff', color: '#7c3aed', border: '1px solid #ddd6fe', fontSize: '12px', cursor: 'pointer' }}
+        >
+          <ClipboardPaste size={13} /> 광고비 붙여넣기
+        </button>
+        <button
           onClick={() => setShowShippingModal(true)}
           style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', background: '#fff', color: '#333', border: '1px solid #e5e5e5', fontSize: '12px', cursor: 'pointer' }}
         >
@@ -1057,6 +1066,12 @@ export default function CostManagementTab() {
         <ReceiptIngestModal
           onClose={() => setShowReceiptModal(false)}
           onConfirmed={load}
+        />
+      )}
+      {showAdPasteModal && (
+        <AdSpendPasteModal
+          onClose={() => setShowAdPasteModal(false)}
+          onSaved={() => { setShowAdPasteModal(false); load(); }}
         />
       )}
       {showRgModal && (
