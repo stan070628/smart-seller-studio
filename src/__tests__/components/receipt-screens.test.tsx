@@ -139,6 +139,50 @@ describe('ReceiptList', () => {
       spy.mockRestore();
     }
   });
+
+  it('🔴 업로드 직후 판독을 곧바로 건다 — Hobby는 10분 cron을 못 쓴다', async () => {
+    let parsed: string | null = null;
+    server.use(
+      http.get('/api/receipts', () => HttpResponse.json({ success: true, data: [] })),
+      http.post('/api/receipts', () =>
+        HttpResponse.json({ success: true, data: { id: DRAFT_ID } })),
+      http.post(`/api/receipts/${DRAFT_ID}/parse`, () => {
+        parsed = DRAFT_ID;
+        return HttpResponse.json({ success: true });
+      }),
+    );
+
+    const { container } = render(<ReceiptList />);
+    await screen.findByText(/대기 중인 영수증이 없습니다/);
+
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, {
+      target: { files: [new File(['x'], 'r.jpg', { type: 'image/jpeg' })] },
+    });
+
+    await waitFor(() => expect(parsed).toBe(DRAFT_ID), { timeout: 5000 });
+  });
+
+  it('판독 요청이 실패해도 업로드는 성공으로 둔다 — cron이 주워간다', async () => {
+    server.use(
+      http.get('/api/receipts', () => HttpResponse.json({ success: true, data: [card()] })),
+      http.post('/api/receipts', () =>
+        HttpResponse.json({ success: true, data: { id: DRAFT_ID } })),
+      http.post(`/api/receipts/${DRAFT_ID}/parse`, () =>
+        HttpResponse.json({ success: false, error: '판독 실패' }, { status: 500 })),
+    );
+
+    const { container } = render(<ReceiptList />);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, {
+      target: { files: [new File(['x'], 'r.jpg', { type: 'image/jpeg' })] },
+    });
+
+    // 오류 배너가 뜨지 않는다
+    await screen.findByText('2026-08-08');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
 });
 
 describe('ReceiptDetail', () => {

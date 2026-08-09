@@ -77,6 +77,15 @@ export default function ReceiptList() {
       const res = await fetch('/api/receipts', { method: 'POST', body: fd });
       const json = await res.json();
       if (!json.success) throw new Error(json.error ?? '업로드 실패');
+
+      // 판독을 곧바로 건다. **응답을 기다리지 않는다** — 12~14초가 걸리므로
+      // 기다리면 촬영 흐름이 멈춘다. 요청이 서버에 닿기만 하면 앱을 닫아도
+      // 서버가 끝까지 처리한다.
+      //
+      // 실패해도 조용히 넘긴다. 초안은 pending으로 남고 cron이 주워간다 —
+      // 이 호출은 빠르게 하기 위한 것이지 유일한 경로가 아니다.
+      void fetch(`/api/receipts/${json.data.id}/parse`, { method: 'POST' }).catch(() => {});
+
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : '업로드 실패');

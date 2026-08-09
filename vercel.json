@@ -38,7 +38,7 @@
     },
     {
       "path": "/api/cron/parse-receipts",
-      "schedule": "*/10 * * * *"
+      "schedule": "0 19 * * *"
     },
     {
       "path": "/api/cron/purge-receipt-images",
