@@ -1,9 +1,14 @@
 import pg from 'pg';
 import { readFileSync } from 'fs';
-import { resolve } from 'path';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function loadEnv() {
-  const lines = readFileSync(resolve('/Users/seungminlee/projects/smart_seller_studio/.env.local'), 'utf-8').split('\n');
+  // 저장소 위치에 묶이지 않도록 스크립트 기준 상대 경로로 읽는다.
+  // (2026-07-31 ~/Desktop/projects → ~/dev 이전 때 절대 경로가 깨져 있었다)
+  const lines = readFileSync(resolve(__dirname, '../.env.local'), 'utf-8').split('\n');
   const env = {};
   for (const line of lines) {
     const t = line.trim();
