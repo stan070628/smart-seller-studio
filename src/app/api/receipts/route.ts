@@ -103,6 +103,10 @@ export async function POST(request: NextRequest) {
  *
  * 쿼리: `?status=draft|done|discarded|all` (기본 draft), `?limit=` (기본 30)
  *
+ * **정렬은 손댈 것이 남은 순서다** — 미처리(`draft`) → 완료(`done`) → 폐기.
+ * 확정이 끝나면 목록에서 사라져 되짚어볼 수 없다는 문제 때문에, 화면은
+ * `all`을 받아 전부 보여주되 아직 할 일이 있는 것을 위로 올린다.
+ *
  * 목록은 줄 전체를 내려보내지 않는다. 카드에 필요한 건 진행률뿐이라
  * 줄은 집계용 최소 필드만 조인한다.
  */
@@ -122,7 +126,8 @@ export async function GET(request: NextRequest) {
               verify_status, ocr_status, status, parse_attempts, created_at
        FROM receipt_drafts
        WHERE user_id = $1 ${status === 'all' ? '' : 'AND status = $3'}
-       ORDER BY created_at DESC
+       ORDER BY CASE status WHEN 'draft' THEN 0 WHEN 'done' THEN 1 ELSE 2 END,
+                created_at DESC
        LIMIT $2`,
       status === 'all' ? [user.userId, limit] : [user.userId, limit, status],
     );

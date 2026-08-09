@@ -18,6 +18,7 @@ export interface DraftCard {
   receipt_total: number | null;
   image_count: number;
   created_at: string;
+  status: 'draft' | 'done' | 'discarded';
   badge: Badge;
   progress: Progress;
 }
@@ -46,7 +47,8 @@ export default function ReceiptList() {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch('/api/receipts?status=draft');
+      // 확정이 끝난 영수증도 남긴다 — 서버가 미처리를 위로 올려준다
+      const res = await fetch('/api/receipts?status=all');
       const json = await res.json();
       if (!json.success) throw new Error(json.error ?? '조회 실패');
       setDrafts(json.data);
@@ -134,7 +136,7 @@ export default function ReceiptList() {
 
       {!loading && drafts.length === 0 && (
         <div style={{ textAlign: 'center', color: '#374151', fontSize: '14px', padding: '48px 0' }}>
-          대기 중인 영수증이 없습니다.<br />장을 보고 오면 여기에 쌓입니다.
+          아직 올린 영수증이 없습니다.<br />장을 보고 오면 여기에 쌓입니다.
         </div>
       )}
 
@@ -149,7 +151,10 @@ export default function ReceiptList() {
             onKeyDown={(e) => { if (e.key === 'Enter') router.push(`/m/receipt/${d.id}`); }}
             style={{
               backgroundColor: '#fff', borderRadius: '12px', padding: '14px',
-              marginBottom: '10px', border: '1px solid #e5e7eb', cursor: 'pointer',
+              marginBottom: '10px', cursor: 'pointer',
+              // 손댈 것이 남은 카드에 시선이 먼저 가야 한다
+              border: d.status === 'draft' ? '1px solid #e5e7eb' : '1px solid #f1f2f4',
+              opacity: d.status === 'draft' ? 1 : 0.68,
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

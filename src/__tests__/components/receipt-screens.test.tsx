@@ -21,6 +21,7 @@ function card(over: Record<string, unknown> = {}) {
     receipt_total: 724310,
     image_count: 1,
     created_at: '2026-08-08T12:00:00Z',
+    status: 'draft',
     badge: { label: '검산 통과', tone: 'ok', busy: false },
     progress: { total: 3, confirmed: 1, ready: 1, blocked: 0, undecided: 1 },
     ...over,
@@ -61,7 +62,7 @@ describe('ReceiptList', () => {
   it('초안이 없으면 안내를 보여준다', async () => {
     server.use(http.get('/api/receipts', () => HttpResponse.json({ success: true, data: [] })));
     render(<ReceiptList />);
-    expect(await screen.findByText(/대기 중인 영수증이 없습니다/)).toBeInTheDocument();
+    expect(await screen.findByText(/아직 올린 영수증이 없습니다/)).toBeInTheDocument();
   });
 
   it('카드에 날짜·매장·합계·배지를 그린다', async () => {
@@ -80,6 +81,27 @@ describe('ReceiptList', () => {
 
     expect(await screen.findByText(/확정 대기 1/)).toBeInTheDocument();
     expect(screen.getByText(/미정 1/)).toBeInTheDocument();
+  });
+
+  it('🔴 확정이 끝난 영수증도 목록에 남는다', async () => {
+    let queried = '';
+    server.use(http.get('/api/receipts', ({ request }) => {
+      queried = new URL(request.url).searchParams.get('status') ?? '';
+      return HttpResponse.json({ success: true, data: [
+        card(),
+        card({ id: 'd-2', purchased_at: '2026-08-01', status: 'done',
+               badge: { label: '입고 완료', tone: 'ok', busy: false },
+               progress: { total: 2, confirmed: 2, ready: 0, blocked: 0, undecided: 0 } }),
+      ] });
+    }));
+
+    render(<ReceiptList />);
+    expect(await screen.findByText('2026-08-08')).toBeInTheDocument();
+    expect(screen.getByText('2026-08-01')).toBeInTheDocument();
+    expect(screen.getByText('입고 완료')).toBeInTheDocument();
+
+    // 전부 받아온다 — 서버가 미처리를 위로 올린다
+    expect(queried).toBe('all');
   });
 
   it('카드를 누르면 상세로 이동한다', async () => {
@@ -121,7 +143,7 @@ describe('ReceiptList', () => {
 
     try {
       const { container } = render(<ReceiptList />);
-      await screen.findByText(/대기 중인 영수증이 없습니다/);
+      await screen.findByText(/아직 올린 영수증이 없습니다/);
 
       const input = container.querySelector('input[type="file"]') as HTMLInputElement;
       const file = new File(['x'], 'r.jpg', { type: 'image/jpeg' });
@@ -153,7 +175,7 @@ describe('ReceiptList', () => {
     );
 
     const { container } = render(<ReceiptList />);
-    await screen.findByText(/대기 중인 영수증이 없습니다/);
+    await screen.findByText(/아직 올린 영수증이 없습니다/);
 
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(input, {
@@ -284,7 +306,8 @@ describe('ReceiptDetail', () => {
         HttpResponse.json({ success: true, data: detail() })),
       http.get('/api/cost-management/products/options', () => {
         optionsCalls++;
-        const data = [{ id: 'p-1', product_name: '커클랜드 타월', subdivision_unit: 10 }];
+        const data: { id: string; product_name: string; subdivision_unit: number | null }[] =
+          [{ id: 'p-1', product_name: '커클랜드 타월', subdivision_unit: 10 }];
         if (optionsCalls > 1) {
           data.push({ id: 'p-2', product_name: '예일 후드티', subdivision_unit: null });
         }
