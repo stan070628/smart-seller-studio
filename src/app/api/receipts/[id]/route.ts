@@ -37,7 +37,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const { rows: drafts } = await pool.query(
       `SELECT id, image_paths, purchased_at, purchased_time, store_name, register_no,
               receipt_total, total_item_count, tax_exempt_total, taxable_total, vat,
-              verify_status, verify_detail, ocr_status, status, parse_attempts, created_at
+              verify_status, verify_detail, ocr_status, status, parse_attempts, created_at,
+              images_purged_at
        FROM receipt_drafts WHERE id = $1 AND user_id = $2`,
       [id, user.userId],
     );

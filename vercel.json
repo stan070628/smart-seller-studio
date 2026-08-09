@@ -41,6 +41,10 @@
       "schedule": "*/10 * * * *"
     },
     {
+      "path": "/api/cron/purge-receipt-images",
+      "schedule": "30 18 * * *"
+    },
+    {
       "path": "/api/listing/sourcing/check-dead-urls",
       "schedule": "0 9 * * *"
     },

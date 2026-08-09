@@ -3,13 +3,14 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { buildTableItems, type GroupRow as GroupRowType } from '@/lib/cost-management/product-grouping';
 import { determineWinnerStatus } from '@/lib/roi/calculations';
-import { Plus, Truck, Package, Search, TrendingUp, TrendingDown, AlertCircle, CloudDownload, Eye, EyeOff } from 'lucide-react';
+import { Plus, Truck, Package, Search, TrendingUp, TrendingDown, AlertCircle, CloudDownload, Eye, EyeOff, Receipt } from 'lucide-react';
 import { toast } from '@/components/ui/toast';
 import { confirmDialog } from '@/components/ui/confirm';
 import CostEntryDrawer from './CostEntryDrawer';
 import ShippingGroupModal from './ShippingGroupModal';
 import AddProductModal from './AddProductModal';
 import RocketGrowthShipmentModal from './RocketGrowthShipmentModal';
+import ReceiptIngestModal from './ReceiptIngestModal';
 import RgShipmentHistoryPopover from './RgShipmentHistoryPopover';
 import ChannelEditPopover from './ChannelEditPopover';
 import { buildImportSummary, type ImportSummary } from './import-summary';
@@ -244,6 +245,7 @@ export default function CostManagementTab() {
   const [showShippingModal, setShowShippingModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showRgModal, setShowRgModal] = useState(false);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [showRgHistory, setShowRgHistory] = useState(false);
   const [importingAll, setImportingAll] = useState(false);
   const [importResult, setImportResult] = useState<ImportSummary | null>(null);
@@ -811,6 +813,13 @@ export default function CostManagementTab() {
           <Plus size={13} /> 상품 추가{hasDraft(ADD_PRODUCT_DRAFT_KEY) && <span title="작성 중인 입력이 있어요"> ✎</span>}
         </button>
         <button
+          onClick={() => setShowReceiptModal(true)}
+          title="폰으로 찍은 코스트코 영수증을 입고로 확정합니다"
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', background: '#fff', color: '#333', border: '1px solid #e5e5e5', fontSize: '12px', cursor: 'pointer' }}
+        >
+          <Receipt size={13} /> 영수증 입고
+        </button>
+        <button
           onClick={() => setShowShippingModal(true)}
           style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', background: '#fff', color: '#333', border: '1px solid #e5e5e5', fontSize: '12px', cursor: 'pointer' }}
         >
@@ -1042,6 +1051,12 @@ export default function CostManagementTab() {
         <AddProductModal
           onClose={() => setShowAddModal(false)}
           onAdded={load}
+        />
+      )}
+      {showReceiptModal && (
+        <ReceiptIngestModal
+          onClose={() => setShowReceiptModal(false)}
+          onConfirmed={load}
         />
       )}
       {showRgModal && (
