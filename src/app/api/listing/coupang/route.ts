@@ -246,7 +246,10 @@ export async function POST(request: NextRequest) {
             maximumBuyCount: d.maximumBuyCount,
             maximumBuyForPerson: d.maximumBuyForPerson,
             maximumBuyForPersonPeriod: 1,
-            outboundShippingTimeDay: d.outboundShippingTimeDay ?? 3,
+            // 기본값은 1일이다. 출고소요일은 아이템위너 8요소 중 하나이므로
+            // 실제보다 길게 잡으면 그만큼 불리해진다 — 코스트코 매입분은
+            // 당일·익일 출고가 가능하다.
+            outboundShippingTimeDay: d.outboundShippingTimeDay ?? 1,
             unitCount: 1,
             adultOnly: d.adultOnly ?? 'EVERYONE',
             taxType: d.taxType ?? 'TAX',
@@ -268,7 +271,10 @@ export async function POST(request: NextRequest) {
               maximumBuyCount: d.maximumBuyCount,
               maximumBuyForPerson: d.maximumBuyForPerson,
               maximumBuyForPersonPeriod: 1,
-              outboundShippingTimeDay: d.outboundShippingTimeDay ?? 3,
+              // 기본값은 1일이다. 출고소요일은 아이템위너 8요소 중 하나이므로
+            // 실제보다 길게 잡으면 그만큼 불리해진다 — 코스트코 매입분은
+            // 당일·익일 출고가 가능하다.
+            outboundShippingTimeDay: d.outboundShippingTimeDay ?? 1,
               unitCount: 1,
               adultOnly: d.adultOnly ?? 'EVERYONE',
               taxType: d.taxType ?? 'TAX',

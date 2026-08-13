@@ -25,6 +25,9 @@ Available block types in blocks[]:
 - heading: { type, text, size: 'xl'|'lg'|'md', bold?, color? }
 - subtext: { type, text, align?: 'left'|'center' }
 - image: { type, attachedIndex: 0..N } — attachedIndex는 "해당 섹션 imageSlots 내부의 0-기반 인덱스"이며 반드시 imageSlots.length 미만이어야 한다. imageSlots를 선언한 섹션은 blocks에 대응하는 image 블록을 반드시 하나 이상 포함하라.
+  🔴 한 섹션의 imageSlots는 **최대 6개**다. 렌더 API가 섹션당 이미지를 6개까지만 받으므로
+  7개 이상을 배정하면 "Too big: expected array to have 6 items or fewer"로 전체 렌더가
+  실패한다. 이미지가 많으면 한 섹션에 몰지 말고 섹션을 나눠 배분하라.
 - stat_row: { type, items: [{label, value, unit?}] }
 - bullet_list: { type, items: string[], icon?: 'dot'|'check'|'arrow' }
 - columns: { type, cols: LayoutBlock[][], gap? }

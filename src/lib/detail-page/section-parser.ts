@@ -293,30 +293,59 @@ export function mobileContentToSections(
   const leftover = imageUrls.slice(1 + content.points.length);
   const hasColorOptions = content.colorOptions.length > 0;
 
+  // 🔴 렌더 API는 섹션당 이미지를 6개까지만 받는다(render/route.ts의 .max(6)).
+  //    leftover를 한 섹션에 통째로 넣으면 7장부터 전체 렌더가
+  //    "Too big: expected array to have <=6 items"로 실패한다 — 2026-08-12 실측.
+  //    프롬프트로 Claude에게 제한을 알려도 leftover는 여기서 붙으므로 막히지 않는다.
+  const IMAGES_PER_SECTION = 6;
+  const chunk = <T,>(arr: T[], size: number): T[][] =>
+    arr.length ? Array.from({ length: Math.ceil(arr.length / size) }, (_, i) => arr.slice(i * size, i * size + size)) : [];
+
   if (hasColorOptions) {
     // items가 leftover보다 적으면 빈 라벨로 패딩 (모든 이미지 렌더링 보장)
     const items: Array<{ label: string; swatchColor?: string }> = [...content.colorOptions];
     while (items.length < leftover.length) items.push({ label: '' });
-    sections.push({
-      id: uuidv4(),
-      type: 'image_grid',
-      order: order++,
-      content: { type: 'image_grid', title: 'Product Info.', items },
-      attachedImages: leftover.map((u, i) => toAttached(u, i)),
-      ...base,
+    chunk(leftover, IMAGES_PER_SECTION).forEach((group, gi) => {
+      sections.push({
+        id: uuidv4(),
+        type: 'image_grid',
+        order: order++,
+        content: {
+          type: 'image_grid',
+          title: 'Product Info.',
+          items: items.slice(gi * IMAGES_PER_SECTION, gi * IMAGES_PER_SECTION + group.length),
+        },
+        attachedImages: group.map((u, i) => toAttached(u, i)),
+        ...base,
+      });
     });
   } else if (leftover.length >= 2) {
-    sections.push({
-      id: uuidv4(),
-      type: 'image_grid',
-      order: order++,
-      content: { type: 'image_grid', title: 'Product Info.', items: leftover.map(() => ({ label: '' })) },
-      attachedImages: leftover.map((u, i) => toAttached(u, i)),
-      ...base,
+    chunk(leftover, IMAGES_PER_SECTION).forEach(group => {
+      sections.push({
+        id: uuidv4(),
+        type: 'image_grid',
+        order: order++,
+        content: { type: 'image_grid', title: 'Product Info.', items: group.map(() => ({ label: '' })) },
+        attachedImages: group.map((u, i) => toAttached(u, i)),
+        ...base,
+      });
     });
   } else if (leftover.length === 1 && pointSections.length > 0) {
-    const last = pointSections[pointSections.length - 1];
-    last.attachedImages = [...last.attachedImages, toAttached(leftover[0], last.attachedImages.length)];
+    // 이미 6장인 섹션에 더 붙이면 같은 이유로 렌더가 실패한다.
+    // 여유 있는 섹션을 뒤에서부터 찾고, 없으면 별도 섹션으로 뺀다.
+    const room = [...pointSections].reverse().find(s => s.attachedImages.length < IMAGES_PER_SECTION);
+    if (room) {
+      room.attachedImages = [...room.attachedImages, toAttached(leftover[0], room.attachedImages.length)];
+    } else {
+      sections.push({
+        id: uuidv4(),
+        type: 'image_grid',
+        order: order++,
+        content: { type: 'image_grid', title: 'Product Info.', items: [{ label: '' }] },
+        attachedImages: [toAttached(leftover[0], 0)],
+        ...base,
+      });
+    }
   }
 
   // spec_table / warning / cta

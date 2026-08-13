@@ -207,7 +207,8 @@ async function registerCoupang(
     outboundShippingPlaceCode: outboundCode,
     returnCenterCode: returnCode,
     deliveryCompanyCode: d.coupang.deliveryCompanyCode,
-    outboundShippingTimeDay: d.coupang.outboundShippingTimeDay,
+    // coupang 라우트와 같은 기본값 1일. 아이템위너 8요소 중 하나다
+    outboundShippingTimeDay: d.coupang.outboundShippingTimeDay ?? 1,
     adultOnly: d.coupang.adultOnly,
     taxType: d.coupang.taxType,
     overseasPurchased: d.coupang.overseasPurchased,
@@ -376,7 +377,8 @@ export async function POST(request: NextRequest) {
         maximumBuyCount: d.coupang.maximumBuyCount, maximumBuyForPerson: d.coupang.maximumBuyForPerson,
         outboundShippingPlaceCode: outboundCode, returnCenterCode: returnCode,
         deliveryCompanyCode: d.coupang.deliveryCompanyCode,
-        outboundShippingTimeDay: d.coupang.outboundShippingTimeDay,
+        // coupang 라우트와 같은 기본값 1일. 아이템위너 8요소 중 하나다
+    outboundShippingTimeDay: d.coupang.outboundShippingTimeDay ?? 1,
         adultOnly: d.coupang.adultOnly,
         taxType: d.coupang.taxType,
         overseasPurchased: d.coupang.overseasPurchased,
