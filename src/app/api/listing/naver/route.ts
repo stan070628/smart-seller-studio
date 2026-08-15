@@ -113,6 +113,18 @@ const RegisterSchema = z.object({
   importer: z.string().optional(),
   noticeType: z.enum(['ETC', 'WEAR', 'SHOES', 'BAG', 'FASHION_ITEMS']).optional(),
   noticeFields: z.record(z.string(), z.string()).optional(),
+
+  // 상품 인증. 어린이제품 카테고리는 비워 보내면 등록이 거부된다.
+  certifications: z.array(z.object({
+    certificationInfoId: z.number().int(),
+    certificationKindType: z.string().min(1),
+    name: z.string().optional(),
+    companyName: z.string().optional(),
+    certificationNumber: z.string().optional(),
+    certificationMark: z.boolean().optional(),
+  })).max(10).optional(),
+  childCertificationExcluded: z.boolean().optional(),
+  modelName: z.string().max(100).optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -172,6 +184,9 @@ export async function POST(request: NextRequest) {
       importer: d.importer,
       noticeType: d.noticeType,
       noticeFields: d.noticeFields,
+      certifications: d.certifications,
+      childCertificationExcluded: d.childCertificationExcluded,
+      modelName: d.modelName,
     };
 
     // 라우트 스키마 → 매퍼의 OptionsInput. 매퍼가 요구하는 원가/채널별 가격은

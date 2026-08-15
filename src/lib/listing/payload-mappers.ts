@@ -121,6 +121,28 @@ export interface NaverSpecificInput {
   noticeType?: NaverNoticeType;
   /** 고시 항목값. 유형에 맞는 키를 넣으면 기본값 위에 덮어쓴다 */
   noticeFields?: Record<string, string>;
+
+  /**
+   * 상품 인증 정보. certificationInfoId는 카테고리 조회
+   * (`GET /external/v1/categories/{id}` → certificationInfos)에서 얻는다 — 카테고리마다
+   * 허용 id와 kindTypes가 다르므로 추측하지 않는다.
+   * 예: 유아동의류(50000535)의 [어린이제품]공급자적합성확인 = id 1042
+   */
+  certifications?: Array<{
+    certificationInfoId: number;
+    certificationKindType: string;
+    name?: string;
+    companyName?: string;
+    certificationNumber?: string;
+    certificationMark?: boolean;
+  }>;
+  /**
+   * 어린이제품 인증 대상에서 제외되는지. 어린이제품 카테고리는 이 값을 명시해야 한다.
+   * false = 대상임(인증 정보를 함께 보낸다), true = 대상 아님.
+   */
+  childCertificationExcluded?: boolean;
+  /** 모델명. 어린이인증 대상 카테고리는 카탈로그 입력이 필수다. */
+  modelName?: string;
 }
 
 // 고시 유형 → payload 상의 본문 키 ('WEAR' → 'wear', 'FASHION_ITEMS' → 'fashionItems')
@@ -386,6 +408,8 @@ export function buildNaverPayload(
       detailAttribute: {
         naverShoppingSearchInfo: {
           manufacturerName: specific.manufacturerName || '상세페이지 참조',
+          // 어린이인증 대상 카테고리는 모델명이 없으면 "카탈로그 입력이 필수"로 거부된다.
+          ...(specific.modelName ? { modelName: specific.modelName } : {}),
         },
         afterServiceInfo: {
           afterServiceTelephoneNumber: process.env.NAVER_AS_PHONE ?? '010-0000-0000',
@@ -408,7 +432,18 @@ export function buildNaverPayload(
             ...specific.noticeFields,
           },
         },
-        productCertificationInfos: [],
+        /**
+         * 상품 인증. 어린이제품 카테고리는 빈 배열을 보내면
+         * "어린이제품 인증대상 인증 종류를 선택하셔야 합니다"로 등록이 거부된다.
+         *
+         * 공급자적합성확인(id 1042)은 제조자가 스스로 시험·확인하는 유형이라
+         * 인증번호가 부여되지 않는다 — 카테고리 조회에서 이 항목만 nonEssential:true다.
+         * 그래서 번호 없이 상호명만으로 등록된다.
+         */
+        productCertificationInfos: specific.certifications ?? [],
+        ...(specific.childCertificationExcluded !== undefined
+          ? { certificationTargetExcludeContent: { childCertifiedProductExclusionYn: specific.childCertificationExcluded } }
+          : {}),
         originAreaInfo: {
           originAreaCode,
           content: specific.countryOfOrigin || '상세페이지 참조',
