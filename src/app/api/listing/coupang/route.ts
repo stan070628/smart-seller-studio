@@ -243,7 +243,10 @@ export async function POST(request: NextRequest) {
             itemName: v.itemName,
             originalPrice: v.originalPrice ?? d.originalPrice ?? d.salePrice,
             salePrice: v.salePrice,
-            maximumBuyCount: d.maximumBuyCount,
+            // 쿠팡에서 재고는 maximumBuyCount다. 옵션이 선언한 stock을 쓴다 —
+            // 상품 전체값(기본 999)을 그대로 쓰면 사이즈별로 10장씩만 있는 의류에
+            // 999개 주문이 들어와 전량 미출고가 된다.
+            maximumBuyCount: v.stock,
             maximumBuyForPerson: d.maximumBuyForPerson,
             maximumBuyForPersonPeriod: 1,
             // 기본값은 1일이다. 출고소요일은 아이템위너 8요소 중 하나이므로

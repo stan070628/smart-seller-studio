@@ -90,6 +90,29 @@ const RegisterSchema = z.object({
   returnFee: z.number().int().min(0).default(4000),
   exchangeFee: z.number().int().min(0).default(8000),
   tags: z.array(z.string()).optional(),
+
+  /**
+   * 옵션(SKU) 조합. buildNaverPayload가 원래 지원하는데 이 라우트만 받지 않아
+   * 사이즈·색상이 있는 의류가 단일 상품으로 등록됐다 — 구매자가 사이즈를 고를 수 없다.
+   */
+  options: z.object({
+    groups: z.array(z.object({
+      groupName: z.string().min(1),
+      values: z.array(z.string()).default([]),
+    })).min(1).max(4),
+    variants: z.array(z.object({
+      optionValues: z.array(z.string()).min(1).max(4),
+      stock: z.number().int().min(0),
+      salePrice: z.number().int().min(0),
+    })).min(1),
+  }).optional(),
+
+  // 표시사항·원산지 — 수입품을 국산으로 등록하지 않으려면 명시해야 한다
+  manufacturerName: z.string().optional(),
+  originAreaCode: z.string().optional(),
+  importer: z.string().optional(),
+  noticeType: z.enum(['ETC', 'WEAR', 'SHOES', 'BAG', 'FASHION_ITEMS']).optional(),
+  noticeFields: z.record(z.string(), z.string()).optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -144,9 +167,28 @@ export async function POST(request: NextRequest) {
       tags: d.tags,
       exchangeFee: d.exchangeFee,
       returnFee: d.returnFee,
+      manufacturerName: d.manufacturerName,
+      originAreaCode: d.originAreaCode,
+      importer: d.importer,
+      noticeType: d.noticeType,
+      noticeFields: d.noticeFields,
     };
 
-    const payload = buildNaverPayload(common, specific);
+    // 라우트 스키마 → 매퍼의 OptionsInput. 매퍼가 요구하는 원가/채널별 가격은
+    // 이 경로에 없으므로 네이버 판매가로 채운다.
+    const options = d.options && {
+      groups: d.options.groups,
+      variants: d.options.variants.map(v => ({
+        optionValues: v.optionValues,
+        sourceHash: null,
+        costPrice: 0,
+        salePrices: { coupang: v.salePrice, naver: v.salePrice },
+        stock: v.stock,
+        enabled: true,
+      })),
+    };
+
+    const payload = buildNaverPayload(common, specific, options);
     console.info('[POST /api/listing/naver] payload:', JSON.stringify(payload).slice(0, 2000));
     const result = await client.registerProduct(payload);
 
