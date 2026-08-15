@@ -69,7 +69,31 @@ const RequestSchema = z.object({
     }))
     .max(4)
     .default([]),
-});
+
+  /**
+   * 촬영이 끝난 사진을 그룹 단위로 알려주는 목록 (Detail Builder 경로).
+   *
+   * productImages(base64)와 다른 문제를 푼다. base64 경로는 "Claude가 실물을 보고
+   * 색상·카피를 정하는" 용도라 4장 상한이 맞지만, 완성된 사진 20~30장을 배치만
+   * 하려는 화면에는 그 상한이 곧 "슬롯 4개짜리 레이아웃"을 강제한다.
+   *
+   * 낱장 인덱스가 아니라 그룹 이름으로 주고받는 이유: 섹션을 재구성하는 데 필요한
+   * 정보는 "1+1 컷이 bundle 그룹에 있다"이지 "index 3"이 아니다. 12개 이하의 이름 중
+   * 하나를 고르는 편이 40개 인덱스를 중복·누락 없이 배정하는 것보다 훨씬 안전하다.
+   */
+  groupManifest: z
+    .array(z.object({
+      key: z.string().min(1).max(30),
+      title: z.string().max(60).default(''),
+      desc: z.string().max(200).default(''),
+      count: z.number().int().min(1),
+    }))
+    .max(12)
+    .default([]),
+}).refine(
+  (d) => !(d.groupManifest.length > 0 && d.productImages.length > 0),
+  { message: 'groupManifest와 productImages는 함께 쓸 수 없습니다 (imageRef의 기준이 모호해집니다).' },
+);
 
 /**
  * sections의 progress_bar 블록(columns.cols 재귀 포함)마다 items 배열로 콜백을 호출한다.
@@ -213,11 +237,26 @@ export async function POST(req: NextRequest): Promise<Response> {
     );
   }
 
-  const { productInfo, analyzedSections, productImageCount, productImages, productOptions } = parsed.data;
+  const { productInfo, analyzedSections, productImageCount, productImages, productOptions, groupManifest } = parsed.data;
   const images: ClaudeImage[] = productImages.length > 0
     ? productImages
     : [];
-  const imageCount = images.length || productImageCount;
+  /**
+   * 매니페스트가 오면 실제 장수를 쓴다. 이 값이 프롬프트의 이미지 장수와 섹션 상한을
+   * 동시에 정하는데, Detail Builder가 4를 보내는 바람에 Claude가 "사진 4장짜리 상품"으로
+   * 알고 슬롯을 적게 만들었다 — 사진 21장 중 9장이 본문 밖으로 밀린 실사고의 원인이다.
+   */
+  const manifestTotal = groupManifest.reduce((a, g) => a + g.count, 0);
+  const manifestMode = groupManifest.length > 0;
+  const imageCount = images.length || manifestTotal || productImageCount;
+
+  /**
+   * 섹션 상한. sectionCap은 Math.min(10, ...)이라 이미지가 몇 장이든 10을 못 넘는다.
+   * 그룹마다 한 섹션을 주고 서사 섹션(도입·비교·마무리)까지 얹으려면 그 상한에 막힌다.
+   */
+  const maxSections = manifestMode
+    ? Math.min(16, groupManifest.length + 5)
+    : sectionCap(imageCount);
 
   const options: ProductOption[] = productOptions;
   const optionMode = isOptionMode(options);
@@ -238,9 +277,10 @@ export async function POST(req: NextRequest): Promise<Response> {
         statHygiene: true,
         narrative: true,
         provenanceSource,
+        maxSections,
         optionNameByImageIndex: optionNameByImageIndex(options),
       }
-    : { statHygiene: true, narrative: true, provenanceSource };
+    : { statHygiene: true, narrative: true, provenanceSource, maxSections };
 
   const userPrompt = [
     `Product: "${productInfo.name}"`,
@@ -248,10 +288,20 @@ export async function POST(req: NextRequest): Promise<Response> {
     productInfo.points.length > 0
       ? `Key points:\n${productInfo.points.map(p => `- ${p}`).join('\n')}`
       : '',
-    imageCount > 0
+    // 매니페스트 모드에서는 낱장 인덱스를 요구하지 않는다 — 아래 그룹 지시로 대체한다.
+    !manifestMode && imageCount > 0
       ? `제품 이미지 ${imageCount}장이 인덱스 0..${imageCount - 1}로 제공됩니다. 실물을 보고 색상·소재·디테일을 파악해 카피에 반영하고, 각 imageSlot의 imageRef에 그 슬롯에 가장 알맞은 이미지 인덱스를 지정하세요.`
       : '',
-    imageCount > 0 ? `섹션 수: 최대 ${sectionCap(imageCount)}개.` : '',
+    manifestMode
+      ? `## 이미 촬영을 마친 사진이 있습니다 (총 ${manifestTotal}장, ${groupManifest.length}개 묶음)\n` +
+        groupManifest.map(g => `- ${g.key} — ${g.title}${g.desc ? ` (${g.desc})` : ''} · ${g.count}장`).join('\n') +
+        `\n\n새로 만들 이미지를 상상하지 말고, 위 묶음을 어느 섹션에 놓을지 정하세요.\n` +
+        `1. 사진을 쓰는 섹션에는 "sourceGroup": "<위 key 중 하나>"를 넣으세요. imageSlots·imageRef는 쓰지 않습니다.\n` +
+        `2. 한 묶음은 한 섹션에만 배정하고, ${groupManifest.length}개 묶음을 모두 쓰세요. 빠뜨린 묶음은 페이지 맨 끝에 덤으로 붙어 흐름이 끊깁니다.\n` +
+        `3. 사진이 필요 없는 섹션(도입 문구·비교표·마무리)은 sourceGroup을 생략하세요.\n` +
+        `4. slotType이 flux_lifestyle인 슬롯은 만들지 마세요 — 이 상품은 AI 이미지를 쓰지 않습니다.`
+      : '',
+    imageCount > 0 ? `섹션 수: 최대 ${maxSections}개.` : '',
     optionLines.length > 0
       ? `옵션(색상/모델): ${optionLines.join(', ')}\n` +
         `옵션 비교 섹션을 정확히 1개 만들고, 나머지 이미지 섹션에는 ${uniqueOptionNames(options).join('·')}를 고르게 배분하세요. 모든 imageSlot에 imageRef를 명시하세요.`
@@ -326,8 +376,29 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     // 정화·수리가 끝난 최종 섹션으로만 계산해야 한다. repair가 이미지 배치와 문구를
     // 모두 바꿀 수 있어서, 그 전에 세면 셀러가 보는 결과와 어긋난다.
+    /**
+     * 어느 섹션도 가져가지 않은 사진 묶음을 알린다.
+     * 클라이언트가 페이지 끝에 붙여 사진이 사라지지는 않지만, 흐름에서 떨어져 나온
+     * 것을 셀러가 모르면 안 된다 — 실제로 등판 3장·표시사항 2장이 조용히 밀렸다.
+     */
+    const groupWarnings = (secs: unknown[]): string[] => {
+      if (!manifestMode) return [];
+      const used = new Set<string>();
+      for (const s of secs) {
+        const g = (s as { sourceGroup?: unknown }).sourceGroup;
+        if (typeof g === 'string') used.add(g);
+      }
+      const missing = groupManifest.filter((g) => !used.has(g.key));
+      if (missing.length === 0) return [];
+      return [
+        `사진 묶음 ${missing.map((m) => `${m.title || m.key}(${m.count}장)`).join(', ')}을 ` +
+        `어느 섹션도 가져가지 않아 페이지 끝에 붙습니다. 다시 생성하면 달라질 수 있습니다.`,
+      ];
+    };
+
     const postWarnings = (secs: unknown): string[] => [
-      ...imageUsageWarnings(secs as ImageUsageSection[], imageCount, optionNamesByIndex),
+      // 낱장 인덱스 기준 검사라 매니페스트 모드에서는 의미가 없다 — 그룹 검사로 대체한다.
+      ...(manifestMode ? groupWarnings(secs as unknown[]) : imageUsageWarnings(secs as ImageUsageSection[], imageCount, optionNamesByIndex)),
       ...riskyClaimWarnings(secs),
     ];
 

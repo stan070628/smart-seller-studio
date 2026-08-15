@@ -11,8 +11,12 @@ Each section is a ClaudeLayoutContent object:
   "blocks": [...],
   "bgStyle": "white"|"light"|"dark"|"primary",
   "padding": "normal"|"compact"|"wide",
-  "imageSlots": [{"slotType": "flux_lifestyle"|"product_nukki"|"detail_closeup", "promptHint": "...", "imageRef": 0}]
+  "imageSlots": [{"slotType": "flux_lifestyle"|"product_nukki"|"detail_closeup", "promptHint": "...", "imageRef": 0}],
+  "sourceGroup": "emblem"   // 촬영본 묶음 목록이 주어진 경우에만. 아래 설명 참조
 }
+sourceGroup = 이미 촬영을 마친 사진 묶음이 제공될 때만 쓴다. 그 목록의 key 중 하나를 골라
+이 섹션이 어느 묶음을 보여줄지 정한다. 이때는 imageSlots·imageRef를 쓰지 않는다 — 낱장
+배치는 시스템이 묶음 순서대로 처리한다. 묶음 목록이 없으면 이 필드를 넣지 않는다.
 slotType: flux_lifestyle=착용/사용 라이프스타일 씬(AI 생성, 인물이 등장할 수 있음), product_nukki=제품 단독컷, detail_closeup=제품의 물리적 디테일(지퍼·스트랩·원단·수납) 접사 컷.
 imageRef = 이 슬롯에 쓸 제품 이미지의 인덱스(0부터). 제공된 이미지를 실제로 보고, 그 섹션 내용/색상에 가장 맞는 이미지를 지정하세요. 예: 히어로·소재 섹션이 베이지를 다루면 베이지 이미지 인덱스를, 로즈 카드는 로즈 이미지 인덱스를.
 

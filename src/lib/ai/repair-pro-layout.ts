@@ -17,6 +17,10 @@ REVIEW CHECKLIST:
 3. Rewrite any Chinese characters into Korean — never delete text leaving a broken sentence.
 4. Keep all valid content unchanged. If a section is already correct, return it unchanged.
    Section ORDER may be changed ONLY when fixing a narrative issue (rule 7).
+4-b. sourceGroup 필드는 절대 삭제하거나 값을 바꾸지 마라. 촬영이 끝난 사진 묶음을
+   어느 섹션에 놓을지 정해둔 값이라, 지우면 그 사진들이 본문에서 떨어져 페이지 끝으로
+   밀린다. 섹션을 새로 만들 때는 sourceGroup을 넣지 마라 — 이미 배정된 묶음을 두 섹션이
+   가져가면 뒤쪽이 빈다.
 5. 옵션 편중(option_coverage) 이슈가 있으면 imageSlots[].imageRef를 재배정해 옵션을 고르게 만든다. 단 섹션 내용과 옵션이 충돌하면 내용을 우선하고 다른 섹션에서 균형을 맞춘다. 비교 섹션(option_compare)은 옵션당 imageSlot 1개를 유지한다.
 6. 모든 섹션은 beat 필드를 가져야 한다. beat 값은 다음 중 하나다:
    hook, problem, solution, compare, evidence, detail, usecase, option, assure

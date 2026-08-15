@@ -43,6 +43,11 @@ export interface ProLayoutOpts {
    * undefined면 progress_bar를 건드리지 않는다 (빈 문자열과 구분된다).
    */
   provenanceSource?: string;
+  /**
+   * 섹션 수 상한. 기본 권장은 6~10이지만, 촬영본 묶음이 여러 개인 groupManifest
+   * 경로에서는 묶음마다 섹션이 하나씩 필요해 10을 넘는 것이 정상이다.
+   */
+  maxSections?: number;
 }
 
 // ── CJK 정규식: test용(non-global, lastIndex 버그 회피)과 strip용(global) 분리 ──
@@ -94,6 +99,11 @@ const zClaudeSection = z.object({
   // 거치지 않는다), draft 저장·render 경로의 warnings에 스키마 노이즈를 만들지
   // 않기 위해서다. 누락 검증은 narrative 플래그가 켜진 생성 경로에서만 한다.
   beat: z.enum(BEATS).optional(),
+  /**
+   * 촬영이 끝난 사진 묶음의 key (groupManifest 경로). 이 섹션에 어느 묶음을 놓을지
+   * Claude가 고른 결과이며, 낱장 배치는 클라이언트가 묶음 순서대로 채운다.
+   */
+  sourceGroup: z.string().optional(),
 });
 
 // ── 헬퍼 ──
@@ -298,8 +308,9 @@ export function validateProLayout(sections: unknown, opts?: ProLayoutOpts): Vali
 
   const violations: Violation[] = [];
 
-  if (sections.length < 6 || sections.length > 10) {
-    violations.push({ code: 'section_count', path: 'sections', message: `섹션 ${sections.length}개 (권장 6~10)`, severity: 'warning', autoFixable: false });
+  const secMax = opts?.maxSections ?? 10;
+  if (sections.length < 6 || sections.length > secMax) {
+    violations.push({ code: 'section_count', path: 'sections', message: `섹션 ${sections.length}개 (권장 6~${secMax})`, severity: 'warning', autoFixable: false });
   }
 
   sections.forEach((sec, i) => {
