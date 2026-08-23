@@ -514,6 +514,19 @@ export class CoupangClient {
     return res.data;
   }
 
+  // ─── 옵션(vendorItem) 재고·판매상태 조회 ───────────────────
+
+  /**
+   * 옵션 하나의 재고·판매상태를 가져온다. 응답은 { sellerItemId, amountInStock, salePrice, onSale }.
+   * 상품 목록에도 상품 상세에도 판매중지 여부가 없어, `onSale`을 보려면 이 경로뿐이다.
+   * 옵션 단위라 상품 하나에 여러 번 불릴 수 있다 — 호출부에서 동시성을 제한한다.
+   */
+  async getVendorItemInventory(vendorItemId: number): Promise<Record<string, unknown>> {
+    const url = `/v2/providers/seller_api/apis/api/v1/marketplace/vendor-items/${vendorItemId}/inventories`;
+    const res = await this.request<Record<string, unknown>>('GET', url);
+    return (res.data ?? {}) as Record<string, unknown>;
+  }
+
   // ─── 승인 요청 ────────────────────────────────────────────
 
   /**

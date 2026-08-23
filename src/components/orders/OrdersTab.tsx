@@ -4,6 +4,11 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Package, RefreshCw, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
 import { PLATFORM_INFO } from '@/types/orders';
 import { useUrlParam } from '@/hooks/useUrlParams';
+import { E } from '@/lib/design-tokens';
+import {
+  qFieldStyle, qLabelStyle, qValStyle, qTitleStyle, queryPanelStyle,
+  inputStyle, btnStyle, thStyle, statNumStyle, statusBarStyle,
+} from './erp-ui';
 
 // ─── 쿠팡 주문 상태 → 내부 레이블 매핑 ────────────────────────
 
@@ -146,8 +151,13 @@ function StatusBadge({ status, platform }: { status: string; platform: 'coupang'
     : platform === 'toss' ? TOSS_STATUS_MAP
     : COUPANG_STATUS_MAP;
   const info = map[status] ?? { label: status, color: '#71717a', bg: 'rgba(113,113,122,0.08)' };
+  // 27px 행에 들어가도록 라운드를 없애고 높이를 줄인다. 색은 상태별 의미를 그대로 쓴다.
   return (
-    <span style={{ fontSize: '11px', fontWeight: 600, padding: '3px 10px', borderRadius: '100px', color: info.color, backgroundColor: info.bg }}>
+    <span style={{
+      fontSize: 9.5, fontWeight: 700, padding: '1px 5px',
+      border: `1px solid ${info.color}`, color: info.color, background: info.bg,
+      whiteSpace: 'nowrap', lineHeight: 1.5,
+    }}>
       {info.label}
     </span>
   );
@@ -444,180 +454,269 @@ export default function OrdersTab() {
     return sum + o.orderItems.reduce((s, i) => s + i.orderPrice, 0);
   }, 0);
 
+  // 채널별 오류를 한 줄씩 모은다 — 네 개 박스가 세로로 쌓이면 표가 화면 밖으로 밀린다.
+  const channelErrors = [
+    ['쿠팡', coupangError],
+    ['로켓그로스', rgError],
+    ['네이버', naverError],
+    ['토스쇼핑', tossError],
+  ].filter((e): e is [string, string] => Boolean(e[1]));
+
   return (
-    <div>
-      {/* 필터 행 */}
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#71717a' }}>
-          <span>기간</span>
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)}
-            style={{ fontSize: '13px', padding: '5px 8px', borderRadius: '8px', border: '1px solid #e5e5e5', outline: 'none', color: '#18181b' }} />
-          <span>~</span>
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)}
-            style={{ fontSize: '13px', padding: '5px 8px', borderRadius: '8px', border: '1px solid #e5e5e5', outline: 'none', color: '#18181b' }} />
-        </div>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
-          style={{ fontSize: '13px', padding: '5px 10px', borderRadius: '8px', border: '1px solid #e5e5e5', outline: 'none', color: '#18181b', backgroundColor: '#fff' }}>
-          {STATUS_FILTER_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
-        <button onClick={() => fetchOrders(true)} disabled={loading}
-          style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '13px', fontWeight: 500, padding: '5px 14px', borderRadius: '8px', border: '1px solid #e5e5e5', backgroundColor: '#fff', color: '#18181b', cursor: loading ? 'default' : 'pointer' }}>
-          <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
-          조회
-        </button>
-        <span style={{ marginLeft: 'auto', fontSize: '12px', color: '#71717a' }}>
-          전체 주문 {orders.length}건 (쿠팡 {coupangCount}건 · 로켓그로스 {rgCount}건 · 네이버 {naverCount}건 · 토스 {tossCount}건) · 총 {totalRevenue.toLocaleString()}원
-        </span>
-      </div>
+    <div style={{ background: E.ground, minHeight: '100%', paddingBottom: 4 }}>
 
-      {/* 에러 — 쿠팡/네이버 개별 표시 */}
-      {coupangError && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px 16px', marginBottom: '8px' }}>
-          <AlertCircle size={15} color="#dc2626" />
-          <span style={{ fontSize: '13px', color: '#dc2626' }}>쿠팡: {coupangError}</span>
-        </div>
-      )}
-      {naverError && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px 16px', marginBottom: '8px' }}>
-          <AlertCircle size={15} color="#dc2626" />
-          <span style={{ fontSize: '13px', color: '#dc2626' }}>네이버: {naverError}</span>
-        </div>
-      )}
-      {rgError && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px 16px', marginBottom: '8px' }}>
-          <AlertCircle size={15} color="#dc2626" />
-          <span style={{ fontSize: '13px', color: '#dc2626' }}>로켓그로스: {rgError}</span>
-        </div>
-      )}
-      {tossError && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px 16px', marginBottom: '8px' }}>
-          <AlertCircle size={15} color="#dc2626" />
-          <span style={{ fontSize: '13px', color: '#dc2626' }}>토스쇼핑: {tossError}</span>
-        </div>
-      )}
+      {/* ══ 조회조건 ══ */}
+      <div style={queryPanelStyle}>
+        <div style={qTitleStyle}>조회조건</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'stretch' }}>
+          <div style={qFieldStyle}>
+            <div style={qLabelStyle}>주문일</div>
+            <div style={qValStyle}>
+              <input
+                type="date" value={from} onChange={(e) => setFrom(e.target.value)}
+                aria-label="조회 시작일"
+                style={{ ...inputStyle, fontFamily: E.mono, fontSize: 11.5 }}
+              />
+              <span style={{ color: E.inkMute }}>~</span>
+              <input
+                type="date" value={to} onChange={(e) => setTo(e.target.value)}
+                aria-label="조회 종료일"
+                style={{ ...inputStyle, fontFamily: E.mono, fontSize: 11.5 }}
+              />
+            </div>
+          </div>
 
-      {/* 쿠팡 상태 요약 카드 */}
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${STATUS_SUMMARY_KEYS.length}, 1fr)`, gap: '10px', marginBottom: '20px' }}>
-        {STATUS_SUMMARY_KEYS.map((s) => {
-          const info = COUPANG_STATUS_MAP[s];
-          return (
-            <button key={s} onClick={() => { setStatusFilter(s === statusFilter ? '' : s); }}
-              style={{ backgroundColor: statusFilter === s ? info.bg : '#fff', borderRadius: '10px', border: `1px solid ${statusFilter === s ? info.color + '40' : '#e5e5e5'}`, padding: '10px 12px', textAlign: 'center', cursor: 'pointer' }}>
-              <p style={{ fontSize: '20px', fontWeight: 700, color: info.color, margin: 0 }}>{statusCounts[s] ?? 0}</p>
-              <p style={{ fontSize: '11px', color: '#71717a', margin: '4px 0 0' }}>{info.label}</p>
+          <div style={qFieldStyle}>
+            <div style={qLabelStyle}>주문상태</div>
+            <div style={qValStyle}>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                aria-label="주문 상태"
+                style={{ ...inputStyle, minWidth: 110 }}
+              >
+                {STATUS_FILTER_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, padding: '6px 12px', alignItems: 'center' }}>
+            <button
+              onClick={() => fetchOrders(true)}
+              disabled={loading}
+              style={{ ...btnStyle, fontWeight: 600, cursor: loading ? 'wait' : 'pointer' }}
+            >
+              <RefreshCw size={12} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
+              {loading ? '조회 중…' : '조회'}
             </button>
-          );
-        })}
+          </div>
+        </div>
       </div>
 
-      {/* 주문 테이블 */}
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: '48px', color: '#71717a', fontSize: '13px' }}>
-          주문 데이터를 불러오는 중...
+      {/* ══ 채널 오류 ══ */}
+      {channelErrors.length > 0 && (
+        <div style={{
+          border: `1px solid ${E.line}`, background: E.warnSoft, marginBottom: 10,
+          padding: '7px 12px', display: 'flex', alignItems: 'flex-start', gap: 8,
+        }}>
+          <AlertCircle size={13} color={E.warn} style={{ flexShrink: 0, marginTop: 2 }} />
+          <div>
+            <span style={{ fontSize: 12, fontWeight: 600, color: E.warn }}>
+              일부 채널 조회 실패 ({channelErrors.length}건)
+            </span>
+            {channelErrors.map(([name, msg]) => (
+              <p key={name} style={{ fontSize: 11, color: E.warn, margin: '2px 0 0' }}>{name}: {msg}</p>
+            ))}
+          </div>
         </div>
-      ) : pagedOrders.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '48px', color: '#71717a', fontSize: '13px' }}>
-          <Package size={32} style={{ marginBottom: '8px', opacity: 0.3 }} />
-          <p>해당 기간에 주문이 없습니다.</p>
+      )}
+
+      {/* ══ 상태 요약 — 누르면 필터가 걸린다 ══ */}
+      <div style={{ border: `1px solid ${E.line}`, background: E.surface, marginBottom: 10 }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px',
+          background: E.chrome, borderBottom: `1px solid ${E.line}`,
+          fontSize: 11, fontWeight: 600, color: E.inkSub,
+        }}>
+          쿠팡 주문 상태 <span style={{ fontWeight: 400, color: E.inkMute }}>누르면 그 상태만 조회합니다</span>
+          {statusFilter && (
+            <button
+              onClick={() => setStatusFilter('')}
+              style={{ ...btnStyle, height: 20, marginLeft: 'auto', fontSize: 11 }}
+            >
+              필터 해제
+            </button>
+          )}
         </div>
-      ) : (
-        <div style={{ backgroundColor: '#fff', borderRadius: '14px', border: '1px solid #e5e5e5', overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${STATUS_SUMMARY_KEYS.length}, 1fr)` }}>
+          {STATUS_SUMMARY_KEYS.map((st, i) => {
+            const info = COUPANG_STATUS_MAP[st];
+            const on = statusFilter === st;
+            return (
+              <button
+                key={st}
+                onClick={() => setStatusFilter(on ? '' : st)}
+                style={{
+                  font: 'inherit', textAlign: 'left', cursor: 'pointer',
+                  padding: '9px 12px', border: 'none',
+                  borderRight: i === STATUS_SUMMARY_KEYS.length - 1 ? 'none' : `1px solid ${E.lineSoft}`,
+                  background: on ? info.bg : E.surface,
+                  boxShadow: on ? `inset 0 -2px 0 ${info.color}` : 'none',
+                }}
+              >
+                <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '.04em', color: E.inkMute }}>
+                  {info.label}
+                </div>
+                <div style={{
+                  fontFamily: E.mono, fontVariantNumeric: 'tabular-nums',
+                  fontSize: 19, fontWeight: 600, letterSpacing: '-.02em', marginTop: 1,
+                  color: (statusCounts[st] ?? 0) > 0 ? info.color : E.inkMute,
+                }}>
+                  {statusCounts[st] ?? 0}<span style={{ fontSize: 12, color: E.inkMute }}>건</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ══ 주문 그리드 ══ */}
+      <div style={{ border: `1px solid ${E.line}`, background: E.surface, overflowX: 'auto' }}>
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: 36, color: E.inkSub, fontSize: 12 }}>
+            주문 데이터를 불러오는 중…
+          </div>
+        ) : pagedOrders.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: 36, color: E.inkSub, fontSize: 12 }}>
+            <Package size={26} style={{ marginBottom: 6, opacity: 0.3 }} />
+            <p style={{ margin: 0 }}>해당 기간에 주문이 없습니다.</p>
+          </div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 940 }}>
             <thead>
-              <tr style={{ backgroundColor: '#f9f9f9', borderBottom: '1px solid #e5e5e5' }}>
-                <th style={th}>주문번호</th>
-                <th style={th}>채널</th>
-                <th style={th}>상품명</th>
-                <th style={{ ...th, textAlign: 'right' }}>수량</th>
-                <th style={{ ...th, textAlign: 'right' }}>결제금액</th>
-                <th style={{ ...th, textAlign: 'center' }}>상태</th>
-                <th style={th}>주문일시</th>
-                <th style={th}>수령인</th>
+              <tr>
+                <th style={{ ...thStyle, textAlign: 'left', width: '13%', minWidth: 110 }}>주문번호</th>
+                <th style={{ ...thStyle, width: 78 }}>채널</th>
+                <th style={{ ...thStyle, textAlign: 'left' }}>상품명</th>
+                <th style={{ ...thStyle, textAlign: 'right', width: 56 }}>수량</th>
+                <th style={{ ...thStyle, textAlign: 'right', width: '11%', minWidth: 92 }}>결제금액</th>
+                <th style={{ ...thStyle, width: 84 }}>상태</th>
+                <th style={{ ...thStyle, textAlign: 'left', width: 92 }}>주문일시</th>
+                <th style={{ ...thStyle, textAlign: 'left', width: 88, borderRight: 'none' }}>수령인</th>
               </tr>
             </thead>
             <tbody>
-              {pagedOrders.map((order) => {
+              {pagedOrders.map((order, rowIndex) => {
                 const totalQty = order.orderItems.reduce((s, i) => s + i.shippingCount, 0);
                 const totalAmt = order.orderItems.reduce((s, i) => s + i.orderPrice, 0);
                 const firstName = order.orderItems[0];
                 const extraCount = order.orderItems.length - 1;
                 const isExpanded = expandedKey === order.key;
-                const platformInfo = PLATFORM_INFO[order.platform] ?? { label: order.platform, color: '#71717a' };
+                const platformInfo = PLATFORM_INFO[order.platform] ?? { label: order.platform, color: E.inkSub };
 
                 return (
                   <React.Fragment key={order.key}>
                     <tr
                       onClick={() => setExpandedKey(isExpanded ? null : order.key)}
-                      style={{ borderBottom: '1px solid #f4f4f5', cursor: 'pointer', backgroundColor: isExpanded ? '#fafafa' : '#fff' }}
+                      style={{
+                        cursor: 'pointer',
+                        background: isExpanded ? E.infoSoft : rowIndex % 2 === 1 ? E.chrome2 : E.surface,
+                      }}
                     >
-                      <td style={td}><span style={{ fontWeight: 500, color: '#2563eb', fontFamily: 'monospace', fontSize: '12px' }}>{order.orderId}</span></td>
-                      <td style={td}>
-                        <span style={{ fontSize: '11px', fontWeight: 600, color: platformInfo.color, backgroundColor: `${platformInfo.color}10`, padding: '2px 8px', borderRadius: '100px' }}>
+                      <td style={{ ...cellStyle, fontFamily: E.mono, fontSize: 11, color: E.info }}>
+                        {order.orderId}
+                      </td>
+                      <td style={{ ...cellStyle, textAlign: 'center' }}>
+                        <span style={{
+                          fontSize: 9.5, fontWeight: 700, padding: '1px 5px',
+                          border: `1px solid ${platformInfo.color}`, color: platformInfo.color,
+                          whiteSpace: 'nowrap', lineHeight: 1.5,
+                        }}>
                           {platformInfo.label}
                         </span>
                       </td>
-                      <td style={{ ...td, maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {firstName?.sellerProductName ?? '-'}
-                        {extraCount > 0 && <span style={{ marginLeft: '4px', fontSize: '11px', color: '#71717a' }}>외 {extraCount}건</span>}
+                      <td style={{ ...cellStyle, maxWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+                          <span
+                            title={firstName?.sellerProductName ?? undefined}
+                            style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}
+                          >
+                            {firstName?.sellerProductName ?? '-'}
+                          </span>
+                          {extraCount > 0 && (
+                            <span style={{ fontSize: 10, color: E.inkMute, flexShrink: 0 }}>외 {extraCount}건</span>
+                          )}
+                        </div>
                       </td>
-                      <td style={{ ...td, textAlign: 'right', color: '#18181b' }}>{totalQty}</td>
-                      <td style={{ ...td, textAlign: 'right', fontWeight: 600, color: '#18181b' }}>{totalAmt.toLocaleString()}원</td>
-                      <td style={{ ...td, textAlign: 'center' }}><StatusBadge status={order.status} platform={order.platform} /></td>
-                      <td style={{ ...td, color: '#71717a', fontSize: '12px' }}>{formatDate(order.orderedAt)}</td>
-                      <td style={{ ...td, color: '#71717a', fontSize: '12px' }}>{order.receiverName ?? '-'}</td>
+                      <td style={numCellStyle}>{totalQty}</td>
+                      <td style={{ ...numCellStyle, fontWeight: 600 }}>{totalAmt.toLocaleString()}</td>
+                      <td style={{ ...cellStyle, textAlign: 'center' }}>
+                        <StatusBadge status={order.status} platform={order.platform} />
+                      </td>
+                      <td style={{ ...cellStyle, fontFamily: E.mono, fontSize: 11, color: E.inkSub }}>
+                        {formatDate(order.orderedAt)}
+                      </td>
+                      <td style={{ ...cellStyle, borderRight: 'none', color: E.inkSub }}>
+                        {order.receiverName ?? '-'}
+                      </td>
                     </tr>
 
                     {/* 펼침: 주문 상세 */}
                     {isExpanded && (
-                      <tr style={{ borderBottom: '1px solid #e5e5e5' }}>
-                        <td colSpan={8} style={{ padding: '0 16px 12px 16px', backgroundColor: '#fafafa' }}>
-                          <div style={{ borderRadius: '8px', border: '1px solid #e5e5e5', overflow: 'hidden', fontSize: '12px' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                              <thead>
-                                <tr style={{ backgroundColor: '#f3f4f6' }}>
-                                  <th style={{ padding: '7px 12px', textAlign: 'left', fontWeight: 600, color: '#71717a' }}>상품명</th>
-                                  <th style={{ padding: '7px 12px', textAlign: 'left', fontWeight: 600, color: '#71717a' }}>옵션</th>
-                                  <th style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 600, color: '#71717a' }}>수량</th>
-                                  <th style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 600, color: '#71717a' }}>결제금액</th>
+                      <tr>
+                        <td colSpan={8} style={{ padding: '0 10px 10px', background: E.infoSoft, borderBottom: `1px solid ${E.line}` }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5, background: E.surface, border: `1px solid ${E.line}` }}>
+                            <thead>
+                              <tr>
+                                <th style={{ ...thStyle, textAlign: 'left', padding: '4px 8px' }}>상품명</th>
+                                <th style={{ ...thStyle, textAlign: 'left', padding: '4px 8px' }}>옵션</th>
+                                <th style={{ ...thStyle, textAlign: 'right', padding: '4px 8px', width: 56 }}>수량</th>
+                                <th style={{
+                                  ...thStyle, textAlign: 'right', padding: '4px 8px', width: 96,
+                                  borderRight: order.platform === 'coupang' ? `1px solid ${E.lineSoft}` : 'none',
+                                }}>
+                                  결제금액
+                                </th>
+                                {order.platform === 'coupang' && (
+                                  <th style={{ ...thStyle, textAlign: 'left', padding: '4px 8px', width: 96, borderRight: 'none' }}>
+                                    예상출고일
+                                  </th>
+                                )}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {order.orderItems.map((item, idx) => (
+                                <tr key={idx} style={{ background: idx % 2 === 1 ? E.chrome2 : E.surface }}>
+                                  <td style={cellStyle}>{item.sellerProductName}</td>
+                                  <td style={{ ...cellStyle, color: E.inkSub }}>{item.sellerProductItemName || '-'}</td>
+                                  <td style={numCellStyle}>{item.shippingCount}</td>
+                                  <td style={{
+                                    ...numCellStyle, fontWeight: 500,
+                                    borderRight: order.platform === 'coupang' ? `1px solid ${E.lineSoft}` : 'none',
+                                  }}>
+                                    {item.orderPrice.toLocaleString()}
+                                  </td>
                                   {order.platform === 'coupang' && (
-                                    <th style={{ padding: '7px 12px', textAlign: 'left', fontWeight: 600, color: '#71717a' }}>예상출고일</th>
+                                    <td style={{ ...cellStyle, borderRight: 'none', fontFamily: E.mono, fontSize: 11, color: E.inkSub }}>
+                                      {item.estimatedShippingDate || '-'}
+                                    </td>
                                   )}
                                 </tr>
-                              </thead>
-                              <tbody>
-                                {order.orderItems.map((item, idx) => (
-                                  <tr key={idx} style={{ borderTop: '1px solid #f3f4f6' }}>
-                                    <td style={{ padding: '7px 12px', color: '#18181b' }}>{item.sellerProductName}</td>
-                                    <td style={{ padding: '7px 12px', color: '#71717a' }}>{item.sellerProductItemName || '-'}</td>
-                                    <td style={{ padding: '7px 12px', textAlign: 'right' }}>{item.shippingCount}</td>
-                                    <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 500 }}>{item.orderPrice.toLocaleString()}원</td>
-                                    {order.platform === 'coupang' && (
-                                      <td style={{ padding: '7px 12px', color: '#71717a' }}>{item.estimatedShippingDate || '-'}</td>
-                                    )}
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                          {/* 배송/수령 정보 */}
-                          <div style={{ marginTop: '8px', fontSize: '12px', color: '#71717a', display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-                            {order.receiverName && (
-                              <span>수령인: <b style={{ color: '#18181b' }}>{order.receiverName}</b></span>
-                            )}
-                            {order.receiverAddr && (
-                              <span>주소: {order.receiverAddr}</span>
-                            )}
-                            {order.receiverTel && (
-                              <span>연락처: {order.receiverTel}</span>
-                            )}
+                              ))}
+                            </tbody>
+                          </table>
+
+                          {/* 배송·수령 정보 */}
+                          <div style={{ marginTop: 6, fontSize: 11, color: E.inkSub, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                            {order.receiverName && <span>수령인 <b style={{ color: E.ink }}>{order.receiverName}</b></span>}
+                            {order.receiverTel && <span>연락처 <span style={{ fontFamily: E.mono }}>{order.receiverTel}</span></span>}
+                            {order.receiverAddr && <span>주소 {order.receiverAddr}</span>}
                             {order.invoiceInfo && (
-                              <span>송장: <span style={{ fontFamily: 'monospace', color: '#2563eb' }}>{order.invoiceInfo}</span></span>
+                              <span>송장 <span style={{ fontFamily: E.mono, color: E.info }}>{order.invoiceInfo}</span></span>
                             )}
-                            {order.parcelMessage && (
-                              <span>배송메모: {order.parcelMessage}</span>
-                            )}
+                            {order.parcelMessage && <span>배송메모 {order.parcelMessage}</span>}
                           </div>
                         </td>
                       </tr>
@@ -627,44 +726,63 @@ export default function OrdersTab() {
               })}
             </tbody>
           </table>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* 페이지네이션 */}
-      {orders.length > PAGE_SIZE && (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', marginTop: '16px' }}>
-          <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
-            style={{ padding: '5px 10px', borderRadius: '7px', border: '1px solid #e5e5e5', background: '#fff', cursor: page === 1 ? 'default' : 'pointer', opacity: page === 1 ? 0.4 : 1 }}>
-            <ChevronLeft size={14} />
-          </button>
-          <span style={{ fontSize: '13px', color: '#71717a' }}>{page} / {totalPages}</span>
-          <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-            style={{ padding: '5px 10px', borderRadius: '7px', border: '1px solid #e5e5e5', background: '#fff', cursor: page === totalPages ? 'default' : 'pointer', opacity: page === totalPages ? 0.4 : 1 }}>
-            <ChevronRight size={14} />
-          </button>
-          {nextToken && (
-            <button onClick={() => fetchOrders(false)} disabled={loading}
-              style={{ fontSize: '12px', color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer' }}>
-              다음 50건 더 불러오기
+      {/* ══ 상태바 — 건수·채널별·합계·페이지 ══ */}
+      <div style={statusBarStyle}>
+        <span>전체 <b style={statNumStyle}>{orders.length}</b>건</span>
+        <span style={{ color: E.inkMute }}>
+          쿠팡 <b style={statNumStyle}>{coupangCount}</b> · 로켓그로스 <b style={statNumStyle}>{rgCount}</b>
+          {' · '}네이버 <b style={statNumStyle}>{naverCount}</b> · 토스 <b style={statNumStyle}>{tossCount}</b>
+        </span>
+        <span>합계 <b style={statNumStyle}>{totalRevenue.toLocaleString()}</b>원</span>
+
+        {orders.length > PAGE_SIZE && (
+          <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+            {nextToken && (
+              <button onClick={() => fetchOrders(false)} disabled={loading} style={{ ...btnStyle, height: 21 }}>
+                다음 50건 더
+              </button>
+            )}
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+              aria-label="이전 페이지"
+              style={{ ...btnStyle, height: 21, padding: '0 6px', opacity: page === 1 ? 0.4 : 1 }}
+            >
+              <ChevronLeft size={12} />
             </button>
-          )}
-        </div>
-      )}
+            <span style={statNumStyle}>{page} / {totalPages}</span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              aria-label="다음 페이지"
+              style={{ ...btnStyle, height: 21, padding: '0 6px', opacity: page === totalPages ? 0.4 : 1 }}
+            >
+              <ChevronRight size={12} />
+            </button>
+          </span>
+        )}
+      </div>
 
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
 
-const th: React.CSSProperties = {
-  padding: '10px 16px',
-  textAlign: 'left',
-  fontWeight: 600,
-  color: '#71717a',
-  fontSize: '12px',
+const cellStyle: React.CSSProperties = {
+  borderBottom: `1px solid ${E.lineSoft}`,
+  borderRight: `1px solid ${E.lineSoft}`,
+  padding: '4px 8px',
+  color: E.ink,
+  verticalAlign: 'middle',
 };
 
-const td: React.CSSProperties = {
-  padding: '12px 16px',
-  color: '#18181b',
+const numCellStyle: React.CSSProperties = {
+  ...cellStyle,
+  textAlign: 'right',
+  fontFamily: E.mono,
+  fontVariantNumeric: 'tabular-nums',
+  whiteSpace: 'nowrap',
 };

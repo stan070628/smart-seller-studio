@@ -1,8 +1,17 @@
 'use client';
 
 import React from 'react';
-import { Link2, Plus, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Plus, ExternalLink } from 'lucide-react';
 import { PLATFORM_INFO, type OrderPlatform } from '@/types/orders';
+import { E } from '@/lib/design-tokens';
+import { bandStyle, thStyle, btnStyle, statusBarStyle, statNumStyle, Tag } from './erp-ui';
+
+/**
+ * 연동 현황을 한 화면에 편다.
+ *
+ * 카드 세 장을 세로로 쌓던 구조를 표 세 개로 바꿨다 — 항목마다 묻는 것이
+ * "연동됐나 / 무엇이 필요한가" 둘뿐이라 행으로 세우는 편이 비교가 빠르다.
+ */
 
 interface ChannelConfig {
   platform: OrderPlatform;
@@ -20,132 +29,205 @@ const CHANNELS: ChannelConfig[] = [
 ];
 
 const SUPPLIERS = [
-  { name: '도매꾹', connected: true, note: 'API 연동됨 (DOMEGGOOK_API_KEY)' },
-  { name: '도매매', connected: false, note: '추후 지원 예정' },
-  { name: '직접 사입', connected: false, note: '수동 관리' },
+  { name: '도매꾹', connected: true, note: 'API 연동됨', envKeys: ['DOMEGGOOK_API_KEY'] },
+  { name: '도매매', connected: false, note: '추후 지원 예정', envKeys: [] },
+  { name: '직접 사입', connected: false, note: '수동 관리', envKeys: [] },
 ];
 
+const RULES = [
+  { name: '기본 규칙', description: '주문 접수 시 → 알림 전송 (수동 확인 후 발주)', action: 'notify_only', active: true },
+  { name: '재고 자동발주', description: '재고 10개 이하 시 → 도매꾹 자동 재발주', action: 'auto_order', active: false },
+];
+
+const panelStyle: React.CSSProperties = {
+  border: `1px solid ${E.line}`,
+  background: E.surface,
+  marginBottom: 10,
+};
+
+const tdStyle: React.CSSProperties = {
+  borderBottom: `1px solid ${E.lineSoft}`,
+  borderRight: `1px solid ${E.lineSoft}`,
+  padding: '5px 8px',
+  fontSize: 12,
+  color: E.ink,
+  verticalAlign: 'middle',
+};
+
+/** env 키 목록 — 무엇을 채워야 하는지 그대로 보여준다 */
+function EnvKeys({ keys }: { keys: string[] }) {
+  if (keys.length === 0) return <span style={{ color: E.inkMute }}>—</span>;
+  return (
+    <span style={{ display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
+      {keys.map((k) => (
+        <code
+          key={k}
+          style={{
+            fontFamily: E.mono, fontSize: 10.5, padding: '1px 4px',
+            border: `1px solid ${E.lineSoft}`, background: E.chrome2, color: E.inkSub,
+          }}
+        >
+          {k}
+        </code>
+      ))}
+    </span>
+  );
+}
+
+function ConnectedTag({ on, onLabel, offLabel }: { on: boolean; onLabel: string; offLabel: string }) {
+  return on
+    ? <Tag tone={E.profit}>{onLabel}</Tag>
+    : <Tag tone={E.inkMute}>{offLabel}</Tag>;
+}
+
 export default function ChannelsTab() {
+  const connectedChannels = CHANNELS.filter((c) => c.connected).length;
+  const connectedSuppliers = SUPPLIERS.filter((s) => s.connected).length;
+  const activeRules = RULES.filter((r) => r.active).length;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      {/* 판매 채널 */}
-      <div style={{ backgroundColor: '#fff', borderRadius: '14px', border: '1px solid #e5e5e5', padding: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
-          <Link2 size={16} color="#2563eb" />
-          <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#18181b', margin: 0 }}>판매 채널</h3>
-        </div>
+    <div style={{ background: E.ground, minHeight: '100%', paddingBottom: 4 }}>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {CHANNELS.map((ch) => {
-            const info = PLATFORM_INFO[ch.platform];
-            return (
-              <div key={ch.platform} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderRadius: '10px', backgroundColor: '#fafafa', border: '1px solid #f4f4f5' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: ch.connected ? '#16a34a' : '#d4d4d8' }} />
-                  <div>
-                    <span style={{ fontSize: '14px', fontWeight: 600, color: info.color }}>{info.label}</span>
-                    <p style={{ fontSize: '11px', color: '#a1a1aa', margin: '2px 0 0' }}>
-                      {ch.connected ? '연동됨 · 주문 자동수집 활성' : `${ch.guideUrl}에서 API 키 발급`}
-                    </p>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {ch.connected ? (
-                    <span style={{ fontSize: '12px', fontWeight: 600, color: '#16a34a', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <CheckCircle2 size={14} /> 연동됨
-                    </span>
-                  ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ fontSize: '12px', color: '#a1a1aa', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <AlertCircle size={12} /> .env.local 설정 필요
-                      </span>
-                      <button style={{ fontSize: '12px', fontWeight: 500, color: '#2563eb', background: 'none', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '4px 10px', cursor: 'pointer' }}>
-                        설정 가이드
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+      {/* ══ 판매 채널 ══ */}
+      <div style={panelStyle}>
+        <div style={bandStyle}>
+          판매 채널 <span style={{ fontWeight: 400, color: E.inkMute }}>주문 자동수집 대상</span>
+          <span style={{ marginLeft: 'auto', fontWeight: 400, color: E.inkMute, fontFamily: E.mono }}>
+            {connectedChannels} / {CHANNELS.length} 연동
+          </span>
         </div>
-      </div>
-
-      {/* 공급처 */}
-      <div style={{ backgroundColor: '#fff', borderRadius: '14px', border: '1px solid #e5e5e5', padding: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
-          <Package size={16} color="#7c3aed" />
-          <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#18181b', margin: 0 }}>공급처</h3>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {SUPPLIERS.map((s) => (
-            <div key={s.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderRadius: '10px', backgroundColor: '#fafafa', border: '1px solid #f4f4f5' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: s.connected ? '#16a34a' : '#d4d4d8' }} />
-                <div>
-                  <span style={{ fontSize: '14px', fontWeight: 600, color: '#18181b' }}>{s.name}</span>
-                  <p style={{ fontSize: '11px', color: '#a1a1aa', margin: '2px 0 0' }}>{s.note}</p>
-                </div>
-              </div>
-              {s.connected ? (
-                <span style={{ fontSize: '12px', fontWeight: 600, color: '#16a34a', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <CheckCircle2 size={14} /> 활성
-                </span>
-              ) : (
-                <button style={{ fontSize: '12px', fontWeight: 500, color: '#71717a', background: 'none', border: '1px solid #e5e5e5', borderRadius: '6px', padding: '4px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Plus size={12} /> 연동하기
-                </button>
-              )}
-            </div>
-          ))}
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 720 }}>
+            <thead>
+              <tr>
+                <th style={{ ...thStyle, textAlign: 'left', width: '16%', minWidth: 120 }}>채널</th>
+                <th style={{ ...thStyle, width: 80 }}>상태</th>
+                <th style={{ ...thStyle, textAlign: 'left' }}>필요한 환경변수</th>
+                <th style={{ ...thStyle, textAlign: 'left', width: '24%', minWidth: 200, borderRight: 'none' }}>키 발급처</th>
+              </tr>
+            </thead>
+            <tbody>
+              {CHANNELS.map((ch, i) => {
+                const info = PLATFORM_INFO[ch.platform];
+                return (
+                  <tr key={ch.platform} style={{ background: i % 2 === 1 ? E.chrome2 : E.surface }}>
+                    <td style={tdStyle}>
+                      <span style={{ fontWeight: 600, color: info.color }}>{info.label}</span>
+                    </td>
+                    <td style={{ ...tdStyle, textAlign: 'center' }}>
+                      <ConnectedTag on={ch.connected} onLabel="연동됨" offLabel="미연동" />
+                    </td>
+                    <td style={tdStyle}><EnvKeys keys={ch.envKeys} /></td>
+                    <td style={{ ...tdStyle, borderRight: 'none', color: ch.connected ? E.inkMute : E.ink }}>
+                      {ch.connected ? (
+                        <span style={{ color: E.inkMute }}>주문 자동수집 활성</span>
+                      ) : (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <ExternalLink size={11} color={E.inkMute} />
+                          <span style={{ fontFamily: E.mono, fontSize: 11 }}>{ch.guideUrl}</span>
+                          <span style={{ color: E.inkMute }}>에서 발급</span>
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
 
-      {/* 발주 규칙 */}
-      <div style={{ backgroundColor: '#fff', borderRadius: '14px', border: '1px solid #e5e5e5', padding: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-          <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#18181b', margin: 0 }}>📋 발주 규칙</h3>
-          <button style={{ fontSize: '12px', fontWeight: 500, color: '#2563eb', background: 'none', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '6px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <Plus size={12} /> 규칙 추가
-          </button>
+      {/* ══ 공급처 ══ */}
+      <div style={panelStyle}>
+        <div style={bandStyle}>
+          공급처 <span style={{ fontWeight: 400, color: E.inkMute }}>사입·발주 경로</span>
+          <span style={{ marginLeft: 'auto', fontWeight: 400, color: E.inkMute, fontFamily: E.mono }}>
+            {connectedSuppliers} / {SUPPLIERS.length} 연동
+          </span>
         </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <RuleCard name="기본 규칙" description="주문 접수 시 → 알림 전송 (수동 확인 후 발주)" action="notify_only" active />
-          <RuleCard name="재고 자동발주" description="재고 10개 이하 시 → 도매꾹 자동 재발주" action="auto_order" active={false} />
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 720 }}>
+            <thead>
+              <tr>
+                <th style={{ ...thStyle, textAlign: 'left', width: '16%', minWidth: 120 }}>공급처</th>
+                <th style={{ ...thStyle, width: 80 }}>상태</th>
+                <th style={{ ...thStyle, textAlign: 'left' }}>필요한 환경변수</th>
+                <th style={{ ...thStyle, textAlign: 'left', width: '24%', minWidth: 200, borderRight: 'none' }}>비고</th>
+              </tr>
+            </thead>
+            <tbody>
+              {SUPPLIERS.map((s, i) => (
+                <tr key={s.name} style={{ background: i % 2 === 1 ? E.chrome2 : E.surface }}>
+                  <td style={{ ...tdStyle, fontWeight: 600 }}>{s.name}</td>
+                  <td style={{ ...tdStyle, textAlign: 'center' }}>
+                    <ConnectedTag on={s.connected} onLabel="활성" offLabel="미연동" />
+                  </td>
+                  <td style={tdStyle}><EnvKeys keys={s.envKeys} /></td>
+                  <td style={{ ...tdStyle, borderRight: 'none', color: E.inkMute }}>{s.note}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-
-        <p style={{ fontSize: '11px', color: '#a1a1aa', marginTop: '12px' }}>
-          * 자동 발주 규칙은 판매 채널과 공급처가 모두 연동된 후 활성화됩니다.
-        </p>
       </div>
-    </div>
-  );
-}
 
-function Package({ size, color }: { size: number; color: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="m7.5 4.27 9 5.15" /><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" /><path d="m3.3 7 8.7 5 8.7-5" /><path d="M12 22V12" />
-    </svg>
-  );
-}
-
-function RuleCard({ name, description, action, active }: { name: string; description: string; action: string; active: boolean }) {
-  const actionLabel = action === 'auto_order' ? '자동 발주' : action === 'notify_only' ? '알림만' : '수동';
-  const actionColor = action === 'auto_order' ? '#16a34a' : '#d97706';
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderRadius: '10px', backgroundColor: active ? '#fafafa' : '#f9f9f9', border: '1px solid #f4f4f5', opacity: active ? 1 : 0.6 }}>
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '13px', fontWeight: 600, color: '#18181b' }}>{name}</span>
-          <span style={{ fontSize: '10px', fontWeight: 600, color: actionColor, backgroundColor: `${actionColor}15`, padding: '2px 6px', borderRadius: '4px' }}>{actionLabel}</span>
+      {/* ══ 발주 규칙 ══ */}
+      <div style={panelStyle}>
+        <div style={bandStyle}>
+          발주 규칙
+          <span style={{ marginLeft: 'auto' }}>
+            <button style={{ ...btnStyle, height: 22 }}>
+              <Plus size={11} /> 규칙 추가
+            </button>
+          </span>
         </div>
-        <p style={{ fontSize: '12px', color: '#71717a', margin: '4px 0 0' }}>{description}</p>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 720 }}>
+            <thead>
+              <tr>
+                <th style={{ ...thStyle, textAlign: 'left', width: '16%', minWidth: 120 }}>규칙</th>
+                <th style={{ ...thStyle, width: 80 }}>동작</th>
+                <th style={{ ...thStyle, textAlign: 'left' }}>조건 → 처리</th>
+                <th style={{ ...thStyle, width: 80, borderRight: 'none' }}>사용</th>
+              </tr>
+            </thead>
+            <tbody>
+              {RULES.map((r, i) => {
+                const isAuto = r.action === 'auto_order';
+                return (
+                  <tr
+                    key={r.name}
+                    style={{ background: i % 2 === 1 ? E.chrome2 : E.surface, opacity: r.active ? 1 : 0.6 }}
+                  >
+                    <td style={{ ...tdStyle, fontWeight: 600 }}>{r.name}</td>
+                    <td style={{ ...tdStyle, textAlign: 'center' }}>
+                      <Tag tone={isAuto ? E.profit : E.warn} filled={isAuto ? undefined : E.warnSoft}>
+                        {isAuto ? '자동 발주' : '알림만'}
+                      </Tag>
+                    </td>
+                    <td style={{ ...tdStyle, color: E.inkSub }}>{r.description}</td>
+                    <td style={{ ...tdStyle, textAlign: 'center', borderRight: 'none' }}>
+                      <ConnectedTag on={r.active} onLabel="켜짐" offLabel="꺼짐" />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ padding: '5px 12px', background: E.chrome2, borderTop: `1px solid ${E.lineSoft}`, fontSize: 10.5, color: E.inkMute }}>
+          자동 발주 규칙은 판매 채널과 공급처가 모두 연동된 뒤에 켤 수 있습니다.
+        </div>
       </div>
-      <div style={{ width: '36px', height: '20px', borderRadius: '10px', backgroundColor: active ? '#16a34a' : '#d4d4d8', position: 'relative', cursor: 'pointer', transition: 'background 0.2s' }}>
-        <div style={{ width: '16px', height: '16px', borderRadius: '50%', backgroundColor: '#fff', position: 'absolute', top: '2px', left: active ? '18px' : '2px', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }} />
+
+      {/* ══ 상태바 ══ */}
+      <div style={{ ...statusBarStyle, borderTop: `1px solid ${E.line}` }}>
+        <span>판매 채널 <b style={statNumStyle}>{connectedChannels}</b>/{CHANNELS.length} 연동</span>
+        <span>공급처 <b style={statNumStyle}>{connectedSuppliers}</b>/{SUPPLIERS.length} 연동</span>
+        <span>발주 규칙 <b style={statNumStyle}>{activeRules}</b>/{RULES.length} 사용</span>
+        <span style={{ marginLeft: 'auto', fontSize: 10.5, color: E.inkMute }}>
+          환경변수는 .env.local에 넣고 서버를 다시 시작해야 반영됩니다
+        </span>
       </div>
     </div>
   );
