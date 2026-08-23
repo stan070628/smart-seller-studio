@@ -72,7 +72,7 @@ export default function GroupRow<T extends GroupableProduct>({
           >
             {group.productName}
           </span>
-          <span style={{ fontSize: 10, color: E.inkMute, fontWeight: 400, flexShrink: 0 }}>옵션 {group.children.length}</span>
+          <span style={{ fontSize: 10, color: E.inkMute, fontWeight: 400, flexShrink: 0 }}>옵션 {group.children.length}개</span>
           {hasOverstock && <OverstockBadge />}
         </div>
       </td>

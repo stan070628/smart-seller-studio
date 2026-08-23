@@ -17,7 +17,8 @@ interface RowProduct {
   margin_rate: number;
   ad_roas: number;
   breakeven_roas: number;
-  current_stock: number;
+  /** 장부 재고. 옛 응답·부분 갱신 경로에서 빠질 수 있어 선택으로 둔다 */
+  current_stock?: number;
   winner_status: 'winner' | 'watch' | 'normal';
   fifo_error?: boolean;
   hidden: boolean;
@@ -83,6 +84,7 @@ export default function ProductRow(props: Props) {
   // RG 실재고는 채널 필터가 rg일 때만 조회된다(CostManagementTab). 없으면 장부 재고만 보인다.
   const rgStock = rgInventory.get(p.id);
   const hasRgStock = rgStock !== undefined;
+  const stock = p.current_stock ?? 0;
 
   return (
     <tr
@@ -187,9 +189,9 @@ export default function ProductRow(props: Props) {
 
       {/* 7: 재고 — 장부 재고(즉시) 위, RG 실재고(늦게 도착) 아래 */}
       <td style={numCell} title="위: 입고·판매로 계산한 장부 재고 / 아래: 로켓그로스 창고 실재고">
-        <div style={{ color: p.current_stock > 0 ? E.ink : E.inkMute }}>{fmt(p.current_stock)}</div>
+        <div style={{ color: stock > 0 ? E.ink : E.inkMute }}>{fmt(stock)}</div>
         {hasRgStock ? (
-          <div style={{ fontSize: 10, color: rgStock === null ? E.inkMute : rgStock !== p.current_stock ? E.warn : E.inkMute }}>
+          <div style={{ fontSize: 10, color: rgStock === null ? E.inkMute : rgStock !== stock ? E.warn : E.inkMute }}>
             RG {rgStock === null ? '—' : fmt(rgStock)}
           </div>
         ) : rgInventoryLoading ? (
