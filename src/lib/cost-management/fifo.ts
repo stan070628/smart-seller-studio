@@ -83,10 +83,18 @@ export interface FifoSummary {
  * @param platformFeeRate - 플랫폼 수수료율 (0.0 ~ 1.0, 예: 0.108 = 10.8%)
  * @returns FifoSummary
  */
+/**
+ * 간이과세 매출세액률. 매입세액 공제가 안 되므로 매출 쪽에서만 차감한다.
+ * 일반과세로 전환하면 이 값이 아니라 (매출세액 − 매입세액) 구조로 바뀐다.
+ */
+export const SALES_VAT_RATE_SIMPLE = 0.015;
+
 export function calculateFifo(
   batches: PurchaseBatch[],
   sales: SaleRow[],
   platformFeeRate: number,
+  /** 매출세액률. 기본 0 — 넘기지 않으면 기존 동작과 같다. */
+  salesVatRate: number = 0,
 ): FifoSummary {
   // 입고 배치를 수령일 오름차순 정렬 (가장 오래된 배치 먼저 소진)
   const sortedBatches = [...batches].sort((a, b) =>
@@ -139,11 +147,15 @@ export function calculateFifo(
     // 플랫폼 수수료: 실효 매출 총액 × 수수료율 (반올림)
     const fee = Math.round(effective_revenue * platformFeeRate);
 
+    // 매출세액: 간이과세 1.5%. 매입세액 공제가 안 되므로 매출 쪽만 차감한다.
+    // 이 항목이 없어 마진율이 1.5%p 과대 계상돼 왔다 (2026-08-23).
+    const vat = Math.round(effective_revenue * salesVatRate);
+
     // 원가: FIFO 단위원가 × 수량 (기존과 동일, 이미 정확)
     const cost = fifo_cost_per_unit * sale.quantity;
 
     // 택배비 제외 손익 (per-unit 표시용 파생)
-    const profit_before_shipping = effective_revenue - cost - fee;
+    const profit_before_shipping = effective_revenue - cost - fee - vat;
     const realized_profit_per_unit =
       sale.quantity > 0 ? Math.round(profit_before_shipping / sale.quantity) : 0;
 

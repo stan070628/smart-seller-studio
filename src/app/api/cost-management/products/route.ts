@@ -3,7 +3,7 @@ import { getSourcingPool } from '@/lib/sourcing/db';
 import { getCurrentUser } from '@/lib/auth';
 import { calculateProductMetrics } from '@/lib/cost-management/calculations';
 import type { CostEntryRow } from '@/lib/cost-management/calculations';
-import { calculateFifo, ENTRY_CHANNEL, SALE_CHANNEL } from '@/lib/cost-management/fifo';
+import { calculateFifo, ENTRY_CHANNEL, SALE_CHANNEL, SALES_VAT_RATE_SIMPLE } from '@/lib/cost-management/fifo';
 import type { PurchaseBatch, SaleRow, FifoSummary } from '@/lib/cost-management/fifo';
 import { calcBreakevenRoas, determineWinnerStatus } from '@/lib/roi/calculations';
 
@@ -212,7 +212,7 @@ export async function GET(request: NextRequest) {
           unit_shipping_fee: e.unit_shipping_fee,
           unit_rg_shipping_fee: e.unit_rg_shipping_fee ?? 0,
         }));
-        fifoResult = calculateFifo(batches, salesToUse, feeRate);
+        fifoResult = calculateFifo(batches, salesToUse, feeRate, SALES_VAT_RATE_SIMPLE);
       } catch (e) {
         fifoError = true;
         console.warn(`FIFO 계산 실패 product=${p.id}:`, e instanceof Error ? e.message : e);
@@ -237,6 +237,14 @@ export async function GET(request: NextRequest) {
       // ROI 계산
       const totalQtySold = pFilteredSales.reduce((s, x) => s + x.quantity, 0);
       const marginRate = periodSalesAmount > 0 ? periodRealizedProfit / periodSalesAmount : 0;
+
+      // 광고비를 뺀 순마진. margin_rate 를 덮지 않고 따로 둔다 —
+      // 광고는 캠페인 단위로 집행돼 상품 배분 정확도가 낮고, 수집 시작일도
+      // 매출·원가와 달라(광고 2026-07~, 노출·클릭 2026-08~) 신뢰 구간이 좁다.
+      // 두 값을 섞으면 어느 쪽이 틀렸는지 가릴 수 없게 된다.
+      const profitAfterAd = periodRealizedProfit - adSpend;
+      const marginRateAfterAd = periodSalesAmount > 0 ? profitAfterAd / periodSalesAmount : 0;
+
       const avgSellingPrice = totalQtySold > 0 ? periodSalesAmount / totalQtySold : 0;
       const avgMarginPerUnit = totalQtySold > 0 ? periodRealizedProfit / totalQtySold : 0;
       const breakevenRoas = calcBreakevenRoas(avgSellingPrice, avgMarginPerUnit);
@@ -269,6 +277,9 @@ export async function GET(request: NextRequest) {
         ad_spend: adSpend,
         ad_roas: adRoas,
         margin_rate: marginRate,
+        /** 광고비 차감 후 순마진 (원). margin_rate 와 축이 다르므로 함께 본다 */
+        total_profit_after_ad: profitAfterAd,
+        margin_rate_after_ad: marginRateAfterAd,
         breakeven_roas: breakevenRoas,
         winner_status: winnerStatus,
         fifo_error: fifoError,

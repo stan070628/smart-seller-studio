@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { getCurrentUser } from '@/lib/auth';
-import { calculateFifo } from '@/lib/cost-management/fifo';
+import { calculateFifo, SALES_VAT_RATE_SIMPLE } from '@/lib/cost-management/fifo';
 import type { PurchaseBatch, SaleRow } from '@/lib/cost-management/fifo';
 
 export async function GET(
@@ -51,7 +51,7 @@ export async function GET(
       shipping_fee: Number(s.shipping_fee ?? 0),
     }));
 
-    const result = calculateFifo(batches, sales, feeRate);
+    const result = calculateFifo(batches, sales, feeRate, SALES_VAT_RATE_SIMPLE);
 
     return NextResponse.json({
       success: true,
