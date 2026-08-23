@@ -60,6 +60,13 @@ test-results/
 supabase/.temp/
 scripts/debug-*.mjs
 scripts/regen-*.mjs
+# 특정 상품 하나를 등록·수정·검증하려고 그때그때 쓰고 버리는 일회성 스크립트.
+# 재사용할 것은 접두사 없는 이름으로 scripts/ 에 정식 등록한다.
+scripts/_*
+# 같은 성격의 일회성 테스트·산출물
+src/__tests__/_tmp_*
+/layout_output.json
+/eider-detail-fixed.html
 
 # docs/superpowers/specs와 plans는 영구 문서로 git 관리
 # (이전에 통째로 무시했지만, spec/plan 문서는 추적 필요)
