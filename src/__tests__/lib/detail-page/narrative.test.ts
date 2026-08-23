@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { checkNarrative, BEATS } from '@/lib/detail-page/narrative';
+import { checkNarrative, BEATS, ACCEPTED_BEATS } from '@/lib/detail-page/narrative';
 
 /** beat를 지정한 최소 섹션 */
 function sec(beat: string, blocks: unknown[] = [{ type: 'heading', text: 'x', size: 'xl' }]) {
@@ -22,49 +22,49 @@ function compareWithText(text: string) {
 
 describe('checkNarrative', () => {
   it('규칙을 모두 지킨 레이아웃은 이슈가 없다', () => {
-    const sections = [sec('hook'), sec('detail'), compareSec(), sec('assure')];
+    const sections = [sec('hook'), sec('detail'), compareSec(), sec('notice')];
     expect(checkNarrative(sections)).toEqual([]);
   });
 
   it('beat 필드가 없으면 beat_missing error', () => {
-    const sections = [sec('hook'), { blocks: [] }, compareSec(), sec('assure')];
+    const sections = [sec('hook'), { blocks: [] }, compareSec(), sec('notice')];
     const issues = checkNarrative(sections);
     expect(issues.some(i => i.severity === 'error' && i.rule === 'beat_missing' && i.sectionIndex === 1)).toBe(true);
   });
 
   it('beat가 문자열이 아니면 beat_missing으로 처리한다', () => {
-    const sections = [sec('hook'), { beat: 123, blocks: [] }, compareSec(), sec('assure')];
+    const sections = [sec('hook'), { beat: 123, blocks: [] }, compareSec(), sec('notice')];
     const issues = checkNarrative(sections);
     expect(issues.some(i => i.rule === 'beat_missing' && i.sectionIndex === 1)).toBe(true);
   });
 
   it('알 수 없는 beat 값은 beat_unknown error', () => {
-    const sections = [sec('hook'), sec('나열'), compareSec(), sec('assure')];
+    const sections = [sec('hook'), sec('나열'), compareSec(), sec('notice')];
     const issues = checkNarrative(sections);
     expect(issues.some(i => i.severity === 'error' && i.rule === 'beat_unknown' && i.sectionIndex === 1)).toBe(true);
   });
 
   it('첫 섹션이 hook이 아니면 hook_first error', () => {
-    const sections = [sec('detail'), sec('hook'), compareSec(), sec('assure')];
+    const sections = [sec('detail'), sec('hook'), compareSec(), sec('notice')];
     const issues = checkNarrative(sections);
     expect(issues.some(i => i.severity === 'error' && i.rule === 'hook_first' && i.sectionIndex === 0)).toBe(true);
   });
 
   it('첫 섹션에 beat가 없으면 beat_missing만 나오고 hook_first는 중복으로 나오지 않는다', () => {
-    const sections = [{ blocks: [] }, sec('detail'), compareSec(), sec('assure')];
+    const sections = [{ blocks: [] }, sec('detail'), compareSec(), sec('notice')];
     const issues = checkNarrative(sections);
     expect(issues.some(i => i.rule === 'beat_missing' && i.sectionIndex === 0)).toBe(true);
     expect(issues.some(i => i.rule === 'hook_first')).toBe(false);
   });
 
   it('compare가 하나도 없으면 compare_missing error', () => {
-    const sections = [sec('hook'), sec('detail'), sec('assure')];
+    const sections = [sec('hook'), sec('detail'), sec('notice')];
     const issues = checkNarrative(sections);
     expect(issues.some(i => i.severity === 'error' && i.rule === 'compare_missing')).toBe(true);
   });
 
   it('compare 섹션에 columns 2단이 없으면 compare_structure error', () => {
-    const sections = [sec('hook'), sec('compare'), sec('assure')];
+    const sections = [sec('hook'), sec('compare'), sec('notice')];
     const issues = checkNarrative(sections);
     expect(issues.some(i => i.severity === 'error' && i.rule === 'compare_structure' && i.sectionIndex === 1)).toBe(true);
   });
@@ -73,7 +73,7 @@ describe('checkNarrative', () => {
     const sections = [
       sec('hook'),
       sec('compare', [{ type: 'columns', cols: [[{ type: 'subtext', text: '하나' }]] }]),
-      sec('assure'),
+      sec('notice'),
     ];
     const issues = checkNarrative(sections);
     expect(issues.some(i => i.rule === 'compare_structure' && i.sectionIndex === 1)).toBe(true);
@@ -84,7 +84,7 @@ describe('checkNarrative', () => {
       sec('hook'),
       sec('compare'), // columns 없음 → 구조 위반
       compareSec(),   // columns 2단 있음 → 통과
-      sec('assure'),
+      sec('notice'),
     ];
     const issues = checkNarrative(sections);
     expect(issues.some(i => i.rule === 'compare_structure' && i.sectionIndex === 1)).toBe(true);
@@ -92,39 +92,84 @@ describe('checkNarrative', () => {
   });
 
   it('problem이 있는데 solution이 없으면 problem_without_solution error', () => {
-    const sections = [sec('hook'), sec('problem'), compareSec(), sec('assure')];
+    const sections = [sec('hook'), sec('problem'), compareSec(), sec('notice')];
     const issues = checkNarrative(sections);
     expect(issues.some(i => i.severity === 'error' && i.rule === 'problem_without_solution')).toBe(true);
   });
 
   it('problem과 solution이 둘 다 있으면 통과', () => {
-    const sections = [sec('hook'), sec('problem'), sec('solution'), compareSec(), sec('assure')];
+    const sections = [sec('hook'), sec('problem'), sec('solution'), compareSec(), sec('notice')];
     expect(checkNarrative(sections).filter(i => i.severity === 'error')).toEqual([]);
   });
 
-  it('assure가 마지막 3섹션 밖에 있으면 assure_tail warning', () => {
-    const sections = [sec('hook'), sec('assure'), compareSec(), sec('detail'), sec('usecase'), sec('option')];
+  it('notice가 마지막 3섹션 밖에 있으면 closing_tail warning', () => {
+    const sections = [sec('hook'), sec('notice'), compareSec(), sec('detail'), sec('usecase'), sec('option')];
     const issues = checkNarrative(sections);
-    expect(issues.some(i => i.severity === 'warning' && i.rule === 'assure_tail')).toBe(true);
+    expect(issues.some(i => i.severity === 'warning' && i.rule === 'closing_tail')).toBe(true);
   });
 
-  it('assure가 아예 없어도 assure_tail warning', () => {
+  it('notice가 아예 없어도 closing_tail warning', () => {
     const sections = [sec('hook'), sec('detail'), compareSec()];
     const issues = checkNarrative(sections);
-    expect(issues.some(i => i.severity === 'warning' && i.rule === 'assure_tail')).toBe(true);
+    expect(issues.some(i => i.severity === 'warning' && i.rule === 'closing_tail')).toBe(true);
   });
 
-  it('assure가 정확히 sections.length-3 위치에 있으면 통과한다 (경계값)', () => {
-    // length=4, assure가 index1 = length-3 → 딱 걸쳐서 통과해야 한다
-    const sections = [sec('hook'), sec('assure'), compareSec(), sec('detail')];
+  it('notice가 정확히 sections.length-3 위치에 있으면 통과한다 (경계값)', () => {
+    // length=4, notice가 index1 = length-3 → 딱 걸쳐서 통과해야 한다
+    const sections = [sec('hook'), sec('notice'), compareSec(), sec('detail')];
     const issues = checkNarrative(sections);
-    expect(issues.some(i => i.rule === 'assure_tail')).toBe(false);
+    expect(issues.some(i => i.rule === 'closing_tail')).toBe(false);
   });
 
-  it('BEATS 목록은 다음과 같다', () => {
+  // ── care는 마감을 대신하지 못한다 ────────────────────────────────────────
+  // 분리의 목적이 "관리법과 고지를 각각 제 몫 하게 하는 것"이라, care 하나로
+  // closing_tail이 닫히면 생성기가 예전처럼 한 섹션에 뭉쳐도 통과해버린다.
+  it('care만 있고 notice가 없으면 closing_tail warning', () => {
+    const sections = [sec('hook'), sec('detail'), compareSec(), sec('care')];
+    const issues = checkNarrative(sections);
+    expect(issues.some(i => i.rule === 'closing_tail')).toBe(true);
+  });
+
+  it('care와 notice가 나란히 있으면 통과한다', () => {
+    const sections = [sec('hook'), sec('detail'), compareSec(), sec('care'), sec('notice')];
+    expect(checkNarrative(sections)).toEqual([]);
+  });
+
+  // ── sizing ───────────────────────────────────────────────────────────────
+  it('sizing 비트를 써도 beat_unknown이 나지 않는다', () => {
+    const sections = [sec('hook'), sec('sizing'), compareSec(), sec('notice')];
+    expect(checkNarrative(sections)).toEqual([]);
+  });
+
+  it('sizing이 없어도 이슈가 없다 — 치수 없는 상품(식품·잡화)이 있다', () => {
+    const sections = [sec('hook'), sec('detail'), compareSec(), sec('notice')];
+    expect(checkNarrative(sections)).toEqual([]);
+  });
+
+  // ── 레거시 assure ────────────────────────────────────────────────────────
+  // 저장된 드래프트가 beat:'assure'를 갖고 있다. 값을 없애면 그 드래프트가
+  // 로드·재저장 시점에 beat_unknown으로 깨지므로 검증에서는 계속 받는다.
+  it('레거시 assure는 여전히 통과하고 closing_tail을 닫는다', () => {
+    const sections = [sec('hook'), sec('detail'), compareSec(), sec('assure')];
+    expect(checkNarrative(sections)).toEqual([]);
+  });
+
+  it('BEATS 목록은 다음과 같다 — 생성 정본. assure는 여기 없다', () => {
     expect(BEATS).toEqual([
-      'hook', 'problem', 'solution', 'compare', 'evidence', 'detail', 'usecase', 'option', 'assure',
+      'hook', 'problem', 'solution', 'compare', 'evidence', 'detail', 'usecase',
+      'option', 'sizing', 'care', 'notice',
     ]);
+  });
+
+  it('ACCEPTED_BEATS는 BEATS + 레거시 assure다', () => {
+    expect(ACCEPTED_BEATS).toEqual([...BEATS, 'assure']);
+  });
+
+  it('beat_unknown 메시지는 BEATS만 안내한다 — 생성기가 assure를 다시 배우면 안 된다', () => {
+    const issues = checkNarrative([sec('hook'), sec('없는비트'), compareSec(), sec('notice')]);
+    const unknown = issues.find(i => i.rule === 'beat_unknown');
+    expect(unknown?.message).not.toContain('assure');
+    expect(unknown?.message).toContain('sizing');
   });
 
   it('빈 배열은 이슈를 만들지 않는다 (다른 검증이 담당)', () => {
@@ -134,7 +179,7 @@ describe('checkNarrative', () => {
 
 describe('compare 섹션의 금지 표현', () => {
   it('배수 표현은 compare_claim warning + labels에 배수', () => {
-    const issues = checkNarrative([sec('hook'), compareWithText('타사 대비 3배 빠른 건조'), sec('assure')]);
+    const issues = checkNarrative([sec('hook'), compareWithText('타사 대비 3배 빠른 건조'), sec('notice')]);
     const issue = issues.find(i => i.rule === 'compare_claim');
     expect(issue?.severity).toBe('warning');
     expect(issue?.sectionIndex).toBe(1);
@@ -142,40 +187,40 @@ describe('compare 섹션의 금지 표현', () => {
   });
 
   it('비교 표지어가 있는 퍼센트 표현은 compare_claim warning + labels에 퍼센트', () => {
-    const issues = checkNarrative([sec('hook'), compareWithText('흡수력 40% 향상'), sec('assure')]);
+    const issues = checkNarrative([sec('hook'), compareWithText('흡수력 40% 향상'), sec('notice')]);
     const issue = issues.find(i => i.rule === 'compare_claim');
     expect(issue?.severity).toBe('warning');
     expect(issue?.labels).toContain('퍼센트');
   });
 
   it('순위 표현은 compare_claim warning + labels에 순위', () => {
-    const issues = checkNarrative([sec('hook'), compareWithText('업계 1위 흡수력'), sec('assure')]);
+    const issues = checkNarrative([sec('hook'), compareWithText('업계 1위 흡수력'), sec('notice')]);
     const issue = issues.find(i => i.rule === 'compare_claim');
     expect(issue?.severity).toBe('warning');
     expect(issue?.labels).toContain('순위');
   });
 
   it('조사가 붙은 순위 표현("1위입니다")도 검출한다', () => {
-    const issues = checkNarrative([sec('hook'), compareWithText('카테고리 판매량 1위입니다'), sec('assure')]);
+    const issues = checkNarrative([sec('hook'), compareWithText('카테고리 판매량 1위입니다'), sec('notice')]);
     const issue = issues.find(i => i.rule === 'compare_claim');
     expect(issue?.severity).toBe('warning');
     expect(issue?.labels).toContain('순위');
   });
 
   it('조사가 붙은 배수 표현("3배나 뛰어납니다")도 검출한다', () => {
-    const issues = checkNarrative([sec('hook'), compareWithText('흡수력이 3배나 뛰어납니다'), sec('assure')]);
+    const issues = checkNarrative([sec('hook'), compareWithText('흡수력이 3배나 뛰어납니다'), sec('notice')]);
     const issue = issues.find(i => i.rule === 'compare_claim');
     expect(issue?.severity).toBe('warning');
     expect(issue?.labels).toContain('배수');
   });
 
   it('숫자가 100이어도 비교 표지어가 있으면 검출한다 (기존 미탐 해소)', () => {
-    const issues = checkNarrative([sec('hook'), compareWithText('흡수력 100% 향상'), sec('assure')]);
+    const issues = checkNarrative([sec('hook'), compareWithText('흡수력 100% 향상'), sec('notice')]);
     expect(issues.some(i => i.rule === 'compare_claim' && i.severity === 'warning')).toBe(true);
   });
 
   it('비교 표지어가 있으면 소수점 퍼센트도 검출한다', () => {
-    const issues = checkNarrative([sec('hook'), compareWithText('타사 대비 40.5% 빠른 건조'), sec('assure')]);
+    const issues = checkNarrative([sec('hook'), compareWithText('타사 대비 40.5% 빠른 건조'), sec('notice')]);
     expect(issues.some(i => i.rule === 'compare_claim' && i.severity === 'warning')).toBe(true);
   });
 
@@ -187,7 +232,7 @@ describe('compare 섹션의 금지 표현', () => {
         cols: [[{ type: 'subtext', text: '40% 단축' }], [{ type: 'subtext', text: '변화 없음' }]],
       },
     ]);
-    const issues = checkNarrative([sec('hook'), section, sec('assure')]);
+    const issues = checkNarrative([sec('hook'), section, sec('notice')]);
     const issue = issues.find(i => i.rule === 'compare_claim');
     expect(issue?.severity).toBe('warning');
     expect(issue?.sectionIndex).toBe(1);
@@ -198,7 +243,7 @@ describe('compare 섹션의 금지 표현', () => {
     const issues = checkNarrative([
       sec('hook'),
       compareWithText('면 100%는 땀을 머금어 무거워집니다'),
-      sec('assure'),
+      sec('notice'),
     ]);
     expect(issues.some(i => i.rule === 'compare_claim')).toBe(false);
   });
@@ -207,7 +252,7 @@ describe('compare 섹션의 금지 표현', () => {
     const issues = checkNarrative([
       sec('hook'),
       compareWithText('폴리에스터 65%, 면 35%'),
-      sec('assure'),
+      sec('notice'),
     ]);
     expect(issues.some(i => i.rule === 'compare_claim')).toBe(false);
   });
@@ -216,7 +261,7 @@ describe('compare 섹션의 금지 표현', () => {
     const issues = checkNarrative([
       sec('hook'),
       compareWithText('면 100.0%로 제작되었습니다'),
-      sec('assure'),
+      sec('notice'),
     ]);
     expect(issues.some(i => i.rule === 'compare_claim')).toBe(false);
   });
@@ -225,7 +270,7 @@ describe('compare 섹션의 금지 표현', () => {
     // "더"는 COMPARATIVE_MARKER 목록에 없어 우위 주장이어도 검출하지 못한다.
     // 조성비 오탐을 없애는 대가로 받아들인 한계이며, 회귀 시 조용히
     // 사라지거나 늘어나지 않도록 이 테스트로 고정한다.
-    const issues = checkNarrative([sec('hook'), compareWithText('40% 더 빠른 건조'), sec('assure')]);
+    const issues = checkNarrative([sec('hook'), compareWithText('40% 더 빠른 건조'), sec('notice')]);
     expect(issues.some(i => i.rule === 'compare_claim')).toBe(false);
   });
 
@@ -237,7 +282,7 @@ describe('compare 섹션의 금지 표현', () => {
     const issues = checkNarrative([
       sec('hook'),
       compareWithText('면 100% 원단으로 통기성이 개선되었습니다'),
-      sec('assure'),
+      sec('notice'),
     ]);
     const issue = issues.find(i => i.rule === 'compare_claim');
     expect(issue?.severity).toBe('warning');
@@ -248,7 +293,7 @@ describe('compare 섹션의 금지 표현', () => {
     const issues = checkNarrative([
       sec('hook'),
       compareWithText('원가는 50위안입니다'),
-      sec('assure'),
+      sec('notice'),
     ]);
     expect(issues.some(i => i.rule === 'compare_claim')).toBe(false);
   });
@@ -257,7 +302,7 @@ describe('compare 섹션의 금지 표현', () => {
     const issues = checkNarrative([
       sec('hook'),
       compareWithText('2배수 구조로 안정적입니다'),
-      sec('assure'),
+      sec('notice'),
     ]);
     expect(issues.some(i => i.rule === 'compare_claim')).toBe(false);
   });
@@ -267,7 +312,7 @@ describe('compare 섹션의 금지 표현', () => {
       sec('hook'),
       sec('detail', [{ type: 'subtext', text: '타사 대비 3배 빠른 건조' }]),
       compareSec(),
-      sec('assure'),
+      sec('notice'),
     ]);
     expect(issues.some(i => i.rule === 'compare_claim')).toBe(false);
   });
@@ -276,14 +321,14 @@ describe('compare 섹션의 금지 표현', () => {
     // 같은 배열(items) 안 인접 leaf는 사이에 다른 필드가 끼지 않아 공백 join이면
     // "재고 30" + "위탁 판매" → "30 위탁"이 순위 정규식에 걸린다.
     const section = sec('compare', [{ type: 'bullet_list', items: ['재고 30', '위탁 판매'] }]);
-    const issues = checkNarrative([sec('hook'), section, sec('assure')]);
+    const issues = checkNarrative([sec('hook'), section, sec('notice')]);
     expect(issues.some(i => i.rule === 'compare_claim')).toBe(false);
   });
 
   it('leaf 경계에서 앞 leaf의 숫자와 뒤 leaf의 음절이 붙어 배수로 오탐하지 않는다', () => {
     // 공백으로 이어붙이면 "옵션 3" + "배기 성능" → "3 배기"가 배수 정규식에 걸린다.
     const section = sec('compare', [{ type: 'bullet_list', items: ['옵션 3', '배기 성능'] }]);
-    const issues = checkNarrative([sec('hook'), section, sec('assure')]);
+    const issues = checkNarrative([sec('hook'), section, sec('notice')]);
     expect(issues.some(i => i.rule === 'compare_claim')).toBe(false);
   });
 
@@ -298,7 +343,7 @@ describe('compare 섹션의 금지 표현', () => {
         [{ type: 'image', attachedIndex: 0, url: 'https://cdn.example.com/img/%ED%95%9C%EA%B5%AD.jpg' }],
       ] },
     ]);
-    const issues = checkNarrative([sec('hook'), section, sec('assure')]);
+    const issues = checkNarrative([sec('hook'), section, sec('notice')]);
     expect(issues.some(i => i.rule === 'compare_claim')).toBe(false);
   });
 
@@ -308,7 +353,7 @@ describe('compare 섹션의 금지 표현', () => {
     const section = sec('compare', [
       { type: 'subtext', text: '자세히는 https://cdn.example.com/%ED%95%9C.jpg 참고 (타사 대비 성능)' },
     ]);
-    const issues = checkNarrative([sec('hook'), section, sec('assure')]);
+    const issues = checkNarrative([sec('hook'), section, sec('notice')]);
     expect(issues.some(i => i.rule === 'compare_claim')).toBe(false);
   });
 
@@ -319,7 +364,7 @@ describe('compare 섹션의 금지 표현', () => {
     const section = sec('compare', [
       { type: 'subtext', text: '옵션 3 https://cdn.example.com/a.jpg 배기 성능' },
     ]);
-    const issues = checkNarrative([sec('hook'), section, sec('assure')]);
+    const issues = checkNarrative([sec('hook'), section, sec('notice')]);
     expect(issues.some(i => i.rule === 'compare_claim')).toBe(false);
   });
 
@@ -337,7 +382,7 @@ describe('compare 섹션의 금지 표현', () => {
         ],
       },
     ]);
-    const issues = checkNarrative([sec('hook'), section, sec('assure')]);
+    const issues = checkNarrative([sec('hook'), section, sec('notice')]);
     const issue = issues.find(i => i.rule === 'compare_claim');
     expect(issue?.severity).toBe('warning');
     expect(issue?.labels).toContain('순위');

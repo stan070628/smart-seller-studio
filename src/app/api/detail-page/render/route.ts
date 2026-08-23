@@ -14,14 +14,8 @@ import { sanitizeProLayout } from '@/lib/detail-page/layout-validator';
 import { composeYoutubeThumbnail } from '@/lib/detail-page/youtube-thumbnail';
 import { PALETTE_NAMES } from '@/lib/detail-page/palette-config';
 import { appendPrivacyFooter } from '@/lib/detail-page-privacy';
-import type { DetailSection, DetailPageTheme, FontStyle } from '@/types/detail-page';
-
-// fontStyle → CSS font-family 매핑 (모듈 레벨 상수)
-const FONT_FAMILY_MAP: Record<FontStyle, string> = {
-  sans:  "'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif",
-  serif: "'Batang','HY신명조','Noto Serif KR',Georgia,serif",
-  mixed: "'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif",
-};
+import { wrapRenderedSections } from '@/lib/detail-page/wrap-rendered';
+import type { DetailSection, DetailPageTheme } from '@/types/detail-page';
 
 // ─────────────────────────────────────────
 // 요청 검증 스키마 (Zod)
@@ -107,8 +101,10 @@ export async function POST(
     const firstIssue = parseResult.error.issues[0];
     return NextResponse.json(
       {
+        // path를 붙이지 않으면 "expected string, received undefined"만 남아
+        // 어느 필드가 빠졌는지 알 수 없다.
         error: firstIssue
-          ? firstIssue.message
+          ? `${firstIssue.message} (${firstIssue.path.join('.') || 'root'})`
           : '입력값 검증 실패',
       },
       { status: 400 },
@@ -155,9 +151,9 @@ export async function POST(
     );
   }
 
-  // max-width 컨테이너로 래핑 — mobile은 390px, desktop은 780px
-  const maxWidth = theme.layoutMode === 'mobile' ? '390px' : '780px';
-  const snippet = `<div style="max-width:${maxWidth};margin:0 auto;font-family:${FONT_FAMILY_MAP[theme.fontStyle]};">\n${renderedSections}\n</div>`;
+  // 본문 컨테이너 래핑(폭 + font-family). 라우트를 거치지 않는 스크립트 경로도
+  // 같은 함수를 써야 폭·폰트가 빠지지 않는다 — wrap-rendered.ts 주석 참조.
+  const snippet = wrapRenderedSections(renderedSections, theme as DetailPageTheme);
 
   // html = snippet + 개인정보 고지 3종
   const html = appendPrivacyFooter(snippet, theme.layoutMode);

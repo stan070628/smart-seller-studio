@@ -23,14 +23,18 @@ REVIEW CHECKLIST:
    가져가면 뒤쪽이 빈다.
 5. 옵션 편중(option_coverage) 이슈가 있으면 imageSlots[].imageRef를 재배정해 옵션을 고르게 만든다. 단 섹션 내용과 옵션이 충돌하면 내용을 우선하고 다른 섹션에서 균형을 맞춘다. 비교 섹션(option_compare)은 옵션당 imageSlot 1개를 유지한다.
 6. 모든 섹션은 beat 필드를 가져야 한다. beat 값은 다음 중 하나다:
-   hook, problem, solution, compare, evidence, detail, usecase, option, assure
-   beat 필드를 절대 삭제하지 마라. 없거나 위 9개 중에 없는 값(오탈자·새로 만든 값)이면
+   hook, problem, solution, compare, evidence, detail, usecase, option, sizing, care, notice
+   beat 필드를 절대 삭제하지 마라. 없거나 위 11개 중에 없는 값(오탈자·새로 만든 값)이면
    섹션 내용을 보고 알맞은 값으로 채우거나 교체하라.
    hook=첫 화면 / problem=기존 방식의 불편 / solution=우리 제품의 해법
    compare=기존 방식 대비 우위 / evidence=관찰 가능한 근거 / detail=물리적 마감·소재
-   usecase=사용 상황 / option=색상·사이즈 선택지 / assure=세탁·보관·제품정보
+   usecase=사용 상황 / option=색상·수량 선택지 / sizing=실측 치수표
+   care=세탁·보관·손질 / notice=표시사항·제품정보·A/S
+   예외 하나: 옛 값 assure가 들어 있으면 그대로 두지 말고 섹션 내용을 보고
+   care(세탁·보관)나 notice(표시사항·제품정보)로 바꿔라. 둘이 섞여 있으면
+   섹션을 care와 notice 둘로 나누고 care를 앞에 둔다.
 7. narrative 이슈가 있으면 다음을 고쳐라. hook_first는 error라 단독으로도 repair를
-   트리거하고, assure_tail은 warning이라 단독으로는 트리거하지 않지만 다른 error와
+   트리거하고, closing_tail은 warning이라 단독으로는 트리거하지 않지만 다른 error와
    함께 발생하면(흔한 경우) repair가 돌 때 이 지시도 함께 전달된다 — 그래서 둘 다
    "없으면 새로 만든다"까지 명시한다. 새 섹션을 만들 때는 배열 끝에 붙이지 말고
    서사 흐름에 맞는 자리에 넣는다 — solution은 problem 바로 다음, compare는 solution
@@ -46,8 +50,9 @@ REVIEW CHECKLIST:
      (예: "40% 향상", "대비 20% 증가")가 있으면 그 표현을 지우고 카테고리 공지의
      사실 진술로 바꾼다. 조성비·함량 표현(예: "면 60%")은 그대로 둔다.
    - problem이 있는데 solution이 없으면 solution 섹션을 추가한다.
-   - assure 섹션을 마지막 3개 섹션 안으로 옮긴다. assure 섹션이 아예 없으면
-     세탁·보관·제품정보를 담은 assure 섹션을 만들어 끝에 둔다.
+   - notice 섹션을 마지막 3개 섹션 안으로 옮긴다. notice 섹션이 아예 없으면
+     표시사항·제품정보·A/S를 담은 notice 섹션을 만들어 끝에 둔다.
+     care 섹션이 있어도 closing_tail은 닫히지 않는다 — notice가 따로 있어야 한다.
 
 Return ONLY the corrected JSON array — no explanation, no code fences.`;
 

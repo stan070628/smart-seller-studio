@@ -22,6 +22,7 @@ import {
   type DetailPageContent,
   type MobileDetailPageContent,
 } from "@/lib/ai/prompts/detail-page";
+import { fetchNoticeSpecs, mergeSpecs } from '@/lib/listing/fetch-notice-specs';
 import { buildDetailPageHtml, buildDetailPageSnippet } from "@/lib/detail-page/html-builder";
 import { mobileContentToSections } from "@/lib/detail-page/section-parser";
 import { renderAllSections } from "@/lib/detail-page/section-renderer";
@@ -108,6 +109,14 @@ const RequestSchema = z.object({
   category: z.enum(['basic', 'fashion', 'living', 'food'] as const).optional(),
   /** 소스 URL에서 추출한 실측 스펙 (이미지 분석보다 우선 반영) */
   productSpecs: z.array(z.object({ label: z.string(), value: z.string() })).max(20).optional(),
+  /**
+   * 채널 고시정보를 카피 입력으로 끌어올 상품 지정.
+   * 주면 서버가 조회해 productSpecs에 보충한다(명시적 productSpecs가 우선).
+   */
+  noticeSource: z.object({
+    channel: z.literal('naver'),
+    productNo: z.number().int().positive(),
+  }).optional(),
   /** true일 때만 imagePrompts(Gemini 씬 프롬프트)를 생성·반환한다. 기본값 false. */
   includeImagePrompts: z.boolean().optional(),
   /**
@@ -362,7 +371,15 @@ export async function POST(
     );
   }
 
-  const { images: rawImages, imageUrls, productName, existingHtml, studioMode, mobileMode, productSpecs, category, conversationContext, includeImagePrompts, referenceText } = parseResult.data;
+  const { images: rawImages, imageUrls, productName, existingHtml, studioMode, mobileMode, productSpecs: explicitSpecs, category, conversationContext, includeImagePrompts, referenceText, noticeSource } = parseResult.data;
+
+  // 고시정보를 카피 입력으로 보충한다. 조회 실패해도 생성은 계속한다.
+  let productSpecs = explicitSpecs;
+  if (noticeSource) {
+    const { specs, error } = await fetchNoticeSpecs(noticeSource);
+    if (error) console.warn('[generate-detail-html] 고시정보 조회 실패:', error);
+    if (specs.length > 0) productSpecs = mergeSpecs(explicitSpecs, specs);
+  }
 
   // imageUrls가 있으면 서버에서 fetch → base64 변환 후 rawImages와 합산
   let images: Array<{ imageBase64: string; mimeType: AllowedMimeType }>;

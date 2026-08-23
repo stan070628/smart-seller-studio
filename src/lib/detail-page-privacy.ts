@@ -27,7 +27,24 @@ const FIXED_IMAGES = [
   'https://mvergrjqfjuwndveztts.supabase.co/storage/v1/object/public/smart-seller-studio/fixed/frame-02-custom_privacy.jpg',
 ] as const;
 
-function makePrivacyFooterHtml(layoutMode?: string): string {
+/**
+ * 신발 카테고리 전용 안내 (780×764).
+ *
+ * 고정 3종과 달리 **모든 상품에 붙이지 않는다.** 신발은 박스 훼손·택 제거가
+ * 곧 재판매 불가로 이어져 반품 1건이 정상 판매 2건의 이익을 지우는데, 이 손실
+ * 구조가 신발에만 있기 때문이다. 세차타월에 "밑창 흔적" 안내가 붙으면 고지가
+ * 아니라 잡음이 된다.
+ *
+ * 소스는 고정 3종과 같은 docs/assets/notice-frames.html의 #shoes 패널이다.
+ */
+export const SHOES_NOTICE_IMAGE =
+  'https://mvergrjqfjuwndveztts.supabase.co/storage/v1/object/public/smart-seller-studio/fixed/frame-04-custom_shoes.jpg';
+
+/** 내부 별칭 — 아래 함수들이 쓰는 이름을 짧게 유지한다. */
+const SHOES_IMAGE = SHOES_NOTICE_IMAGE;
+
+/** 이미지를 세로로 쌓는 래퍼. 고정 3종과 신발 안내가 같은 규격을 쓴다. */
+function makeImageStack(images: readonly string[], layoutMode?: string): string {
   const maxWidth = layoutMode === 'mobile' ? '390px' : '780px';
   // 세로 스택 고정. 원본이 780x1100 세로 텍스트 고지라 가로 3분할(flex:1)로 깔면
   // 모바일에서 장당 130px까지 줄어 본문 글자가 2px가 된다 — 법적 고지가 판독
@@ -37,12 +54,18 @@ function makePrivacyFooterHtml(layoutMode?: string): string {
   const wrapStyle = `max-width:${maxWidth};margin:0 auto;line-height:0;`;
   return (
     `<div style="${wrapStyle}">` +
-    FIXED_IMAGES.map(
-      (src) =>
-        `<div><img src="${src}" alt="" style="width:100%;display:block;" /></div>`,
-    ).join('') +
+    images
+      .map(
+        (src) =>
+          `<div><img src="${src}" alt="" style="width:100%;display:block;" /></div>`,
+      )
+      .join('') +
     `</div>`
   );
+}
+
+function makePrivacyFooterHtml(layoutMode?: string): string {
+  return makeImageStack(FIXED_IMAGES, layoutMode);
 }
 
 export const PRIVACY_FOOTER_HTML = makePrivacyFooterHtml();
@@ -61,4 +84,35 @@ export function appendPrivacyFooter(html: string, layoutMode?: string): string {
     return html.replace('</body>', `${footerHtml}\n</body>`);
   }
   return html + '\n' + footerHtml;
+}
+
+/**
+ * 신발 상품 상세페이지에 신발 전용 안내를 붙인다.
+ *
+ * 고정 3종 **앞**에 들어간다. 순서는 상품 안내 → 주문/배송 → 반품/CS → 개인정보다.
+ * 박스와 택을 어떻게 다뤄야 하는지는 반품을 신청한 뒤에 읽으면 늦어서, 법적 고지
+ * 3종보다 앞에 둔다.
+ *
+ * appendPrivacyFooter와 호출 순서가 무관하다 — 3종이 이미 붙어 있으면 그 컨테이너
+ * 앞에 끼워 넣고, 아직 없으면 본문 끝에 붙인다. AssetsTab처럼 appendPrivacyFooter를
+ * 먼저 부르는 경로가 여럿이라 순서를 강제하면 그 경로마다 신발 안내가 빠진다.
+ */
+export function appendShoesNotice(html: string, layoutMode?: string): string {
+  const block = makeImageStack([SHOES_IMAGE], layoutMode);
+  if (!html) return block;
+  if (html.includes(SHOES_IMAGE)) return html;
+
+  const footerIdx = html.indexOf(FIXED_IMAGES[0]);
+  if (footerIdx === -1) {
+    // 고정 3종이 아직 없다. 본문 끝에 붙이면 이후 appendPrivacyFooter가 뒤에 쌓는다.
+    if (html.includes('</body>')) {
+      return html.replace('</body>', `${block}\n</body>`);
+    }
+    return html + '\n' + block;
+  }
+
+  // 고정 3종이 이미 있다. 그 래퍼 div 시작 지점을 찾아 바로 앞에 끼워 넣는다.
+  const wrapIdx = html.lastIndexOf('<div style="max-width:', footerIdx);
+  if (wrapIdx === -1) return html + '\n' + block;
+  return html.slice(0, wrapIdx) + block + '\n' + html.slice(wrapIdx);
 }

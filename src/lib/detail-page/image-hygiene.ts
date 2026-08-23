@@ -17,7 +17,7 @@
  * 그보다 섹션이 많으면 남는 섹션이 앞에서 쓴 사진을 다시 크게 쓰게 된다(사진 3장으로
  * 9섹션을 만든 실제 사례에서 세 장이 각각 3회씩 반복됐다).
  *
- * 하한 6은 서사 아크가 성립하는 최소치다 — hook·compare·assure가 필수라 그 아래로
+ * 하한 6은 서사 아크가 성립하는 최소치다 — hook·compare·notice가 필수라 그 아래로
  * 내리면 필수 비트끼리 한 섹션을 다투게 된다.
  */
 export function sectionCap(imageCount: number): number {

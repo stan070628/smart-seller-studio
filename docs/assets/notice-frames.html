@@ -34,6 +34,7 @@
   #notice  { height: 768px; }
   #return  { height: 886px; }
   #privacy { height: 679px; }
+  #shoes   { height: 764px; }
 
   .dots { position: absolute; top: 52px; right: 56px; display: flex; gap: 12px; }
   .dots i { width: 11px; height: 11px; border-radius: 50%; background: var(--dot); display: block; }
@@ -84,6 +85,19 @@
     font-family: var(--en); font-weight: 700; font-size: 50px; line-height: 1;
     letter-spacing: -0.03em; font-variant-numeric: tabular-nums;
   }
+
+  /* 신발 패널 전용 — 경고 배너 */
+  .warn {
+    background: var(--ink); color: #FFFFFF;
+    padding: 26px 30px; display: flex; align-items: center; gap: 24px;
+  }
+  .warn .sign { font-family: var(--en); font-weight: 700; font-size: 44px; line-height: 1; flex-shrink: 0; }
+  .warn .txt { font-size: 21px; font-weight: 700; line-height: 1.45; letter-spacing: -0.02em; }
+  .warn .txt .sm {
+    display: block; font-weight: 500; font-size: 16px;
+    color: #C9C9C9; margin-top: 8px; line-height: 1.6;
+  }
+  #shoes .check .body .val { font-size: 16px; line-height: 1.6; margin-top: 8px; }
 
   .muted { font-size: 16px; color: var(--sub); letter-spacing: -0.02em; }
   .note { font-size: 16px; color: var(--sub); line-height: 1.75; letter-spacing: -0.02em; }
@@ -209,6 +223,51 @@
     <div class="check">
       <svg width="34" height="30" viewBox="0 0 34 30" fill="none"><rect x="1.5" y="6.5" width="22" height="22" stroke="#111" stroke-width="2.4"/><path d="M7 17.5L14.5 24.5L32 2" stroke="#111" stroke-width="2.4" stroke-linecap="square"/></svg>
       <div class="body">개인정보 보유 및 이용기간 :<span class="val">이용목적 달성 시까지 보존 후 삭제합니다.</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ─────────── Shoes · 780×764 (신발 카테고리 전용) ─────────── -->
+<div class="panel" id="shoes">
+  <div class="dots"><i></i><i></i><i></i></div>
+
+  <div style="height:118px"></div>
+  <h1>Shoes</h1>
+
+  <div style="height:44px"></div>
+  <div class="warn">
+    <div class="sign">!</div>
+    <div class="txt">
+      신발 박스가 훼손되거나 택이 제거되면 교환·반품이 불가합니다.
+      <span class="sm">신발 박스는 포장재가 아니라 상품의 일부입니다. 박스 상태 그대로 보관해 주세요.</span>
+    </div>
+  </div>
+
+  <div style="height:40px"></div>
+  <div class="checks gap-md">
+    <div class="check">
+      <svg width="34" height="30" viewBox="0 0 34 30" fill="none"><rect x="1.5" y="6.5" width="22" height="22" stroke="#111" stroke-width="2.4"/><path d="M7 17.5L14.5 24.5L32 2" stroke="#111" stroke-width="2.4" stroke-linecap="square"/></svg>
+      <div class="body">신발 박스에 테이프나 송장을 직접 붙이지 말아 주세요.
+        <span class="val">반품 시에는 받으신 겉박스에 그대로 담아 보내주시면 됩니다.</span>
+      </div>
+    </div>
+    <div class="check">
+      <svg width="34" height="30" viewBox="0 0 34 30" fill="none"><rect x="1.5" y="6.5" width="22" height="22" stroke="#111" stroke-width="2.4"/><path d="M7 17.5L14.5 24.5L32 2" stroke="#111" stroke-width="2.4" stroke-linecap="square"/></svg>
+      <div class="body">택과 스티커를 제거하지 말아 주세요.
+        <span class="val">신발에 부착된 택·품번 스티커·라벨은 정품 확인 표식입니다.</span>
+      </div>
+    </div>
+    <div class="check">
+      <svg width="34" height="30" viewBox="0 0 34 30" fill="none"><rect x="1.5" y="6.5" width="22" height="22" stroke="#111" stroke-width="2.4"/><path d="M7 17.5L14.5 24.5L32 2" stroke="#111" stroke-width="2.4" stroke-linecap="square"/></svg>
+      <div class="body">착화는 실내 매트나 카펫 위에서만 해주세요.
+        <span class="val">트레킹화는 밑창 홈이 깊어 한 번만 외부에서 신어도 흔적이 남습니다.</span>
+      </div>
+    </div>
+    <div class="check">
+      <svg width="34" height="30" viewBox="0 0 34 30" fill="none"><rect x="1.5" y="6.5" width="22" height="22" stroke="#111" stroke-width="2.4"/><path d="M7 17.5L14.5 24.5L32 2" stroke="#111" stroke-width="2.4" stroke-linecap="square"/></svg>
+      <div class="body">사이즈가 고민되시면 신어보시기 전에 문의해 주세요.
+        <span class="val">발볼이나 착용감 안내를 도와드립니다. 교환이 반품보다 훨씬 빠릅니다.</span>
+      </div>
     </div>
   </div>
 </div>

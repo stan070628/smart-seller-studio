@@ -6,7 +6,7 @@ Generate a complete page layout as a JSON array of sections for mobile (390px wi
 Each section is a ClaudeLayoutContent object:
 {
   "type": "claude_layout",
-  "beat": "hook"|"problem"|"solution"|"compare"|"evidence"|"detail"|"usecase"|"option"|"assure",
+  "beat": "hook"|"problem"|"solution"|"compare"|"evidence"|"detail"|"usecase"|"option"|"sizing"|"care"|"notice",
   "title": "section title",
   "blocks": [...],
   "bgStyle": "white"|"light"|"dark"|"primary",
@@ -163,18 +163,27 @@ N0. 모든 섹션에 beat 필드를 반드시 붙이세요. 누락하면 수정 
     hook=첫 화면(이게 뭐고 왜 봐야 하는가) / problem=기존 방식·대체재의 불편
     solution=우리 제품이 그것을 어떻게 푸는가 / compare=기존 방식 대비 우위
     evidence=관찰 가능한 근거 / detail=물리적 마감·소재·구조
-    usecase=언제 어디서 쓰는가 / option=색상·사이즈 등 선택지
-    assure=세탁·보관·제품정보
+    usecase=언제 어디서 쓰는가 / option=색상·사이즈 등 "무엇을 고를까"
+    sizing=실측 치수표 "내 사이즈가 맞나" / care=세탁·보관·손질
+    notice=표시사항·제품정보·A/S
 N1. 먼저 상품이 어떤 유형인지 판단하고 아래 아크 중 하나를 골라 섹션을 배열하세요.
     아크 이름은 출력하지 말고 순서만 따르세요. 상품에 맞게 비트를 가감해도 됩니다.
-    단 hook(첫 섹션)·compare(최소 1개)·assure(마지막 3개 안)는 아크와 무관하게 필수입니다.
+    단 hook(첫 섹션)·compare(최소 1개)·notice(마지막 3개 안)는 아크와 무관하게 필수입니다.
     - 기능형 (성능이 구매 이유 — 원단·도구·가전):
-      hook → problem → solution → compare → evidence → detail → option → assure
+      hook → problem → solution → compare → evidence → detail → option → care → notice
     - 감성형 (장면이 구매 이유 — 패션·리빙):
-      hook → usecase → detail → solution → compare → option → assure
+      hook → usecase → detail → solution → compare → option → sizing → care → notice
     - 신뢰형 (믿음이 구매 이유 — 식품·고가):
-      hook → detail → evidence → compare → usecase → option → assure
-N2. 첫 섹션의 beat는 반드시 hook, assure는 마지막 3개 섹션 안에 두세요.
+      hook → detail → evidence → compare → usecase → option → care → notice
+N2. 첫 섹션의 beat는 반드시 hook, notice는 마지막 3개 섹션 안에 두세요.
+N2-b. option과 sizing을 한 섹션에 합치지 마세요. 사는 사람은 "내 사이즈가 있나"를
+    먼저 확인하고 그 다음에 색을 고릅니다 — 둘을 합치면 실측 치수가 옵션 그리드에
+    묻혀 반품 사유가 됩니다.
+    - sizing: 실측 치수표. spec_table로 씁니다. 어깨·가슴·총장처럼 자로 잰 값과
+      측정 위치를 함께 적고, 단위(cm)와 측정 오차 범위를 밝히세요.
+      치수 개념이 없는 상품(식품·화장품·잡화)에서는 sizing을 아예 빼세요.
+      Key points에 실측값이 없으면 지어내지 말고 빼세요 — 틀린 치수가 없는 치수보다 나쁩니다.
+    - option: 색상·수량·구성 선택지. option_grid로 씁니다.
 N3. compare 섹션을 최소 1개 만드세요. 반드시 columns 블록으로 2단 대비 구조를 쓰고
     (좌: 기존 방식의 한계 / 우: 우리 제품), 카테고리 공지의 사실만 다루세요.
     특정 경쟁사·브랜드 지목 금지.
@@ -201,12 +210,18 @@ N5. evidence 비트는 관찰 가능한 물리적 근거만 다루세요 (봉제
     evidence 섹션에는 detail_closeup 슬롯을 배정해 판매자가 직접 촬영할 수 있게 하세요.
     단 페이지 전체의 detail_closeup 슬롯은 C5의 것을 포함해 2개 이내로 유지하세요.
     판매자가 직접 촬영해야 하는 컷이므로 늘어날수록 부담이 커집니다.
-N6. assure 비트는 세탁·보관·제품정보로 끝내지 말고, 사기 직전에 남는 질문을 먼저
-    해소하세요. 상세페이지를 끝까지 내려온 사람은 이미 사고 싶은 상태이고, 마지막에
-    남은 걱정 하나 때문에 이탈합니다. 그 걱정은 카테고리마다 다릅니다.
+N6. care와 notice는 페이지를 사무적으로 끝내는 자리가 아니라, 사기 직전에 남는 질문을
+    해소하는 자리입니다. 상세페이지를 끝까지 내려온 사람은 이미 사고 싶은 상태이고,
+    마지막에 남은 걱정 하나 때문에 이탈합니다. 그 걱정은 카테고리마다 다릅니다.
     - 의류: 비침, 세탁 후 수축·이염, 건조기 사용 가능 여부, 냄새
     - 식품: 보관 방법, 개봉 후 기간, 알레르기 유발 성분
     - 가전·기기: 소음, 전기요금, A/S, 설치 난이도
+    두 비트의 역할이 다릅니다. 섞지 마세요:
+    - care = 산 뒤에 내가 해야 할 일. 세탁·보관·손질 방법과 하면 안 되는 것.
+      위 걱정 목록 중 "관리하면 되는가"에 답하는 항목이 여기 옵니다.
+      세탁·보관 개념이 없는 상품에서는 care를 빼세요.
+    - notice = 판매자가 보증하는 사실. 소재 혼용률·원산지·제조사·A/S 연락처·교환반품 조건.
+      notice는 어느 상품에나 있어야 합니다.
     Key points에 답할 근거가 있는 것만 다루세요. 근거가 없으면 그 항목은 빼고,
     "문의 주세요" 같은 회피 문구로 자리를 채우지 마세요 — 답이 없는 것보다 나쁩니다.
     bullet_list나 spec_table로 짧게 정리하고, 걱정을 부풀리는 문장은 쓰지 마세요.

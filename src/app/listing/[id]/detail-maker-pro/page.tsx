@@ -486,9 +486,56 @@ export default function DetailMakerProPage() {
         <h1 style={{ fontSize: '20px', fontWeight: 800, marginBottom: '6px' }}>
           PRO 상세페이지 만들기
         </h1>
-        <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '24px' }}>
+        <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '12px' }}>
           참고 스크린샷을 올리면 AI가 분석해서 전문 페이지를 자동 생성합니다.
         </p>
+
+        {/*
+          자동 파이프라인은 Claude가 씬 프롬프트를 쓴다(sceneHint 600자).
+          외부에서 작성한 완성형 프롬프트를 그대로 쓰려면 Scene Studio로 간다
+          — scenePrompt 직결(2000자)이라 Claude 재작성을 거치지 않는다.
+        */}
+        <a
+          href="/listing/scene-studio"
+          style={{
+            display: 'inline-block',
+            marginBottom: '24px',
+            padding: '8px 14px',
+            borderRadius: 8,
+            background: '#1e1e2e',
+            border: '1px solid #374151',
+            color: '#a5b4fc',
+            fontSize: 12,
+            fontWeight: 600,
+            textDecoration: 'none',
+          }}
+        >
+          🎬 Scene Studio — 프롬프트 직접 입력해서 씬 만들기
+        </a>
+
+        {/*
+          완성된 AI 이미지를 이미 들고 있을 때는 2단계(generate-scene-image)의
+          AI 변환이 오히려 결과를 망친다 — 배경 교체 시 자수 탈색, 색상 변환 시
+          없던 스티치 생성이 실측됐다. Detail Builder는 그 변환을 통째로 건너뛴다.
+        */}
+        <a
+          href="/listing/detail-builder"
+          style={{
+            display: 'inline-block',
+            marginLeft: '8px',
+            marginBottom: '24px',
+            padding: '8px 14px',
+            borderRadius: 8,
+            background: '#1e1e2e',
+            border: '1px solid #374151',
+            color: '#86efac',
+            fontSize: 12,
+            fontWeight: 600,
+            textDecoration: 'none',
+          }}
+        >
+          🧩 Detail Builder — 완성 이미지를 섹션에 꽂아 상세페이지 만들기
+        </a>
 
         {errorBanner}
 

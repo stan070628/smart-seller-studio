@@ -4,7 +4,7 @@ import { checkProhibitedPhrases } from '@/lib/ai/prompts/detail-page';
 import { normalizeImageBlocks } from './layout-image-blocks';
 import type { LayoutBlock } from '@/types/detail-page';
 import { collectOptionCoverage, type OptionSection } from './product-options';
-import { BEATS, checkNarrative, type NarrativeSection } from './narrative';
+import { ACCEPTED_BEATS, checkNarrative, type NarrativeSection } from './narrative';
 import { sanitizeProgressBars } from './progress-hygiene';
 import { hasVisualAnchor, countMismatch } from './section-shape';
 // gen-slots.ts는 import 없는 leaf 모듈이다 — 정의를 거기 하나로 두고 여기서는
@@ -98,7 +98,11 @@ const zClaudeSection = z.object({
   // 서사 비트. optional인 이유는 기존 draft 로드가 깨져서가 아니라(draft GET은 검증을
   // 거치지 않는다), draft 저장·render 경로의 warnings에 스키마 노이즈를 만들지
   // 않기 위해서다. 누락 검증은 narrative 플래그가 켜진 생성 경로에서만 한다.
-  beat: z.enum(BEATS).optional(),
+  //
+  // BEATS가 아니라 ACCEPTED_BEATS를 쓴다 — 저장된 드래프트에 남아 있는 레거시
+  // beat:'assure'가 재저장 시점에 스키마에서 튕기지 않게 하기 위해서다.
+  // 생성 프롬프트에는 BEATS만 들어간다.
+  beat: z.enum(ACCEPTED_BEATS).optional(),
   /**
    * 촬영이 끝난 사진 묶음의 key (groupManifest 경로). 이 섹션에 어느 묶음을 놓을지
    * Claude가 고른 결과이며, 낱장 배치는 클라이언트가 묶음 순서대로 채운다.

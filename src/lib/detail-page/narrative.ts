@@ -3,7 +3,12 @@
  * 순수 함수만 두고 Violation 변환은 layout-validator가 담당한다.
  */
 
-/** 섹션이 아크에서 맡는 역할. 검증이 참조하는 것은 hook/problem/solution/compare/assure 5종이다. */
+/**
+ * 섹션이 아크에서 맡는 역할. 검증이 참조하는 것은 hook/problem/solution/compare/notice 5종이다.
+ *
+ * 순서는 구매 결정 순서를 따른다 — 이게 뭐야(hook) → 나한테 맞나(usecase·option·sizing)
+ * → 품질·정품(detail·evidence) → 관리(care) → 믿을만한가(notice).
+ */
 export const BEATS = [
   'hook',      // 첫 화면. 이게 뭐고 왜 봐야 하는가
   'problem',   // 기존 방식·대체재의 불편
@@ -12,13 +17,32 @@ export const BEATS = [
   'evidence',  // 관찰 가능한 근거
   'detail',    // 물리적 마감·소재·구조
   'usecase',   // 언제 어디서 쓰는가
-  'option',    // 색상·사이즈 등 선택지
-  'assure',    // 세탁·보관·제품정보
+  'option',    // 색상·사이즈 등 "무엇을 고를까"
+  'sizing',    // 실측 치수표. "내 사이즈가 맞나" — option과 다르다(고르기 전에 맞는지부터 본다)
+  'care',      // 세탁·보관·손질
+  'notice',    // 표시사항·제품정보·A/S. 마지막에 남는 불신을 닫는다
 ] as const;
 
 export type Beat = (typeof BEATS)[number];
 
-const BEAT_SET: ReadonlySet<string> = new Set(BEATS);
+/**
+ * 레거시 비트. 생성기에는 절대 노출하지 않고 검증에서만 받는다.
+ *
+ * 'assure'는 care와 notice로 갈리기 전의 옛 값이다. 저장된 드래프트가 이 값을
+ * 갖고 있는데 layout-validator의 zLayoutBlock이 z.enum으로 beat를 검사하므로,
+ * BEATS에서 지우기만 하면 그 드래프트가 로드·재저장 시점에 깨진다.
+ * 마이그레이션 대신 받아주는 쪽을 택했다 — 드래프트는 사용자 편집본이라
+ * 일괄 변환이 조용히 내용을 바꿀 위험이 있고, 이 값 하나를 남기는 비용은 없다.
+ */
+export const LEGACY_BEATS = ['assure'] as const;
+
+/** 스키마·검증이 허용하는 전체 집합. 생성 프롬프트는 BEATS만 쓴다. */
+export const ACCEPTED_BEATS = [...BEATS, ...LEGACY_BEATS] as const;
+
+const BEAT_SET: ReadonlySet<string> = new Set(ACCEPTED_BEATS);
+
+/** closing_tail을 닫을 수 있는 비트 — notice와 그 레거시 동의어 */
+const CLOSING_BEATS: ReadonlySet<string> = new Set(['notice', 'assure']);
 
 /**
  * 위반 규칙 코드. layout-validator가 이걸 그대로 Violation.code로 옮겨 쓴다 —
@@ -32,7 +56,8 @@ export type NarrativeRule =
   | 'compare_structure'
   | 'compare_claim'
   | 'problem_without_solution'
-  | 'assure_tail';
+  /** 옛 이름은 assure_tail. 비트가 care/notice로 갈리면서 이름도 마감 일반을 가리키게 바꿨다. */
+  | 'closing_tail';
 
 export interface NarrativeIssue {
   rule: NarrativeRule;
@@ -52,8 +77,8 @@ export interface NarrativeSection {
   blocks?: unknown;
 }
 
-/** assure가 이 위치 안에 있어야 한다 — 뒤에서 세 섹션 */
-const ASSURE_TAIL = 3;
+/** 마감 비트가 이 위치 안에 있어야 한다 — 뒤에서 세 섹션 */
+const CLOSING_TAIL = 3;
 
 /**
  * 우위 주장임을 드러내는 표지어. compare 섹션 전체(헤더+표 셀 등 모든 leaf를
@@ -274,13 +299,21 @@ export function checkNarrative(sections: NarrativeSection[]): NarrativeIssue[] {
     });
   }
 
-  // assure는 끝부분에
-  const assureIdx = beats.lastIndexOf('assure');
-  if (assureIdx === -1 || assureIdx < sections.length - ASSURE_TAIL) {
+  // 마감(notice)은 끝부분에.
+  //
+  // care로는 닫히지 않는다. 세탁·보관(care)과 표시사항·A/S(notice)를 가른 목적이
+  // "둘이 각각 제 몫을 하게 하는 것"이라, care 하나로 통과시키면 생성기가 예전처럼
+  // 한 섹션에 뭉쳐놓고 이름만 바꿔도 검증을 지나간다. 반대로 care까지 필수로 걸면
+  // 세탁이라는 개념이 없는 상품(식품·가전·잡화)이 전부 걸리므로 care는 선택으로 둔다.
+  //
+  // 강도는 옛 assure_tail과 같다(warning + 마감 1개 필수) — 이번 변경으로 기존
+  // 레이아웃이 새로 걸리는 일은 없다.
+  const closingIdx = beats.reduce((last, b, i) => (b !== null && CLOSING_BEATS.has(b) ? i : last), -1);
+  if (closingIdx === -1 || closingIdx < sections.length - CLOSING_TAIL) {
     issues.push({
-      rule: 'assure_tail',
-      ...(assureIdx === -1 ? {} : { sectionIndex: assureIdx }),
-      message: `assure 섹션이 마지막 ${ASSURE_TAIL}개 섹션 안에 없습니다.`,
+      rule: 'closing_tail',
+      ...(closingIdx === -1 ? {} : { sectionIndex: closingIdx }),
+      message: `notice 섹션이 마지막 ${CLOSING_TAIL}개 섹션 안에 없습니다.`,
       severity: 'warning',
     });
   }
