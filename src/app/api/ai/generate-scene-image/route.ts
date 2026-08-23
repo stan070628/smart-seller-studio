@@ -38,6 +38,16 @@ const RequestBodySchema = z.object({
     subheadline: z.string().optional(),
     sellingPoints: z.array(z.object({ title: z.string(), description: z.string() })).optional(),
     features: z.array(z.object({ title: z.string() })).optional(),
+    // 씬 컨텍스트 확장 — 상세는 user-prompt.ts의 SceneProductInfo 주석 참조.
+    // 길이 상한은 Claude 입력이 비대해지는 것을 막기 위한 것이며,
+    // 초과 시 400이 나므로 호출부에서 잘라 보낼 것.
+    material: z.string().max(200).optional(),
+    colors: z.array(z.string().max(50)).max(12).optional(),
+    category: z.string().max(100).optional(),
+    targetCustomer: z.string().max(100).optional(),
+    season: z.string().max(100).optional(),
+    priceTier: z.string().max(100).optional(),
+    avoid: z.array(z.string().max(120)).max(10).optional(),
   }).optional(),
   sceneHint: z.string().max(600).optional(),
   // 스토리보드 직접 프롬프트: 있으면 Claude 단계 건너뛰고 Gemini에 바로 전달

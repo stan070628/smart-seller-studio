@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<title>신발 동봉 안내문 · A4 단면</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --ink: #111111;
+    --sub: #4A4A4A;
+    --rule: #B3B3B3;
+    --band: #D9D9D9;
+    --hi: #FFE500;
+    --en: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    --ko: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+  }
+
+  /* ── 인쇄 규격: A4 단면 1장 ── */
+  @page { size: A4; margin: 0; }
+
+  body {
+    background: #666;
+    font-family: var(--ko);
+    color: var(--ink);
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .sheet {
+    width: 210mm;
+    height: 297mm;
+    background: #FFFFFF;
+    position: relative;
+    padding: 0 18mm 16mm;
+    display: flex;
+    flex-direction: column;
+    margin: 0 auto;
+    overflow: hidden;
+  }
+
+  @media print {
+    body { background: #FFFFFF; }
+    .sheet { margin: 0; }
+  }
+
+  .band { position: absolute; top: 0; left: 0; right: 0; height: 7mm; background: var(--band); }
+
+  .dots { position: absolute; top: 15mm; right: 18mm; display: flex; gap: 3.5mm; }
+  .dots i { width: 2.8mm; height: 2.8mm; border-radius: 50%; background: var(--rule); display: block; }
+
+  h1 {
+    font-family: var(--en);
+    font-weight: 700;
+    font-size: 42pt;
+    line-height: 1;
+    letter-spacing: -0.035em;
+  }
+
+  h2 {
+    font-family: var(--en);
+    font-weight: 700;
+    font-size: 15pt;
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+
+  .kicker { font-size: 10.5pt; font-weight: 700; letter-spacing: -0.02em; color: var(--sub); }
+
+  .rule { height: 0.3mm; background: var(--rule); width: 100%; }
+  .rule.dark { height: 0.7mm; background: var(--ink); }
+
+  .lede { font-size: 11pt; color: var(--sub); line-height: 1.7; letter-spacing: -0.02em; }
+
+  /* ── 강조: 형광 마커 ──
+     노란색은 컬러 인쇄에서 즉시 눈에 띄고,
+     흑백 레이저에서도 연회색 음영으로 남아 강조가 유지된다. */
+  mark {
+    background: var(--hi);
+    color: var(--ink);
+    padding: 0 1mm;
+    font-weight: 700;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+
+  /* ── 최우선 경고 배너 ── */
+  .alert {
+    background: var(--ink);
+    color: #FFFFFF;
+    padding: 6mm 8mm;
+    display: flex;
+    align-items: center;
+    gap: 6mm;
+  }
+  .alert .sign {
+    font-family: var(--en); font-weight: 700; font-size: 22pt;
+    line-height: 1; flex-shrink: 0;
+  }
+  .alert .txt { font-size: 11.5pt; font-weight: 700; line-height: 1.5; letter-spacing: -0.02em; }
+  .alert .txt .sm { display: block; font-weight: 500; font-size: 9.5pt; color: #C9C9C9; margin-top: 1.5mm; }
+  .alert mark { background: var(--hi); }
+
+  /* ── 2단 본문 ── */
+  .cols { display: flex; gap: 14mm; align-items: flex-start; }
+  .col { flex: 1; min-width: 0; }
+
+  .col-head { display: flex; align-items: baseline; gap: 4mm; }
+  .col-num {
+    font-family: var(--en); font-weight: 700; font-size: 15pt;
+    letter-spacing: -0.02em; color: var(--ink);
+  }
+
+  /* 체크 항목 */
+  .checks { display: flex; flex-direction: column; }
+  .checks.gap-lg { gap: 7mm; }
+  .checks.gap-md { gap: 5mm; }
+
+  .check { display: flex; align-items: flex-start; gap: 4mm; }
+  .check svg { flex-shrink: 0; margin-top: 0.6mm; }
+
+  .check .body { font-size: 11pt; font-weight: 700; line-height: 1.45; letter-spacing: -0.02em; }
+  .check .body .val {
+    display: block; font-weight: 500; font-size: 10pt; color: var(--sub);
+    margin-top: 2mm; line-height: 1.6;
+  }
+
+  .tel { font-family: var(--en); font-weight: 700; color: var(--ink); letter-spacing: -0.01em; }
+  .muted { font-size: 10pt; color: var(--sub); letter-spacing: -0.02em; }
+
+  /* 동봉품 체크리스트 */
+  .items { display: grid; grid-template-columns: 1fr 1fr; gap: 3.5mm 4mm; }
+  .item { display: flex; align-items: center; gap: 3mm; font-size: 10pt; font-weight: 500; letter-spacing: -0.02em; }
+  .box { width: 3.8mm; height: 3.8mm; border: 0.45mm solid var(--ink); display: block; flex-shrink: 0; }
+
+  /* 강조 박스 */
+  .callout {
+    border: 0.7mm solid var(--ink);
+    padding: 5mm;
+    font-size: 10pt;
+    line-height: 1.6;
+    letter-spacing: -0.02em;
+    font-weight: 500;
+  }
+  .callout strong { font-weight: 700; }
+
+  /* ── 하단 연락처 바 ── */
+  .contact {
+    margin-top: auto;
+    background: var(--band);
+    padding: 9mm 12mm;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12mm;
+  }
+  .ct-left { flex-shrink: 0; }
+  .ct-label { font-size: 10pt; font-weight: 700; color: var(--sub); letter-spacing: -0.02em; }
+  .big {
+    font-family: var(--en); font-weight: 700; font-size: 30pt; line-height: 1.05;
+    letter-spacing: -0.03em; font-variant-numeric: tabular-nums; margin-top: 2mm;
+  }
+  .ct-right { flex: 1; }
+  .ct-row { display: flex; align-items: baseline; gap: 5mm; padding: 2mm 0; }
+  .ct-row + .ct-row { border-top: 0.3mm solid #BFBFBF; }
+  .ct-key { font-size: 9.5pt; font-weight: 700; color: var(--sub); letter-spacing: -0.02em; width: 20mm; flex-shrink: 0; }
+  .ct-val { font-size: 10pt; font-weight: 500; letter-spacing: -0.02em; }
+  .ct-val.mail { font-family: var(--en); font-weight: 700; }
+  .ct-note { font-size: 9pt; color: var(--sub); line-height: 1.6; letter-spacing: -0.02em; margin-top: 2.5mm; }
+  .ct-note strong { font-weight: 700; color: var(--ink); }
+</style>
+</head>
+<body>
+
+<div class="sheet">
+  <div class="band"></div>
+  <div class="dots"><i></i><i></i><i></i></div>
+
+  <!-- ─────── 헤더 ─────── -->
+  <div style="height:26mm"></div>
+  <div class="kicker">신발 박스를 열기 전에 읽어주세요</div>
+  <div style="height:5mm"></div>
+  <h1>Before You Open</h1>
+
+  <div style="height:7mm"></div>
+  <div class="lede">
+    구매해 주셔서 감사합니다. 아래 내용만 지켜주시면 교환·반품이 훨씬 빠르게 처리됩니다.
+  </div>
+
+  <div style="height:8mm"></div>
+  <div class="alert">
+    <div class="sign">!</div>
+    <div class="txt">
+      <mark>신발 박스가 훼손</mark>되거나 <mark>택이 제거</mark>되면 교환·반품이 불가합니다.
+      <span class="sm">신발 박스는 포장재가 아니라 상품의 일부입니다. 박스에 테이프나 송장을 직접 붙이지 말아 주세요.</span>
+    </div>
+  </div>
+  <div style="height:9mm"></div>
+
+  <!-- ─────── 2단 본문 ─────── -->
+  <div class="cols">
+
+    <!-- 좌: 개봉 전 확인 -->
+    <div class="col">
+      <div class="col-head"><span class="col-num">01</span><h2>Check</h2></div>
+      <div style="height:2.5mm"></div>
+      <div class="rule"></div>
+      <div style="height:7mm"></div>
+
+      <div class="checks gap-lg">
+        <div class="check">
+          <svg width="17" height="15" viewBox="0 0 34 30" fill="none"><rect x="1.5" y="6.5" width="22" height="22" stroke="#111" stroke-width="2.8"/><path d="M7 17.5L14.5 24.5L32 2" stroke="#111" stroke-width="2.8" stroke-linecap="square"/></svg>
+          <div class="body">신발 박스는 포장재가 아니라 상품의 일부입니다.
+            <span class="val">신발 박스에 테이프나 송장을 직접 붙이지 말아 주세요. 반품 시에는 받으신 겉박스에 그대로 담아 보내주시면 됩니다.</span>
+          </div>
+        </div>
+        <div class="check">
+          <svg width="17" height="15" viewBox="0 0 34 30" fill="none"><rect x="1.5" y="6.5" width="22" height="22" stroke="#111" stroke-width="2.8"/><path d="M7 17.5L14.5 24.5L32 2" stroke="#111" stroke-width="2.8" stroke-linecap="square"/></svg>
+          <div class="body">택과 스티커를 제거하지 말아 주세요.
+            <span class="val">신발에 부착된 택·품번 스티커·라벨은 정품 확인 표식입니다. 제거하시면 교환·반품이 어렵습니다.</span>
+          </div>
+        </div>
+        <div class="check">
+          <svg width="17" height="15" viewBox="0 0 34 30" fill="none"><rect x="1.5" y="6.5" width="22" height="22" stroke="#111" stroke-width="2.8"/><path d="M7 17.5L14.5 24.5L32 2" stroke="#111" stroke-width="2.8" stroke-linecap="square"/></svg>
+          <div class="body">착화는 실내 매트나 카펫 위에서만 해주세요.
+            <span class="val">트레킹화는 밑창 홈이 깊어 <mark>한 번만 외부에서 신어도 흔적이 남습니다.</mark> 사용 흔적이 확인되면 반품이 제한될 수 있습니다.</span>
+          </div>
+        </div>
+        <div class="check">
+          <svg width="17" height="15" viewBox="0 0 34 30" fill="none"><rect x="1.5" y="6.5" width="22" height="22" stroke="#111" stroke-width="2.8"/><path d="M7 17.5L14.5 24.5L32 2" stroke="#111" stroke-width="2.8" stroke-linecap="square"/></svg>
+          <div class="body">사이즈가 고민되시면 신어보시기 전에 문자 주세요.
+            <span class="val">문자 <mark class="tel">010-5169-2357</mark> &middot; 발볼이나 착용감 관련해 안내를 도와드립니다. 교환이 반품보다 훨씬 빠릅니다.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 우: 반품 · 교환 -->
+    <div class="col">
+      <div class="col-head"><span class="col-num">02</span><h2>Return</h2></div>
+      <div style="height:2.5mm"></div>
+      <div class="rule"></div>
+      <div style="height:7mm"></div>
+
+      <div class="checks gap-md">
+        <div class="check">
+          <svg width="17" height="15" viewBox="0 0 34 30" fill="none"><rect x="1.5" y="6.5" width="22" height="22" stroke="#111" stroke-width="2.8"/><path d="M7 17.5L14.5 24.5L32 2" stroke="#111" stroke-width="2.8" stroke-linecap="square"/></svg>
+          <div class="body">반품·교환 전 판매자에게 꼭! 문자 문의 부탁드립니다.</div>
+        </div>
+        <div class="check">
+          <svg width="17" height="15" viewBox="0 0 34 30" fill="none"><rect x="1.5" y="6.5" width="22" height="22" stroke="#111" stroke-width="2.8"/><path d="M7 17.5L14.5 24.5L32 2" stroke="#111" stroke-width="2.8" stroke-linecap="square"/></svg>
+          <div class="body">판매자 주소로 임의 반송 시 착불로 재발송됩니다.</div>
+        </div>
+        <div class="check">
+          <svg width="17" height="15" viewBox="0 0 34 30" fill="none"><rect x="1.5" y="6.5" width="22" height="22" stroke="#111" stroke-width="2.8"/><path d="M7 17.5L14.5 24.5L32 2" stroke="#111" stroke-width="2.8" stroke-linecap="square"/></svg>
+          <div class="body">출고지와 반품지가 달라 자동수거와 묶음 배송이 불가합니다.</div>
+        </div>
+      </div>
+
+      <div style="height:9mm"></div>
+      <div class="muted" style="font-weight:700;color:#111;">반품 시 동봉 항목</div>
+      <div style="height:4mm"></div>
+      <div class="items">
+        <div class="item"><span class="box"></span>신발 본품 (좌·우)</div>
+        <div class="item"><span class="box"></span>신발 박스</div>
+        <div class="item"><span class="box"></span>종이 충전재</div>
+        <div class="item"><span class="box"></span>택 · 라벨</div>
+      </div>
+
+      <div style="height:9mm"></div>
+      <div class="callout">
+        위 항목이 누락되거나 <mark>박스 훼손 · 택 제거 · 사용 흔적</mark>으로 재판매가 불가능한 상태로
+        도착한 경우, 관련 법령에 따라 반품이 제한되거나 감가 금액이 청구될 수 있습니다.
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ─────── 하단 연락처 바 ─────── -->
+  <div class="contact">
+    <div class="ct-left">
+      <div class="ct-label">문자 문의</div>
+      <div class="big">010-5169-2357</div>
+    </div>
+    <div class="ct-right">
+      <div class="ct-row">
+        <span class="ct-key">상담시간</span>
+        <span class="ct-val">10:00 ~ 16:00 &middot; 주말, 공휴일 휴무</span>
+      </div>
+      <div class="ct-row">
+        <span class="ct-key">이메일</span>
+        <span class="ct-val mail">cheongyeon.corp@gmail.com</span>
+      </div>
+      <div class="ct-note">
+        유선상담이 원활하지 않을 수 있습니다. 문의사항을 <strong>문자</strong> 또는 구매하신 쇼핑몰의
+        문의기능으로 남겨주시면 빠르게 확인 후 처리 도와드리겠습니다.
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

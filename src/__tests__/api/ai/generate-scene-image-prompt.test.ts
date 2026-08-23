@@ -71,3 +71,63 @@ describe('buildSceneUserPrompt — 편집 모드 (editOpts.isEditMode)', () => {
     expect(out).not.toContain('FIRST image');
   });
 });
+
+describe('buildSceneUserPrompt — 상품 컨텍스트 확장', () => {
+  it('소재·색상·카테고리·타깃·시즌·가격대를 프롬프트에 싣는다', () => {
+    const out = buildSceneUserPrompt('lifestyle', {
+      headline: '예일 후드티',
+      category: '남성 후드티',
+      material: '면 55% 폴리에스터 45%',
+      colors: ['멜란지그레이', '네이비', '아이보리'],
+      targetCustomer: '20~30대 남녀',
+      season: '봄가을 간절기',
+      priceTier: '5만원대 캐주얼',
+    }, undefined);
+
+    expect(out).toContain('Category: 남성 후드티');
+    expect(out).toContain('Material: 면 55% 폴리에스터 45%');
+    expect(out).toContain('Available colors: 멜란지그레이, 네이비, 아이보리');
+    expect(out).toContain('Target customer: 20~30대 남녀');
+    expect(out).toContain('Season / usage period: 봄가을 간절기');
+    expect(out).toContain('Price tier: 5만원대 캐주얼');
+  });
+
+  it('sellingPoints의 description까지 싣는다 (title만 넘기던 동작 교체)', () => {
+    const out = buildSceneUserPrompt('hero', {
+      sellingPoints: [{ title: '캥거루 포켓', description: '손을 넣을 수 있는 앞주머니' }],
+    }, undefined);
+
+    expect(out).toContain('캥거루 포켓');
+    expect(out).toContain('손을 넣을 수 있는 앞주머니');
+  });
+
+  it('description이 비면 title만 싣는다', () => {
+    const out = buildSceneUserPrompt('hero', {
+      sellingPoints: [{ title: '루즈핏', description: '   ' }],
+    }, undefined);
+
+    expect(out).toContain('루즈핏');
+    expect(out).not.toContain('루즈핏: ');
+  });
+
+  it('avoid는 부정 지시문으로 나간다', () => {
+    const out = buildSceneUserPrompt('lifestyle', {
+      headline: '후드티',
+      avoid: ['한겨울 눈밭', '지퍼 여밈'],
+    }, undefined);
+
+    expect(out).toContain('MUST NOT appear');
+    expect(out).toContain('한겨울 눈밭');
+    expect(out).toContain('지퍼 여밈');
+  });
+
+  it('확장 필드가 없으면 기존 출력과 동일하다 (하위호환)', () => {
+    const legacy = buildSceneUserPrompt('hero', { headline: '향수' }, 'moody gold');
+    const extended = buildSceneUserPrompt('hero', { headline: '향수' }, 'moody gold');
+
+    expect(extended).toBe(legacy);
+    expect(legacy).not.toContain('Category:');
+    expect(legacy).not.toContain('Material:');
+    expect(legacy).not.toContain('MUST NOT appear');
+  });
+});
