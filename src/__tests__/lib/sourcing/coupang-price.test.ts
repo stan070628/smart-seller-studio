@@ -10,33 +10,33 @@ import {
 import type { LogisticsSize } from '@/types/shortlist';
 
 describe('LOGISTICS_FEE', () => {
-  it('로켓그로스 요금표와 일치한다 (VAT 포함 실효원가)', () => {
-    // 2026-07-31 VAT 반영: 고지값(1725/1900/2740)에 10% VAT를 더한 실질 부담액.
-    expect(LOGISTICS_FEE.xsmall).toBe(1898);
-    expect(LOGISTICS_FEE.small).toBe(2090);
-    expect(LOGISTICS_FEE.medium).toBe(3014);
+  it('로켓그로스 실청구 실측과 일치한다 (VAT 포함 실효원가)', () => {
+    // 2026-08-13 실청구 실측: 고지값(2800/3625/5206)에 10% VAT를 더한 실질 부담액.
+    // 직전 판은 요금표 최소값 기준의 1898/2090/3014이었다.
+    expect(LOGISTICS_FEE.xsmall).toBe(3080);
+    expect(LOGISTICS_FEE.small).toBe(3988);
+    expect(LOGISTICS_FEE.medium).toBe(5727);
   });
 });
 
 describe('breakEvenPrice', () => {
-  it('극소형 실효원가 2,500원의 손익분기가는 8,222원', () => {
-    // 2026-07-31 VAT 반영
-    expect(breakEvenPrice(2500, 'xsmall')).toBe(8222);
+  // 2026-08-13 실청구 물류비 + 매출세액 1.5% 반영으로 전 구간이 올랐다.
+  // 물류비 인상분(1,182원)보다 손익분기가 상승폭(3,554원)이 큰 이유는,
+  // 물류비가 마진율 30% 조건의 분자에 들어가 판매가로 3배 증폭되기 때문이다.
+  it('극소형 실효원가 2,500원의 손익분기가는 11,776원', () => {
+    expect(breakEvenPrice(2500, 'xsmall')).toBe(11776);
   });
 
-  it('극소형 실효원가 3,300원의 손익분기가는 9,130원', () => {
-    // 2026-07-31 VAT 반영
-    expect(breakEvenPrice(3300, 'xsmall')).toBe(9130);
+  it('극소형 실효원가 3,300원의 손익분기가는 12,700원', () => {
+    expect(breakEvenPrice(3300, 'xsmall')).toBe(12700);
   });
 
-  it('극소형 실효원가 4,000원의 손익분기가는 10,148원', () => {
-    // 2026-07-31 VAT 반영
-    expect(breakEvenPrice(4000, 'xsmall')).toBe(10148);
+  it('극소형 실효원가 4,000원의 손익분기가는 13,508원', () => {
+    expect(breakEvenPrice(4000, 'xsmall')).toBe(13508);
   });
 
-  it('소형 실효원가 3,180원의 손익분기가는 9,539원', () => {
-    // 2026-07-31 VAT 반영
-    expect(breakEvenPrice(3180, 'small')).toBe(9539);
+  it('소형 실효원가 3,180원의 손익분기가는 15,182원', () => {
+    expect(breakEvenPrice(3180, 'small')).toBe(15182);
   });
 
   it('사이즈가 커지면 손익분기가도 올라간다', () => {
@@ -47,9 +47,10 @@ describe('breakEvenPrice', () => {
 });
 
 describe('marginOf', () => {
-  it('메쉬 반장갑 — 실효원가 3,600원을 9,900원에 팔면 마진 3,226원', () => {
-    // 2026-07-31 VAT 반영
-    expect(marginOf(9900, 3600, 'xsmall')).toBe(3226);
+  it('메쉬 반장갑 — 실효원가 3,600원을 9,900원에 팔면 마진 1,895원', () => {
+    // 2026-08-13 실청구 물류비(3,080) + 매출세액(1.5%) 반영.
+    // 직전 판은 3,226원이었고, 물류비 1,182원 인상과 매출세액 149원이 그 차이다.
+    expect(marginOf(9900, 3600, 'xsmall')).toBe(1895);
   });
 
   it('접이식 쓰레기통 — 실효원가 2,830원을 5,080원에 팔면 적자', () => {
@@ -72,16 +73,16 @@ describe('breakEvenPrice 보장', () => {
     [3000, 'medium'], [7000, 'medium'],
   ];
 
+  // 마진은 marginOf로 잰다. 검증식을 손으로 다시 쓰면 산식에 항목이 추가될 때
+  // (2026-08-13 매출세액이 그랬다) 검증식만 낡아 조건을 통과한 것처럼 보인다.
   it.each(CASES)('실효원가 %i원 %s — 마진율 30%% 이상', (cost, size) => {
     const be = breakEvenPrice(cost, size);
-    const margin = be * (1 - COMMISSION_RATE) - LOGISTICS_FEE[size] - cost;
-    expect(margin / be).toBeGreaterThanOrEqual(0.3);
+    expect(marginOf(be, cost, size) / be).toBeGreaterThanOrEqual(0.3);
   });
 
   it.each(CASES)('실효원가 %i원 %s — 개당 마진이 물류비의 1.5배 이상', (cost, size) => {
     const be = breakEvenPrice(cost, size);
-    const margin = be * (1 - COMMISSION_RATE) - LOGISTICS_FEE[size] - cost;
-    expect(margin).toBeGreaterThanOrEqual(LOGISTICS_FEE[size] * 1.5);
+    expect(marginOf(be, cost, size)).toBeGreaterThanOrEqual(LOGISTICS_FEE[size] * 1.5);
   });
 });
 
@@ -209,19 +210,17 @@ describe('COMMISSION_RATE VAT 반영', () => {
     expect(COMMISSION_RATE).toBeCloseTo(0.1188, 6);
   });
 
-  it('손익분기가가 VAT 포함 수수료로 계산된다', () => {
-    // 실효원가 3,600원, 극소형(물류비 1,898원 VAT포함)
-    // byRate   = (3600 + 1898) / (1 - 0.1188 - 0.30) = 5498 / 0.5812 = 9459.74
-    // byAmount = (3600 + 1898 * 2.5) / (1 - 0.1188)  = 8345 / 0.8812 = 9470.04
-    // max(byRate, byAmount) = byAmount → Math.ceil → 9471
+  it('손익분기가가 VAT 포함 수수료·매출세액·실청구 물류비로 계산된다', () => {
+    // 실효원가 3,600원, 극소형(실청구 물류비 3,080원 VAT포함), 정률 합계 0.1188 + 0.015 = 0.1338
+    // byRate   = (3600 + 3080) / (1 - 0.1338 - 0.30) = 6680 / 0.5662  = 11798.0
+    // byAmount = (3600 + 3080 * 2.5) / (1 - 0.1338)  = 11300 / 0.8662 = 13045.5
+    // max(byRate, byAmount) = byAmount → Math.ceil → 13046
     //
-    // 옛 모델(수수료 10.8%, 물류비 1,725원 VAT 미반영)과 비교하면 지배 조건이 뒤집힌다:
-    //   byRate   = (3600 + 1725) / (1 - 0.108 - 0.30) = 5325 / 0.592 = 8994.93
-    //   byAmount = (3600 + 1725 * 2.5) / (1 - 0.108)  = 7912.5 / 0.892 = 8870.52
-    //   max(byRate, byAmount) = byRate → Math.ceil → 8995
-    // 옛 모델은 마진율 조건(byRate)이 구속했지만, VAT를 반영하면 물류비 배수 조건(byAmount)이
-    // 구속한다 — 원가 구조가 바뀌면서 어느 제약이 이기는지도 바뀐다. Math.ceil로 정수를
-    // 반환하므로 값을 정확히 못 박는다(MARGIN_TO_LOGISTICS 같은 계수의 미세한 변경도 잡아낸다).
-    expect(breakEvenPrice(3600, 'xsmall')).toBe(9471);
+    // 요금표 최소값을 쓰던 직전 판은 9,471원이었다. 3,575원이 오른 셈이며,
+    // 물류비 배수 조건(byAmount)이 구속한다는 점은 그대로다 — 물류비가 오를수록
+    // byAmount의 계수(2.5배)가 더 크게 작용해 격차가 벌어진다.
+    // Math.ceil로 정수를 반환하므로 값을 정확히 못 박는다
+    // (MARGIN_TO_LOGISTICS 같은 계수의 미세한 변경도 잡아낸다).
+    expect(breakEvenPrice(3600, 'xsmall')).toBe(13046);
   });
 });

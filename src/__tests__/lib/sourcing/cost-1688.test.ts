@@ -19,7 +19,8 @@ describe('calc1688UnitCost', () => {
     expect(r.tariffKrw).toBe(180);          // round(2256 × 0.08)
     expect(r.importVatKrw).toBe(244);       // round((2256+180) × 0.1)
     expect(r.effectiveCostKrw).toBe(2680);
-    expect(r.breakEvenPriceKrw).toBe(8427);
+    // 2026-08-13 실청구 물류비 + 매출세액 반영으로 8,427 → 11,984
+    expect(r.breakEvenPriceKrw).toBe(11984);
   });
 
   it('국제배송비 0이면 경고 플래그를 세운다', () => {
@@ -31,7 +32,7 @@ describe('calc1688UnitCost', () => {
     // 0은 "사람이 0이라고 못 박은 값"이라 추정으로 대체하지 않는다(추정은 null일 때만).
     expect(r.shippingMissing).toBe(true);
     expect(r.dutiableValueKrw).toBe(1934);
-    expect(r.breakEvenPriceKrw).toBe(7993);  // 배송비를 넣으면 8,427로 오른다
+    expect(r.breakEvenPriceKrw).toBe(11543);  // 배송비를 넣으면 11,984로 오른다
   });
 
   it('품목명으로 관세율이 갈린다', () => {
@@ -68,7 +69,7 @@ describe('calc1688UnitCost — 국제배송비 추정', () => {
     expect(r.shipEstimated).toBe(true);
     expect(r.shippingMissing).toBe(false);   // 추정값이 있으니 누락이 아니다
     expect(r.effectiveCostKrw).toBe(2930);
-    expect(r.breakEvenPriceKrw).toBe(8710);
+    expect(r.breakEvenPriceKrw).toBe(12272);
   });
 
   it('사람이 넣은 값이 추정값을 이긴다', () => {

@@ -56,3 +56,31 @@ export function effectiveCost(listedCost: number): number {
   if (!IS_SIMPLIFIED_TAXPAYER) return listedCost;
   return Math.round(listedCost * (1 + VAT_RATE));
 }
+
+/**
+ * 간이과세자 소매업 부가가치율.
+ *
+ * 간이과세자의 매출세액은 `공급대가 × 업종별 부가가치율 × 10%`로 계산된다.
+ * 소매업 부가가치율은 2021년 개정 이후 15%이므로 실효 부담은 판매가의 **1.5%**다.
+ */
+export const SIMPLIFIED_VALUE_ADDED_RATE = 0.15;
+
+/** 간이과세자 매출세액 실효율 — 판매가 대비 1.5% */
+export const SALES_VAT_RATE = VAT_RATE * SIMPLIFIED_VALUE_ADDED_RATE;
+
+/**
+ * 매출세액 — 판매로 발생해 납부해야 하는 부가세.
+ *
+ * 수수료·물류비 VAT(`effectiveFeeRate`·`effectiveCost`)가 **판매자가 부담하는 매입 측** VAT라면,
+ * 이 함수는 **매출 측** VAT다. 둘은 별개이며 마진에서 모두 빠진다.
+ *
+ * @param settlementPrice 정산 기준 판매가. 표시 판매가가 아니라 **판매자 부담 할인을 뺀 금액**이다.
+ *
+ * ⚠️ 일반과세자 전환 시 이 함수는 그대로 쓸 수 없다. 일반과세자는 매출세액 10%를 받아 납부하되
+ *    매입세액을 전액 공제받으므로 부담이 `(판매가 − 매입액) × 10%`가 되어 산식 자체가 달라진다.
+ *    전환 시점에는 0을 반환하는 현재 동작이 아니라 매입액을 인자로 받는 형태로 재설계해야 한다.
+ */
+export function salesVat(settlementPrice: number): number {
+  if (!IS_SIMPLIFIED_TAXPAYER) return 0;
+  return Math.round(settlementPrice * SALES_VAT_RATE);
+}

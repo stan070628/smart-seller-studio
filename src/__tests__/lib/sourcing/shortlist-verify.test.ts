@@ -33,32 +33,39 @@ describe('buildVerifyResult', () => {
   beforeEach(() => vi.clearAllMocks());
   afterEach(() => vi.restoreAllMocks());
 
+  // 손익분기가 1만원 하한보다 **낮아지는** 저원가 스냅샷.
+  // 하한이 손익분기보다 먼저 판정되는지 보려면 두 값이 하한을 사이에 두고 갈려야 하는데,
+  // 2026-08-13 실청구 물류비 반영으로 DOME_ALIVE(도매가 3,300)의 손익분기가
+  // 13,046원까지 올라 하한 위로 넘어가 버렸다. 그래서 도매가를 낮춘 별도 스냅샷을 쓴다.
+  const DOME_CHEAP = { ...DOME_ALIVE, price: 700 };
+
   it('판매중이고 쿠팡가가 손익분기를 넘으면 pass', async () => {
-    // 9,900원이었으나 1만원 하한 도입(2026-08-01)으로 하한에 먼저 걸려 fail이 된다.
-    // 손익분기 통과 경로를 검증하는 케이스라 하한 위 값으로 올린다.
-    const r = await buildVerifyResult(DOME_ALIVE, 10, 'xsmall', 10500);
+    // 10,500원이었으나 물류비 실측 반영으로 손익분기가 13,046원이 되어 미달이 된다.
+    // 손익분기 통과 경로를 검증하는 케이스라 그 위 값으로 올린다.
+    const r = await buildVerifyResult(DOME_ALIVE, 10, 'xsmall', 14000);
 
     expect(r.verdict).toBe('pass');
     expect(r.unitDeliFee).toBe(300);       // 30개당 3000원을 10개 주문 → 개당 300
     expect(r.effectiveCost).toBe(3600);    // 3300 + 300
-    expect(r.breakEvenPrice).toBe(9471); // 2026-07-31 VAT 반영
-    expect(r.margin).toBe(3755); // 2026-07-31 VAT 반영
+    expect(r.breakEvenPrice).toBe(13046);  // 2026-08-13 실청구 물류비 + 매출세액 반영
+    expect(r.margin).toBe(5447);
   });
 
   it('손익분기는 넘어도 1만원 하한 미만이면 fail — 하한이 손익분기보다 먼저다', async () => {
-    // 손익분기 9,471원 < 9,900원이므로 손익분기 기준으로는 통과다.
+    // 손익분기 9,813원 < 9,900원이므로 손익분기 기준으로는 통과다.
     // 그래도 1만원 미만 가격대는 아예 진입하지 않기로 한 정책이라 fail이다.
-    const r = await buildVerifyResult(DOME_ALIVE, 10, 'xsmall', 9900);
+    const r = await buildVerifyResult(DOME_CHEAP, 30, 'xsmall', 9900);
 
     expect(r.verdict).toBe('fail');
     // 하한 미달이어도 원가·손익분기·마진은 그대로 채운다 — 화면이 근거를 보여줘야 한다
     expect(r.coupangP25).toBe(9900);
-    expect(r.breakEvenPrice).toBe(9471);
+    expect(r.breakEvenPrice).toBe(9813);
+    expect(r.breakEvenPrice).toBeLessThan(9900);
   });
 
   it('정확히 1만원이면 하한을 통과한다 (경계값)', async () => {
     // 하한은 "1만원 미만"이 fail이다. 1만원 자체는 진입 가능 구간이다.
-    const r = await buildVerifyResult(DOME_ALIVE, 10, 'xsmall', 10000);
+    const r = await buildVerifyResult(DOME_CHEAP, 30, 'xsmall', 10000);
     expect(r.verdict).toBe('pass');
   });
 
@@ -101,7 +108,7 @@ describe('buildVerifyResult', () => {
     expect(r.coupangP25).toBeNull();
     // 원가 계산은 되어 있어야 한다
     expect(r.effectiveCost).toBe(3600);
-    expect(r.breakEvenPrice).toBe(9471); // 2026-07-31 VAT 반영
+    expect(r.breakEvenPrice).toBe(13046); // 2026-08-13 실청구 물류비 + 매출세액 반영
   });
 
   it('사입 수량을 늘리면 개당 배송비가 줄어든다', async () => {
@@ -130,8 +137,8 @@ describe('buildVerifyResult', () => {
   });
 
   it('배송비 정보 자체가 없는 경우(deli 필드 부재)는 확인 불가와 다르게 취급해 정상 진행한다', async () => {
-    // 9,900원에서 10,500원으로 올린 이유는 위 pass 케이스와 같다 — 1만원 하한.
-    const r = await buildVerifyResult({ ...DOME_ALIVE, deli: undefined }, 10, 'xsmall', 10500);
+    // 원가 3,300원(배송비 0)의 손익분기는 12,700원이므로 그 위 값을 쓴다.
+    const r = await buildVerifyResult({ ...DOME_ALIVE, deli: undefined }, 10, 'xsmall', 13000);
 
     // deli 정보가 아예 없는 경우는 parseDeliPolicy가 기존에도 FREE로 처리해 왔다.
     // 이 테스트는 새 판정 로직이 이 기존 동작을 건드리지 않는다는 것을 고정한다.
@@ -213,7 +220,7 @@ describe('verifyOne — target.coupangP25가 buildVerifyResult까지 전달된�
   it('저장된 쿠팡가를 그대로 결과에 담아 저장한다', async () => {
     // DOME_ALIVE와 같은 조합(가격 3300원, 30개당 3000원 배송)이다. 위
     // 'buildVerifyResult' describe의 첫 테스트에서 이 조합의 손익분기가
-    // 9471원으로 이미 검증돼 있다. 10500 >= 9471이므로 손으로 계산해도 pass다.
+    // 13,046원으로 이미 검증돼 있다. 14000 >= 13046이므로 손으로 계산해도 pass다.
     vi.mocked(getDomeggookClient).mockReturnValue({
       getItemView: vi.fn().mockResolvedValue({
         basis: { status: '판매중', title: '테스트 상품' },
@@ -228,7 +235,7 @@ describe('verifyOne — target.coupangP25가 buildVerifyResult까지 전달된�
       title: '테스트 상품',
       orderQty: 10,
       logisticsSize: 'xsmall',
-      coupangP25: 10500,
+      coupangP25: 14000,
     });
 
     expect(ok).toBe(true);
@@ -237,7 +244,7 @@ describe('verifyOne — target.coupangP25가 buildVerifyResult까지 전달된�
     // 테스트가 지키려는 회귀다(야간 cron이 사용자가 입력한 시세를 지우는 버그).
     expect(saveVerifyResult).toHaveBeenCalledWith(
       999,
-      expect.objectContaining({ coupangP25: 10500, verdict: 'pass' }),
+      expect.objectContaining({ coupangP25: 14000, verdict: 'pass' }),
     );
   });
 });

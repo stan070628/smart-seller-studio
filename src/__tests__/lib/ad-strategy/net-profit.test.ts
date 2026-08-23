@@ -7,12 +7,12 @@ import {
 
 describe('calcMarginPerUnit', () => {
   it('판매가 30000, 원가 18000, 수수료 10.8%', () => {
-    // 30000 × (1 - 0.108) - 18000 = 26760 - 18000 = 8760
-    expect(calcMarginPerUnit(30000, 18000, 0.108)).toBe(8760);
+    // 30,000 − 18,000 − 3,240(수수료) − 450(매출세액 1.5%) = 8,310
+    expect(calcMarginPerUnit({ sellingPrice: 30000, costPrice: 18000, feeRate: 0.108 })).toBe(8310);
   });
 
   it('원가가 판매가보다 크면 음수 마진', () => {
-    expect(calcMarginPerUnit(10000, 12000, 0.108)).toBeLessThan(0);
+    expect(calcMarginPerUnit({ sellingPrice: 10000, costPrice: 12000, feeRate: 0.108 })).toBeLessThan(0);
   });
 });
 

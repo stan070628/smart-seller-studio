@@ -10,6 +10,8 @@
  * - Shopee: seller.shopee.com
  */
 
+import { RG_SIZE_SPECS, RG_SIZE_TYPES, resolveRgShippingFee } from '@/lib/roi/rg-fees';
+
 // ─── 쿠팡 윙 ──────────────────────────────────────────────────
 export const COUPANG_WING = {
   shippingFeeRate: 0.033, // 선결제 배송비 × 3.3% (VAT 포함)
@@ -18,17 +20,23 @@ export const COUPANG_WING = {
 } as const;
 
 // ─── 쿠팡 로켓그로스 ──────────────────────────────────────────
-export type RocketSize = '극소형' | '소형' | '중형' | '대형' | '특대형' | '초대형';
+/**
+ * 판매자센터 표기 사이즈 명칭.
+ * 값은 rg-fees.ts의 `RG_SIZE_SPECS[].label`과 일치해야 하며,
+ * 어긋나면 fees.test.ts의 정합성 테스트가 잡는다.
+ */
+export type RocketSize = '극소형' | '소형' | '중형' | '대형1' | '대형2' | '특대형';
 
-export const COUPANG_ROCKET_LOGISTICS: Record<RocketSize, number> = {
-  // 입출고 + 배송 요금 (프로모션 종료 후 기준, 판매자센터 확인 필요)
-  '극소형': 1800,
-  '소형': 2500,
-  '중형': 3200,
-  '대형': 4500,
-  '특대형': 6500,
-  '초대형': 9000,
-};
+/**
+ * 사이즈별 개당 물류비 (입출고 + 배송, **VAT 포함 실질 부담액**).
+ *
+ * 직전 판은 이 파일에 자체 추정값(극소형 1,800원 등)을 들고 있었다. 그 결과
+ * 같은 상품의 물류비가 계산기 탭과 ROI 화면에서 달랐다 — 원장이 두 벌이었다.
+ * 이제 rg-fees.ts에서 파생하므로 요율이 바뀌면 그 파일만 고치면 된다.
+ */
+export const COUPANG_ROCKET_LOGISTICS: Record<RocketSize, number> = Object.fromEntries(
+  RG_SIZE_TYPES.map((type) => [RG_SIZE_SPECS[type].label, resolveRgShippingFee(null, type)]),
+) as Record<RocketSize, number>;
 
 export const COUPANG_ROCKET = {
   freeStorageDays: 30,

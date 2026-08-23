@@ -15,7 +15,7 @@
 
 import type { LogisticsSize } from '@/types/shortlist';
 import { resolveRgShippingFee, type RgSizeType } from '@/lib/roi/rg-fees';
-import { effectiveFeeRate } from '@/lib/tax';
+import { effectiveFeeRate, SALES_VAT_RATE } from '@/lib/tax';
 
 /**
  * 쿠팡 판매수수료.
@@ -88,6 +88,14 @@ export const MIN_SELL_PRICE_KRW = 10000;
 export const DEFAULT_ORDER_QTY = 30;
 
 /**
+ * 판매가에서 판매자가 떼이는 정률 비용의 합 — 판매 수수료 + 매출세액.
+ *
+ * 둘을 묶는 이유는 둘 다 판매가에 비례해 빠지기 때문이다. 손익분기가 역산에서
+ * 분모로 함께 들어가므로 한쪽만 넣으면 진입 하한가가 낙관적으로 나온다.
+ */
+const PRICE_LINKED_RATE = COMMISSION_RATE + SALES_VAT_RATE;
+
+/**
  * 진입 가능한 최소 판매가(원).
  *
  * 두 조건을 모두 만족해야 하므로 큰 쪽을 취한다.
@@ -98,21 +106,27 @@ export const DEFAULT_ORDER_QTY = 30;
  */
 export function breakEvenPrice(effectiveCost: number, size: LogisticsSize): number {
   const logi = LOGISTICS_FEE[size];
-  const byRate = (effectiveCost + logi) / (1 - COMMISSION_RATE - TARGET_MARGIN_RATE);
+  const byRate = (effectiveCost + logi) / (1 - PRICE_LINKED_RATE - TARGET_MARGIN_RATE);
   // logi * (1 + MARGIN_TO_LOGISTICS): 물류비 자체를 회수(logi)하고,
   // 그 위에 물류비의 MARGIN_TO_LOGISTICS배를 마진으로 더 얹는다.
-  const byAmount = (effectiveCost + logi * (1 + MARGIN_TO_LOGISTICS)) / (1 - COMMISSION_RATE);
+  const byAmount = (effectiveCost + logi * (1 + MARGIN_TO_LOGISTICS)) / (1 - PRICE_LINKED_RATE);
   return Math.ceil(Math.max(byRate, byAmount));
 }
 
-/** 개당 마진(원). 음수면 적자다. */
+/**
+ * 개당 마진(원). 음수면 적자다.
+ *
+ * 정의는 roi/calculations.ts의 `calcMargin`과 같다 — 판매가에서 수수료·물류비·매출세액을 뺀다.
+ * 이 함수를 따로 두는 이유는 소싱 단계에서는 사이즈 코드(`LogisticsSize`)만 알고
+ * 실측 정산액이 없어 인자 모양이 다르기 때문이며, **차감 항목은 어긋나선 안 된다.**
+ */
 export function marginOf(
   sellingPrice: number,
   effectiveCost: number,
   size: LogisticsSize,
 ): number {
   return Math.round(
-    sellingPrice * (1 - COMMISSION_RATE) - LOGISTICS_FEE[size] - effectiveCost,
+    sellingPrice * (1 - PRICE_LINKED_RATE) - LOGISTICS_FEE[size] - effectiveCost,
   );
 }
 

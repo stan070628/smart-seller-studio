@@ -12,18 +12,20 @@ function itemWithDeli(deli: unknown): DomeggookListItem {
 
 describe('evaluateCandidate', () => {
   it('쿠팡 p25가 손익분기가 이상이면 pass다', () => {
-    // 실효원가 3,600 · 극소형 → 손익분기 9,471. p25 10,500
+    // 실효원가 3,600 · 극소형 → 손익분기 13,046. p25 14,000
     // p25는 최소 판매가 하한(10,000) 이상이어야 손익분기 판정까지 도달한다.
+    // 직전 판은 손익분기 9,471에 p25 10,500이었다. 물류비 실측 반영으로 손익분기가
+    // 3,575원 올라 같은 p25로는 fail이 되므로, pass 시나리오를 유지하려 p25를 올렸다.
     const r = evaluateCandidate({
       domePrice: 3300,
       unitDeliFee: 300,
-      coupangP25: 10500,
+      coupangP25: 14000,
       coupangSampleN: 91,
       logisticsSize: 'xsmall',
     });
     expect(r.verdict).toBe('pass');
     expect(r.effectiveCost).toBe(3600);
-    expect(r.breakEvenPrice).toBe(9471); // 2026-07-31 VAT 반영 — Task 1 참조
+    expect(r.breakEvenPrice).toBe(13046); // 2026-08-13 실청구 물류비 + 매출세액 반영
   });
 
   it('p25가 손익분기 미달이면 fail이다', () => {

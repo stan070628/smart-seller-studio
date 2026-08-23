@@ -10,17 +10,36 @@ import {
 } from './calculations';
 
 describe('calcMargin', () => {
-  it('마진액 = 판매가 - 원가 - 수수료 - 배송비', () => {
-    expect(calcMargin(9900, 4200, 0.10, 2500)).toBe(2210);
+  it('마진액 = 판매가 - 원가 - 수수료 - 배송비 - 매출세액', () => {
+    // 9,900 − 4,200 − 990 − 2,500 − 149(매출세액 1.5%) = 2,061
+    expect(calcMargin({ sellingPrice: 9900, costPrice: 4200, feeRate: 0.10, deliveryFee: 2500 })).toBe(2061);
   });
-  it('수수료율 0이면 배송비만 차감', () => {
-    expect(calcMargin(10000, 3000, 0, 0)).toBe(7000);
+  it('수수료율 0이어도 매출세액은 차감된다', () => {
+    // 10,000 − 3,000 − 150 = 6,850. 매출세액은 수수료와 무관하게 판매로 발생한다.
+    expect(calcMargin({ sellingPrice: 10000, costPrice: 3000, feeRate: 0 })).toBe(6850);
+  });
+  it('판매자 부담 할인은 정산 기준가를 낮추고, 수수료도 할인 후 금액에 붙는다', () => {
+    // 실측(2026-08-13): 12,800원 상품에 SELLER_FREE_EXPOSURE 680원이 걸려
+    // 수수료가 12,120원의 10%인 1,212원으로 부과됐다.
+    const withDiscount = calcMargin({
+      sellingPrice: 12800, costPrice: 0, feeRate: 0.10, sellerDiscount: 680,
+    });
+    // 12,120 − 1,212 − 182 = 10,726
+    expect(withDiscount).toBe(10726);
+  });
+  it('할인이 마진에 미치는 영향은 할인액보다 크다', () => {
+    // 할인 680원은 정산가·수수료·매출세액을 함께 끌어내려 실제 손실이 680원을 넘지 않는다 —
+    // 수수료와 세액이 같이 줄기 때문이다. 방향만 검증한다.
+    const base = calcMargin({ sellingPrice: 12800, costPrice: 5000, feeRate: 0.11 });
+    const discounted = calcMargin({ sellingPrice: 12800, costPrice: 5000, feeRate: 0.11, sellerDiscount: 680 });
+    expect(base - discounted).toBeGreaterThan(0);
+    expect(base - discounted).toBeLessThan(680);
   });
 });
 
 describe('calcBreakevenRoas', () => {
   it('간이과세자: (판매가 / 마진액) * 100', () => {
-    expect(calcBreakevenRoas(9900, 2210)).toBeCloseTo(448, 0);
+    expect(calcBreakevenRoas(9900, 2061)).toBeCloseTo(480, 0);
   });
   it('마진액 0이면 Infinity 반환', () => {
     expect(calcBreakevenRoas(9900, 0)).toBe(Infinity);

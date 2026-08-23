@@ -86,12 +86,17 @@ describe('supplierCostsOf', () => {
     expect(cn1688!.shipEstimated).toBe(false);
   });
 
-  it('표가 보여줄 이긴 쪽은 1688이다 — 이 행이 미달로만 보이던 것이 버그였다', () => {
+  it('표가 보여줄 이긴 쪽은 1688이다 — 도매꾹만 보고 행을 접으면 안 된다', () => {
     const { dome, cn1688 } = supplierCostsOf(BASE);
     const best = pickBestSupplier(dome!, cn1688);
     expect(best.supplier).toBe('cn1688');
     expect(best.effectiveCostKrw).toBeLessThan(dome!.effectiveCostKrw);
-    // 실판가 12,000원이 1688 손익분기를 넘는다 — 표에 통과로 떠야 한다
-    expect(best.breakEvenPriceKrw).toBeLessThanOrEqual(12000);
+    expect(best.breakEvenPriceKrw).toBeLessThan(dome!.breakEvenPriceKrw);
+    // 🔴 2026-08-13 실청구 물류비 반영으로 1688 손익분기가 12,272원이 되어
+    // 이 fixture의 실판가 12,000원을 272원 넘어섰다. 물류비 인상 전에는 8,710원으로
+    // 통과였고, 표가 미달로 보이던 것이 버그였다. 지금은 **표시가 사실과 맞는다** —
+    // 즉 이 행은 진짜 미달이며, 같은 원가로 진입하려면 판매가를 올려야 한다.
+    expect(best.breakEvenPriceKrw).toBe(12272);
+    expect(best.breakEvenPriceKrw).toBeGreaterThan(BASE.coupangP25!);
   });
 });

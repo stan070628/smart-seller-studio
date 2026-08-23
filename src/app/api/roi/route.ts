@@ -81,7 +81,15 @@ export async function GET(request: NextRequest) {
       const cost = costMap.get(p.vendorItemId) ?? { costPrice: 0, deliveryFee: 0, rgShippingFee: 0, feeRate: DEFAULT_FEE_RATE };
       const ads = adsMap.get(p.vendorItemId) ?? defaultAds();
 
-      const marginAmount = calcMargin(p.sellingPrice, cost.costPrice, cost.feeRate, cost.deliveryFee, cost.rgShippingFee);
+      // 판매자 부담 할인(즉시할인쿠폰·SELLER_FREE_EXPOSURE)은 product_costs에 컬럼이 없어
+      // 아직 넘기지 못한다. 할인이 걸린 상품은 그만큼 마진이 과대평가된다.
+      const marginAmount = calcMargin({
+        sellingPrice: p.sellingPrice,
+        costPrice: cost.costPrice,
+        feeRate: cost.feeRate,
+        deliveryFee: cost.deliveryFee,
+        rgShippingFee: cost.rgShippingFee,
+      });
       const marginRate = p.sellingPrice > 0 ? marginAmount / p.sellingPrice : 0;
       const conversionRate = ads.clicks > 0 ? (p.salesCount / ads.clicks) * 100 : 0;
 

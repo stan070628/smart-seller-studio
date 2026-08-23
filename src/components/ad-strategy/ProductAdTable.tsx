@@ -326,9 +326,14 @@ export default function ProductAdTable({ products }: { products: ProductAdGrade[
             let roasCell: React.ReactNode = <span style={{ color: '#9ca3af' }}>-</span>;
 
             if (costPrice !== undefined) {
-              const margin = calcMarginPerUnit(
-                p.currentPrice, costPrice, effectiveFeeRate(feeRate), rgShippingFee,
-              );
+              // 판매자 부담 할인은 CostEntry에 필드가 없어 넘기지 못한다.
+              // 할인이 걸린 상품은 정산 기준가가 표시가보다 낮아 마진이 과대평가된다.
+              const margin = calcMarginPerUnit({
+                sellingPrice: p.currentPrice,
+                costPrice,
+                feeRate: effectiveFeeRate(feeRate),
+                shippingFee: rgShippingFee,
+              });
               const breakEven = calcBreakEvenRoas(p.currentPrice, margin);
               const { perUnit, monthly } = calcNetProfit({
                 monthlySales,

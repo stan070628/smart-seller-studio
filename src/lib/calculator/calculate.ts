@@ -20,6 +20,7 @@ import {
   type ShopeeCountry,
   type ShopeeProgram,
 } from './fees';
+import { salesVat } from '@/lib/tax';
 
 export interface CalcResult {
   items: { label: string; amount: number; rate?: number }[];
@@ -69,18 +70,20 @@ export function calcCoupangWing(p: {
   const rate = p.feeRate;
   const commission = Math.round(p.sellingPrice * rate);
   const shippingCommission = Math.round(p.shippingFee * COUPANG_WING.shippingFeeRate);
+  const salesTax = salesVat(p.sellingPrice);
 
   const items = [
     { label: '판매 수수료', amount: commission, rate },
     { label: '배송비 수수료', amount: shippingCommission, rate: COUPANG_WING.shippingFeeRate },
+    { label: '매출세액', amount: salesTax },
     { label: '광고비', amount: p.adCost },
   ];
 
-  const totalFees = commission + shippingCommission + p.adCost;
+  const totalFees = commission + shippingCommission + salesTax + p.adCost;
   const netProfit = p.sellingPrice - p.costPrice - totalFees;
   const marginRate = p.sellingPrice > 0 ? (netProfit / p.sellingPrice) * 100 : 0;
   const breakEvenCost = p.sellingPrice - totalFees;
-  const adMetrics = calcAdMetrics(p.sellingPrice, commission + shippingCommission, p.costPrice, p.conversionRate ?? 0);
+  const adMetrics = calcAdMetrics(p.sellingPrice, commission + shippingCommission + salesTax, p.costPrice, p.conversionRate ?? 0);
 
   return { items, totalFees, netProfit, marginRate, breakEvenCost, ...adMetrics };
 }
@@ -97,25 +100,28 @@ export function calcCoupangRocket(p: {
 }): CalcResult {
   const rate = p.feeRate;
   const commission = Math.round(p.sellingPrice * rate);
+  // VAT 포함 실질 부담액이다. 극소형·소형은 2026-08-13 실청구 실측, 중형 이상은 추정치.
   const logistics = COUPANG_ROCKET_LOGISTICS[p.size] ?? 0;
   const storageFee = Math.round(
     p.monthlyQty > 0
       ? (p.monthlyQty * COUPANG_ROCKET.storageFeePerDay * 15) // 평균 15일 보관 추정
       : 0
   );
+  const salesTax = salesVat(p.sellingPrice);
 
   const items = [
     { label: '판매 수수료', amount: commission, rate },
     { label: '물류비 (입출고+배송)', amount: logistics },
     { label: '보관료 (추정)', amount: storageFee },
+    { label: '매출세액', amount: salesTax },
     { label: '광고비', amount: p.adCost },
   ];
 
-  const totalFees = commission + logistics + storageFee + p.adCost;
+  const totalFees = commission + logistics + storageFee + salesTax + p.adCost;
   const netProfit = p.sellingPrice - p.costPrice - totalFees;
   const marginRate = p.sellingPrice > 0 ? (netProfit / p.sellingPrice) * 100 : 0;
   const breakEvenCost = p.sellingPrice - totalFees;
-  const adMetrics = calcAdMetrics(p.sellingPrice, commission + logistics + storageFee, p.costPrice, p.conversionRate ?? 0);
+  const adMetrics = calcAdMetrics(p.sellingPrice, commission + logistics + storageFee + salesTax, p.costPrice, p.conversionRate ?? 0);
 
   return { items, totalFees, netProfit, marginRate, breakEvenCost, ...adMetrics };
 }
@@ -135,18 +141,20 @@ export function calcNaver(p: {
 
   const orderMgmtFee = Math.round((p.sellingPrice + p.shippingFee) * orderMgmtRate);
   const salesFee = Math.round(p.sellingPrice * salesRate);
+  const salesTax = salesVat(p.sellingPrice);
 
   const items = [
     { label: '주문관리 수수료', amount: orderMgmtFee, rate: orderMgmtRate },
     { label: '판매 수수료', amount: salesFee, rate: salesRate },
+    { label: '매출세액', amount: salesTax },
     { label: '광고비', amount: p.adCost },
   ];
 
-  const totalFees = orderMgmtFee + salesFee + p.adCost;
+  const totalFees = orderMgmtFee + salesFee + salesTax + p.adCost;
   const netProfit = p.sellingPrice - p.costPrice - totalFees;
   const marginRate = p.sellingPrice > 0 ? (netProfit / p.sellingPrice) * 100 : 0;
   const breakEvenCost = p.sellingPrice - totalFees;
-  const adMetrics = calcAdMetrics(p.sellingPrice, orderMgmtFee + salesFee, p.costPrice, p.conversionRate ?? 0);
+  const adMetrics = calcAdMetrics(p.sellingPrice, orderMgmtFee + salesFee + salesTax, p.costPrice, p.conversionRate ?? 0);
 
   return { items, totalFees, netProfit, marginRate, breakEvenCost, ...adMetrics };
 }
@@ -165,19 +173,21 @@ export function calcGmarket(p: {
   const commission = Math.round(p.sellingPrice * rate);
   const shippingCommission = Math.round(p.shippingFee * GMARKET.shippingFeeRate);
   const couponBurden = Math.round(p.couponDiscount * GMARKET.couponSellerShare);
+  const salesTax = salesVat(p.sellingPrice);
 
   const items = [
     { label: '카테고리 수수료', amount: commission, rate },
     { label: '배송비 수수료', amount: shippingCommission, rate: GMARKET.shippingFeeRate },
     { label: '쿠폰 부담금', amount: couponBurden },
+    { label: '매출세액', amount: salesTax },
     { label: '광고비', amount: p.adCost },
   ];
 
-  const totalFees = commission + shippingCommission + couponBurden + p.adCost;
+  const totalFees = commission + shippingCommission + couponBurden + salesTax + p.adCost;
   const netProfit = p.sellingPrice - p.costPrice - totalFees;
   const marginRate = p.sellingPrice > 0 ? (netProfit / p.sellingPrice) * 100 : 0;
   const breakEvenCost = p.sellingPrice - totalFees;
-  const adMetrics = calcAdMetrics(p.sellingPrice, commission + shippingCommission + couponBurden, p.costPrice, p.conversionRate ?? 0);
+  const adMetrics = calcAdMetrics(p.sellingPrice, commission + shippingCommission + couponBurden + salesTax, p.costPrice, p.conversionRate ?? 0);
 
   return { items, totalFees, netProfit, marginRate, breakEvenCost, ...adMetrics };
 }
@@ -198,24 +208,27 @@ export function calcElevenst(p: {
   const commission = Math.round(p.sellingPrice * rate);
   const shippingCommission = Math.round(p.shippingFee * ELEVENST.shippingFeeRate);
   const couponBurden = Math.round(p.couponDiscount * ELEVENST.couponSellerShare);
+  const salesTax = salesVat(p.sellingPrice);
 
   const items = [
     { label: '카테고리 수수료', amount: commission, rate },
     { label: '배송비 수수료', amount: shippingCommission, rate: ELEVENST.shippingFeeRate },
     { label: '쿠폰 부담금', amount: couponBurden },
+    { label: '매출세액', amount: salesTax },
     { label: '광고비', amount: p.adCost },
   ];
 
-  const totalFees = commission + shippingCommission + couponBurden + p.adCost;
+  const totalFees = commission + shippingCommission + couponBurden + salesTax + p.adCost;
   const netProfit = p.sellingPrice - p.costPrice - totalFees;
   const marginRate = p.sellingPrice > 0 ? (netProfit / p.sellingPrice) * 100 : 0;
   const breakEvenCost = p.sellingPrice - totalFees;
-  const adMetrics = calcAdMetrics(p.sellingPrice, commission + shippingCommission + couponBurden, p.costPrice, p.conversionRate ?? 0);
+  const adMetrics = calcAdMetrics(p.sellingPrice, commission + shippingCommission + couponBurden + salesTax, p.costPrice, p.conversionRate ?? 0);
 
   return { items, totalFees, netProfit, marginRate, breakEvenCost, ...adMetrics };
 }
 
 // ─── Shopee ────────────────────────────────────────────────────
+// 매출세액을 넣지 않는다. 국외 판매는 수출 영세율이라 국내 플랫폼과 부가세 구조가 다르다.
 export function calcShopee(p: {
   costPriceKRW: number;
   sellingPriceLocal: number;
