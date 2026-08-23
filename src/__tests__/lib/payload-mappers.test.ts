@@ -446,3 +446,41 @@ describe('buildNaverPayload', () => {
     expect((payload.smartstoreChannelProduct as Record<string, unknown>).naverShoppingRegistration).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// 신발 전용 안내
+// ---------------------------------------------------------------------------
+
+describe('신발 안내 자동 삽입', () => {
+  const SHOES_IMG = 'frame-04-custom_shoes.jpg';
+
+  function naverDetailContent(specific: NaverSpecificInput): string {
+    const payload = buildNaverPayload(makeCommon(), specific);
+    const origin = payload.originProduct as Record<string, unknown>;
+    return String(origin.detailContent ?? '');
+  }
+
+  it('noticeType 이 SHOES 면 상세에 신발 안내가 붙는다', () => {
+    expect(naverDetailContent(makeNaverSpecific({ noticeType: 'SHOES' }))).toContain(SHOES_IMG);
+  });
+
+  it('noticeType 이 SHOES 가 아니면 붙지 않는다', () => {
+    // FASHION_ITEMS(잡화)는 신발과 가장 인접한 분류다. 여기가 새면
+    // 카테고리명 문자열 매칭으로 되돌아간 것과 같아진다.
+    for (const t of ['ETC', 'WEAR', 'BAG', 'FASHION_ITEMS'] as const) {
+      expect(naverDetailContent(makeNaverSpecific({ noticeType: t }))).not.toContain(SHOES_IMG);
+    }
+    // noticeType 미지정(기본 ETC)
+    expect(naverDetailContent(makeNaverSpecific())).not.toContain(SHOES_IMG);
+  });
+
+  it('신발이어도 기존 상세 설명은 보존된다', () => {
+    const content = naverDetailContent(makeNaverSpecific({ noticeType: 'SHOES' }));
+    expect(content).toContain('상세 설명입니다.');
+  });
+
+  it('쿠팡은 화이트리스트에 없는 카테고리에 안내를 붙이지 않는다', () => {
+    const payload = buildCoupangPayload(makeCommon(), makeCoupangSpecific(), 'VENDOR-001');
+    expect(JSON.stringify(payload)).not.toContain(SHOES_IMG);
+  });
+});

@@ -7,6 +7,22 @@
  */
 
 import type { CoupangProductPayload } from '@/lib/listing/coupang-client';
+import { appendShoesNotice, SHOES_NOTICE_IMAGE } from '@/lib/detail-page-privacy';
+
+/**
+ * 신발 안내(박스 훼손·택 제거 시 재판매 불가)를 붙일 쿠팡 카테고리 코드.
+ *
+ * 코드로 거르는 이유는 카테고리명 문자열이 이 판정에 쓸 수 없기 때문이다.
+ * '화'로 찾으면 화장품·화장지·잡화가 걸리고, '신발'로 좁혀도 가구의 신발장이
+ * 남는다. 코드는 오탐이 0이고, 대신 새 신발 카테고리를 쓸 때마다 여기에
+ * 추가해야 한다 — 미탐은 안내가 안 붙을 뿐이지만 오탐은 세차타월 상세에
+ * 밑창 흔적 고지가 붙는 사고다.
+ *
+ * 등록 전 조회한 category-related-metas 응답의 displayCategoryCode를 넣는다.
+ */
+const SHOES_CATEGORY_CODES = new Set<number>([
+  // 예: 63955, // 패션잡화 > 남성신발 > 등산화
+]);
 
 // ─────────────────────────────────────────────────────────────
 // 옵션(variants) 입력 타입 — ProductOptions 에서 필요한 필드만 추출
@@ -185,11 +201,23 @@ export function buildCoupangPayload(
 
   // 상세 내용 — TEXT(설명) + IMAGE(상세이미지) 분리
   // 쿠팡은 TEXT 타입에서 HTML을 렌더링하지 않으므로 이미지는 IMAGE 타입으로 전달
+  //
+  // 신발 안내도 같은 이유로 IMAGE 항목이다. 네이버는 detailContent가 HTML이라
+  // appendShoesNotice()로 붙이지만, 쿠팡에 같은 HTML을 넣으면 태그가 그대로 노출된다.
+  const isShoes = SHOES_CATEGORY_CODES.has(specific.displayCategoryCode);
   const contents: { contentsType: 'TEXT' | 'IMAGE'; contentDetails: { content: string; detailType: 'TEXT' | 'IMAGE' }[] }[] = [
     {
       contentsType: 'TEXT',
       contentDetails: [{ content: common.description || common.name, detailType: 'TEXT' }],
     },
+    // 상세 이미지보다 앞에 둔다 — 박스와 택을 어떻게 다뤄야 하는지는
+    // 구매를 결정하기 전에 읽어야 의미가 있다.
+    ...(isShoes
+      ? [{
+          contentsType: 'IMAGE' as const,
+          contentDetails: [{ content: SHOES_NOTICE_IMAGE, detailType: 'IMAGE' as const }],
+        }]
+      : []),
     ...common.detailImages.map((url) => ({
       contentsType: 'IMAGE' as const,
       contentDetails: [{ content: url, detailType: 'IMAGE' as const }],
@@ -347,6 +375,12 @@ export function buildNaverPayload(
   const returnFee = specific.returnFee ?? common.returnCharge;
   const asPhone = process.env.NAVER_AS_PHONE ?? '010-0000-0000';
   const noticeType: NaverNoticeType = specific.noticeType ?? 'ETC';
+  // 신발 전용 안내(박스 훼손·택 제거 시 재판매 불가)는 신발에만 붙인다.
+  // 카테고리명 문자열로 '신발'/'화'를 찾으면 잡화·화장품·화장지가 함께 걸린다.
+  // noticeType은 고시정보 법정 분류라 SHOES와 FASHION_ITEMS가 배타적이다 —
+  // 오탐이 구조적으로 불가능한 유일한 판정 기준이다.
+  const shoesAwareDescription =
+    noticeType === 'SHOES' ? appendShoesNotice(common.description) : common.description;
   // '00'(국산)을 기본값으로 두면 수입품이 국산으로 등록된다 → '03'(상세설명에 표시)
   const originAreaCode = specific.originAreaCode ?? '03';
 
@@ -484,7 +518,7 @@ export function buildNaverPayload(
         },
       },
       // detailImages가 있으면 detailContent 끝에 이미지 태그를 추가한다
-      detailContent: `<div>${common.description}${
+      detailContent: `<div>${shoesAwareDescription}${
         common.detailImages.length > 0
           ? common.detailImages
               .map(url => `<img src="${url}" style="width:100%;display:block;" />`)

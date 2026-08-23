@@ -39,7 +39,8 @@ interface TossApiResponse<T> {
 }
 
 interface TossOrderListSuccess {
-  orders: TossOrder[];
+  /** 주문 배열. 응답 키는 `orders`가 아니라 `results`다 (2026-08-11 실측) */
+  results: TossOrder[];
   nextCursor?: string;
 }
 
@@ -80,6 +81,11 @@ export class TossShoppingClient {
   async getOrders(params: {
     startDate: string; // yyyy-MM-dd
     endDate: string;   // yyyy-MM-dd (startDate로부터 최대 31일)
+    /**
+     * 대부분의 값이 400(INVALID_REQUEST)이다. 2026-08-11 실측에서 통과한 것은
+     * `DELIVERED`뿐이고 PAYMENT_COMPLETED/PREPARING/SHIPPING/CONFIRMED/CANCELED/ALL은
+     * 모두 거부됐다. 생략하고 orderProductStatus로 거르는 편이 안전하다.
+     */
     status?: string;
   }): Promise<TossOrder[]> {
     const allOrders: TossOrder[] = [];
@@ -106,7 +112,7 @@ export class TossShoppingClient {
         throw new Error(`토스쇼핑 주문 조회 실패 (${code}): ${reason}`);
       }
 
-      allOrders.push(...(res.success.orders ?? []));
+      allOrders.push(...(res.success.results ?? []));
       cursor = res.success.nextCursor;
       pages++;
     } while (cursor && pages < MAX_PAGES);
