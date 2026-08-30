@@ -21,6 +21,29 @@
 
 export type ModelSex = 'female' | 'male';
 
+/**
+ * 캐릭터 프로필 — 외모 프리셋에 정체성을 얹는다.
+ *
+ * MODEL_PERSONAS는 원래 얼굴만 고정했다. 유튜브 채널을 운영하려면 그 인물이
+ * 누구인지가 필요하고, 그것이 영상 자막·카피의 말투까지 정한다.
+ * 선택 필드인 이유는 5명 중 굴다부터 채우기 때문이다 — 나머지는 프리셋으로
+ * 계속 동작해야 한다.
+ */
+export interface CharacterProfile {
+  /** 이름 */
+  name: string;
+  /** 직함 — 채널 안에서의 위치 */
+  title: string;
+  /** 나이대 */
+  ageBand: string;
+  /** 한 줄 생활 배경 */
+  setting: string;
+  /** 말투 규칙 — buildCharacterVoice가 지시문으로 바꾼다 */
+  voiceRules: string[];
+  /** 금지 표현 */
+  forbidden: string[];
+}
+
 export interface ModelPersona {
   /** 안정 식별자. Storage 파일명과 같아야 한다 */
   id: string;
@@ -31,6 +54,8 @@ export interface ModelPersona {
   bestFor: string;
   /** 캐릭터 시트 Storage 경로 (버킷 내부 경로) */
   sheetPath: string;
+  /** 캐릭터 프로필. 없으면 외모 프리셋으로만 쓴다 */
+  character?: CharacterProfile;
 }
 
 const BUCKET_PUBLIC_PREFIX = '/storage/v1/object/public/smart-seller-studio/';
@@ -56,6 +81,25 @@ export const MODEL_PERSONAS: readonly ModelPersona[] = [
     label: '여성 C · 건강 발랄',
     bestFor: '스포츠·아웃도어·식품 — 생기 있는 인상',
     sheetPath: 'model-sheets/model_f_c.jpg',
+    character: {
+      name: '굴다',
+      title: '발굴템 연구소 연구원',
+      ageBand: '30대 초반',
+      setting: '코스트코 단골. 집이 주 무대이고 장보기·살림·정리가 일상이다. 잘 사는 사람이 아니라 사고 나서 후회도 하는 사람이다',
+      voiceRules: [
+        '높임말 구어체로 말한다 — ~잖아요, ~더라고요, ~거든요, ~네요',
+        '문장 끝에 마침표를 찍지 않는다',
+        '실패담과 후회를 숨기지 않는다. 좋은 점만 말하면 추천이 믿기지 않는다',
+        '같은 어미를 세 번 연속 반복하지 않는다',
+      ],
+      forbidden: [
+        '~습니다 정중체 (딱딱해진다)',
+        '반말',
+        '과장 단정 — 최고예요, 무조건, 강추',
+        '번역투 — 소리 내 읽어서 걸리면 다시 쓴다',
+        '부정문 제목',
+      ],
+    },
   },
   {
     id: 'model_m_a',
