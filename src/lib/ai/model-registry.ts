@@ -177,3 +177,26 @@ export const PRODUCT_LOCK_INSTRUCTION =
   'sizes, the same colors. Do NOT invent, restyle, re-letter, relocate, or omit any logo, lettering, or ' +
   'trademark symbol. Do NOT add any graphic that is absent from the references. The product may drape, ' +
   'fold, or catch light naturally, but the printed artwork itself must stay faithful to the references.';
+
+/**
+ * 캐릭터 말투 지시문 — 영상 자막·카피 생성에 붙인다.
+ *
+ * IDENTITY_LOCK_INSTRUCTION이 얼굴을 고정하듯 이 함수는 목소리를 고정한다.
+ * 한국어 카피를 만드는 프롬프트에 들어가므로 지시문 자체도 한국어다.
+ *
+ * 규칙과 금지를 구획으로 나누는 이유: 한 덩어리로 주면 모델이 금지 표현을
+ * 예시로 읽고 그대로 쓰는 경우가 있다.
+ */
+export function buildCharacterVoice(profile: CharacterProfile): string {
+  const rules = profile.voiceRules.map((r) => `- ${r}`).join('\n');
+  const bans = profile.forbidden.map((r) => `- ${r}`).join('\n');
+  return [
+    `화자는 ${profile.name}이며 ${profile.title}이다. ${profile.ageBand}이고, ${profile.setting}.`,
+    '',
+    '지켜야 할 말투:',
+    rules,
+    '',
+    '아래 표현은 쓰지 않는다:',
+    bans,
+  ].join('\n');
+}
