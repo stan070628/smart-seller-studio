@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { SCENE_SHEETS, findScene, scenesFor, sceneSheetUrl } from '../scene-registry';
+import { SCENE_SHEETS, findScene, scenesFor, sceneSheetUrl, buildSceneLock } from '../scene-registry';
 
 describe('SCENE_SHEETS', () => {
   it('굴다의 집으로 거실·부엌·현관이 등록돼 있다', () => {
@@ -47,5 +47,29 @@ describe('sceneSheetUrl', () => {
   it('환경변수가 없으면 null을 준다 — 씬 없이도 생성은 진행돼야 한다', () => {
     delete process.env.NEXT_PUBLIC_SUPABASE_URL;
     expect(sceneSheetUrl(findScene('home_living')!)).toBeNull();
+  });
+});
+
+describe('buildSceneLock', () => {
+  const scene = () => findScene('home_living')!;
+
+  it('reference 모드는 첨부된 씬 참조를 가리킨다', () => {
+    const out = buildSceneLock(scene(), 'reference');
+    expect(out).toContain('SCENE LOCK');
+    expect(out).toContain('scene reference');
+    expect(out).not.toContain(scene().fixtures);
+  });
+
+  it('fixtures 모드는 소품 문장을 그대로 싣는다 — 참조가 없기 때문이다', () => {
+    const out = buildSceneLock(scene(), 'fixtures');
+    expect(out).toContain('SCENE LOCK');
+    expect(out).toContain(scene().fixtures);
+    expect(out).not.toContain('scene reference');
+  });
+
+  it('두 모드 모두 인물을 바꾸라고 말하지 않는다 — 인물은 IDENTITY_LOCK의 몫이다', () => {
+    for (const mode of ['reference', 'fixtures'] as const) {
+      expect(buildSceneLock(scene(), mode).toLowerCase()).not.toContain('face');
+    }
   });
 });

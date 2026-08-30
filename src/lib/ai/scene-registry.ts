@@ -88,3 +88,31 @@ export function sceneSheetUrl(scene: SceneSheet): string | null {
   if (!base) return null;
   return `${base.replace(/\/$/, '')}${BUCKET_PUBLIC_PREFIX}${scene.sheetPath}`;
 }
+
+export type SceneLockMode = 'reference' | 'fixtures';
+
+/**
+ * 배경 고정 지시문.
+ *
+ * 두 모드가 있는 이유는 참조 3장 상한 때문이다. 의류 생성은 캐릭터 시트·착용
+ * 참조·제품 누끼로 자리가 이미 차서 씬 시트를 넣을 수 없고, 그때는 소품을
+ * 문장으로 서술하는 fixtures 모드로 내려간다. 어느 모드인지는
+ * composeReferences가 정한다.
+ *
+ * 인물에 대해서는 아무것도 말하지 않는다 — 그것은 IDENTITY_LOCK_INSTRUCTION의
+ * 몫이고, 두 지시문이 같은 대상을 다르게 말하면 모델이 흔들린다.
+ */
+export function buildSceneLock(scene: SceneSheet, mode: SceneLockMode): string {
+  if (mode === 'reference') {
+    return (
+      'SCENE LOCK: The room MUST be the exact same room shown in the attached scene reference image — ' +
+      'same furniture, same layout, same wall and floor finish, same window position. Treat the scene ' +
+      'reference as a photograph of the actual location being shot. The camera may stand at a different ' +
+      'spot in that room, but do not invent a different room.'
+    );
+  }
+  return (
+    'SCENE LOCK: Build the room exactly as described here and keep it identical across every image in ' +
+    `this set. ${scene.fixtures} Do not add furniture or props that are not listed.`
+  );
+}
