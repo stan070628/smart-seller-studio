@@ -45,8 +45,15 @@ export interface ComposeResult {
   dropped: RefKind[];
 }
 
-/** 넣는 우선순위. 버리는 순서의 역순이다 */
-const PRIORITY: RefKind[] = ['persona', 'productFlat', 'productWorn', 'scene'];
+/**
+ * 넣는 우선순위. 버리는 순서의 역순이다.
+ *
+ * 🔴 이 배열의 순서가 이 모듈의 모든 보장을 떠받친다. 앞쪽일수록 먼저 들어가고
+ *    뒤쪽일수록 먼저 버려진다. 종류를 추가할 때는 반드시 「버려도 되는 정도」에
+ *    맞는 자리에 넣어야 하며, 맨 뒤에 그냥 붙이면 scene보다 먼저 버려진다.
+ *    순서는 reference-composer.test.ts가 고정한다.
+ */
+export const PRIORITY: readonly RefKind[] = ['persona', 'productFlat', 'productWorn', 'scene'] as const;
 
 /**
  * 🔴 sceneMode가 'none'이면 buildSceneLock을 부르지 않는다.
@@ -54,6 +61,10 @@ const PRIORITY: RefKind[] = ['persona', 'productFlat', 'productWorn', 'scene'];
  *    호출부는 이렇게 쓴다:
  *      const c = composeReferences({...});
  *      const sceneLock = c.sceneMode === 'none' ? '' : buildSceneLock(scene, c.sceneMode);
+ *
+ * 🔴 빈 문자열은 「없음」으로 취급한다. 호출부는 조회에 실패했을 때 '' 대신
+ *    undefined를 넘겨야 한다 — ''를 넘기면 그 자리가 비고 뒤 항목이 승격되는데,
+ *    dropped는 상한 때문에 버린 것만 담으므로 그 사실이 어디에도 보고되지 않는다.
  */
 export function composeReferences(input: ComposeInput): ComposeResult {
   const available: RefSlot[] = PRIORITY.flatMap((kind) => {

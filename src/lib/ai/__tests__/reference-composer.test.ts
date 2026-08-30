@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { describe, it, expect } from 'vitest';
-import { composeReferences, MAX_REFERENCES } from '../reference-composer';
+import { composeReferences, MAX_REFERENCES, PRIORITY } from '../reference-composer';
 
 const P = 'https://x/persona.jpg';
 const S = 'https://x/scene.jpg';
@@ -50,5 +50,30 @@ describe('composeReferences', () => {
   it('어떤 경우에도 상한을 넘지 않는다', () => {
     const r = composeReferences({ persona: P, scene: S, productWorn: W, productFlat: F });
     expect(r.refs.length).toBeLessThanOrEqual(MAX_REFERENCES);
+  });
+
+  it('각 슬롯이 자기 URL을 갖는다 — kind만 보면 URL이 뒤섞여도 통과한다', () => {
+    const r = composeReferences({ persona: P, scene: S, productWorn: W, productFlat: F });
+    const byKind = Object.fromEntries(r.refs.map((x) => [x.kind, x.url]));
+    expect(byKind.persona).toBe(P);
+    expect(byKind.productFlat).toBe(F);
+    expect(byKind.productWorn).toBe(W);
+  });
+
+  it('빈 문자열은 없음으로 취급한다 — 호출부는 undefined를 넘겨야 한다', () => {
+    const r = composeReferences({ persona: '', scene: S, productWorn: W, productFlat: F });
+    expect(r.refs.some((x) => x.kind === 'persona')).toBe(false);
+    expect(r.refs.map((x) => x.kind)).toEqual(['productFlat', 'productWorn', 'scene']);
+    expect(r.dropped).toEqual([]);
+  });
+});
+
+describe('PRIORITY', () => {
+  it('순서가 고정돼 있다 — 이 배열이 모든 보장을 떠받친다', () => {
+    expect(PRIORITY).toEqual(['persona', 'productFlat', 'productWorn', 'scene']);
+  });
+
+  it('버릴 수 없는 둘이 앞쪽 두 자리를 차지한다', () => {
+    expect(PRIORITY.slice(0, 2)).toEqual(['persona', 'productFlat']);
   });
 });
