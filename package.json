@@ -63,6 +63,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
     "jsdom": "^29.0.1",
+    "lucide-static": "^1.41.0",
     "msw": "^2.12.14",
     "tailwindcss": "^4",
     "typescript": "^5",
