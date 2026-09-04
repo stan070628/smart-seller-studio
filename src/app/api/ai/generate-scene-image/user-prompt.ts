@@ -1,3 +1,6 @@
+import { PALETTES } from '@/lib/detail-page/palette-config';
+import type { PaletteName } from '@/types/detail-page';
+
 export interface SceneProductInfo {
   headline?: string;
   subheadline?: string;
@@ -38,6 +41,22 @@ export interface SceneEditOpts {
    * 참조 이미지는 세팅/조명 추론용으로만 쓰고 배경 플레이트 프롬프트만 요청한다.
    */
   isCompositeBackground?: boolean;
+  /**
+   * 페이지 팔레트. 지정하면 씬의 배경·강조색 톤을 페이지 팔레트에 맞추도록
+   * 프롬프트 끝에 힌트를 덧붙인다(paletteToneHint 참조). 생략하면 기존 동작과
+   * 동일하다 — 섹션마다 씬을 개별 생성해온 기존 호출부를 깨지 않기 위함이다.
+   */
+  palette?: PaletteName;
+}
+
+/** 섹션 이미지들의 색감을 페이지 팔레트에 맞춰 통일한다. 섹션마다 톤이 제각각이면
+ *  같은 페이지의 사진이 아니라 짜깁기로 읽힌다.
+ *  🔴 반환값은 출력 형식 지시("Return only JSON") **앞에** 넣는다 — 형식 지시가
+ *  마지막에 있어야 준수율이 높다. */
+export function paletteToneHint(palette?: PaletteName): string {
+  if (!palette) return '';
+  const c = PALETTES[palette];
+  return `Color tone of the scene you describe: match the page palette — background tones near ${c.bg}, accents near ${c.accent}. Keep the overall color temperature consistent with these hex values, with muted natural saturation.`;
 }
 
 export function buildSceneUserPrompt(
@@ -56,6 +75,8 @@ export function buildSceneUserPrompt(
     }
     lines.push('');
     lines.push(`Section type: ${sectionType}`);
+    const editTone = paletteToneHint(editOpts.palette);
+    if (editTone) lines.push(editTone);
     lines.push(
       'Generate a Gemini image editing prompt that modifies the existing scene per the edit instruction while keeping the product appearance unchanged. Return only JSON: {"prompt": "..."}',
     );
@@ -111,6 +132,8 @@ export function buildSceneUserPrompt(
 
   lines.push('');
   lines.push(`Section type: ${sectionType}`);
+  const tone = paletteToneHint(editOpts?.palette);
+  if (tone) lines.push(tone);
   lines.push(
     editOpts?.isCompositeBackground
       ? 'Generate a detailed Gemini prompt for the EMPTY BACKGROUND PLATE ONLY for this section. Return only JSON.'

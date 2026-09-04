@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildSceneUserPrompt } from '@/app/api/ai/generate-scene-image/user-prompt';
+import { buildSceneUserPrompt, paletteToneHint } from '@/app/api/ai/generate-scene-image/user-prompt';
+import { PALETTES } from '@/lib/detail-page/palette-config';
 
 describe('buildSceneUserPrompt', () => {
   it('sceneHint가 있으면 Art direction 라인을 포함한다', () => {
@@ -129,5 +130,41 @@ describe('buildSceneUserPrompt — 상품 컨텍스트 확장', () => {
     expect(legacy).not.toContain('Category:');
     expect(legacy).not.toContain('Material:');
     expect(legacy).not.toContain('MUST NOT appear');
+  });
+});
+
+describe('paletteToneHint', () => {
+  it('palette가 있으면 해당 팔레트의 hex 값을 포함한 톤 힌트를 반환한다', () => {
+    const hint = paletteToneHint('rose_soft');
+    expect(hint).toContain(PALETTES.rose_soft.bg);
+    expect(hint).toContain(PALETTES.rose_soft.accent);
+    expect(hint).toContain('Color tone');
+  });
+
+  it('palette가 없으면 빈 문자열을 반환한다 (하위호환)', () => {
+    expect(paletteToneHint(undefined)).toBe('');
+    expect(paletteToneHint()).toBe('');
+  });
+});
+
+describe('buildSceneUserPrompt — palette 톤 힌트', () => {
+  it('editOpts.palette가 있으면 톤 힌트가 출력 형식 지시 앞에 들어간다', () => {
+    const out = buildSceneUserPrompt('hero', { headline: '향수' }, undefined, {
+      palette: 'tech_navy',
+    });
+    expect(out).toContain('Color tone');
+    expect(out).toContain(PALETTES.tech_navy.bg);
+    // 형식 지시("Return only JSON")가 마지막에 와야 LLM이 형식을 지킨다.
+    expect(out.indexOf('Color tone')).toBeLessThan(out.indexOf('Return only JSON'));
+    expect(out.trimEnd().endsWith('Return only JSON.')).toBe(true);
+  });
+
+  it('palette가 없으면 기존 출력과 완전히 동일하다 (하위호환)', () => {
+    const withoutPalette = buildSceneUserPrompt('hero', { headline: '향수' }, 'moody gold');
+    const withUndefinedPalette = buildSceneUserPrompt('hero', { headline: '향수' }, 'moody gold', {
+      palette: undefined,
+    });
+    expect(withoutPalette).not.toContain('Color tone');
+    expect(withUndefinedPalette).toBe(withoutPalette);
   });
 });

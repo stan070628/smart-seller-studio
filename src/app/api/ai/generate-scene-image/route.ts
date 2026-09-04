@@ -13,6 +13,7 @@ import {
   PRODUCT_LOCK_INSTRUCTION,
 } from '@/lib/ai/model-registry';
 import { buildSceneUserPrompt } from './user-prompt';
+import { PALETTE_NAMES } from '@/lib/detail-page/palette-config';
 import { removeBackgroundTransparent } from '@/lib/ai/remove-background';
 import {
   PRODUCT_FIDELITY_INSTRUCTION,
@@ -66,6 +67,9 @@ const RequestBodySchema = z.object({
   baseImageUrl: z.string().url().optional(),
   // 편집 지시어 또는 새 생성 art direction
   instruction: z.string().max(500).optional(),
+  // 페이지 팔레트. 있으면 씬 색감을 페이지 톤에 맞춘다(user-prompt.ts의
+  // paletteToneHint 참조). 생략하면 기존 동작과 동일 — 하위호환.
+  palette: z.enum(PALETTE_NAMES).optional(),
 });
 
 // lifestyle/detail/feature: 제품 합성 방식 (Gemini에 배경만 생성 → Sharp 합성)
@@ -322,6 +326,7 @@ export async function POST(req: NextRequest) {
     scenePrompt: directPrompt,
     baseImageUrl,
     instruction,
+    palette,
   } = parsed.data;
   isEditMode = !!baseImageUrl; // Zod 검증된 값으로 덮어쓰기
 
@@ -447,6 +452,7 @@ export async function POST(req: NextRequest) {
           isEditMode,
           instruction,
           isCompositeBackground,
+          palette,
         }),
       });
 
