@@ -25,6 +25,14 @@ export interface GenerateFrameImageInput {
   productImageBase64?: string;
   /** @deprecated 상품 이미지 MIME 타입 */
   productImageMimeType?: string;
+  /**
+   * 출력 종횡비. 생략하면 모델이 참조 이미지를 따라간다(기존 동작).
+   *
+   * 🔴 프롬프트에 "vertical 9:16"이라고 써도 반영되지 않는다 — 2026-08-28 실측에서
+   * 세로 지시를 넣은 프롬프트가 1024×1024 정사각을 냈다. 종횡비는 이 필드로만 정해진다.
+   * 쇼츠·릴스는 '9:16'.
+   */
+  aspectRatio?: '1:1' | '2:3' | '3:2' | '3:4' | '4:3' | '4:5' | '5:4' | '9:16' | '16:9' | '21:9';
 }
 
 export interface GenerateFrameImageOutput {
@@ -79,7 +87,9 @@ export async function generateFrameImage(
     model: MODEL,
     config: {
       responseModalities: ["Text", "Image"],
-      imageConfig: { imageSize: "1K" },
+      imageConfig: input.aspectRatio
+        ? { imageSize: "1K", aspectRatio: input.aspectRatio }
+        : { imageSize: "1K" },
     },
     contents: [
       {

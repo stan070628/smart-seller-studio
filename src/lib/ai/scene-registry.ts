@@ -65,6 +65,36 @@ export const SCENE_SHEETS: readonly SceneSheet[] = [
       'entrance floor stepping up to pale wood flooring. No rug.',
     bestFor: '택배 언박싱·나가는 옷·신발',
   },
+  {
+    // 🔴 이 씬만 주인이 model_f_b다. 위 셋은 굴다(model_f_c)의 집이므로 섞어 쓰지 않는다.
+    id: 'home_bathroom',
+    personaId: 'model_f_b',
+    label: '욕실·세면대',
+    sheetPath: 'scene-sheets/home_bathroom.jpg',
+    fixtures:
+      'A bathroom vanity: a wall-mounted white solid-surface counter running across the frame with an ' +
+      'undermount rectangular basin just RIGHT of centre and a brushed-nickel faucet behind it, a large ' +
+      'backlit rectangular mirror on the BACK wall above the counter with a soft warm glow around its ' +
+      'edges, one open shelf under the counter holding folded towels, and a tall frosted-glass window ' +
+      'on the RIGHT wall. Matte off-white tiled walls, light grey floor tile. No other fixtures.',
+    bestFor: '핸드워시·바디워시·욕실용품',
+  },
+  {
+    // 사용자 제공 레퍼런스를 그대로 시트로 쓴다 (2026-09-03, 문구·인물 없음 확인).
+    // ⚠️ 원본은 /Volumes/Mac_SSD/모델 페르소나/model_F_C/거실/ 에 있으나 현재 이 씬을
+    //    쓰는 상품 컷의 인물은 model_f_b다 — 페르소나 정리 때 소유를 재검토한다.
+    id: 'home_living_fb',
+    personaId: 'model_f_b',
+    label: '거실 (프리미엄)',
+    sheetPath: 'scene-sheets/home_living_fb.jpg',
+    fixtures:
+      'A spacious open-plan living room: floor-to-ceiling windows along the RIGHT wall with sheer curtains, ' +
+      'a large beige modular fabric sofa in an L-shape facing the camera, a low rectangular travertine ' +
+      'coffee table in front of it holding a vase with green branches and one or two small bowls, ' +
+      'a cream rug under the seating area, a kitchen island with wooden bar stools in the far background, ' +
+      'a mezzanine balcony above on the LEFT, warm beige walls and pale stone flooring. Daylight from the right.',
+    bestFor: '홈리빙·휴대 소구·라이프스타일',
+  },
 ] as const;
 
 export function findScene(id: string | undefined | null): SceneSheet | null {

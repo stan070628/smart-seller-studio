@@ -87,11 +87,20 @@ Rules:
 - CRITICAL PRODUCT COUNT: The multiple reference images show the SAME single product from different angles — they do NOT represent multiple products. Carefully count the EXACT number of each item type that makes up ONE product unit (e.g., "1 spoon and 1 chopstick set" or "3 bottles sold together"). Your prompt MUST specify this EXACT count. NEVER duplicate or multiply items based on the number of reference images provided. State the count explicitly: "exactly 1 [item]" etc.
 - CRITICAL: The generated prompt MUST end with this exact instruction: "${PRODUCT_FIDELITY_INSTRUCTION}"
 
-Section type directions:
-- hero: Clean studio shot with the product as the clear hero. Dramatic professional lighting, minimal elegant background, product centered.
-- lifestyle: Product shown in its actual real-world use context. Creative authentic scene (e.g. fragrance diffuser hanging from a car rearview mirror, cutlery arranged on a fine dining table, skincare product on a marble bathroom counter). Natural or mood lighting.
-- detail: Extreme close-up macro shot of the product's most distinctive material, texture, or craftsmanship detail. Very shallow depth of field, soft bokeh.
-- feature: Aspirational scene that visually communicates the product's key function or benefit. Creative and conceptual but still photorealistic.
+SECTION MISE-EN-SCÈNE — each section answers a different buyer question, so angle, distance, lighting and props must differ. Do not shoot every section the same way.
+
+- hero — answers "what is this?". Camera straight-on or angled 45 degrees down (the angle people naturally view objects on a table). Product fills roughly 85% of the frame, centered. Even soft lighting, minimal shadow. NO props. Clean seamless white or near-white background.
+  Do NOT apply artistic composition rules here — no rule of thirds, no large negative space, no off-center placement. The hero exists to be recognized instantly, not admired.
+
+- feature — answers "why is this different?". Camera at eye level or slightly below. Medium distance, product centered. Strong directional key light with high contrast and deliberate shadow. Background is a dark, subtly textured surface (matte fabric, stone, brushed metal, deep gradient) with visual depth. Props minimal or none.
+
+- detail — answers "how well is it made?". Macro framing of ONE part only (stitching, weave, zipper, seam, clasp, surface grain). Camera 45 degrees or perpendicular to the surface. SIDE lighting that rakes across the surface so texture stands up — flat frontal light kills the texture and defeats this section. Matte neutral backdrop (marble, linen, concrete), very shallow depth of field.
+
+- lifestyle — answers "how does this fit my life?". Camera at EYE LEVEL, grounded human perspective. Soft natural window light from the side. A real, lived-in setting that matches the buyer's actual life — not an unattainably perfect showroom.
+  🔴 The three ways lifestyle scenes fail, in order of frequency:
+    1. TOO MANY PROPS. Use 2 to 3 props maximum, each one reinforcing what the product is for. More than that and the viewer cannot tell what is being sold.
+    2. THE PRODUCT GETS BURIED. The setting exists to support the product, never to compete with it. If a viewer's eye lands on the room before the product, the scene has failed.
+    3. OVER-STAGING. A house nobody actually lives in reads as an advertisement and loses trust.
 
 Return ONLY valid JSON: {"prompt": "your detailed English prompt here"}`;
 
@@ -128,18 +137,27 @@ const NO_PRODUCT_BASE =
   'Use a single consistent light source with believable, grounded shadows so a composited product will match the scene lighting and cast direction.';
 
 // 섹션 타입별 배경 분위기 보강 지시
+// 섹션별 배경 플레이트 지시. 합성 모드는 이 힌트만으로 배경이 결정되므로
+// 카메라 높이·광원 방향까지 여기서 못 박는다 — 나중에 얹을 제품 컷과
+// 시점·조명이 어긋나면 합성이 뜬다.
 const SECTION_BG_HINTS: Record<string, string> = {
   feature:
-    ' Use rich, atmospheric studio lighting with a premium, high-contrast look. ' +
-    'The background should have visual depth — a subtly textured dark surface (matte fabric, brushed metal, stone, deep gradient) ' +
-    'with soft directional light that creates a dramatic, editorial feel. Avoid plain white or empty-looking backgrounds.',
+    ' Camera at eye level or slightly below, medium distance. ' +
+    'Use rich, atmospheric studio lighting with a premium, high-contrast look — a strong directional key light ' +
+    'with deliberate shadow, not flat even illumination. ' +
+    'The background should have visual depth — a subtly textured dark surface (matte fabric, brushed metal, stone, deep gradient). ' +
+    'Avoid plain white or empty-looking backgrounds. Keep props minimal or absent.',
   detail:
-    ' Use a clean macro-photography backdrop: a softly blurred, slightly warm or cool neutral surface ' +
-    '(marble, linen, concrete) with gentle diffused lighting to highlight material texture.',
+    ' Use a clean macro-photography backdrop: a softly blurred neutral surface (marble, linen, concrete) with very shallow ' +
+    'depth of field. Light it from the SIDE so the surface texture rakes and stands up — flat frontal light flattens ' +
+    'the material and defeats the purpose of a detail shot. Camera 45 degrees or perpendicular to the surface.',
   lifestyle:
     ' Create an authentic, true-to-life real-world SETTING where this product would naturally be used — ' +
     'the location, surfaces, and atmosphere only, with NO equipment, gear, or items from the product\'s category present, ' +
-    'shot like a real editorial/commercial photograph with natural daylight and a grounded, eye-level perspective. ' +
+    'shot like a real editorial/commercial photograph with soft natural window light from the side and a grounded, ' +
+    'EYE-LEVEL perspective. The setting must look lived-in and attainable, not an unattainably perfect showroom. ' +
+    'Keep the scene sparse — at most 2 to 3 incidental props, since the product will be composited in as the subject ' +
+    'and a busy background buries it. ' +
     'AVOID the typical "AI look": no heavy bokeh/blur haze, no dreamy glow or bloom, no lens flare, no oversaturation, ' +
     'and NO blurry, faceless, or ghost-like human figures in the background. Keep lighting and shadows physically consistent.',
 };

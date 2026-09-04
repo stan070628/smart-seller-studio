@@ -14,6 +14,7 @@ import { deriveOptions, isOptionMode } from '@/lib/detail-page/product-options';
 // gen-slots.ts는 import 없는 leaf 모듈이다 — layout-validator.ts를 대신 import하면
 // 거기 딸린 zod 스키마가 tree-shake되지 않고 클라이언트 번들에 그대로 들어간다.
 import { resolveGenSlot, sceneTypeFor, isComparePairSlot } from '@/lib/detail-page/gen-slots';
+import { MODEL_PERSONAS } from '@/lib/ai/model-registry';
 import {
   stripCloseupClaims,
   findReusedImages,
@@ -82,6 +83,10 @@ export default function DetailMakerProPage() {
   const [editedSections, setEditedSections] = useState<AnalyzedSection[]>([]);
   const [productName, setProductName] = useState('');
   const [productPoints, setProductPoints] = useState('');
+  // 인물컷에 쓸 AI 모델. 빈 문자열이면 기존 동작(제품 원본 픽셀 합성, 인물 없음).
+  // 마지막 선택을 localStorage에 남겨 다음 상품에서 기본값으로 되살린다 —
+  // 같은 모델을 계속 쓰는 것이 이 기능의 목적이라 매번 고르게 하면 어긋난다.
+  const [modelPersonaId, setModelPersonaId] = useState('');
   const [progress, setProgress] = useState<ProgressEvent | null>(null);
   const [generatedSections, setGeneratedSections] = useState<GeneratedSection[]>([]);
   // 레이아웃 검증·위생에서 사용자가 알아야 할 사항 — repair 후 잔존 위반, 근거 없는 수치 제거 등
@@ -113,6 +118,15 @@ export default function DetailMakerProPage() {
         if (json?.success && Array.isArray(json.drafts)) setShootDrafts(json.drafts);
       } catch { /* 무시 */ }
     })();
+  }, []);
+
+  // 지난 상품에서 고른 모델을 되살린다. 등록 목록에 없는 id면 무시한다
+  // (모델이 교체·삭제된 뒤에도 죽은 id가 계속 전송되는 것을 막는다).
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('detailMakerPro.modelPersonaId') ?? '';
+      if (saved && MODEL_PERSONAS.some((p) => p.id === saved)) setModelPersonaId(saved);
+    } catch { /* localStorage 차단 환경 무시 */ }
   }, []);
 
   useEffect(() => {
@@ -806,6 +820,61 @@ export default function DetailMakerProPage() {
           )}
         </div>
 
+        <div style={{ marginBottom: '12px' }}>
+          <label
+            htmlFor="model-persona"
+            style={{ display: 'block', fontSize: '12px', color: '#9ca3af', marginBottom: '6px' }}
+          >
+            인물컷 모델 — 고르면 모든 인물 컷에 같은 사람이 나옵니다
+          </label>
+          <select
+            id="model-persona"
+            value={modelPersonaId}
+            onChange={(e) => {
+              const v = e.target.value;
+              setModelPersonaId(v);
+              try {
+                localStorage.setItem('detailMakerPro.modelPersonaId', v);
+              } catch { /* 무시 */ }
+            }}
+            style={{
+              width: '100%',
+              padding: '10px',
+              background: '#1e1e2e',
+              border: '1px solid #374151',
+              borderRadius: '8px',
+              color: '#e5e7eb',
+              fontSize: '13px',
+            }}
+          >
+            <option value="">사용 안 함 — 제품 원본을 그대로 합성 (권장)</option>
+            {MODEL_PERSONAS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label} · {p.bestFor}
+              </option>
+            ))}
+          </select>
+          {modelPersonaId && (
+            <p
+              style={{
+                fontSize: '12px',
+                color: '#fcd34d',
+                marginTop: '6px',
+                lineHeight: 1.5,
+                background: '#2a2112',
+                border: '1px solid #92400e',
+                borderRadius: '6px',
+                padding: '8px 10px',
+              }}
+            >
+              모델을 쓰면 제품도 AI가 다시 그립니다(원본 픽셀 합성이 꺼집니다).
+              <br />
+              브랜드 상품도 로고가 대체로 재현되지만 세부 마크가 빠질 수 있습니다 —
+              <b> 생성 후 로고를 확대해 검수하세요.</b>
+            </p>
+          )}
+        </div>
+
         {(!productName.trim() || referenceImages.length === 0) && !isAnalyzing && (
           <p style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '8px' }}>
             {!productName.trim() && '상품명을 입력하세요.'}
@@ -1433,6 +1502,8 @@ export default function DetailMakerProPage() {
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
                         sectionType: sceneType,
+                        // 빈 문자열이면 보내지 않는다 — 라우트가 기존 경로(픽셀 합성)로 빠진다
+                        ...(modelPersonaId ? { modelPersonaId } : {}),
                         productImageUrls: refImages,
                         // scenePrompt(직결) 대신 sceneHint로 전달 → Claude 프롬프트 정교화
                         // (조명·앵글·무드 + anti-AI 규칙) 단계를 경유해 씬 품질을 높인다.

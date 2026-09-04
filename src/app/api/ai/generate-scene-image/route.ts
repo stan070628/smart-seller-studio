@@ -6,6 +6,12 @@ import { checkRateLimit, getRateLimitKey } from '@/lib/rate-limit';
 import { getAnthropicClient } from '@/lib/ai/claude';
 import { generateFrameImage } from '@/lib/ai/imagen';
 import { loadReferenceImages, type ReferenceImage } from '@/lib/ai/reference-images';
+import {
+  findPersona,
+  personaSheetUrl,
+  IDENTITY_LOCK_INSTRUCTION,
+  PRODUCT_LOCK_INSTRUCTION,
+} from '@/lib/ai/model-registry';
 import { buildSceneUserPrompt } from './user-prompt';
 import { removeBackgroundTransparent } from '@/lib/ai/remove-background';
 import {
@@ -23,6 +29,10 @@ const EDIT_RATE_LIMIT = { windowMs: 60_000, maxRequests: 6 };
 
 const RequestBodySchema = z.object({
   sectionType: z.enum(['hero', 'lifestyle', 'detail', 'feature']),
+  // 인물 고정: model-registry의 페르소나 id. 지정하면 그 캐릭터 시트를
+  // 참조에 넣고 IDENTITY_LOCK을 프롬프트에 붙여 컷마다 얼굴이 바뀌는 것을 막는다.
+  // 생략하면 기존과 동일하게 동작한다(인물이 매번 달라진다).
+  modelPersonaId: z.string().max(40).optional(),
   // 신규: 멀티참조
   referenceImages: z
     .array(z.object({ base64: z.string(), mimeType: z.string().optional() }))
@@ -337,11 +347,34 @@ export async function POST(req: NextRequest) {
       productImageUrl: parsed.data.productImageUrl,
     });
 
+    // 인물 고정용 캐릭터 시트 로딩.
+    // 실패해도 생성은 계속한다 — 인물이 안 고정될 뿐 씬 자체는 나와야 한다.
+    const persona = findPersona(parsed.data.modelPersonaId);
+    let personaSheet: ReferenceImage[] = [];
+    if (persona) {
+      const url = personaSheetUrl(persona);
+      if (url) {
+        personaSheet = await loadReferenceImages({ productImageUrls: [url] });
+        if (personaSheet.length === 0) {
+          console.warn(`[generate-scene-image] 캐릭터 시트 로딩 실패 — 인물 고정 없이 진행: ${persona.id}`);
+        }
+      }
+    }
+
     // Point 씬(lifestyle/detail/feature): 누끼 → 배경만 Gemini 생성 → Sharp 합성
     // selectCompositeCutout: 균일 배경 참조 우선 + 불투명 비율 검증 통과분만 사용.
     // 유효 누끼가 없으면 null → 기존 비합성 경로(product ref를 Gemini에 전달)로 fallback
+    //
+    // 🔴 페르소나가 지정되면 합성을 건너뛴다. 합성 모드의 배경 프롬프트는
+    // NO_CATEGORY_PROPS로 "no players ... empty, prop-light environment only"를
+    // 강제하므로 사람이 등장할 수 없다. 인물 씬은 제품과 인물을 함께 그려야
+    // 성립하고, 그 대가로 제품이 AI 렌더가 된다.
+    //
+    // 🔵 2026-08-27 실측: 브랜드 상품도 PRODUCT_LOCK_INSTRUCTION을 붙이면 로고가
+    // 대체로 재현된다(나이키 다저스 반팔티 워드마크·스우시·™ 유지). 다만 세부
+    // 마크가 누락되는 경우가 있어 생성 후 로고 확대 검수가 필요하다.
     let compositeProductPng: Buffer | null = null;
-    if (COMPOSITE_SECTIONS.has(sectionType) && productRefs.length > 0) {
+    if (COMPOSITE_SECTIONS.has(sectionType) && productRefs.length > 0 && !persona) {
       // 누끼 소스는 무손실 PNG로 별도 로딩한다: q80 JPEG 재압축을 거친 refs를
       // rembg에 넣으면 페더 등 미세 가장자리가 뭉개진다. URL 참조는 fetch가
       // 1회 더 발생하지만 합성 모드 한정이며, 실패 시 기존 q80 refs로 폴백.
@@ -366,7 +399,15 @@ export async function POST(req: NextRequest) {
 
     // 합성 성공 시 Gemini에 product ref 미전달 (배경만 생성하도록)
     // 합성 실패 시 기존 방식: base + productRefs 모두 전달
-    const allImages = [...baseImages, ...(compositeProductPng ? [] : productRefs)].slice(0, 3);
+    //
+    // 캐릭터 시트를 제품 참조보다 앞에 둔다. 상한이 3장이라 뒤로 밀면
+    // 잘려나가는데, 합성 모드에서는 제품이 픽셀로 합성되므로 제품 참조보다
+    // 시트가 우선이다. 비합성 경로에서도 인물이 바뀌는 쪽이 더 눈에 띈다.
+    const allImages = [
+      ...baseImages,
+      ...personaSheet,
+      ...(compositeProductPng ? [] : productRefs),
+    ].slice(0, 3);
 
     // Step 1: 씬 프롬프트 결정 (스토리보드 직접 전달 시 Claude 우회)
     let finalScenePrompt: string;
@@ -449,6 +490,25 @@ export async function POST(req: NextRequest) {
       finalScenePrompt = compositeProductPng
         ? `${bgPrompt}${buildNoProductSuffix(sectionType, productInfo?.headline)}` // 합성 모드: 배경만 생성
         : claudePrompt; // fallback: Claude 프롬프트 그대로 (PRODUCT_FIDELITY_INSTRUCTION 이미 포함)
+    }
+
+    // 인물 고정 지시는 프롬프트가 어떤 경로로 만들어졌든(직결·Claude·합성)
+    // 마지막에 한 번만 붙인다. 분기마다 넣으면 빠뜨리는 경로가 생긴다.
+    // 시트가 실제로 참조에 들어간 경우에만 붙인다 — 첨부가 없는데 "첨부된
+    // 시트를 보라"고 하면 Gemini가 없는 인물을 지어낸다.
+    const sheetAttached = personaSheet.length > 0 && allImages.includes(personaSheet[0]!);
+    if (sheetAttached) {
+      finalScenePrompt = `${finalScenePrompt}\n\n${IDENTITY_LOCK_INSTRUCTION}`;
+    } else if (persona) {
+      console.warn(`[generate-scene-image] 참조 3장 상한에 밀려 캐릭터 시트 미첨부: ${persona.id}`);
+    }
+
+    // 인물 경로는 제품도 AI가 그린다(합성이 꺼져 있다). 제품 참조가 함께 붙어
+    // 있을 때만 제품 고정을 건다 — 참조가 없으면 지킬 원본이 없어 무의미하다.
+    // 이 지시는 PRODUCT_FIDELITY_INSTRUCTION의 "not a direct reproduction"을
+    // 상쇄하므로 반드시 그 뒤에 와야 한다(뒤 지시가 우선).
+    if (persona && !compositeProductPng && productRefs.some((r) => allImages.includes(r))) {
+      finalScenePrompt = `${finalScenePrompt}\n\n${PRODUCT_LOCK_INSTRUCTION}`;
     }
 
     // Step 2: Gemini로 씬 생성 (합성 모드: 배경만 / fallback: 제품 포함)
