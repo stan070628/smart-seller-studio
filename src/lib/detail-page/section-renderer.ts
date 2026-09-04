@@ -819,7 +819,8 @@ function renderLayoutBlock(
       return `<div style="display:flex;gap:${gap}px;align-items:flex-start;margin-bottom:8px;">${cols}</div>`;
     }
     case 'divider':
-      return `<hr style="border:none;border-top:1px solid ${colors.border};margin:12px 0;" />`;
+      // 실제 쇼핑몰 상세는 선으로 섹션을 가르지 않는다 — 여백과 배경 전환이 리듬을 만든다.
+      return `<div style="height:28px;"></div>`;
     case 'spacer':
       return `<div style="height:${Math.min(block.height, 120)}px;"></div>`;
     case 'progress_bar': {
