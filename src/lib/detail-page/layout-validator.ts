@@ -6,6 +6,7 @@ import type { LayoutBlock } from '@/types/detail-page';
 import { collectOptionCoverage, type OptionSection } from './product-options';
 import { ACCEPTED_BEATS, checkNarrative, type NarrativeSection } from './narrative';
 import { sanitizeProgressBars } from './progress-hygiene';
+import { getIcon } from './icon-library';
 import { hasVisualAnchor, countMismatch } from './section-shape';
 // gen-slots.ts는 import 없는 leaf 모듈이다 — 정의를 거기 하나로 두고 여기서는
 // re-export만 한다. page.tsx(클라이언트 컴포넌트)가 이 이름들만 쓰려고 이
@@ -18,7 +19,7 @@ export interface Violation {
     | 'schema' | 'cjk' | 'broken_text' | 'empty_block'
     | 'duplicate' | 'section_count' | 'prohibited'
     | 'option_compare' | 'option_coverage' | 'option_image' | 'narrative'
-    | 'visual_anchor' | 'count_mismatch';
+    | 'visual_anchor' | 'count_mismatch' | 'icon_key';
   path: string;
   message: string;
   severity: 'error' | 'warning';
@@ -347,6 +348,25 @@ export function validateProLayout(sections: unknown, opts?: ProLayoutOpts): Vali
       if (isEmptyBlock(block)) violations.push({ code: 'empty_block', path: `${base}.${bpath}`, message: `빈 블록(${String(block.type)})`, severity: 'warning', autoFixable: true });
     });
 
+    // icon_grid의 무효 아이콘 키 — icon-library에 없는 키는 렌더러가 번호 배지로
+    // 폴백하므로 렌더 자체는 안 깨지지만, LLM이 존재하지 않는 키를 지어낸 신호라
+    // warning으로 잡고 자동수정(빈 문자열 치환 → 번호 배지 폴백)한다.
+    forEachBlock(sec, (block, bpath) => {
+      if (block.type !== 'icon_grid' || !Array.isArray(block.items)) return;
+      (block.items as unknown[]).forEach((item, ii) => {
+        if (!item || typeof item !== 'object') return;
+        const icon = (item as { icon?: unknown }).icon;
+        if (typeof icon !== 'string' || icon === '') return;
+        if (getIcon(icon) === null) {
+          violations.push({
+            code: 'icon_key', path: `${base}.${bpath}.items[${ii}].icon`,
+            message: `${base}의 icon_grid items[${ii}] icon "${icon}"은 icon-library에 없는 키입니다. 번호 배지로 폴백합니다.`,
+            severity: 'warning', autoFixable: true,
+          });
+        }
+      });
+    });
+
     // 시각 앵커 — D2는 프롬프트에만 있고 검사가 없어서, 헤드라인+문단+불릿뿐인
     // 섹션이 그대로 통과했다(실제 생성물에서 텍스트 벽이 이탈 지점 1번이었다).
     // autoFixable: repair가 기존 불릿을 icon_grid로 옮기는 식으로 고칠 수 있다.
@@ -484,6 +504,31 @@ function pruneBlocks(sec: unknown): unknown {
 }
 
 /**
+ * icon_grid items의 무효 icon 키를 빈 문자열로 치환한다.
+ * 렌더러는 icon이 빈 문자열이면 번호 배지로 폴백하므로 렌더는 깨지지 않는다.
+ */
+function sanitizeIconKeys(sec: unknown): unknown {
+  if (!sec || typeof sec !== 'object') return sec;
+  const s = { ...(sec as Record<string, unknown>) };
+  if (!Array.isArray(s.blocks)) return s;
+  s.blocks = (s.blocks as unknown[]).map((b) => {
+    if (!b || typeof b !== 'object' || (b as { type?: unknown }).type !== 'icon_grid') return b;
+    const block = b as { items?: unknown };
+    if (!Array.isArray(block.items)) return b;
+    return {
+      ...(b as Record<string, unknown>),
+      items: (block.items as unknown[]).map((item) => {
+        if (!item || typeof item !== 'object') return item;
+        const icon = (item as { icon?: unknown }).icon;
+        if (typeof icon !== 'string' || icon === '' || getIcon(icon) !== null) return item;
+        return { ...(item as Record<string, unknown>), icon: '' };
+      }),
+    };
+  });
+  return s;
+}
+
+/**
  * 결정적 코드 폴백. autoFixable 문제를 코드로 강제 교정하고,
  * 교정 후에도 남은 위반을 warnings로 반환한다.
  */
@@ -509,6 +554,8 @@ export function sanitizeProLayout(
   cleaned = cleaned.filter((sec, i) => i === 0 || JSON.stringify(sec) !== JSON.stringify(cleaned[i - 1]));
   // 5) image 블록 ↔ imageSlots 정합성 (범위 클램프 + 부재 시 주입)
   cleaned = cleaned.map(normalizeSectionImages);
+  // 6) icon_grid 무효 아이콘 키 → 빈 문자열(번호 배지 폴백)
+  cleaned = cleaned.map(sanitizeIconKeys);
 
   const { violations } = validateProLayout(cleaned, opts);
   return { sections: cleaned, warnings: violations };
