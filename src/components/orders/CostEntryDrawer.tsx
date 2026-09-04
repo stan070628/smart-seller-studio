@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { X, Plus, Pencil, Trash2 } from 'lucide-react';
 import SaleEntryPanel from './SaleEntryPanel';
 import { calculateSubdivision } from '@/lib/cost-management/subdivision';
+import { parseOptionalFee } from '@/lib/cost-management/entry-form';
 import { toast } from '@/components/ui/toast';
 import { confirmDialog } from '@/components/ui/confirm';
 import { useDraftPersist, loadDraft } from '@/hooks/useDraftPersist';
@@ -53,7 +54,9 @@ function emptySubForm(subdivisionUnit?: number | null): SubForm {
     boxQuantity: '1',
     subUnit: subdivisionUnit ? String(subdivisionUnit) : '',
     unit_shipping_fee: '0',
-    unit_rg_shipping_fee: '0',
+    // 빈 칸 = 상품 사이즈 요율을 서버가 채운다. '0'을 기본값으로 두면
+    // 항상 0이 전송돼 폴백이 무력화된다.
+    unit_rg_shipping_fee: '',
   };
 }
 
@@ -234,13 +237,15 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
     }
     setSaving(true);
     try {
+      const rgFee = parseOptionalFee(subForm.unit_rg_shipping_fee);
       const payload = {
         received_at: subForm.received_at,
         unit_cost: Math.round(bp * bq),
         purchase_quantity: Math.round(ipb * bq),
         subdivision_unit: Math.round(su),
         unit_shipping_fee: Math.round(Number(subForm.unit_shipping_fee)),
-        unit_rg_shipping_fee: Math.round(Number(subForm.unit_rg_shipping_fee)),
+        // 빈 칸이면 키를 빼서 서버가 상품 사이즈 요율로 채우게 한다
+        ...(rgFee === undefined ? {} : { unit_rg_shipping_fee: rgFee }),
       };
       const res = await fetch(`/api/cost-management/products/${productId}/entries`, {
         method: 'POST',
@@ -445,7 +450,7 @@ export default function CostEntryDrawer({ productId, productName, sellerProductI
                           </div>
                           <div>
                             <div style={{ fontSize: '9px', color: '#92400e', marginBottom: '2px' }}>RG 배송비(원)</div>
-                            <input type="number" value={subForm.unit_rg_shipping_fee} onChange={(e) => setSubForm((f) => ({ ...f, unit_rg_shipping_fee: e.target.value }))} style={{ width: '100%', padding: '3px 5px', borderRadius: '4px', border: '1px solid #fed7aa', fontSize: '11px', color: '#18181b', boxSizing: 'border-box' }} />
+                            <input type="number" value={subForm.unit_rg_shipping_fee} onChange={(e) => setSubForm((f) => ({ ...f, unit_rg_shipping_fee: e.target.value }))} placeholder="비우면 사이즈 요율" style={{ width: '100%', padding: '3px 5px', borderRadius: '4px', border: '1px solid #fed7aa', fontSize: '11px', color: '#18181b', boxSizing: 'border-box' }} />
                           </div>
                         </div>
                         {Number(subForm.boxPrice) > 0 && Number(subForm.itemsPerBox) > 0 && (

@@ -1,6 +1,7 @@
 import type { PoolClient } from 'pg';
 import { ENTRY_CHANNEL } from '@/lib/cost-management/fifo';
 import { calculateSubdivision } from '@/lib/cost-management/subdivision';
+import { resolveRgShippingFee, type RgSizeType } from '@/lib/roi/rg-fees';
 
 /**
  * 입고 1건 생성.
@@ -27,7 +28,11 @@ export interface CreateEntryInput {
   /** 생략하면 상품에 설정된 기본값을 쓴다 */
   subdivisionUnit?: number | null;
   unitShippingFee?: number;
-  unitRgShippingFee?: number;
+  /**
+   * 생략하면 상품의 `rg_size_type` 요율을 기본값으로 채운다.
+   * 명시한 0은 그대로 존중한다 — RG로 보내지 않는 재고가 있다.
+   */
+  unitRgShippingFee?: number | null;
   channel?: string;
   variantName?: string | null;
   /** 영수증 확정 경로에서만 채운다 */
@@ -52,6 +57,30 @@ export class CostEntryError extends Error {
   }
 }
 
+/**
+ * 입고에 실을 RG 물류비 기본값을 정한다. 호출자가 값을 주지 않았을 때만 쓴다.
+ *
+ * 사이즈 요율이 있으면 그것을, 없으면 같은 상품의 직전 비영 배치를 승계한다.
+ * 둘 다 없으면 0 — 근거 없이 추정하지 않는다.
+ */
+async function resolveDefaultRgShippingFee(
+  client: PoolClient,
+  productCostId: string,
+  rgSizeType: unknown,
+): Promise<number> {
+  const bySize = resolveRgShippingFee(null, rgSizeType as RgSizeType | null);
+  if (bySize > 0) return bySize;
+
+  const { rows } = await client.query(
+    `SELECT unit_rg_shipping_fee FROM cost_entries
+      WHERE product_cost_id = $1 AND unit_rg_shipping_fee > 0
+      ORDER BY received_at DESC, created_at DESC
+      LIMIT 1`,
+    [productCostId],
+  );
+  return rows.length > 0 ? Number(rows[0].unit_rg_shipping_fee) : 0;
+}
+
 export async function createCostEntry(input: CreateEntryInput): Promise<CreateEntryResult> {
   const {
     client, userId, productCostId, receivedAt, unitCost,
@@ -65,7 +94,7 @@ export async function createCostEntry(input: CreateEntryInput): Promise<CreateEn
 
   // subdivision 필드를 포함하여 product 조회
   const { rows: check } = await client.query(
-    `SELECT id, subdivision_unit, subdivision_carryover, subdivision_carryover_unit_cost
+    `SELECT id, subdivision_unit, subdivision_carryover, subdivision_carryover_unit_cost, rg_size_type
      FROM product_costs WHERE id = $1 AND user_id = $2`,
     [productCostId, userId],
   );
@@ -117,6 +146,26 @@ export async function createCostEntry(input: CreateEntryInput): Promise<CreateEn
     finalUnitCost = unitCost;
   }
 
+  // RG 물류비를 받지 못했으면 기본값을 채운다.
+  //
+  // 🔴 이 폴백이 없으면 0이 들어간다. 일반 입고 폼과 영수증 확정 경로는 이 필드를
+  //    보내지 않으므로, 2026-08-12~29 극세사 옐로우 입고 137개가 개당 3,080원의
+  //    물류비 없이 장부에 올랐다. 1회성 스크립트로 메우면 그 뒤 입고가 또 빈다 —
+  //    스크립트는 실행 시점의 배치만 고칠 수 있기 때문이다.
+  //
+  // 순서: ① rg_size_type 요율 → ② 직전 비영 배치 승계 → ③ 0
+  //
+  //   ①이 먼저인 이유 — 사이즈는 사람이 명시한 **현재** 상태다. 과거 실적이 그것을
+  //     덮으면 2026-08-21 극세사 옐로우의 소형 → 극소형 정정이 반영되지 않는다.
+  //   ②가 필요한 이유 — **사이즈로 표현할 수 없는 상품이 있다.** 라비오라 팩은
+  //     예상정산액 역산 실측이 3,575원인데 어떤 사이즈 요율과도 다르다. 그런 상품에
+  //     사이즈를 추정으로 넣으면 실측보다 낮은 값이 확정값처럼 자리잡는다.
+  //   ③으로 남기는 이유 — 근거가 없으면 0이다. RG 미사용 상품이 대부분이고,
+  //     사이즈도 실적도 없는 상품을 추정으로 채우지 않는다.
+  const finalUnitRgShippingFee =
+    unitRgShippingFee ??
+    (await resolveDefaultRgShippingFee(client, productCostId, product.rg_size_type));
+
   const { rows } = await client.query(
     `INSERT INTO cost_entries
        (user_id, product_cost_id, received_at, quantity, unit_cost, unit_shipping_fee,
@@ -131,7 +180,7 @@ export async function createCostEntry(input: CreateEntryInput): Promise<CreateEn
       finalQuantity,
       finalUnitCost,
       unitShippingFee ?? 0,
-      unitRgShippingFee ?? 0,
+      finalUnitRgShippingFee,
       (channel === ENTRY_CHANNEL.RG || channel === ENTRY_CHANNEL.WING) ? channel : ENTRY_CHANNEL.WING,
       finalPurchaseQuantity,
       finalSubdivisionUnit,
