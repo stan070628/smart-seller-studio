@@ -33,6 +33,7 @@ import { PALETTES } from '@/lib/detail-page/palette-config';
 import { editableMarkupText } from '@/lib/detail-page/inline-markup';
 import { YOUTUBE_ID_RE } from '@/lib/detail-page/youtube';
 import { isOptionGridCarrier } from '@/lib/detail-page/layout-image-blocks';
+import { getIcon } from './icon-library';
 
 // ─────────────────────────────────────────
 // 보안 헬퍼
@@ -705,6 +706,16 @@ function accentNumberBadge(index: number, colors: PaletteColors): string {
   return `<div style="display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;border:2px solid ${c};color:${c};font-size:14px;font-weight:800;margin:0 auto 8px;">${index}</div>`;
 }
 
+// 유효한 라이브러리 키면 선형 아이콘, 아니면 번호 배지 — 절대 깨지지 않는 폴백.
+// getIcon은 마진을 갖지 않으므로(배치는 호출부 책임) 배지와 같은 하단 리듬을 여기서 맞춘다.
+function iconOrBadge(iconKey: string | undefined, index: number, colors: PaletteColors): string {
+  const isDark = colors.text === '#ffffff';
+  const c = isDark ? '#ffffff' : colors.accent;
+  const svg = iconKey ? getIcon(iconKey, 26, c) : null;
+  if (!svg) return accentNumberBadge(index, colors);
+  return `<div style="margin:0 auto 8px;width:26px;">${svg}</div>`;
+}
+
 function renderLayoutBlock(
   block: LayoutBlock,
   images: AttachedImage[],
@@ -883,7 +894,7 @@ function renderLayoutBlock(
       const cols = block.cols ?? 3;
       const items = block.items.map((item, i) =>
         `<div style="text-align:center;padding:14px 6px;background:${itemBg};border-radius:10px;">
-          ${accentNumberBadge(i + 1, colors)}
+          ${iconOrBadge(item.icon, i + 1, colors)}
           <div style="font-size:13px;font-weight:700;color:${colors.text};line-height:1.3;word-break:keep-all;">${editableText(`${basePath}.items.${i}.title`, item.title)}</div>
           ${item.subtitle ? `<div style="font-size:12px;color:${colors.textSub};margin-top:2px;">${editableText(`${basePath}.items.${i}.subtitle`, item.subtitle)}</div>` : ''}
         </div>`
