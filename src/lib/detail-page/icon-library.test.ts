@@ -18,4 +18,9 @@ describe('icon-library', () => {
   it('이모지가 섞여 있지 않다', () => {
     for (const k of ICON_KEYS) expect(getIcon(k)!).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u);
   });
+  it('color에 주입 시도가 들어오면 currentColor로 대체한다', () => {
+    const svg = getIcon('pack_sealed', 26, '" onload="x');
+    expect(svg).not.toContain('onload');
+    expect(svg).toContain('stroke="currentColor"');
+  });
 });
