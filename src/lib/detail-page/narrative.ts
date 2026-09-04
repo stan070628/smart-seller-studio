@@ -57,7 +57,8 @@ export type NarrativeRule =
   | 'compare_claim'
   | 'problem_without_solution'
   /** 옛 이름은 assure_tail. 비트가 care/notice로 갈리면서 이름도 마감 일반을 가리키게 바꿨다. */
-  | 'closing_tail';
+  | 'closing_tail'
+  | 'numbered_worry';
 
 export interface NarrativeIssue {
   rule: NarrativeRule;
@@ -122,6 +123,10 @@ const COMPARATIVE_MARKER = /(대비|보다|향상|증가|절감|개선|상승|�
  * 크다. 그래서 "50위안"(1688 사입가)·"2배수 구조" 같은 실측 오탐
  * 사례에서 관찰된 음절만 좁게 제외한다.
  */
+// 「첫 번째 고민, 두 번째 고민…」 목차식 나열 — 쇼핑몰이 아니라 문서를 쓰는 AI의 습관이다.
+// 고민을 세는 순간 "잘하는 AI가 만든 냄새"가 난다(2026-09-04 온크트리 실측 벤치마크).
+const NUMBERED_WORRY = /(첫|두|세|네|다섯)\s*번째\s*(고민|장점|이유|문제|걱정)/;
+
 const FORBIDDEN_COMPARE: ReadonlyArray<{ label: string; test: (s: string) => boolean }> = [
   { label: '배수', test: (s) => /\d+\s*배(?!수|송|열|치|터)/.test(s) },
   {
@@ -239,6 +244,20 @@ export function checkNarrative(sections: NarrativeSection[]): NarrativeIssue[] {
       return;
     }
     beats.push(raw);
+  });
+
+  // 「n번째 고민」식 목차 나열 — beat와 무관하게 전 섹션을 대상으로 한다.
+  // compare_claim과 같은 방식(collectSectionText로 섹션 전체 leaf를 이어붙여 검사)을 쓴다.
+  sections.forEach((sec, i) => {
+    const sectionText = collectSectionText(sec?.blocks);
+    if (NUMBERED_WORRY.test(sectionText)) {
+      issues.push({
+        rule: 'numbered_worry',
+        sectionIndex: i,
+        message: `sections[${i}]에 「n번째 고민」식 넘버링 나열이 있습니다. 장면·소제목으로 풀어 쓰세요.`,
+        severity: 'warning',
+      });
+    }
   });
 
   // 첫 섹션은 hook. beat 자체가 없거나 알 수 없는 값이면 위에서 이미

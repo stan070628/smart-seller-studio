@@ -388,3 +388,36 @@ describe('compare 섹션의 금지 표현', () => {
     expect(issue?.labels).toContain('순위');
   });
 });
+
+describe('넘버링 나열(numbered_worry)', () => {
+  it('「첫 번째 고민」이 heading에 있으면 numbered_worry warning', () => {
+    const section = sec('hook', [{ type: 'heading', text: '여름 비누의 첫 번째 고민', size: 'xl' }]);
+    const issues = checkNarrative([section, sec('detail'), compareSec(), sec('notice')]);
+    const issue = issues.find(i => i.rule === 'numbered_worry');
+    expect(issue?.severity).toBe('warning');
+    expect(issue?.sectionIndex).toBe(0);
+  });
+
+  it('「사용 방법 1단계」는 잡지 않는다', () => {
+    const section = sec('usecase', [{ type: 'heading', text: '사용 방법 1단계', size: 'xl' }]);
+    const issues = checkNarrative([sec('hook'), section, compareSec(), sec('notice')]);
+    expect(issues.some(i => i.rule === 'numbered_worry')).toBe(false);
+  });
+
+  it('「두 번째 장점」도 검출한다 (고민 외 명사도 포함)', () => {
+    const section = sec('detail', [{ type: 'subtext', text: '두 번째 장점은 내구성입니다' }]);
+    const issues = checkNarrative([sec('hook'), section, compareSec(), sec('notice')]);
+    expect(issues.some(i => i.rule === 'numbered_worry' && i.severity === 'warning')).toBe(true);
+  });
+
+  it('beat와 무관하게 어느 섹션에서든 검출한다 (compare 섹션도 포함)', () => {
+    const section = sec('compare', [
+      { type: 'columns', cols: [
+        [{ type: 'subtext', text: '세 번째 고민까지 해결' }],
+        [{ type: 'subtext', text: '우리' }],
+      ] },
+    ]);
+    const issues = checkNarrative([sec('hook'), section, sec('notice')]);
+    expect(issues.some(i => i.rule === 'numbered_worry' && i.sectionIndex === 1)).toBe(true);
+  });
+});
