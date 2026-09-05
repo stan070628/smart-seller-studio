@@ -89,7 +89,7 @@ interface HTableOpts {
   gap?: number;
   /** 행 사이 세로 간격(px) — 여러 행일 때만 의미가 있다 */
   rowGap?: number;
-  valign?: 'top' | 'middle' | 'bottom';
+  valign?: 'top' | 'middle' | 'bottom' | 'baseline';
   /** false면 auto 레이아웃(내용 폭). 기본 true = flex:1 균등 분할 대체 */
   fixed?: boolean;
   style?: string;
@@ -197,15 +197,18 @@ function renderAttachedImage(section: DetailSection, imageLayout: ImageLayout): 
     const safeUrl2 = sanitizeUrl(img2.url);
     if (!safeUrl1 && !safeUrl2) return '';
     const isComposed = imageLayout === 'composed';
+    // 2장 나란히도 flex였다 — 네이버 앱에서는 위아래로 쌓인다. table 1행으로 낸다.
+    // flex:1 + width:50%는 table-layout:fixed가 대신한다.
     const itemStyle = isComposed
-      ? 'flex:1;min-width:0;width:50%;display:block;height:auto;border-radius:8px;'
-      : 'flex:1;min-width:0;width:50%;display:block;height:auto;';
+      ? 'width:100%;display:block;height:auto;border-radius:8px;'
+      : 'width:100%;display:block;height:auto;';
     const imgTag = (url: string) =>
-      url
-        ? `<img src="${escapeHtml(url)}" alt="" style="${itemStyle}" />`
-        : `<div style="flex:1;min-width:0;width:50%;"></div>`;
-    const gap = isComposed ? '16px' : '8px';
-    return `<div style="display:flex;gap:${gap};width:100%;box-sizing:border-box;margin-bottom:24px;">${imgTag(safeUrl1)}${imgTag(safeUrl2)}</div>`;
+      url ? `<img src="${escapeHtml(url)}" alt="" style="${itemStyle}" />` : '';
+    const gap = isComposed ? 16 : 8;
+    return `<div style="width:100%;box-sizing:border-box;margin-bottom:24px;">${hTable(
+      [[{ html: imgTag(safeUrl1) }, { html: imgTag(safeUrl2) }]],
+      { gap, valign: 'top' },
+    )}</div>`;
   }
 
   const img = section.attachedImages[0];
@@ -258,21 +261,19 @@ function renderSellingPoints(content: SellingPointsContent, section: DetailSecti
   const headingFont = headingFontStyle(theme.fontStyle);
   const eyebrowHtml = renderEyebrow(section, colors, theme);
 
-  const pointsHtml = content.points
+  // 2단 카드는 flex-wrap이었다 — 네이버 앱에서 한 줄씩 쌓인다. 2열 table로 낸다.
+  const pointCards = content.points
     .map(
-      (point, index) => `<div style="flex:1;min-width:calc(50% - 12px);background-color:${colors.cardBg};border:1px solid ${colors.border};border-top:4px solid ${colors.accent};border-radius:8px;padding:24px;box-sizing:border-box;">
+      (point, index) => `<div style="background-color:${colors.cardBg};border:1px solid ${colors.border};border-top:4px solid ${colors.accent};border-radius:8px;padding:24px;box-sizing:border-box;height:100%;">
       <div style="font-size:16px;font-weight:700;color:${colors.text};margin-bottom:8px${headingFont};">${editableText(`content.points.${index}.title`, point.title)}</div>
       <div style="font-size:14px;color:${colors.textSub};line-height:1.6;">${editableMarkupText(`content.points.${index}.description`, point.description, colors.accent)}</div>
     </div>`
-    )
-    .join('\n');
+    );
 
   return `<div ${sectionAttrs(section)} style="background-color:${colors.bg};padding:60px 40px;box-sizing:border-box;">
   ${eyebrowHtml}
   ${imageHtml}
-  <div style="display:flex;flex-wrap:wrap;gap:24px;">
-    ${pointsHtml}
-  </div>
+  ${gridTable(pointCards, Math.min(Math.max(content.points.length, 1), 2), { gap: 24, rowGap: 24, valign: 'top' })}
 </div>`;
 }
 
@@ -302,21 +303,19 @@ function renderStats(content: StatsContent, section: DetailSection, colors: Pale
   const headingFont = headingFontStyle(theme.fontStyle);
   const eyebrowHtml = renderEyebrow(section, colors, theme);
 
-  const statsHtml = content.stats
+  // 수치 나열은 가로가 전부다 — flex:1 균등분할을 table-layout:fixed로 옮긴다.
+  const statCards = content.stats
     .map(
-      (stat, index) => `<div style="text-align:center;flex:1;min-width:120px;padding:16px;">
+      (stat, index) => `<div style="text-align:center;padding:16px;">
       <div style="font-size:48px;font-weight:700;color:${colors.accent};line-height:1.1;margin-bottom:8px${headingFont};">${editableText(`content.stats.${index}.value`, stat.value)}</div>
       <div style="font-size:16px;color:${colors.textSub};">${editableText(`content.stats.${index}.label`, stat.label)}</div>
     </div>`
-    )
-    .join('\n');
+    );
 
   return `<div ${sectionAttrs(section)} style="background-color:${colors.bg};padding:60px 40px;box-sizing:border-box;">
   ${eyebrowHtml}
   ${imageHtml}
-  <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:0;">
-    ${statsHtml}
-  </div>
+  ${gridTable(statCards, Math.min(Math.max(content.stats.length, 1), 4), { valign: 'top' })}
 </div>`;
 }
 
@@ -373,10 +372,16 @@ function renderUsageSteps(content: UsageStepsContent, section: DetailSection, co
 
   const stepsHtml = content.steps
     .map(
-      (step, index) => `<div style="display:flex;align-items:flex-start;gap:16px;margin-bottom:24px;">
-      <div style="flex-shrink:0;width:36px;height:36px;border-radius:50%;background-color:${colors.accent};color:${colors.accentTextColor};display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;line-height:36px;text-align:center;min-width:36px${headingFont};">${index + 1}</div>
-      <div style="font-size:16px;color:${colors.text};line-height:1.7;padding-top:6px;">${editableMarkupText(`content.steps.${index}`, step, colors.accent)}</div>
-    </div>`
+      // 번호 배지 + 본문의 가로 정렬 — 네이버 앱에서 flex가 무시돼 배지가 윗줄로 떨어진다.
+      (step, index) => `<div style="margin-bottom:24px;">${hTable(
+        [
+          [
+            { html: `<div style="width:36px;height:36px;border-radius:50%;background-color:${colors.accent};color:${colors.accentTextColor};font-size:16px;font-weight:700;line-height:36px;text-align:center${headingFont};">${index + 1}</div>`, width: '36px' },
+            { html: `<div style="font-size:16px;color:${colors.text};line-height:1.7;padding-top:6px;">${editableMarkupText(`content.steps.${index}`, step, colors.accent)}</div>` },
+          ],
+        ],
+        { gap: 16, valign: 'top' },
+      )}</div>`
     )
     .join('\n');
 
@@ -439,9 +444,18 @@ function sanitizeSwatchColor(color: string | undefined): string {
 }
 
 function renderBrandHeader(content: BrandHeaderContent, section: DetailSection, colors: PaletteColors): string {
-  return `<div ${sectionAttrs(section)} style="display:flex;justify-content:space-between;align-items:baseline;padding:16px 20px;border-bottom:1px solid ${colors.border};background-color:${colors.cardBg};box-sizing:border-box;">
-  <span style="font-size:15px;font-weight:600;color:${colors.text};">${editableText('content.brandName', content.brandName)}</span>
-  <span style="font-size:13px;color:${colors.textSub};">${editableText('content.rightLabel', content.rightLabel)}</span>
+  // justify-content:space-between도 flex다 — 네이버에서는 두 줄로 떨어진다.
+  // auto 레이아웃(fixed:false) table + 셀 정렬로 같은 결과를 낸다.
+  return `<div ${sectionAttrs(section)} style="padding:16px 20px;border-bottom:1px solid ${colors.border};background-color:${colors.cardBg};box-sizing:border-box;">
+  ${hTable(
+    [
+      [
+        { html: `<span style="font-size:15px;font-weight:600;color:${colors.text};">${editableText('content.brandName', content.brandName)}</span>`, align: 'left' },
+        { html: `<span style="font-size:13px;color:${colors.textSub};">${editableText('content.rightLabel', content.rightLabel)}</span>`, align: 'right' },
+      ],
+    ],
+    { fixed: false, valign: 'baseline' },
+  )}
 </div>`;
 }
 
@@ -517,12 +531,12 @@ function renderImageGrid(content: ImageGridContent, section: DetailSection, colo
       const labelHtml = item.label
         ? `<div style="margin-top:8px;font-size:15px;color:${colors.text};">${swatchHtml}${editableText(`content.items.${i}.label`, item.label)}</div>`
         : '';
-      return `<div style="width:50%;padding:8px;box-sizing:border-box;text-align:center;">${imgHtml}${labelHtml}</div>`;
-    })
-    .join('');
+      return `<div style="padding:8px;box-sizing:border-box;text-align:center;">${imgHtml}${labelHtml}</div>`;
+    });
+  // 2열 랩 그리드도 flex였다 — 네이버 앱에서 1열로 쌓인다. 2개씩 끊어 table 행으로.
   return `<div ${sectionAttrs(section)} style="background-color:${colors.cardBg};padding:40px 12px;box-sizing:border-box;">
   ${titleHtml}
-  <div style="display:flex;flex-wrap:wrap;">${cells}</div>
+  ${gridTable(cells, 2, { valign: 'top' })}
 </div>`;
 }
 
@@ -532,13 +546,21 @@ function renderImageGrid(content: ImageGridContent, section: DetailSection, colo
 
 function renderPointSection(content: PointSectionContent, section: DetailSection, colors: PaletteColors): string {
   const itemsHtml = content.items.map((item, i) =>
-    `<div style="background:#f8fafc;border-radius:12px;padding:24px;margin-bottom:12px;display:flex;gap:20px;align-items:flex-start;">
-      <div style="flex-shrink:0;"><div style="background:#1e293b;color:#ffffff;font-size:10px;font-weight:800;padding:4px 10px;border-radius:20px;white-space:nowrap;letter-spacing:1px;">POINT ${escapeHtml(String(item.number))}</div></div>
-      <div>
+    // POINT 배지 + 본문의 가로 정렬. auto 레이아웃 table이라 배지는 내용 폭을 갖는다.
+    `<div style="background:#f8fafc;border-radius:12px;padding:24px;margin-bottom:12px;">${hTable(
+      [
+        [
+          { html: `<div style="background:#1e293b;color:#ffffff;font-size:10px;font-weight:800;padding:4px 10px;border-radius:20px;white-space:nowrap;letter-spacing:1px;display:inline-block;">POINT ${escapeHtml(String(item.number))}</div>` },
+          {
+            html: `<div>
         <div style="font-size:18px;font-weight:800;color:${colors.text};margin-bottom:6px;">${editableText(`content.items.${i}.title`, item.title)}</div>
         <div style="font-size:13px;color:${colors.textSub};line-height:1.6;">${editableText(`content.items.${i}.description`, item.description)}</div>
-      </div>
-    </div>`
+      </div>`,
+          },
+        ],
+      ],
+      { gap: 20, fixed: false, valign: 'top' },
+    )}</div>`
   ).join('');
   return `<div ${sectionAttrs(section)} style="background-color:${colors.bg};padding:40px 24px;width:100%;box-sizing:border-box;">${itemsHtml}</div>`;
 }
@@ -546,26 +568,36 @@ function renderPointSection(content: PointSectionContent, section: DetailSection
 function renderStatCallout(content: StatCalloutContent, section: DetailSection, colors: PaletteColors): string {
   const cols = Math.max(1, Math.min(content.items.length, 3));
   const itemsHtml = content.items.map((item, i) =>
-    `<div style="background:linear-gradient(135deg,#1e293b,#334155);border-radius:12px;padding:20px 16px;text-align:center;">
+    `<div style="background:linear-gradient(135deg,#1e293b,#334155);border-radius:12px;padding:20px 16px;text-align:center;height:100%;box-sizing:border-box;">
       <div style="font-size:28px;font-weight:900;color:#f8fafc;line-height:1.2;">${editableText(`content.items.${i}.value`, item.value)}</div>
       <div style="font-size:11px;color:#94a3b8;margin-top:4px;">${editableText(`content.items.${i}.label`, item.label)}</div>
       <div style="font-size:11px;color:#64748b;margin-top:6px;">${editableText(`content.items.${i}.description`, item.description)}</div>
     </div>`
-  ).join('');
-  return `<div ${sectionAttrs(section)} style="background-color:${colors.bg};padding:40px 24px;width:100%;box-sizing:border-box;"><div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:12px;">${itemsHtml}</div></div>`;
+  );
+  // grid는 네이버 앱에서 렌더되지 않는다 → cols개씩 끊은 table 행.
+  return `<div ${sectionAttrs(section)} style="background-color:${colors.bg};padding:40px 24px;width:100%;box-sizing:border-box;">${gridTable(itemsHtml, cols, { gap: 12, rowGap: 12, valign: 'top' })}</div>`;
 }
 
 function renderBarChart(content: BarChartContent, section: DetailSection, colors: PaletteColors): string {
   const maxPct = Math.max(...content.items.map(i => i.percentage), 1);
   const itemsHtml = content.items.map((item, i) => {
     const barWidth = Math.min(Math.round((item.percentage / maxPct) * 100), 100);
-    return `<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
-      <span style="font-size:13px;color:${colors.text};width:100px;flex-shrink:0;">${editableText(`content.items.${i}.label`, item.label)}</span>
-      <div style="flex:1;height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;">
+    // 라벨·막대·수치의 가로 3단 — 네이버 앱에서 flex가 무시돼 세로로 무너진다.
+    // 라벨 100px·수치 50px를 고정하면 table-layout:fixed에서 막대가 나머지를 차지한다.
+    return `<div style="margin-bottom:10px;">${hTable(
+      [
+        [
+          { html: `<span style="font-size:13px;color:${colors.text};">${editableText(`content.items.${i}.label`, item.label)}</span>`, width: '100px' },
+          {
+            html: `<div style="height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;">
         <div style="height:100%;width:${barWidth}%;background:linear-gradient(90deg,#6366f1,#818cf8);border-radius:4px;"></div>
-      </div>
-      <span style="font-size:12px;font-weight:700;color:#6366f1;width:50px;text-align:right;flex-shrink:0;">${editableText(`content.items.${i}.displayValue`, item.displayValue)}</span>
-    </div>`;
+      </div>`,
+          },
+          { html: `<span style="font-size:12px;font-weight:700;color:#6366f1;">${editableText(`content.items.${i}.displayValue`, item.displayValue)}</span>`, width: '50px', align: 'right' },
+        ],
+      ],
+      { gap: 12, valign: 'middle' },
+    )}</div>`;
   }).join('');
   return `<div ${sectionAttrs(section)} style="background-color:${colors.bg};padding:40px 24px;width:100%;box-sizing:border-box;"><div style="background:#f8fafc;border-radius:12px;padding:20px;">${itemsHtml}</div></div>`;
 }
@@ -578,35 +610,48 @@ function renderWhyIcons(content: WhyIconsContent, section: DetailSection, colors
       <div style="font-size:13px;font-weight:700;color:${colors.text};margin-bottom:4px;word-break:keep-all;">${editableText(`content.items.${i}.title`, item.title)}</div>
       <div style="font-size:11px;color:${colors.textSub};line-height:1.4;">${editableText(`content.items.${i}.description`, item.description)}</div>
     </div>`
-  ).join('');
-  return `<div ${sectionAttrs(section)} style="background-color:${colors.cardBg};padding:40px 24px;width:100%;box-sizing:border-box;"><div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:12px;">${itemsHtml}</div></div>`;
+  );
+  // grid는 네이버 앱에서 렌더되지 않는다 → cols개씩 끊은 table 행.
+  return `<div ${sectionAttrs(section)} style="background-color:${colors.cardBg};padding:40px 24px;width:100%;box-sizing:border-box;">${gridTable(itemsHtml, cols, { gap: 12, rowGap: 12, valign: 'top' })}</div>`;
 }
 
 function renderCertifications(content: CertificationsContent, section: DetailSection, colors: PaletteColors): string {
   const itemsHtml = content.items.map((item, i) =>
-    `<div style="border:2px solid #e2e8f0;border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:10px;">
-      <div style="flex-shrink:0;width:24px;height:24px;border-radius:50%;background:${colors.accent};color:${colors.accentTextColor};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;">✓</div>
-      <div>
+    // 체크 원의 중앙 정렬도 flex가 아니라 line-height로 낸다.
+    `<div style="border:2px solid #e2e8f0;border-radius:12px;padding:12px 16px;height:100%;box-sizing:border-box;">${hTable(
+      [
+        [
+          { html: `<div style="width:24px;height:24px;border-radius:50%;background:${colors.accent};color:${colors.accentTextColor};font-size:13px;font-weight:800;line-height:24px;text-align:center;">✓</div>`, width: '24px' },
+          {
+            html: `<div>
         <div style="font-size:13px;font-weight:700;color:${colors.text};">${editableText(`content.items.${i}.name`, item.name)}</div>
         <div style="font-size:11px;color:${colors.textSub};margin-top:2px;">${editableText(`content.items.${i}.description`, item.description)}</div>
-      </div>
-    </div>`
-  ).join('');
-  return `<div ${sectionAttrs(section)} style="background-color:${colors.cardBg};padding:40px 24px;width:100%;box-sizing:border-box;"><div style="display:flex;gap:12px;flex-wrap:wrap;">${itemsHtml}</div></div>`;
+      </div>`,
+          },
+        ],
+      ],
+      { gap: 10, valign: 'middle' },
+    )}</div>`
+  );
+  // flex-wrap 카드 나열 → 2열 table. 카드가 내용 폭이 아니라 균등 폭이 되지만,
+  // 네이버 앱에서 flex는 아예 렌더되지 않으므로 이쪽이 낫다.
+  return `<div ${sectionAttrs(section)} style="background-color:${colors.cardBg};padding:40px 24px;width:100%;box-sizing:border-box;">${gridTable(itemsHtml, Math.min(Math.max(content.items.length, 1), 2), { gap: 12, rowGap: 12, valign: 'top' })}</div>`;
 }
 
 function renderInfographicSteps(content: InfographicStepsContent, section: DetailSection, colors: PaletteColors): string {
   const itemsHtml = content.items.map((item, i) => {
     const isLast = i === content.items.length - 1;
     const arrow = isLast ? '' : `<div style="position:absolute;right:-10px;top:18px;color:#94a3b8;font-size:18px;z-index:1;">→</div>`;
-    return `<div style="flex:1;text-align:center;position:relative;">
+    // 단계 원의 중앙 정렬은 line-height:36px로. flex가 무시돼도 숫자가 원 안에 남는다.
+    return `<div style="text-align:center;position:relative;">
       ${arrow}
-      <div style="width:36px;height:36px;background:${colors.accent};color:${colors.accentTextColor};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;margin:0 auto 8px;">${escapeHtml(String(item.step))}</div>
+      <div style="width:36px;height:36px;background:${colors.accent};color:${colors.accentTextColor};border-radius:50%;font-size:14px;font-weight:800;line-height:36px;text-align:center;margin:0 auto 8px;">${escapeHtml(String(item.step))}</div>
       <div style="font-size:12px;font-weight:700;color:${colors.text};margin-bottom:3px;word-break:keep-all;">${editableText(`content.items.${i}.title`, item.title)}</div>
       <div style="font-size:11px;color:${colors.textSub};">${editableText(`content.items.${i}.description`, item.description)}</div>
     </div>`;
-  }).join('');
-  return `<div ${sectionAttrs(section)} style="background-color:${colors.cardBg};padding:40px 24px;width:100%;box-sizing:border-box;"><div style="display:flex;align-items:flex-start;gap:0;">${itemsHtml}</div></div>`;
+  });
+  // 가로 단계 흐름 → table 1행. flex:1 균등분할은 table-layout:fixed가 대신한다.
+  return `<div ${sectionAttrs(section)} style="background-color:${colors.cardBg};padding:40px 24px;width:100%;box-sizing:border-box;">${hTable([itemsHtml.map((html) => ({ html }))], { valign: 'top' })}</div>`;
 }
 
 // ─────────────────────────────────────────

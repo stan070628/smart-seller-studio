@@ -107,7 +107,9 @@ describe('renderSection — image_grid', () => {
     expect(html).toContain('레드');
     expect(html).toContain('#D9442C');
     expect(html).toContain('https://example.com/red.jpg');
-    expect(html).toContain('width:50%');
+    // width:50% 대신 2열 table이 폭을 반씩 나눈다(네이버 앱 flex 미렌더 대응)
+    expect(html).toContain('table-layout:fixed');
+    expect(html.match(/<td /g)?.length).toBe(2);
   });
 
   it('title이 빈 문자열이면 타이틀을 렌더링하지 않는다', () => {

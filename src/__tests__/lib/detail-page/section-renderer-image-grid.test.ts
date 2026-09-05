@@ -34,8 +34,8 @@ describe('renderImageGrid — points 오버레이', () => {
     expect(html).toContain('포인트 2');
     expect(html).toContain('제품 특징');
     expect(html).toContain('cdn.example.com/bg.jpg');
-    // 기존 그리드 구조(display:flex;flex-wrap:wrap)는 없어야 함
-    expect(html).not.toContain('flex-wrap:wrap');
+    // 기존 그리드 구조(2열 table)는 없어야 함
+    expect(html).not.toContain('<table');
   });
 
   it('points가 없으면 기존 그리드 HTML 렌더링', () => {
@@ -48,7 +48,9 @@ describe('renderImageGrid — points 오버레이', () => {
 
     const html = renderSection(section, DEFAULT_THEME);
 
-    expect(html).toContain('flex-wrap:wrap');
+    // 2열 랩 그리드는 table로 낸다 — 네이버 앱이 flex를 렌더하지 않는다(2026-09-05 실측)
+    expect(html).toContain('<table');
+    expect(html).not.toContain('display:flex');
     expect(html).toContain('빨강');
   });
 
@@ -63,7 +65,8 @@ describe('renderImageGrid — points 오버레이', () => {
 
     const html = renderSection(section, DEFAULT_THEME);
 
-    expect(html).toContain('flex-wrap:wrap');
+    expect(html).toContain('<table');
+    expect(html).not.toContain('display:flex');
   });
 
   it('XSS 방어: points 텍스트의 < > & 가 이스케이프됨', () => {

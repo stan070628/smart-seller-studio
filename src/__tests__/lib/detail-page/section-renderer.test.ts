@@ -720,10 +720,15 @@ describe('renderSection — attachedImages 2장', () => {
     expect(html).toContain('https://example.com/img2.jpg');
   });
 
-  it('flex 컨테이너로 나란히 배치된다', () => {
+  // 네이버 앱 뷰어가 display:flex를 렌더하지 않아 2장이 위아래로 쌓였다(2026-09-05 실측).
+  // 나란히 배치는 table 1행 + table-layout:fixed로 낸다.
+  it('table 1행으로 나란히 배치된다', () => {
     const html = renderSection(twoImageSection, WARM_CREAM_THEME);
-    expect(html).toContain('display:flex;gap:8px;width:100%;box-sizing:border-box;');
-    expect(html).toContain('width:50%');
+    expect(html).toContain('<table');
+    expect(html).toContain('table-layout:fixed');
+    expect(html).toContain('border-spacing:8px 0px;');
+    expect(html).not.toContain('display:flex');
+    expect(html.match(/<td /g)?.length).toBe(2);
   });
 
   it('imageLayout=composed 2장 — gap:16px, border-radius:8px 적용', () => {
@@ -737,17 +742,18 @@ describe('renderSection — attachedImages 2장', () => {
     });
     const composedTheme = { ...WARM_CREAM_THEME, imageLayout: 'composed' as const };
     const html = renderSection(composedSection, composedTheme);
-    expect(html).toContain('gap:16px');
+    // gap:16px → border-spacing:16px (표 바깥 가장자리에도 적용된다)
+    expect(html).toContain('border-spacing:16px 0px;');
     expect(html).toContain('border-radius:8px');
   });
 
   it('imageLayout=fullbleed 2장 — gap:8px, border-radius 없음', () => {
     const html = renderSection(twoImageSection, WARM_CREAM_THEME); // fullbleed
-    expect(html).toContain('gap:8px');
+    expect(html).toContain('border-spacing:8px 0px;');
     expect(html).not.toContain('border-radius:8px');
   });
 
-  it('한 장이 악성 URL이면 placeholder div가 삽입되고 flex 컨테이너는 유지된다', () => {
+  it('한 장이 악성 URL이면 빈 칸이 남고 table 컨테이너는 유지된다', () => {
     const mixedSection = baseSection({
       type: 'hero',
       content: { type: 'hero', headline: '제목', subheadline: '부제목' },
@@ -757,8 +763,9 @@ describe('renderSection — attachedImages 2장', () => {
       ],
     });
     const html = renderSection(mixedSection, WARM_CREAM_THEME);
-    // flex 컨테이너는 유지되어야 함
-    expect(html).toContain('display:flex;gap:8px;width:100%;box-sizing:border-box;');
+    // table 컨테이너는 유지되어야 함 (빈 칸으로 열 정렬 유지)
+    expect(html).toContain('border-spacing:8px 0px;');
+    expect(html.match(/<td /g)?.length).toBe(2);
     // 악성 URL은 출력에 포함되지 않아야 함
     expect(html).not.toContain('javascript:');
     // 유효한 URL은 렌더링되어야 함
