@@ -835,9 +835,25 @@ function accentNumberBadge(index: number, colors: PaletteColors): string {
 
 // 유효한 라이브러리 키면 선형 아이콘, 아니면 번호 배지 — 절대 깨지지 않는 폴백.
 // getIcon은 마진을 갖지 않으므로(배치는 호출부 책임) 배지와 같은 하단 리듬을 여기서 맞춘다.
-function iconOrBadge(iconKey: string | undefined, index: number, colors: PaletteColors): string {
+//
+// 🔴 실측 2026-09-05: 마켓(네이버·쿠팡)은 상세 HTML의 인라인 <svg>를 렌더하지 않고
+// 소스 코드를 텍스트로 노출한다 — 화면에 `<svg width="26" height="26" viewBox=...`가
+// 그대로 찍혔다. 그래서 아이콘 이미지 URL 맵(iconUrls)을 주면 <img>로 낸다.
+// 맵을 주지 않으면 기존 인라인 SVG를 유지한다 — 앱 미리보기는 SVG가 정상으로 보이고,
+// 여기서 동작을 바꾸면 미리보기까지 함께 바뀌기 때문이다.
+function iconOrBadge(
+  iconKey: string | undefined,
+  index: number,
+  colors: PaletteColors,
+  iconUrls?: Record<string, string>,
+): string {
   const isDark = colors.text === '#ffffff';
   const c = isDark ? '#ffffff' : colors.accent;
+  const mapped = iconKey ? iconUrls?.[iconKey] : undefined;
+  const safeIconUrl = mapped ? sanitizeUrl(mapped) : '';
+  if (safeIconUrl) {
+    return `<div style="margin:0 auto 8px;width:26px;"><img src="${escapeHtml(safeIconUrl)}" alt="" width="26" height="26" style="width:26px;height:26px;display:block;object-fit:contain;" /></div>`;
+  }
   const svg = iconKey ? getIcon(iconKey, 26, c) : null;
   if (!svg) return accentNumberBadge(index, colors);
   return `<div style="margin:0 auto 8px;width:26px;">${svg}</div>`;
@@ -848,6 +864,7 @@ function renderLayoutBlock(
   images: AttachedImage[],
   colors: PaletteColors,
   basePath: string = '',
+  iconUrls?: Record<string, string>,
 ): string {
   switch (block.type) {
     case 'badge': {
@@ -940,7 +957,7 @@ function renderLayoutBlock(
       const gap = block.gap ?? 12;
       // 좌우 2단 비교가 네이버 앱에서 위아래로 무너졌다 → table 1행.
       const cells: HCell[] = block.cols.map((col, c) => ({
-        html: col.map((b, r) => renderLayoutBlock(b, images, colors, `${basePath}.cols.${c}.${r}`)).join(''),
+        html: col.map((b, r) => renderLayoutBlock(b, images, colors, `${basePath}.cols.${c}.${r}`, iconUrls)).join(''),
       }));
       return `<div style="margin-bottom:8px;">${hTable([cells], { gap, valign: 'top' })}</div>`;
     }
@@ -1043,7 +1060,7 @@ function renderLayoutBlock(
       const cols = block.cols ?? 3;
       const items = block.items.map((item, i) =>
         `<div style="text-align:center;padding:14px 6px;background:${itemBg};border-radius:10px;height:100%;box-sizing:border-box;">
-          ${iconOrBadge(item.icon, i + 1, colors)}
+          ${iconOrBadge(item.icon, i + 1, colors, iconUrls)}
           <div style="font-size:13px;font-weight:700;color:${colors.text};line-height:1.3;word-break:keep-all;">${editableText(`${basePath}.items.${i}.title`, item.title)}</div>
           ${item.subtitle ? `<div style="font-size:12px;color:${colors.textSub};margin-top:2px;">${editableText(`${basePath}.items.${i}.subtitle`, item.subtitle)}</div>` : ''}
         </div>`
@@ -1178,6 +1195,7 @@ function renderClaudeLayout(
   content: ClaudeLayoutContent,
   section: DetailSection,
   colors: PaletteColors,
+  iconUrls?: Record<string, string>,
 ): string {
   const bg = resolveBgColor(content.bgStyle, colors);
   const pad = resolvePad(content.padding);
@@ -1187,12 +1205,22 @@ function renderClaudeLayout(
       ? { ...colors, text: '#ffffff', textSub: 'rgba(255,255,255,0.72)' }
       : colors;
   const blocksHtml = (content.blocks ?? [])
-    .map((b, i) => renderLayoutBlock(b, section.attachedImages, effectiveColors, `content.blocks.${i}`))
+    .map((b, i) => renderLayoutBlock(b, section.attachedImages, effectiveColors, `content.blocks.${i}`, iconUrls))
     .join('');
   return `<div ${sectionAttrs(section)} style="background-color:${bg};padding:${pad};width:100%;box-sizing:border-box;">${blocksHtml}</div>`;
 }
 
 type RenderMode = 'preview' | 'export';
+
+export interface RenderOptions {
+  /**
+   * 아이콘 키 → 이미지 URL 맵. 주면 icon_grid가 인라인 SVG 대신 <img>를 낸다.
+   * 🔴 마켓은 상세 HTML의 인라인 <svg>를 렌더하지 않고 소스를 텍스트로 노출한다
+   * (2026-09-05 실측). 앱 미리보기는 SVG가 정상이므로 맵을 주지 않으면 기존
+   * 인라인 SVG를 그대로 유지한다 — 기존 호출부는 손대지 않아도 동작이 같다.
+   */
+  iconUrls?: Record<string, string>;
+}
 
 function renderYoutube(content: YoutubeContent, section: DetailSection, mode: RenderMode): string {
   if (!content.enabled || !YOUTUBE_ID_RE.test(content.videoId)) return '';
@@ -1236,7 +1264,12 @@ function renderYoutube(content: YoutubeContent, section: DetailSection, mode: Re
   </section>`;
 }
 
-export function renderSection(section: DetailSection, theme: DetailPageTheme, mode: RenderMode = 'export'): string {
+export function renderSection(
+  section: DetailSection,
+  theme: DetailPageTheme,
+  mode: RenderMode = 'export',
+  opts: RenderOptions = {},
+): string {
   const colors = PALETTES[theme.palette];
   switch (section.type) {
     case 'hero':
@@ -1274,15 +1307,20 @@ export function renderSection(section: DetailSection, theme: DetailPageTheme, mo
     case 'infographic_steps':
       return renderInfographicSteps(section.content as InfographicStepsContent, section, colors);
     case 'claude_layout':
-      return renderClaudeLayout(section.content as ClaudeLayoutContent, section, colors);
+      return renderClaudeLayout(section.content as ClaudeLayoutContent, section, colors, opts.iconUrls);
     case 'youtube':
       return renderYoutube(section.content as YoutubeContent, section, mode);
   }
 }
 
-export function renderAllSections(sections: DetailSection[], theme: DetailPageTheme, mode: RenderMode = 'export'): string {
+export function renderAllSections(
+  sections: DetailSection[],
+  theme: DetailPageTheme,
+  mode: RenderMode = 'export',
+  opts: RenderOptions = {},
+): string {
   return [...sections]
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-    .map((s) => renderSection(s, theme, mode))
+    .map((s) => renderSection(s, theme, mode, opts))
     .join('\n');
 }
