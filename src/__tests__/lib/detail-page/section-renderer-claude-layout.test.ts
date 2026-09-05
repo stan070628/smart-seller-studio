@@ -82,8 +82,12 @@ describe('renderSection — claude_layout', () => {
     // 라벨·서브라벨이 모두 렌더링된다
     expect(html).toContain('55 x 45cm');
     expect(html).toContain('65 x 50cm');
-    // 3개 항목은 3열 그리드로 배치된다
-    expect(html).toContain('grid-template-columns:repeat(3,1fr)');
+    // 3개 항목은 3열 table 1행으로 배치된다
+    // (네이버 앱 뷰어가 display:grid를 렌더하지 않아 table로 낸다 — 2026-09-05 실측)
+    expect(html).toContain('<table');
+    expect(html).toContain('table-layout:fixed');
+    expect(html).not.toContain('display:grid');
+    expect(html.match(/<td /g)?.length).toBe(3);
     // process_flow와 달리 흐름 화살표가 없어야 한다
     expect(html).not.toContain('↓');
     expect(html).not.toContain('→');
@@ -175,7 +179,9 @@ describe('renderSection — claude_layout', () => {
     expect(html).toContain('margin-top:4px;line-height:1.4;word-break:keep-all;');
   });
 
-  it('option_grid — 행이 나뉘어도 카드 높이가 통일된다(grid-auto-rows:1fr)', () => {
+  // grid-auto-rows:1fr는 행 사이 높이까지 통일했지만 table은 같은 행 안에서만
+  // 맞춘다. grid가 네이버에서 아예 렌더되지 않으므로 행 내부 통일만 유지한다.
+  it('option_grid — 4개 항목이 2열 table 2행으로 나뉘고 카드가 행 높이를 채운다', () => {
     const section = makeSection({
       type: 'claude_layout',
       title: '사이즈',
@@ -188,7 +194,10 @@ describe('renderSection — claude_layout', () => {
       ],
     });
     const html = renderSection(section, DEFAULT_THEME);
-    expect(html).toContain('grid-auto-rows:1fr');
+    expect(html).not.toContain('display:grid');
+    expect(html.match(/<tr>/g)?.length).toBe(2);
+    expect(html.match(/<td /g)?.length).toBe(4);
+    expect(html).toContain('height:100%;');
   });
 
   it('heading·subtext의 개행이 줄바꿈으로 렌더된다', () => {

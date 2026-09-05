@@ -57,6 +57,86 @@ function editableText(path: string, value: string): string {
   return `<span data-edit-path="${escapeHtml(path)}">${escapeHtml(value)}</span>`;
 }
 
+// ─────────────────────────────────────────
+// 마켓플레이스 호환 가로 배치 헬퍼
+//
+// 🔴 실측 2026-09-05(보태니컬 비누 상세를 네이버·쿠팡·토스에 올린 뒤 모바일 확인):
+// 네이버 앱 상품상세 뷰어는 저장된 HTML의 display:flex / display:grid를 렌더하지
+// 않는다. HTML 자체는 손상 없이 저장되고(재조회 시 flex 28개·grid 2개 그대로)
+// 화면에서만 모든 자식이 세로로 쌓였다 — 2×2 아이콘 그리드가 4줄로, 좌우 2단
+// 비교가 위아래로, 가로 3단계 흐름이 세로로 무너졌다. 같은 문서에서 <table>은
+// 정상 렌더됐다. 그래서 이 파일의 가로 배치는 전부 table로 낸다.
+// (detail-page-privacy.ts는 같은 이유로 이미 flex를 피하고 있었다 — 렌더러만
+//  그 제약을 지키지 않고 있었다.)
+//
+// 세로 배치(flex-direction:column)는 그대로 둔다. 뷰어가 flex를 무시해도 자식이
+// 세로로 쌓이는 결과는 같으므로 고칠 이유가 없다.
+//
+// 치환 규칙: gap → border-spacing, flex:1 균등분할 → table-layout:fixed.
+// ⚠️ border-spacing은 표 바깥 가장자리에도 적용돼 내용 폭이 좌우 gap만큼 줄어든다.
+// 음수 마진·calc 보정은 마켓 스타일 필터에서 살아남는다는 보장이 없어 쓰지 않는다.
+// ─────────────────────────────────────────
+
+interface HCell {
+  html: string;
+  /** 균등 분할에서 빼야 하는 칸(화살표 등). 지정하면 그 폭으로 고정된다 */
+  width?: string;
+  align?: 'left' | 'center' | 'right';
+}
+
+interface HTableOpts {
+  /** 칸 사이 가로 간격(px) — flex gap 대체 */
+  gap?: number;
+  /** 행 사이 세로 간격(px) — 여러 행일 때만 의미가 있다 */
+  rowGap?: number;
+  valign?: 'top' | 'middle' | 'bottom';
+  /** false면 auto 레이아웃(내용 폭). 기본 true = flex:1 균등 분할 대체 */
+  fixed?: boolean;
+  style?: string;
+}
+
+/** 가로 배치를 table로 낸다. rows[i][j]가 셀 하나. */
+function hTable(rows: HCell[][], opts: HTableOpts = {}): string {
+  const gap = opts.gap ?? 0;
+  const rowGap = opts.rowGap ?? 0;
+  const valign = opts.valign ?? 'top';
+  const fixed = opts.fixed !== false;
+  const spacing =
+    gap > 0 || rowGap > 0
+      ? `border-collapse:separate;border-spacing:${gap}px ${rowGap}px;`
+      : 'border-collapse:collapse;';
+  const body = rows
+    .map(
+      (cells) =>
+        `<tr>${cells
+          .map(
+            (c) =>
+              `<td style="padding:0;${c.width ? `width:${c.width};` : ''}${c.align ? `text-align:${c.align};` : ''}vertical-align:${valign};">${c.html}</td>`,
+          )
+          .join('')}</tr>`,
+    )
+    .join('');
+  return `<table style="width:100%;${fixed ? 'table-layout:fixed;' : ''}${spacing}${opts.style ?? ''}"><tbody>${body}</tbody></table>`;
+}
+
+/**
+ * grid-template-columns:repeat(N,1fr) 대체. 항목을 N개씩 끊어 행으로 나누고
+ * 마지막 행은 빈 칸으로 채워 열 정렬을 유지한다(flex-wrap 대체도 겸한다).
+ * ⚠️ grid-auto-rows:1fr가 주던 "행 사이" 높이 통일은 table로 재현할 수 없다 —
+ * table은 같은 행 안에서만 높이를 맞춘다. 카드에 height:100%를 줘서 행 내부
+ * 통일까지만 유지한다.
+ */
+function gridTable(items: string[], cols: number, opts: HTableOpts = {}): string {
+  const n = Math.max(1, cols);
+  const rows: HCell[][] = [];
+  for (let i = 0; i < items.length; i += n) {
+    const row: HCell[] = items.slice(i, i + n).map((html) => ({ html }));
+    while (row.length < n) row.push({ html: '' });
+    rows.push(row);
+  }
+  return hTable(rows, opts);
+}
+
 const SECTION_LABELS: Record<DetailSection['type'], string> = {
   hero: '히어로',
   selling_points: '셀링 포인트',
@@ -703,7 +783,9 @@ function buildRadarChartSvg(
 function accentNumberBadge(index: number, colors: PaletteColors): string {
   const isDark = colors.text === '#ffffff';
   const c = isDark ? '#ffffff' : colors.accent;
-  return `<div style="display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;border:2px solid ${c};color:${c};font-size:14px;font-weight:800;margin:0 auto 8px;">${index}</div>`;
+  // 숫자 중앙 정렬을 inline-flex로 하면 네이버 뷰어(flex 미렌더)에서 숫자가 원
+  // 왼쪽 위로 붙는다 → line-height:30px + text-align:center로 낸다.
+  return `<div style="display:inline-block;width:30px;height:30px;border-radius:50%;border:2px solid ${c};color:${c};font-size:14px;font-weight:800;line-height:30px;text-align:center;margin:0 auto 8px;">${index}</div>`;
 }
 
 // 유효한 라이브러리 키면 선형 아이콘, 아니면 번호 배지 — 절대 깨지지 않는 폴백.
@@ -766,43 +848,44 @@ function renderLayoutBlock(
       const safeUrl = sanitizeUrl(img.url);
       if (!safeUrl) return '';
       const width = block.width ?? '100%';
-      const align =
-        block.align === 'left'
-          ? 'flex-start'
-          : block.align === 'right'
-          ? 'flex-end'
-          : 'center';
+      // 정렬 하나 때문에 flex를 쓰면 네이버 뷰어에서 정렬이 통째로 사라진다 → text-align.
+      const align = block.align === 'left' ? 'left' : block.align === 'right' ? 'right' : 'center';
       const radius = block.rounded ? 'border-radius:12px;' : '';
-      return `<div style="display:flex;justify-content:${align};margin-bottom:12px;"><img src="${escapeHtml(safeUrl)}" alt="" style="width:${escapeHtml(width)};max-width:100%;object-fit:contain;${radius}" /></div>`;
+      return `<div style="text-align:${align};margin-bottom:12px;"><img src="${escapeHtml(safeUrl)}" alt="" style="width:${escapeHtml(width)};max-width:100%;object-fit:contain;display:inline-block;${radius}" /></div>`;
     }
     case 'stat_row': {
       if (!Array.isArray(block.items)) return '';
       // dark/primary 배경(accent가 배경색)에서는 accent 숫자가 안 보이므로 흰색으로.
       const isDark = colors.text === '#ffffff';
       const valueColor = isDark ? '#ffffff' : colors.accent;
-      const items = block.items
-        .map(
-          (item, i) =>
-            `<div style="text-align:center;flex:1;">
+      // 수치 나열은 가로 배치가 전부다 — flex:1 균등분할을 table-layout:fixed로.
+      const cells: HCell[] = block.items.map((item, i) => ({
+        html: `<div style="text-align:center;">
               <div style="font-size:44px;font-weight:900;color:${valueColor};line-height:1.05;letter-spacing:-1px;">${editableText(`${basePath}.items.${i}.value`, item.value)}${item.unit ? `<span style="font-size:18px;font-weight:700;margin-left:2px;">${editableText(`${basePath}.items.${i}.unit`, item.unit)}</span>` : ''}</div>
               <div style="font-size:12px;color:${colors.textSub};margin-top:6px;line-height:1.4;">${editableText(`${basePath}.items.${i}.label`, item.label)}</div>
             </div>`,
-        )
-        .join('');
-      return `<div style="display:flex;gap:8px;padding:20px 0;margin-bottom:8px;">${items}</div>`;
+      }));
+      return `<div style="padding:20px 0;margin-bottom:8px;">${hTable([cells], { gap: 8, valign: 'top' })}</div>`;
     }
     case 'bullet_list': {
       if (!Array.isArray(block.items)) return '';
       const isDark = colors.text === '#ffffff';
       const iconColor = isDark ? 'rgba(255,255,255,0.9)' : colors.accent;
       const icon = block.icon === 'check' ? '✓' : block.icon === 'arrow' ? '→' : '•';
+      // 불릿 기호와 본문의 가로 정렬도 flex였다 — 네이버에서는 기호가 윗줄로 떨어진다.
+      // 기호 칸은 균등 분할하면 안 되므로 22px로 고정한다(기호 16px + 여백 6px).
       const items = block.items
         .map(
           (item, i) =>
-            `<li style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px;font-size:14px;color:${colors.text};line-height:1.5;">
-              <span style="color:${iconColor};flex-shrink:0;font-weight:700;">${icon}</span>
-              <span>${editableText(`${basePath}.items.${i}`, item)}</span>
-            </li>`,
+            `<li style="margin-bottom:6px;font-size:14px;color:${colors.text};line-height:1.5;">${hTable(
+              [
+                [
+                  { html: `<span style="color:${iconColor};font-weight:700;">${icon}</span>`, width: '22px' },
+                  { html: `<span>${editableText(`${basePath}.items.${i}`, item)}</span>` },
+                ],
+              ],
+              { valign: 'top' },
+            )}</li>`,
         )
         .join('');
       return `<ul style="list-style:none;margin:0 0 12px;padding:0;">${items}</ul>`;
@@ -810,13 +893,11 @@ function renderLayoutBlock(
     case 'columns': {
       if (!Array.isArray(block.cols)) return '';
       const gap = block.gap ?? 12;
-      const cols = block.cols
-        .map((col, c) => {
-          const inner = col.map((b, r) => renderLayoutBlock(b, images, colors, `${basePath}.cols.${c}.${r}`)).join('');
-          return `<div style="flex:1;min-width:0;">${inner}</div>`;
-        })
-        .join('');
-      return `<div style="display:flex;gap:${gap}px;align-items:flex-start;margin-bottom:8px;">${cols}</div>`;
+      // 좌우 2단 비교가 네이버 앱에서 위아래로 무너졌다 → table 1행.
+      const cells: HCell[] = block.cols.map((col, c) => ({
+        html: col.map((b, r) => renderLayoutBlock(b, images, colors, `${basePath}.cols.${c}.${r}`)).join(''),
+      }));
+      return `<div style="margin-bottom:8px;">${hTable([cells], { gap, valign: 'top' })}</div>`;
     }
     case 'divider':
       // 실제 쇼핑몰 상세는 선으로 섹션을 가르지 않는다 — 여백과 배경 전환이 리듬을 만든다.
@@ -835,10 +916,15 @@ function renderLayoutBlock(
           ? (isDark ? 'rgba(255,255,255,0.25)' : `${colors.accent}22`)
           : (isDark ? 'rgba(255,255,255,0.15)' : '#e5e7eb');
         return `<div style="margin-bottom:10px;">
-          <div style="display:flex;justify-content:space-between;font-size:12px;color:${colors.text};margin-bottom:4px;">
-            <span>${editableText(`${basePath}.items.${i}.label`, item.label)}</span>
-            <span style="font-weight:700;color:${barColor};">${editableText(`${basePath}.items.${i}.displayValue`, item.displayValue ?? `${pct}%`)}</span>
-          </div>
+          <div style="font-size:12px;color:${colors.text};margin-bottom:4px;">${hTable(
+            [
+              [
+                { html: `<span>${editableText(`${basePath}.items.${i}.label`, item.label)}</span>` },
+                { html: `<span style="font-weight:700;color:${barColor};">${editableText(`${basePath}.items.${i}.displayValue`, item.displayValue ?? `${pct}%`)}</span>`, align: 'right' },
+              ],
+            ],
+            { valign: 'bottom' },
+          )}</div>
           <div style="background:${trackColor};border-radius:8px;height:12px;overflow:hidden;">
             <div style="background:${barColor};height:100%;width:${pct}%;border-radius:8px;"></div>
           </div>
@@ -854,7 +940,8 @@ function renderLayoutBlock(
       const badgeBg = isDark ? '#ffffff' : colors.accent;
       const badgeFg = isDark ? '#111111' : colors.accentTextColor;
       const accentBar = isDark ? 'rgba(255,255,255,0.6)' : colors.accent;
-      const items = block.items.map((item, i) => {
+      const cells: HCell[] = [];
+      block.items.forEach((item, i) => {
         const isLast = i === block.items.length - 1;
         const boxBg = item.highlight
           ? (isDark ? 'rgba(255,255,255,0.25)' : `${colors.accent}15`)
@@ -866,27 +953,43 @@ function renderLayoutBlock(
           ? (isDark ? '#ffffff' : colors.accent)
           : colors.text;
         // 스텝 번호 배지로 시각적 앵커 추가(빈 회색 박스 → 단계감 부여).
-        const stepBadge = `<div style="flex-shrink:0;width:26px;height:26px;border-radius:50%;background:${badgeBg};color:${badgeFg};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;line-height:1;">${i + 1}</div>`;
+        // 가운데 정렬은 flex가 아니라 line-height+text-align으로 한다 — 네이버 뷰어가
+        // flex를 무시하면 숫자가 원 왼쪽 위로 붙는다.
+        const stepBadge = `<div style="display:inline-block;width:26px;height:26px;border-radius:50%;background:${badgeBg};color:${badgeFg};font-size:13px;font-weight:800;line-height:26px;text-align:center;">${i + 1}</div>`;
         const label = editableText(`${basePath}.items.${i}.label`, item.label);
         const sublabel = item.sublabel
           ? `<div style="font-size:12px;color:${colors.textSub};margin-top:2px;word-break:keep-all;">${editableText(`${basePath}.items.${i}.sublabel`, item.sublabel)}</div>`
           : '';
         const arrow = isLast ? '' : (isVertical
           ? `<div style="text-align:center;color:${accentBar};font-size:14px;line-height:1;padding:2px 0;">↓</div>`
-          : `<div style="color:${accentBar};font-size:16px;flex-shrink:0;align-self:center;">→</div>`);
+          : `<div style="color:${accentBar};font-size:16px;text-align:center;">→</div>`);
+        // 세로 박스의 "배지 + 텍스트"도 가로 배치다 — 여기도 table로 낸다.
         const box = isVertical
-          ? `<div style="display:flex;align-items:center;gap:10px;background:${boxBg};border:1px solid ${boxBorder};border-left:3px solid ${accentBar};border-radius:8px;padding:10px 12px;text-align:left;">
-              ${stepBadge}
-              <div><div style="font-size:13px;font-weight:700;color:${textColor};word-break:keep-all;">${label}</div>${sublabel}</div>
-            </div>`
-          : `<div style="flex:1;background:${boxBg};border:1.5px solid ${boxBorder};border-radius:8px;padding:10px 8px;text-align:center;">
-              <div style="display:flex;justify-content:center;margin-bottom:6px;">${stepBadge}</div>
+          ? `<div style="background:${boxBg};border:1px solid ${boxBorder};border-left:3px solid ${accentBar};border-radius:8px;padding:10px 12px;text-align:left;">${hTable(
+              [
+                [
+                  { html: stepBadge, width: '26px' },
+                  { html: `<div><div style="font-size:13px;font-weight:700;color:${textColor};word-break:keep-all;">${label}</div>${sublabel}</div>` },
+                ],
+              ],
+              { gap: 10, valign: 'middle' },
+            )}</div>`
+          : `<div style="background:${boxBg};border:1.5px solid ${boxBorder};border-radius:8px;padding:10px 8px;text-align:center;">
+              <div style="text-align:center;margin-bottom:6px;">${stepBadge}</div>
               <div style="font-size:12px;font-weight:700;color:${textColor};word-break:keep-all;">${label}</div>${sublabel}
             </div>`;
-        return box + (isLast ? '' : arrow);
+        cells.push({ html: box });
+        // 화살표 칸은 균등 분할에서 뺀다 — 함께 나누면 스텝 사이가 크게 벌어진다.
+        if (!isLast) cells.push({ html: arrow, width: '24px' });
       });
-      const flexDir = isVertical ? 'column' : 'row';
-      return `<div style="display:flex;flex-direction:${flexDir};gap:6px;align-items:${isVertical ? 'stretch' : 'center'};flex-wrap:wrap;margin-bottom:16px;">${items.join('')}</div>`;
+      // 세로 방향은 flex가 무시돼도 결과가 같으므로 기존 flex-direction:column 유지.
+      if (isVertical) {
+        return `<div style="display:flex;flex-direction:column;gap:6px;align-items:stretch;margin-bottom:16px;">${cells
+          .map((c) => c.html)
+          .join('')}</div>`;
+      }
+      // 가로 3단계 흐름이 네이버 앱에서 세로로 무너졌다 → table 1행.
+      return `<div style="margin-bottom:16px;">${hTable([cells], { gap: 6, valign: 'middle' })}</div>`;
     }
     case 'icon_grid': {
       if (!Array.isArray(block.items)) return '';
@@ -894,13 +997,14 @@ function renderLayoutBlock(
       const itemBg = isDark ? 'rgba(255,255,255,0.12)' : '#f9fafb';
       const cols = block.cols ?? 3;
       const items = block.items.map((item, i) =>
-        `<div style="text-align:center;padding:14px 6px;background:${itemBg};border-radius:10px;">
+        `<div style="text-align:center;padding:14px 6px;background:${itemBg};border-radius:10px;height:100%;box-sizing:border-box;">
           ${iconOrBadge(item.icon, i + 1, colors)}
           <div style="font-size:13px;font-weight:700;color:${colors.text};line-height:1.3;word-break:keep-all;">${editableText(`${basePath}.items.${i}.title`, item.title)}</div>
           ${item.subtitle ? `<div style="font-size:12px;color:${colors.textSub};margin-top:2px;">${editableText(`${basePath}.items.${i}.subtitle`, item.subtitle)}</div>` : ''}
         </div>`
-      ).join('');
-      return `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:8px;margin-bottom:16px;">${items}</div>`;
+      );
+      // 2×2 아이콘 그리드가 네이버 앱에서 4줄로 무너졌다 → cols개씩 끊은 table 행.
+      return `<div style="margin-bottom:16px;">${gridTable(items, cols, { gap: 8, rowGap: 8, valign: 'top' })}</div>`;
     }
     case 'option_grid': {
       if (!Array.isArray(block.items)) return '';
@@ -931,14 +1035,17 @@ function renderLayoutBlock(
         // 텍스트 전용 카드는 세로 중앙에 놓는다. grid-auto-rows로 카드 높이가
         // 행마다 통일되므로, 그냥 두면 라벨이 카드 위쪽에 붙어 어긋나 보인다.
         const justify = cardImgUrl ? 'flex-start' : 'center';
-        return `<div style="display:flex;flex-direction:column;justify-content:${justify};background:${boxBg};border:1.5px solid ${boxBorder};border-radius:12px;padding:${pad};text-align:center;box-sizing:border-box;">
+        // 카드 안의 세로 배치(flex-direction:column)는 유지한다 — flex가 무시돼도
+        // 자식이 세로로 쌓이는 결과는 같다. height:100%는 같은 행 안에서 카드
+        // 높이를 맞추기 위한 것이다(table은 행 내부만 맞춘다).
+        return `<div style="display:flex;flex-direction:column;justify-content:${justify};background:${boxBg};border:1.5px solid ${boxBorder};border-radius:12px;padding:${pad};text-align:center;box-sizing:border-box;height:100%;">
           ${cardImgHtml}<div style="font-size:14px;font-weight:800;color:${textColor};line-height:1.3;word-break:keep-all;white-space:pre-line;">${editableText(`${basePath}.items.${i}.label`, item.label)}</div>
           ${item.sublabel ? `<div style="font-size:12px;color:${colors.textSub};margin-top:4px;line-height:1.4;word-break:keep-all;white-space:pre-line;">${editableText(`${basePath}.items.${i}.sublabel`, item.sublabel)}</div>` : ''}
         </div>`;
-      }).join('');
-      // grid-auto-rows:1fr — align-items 기본값(stretch)은 같은 행 안에서만 높이를
-      // 맞추므로, 2×2처럼 행이 나뉘면 행끼리 높이가 달라진다.
-      return `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);grid-auto-rows:1fr;gap:8px;margin-bottom:16px;">${items}</div>`;
+      });
+      // ⚠️ grid-auto-rows:1fr가 주던 "행 사이" 높이 통일은 table로 재현할 수 없다.
+      // 그래도 grid는 네이버에서 아예 렌더되지 않으므로 table이 낫다.
+      return `<div style="margin-bottom:16px;">${gridTable(items, cols, { gap: 8, rowGap: 8, valign: 'top' })}</div>`;
     }
     case 'layout_bar_chart': {
       const svg = buildBarChartSvg(block);
@@ -999,9 +1106,11 @@ function renderLayoutBlock(
         const labelColor = isHighlight ? colors.accent : colors.text;
         const isLast = i === N - 1;
 
-        return `<div style="display:flex;flex-direction:column;align-items:center;flex:1;position:relative;">
+        // 세로 정렬(dot → 라벨)은 블록 흐름 그대로다. 가로 중앙 정렬은 flex 대신
+        // text-align + margin:0 auto로 낸다.
+        return `<div style="position:relative;text-align:center;">
           ${!isLast ? `<div style="position:absolute;top:12px;left:calc(50% + 12px);width:calc(50% - 12px);height:2px;background:#e5e7eb;z-index:0;"></div>` : ''}
-          <div style="width:24px;height:24px;border-radius:50%;background-color:${dotBg};display:flex;align-items:center;justify-content:center;z-index:1;flex-shrink:0;">
+          <div style="width:24px;height:24px;border-radius:50%;background-color:${dotBg};line-height:24px;text-align:center;margin:0 auto;position:relative;z-index:1;">
             <span style="font-size:11px;font-weight:800;color:#ffffff;">${i + 1}</span>
           </div>
           <div style="margin-top:8px;font-size:12px;font-weight:700;color:${labelColor};text-align:center;">${escapeHtml(item.stage)}</div>
@@ -1009,9 +1118,11 @@ function renderLayoutBlock(
         </div>`;
       });
 
-      return `<div style="display:flex;flex-direction:row;align-items:flex-start;width:100%;padding:16px 0;position:relative;">
-        ${dots.join('')}
-      </div>`;
+      // 가로 타임라인 — flex row를 table 1행으로. table-layout:fixed가 flex:1을 대신한다.
+      return `<div style="width:100%;padding:16px 0;position:relative;">${hTable(
+        [dots.map((html) => ({ html }))],
+        { valign: 'top' },
+      )}</div>`;
     }
     default:
       return '';
