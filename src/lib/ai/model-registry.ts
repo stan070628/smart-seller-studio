@@ -16,7 +16,7 @@
  * 🔴 시트를 새로 만들 때는 generateFrameImage(imagen.ts)를 쓸 수 없다.
  * 그 함수의 singleFrameConstraint가 multi-view/collage를 절대 금지하는데
  * 캐릭터 시트는 정의상 multi-view다. 생성 스크립트는
- * `공용 섹션/모델 캐릭터시트/charsheet2.mjs`에 있다.
+ * `모델 페르소나/_scripts/charsheet2.mjs`에 있다.
  */
 
 export type ModelSex = 'female' | 'male';
@@ -52,8 +52,24 @@ export interface ModelPersona {
   label: string;
   /** 어떤 상품에 어울리는지 — 선택을 돕는 힌트 */
   bestFor: string;
-  /** 캐릭터 시트 Storage 경로 (버킷 내부 경로) */
+  /** 캐릭터 시트 Storage 경로 (버킷 내부 경로). 얼굴 3뷰만 담는다 */
   sheetPath: string;
+  /**
+   * 얼굴 3뷰 + 전신을 한 장에 담은 합본 시트.
+   *
+   * 🔴 얼굴 시트만 주면 몸 비율 정보가 없어 씬마다 등신이 달라지고 다리가
+   * 짧게 나온다(2026-08-31 굴다 c7 실측). 전신·상반신이 프레임에 들어오는
+   * 컷에서는 이쪽을 참조로 준다. 없으면 sheetPath로 물러난다.
+   */
+  combinedSheetPath?: string;
+  /**
+   * 전신 턴어라운드 — 정면·측면·후면 3뷰.
+   *
+   * 🔴 의류 착용컷 전용이다. 백프린트나 뒷 핏이 파는 요소인 상품에서 후면 참조가
+   * 없으면 AI가 뒷모습을 지어낸다. 일반 lifestyle 컷에는 combinedSheetPath를 쓴다 —
+   * 뷰가 많을수록 뷰당 픽셀이 줄어 얼굴 재현이 나빠지기 때문이다.
+   */
+  turnaroundSheetPath?: string;
   /** 캐릭터 프로필. 없으면 외모 프리셋으로만 쓴다 */
   character?: CharacterProfile;
 }
@@ -81,6 +97,8 @@ export const MODEL_PERSONAS: readonly ModelPersona[] = [
     label: '여성 C · 건강 발랄',
     bestFor: '스포츠·아웃도어·식품 — 생기 있는 인상',
     sheetPath: 'model-sheets/model_f_c.jpg',
+    combinedSheetPath: 'model-sheets/model_f_c_combined.jpg',
+    turnaroundSheetPath: 'model-sheets/model_f_c_turnaround.jpg',
     character: {
       name: '굴다',
       title: '발굴템 연구소 연구원',
@@ -102,11 +120,68 @@ export const MODEL_PERSONAS: readonly ModelPersona[] = [
     },
   },
   {
+    id: 'model_f_d',
+    sex: 'female',
+    label: '여성 D · 절제된 고급 (유하)',
+    bestFor: '뷰티·주얼리·향수·프리미엄 의류 — 정제되고 값비싼 인상',
+    sheetPath: 'model-sheets/model_f_d.jpg',
+    combinedSheetPath: 'model-sheets/model_f_d_combined.jpg',
+    // 뷰티·주얼리뿐 아니라 프리미엄 의류·아우터에도 쓰므로 후면 참조를 함께 갖췄다(2026-09-08).
+    turnaroundSheetPath: 'model-sheets/model_f_d_turnaround.jpg',
+    // 연구소의 세 번째 자리 — 굴다가 찾고, 유하가 가르고, 이루가 알린다.
+    //
+    // 🔴 굴다와 말투가 겹치면 두 사람을 둘 이유가 없다. 굴다는 실패담과 후회로 신뢰를
+    // 만들고, 유하는 기준과 근거로 만든다. 굴다가 "저도 처음엔 속았거든요"라면
+    // 유하는 "밑단 마감이 접혀 들어가 있어요"다 — 같은 물건을 다른 각도에서 말한다.
+    //
+    // 🔴 절제된 인상이라고 형용사를 늘리면 정반대가 된다. 「우아한·고급스러운·세련된」을
+    // 근거 없이 붙이는 것을 금지에 넣은 이유다 — 고급은 수식어가 아니라 관찰에서 나온다.
+    //
+    // 🔴 어미는 세 화자가 배타적으로 나눠 갖는다 — 굴다 `~잖아요`(경험 공유) · 이루 `~예요`(발견
+    // 전달) · 유하 `~어요`(관찰 서술). 2026-08-30 판정이 굴다·이루 두 명을 가르며 세운 규칙이고,
+    // 유하가 셋째로 들어오며 같은 규칙을 적용했다. `__tests__/model-registry.test.ts`가 고정한다.
+    //
+    // 매체는 상세페이지 카피와 스레드·인스타다. 유튜브 화자는 이루이고 여기 끼지 않는다.
+    character: {
+      name: '유하',
+      title: '발굴템 연구소 감식 담당',
+      ageBand: '20대 후반',
+      setting:
+        '굴다가 찾아온 물건을 두고 「이건 값을 하는가」를 판정하는 자리다. ' +
+        '만져보고 뜯어보고 값을 따져 본 뒤에야 말한다. 비싼 것과 좋은 것을 같은 말로 쓰지 않는다',
+      voiceRules: [
+        '높임말 구어체로 말한다 — ~어요, ~아요, ~고요. 관찰한 것을 그대로 서술한다. 굴다보다 문장이 짧고 담백하다',
+        '문장 끝에 마침표를 찍지 않는다',
+        '형용사를 줄이고 관찰한 것을 말한다 — 「정말 고급스러워요」가 아니라 「밑단 마감이 접혀 들어가 있어요」',
+        '좋다고 말하기 전에 기준을 먼저 댄다. 무엇과 비교해서 좋은지가 없으면 광고다',
+        '값이 비싼 것과 좋은 것을 구분해서 말한다. 비싸서 좋다고 하지 않는다',
+        '감탄사로 띄우지 않는다. 조용히 말해도 근거가 있으면 읽힌다',
+        '스레드·인스타에서는 후크를 첫 줄에 둔다. 완곡한 질문으로 시작하지 않는다',
+        '같은 어미를 세 번 연속 반복하지 않는다',
+      ],
+      forbidden: [
+        '~예요·~죠 — 이루의 어미다. 한 연구소의 세 사람이 같은 어미를 쓰면 구분되지 않는다',
+        '~잖아요·~더라고요 — 굴다의 어미다',
+        '근거 없는 감성 수식 — 우아한, 고급스러운, 세련된, 감각적인을 그냥 붙이기',
+        '과장 단정 — 최고예요, 무조건, 강추, 인생템',
+        '~습니다 정중체 (딱딱해진다)',
+        '반말',
+        '번역투 — 소리 내 읽어서 걸리면 다시 쓴다',
+        '부정문 제목',
+        '판매자 내부 사정을 본문에 쓰기 — 재고·마진·배송 사정은 독자의 관심사가 아니다',
+        '앱·코드 내부 용어를 그대로 쓰기',
+      ],
+    },
+  },
+  {
     id: 'model_m_a',
     sex: 'male',
-    label: '남성 A · 조각형 세련',
+    label: '남성 A · 조각형 세련 (무진)',
     bestFor: '남성 의류·시계·가전 — 정통 캠페인 모델',
     sheetPath: 'model-sheets/model_m_a.jpg',
+    combinedSheetPath: 'model-sheets/model_m_a_combined.jpg',
+    // 의류 착용컷용. 이 페르소나는 의류가 주 용도라 턴어라운드를 먼저 갖췄다(2026-09-06).
+    turnaroundSheetPath: 'model-sheets/model_m_a_turnaround.jpg',
   },
   {
     id: 'model_m_b',
@@ -114,6 +189,44 @@ export const MODEL_PERSONAS: readonly ModelPersona[] = [
     label: '남성 B · 부드러운 미남',
     bestFor: '캐주얼·라이프스타일·2030 타깃 — 친근한 인상',
     sheetPath: 'model-sheets/model_m_b.jpg',
+    combinedSheetPath: 'model-sheets/model_m_b_combined.jpg',
+    turnaroundSheetPath: 'model-sheets/model_m_b_turnaround.jpg',
+    // 유튜브 「발굴템 연구소」 진행자. 굴다와 소속은 같고 매체가 다르다 —
+    // 굴다는 커머스 상세페이지의 인물컷, 알리는 유튜브 영상의 화자다.
+    //
+    // 🔴 얼굴은 내보내되 립싱크는 하지 않는다. 2026-08-30 아바타 판정이
+    // 기각한 것은 토킹헤드이며 근거는 컷 속도였다(립싱크 3.6초 대 쇼츠 1.0초).
+    // 입을 맞추지 않는 얼굴 컷은 그 제약에 걸리지 않는다.
+    //
+    // 🔴 브랜드 스토리 다큐(코스트코편 등)의 화자가 아니다. 그쪽은 인격 없는
+    // 다큐 내레이션이고 어미가 ~습니다체이며 화면에 사람이 없다. 알리는 제품 설명과
+    // AI 툴 소개 포맷의 화자이고 밝은 구어체를 쓴다. 두 톤을 섞지 않는다.
+    character: {
+      name: '이루',
+      title: '「이루가 해봤어요」 진행자',
+      ageBand: '20대 후반',
+      setting:
+        '연구소가 찾아낸 물건과 직접 만든 도구를 밖에 알리는 일을 한다. ' +
+        '써보고 판단해서 권하고, 만든 것은 직접 시연해 보인다',
+      voiceRules: [
+        '높임말 구어체로 말한다 — ~예요, ~죠, ~거든요. 딱딱한 ~습니다체는 쓰지 않는다',
+        '문장을 짧게 끊는다. 한 문장에 하나만 말한다',
+        '질문을 던지고 바로 답한다 — 궁금증을 오래 끌지 않는다',
+        '밝게 전하되 감탄사로 띄우지 않는다. 놀라움은 화자가 아니라 사실이 만든다',
+        '숫자와 근거를 앞세운다',
+        '어려운 말은 듣는 사람 어휘로 바꾼다. 바꿀 수 없으면 지운다',
+        '문장 끝에 마침표를 찍지 않는다',
+        '같은 어미를 세 번 연속 반복하지 않는다',
+      ],
+      forbidden: [
+        '과장 단정 — 최고예요, 무조건, 강추, 놓치지 마세요',
+        '안 써본 것을 써본 것처럼 말하기',
+        '앱·코드 내부 용어를 그대로 쓰기 (MAX_REFERENCES, 립싱크, 컷 같은 것)',
+        '반말',
+        '번역투 — 소리 내 읽어서 걸리면 다시 쓴다',
+        '다루는 브랜드를 깎아내리는 표현',
+      ],
+    },
   },
 ] as const;
 
@@ -130,10 +243,19 @@ export function findPersona(id: string | undefined | null): ModelPersona | null 
  * null을 돌려주고, 호출부는 시트 없이 진행한다 — 인물이 안 고정될 뿐
  * 생성 자체가 실패하지는 않아야 한다.
  */
-export function personaSheetUrl(persona: ModelPersona): string | null {
+export function personaSheetUrl(
+  persona: ModelPersona,
+  opts?: { fullBody?: boolean; turnaround?: boolean },
+): string | null {
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (!base) return null;
-  return `${base.replace(/\/$/, '')}${BUCKET_PUBLIC_PREFIX}${persona.sheetPath}`;
+  // 없는 시트를 요구하면 한 단계씩 물러난다 — 턴어라운드 → 합본 → 얼굴.
+  // 체형이나 후면은 못 잡아도 인물은 고정되며, 시트가 없다고 생성이 실패해서는 안 된다.
+  const objectPath =
+    (opts?.turnaround && persona.turnaroundSheetPath) ||
+    ((opts?.turnaround || opts?.fullBody) && persona.combinedSheetPath) ||
+    persona.sheetPath;
+  return `${base.replace(/\/$/, '')}${BUCKET_PUBLIC_PREFIX}${objectPath}`;
 }
 
 /**
@@ -199,4 +321,56 @@ export function buildCharacterVoice(profile: CharacterProfile): string {
     '아래 표현은 쓰지 않는다:',
     bans,
   ].join('\n');
+}
+
+/**
+ * 페르소나 id로 말투 지시문을 만든다 — 프롬프트에 그대로 이어 붙이는 용도.
+ *
+ * buildCharacterVoice는 프로필을 요구하지만 호출부는 id만 갖고 있고, 프로필이
+ * 없는 페르소나(3명)와 지정 안 함(null)도 정상 경로다. 그 셋을 호출부마다
+ * 분기하면 같은 코드가 라우트 수만큼 늘어나므로 여기서 흡수한다.
+ *
+ * 화자가 없으면 빈 문자열을 돌려준다 — 프롬프트에 붙여도 아무 일이 없어야 한다.
+ */
+export function personaVoiceBlock(personaId: string | undefined | null): string {
+  const profile = findPersona(personaId)?.character;
+  if (!profile) return '';
+  return `\n\n${buildCharacterVoice(profile)}`;
+}
+/**
+ * 로컬 원본 시트 경로 — 스크립트 전용이다(서버는 Storage URL을 쓴다).
+ *
+ * 🔴 폴더명이 페르소나 id와 다르다. 캐릭터가 정해진 셋은 캐릭터명(`굴다`·`이루`·`무진`)이고
+ * 나머지는 대문자 id다. **코드가 참조하는 것은 id이므로 매핑은 여기 한 곳에만 둔다** —
+ * 스크립트마다 경로를 문자열로 박으면 폴더명을 바꿀 때 전부 깨진다(2026-09-06 실제로 겪었다).
+ */
+export const PERSONA_ROOT = '/Volumes/Mac_SSD/모델 페르소나';
+
+const CHARACTER_FOLDER: Record<string, string> = {
+  model_f_c: '굴다',
+  model_f_d: '유하',
+  model_m_b: '이루',
+  // 무진은 의류 모델이라 CharacterProfile(말투·직함)이 없다 — 이름은 폴더를 찾기
+  // 위한 것이고, 화자로 쓸 일이 생기면 그때 character를 채운다.
+  model_m_a: '무진',
+};
+
+export function personaLocalDir(personaId: string): string {
+  const folder =
+    CHARACTER_FOLDER[personaId] ??
+    personaId.replace(/_([a-z])_([a-z])$/, (_, a: string, b: string) => `_${a.toUpperCase()}_${b.toUpperCase()}`);
+  return `${PERSONA_ROOT}/${folder}`;
+}
+
+/** kind: face=얼굴 3뷰 · body=전신 · combined=합본 */
+export function personaLocalSheet(
+  personaId: string,
+  kind: 'face' | 'body' | 'combined' | 'turnaround' = 'face',
+): string {
+  const name =
+    kind === 'face' ? '캐릭터시트.jpg'
+    : kind === 'body' ? '전신시트.png'
+    : kind === 'combined' ? '캐릭터시트_합본.jpg'
+    : '전신턴어라운드.jpg';
+  return `${personaLocalDir(personaId)}/${name}`;
 }
