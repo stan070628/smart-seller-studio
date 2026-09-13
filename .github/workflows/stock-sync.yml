@@ -1,0 +1,29 @@
+name: 재고 품절 동기화
+
+on:
+  # 3시간마다 (Vercel Hobby는 cron 하루 1회 제한이라 여기서 호출한다)
+  schedule:
+    - cron: '0 */3 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '드라이런 (판정만, 변경 없음)'
+        type: boolean
+        default: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: 동기화 경로 호출
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          DRY: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '0' }}
+        run: |
+          code=$(curl -sS -o body.json -w '%{http_code}' --max-time 320 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_URL/api/cron/stock-sync?dryRun=$DRY")
+          cat body.json
+          test "$code" = "200"
