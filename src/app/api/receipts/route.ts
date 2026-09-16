@@ -7,10 +7,21 @@ import { receiptImagePath } from '@/lib/receipt/storage-path';
 import { ALLOWED_MIME_TYPES, type AllowedMimeType } from '@/lib/ai/claude-vision';
 import { draftBadge, draftProgress, type ProgressLine } from '@/lib/receipt/view';
 
-/** 장당 최대 크기. 아이폰 원본이 6MB 안팎이다 */
-const MAX_FILE_SIZE = 15 * 1024 * 1024;
+/**
+ * 장당 최대 크기.
+ *
+ * 🔴 **15MB로 두었던 값은 도달할 수 없는 관문이었다.** Vercel 함수는 요청
+ * 본문이 4.5MB를 넘으면 **이 핸들러를 실행하지 않고** text/plain 413을
+ * 돌려준다. 아이폰 원본이 6MB 안팎이므로 촬영 업로드는 거의 매번 그 앞에서
+ * 끊겼고, 화면은 비-JSON 본문을 파싱하다 사파리 내부 문구를 띄웠다
+ * (2026-09-16). 실효 관문은 클라이언트의 `lib/receipt/downscale.ts`이고,
+ * 여기 남은 값은 그 뒤를 받치는 백스톱이다.
+ */
+const MAX_FILE_SIZE = 4 * 1024 * 1024;
 /** 긴 영수증은 나눠 찍으므로 여러 장을 받는다 */
 const MAX_FILES = 5;
+/** 플랫폼 상한(4.5MB)보다 낮게 잡은 합계 상한 */
+const MAX_TOTAL_SIZE = 4 * 1024 * 1024;
 
 /**
  * POST /api/receipts — 영수증 이미지 업로드
@@ -61,6 +72,14 @@ export async function POST(request: NextRequest) {
         { status: 413 },
       );
     }
+  }
+
+  const totalSize = files.reduce((n, f) => n + f.size, 0);
+  if (totalSize > MAX_TOTAL_SIZE) {
+    return NextResponse.json(
+      { success: false, error: '사진 합계 용량이 너무 큽니다. 장수를 줄여 주세요.' },
+      { status: 413 },
+    );
   }
 
   // draft id를 먼저 만든다 — 저장 경로에 들어가야 하기 때문이다

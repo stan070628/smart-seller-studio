@@ -10,6 +10,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Badge, Progress } from '@/lib/receipt/view';
+import { readJsonOrThrow } from '@/lib/receipt/http';
+import { prepareForUpload } from '@/lib/receipt/downscale';
 
 export interface DraftCard {
   id: string;
@@ -49,7 +51,7 @@ export default function ReceiptList() {
     try {
       // 확정이 끝난 영수증도 남긴다 — 서버가 미처리를 위로 올려준다
       const res = await fetch('/api/receipts?status=all');
-      const json = await res.json();
+      const json = await readJsonOrThrow<{ success: boolean; error?: string; data: DraftCard[] }>(res);
       if (!json.success) throw new Error(json.error ?? '조회 실패');
       setDrafts(json.data);
       setError(null);
@@ -74,10 +76,17 @@ export default function ReceiptList() {
     setUploading(true);
     setError(null);
     try {
+      // 🔴 원본을 그대로 보내면 Vercel이 4.5MB에서 **함수 실행 전에** 끊는다.
+      // 아이폰 원본은 장당 6MB 안팎이라 거의 매번 걸린다. 보내기 전에 줄인다.
+      const prepared = await prepareForUpload(Array.from(files));
+      if (prepared.overBudget) {
+        throw new Error('사진 용량이 커서 한 번에 보낼 수 없습니다. 장수를 줄여 다시 시도해 주세요.');
+      }
+
       const fd = new FormData();
-      Array.from(files).forEach((f) => fd.append('files', f));
+      prepared.files.forEach((f) => fd.append('files', f));
       const res = await fetch('/api/receipts', { method: 'POST', body: fd });
-      const json = await res.json();
+      const json = await readJsonOrThrow<{ success: boolean; error?: string; data: { id: string } }>(res);
       if (!json.success) throw new Error(json.error ?? '업로드 실패');
 
       // 판독을 곧바로 건다. **응답을 기다리지 않는다** — 12~14초가 걸리므로

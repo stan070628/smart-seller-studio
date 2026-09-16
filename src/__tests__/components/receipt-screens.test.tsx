@@ -120,6 +120,33 @@ describe('ReceiptList', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('조회할 수 없습니다');
   });
 
+  it('🔴 413 같은 비-JSON 응답에도 브라우저 내부 문구를 띄우지 않는다', async () => {
+    // Vercel은 본문 4.5MB 초과를 **함수 실행 전에** text/plain 413으로 끊는다.
+    // 그 본문에 res.json()을 걸면 사파리가 영문 DOMException을 던지고,
+    // 사용자는 "The string did not match the expected pattern."만 보게 된다.
+    server.use(
+      http.get('/api/receipts', () => HttpResponse.json({ success: true, data: [] })),
+      http.post('/api/receipts', () =>
+        new HttpResponse('Request Entity Too Large\n\nFUNCTION_PAYLOAD_TOO_LARGE', {
+          status: 413,
+          headers: { 'content-type': 'text/plain' },
+        })),
+    );
+
+    const { container } = render(<ReceiptList />);
+    await screen.findByText(/아직 올린 영수증이 없습니다/);
+
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, {
+      target: { files: [new File(['x'], 'r.jpg', { type: 'image/jpeg' })] },
+    });
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/용량/);
+    expect(alert.textContent ?? '').not.toMatch(/did not match the expected pattern/i);
+    expect(alert.textContent ?? '').not.toMatch(/Unexpected token/i);
+  });
+
   it('🔴 업로드는 files 필드로 보내고, 끝나면 목록을 다시 읽는다', async () => {
     // multipart 본문은 jsdom에서 request.text()/formData()로 역직렬화되지 않는다
     // (핸들러에는 도달하지만 읽기가 멎는다). 직렬화 **전**의 FormData를 잡는다 —
