@@ -1,10 +1,11 @@
 name: 도매꾹 일일 수집
 
 on:
-  # 매일 KST 09:00 (UTC 00:00)
-  schedule:
-    - cron: '0 0 * * *'
-  # 수동 트리거 (GitHub Actions UI에서 "Run workflow" 버튼)
+  # 🔴 2026-09-18 일일 스케줄 중단 — 이 기능을 쓰지 않는데 매일 실패 메일만 왔다.
+  #   되살리려면 아래 두 줄의 주석을 풀면 된다 (매일 KST 09:00 = UTC 00:00).
+  # schedule:
+  #   - cron: '0 0 * * *'
+  # 수동 트리거만 남긴다 (GitHub Actions UI에서 "Run workflow" 버튼)
   workflow_dispatch:
 
 jobs:
