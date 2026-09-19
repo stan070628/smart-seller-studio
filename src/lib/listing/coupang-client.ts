@@ -891,6 +891,137 @@ export class CoupangClient {
     });
   }
 
+  // ─── 즉시할인쿠폰 생성 (FMS Promotion API) ─────────────────
+
+  /**
+   * 쿠폰 계약서 목록 조회. 쿠폰 생성에 필요한 contractId를 여기서 얻는다.
+   * 문서: /ko/api/promotions/common-query-contract-list
+   */
+  async getCouponContracts(): Promise<Array<{
+    contractId: number;
+    vendorContractId: string;
+    sellerShareRatio: number;
+    coupangShareRatio: number;
+    type: string;
+    start: string;
+    end: string;
+  }>> {
+    const url = `/v2/providers/fms/apis/api/v2/vendors/${this.vendorId}/contract/list`;
+    await sleep(API_DELAY);
+    const res = await this.request<{ success: boolean; content: unknown[] }>('GET', url);
+    const content = Array.isArray(res.data?.content) ? res.data.content : [];
+    return content.map((c) => {
+      const it = c as Record<string, unknown>;
+      return {
+        contractId: Number(it.contractId ?? 0),
+        vendorContractId: String(it.vendorContractId ?? ''),
+        sellerShareRatio: Number(it.sellerShareRatio ?? 0),
+        coupangShareRatio: Number(it.coupangShareRatio ?? 0),
+        type: String(it.type ?? ''),
+        start: String(it.start ?? ''),
+        end: String(it.end ?? ''),
+      };
+    });
+  }
+
+  /**
+   * 즉시할인쿠폰 생성.
+   *
+   * 🔴 비동기다 — 응답은 requestedId만 주고 couponId는 주지 않는다.
+   *    getCouponRequestStatus(requestedId)로 DONE을 확인하고 거기서 couponId를 얻는다.
+   * 🔴 생성만으로는 아무 상품에도 걸리지 않는다. addCouponItems로 vendorItemId를 붙여야 한다.
+   * ⚠️ 한 번 붙인 적용 상품은 나중에 뺄 수 없다 — 빼려면 쿠폰을 중지하고 새로 만든다(쿠팡 문서).
+   *
+   * @param discount PRICE면 할인 금액(원), RATE면 할인율(1~100)
+   * @param maxDiscountPrice 최대 할인 금액(원). 최소 10원
+   */
+  async createInstantDiscountCoupon(params: {
+    contractId: number;
+    name: string;
+    discount: number;
+    maxDiscountPrice: number;
+    startAt: string; // yyyy-MM-dd HH:mm:ss
+    endAt: string;   // yyyy-MM-dd HH:mm:ss
+    type?: 'PRICE' | 'RATE' | 'FIXED_WITH_QUANTITY';
+    wowExclusive?: boolean;
+  }): Promise<{ requestedId: string }> {
+    const url = `/v2/providers/fms/apis/api/v2/vendors/${this.vendorId}/coupon`;
+    await sleep(API_DELAY);
+    const res = await this.request<{ success: boolean; content: { requestedId: string } }>('POST', url, {
+      contractId: params.contractId,
+      name: params.name,
+      discount: params.discount,
+      maxDiscountPrice: params.maxDiscountPrice,
+      startAt: params.startAt,
+      endAt: params.endAt,
+      type: params.type ?? 'PRICE',
+      wowExclusive: params.wowExclusive ?? false,
+    });
+    const requestedId = String(res.data?.content?.requestedId ?? '');
+    if (!requestedId) throw new Error(`쿠폰 생성 응답에 requestedId 없음: ${JSON.stringify(res).slice(0, 300)}`);
+    return { requestedId };
+  }
+
+  /**
+   * 쿠폰에 적용 상품(옵션)을 붙인다. 한 번에 10,000개 이하.
+   * ⚠️ 붙인 상품은 나중에 뺄 수 없다.
+   */
+  async addCouponItems(couponId: number, vendorItemIds: number[]): Promise<{ requestedId: string }> {
+    const url = `/v2/providers/fms/apis/api/v1/vendors/${this.vendorId}/coupons/${couponId}/items`;
+    await sleep(API_DELAY);
+    const res = await this.request<{ success: boolean; content: { requestedId: string } }>('POST', url, {
+      vendorItems: vendorItemIds,
+    });
+    const requestedId = String(res.data?.content?.requestedId ?? '');
+    if (!requestedId) throw new Error(`아이템 추가 응답에 requestedId 없음: ${JSON.stringify(res).slice(0, 300)}`);
+    return { requestedId };
+  }
+
+  /**
+   * 쿠폰 파기(중지).
+   *
+   * 🔴 `?action=expire`가 없으면 500이다 — `Parameter conditions "action=expire" not met`.
+   *    서명 계산에 쿼리스트링이 포함돼야 하므로 request()에 쿼리까지 넘긴다(2026-09-05 실측).
+   * 🔴 되돌릴 수 없다. 그리고 파기하면 그 쿠폰이 걸려 있던 옵션의 실결제가가 할인액만큼 오른다 —
+   *    **파기와 가격 복귀(또는 새 쿠폰 적용)는 한 세트로 확인한다.**
+   */
+  async expireCoupon(couponId: number): Promise<{ requestedId: string }> {
+    const url = `/v2/providers/fms/apis/api/v1/vendors/${this.vendorId}/coupons/${couponId}?action=expire`;
+    await sleep(API_DELAY);
+    const res = await this.request<{ success: boolean; content: { requestedId: string } }>('PUT', url);
+    const requestedId = String(res.data?.content?.requestedId ?? '');
+    if (!requestedId) throw new Error(`쿠폰 파기 응답에 requestedId 없음: ${JSON.stringify(res).slice(0, 300)}`);
+    return { requestedId };
+  }
+
+  /**
+   * 쿠폰 생성·아이템 추가의 비동기 처리 결과 확인.
+   * status: REQUESTED(처리중) | DONE(성공) | FAIL(실패)
+   */
+  async getCouponRequestStatus(requestedId: string): Promise<{
+    status: string;
+    couponId: number;
+    type: string;
+    total: number;
+    succeeded: number;
+    failed: number;
+    failedVendorItems: unknown[];
+  }> {
+    const url = `/v2/providers/fms/apis/api/v1/vendors/${this.vendorId}/requested/${requestedId}`;
+    await sleep(API_DELAY);
+    const res = await this.request<{ success: boolean; content: Record<string, unknown> }>('GET', url);
+    const c = (res.data?.content ?? {}) as Record<string, unknown>;
+    return {
+      status: String(c.status ?? ''),
+      couponId: Number(c.couponId ?? 0),
+      type: String(c.type ?? ''),
+      total: Number(c.total ?? 0),
+      succeeded: Number(c.succeeded ?? 0),
+      failed: Number(c.failed ?? 0),
+      failedVendorItems: Array.isArray(c.failedVendorItems) ? c.failedVendorItems : [],
+    };
+  }
+
   // ─── fms 주문별 즉시할인쿠폰 조회 ──────────────────────────
 
   /**
