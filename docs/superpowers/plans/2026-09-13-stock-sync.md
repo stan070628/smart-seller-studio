@@ -34,6 +34,13 @@
 | Vercel env `TOSS_SHOPPING_ACCESS_KEY`·`TOSS_SHOPPING_SECRET_KEY`·`STOCK_SYNC_TELEGRAM_CHAT_ID` | ❌ 없음 |
 | GitHub secrets `APP_URL`·`CRON_SECRET` | ❌ 없음 |
 
+2026-09-14 진행:
+- ✅ 토스 `productItemId` = `stocks[].itemId` (같은 값 재설정으로 확인, `id`는 NOT_FOUND)
+- ✅ 마이그레이션 105 적용 · 연결 163건 입력 (네이버 116행/104옵션, 토스 47)
+- ✅ 커밋 8f7c495e. 🔴 **현재 브랜치가 `feature/detail-page-polish`였는데 확인 없이 `HEAD:main`으로 push해 미푸시 커밋 48건이 origin/main에 함께 올라갔다** (5b5d995f..8f7c495e, fast-forward). **사용자 결정: 그대로 둔다** (2026-09-14)
+- ❌ Vercel env·GitHub secrets 등록은 권한 확인에서 막힘 → 사용자가 직접 실행
+- ⏳ 배포(`vercel --prod`)·드라이런·실행은 위 두 건 이후
+
 추가 결정(구현 중):
 - 채널 옵션 하나에 쿠팡 옵션 여럿이 붙을 수 있다(네이버 단일상품 ↔ 쿠팡 M·L). **전부 판매 불가일 때만** 품절, 되살림 수량은 판매 가능 옵션 합
 - 채널에서 이미 판매중지(네이버 SALE 아님 / 토스 검수 미통과·숨김)인 상품은 건드리지 않는다
