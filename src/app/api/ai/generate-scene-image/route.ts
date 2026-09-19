@@ -357,7 +357,11 @@ export async function POST(req: NextRequest) {
     const persona = findPersona(parsed.data.modelPersonaId);
     let personaSheet: ReferenceImage[] = [];
     if (persona) {
-      const url = personaSheetUrl(persona);
+      // lifestyle은 인물이 상반신~전신으로 들어오는 유일한 슬롯이라 체형이
+      // 읽혀야 한다. 나머지 슬롯은 제품이 주인공이라 얼굴 시트로 충분하다.
+      const url = personaSheetUrl(persona, {
+        fullBody: parsed.data.sectionType === 'lifestyle',
+      });
       if (url) {
         personaSheet = await loadReferenceImages({ productImageUrls: [url] });
         if (personaSheet.length === 0) {

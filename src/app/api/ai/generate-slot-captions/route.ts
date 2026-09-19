@@ -13,6 +13,7 @@ import { getAnthropicClient } from '@/lib/ai/claude';
 import { requireAuth } from '@/lib/supabase/auth';
 import { checkRateLimit, getRateLimitKey } from '@/lib/rate-limit';
 import { jsonrepair } from 'jsonrepair';
+import { personaVoiceBlock } from '@/lib/ai/model-registry';
 
 // ─────────────────────────────────────────
 // 상수
@@ -50,6 +51,8 @@ type FrameType = 'custom_3col' | 'custom_gallery';
 interface ValidatedInput {
   frameType: FrameType;
   slots: Record<string, SlotImage>;
+  /** 화자 페르소나 id. 지정하면 그 인물의 말투로 캡션을 쓴다 */
+  modelPersonaId?: string;
 }
 
 /** custom_3col 단일 컬럼 메타데이터 */
@@ -170,7 +173,13 @@ function validateRequestBody(body: unknown): ValidatedInput {
     validatedSlots[key] = { imageBase64: cleanedBase64, mimeType: mimeType as AllowedMimeType };
   }
 
-  return { frameType, slots: validatedSlots };
+  // 화자는 선택이다 — 없으면 기존 동작 그대로다.
+  const rawPersona = (body as Record<string, unknown>).modelPersonaId;
+  if (rawPersona !== undefined && typeof rawPersona !== 'string') {
+    throw new Error('modelPersonaId는 문자열이어야 합니다.');
+  }
+
+  return { frameType, slots: validatedSlots, modelPersonaId: rawPersona as string | undefined };
 }
 
 // ─────────────────────────────────────────
@@ -357,10 +366,11 @@ export async function POST(
     });
 
     // frameType에 따라 프롬프트 선택
+    // 화자를 지정하면 말투 지시가 뒤에 붙는다. 없으면 빈 문자열이라 프롬프트가 그대로다.
     const promptText =
-      input.frameType === 'custom_3col'
+      (input.frameType === 'custom_3col'
         ? build3ColPrompt(slotKeys)
-        : buildGalleryPrompt(slotKeys);
+        : buildGalleryPrompt(slotKeys)) + personaVoiceBlock(input.modelPersonaId);
 
     imageContentBlocks.push({ type: 'text', text: promptText });
 

@@ -33,7 +33,7 @@ function validateRequestBody(body: unknown): GenerateCopyInput {
     throw new Error("요청 바디가 유효한 JSON 객체가 아닙니다.");
   }
 
-  const { reviews, productName } = body as Record<string, unknown>;
+  const { reviews, productName, modelPersonaId } = body as Record<string, unknown>;
 
   // reviews 검증: 비어있지 않은 문자열 배열
   if (!Array.isArray(reviews) || reviews.length === 0) {
@@ -54,9 +54,15 @@ function validateRequestBody(body: unknown): GenerateCopyInput {
     throw new Error("productName은 문자열이어야 합니다.");
   }
 
+  // 화자는 선택이다 — 없으면 기존 동작 그대로다.
+  if (modelPersonaId !== undefined && typeof modelPersonaId !== "string") {
+    throw new Error("modelPersonaId는 문자열이어야 합니다.");
+  }
+
   return {
     reviews: reviews as string[],
     productName: productName as string | undefined,
+    modelPersonaId: modelPersonaId as string | undefined,
   };
 }
 

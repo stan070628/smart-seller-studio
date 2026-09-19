@@ -4,6 +4,7 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
+import { personaVoiceBlock } from '@/lib/ai/model-registry';
 import {
   COPY_SYSTEM_PROMPT,
   buildCopyUserPrompt,
@@ -24,6 +25,8 @@ export interface GenerateCopyInput {
   reviews: string[];
   /** 선택적 상품명 — 제공 시 SEO 제목 생성 품질이 향상됩니다 */
   productName?: string;
+  /** 화자 페르소나 id. 지정하면 그 인물의 말투로 카피를 쓴다 */
+  modelPersonaId?: string;
 }
 
 /** generateCopyFromReviews()의 반환 타입 (Zod 스키마와 1:1 대응) */
@@ -81,7 +84,10 @@ export function getAnthropicClient(): Anthropic {
 export async function generateCopyFromReviews(
   input: GenerateCopyInput
 ): Promise<GenerateCopyOutput> {
-  const userMessage = buildCopyUserPrompt(input.reviews, input.productName);
+  // 화자를 지정하면 말투 지시가 뒤에 붙는다. 없으면 빈 문자열이라 기존 동작 그대로다.
+  const userMessage =
+    buildCopyUserPrompt(input.reviews, input.productName) +
+    personaVoiceBlock(input.modelPersonaId);
 
   const rawText = await withRetry(
     () => callClaude(COPY_SYSTEM_PROMPT, userMessage, "sonnet"),

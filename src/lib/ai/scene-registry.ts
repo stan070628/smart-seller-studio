@@ -81,7 +81,7 @@ export const SCENE_SHEETS: readonly SceneSheet[] = [
   },
   {
     // 사용자 제공 레퍼런스를 그대로 시트로 쓴다 (2026-09-03, 문구·인물 없음 확인).
-    // ⚠️ 원본은 /Volumes/Mac_SSD/모델 페르소나/model_F_C/거실/ 에 있으나 현재 이 씬을
+    // ⚠️ 원본은 /Volumes/Mac_SSD/모델 페르소나/굴다/거실/ 에 있으나 현재 이 씬을
     //    쓰는 상품 컷의 인물은 model_f_b다 — 페르소나 정리 때 소유를 재검토한다.
     id: 'home_living_fb',
     personaId: 'model_f_b',
