@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { normalizeProductQuery } from '@/lib/sourcing/naver-shopping';
+import { searchDanawa } from '@/lib/sourcing/danawa';
 import { requireAuth } from '@/lib/supabase/auth';
 
 export const runtime = 'nodejs';
@@ -155,25 +156,26 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // 네이버 쇼핑 검색
-  const rawItems = await fetchNaverItems(title);
+  // 🔴 2026-09-06: 네이버 쇼핑 검색 API가 2026-08-01에 종료돼(SE05) 시세가 「정보 없음」으로만
+  //    떴다. 다나와로 교체한다 — Vercel 서버에서 200 응답을 실측 확인했다.
+  //    응답 스키마(NaverCompareItem)는 그대로 두어 화면은 손대지 않는다.
+  const rawItems = await searchDanawa(normalizeProductQuery(title));
 
-  // 유효한 가격이 있는 상품만 필터링 후 최대 3개 반환
   const items: NaverCompareItem[] = rawItems
     .map((item): NaverCompareItem | null => {
-      const totalPrice = parseLprice(item.lprice);
-      if (totalPrice === null) return null;
-      let safeLink: string;
-      try {
-        const u = new URL(item.link);
-        safeLink = u.protocol === 'https:' ? item.link : '';
-      } catch {
-        safeLink = '';
+      if (!Number.isFinite(item.price) || item.price <= 0) return null;
+      let safeLink = '';
+      if (item.link) {
+        try {
+          const u = new URL(item.link);
+          if (u.protocol === 'https:') safeLink = item.link;
+        } catch {
+          safeLink = '';
+        }
       }
-      if (!safeLink) return null;
       return {
-        title: stripHtml(item.title),
-        totalPrice,
+        title: item.title,
+        totalPrice: item.price,
         unitPrice: null,       // 단가 계산은 클라이언트 또는 별도 엔드포인트에서 수행
         unitPriceLabel,
         link: safeLink,

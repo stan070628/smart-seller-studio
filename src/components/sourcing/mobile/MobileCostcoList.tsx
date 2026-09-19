@@ -51,6 +51,34 @@ function fmtDate(iso: string): string {
 // 메인 컴포넌트
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * 카메라 원본을 JPEG Blob으로 다시 그린다.
+ *
+ * 아이폰은 HEIC 또는 빈 MIME으로 올려 서버 형식 검사에 걸린다. canvas 경유로 형식을
+ * JPEG로 통일하고 긴 변을 maxSide로 줄여 업로드 크기를 낮춘다.
+ * createImageBitmap이 HEIC을 못 여는 브라우저에서는 원본을 그대로 돌려준다 —
+ * 축소를 못 해도 업로드는 시도하는 편이 낫다.
+ */
+async function toJpegBlob(file: File, maxSide: number, quality: number): Promise<Blob> {
+  try {
+    const bmp = await createImageBitmap(file);
+    const scale = Math.min(1, maxSide / Math.max(bmp.width, bmp.height));
+    const w = Math.round(bmp.width * scale);
+    const h = Math.round(bmp.height * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return file;
+    ctx.drawImage(bmp, 0, 0, w, h);
+    bmp.close?.();
+    const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/jpeg', quality));
+    return blob ?? file;
+  } catch {
+    return file;
+  }
+}
+
 export default function MobileCostcoList({ initialSearch }: MobileCostcoListProps) {
   // ── 필터 / 정렬 / 검색 상태 ───────────────────────────────────────────────
   const [filters, setFilters] = useState<CostcoFilterState>(() =>
@@ -72,6 +100,51 @@ export default function MobileCostcoList({ initialSearch }: MobileCostcoListProp
   const [selectedProduct, setSelectedProduct] = useState<CostcoProductRow | null>(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isSortOpen, setIsSortOpen] = useState(false);
+
+  // ── 가격표 촬영 판독 ──────────────────────────────────────────────────────
+  // 매대에서 코드를 타이핑하는 대신 가격표를 찍는다. 판독된 코드를 search에 넣으면
+  // 위의 isProductCode가 켜져 기존 상품코드 흐름을 그대로 탄다 — 흐름은 건드리지 않는다.
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isOcrLoading, setIsOcrLoading] = useState(false);
+  const [ocrError, setOcrError] = useState<string | null>(null);
+  /** 판독된 매장가 — 상품코드와 함께 카드로 넘겨 타이핑을 없앤다 */
+  const [scannedPrice, setScannedPrice] = useState<number | null>(null);
+
+  const handleTagPhoto = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // 같은 사진을 다시 찍어도 onChange가 뜨게 한다
+    if (!file) return;
+
+    setIsOcrLoading(true);
+    setOcrError(null);
+    try {
+      // 🔴 아이폰 카메라 원본은 HEIC이거나 MIME이 비어 오는 경우가 있어 서버가 400으로 잘랐다
+      //    (2026-09-06 실측). canvas로 다시 그리면 형식이 JPEG로 통일되고, 3~4MB가
+      //    180KB 안팎으로 줄어 업로드가 빨라진다. 가격표 글자는 1000px로도 판독률이 같다(2026-09-06 실측).
+      const jpeg = await toJpegBlob(file, 1000, 0.82);
+      const fd = new FormData();
+      fd.append('image', jpeg, 'tag.jpg');
+      const res = await fetch('/api/sourcing/costco/tag-ocr', { method: 'POST', body: fd });
+      const j = await res.json();
+      if (!res.ok) { setOcrError(j?.error ?? '판독에 실패했습니다.'); return; }
+
+      setScannedPrice(typeof j.price === 'number' && j.price > 0 ? j.price : null);
+
+      if (j.product_code) {
+        setSearch(j.product_code);
+      } else if (j.name_ko) {
+        // 코드를 못 읽었으면 상품명으로라도 찾게 한다
+        setSearch(j.name_ko);
+        setOcrError('상품코드를 읽지 못해 상품명으로 검색합니다.');
+      } else {
+        setOcrError('가격표를 읽지 못했습니다. 더 가까이·수평으로 찍어주세요.');
+      }
+    } catch {
+      setOcrError('네트워크 오류가 발생했습니다.');
+    } finally {
+      setIsOcrLoading(false);
+    }
+  }, []);
 
   // ── 검색어 300ms debounce ─────────────────────────────────────────────────
   useEffect(() => {
@@ -154,6 +227,39 @@ export default function MobileCostcoList({ initialSearch }: MobileCostcoListProp
             zIndex: 10,
           }}
         >
+          {/* 가격표 촬영 — capture="environment"로 후면 카메라를 바로 연다 */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={handleTagPhoto}
+            style={{ display: 'none' }}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isOcrLoading}
+            aria-label="가격표 촬영"
+            style={{
+              flexShrink: 0,
+              width: '40px',
+              height: '36px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '1px solid #2563eb',
+              borderRadius: '8px',
+              backgroundColor: isOcrLoading ? '#eff6ff' : '#2563eb',
+              color: isOcrLoading ? '#2563eb' : '#ffffff',
+              fontSize: '17px',
+              lineHeight: 1,
+              cursor: isOcrLoading ? 'default' : 'pointer',
+            }}
+          >
+            {isOcrLoading ? '…' : '📷'}
+          </button>
+
           {/* 검색 입력 — 상품코드 모드 시 파란 테두리 + 뱃지 표시 */}
           <div style={{ flex: 1, position: 'relative' }}>
             <input
@@ -274,6 +380,38 @@ export default function MobileCostcoList({ initialSearch }: MobileCostcoListProp
           </button>
         </div>
 
+        {/* 판독 성공 안내 — 매장가가 자동으로 채워졌음을 알린다 */}
+        {!isOcrLoading && !ocrError && scannedPrice !== null && isProductCode && (
+          <div
+            style={{
+              padding: '8px 12px',
+              fontSize: '12px',
+              backgroundColor: '#f0fdf4',
+              color: '#15803d',
+              borderBottom: '1px solid #e5e7eb',
+            }}
+          >
+            매장가 {scannedPrice.toLocaleString('ko-KR')}원을 읽었습니다 · 다르면 아래에서 고치세요
+          </div>
+        )}
+
+        {/* 촬영 판독 상태 — 진행 중 안내와 실패 사유를 같은 자리에 띄운다 */}
+        {(isOcrLoading || ocrError) && (
+          <div
+            style={{
+              padding: '8px 12px',
+              fontSize: '12px',
+              backgroundColor: ocrError ? '#fef2f2' : '#eff6ff',
+              color: ocrError ? '#b91c1c' : '#1d4ed8',
+              borderBottom: '1px solid #e5e7eb',
+            }}
+          >
+            {isOcrLoading
+              ? '가격표를 읽는 중입니다…'
+              : ocrError}
+          </div>
+        )}
+
         {/* 활성 필터 칩 바 */}
         {activeFilterCount > 0 && (
           <MobileFilterChipBar
@@ -316,7 +454,8 @@ export default function MobileCostcoList({ initialSearch }: MobileCostcoListProp
         {isProductCode && (
           <MobileCodeSearchCard
             code={search}
-            onClose={() => setSearch('')}
+            scannedPrice={scannedPrice}
+            onClose={() => { setSearch(''); setScannedPrice(null); }}
           />
         )}
 

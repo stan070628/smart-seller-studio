@@ -24,12 +24,23 @@ import {
   COSTCO_TARGET_MARGIN_RATE,
   calcNetProfit,
   calcNetMarginRate,
+  calcMinSalePrice,
   type Channel,
 } from './shared/channel-policy';
 import { getGrade, GRADE_COLORS, type SourcingGrade } from './shared/grade';
 
 export type { Channel, SourcingGrade };
 export { GRADE_COLORS };
+
+/**
+ * 「가격 → 마진」 방향 계산.
+ *
+ * calcCostcoPrice()는 목표 마진율로 판매가를 역산하지만, 매대에서는 반대 방향이
+ * 필요하다 — 「이 가격에 팔면 얼마 남나」. 공식은 같으므로 공용 모듈 함수를
+ * 그대로 내보낸다(2026-09-06). 새 계산 코드를 만들면 두 전제가 갈린다.
+ */
+export { calcNetProfit, calcNetMarginRate, calcMinSalePrice };
+export { COSTCO_TARGET_MARGIN_RATE, CHANNEL_FEE, VAT_RATE };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 상수
@@ -69,6 +80,143 @@ const CATEGORY_TARGET_RATES: Record<string, number> = {
  * < 10 kg → 7,000원
  * ≥ 10 kg → 9,000원
  */
+/**
+ * 코스트코 카테고리 → 쿠팡 실측 수수료율 (2026-09-06)
+ *
+ * 🔴 CHANNEL_FEE.coupang(11%)은 실측 어느 값에도 해당하지 않는 가정이었다.
+ *    위키 실측 범위는 7.8~10.8%이고 최고치인 의류도 10.5%다 —
+ *    11%를 쓰면 모든 품목의 마진이 실제보다 낮게 나온다.
+ *
+ * 출처: [[쿠팡 판매 수수료]] 실측표 (정산 API `serviceFeeRatio` 직접 조회)
+ *   7.8%  생활·잡화  — 아머올 티슈 · 라브아 방향제 · 리치키즈 칫솔 · 서큘레이터
+ *   9.6%  화장품     — 도미나스 크림 · 오스트리안 핸드워시 · 보태니컬 비누 · 다슈 왁스
+ *   10.0% 생활       — 극세사 타월 · LED 라이트트랩
+ *   10.5% 의류·잡화  — 디아도라 · 캘빈클라인 · 컬럼비아 · 코오롱 · 압축파우치
+ *   10.6% 식품·건강  — 랩노쉬 · 위트빅스 · 팝콘 · 오메가3
+ *   10.8% 주방       — 실리만 조리도구 · 아이스트레이
+ *
+ * ⚠️ 계열 추정은 관측에서 역으로 읽은 것이지 쿠팡 공개 분류가 아니다.
+ *    새 품목은 정산 API로 실측하고 이 표를 갱신한다.
+ *    미매핑 카테고리는 보수적으로 10.8%(실측 최고치)를 쓴다 — 11%보다는 근거가 있다.
+ */
+const COSTCO_CATEGORY_COUPANG_FEE: Record<string, number> = {
+  '식품':         0.106,  // 랩노쉬·위트빅스·팝콘 실측
+  '건강보조식품': 0.106,  // 오메가3 실측
+  '건강·뷰티':   0.096,  // 핸드워시·비누·크림·왁스 실측
+  '생활용품':     0.078,  // 방향제·칫솔·티슈 실측 (극세사 10%와 갈리나 다수가 7.8%)
+  '의류·패션':   0.105,  // 디아도라·컬럼비아·코오롱 실측
+  '주방·식기':   0.108,  // 실리만 조리도구·아이스트레이 실측
+  '자동차용품':   0.078,  // 아머올 티슈 실측
+  '가전제품':     0.078,  // 서큘레이터 실측
+  '완구·스포츠': 0.078,  // 마스터버니 얼음주머니 실측
+  '반려동물':     0.100,  // 미실측 — 생활 계열로 추정
+  '가구·침구':   0.100,  // 미실측 — 생활 계열로 추정
+};
+
+/** 실측 최고치. 미매핑 카테고리의 보수적 폴백 */
+const COUPANG_FEE_FALLBACK = 0.108;
+
+/**
+ * 코스트코 카테고리의 쿠팡 정률을 돌려준다.
+ * 네이버는 실측 표가 없어 기존 CHANNEL_FEE를 그대로 쓴다.
+ */
+export function getCoupangFeeRate(categoryName: string | null | undefined): number {
+  if (!categoryName) return COUPANG_FEE_FALLBACK;
+  return COSTCO_CATEGORY_COUPANG_FEE[categoryName] ?? COUPANG_FEE_FALLBACK;
+}
+
+/**
+ * 간이과세자 기준 마진 계산 (2026-09-06)
+ *
+ * 🔴 공용 calcNetProfit()은 일반과세 전제로 VAT를 10/110(9.09%) 차감한다.
+ *    그러나 이 사업자는 **간이과세자**라 구조가 다르다 —
+ *      ① 매출세액이 판매가의 **1.5%**다 (9.09%가 아니다)
+ *      ② 매입세액 공제가 `매입액 × 0.5%`로 제한돼 사실상 못 받는다 →
+ *         수수료·물류비의 VAT가 그대로 비용이 되므로 **수수료에 ×1.1**을 곱한다
+ *
+ *    출처: [[쿠팡 판매 수수료]] 계산 규칙 · [[로켓그로스 서비스 소개서 2025-01]]
+ *      개당 마진 = 판매가 − 원가 − 판매가×(정률×1.1) − 물류비 − 판매가×1.5%
+ *
+ *    위키 전 문서가 이 기준으로 계산돼 있다. 일반과세 공식을 쓰면 이 화면만 어긋난다.
+ */
+export const SIMPLIFIED_VAT_RATE = 0.015;
+
+/**
+ * 간이과세 기준 순이익 — 수수료는 VAT 포함(×1.1), 매출세액은 1.5%
+ * @param feeRate 정률 override. 쿠팡은 카테고리 실측값을 넘긴다(getCoupangFeeRate)
+ */
+export function calcNetProfitSimplified(
+  salePrice: number,
+  costTotal: number,
+  channel: Channel,
+  feeRate?: number,
+): number {
+  const feeWithVat = (feeRate ?? CHANNEL_FEE[channel]) * 1.1;
+  const deduction = salePrice * (feeWithVat + SIMPLIFIED_VAT_RATE);
+  return Math.round(salePrice - deduction - costTotal);
+}
+
+/** 간이과세 기준 마진율 (%) */
+export function calcNetMarginRateSimplified(
+  salePrice: number,
+  costTotal: number,
+  channel: Channel,
+  feeRate?: number,
+): number {
+  if (salePrice <= 0) return 0;
+  const profit = calcNetProfitSimplified(salePrice, costTotal, channel, feeRate);
+  return Math.round((profit / salePrice) * 10000) / 100;
+}
+
+/** 간이과세 기준 손익분기 판매가 */
+export function calcMinSalePriceSimplified(
+  costTotal: number,
+  channel: Channel,
+  feeRate?: number,
+): number {
+  const deductionRate = 1 - (feeRate ?? CHANNEL_FEE[channel]) * 1.1 - SIMPLIFIED_VAT_RATE;
+  return Math.ceil(costTotal / deductionRate);
+}
+
+/**
+ * 판매 경로별 물류비 — 위키 실측 기반 (2026-09-06 반영)
+ *
+ * 🔴 기존 getShippingCost()는 2kg 미만 3,500원으로 잡는데 실측과 다르다.
+ *    호출부가 많아 그 함수는 그대로 두고, 코스트코 판정용으로 이 함수를 쓴다.
+ *
+ * ■ 윙(판매자배송) — 롯데 SOHO 계약 2026-08-06
+ *   2kg/80cm 2,890원(VAT 별도) → 실부담 3,179원. 6kg 3,290 · 8kg 3,790.
+ *   ⚠️ 120cm 초과 구간은 표에 없고 콜맨 웨건 실측이 5,000원(VAT 포함)이었다.
+ *
+ * ■ 로켓그로스 — 2026-08-13 실청구 실측
+ *   입출고비(낱개당) + 배송비(건당). **극소형 1,128+1,953=3,080 고정**(2026-09-06).
+ *   🔴 요금표 최소값(1,898)의 1.6배다. 요금표로 계산하면 마진이 과대계상된다.
+ *   소형 3,988·중형 5,727 구간은 참고용이며 계산에는 쓰지 않는다.
+ */
+export type FulfillChannel = 'wing' | 'growth';
+
+export function getLogisticsCost(
+  weightKg: number | null,
+  fulfill: FulfillChannel,
+  packQty = 1,
+): number {
+  if (fulfill === 'growth') {
+    // 🔵 극소형 고정 (2026-09-06 사용자 확정). 무게로 크기 구간을 근사하던 것을 걷어냈다 —
+    //    DB에 부피가 없어 근사가 900원까지 틀어졌고, 실제 취급 상품은 극소형에 몰린다.
+    //    로켓그로스 34개 옵션 중 중형 이상이 0건이라는 실측과도 맞는다.
+    //    입출고비는 낱개당, 배송비는 건당 — 묶음 절감의 원천이 배송비 1회분이다.
+    const INBOUND = 1128;   // 극소형 입출고비 (2026-08-13 실청구)
+    const DELIVERY = 1953;  // 극소형 배송비
+    return INBOUND * packQty + DELIVERY;
+  }
+
+  // 윙 — SOHO 실부담(VAT 포함)
+  if (!weightKg || weightKg < 2) return 3179;
+  if (weightKg < 6)  return 3619;   // 3,290 + VAT
+  if (weightKg < 8)  return 4169;   // 3,790 + VAT
+  return 5000;                      // 120cm 초과 실측(VAT 포함)
+}
+
 export function getShippingCost(weightKg: number | null): number {
   if (!weightKg || weightKg <= 0) return 3500;
   if (weightKg < 2)  return 3500;

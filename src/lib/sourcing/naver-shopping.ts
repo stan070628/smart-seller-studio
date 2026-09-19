@@ -220,6 +220,15 @@ export async function searchNaverLowestPrice(query: string): Promise<number | nu
 // 단가 기반 네이버 쇼핑 검색
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * 시세 단가가 코스트코 단가의 몇 배까지를 정상으로 볼지의 상한.
+ *
+ * 이 값을 넘는 후보는 채택하지 않는다 — 대부분 「낱개 1개 값을 묶음 단가로 읽은」 오파싱이다.
+ * 실측(2026-09-05, 활성 739건): p50 0.92 · p75 1.04 · p90 1.18 · p95 1.85 · p97 6.43 · 최대 29.9.
+ * 정상 시세차는 2배 안에서 끝나므로 3배로 자른다.
+ */
+const MAX_UNIT_PRICE_RATIO = 3;
+
 /** searchNaverUnitPrice() 반환 타입 */
 export interface NaverUnitPriceResult {
   /** 검색된 상품 총 가격 */
@@ -318,11 +327,17 @@ export async function searchNaverUnitPrice(
       const itemUnitPrice =
         Math.round((totalPrice / totalQuantity) * unitPriceDivisor * 100) / 100;
 
-      // 이상치 필터: 코스트코 단가 대비 0.3x ~ 30x 범위 밖은 제외
+      // 이상치 필터: 코스트코 단가 대비 0.3x ~ 3x 범위 밖은 제외
       // (오파싱된 묶음상품이나 전혀 다른 규격의 상품 차단)
+      //
+      // 🔴 2026-09-05: 상한이 30x라 「낱개 1개 값을 묶음 단가로 읽은」 결과가 통과했다.
+      // 신라면 30개입에서 시세단가 6,667원/100g(= 120g 1개를 8,000원으로 본 값)이 들어와
+      // 원가율 0.10으로 계산됐고, 상위 목록이 그런 행 27건에 점령돼 표 자체를 못 쓰게 됐다.
+      // 실측 분포(활성 739건)에서 시세단가÷매입단가는 p95가 1.85배이고 그 위로 급등한다
+      // (p97 6.43 · 최대 29.9). 정상 시세차는 2배 안에서 끝나므로 3배를 상한으로 잡는다.
       if (costcoUnitPrice && costcoUnitPrice > 0) {
         const ratio = itemUnitPrice / costcoUnitPrice;
-        if (ratio < 0.3 || ratio > 30) continue;
+        if (ratio < 0.3 || ratio > MAX_UNIT_PRICE_RATIO) continue;
       }
 
       if (itemUnitPrice < bestUnitPrice) {
