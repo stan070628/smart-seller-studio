@@ -10,6 +10,7 @@ import { supabaseStore } from './store.ts';
 
 const env: Env = {
   IG_APP_SECRET: Deno.env.get('IG_APP_SECRET') ?? '',
+  IG_APP_SECRET_2: Deno.env.get('IG_APP_SECRET_2') || undefined,
   IG_VERIFY_TOKEN: Deno.env.get('IG_VERIFY_TOKEN') ?? '',
   IG_ACCESS_TOKEN: Deno.env.get('IG_ACCESS_TOKEN') ?? '',
   IG_USER_ID: Deno.env.get('IG_USER_ID') || undefined,

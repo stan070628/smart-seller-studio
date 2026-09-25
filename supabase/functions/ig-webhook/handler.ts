@@ -13,6 +13,9 @@ import {
 
 export interface Env {
   IG_APP_SECRET: string;
+  /** 두 번째 후보 시크릿. Instagram 로그인 앱은 부모 Meta 앱 시크릿과 Instagram 앱 시크릿이 따로 있어
+   *  어느 쪽으로 서명되는지 실측하기 위해 둘 다 받는다. 확정되면 하나만 남긴다 */
+  IG_APP_SECRET_2?: string;
   IG_VERIFY_TOKEN: string;
   IG_ACCESS_TOKEN: string;
   IG_USER_ID?: string;
@@ -93,24 +96,30 @@ async function processEvent(
   }
 
   // 서명은 원문으로 검증한다 — JSON 파싱 후 재직렬화하면 바이트가 달라진다
-  if (!(await verifySignature(raw, sigHeader, env.IG_APP_SECRET))) {
+  const secrets = [env.IG_APP_SECRET, env.IG_APP_SECRET_2].filter((x): x is string => !!x);
+  let matchedSecret = -1;
+  for (let i = 0; i < secrets.length; i++) {
+    if (await verifySignature(raw, sigHeader, secrets[i])) { matchedSecret = i; break; }
+  }
+  if (matchedSecret < 0) {
     trace.note = sigHeader ? 'bad-signature' : 'no-signature-header';
     return json({ ok: false }, 401);
   }
   trace.sig_ok = true;
+  const secretTag = matchedSecret === 0 ? '' : `secret${matchedSecret + 1};`;
 
   let body: unknown;
-  try { body = JSON.parse(raw); } catch { trace.note = 'not-json'; return json({ ok: true }); }
+  try { body = JSON.parse(raw); } catch { trace.note = secretTag + 'not-json'; return json({ ok: true }); }
 
   const all = extractComments(body);
   trace.events = all.length;
   const events = all.filter((e) => !isOwnComment(e));
-  if (!events.length) { trace.note = all.length ? 'own-comments-only' : 'no-comment-events'; return json({ ok: true }); }
+  if (!events.length) { trace.note = secretTag + (all.length ? 'own-comments-only' : 'no-comment-events'); return json({ ok: true }); }
 
   const { data: rules, error: rulesErr } = await store.loadActiveRules();
   if (rulesErr) {
     console.error('[ig-dm] 규칙 조회 실패', rulesErr.message);
-    trace.note = `rules-error:${rulesErr.message}`;
+    trace.note = `${secretTag}rules-error:${rulesErr.message}`;
     return json({ ok: true }); // 재전송돼도 같은 실패라 200으로 끊는다
   }
 
@@ -145,7 +154,7 @@ async function processEvent(
   }
 
   trace.matched = results.length;
-  trace.note = results.length ? results.map((r) => r.result).join(',') : 'no-rule-match';
+  trace.note = secretTag + (results.length ? results.map((r) => r.result).join(',') : 'no-rule-match');
   if (results.length) console.log('[ig-dm]', JSON.stringify(results));
   return json({ ok: true });
 }

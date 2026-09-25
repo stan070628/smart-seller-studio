@@ -150,6 +150,17 @@ describe('POST', () => {
     expect(rows[1].body_head).toContain('텐트');
   });
 
+  it('두 번째 시크릿으로 서명된 요청도 통과하고 note에 secret2가 남는다', async () => {
+    const { store, logs } = fakeStore([rule()]);
+    const rows: any[] = [];
+    store.logRequest = async (r) => { rows.push(r); };
+    const body = commentBody('텐트');
+    const res = await handle(post(body, signed(body, 'second')), { env: { ...env, IG_APP_SECRET_2: 'second' }, store, fetch: okFetch() as any });
+    expect(res.status).toBe(200);
+    expect(logs.c1.status).toBe('sent');
+    expect(rows[0]).toMatchObject({ sig_ok: true, note: 'secret2;sent' });
+  });
+
   it('JSON이 아니면 200으로 끊는다 (재전송 방지)', async () => {
     const body = 'not-json';
     const res = await handle(post(body, signed(body)), { env, store: fakeStore([]).store, fetch: okFetch() as any });
