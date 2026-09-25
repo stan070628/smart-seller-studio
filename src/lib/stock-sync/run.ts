@@ -19,6 +19,8 @@ export interface SyncResult {
   links: number;
   changes: SyncChange[];
   errors: string[];
+  /** 재고와 함께 바꾼 부수 상태 — 네이버 전시 ON/SUSPENSION 등 */
+  notes: string[];
 }
 
 /** 채널 옵션 하나 = 연결 행 여러 개(쿠팡 옵션마다 한 행) */
@@ -44,7 +46,7 @@ export async function runStockSync({ dryRun, preset }: { dryRun: boolean; preset
     id: Number(r.id), coupangVendorItemId: Number(r.coupang_vendor_item_id), channel: r.channel,
     productId: Number(r.product_id), optionKey: r.option_key, label: r.label, zeroedAt: r.zeroed_at,
   }));
-  const result: SyncResult = { dryRun, links: links.length, changes: [], errors: [] };
+  const result: SyncResult = { dryRun, links: links.length, changes: [], errors: [], notes: [] };
 
   // 1) 쿠팡 옵션 상태
   const cp = getCoupangClient();
@@ -117,7 +119,10 @@ export async function runStockSync({ dryRun, preset }: { dryRun: boolean; preset
           if (plan.kind === 'restore') updates.set(t.optionKey, plan.to);
         }
         // 네이버는 상품 전체 PUT 한 번이라 성공하면 전 옵션이 함께 반영된다
-        if (updates.size && !dryRun) await saveNaverStocks(p, updates);
+        if (updates.size && !dryRun) {
+          const display = await saveNaverStocks(p, updates);
+          if (display) result.notes.push(`[네이버] ${group[0].label.split(' · ')[0]}: 전시 ${display === 'SUSPENSION' ? '끔 (재고 0)' : '켬 (재고 복구)'}`);
+        }
         for (const x of planned) await record(x.t, x.plan);
       } else {
         tossToken ??= await getTossToken();
@@ -155,6 +160,7 @@ export function formatSyncReport(r: SyncResult): string {
       c.plan.kind === 'missing' ? '⚠️ 채널에서 옵션을 찾지 못함 — 연결 확인 필요' : '';
     lines.push(`• [${ch(c.channel)}] ${c.label}: ${what}`);
   }
+  for (const n of r.notes ?? []) lines.push(`• ${n}`);
   for (const e of r.errors) lines.push(`🔴 ${e}`);
   return lines.join('\n');
 }
