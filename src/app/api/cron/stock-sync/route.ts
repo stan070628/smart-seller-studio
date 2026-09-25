@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { runStockSync, formatSyncReport } from '@/lib/stock-sync/run';
 import { sendTelegramMessage } from '@/lib/telegram/client';
 import { withJobRun } from '@/lib/jobs/run-log';
+import { maskPII } from '@/lib/jobs/mask';
 
 /** 쿠팡 옵션 140여 개 조회 + 네이버 상세 700ms 간격이라 60초를 넘긴다 */
 export const maxDuration = 300;
@@ -25,23 +26,25 @@ export async function GET(request: NextRequest) {
   }
 
   const dryRun = request.nextUrl.searchParams.get('dryRun') === '1';
+  const manual = dryRun || request.nextUrl.searchParams.get('trigger') === 'manual';
   const chatId = process.env.STOCK_SYNC_TELEGRAM_CHAT_ID ?? '';
 
   try {
+    // 부분 오류(errors>0)는 status 'ok'로 남는다 — A11 「전송 실패」는 status='failed' OR counts.errors>0으로 센다.
     const result = await withJobRun(
       'stock-sync',
       async () => {
         const r = await runStockSync({ dryRun });
         return { value: r, counts: { links: r.links, changes: r.changes.length, errors: r.errors.length } };
       },
-      { trigger: dryRun ? 'manual' : 'cron' },
+      { trigger: manual ? 'manual' : 'cron' },
     );
     if (chatId && (result.changes.length || result.errors.length)) {
       await sendTelegramMessage(chatId, formatSyncReport(result));
     }
     return NextResponse.json({ success: true, ...result });
   } catch (e: any) {
-    const msg = e?.message ?? String(e);
+    const msg = maskPII(e?.message ?? String(e));
     if (chatId) await sendTelegramMessage(chatId, `🔴 재고 동기화 실패: ${msg}`);
     return NextResponse.json({ success: false, error: msg }, { status: 500 });
   }
