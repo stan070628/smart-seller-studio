@@ -24,9 +24,9 @@
 
 | 대상 | 내용 | 보정 예시 |
 |---|---|---|
-| `coupang_wing\|95626847868\|` | 레거시 배수 7 / 초안 배수 1 | `{"setMultiplier": [{"listingKey": "coupang_wing|95626847868|", "skuKey": "cp:16263936282:45g", "multiplier": 1}]}` |
-| `coupang_wing\|95835453387\|` | 레거시 배수 2 / 초안 배수 1 | `{"setMultiplier": [{"listingKey": "coupang_wing|95835453387|", "skuKey": "cp:16320666229:2개입", "multiplier": 1}]}` |
-| `coupang_rg\|95835453386\|` | 레거시 배수 2 / 초안 배수 1 | `{"setMultiplier": [{"listingKey": "coupang_rg|95835453386|", "skuKey": "cp:16320666229:2개입", "multiplier": 1}]}` |
+| `coupang_wing\|95626847868\|` | 레거시 배수 7 / 초안 배수 1 | `{"setMultiplier": [{"listingKey": "coupang_wing|95626847868|", "skuKey": "cp:16263936282:45g", "multiplier": 7}]}` |
+| `coupang_wing\|95835453387\|` | 레거시 배수 2 / 초안 배수 1 | `{"setMultiplier": [{"listingKey": "coupang_wing|95835453387|", "skuKey": "cp:16320666229:2개입", "multiplier": 2}]}` |
+| `coupang_rg\|95835453386\|` | 레거시 배수 2 / 초안 배수 1 | `{"setMultiplier": [{"listingKey": "coupang_rg|95835453386|", "skuKey": "cp:16320666229:2개입", "multiplier": 2}]}` |
 
 ### 🔴 옛 원가 행이 SKU 여러 개에 걸침 (12)
 
