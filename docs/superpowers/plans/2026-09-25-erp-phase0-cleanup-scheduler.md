@@ -817,7 +817,7 @@ Expected: `done` 한 줄만(경고 없음). 경고가 나오면 멈추고 사용
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 DB_URL=$(grep -E '^SUPABASE_DB_URL=' .env.local | cut -d= -f2- | sed -E "s/^[\"']|[\"']$//g")
-OUT_DIR=/Volumes/Mac_SSD/backups/investcock
+OUT_DIR=/Volumes/Mac_SSD/backup/investcock
 mkdir -p "$OUT_DIR"
 OUT="$OUT_DIR/investcock-$(date +%Y%m%d-%H%M).sql"
 ARGS=()
@@ -885,14 +885,14 @@ console.log((await c.query('select job_name,max(started_at) from job_run_log gro
 - [ ] **Step 2: 덤프**
 
 Run: `bash scripts/ops/investcock-dump.sh`
-Expected: `/Volumes/Mac_SSD/backups/investcock/investcock-YYYYMMDD-HHMM.sql (약 5M)`. SSD가 없으면 멈춘다.
+Expected: `/Volumes/Mac_SSD/backup/investcock/investcock-YYYYMMDD-HHMM.sql (약 5M)`. SSD가 없으면 멈춘다.
 
 복원은 반드시 `psql -f`로 한다 — 덤프의 `\restrict` 메타명령 때문에 대시보드 SQL 편집기에 붙여넣으면 실패한다.
 
 - [ ] **Step 3: 새 DB에 복원**
 
 ```bash
-DUMP=$(ls -t /Volumes/Mac_SSD/backups/investcock/*.sql | head -1)
+DUMP=$(ls -t /Volumes/Mac_SSD/backup/investcock/*.sql | head -1)
 NEW=$(grep -E '^INVESTCOCK_DB_URL=' .env.local | cut -d= -f2- | sed -E "s/^[\"']|[\"']$//g")
 psql "$NEW" -v ON_ERROR_STOP=1 -f "$DUMP" 2>&1 | tail -5
 ```
@@ -925,7 +925,7 @@ Expected: `INVESTCOCK_DB_URL` 쪽 `job_run_log` 최신 시각이 교체 이후�
 ```sql
 -- scripts/ops/investcock-drop.sql
 -- 투자콕 50개 테이블을 셀러 DB에서 지운다. Task 10 Step 6 확인 뒤에만 실행한다.
--- 덤프: /Volumes/Mac_SSD/backups/investcock/ (복원 검증은 새 프로젝트 50/50 일치로 끝났다)
+-- 덤프: /Volumes/Mac_SSD/backup/investcock/ (복원 검증은 새 프로젝트 50/50 일치로 끝났다)
 begin;
 drop table if exists
   public.users, public.api_keys, public.portfolios, public.holdings, public.rebalance_logs,

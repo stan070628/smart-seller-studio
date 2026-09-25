@@ -7,7 +7,7 @@ cd "$(dirname "$0")/../.."
 DB_URL=$(grep -E '^SUPABASE_DB_URL=' .env.local | cut -d= -f2- | sed -E "s/^[\"']|[\"']$//g" || true)
 [ -n "$DB_URL" ] || { echo "SUPABASE_DB_URL 없음" >&2; exit 1; }
 [ -d /Volumes/Mac_SSD ] || { echo "외장 SSD(/Volumes/Mac_SSD)가 없다" >&2; exit 1; }
-OUT_DIR=/Volumes/Mac_SSD/backups/investcock
+OUT_DIR=/Volumes/Mac_SSD/backup/investcock
 mkdir -p "$OUT_DIR"
 OUT="$OUT_DIR/investcock-$(date +%Y%m%d-%H%M).sql"
 ARGS=()
