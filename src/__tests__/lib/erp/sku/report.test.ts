@@ -199,9 +199,44 @@ describe('renderReport — I-2: 짝 묶음은 배수가 같을 때만', () => {
 });
 
 describe('renderReport — M-3: 판단 필요 이슈 표의 보정 예시 열', () => {
-  it('setMultiplier 대상 종류는 그 리스팅 키·SKU·현재 초안 배수를 넣는다', () => {
+  it('[재검토] legacy_multiplier_mismatch는 초안 배수가 아니라 detail의 레거시 배수를 넣는다 — 그대로 붙이면 옛 매핑을 따르는 선택이 된다', () => {
     const md = renderReport(draft, { date: '2026-09-26', notes: [] });
-    expect(md).toContain('| `coupang_wing\\|12\\|` | 레거시 배수 3 / 초안 배수 2 | `{"setMultiplier": [{"listingKey": "coupang_wing|12|", "skuKey": "cp:100:", "multiplier": 2}]}` |');
+    expect(md).toContain('| `coupang_wing\\|12\\|` | 레거시 배수 3 / 초안 배수 2 | `{"setMultiplier": [{"listingKey": "coupang_wing|12|", "skuKey": "cp:100:", "multiplier": 3}]}` |');
+  });
+
+  it('[재검토] legacy_multiplier_mismatch의 detail에서 레거시 배수를 못 찾으면 자리표시자를 넣는다', () => {
+    const d: Draft = {
+      skus: [{ key: 'cp:100:', name: 'p', optionLabel: '', baseUnitLabel: null, status: 'active', legacyProductCostIds: [] }],
+      listings: [{ key: 'coupang_wing|12|', channel: 'coupang_wing', externalProductId: '12', externalOptionKey: '', altProductId: '100', label: 'p', linkMode: 'single' }],
+      links: [{ listingKey: 'coupang_wing|12|', skuKey: 'cp:100:', multiplier: 2 }],
+      issues: [{ kind: 'legacy_multiplier_mismatch', ref: 'coupang_wing|12|', detail: '배수 정보를 파싱할 수 없다' }],
+    };
+    const md = renderReport(d, { date: '2026-09-26', notes: [] });
+    expect(md).toContain('| `coupang_wing\\|12\\|` | 배수 정보를 파싱할 수 없다 | `{"setMultiplier": [{"listingKey": "coupang_wing|12|", "skuKey": "cp:100:", "multiplier": "<정할 배수>"}]}` |');
+  });
+
+  it('[재검토] uneven_multiplier·channel_quantity_mismatch는 현재 값이 아니라 자리표시자를 넣는다 — 같은 값이면 무의미하다', () => {
+    const d: Draft = {
+      skus: [
+        { key: 'cp:1:', name: 'p', optionLabel: '', baseUnitLabel: null, status: 'active', legacyProductCostIds: [] },
+        { key: 'cp:100:', name: 'q', optionLabel: '', baseUnitLabel: null, status: 'active', legacyProductCostIds: [] },
+      ],
+      listings: [
+        { key: 'coupang_wing|2|', channel: 'coupang_wing', externalProductId: '2', externalOptionKey: '', altProductId: '1', label: 'p · 3개', linkMode: 'single' },
+        { key: 'toss|801|3개', channel: 'toss', externalProductId: '801', externalOptionKey: '3개', altProductId: null, label: '토스', linkMode: 'single' },
+      ],
+      links: [
+        { listingKey: 'coupang_wing|2|', skuKey: 'cp:1:', multiplier: 3 },
+        { listingKey: 'toss|801|3개', skuKey: 'cp:100:', multiplier: 3 },
+      ],
+      issues: [
+        { kind: 'uneven_multiplier', ref: 'cp:1:', detail: '수량 2/3 — 배수를 원래 수량으로 두었다' },
+        { kind: 'channel_quantity_mismatch', ref: 'toss|801|3개', detail: '토스 옵션 수량 3 / 쿠팡 수량 2' },
+      ],
+    };
+    const md = renderReport(d, { date: '2026-09-26', notes: [] });
+    expect(md).toContain('| cp:1: | 수량 2/3 — 배수를 원래 수량으로 두었다 | `{"setMultiplier": [{"listingKey": "coupang_wing|2|", "skuKey": "cp:1:", "multiplier": "<정할 배수>"}]}` |');
+    expect(md).toContain('| `toss\\|801\\|3개` | 토스 옵션 수량 3 / 쿠팡 수량 2 | `{"setMultiplier": [{"listingKey": "toss|801|3개", "skuKey": "cp:100:", "multiplier": "<정할 배수>"}]}` |');
   });
 
   it('excludeListings 대상 종류는 그 키를 넣는다', () => {

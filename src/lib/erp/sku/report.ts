@@ -75,23 +75,38 @@ function overrideExample(kind: IssueKind, row: DraftIssue, d: Draft, listingByKe
   }
 }
 
+/** legacy_multiplier_mismatch의 detail("레거시 배수 N / 초안 배수 M")에서 레거시 배수만 뽑는다. */
+const LEGACY_MULTIPLIER_RE = /레거시 배수 (\d+)/;
+
 /**
  * 판단 필요 이슈 표의 「보정 예시」 열 — setMultiplier·excludeListings처럼 그 행 자체의 값으로
- * 뻔하게 채울 수 있는 종류만 만든다(setMultiplier는 그 리스팅 키·SKU·현재 초안 배수를 그대로 쓴다).
- * 나머지는 '—'다 — 문맥 판단이 필요해 뻔한 정답이 없다.
+ * 뻔하게 채울 수 있는 종류만 만든다. 나머지는 '—'다 — 문맥 판단이 필요해 뻔한 정답이 없다.
+ *
+ * setMultiplier의 배수 값은 **현재 초안 배수를 그대로 넣지 않는다** — 그대로 붙여 넣으면 아무것도
+ * 바뀌지 않아 "옛 매핑을 그대로 따르는" 선택이 되거나(legacy_multiplier_mismatch), 애초에 지금 값이
+ * 틀렸다는 이슈 자체를 무의미하게 만든다(uneven_multiplier·channel_quantity_mismatch). 대신
+ * legacy_multiplier_mismatch는 detail의 레거시 배수를(파싱 실패 시 자리표시자), 나머지 둘은 항상
+ * 자리표시자 `"<정할 배수>"`를 넣어 사람이 직접 정하게 한다.
  */
 function rowOverrideExample(kind: IssueKind, row: DraftIssue, d: Draft): string {
+  const PLACEHOLDER = '"<정할 배수>"';
   switch (kind) {
-    case 'legacy_multiplier_mismatch':
+    case 'legacy_multiplier_mismatch': {
+      const link = d.links.find((l) => l.listingKey === row.ref);
+      if (!link) return '—';
+      const m = row.detail.match(LEGACY_MULTIPLIER_RE);
+      const multiplier = m ? m[1] : PLACEHOLDER;
+      return `\`{"setMultiplier": [{"listingKey": "${row.ref}", "skuKey": "${link.skuKey}", "multiplier": ${multiplier}}]}\``;
+    }
     case 'channel_quantity_mismatch': {
       const link = d.links.find((l) => l.listingKey === row.ref);
       if (!link) return '—';
-      return `\`{"setMultiplier": [{"listingKey": "${row.ref}", "skuKey": "${link.skuKey}", "multiplier": ${link.multiplier}}]}\``;
+      return `\`{"setMultiplier": [{"listingKey": "${row.ref}", "skuKey": "${link.skuKey}", "multiplier": ${PLACEHOLDER}}]}\``;
     }
     case 'uneven_multiplier': {
       const link = d.links.find((l) => l.skuKey === row.ref);
       if (!link) return '—';
-      return `\`{"setMultiplier": [{"listingKey": "${link.listingKey}", "skuKey": "${row.ref}", "multiplier": ${link.multiplier}}]}\``;
+      return `\`{"setMultiplier": [{"listingKey": "${link.listingKey}", "skuKey": "${row.ref}", "multiplier": ${PLACEHOLDER}}]}\``;
     }
     case 'sync_link_unresolved':
       return `\`{"excludeListings": ["${row.ref}"]}\``;
