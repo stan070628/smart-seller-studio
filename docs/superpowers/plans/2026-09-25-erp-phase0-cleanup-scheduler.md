@@ -697,6 +697,8 @@ on:
         default: true
 ```
 
+- [ ] **Step 6b: 수동 실행을 manual로 기록** — 같은 파일 `run:` 블록의 curl URL을 `"$APP_URL/api/cron/stock-sync?dryRun=$DRY&trigger=manual"`로 바꾼다(이제 이 워크플로는 수동 전용이다 · Task 4 리뷰 지적).
+
 - [ ] **Step 7: Commit + PR 병합(Task 6 승인 범위 안)**
 
 ```bash
@@ -965,3 +967,16 @@ git push origin feature/erp-restructure
 - [ ] **Step 2: superpowers:requesting-code-review로 0단계 전체 리뷰**
 
 - [ ] **Step 3: 위키 갱신 요청** — 결과를 사용자에게 보고하고, 위키(`[[스마트셀러스튜디오 ERP 재구성 설계 2026-09-25]]` · `[[판매 채널 API의 아웃바운드 IP 제약]]` · `[[인프라 고정비 원장]]`)와 `log.md` 반영은 메인 세션이 한다.
+
+---
+
+## 실행 중 나온 후속 항목 (0단계 범위 밖 — 다음 단계 계획에 넣는다)
+
+| # | 항목 | 출처 |
+|---|---|---|
+| F1 | 타임아웃으로 죽은 실행이 `running`으로 남는다 → 다음 `withJobRun` 시작 시 같은 job의 15분 넘은 `running`을 `failed`로 닫고 경보 | Task 3 리뷰 Minor 2 |
+| F2 | 쿠팡 조회가 **전부** 실패해도 품절 동기화가 `ok`로 기록되고 경보가 없다(`run.ts`가 조회 실패를 `errors`로만 쌓음) → 「전부 실패」를 `failed`로 올릴지 · 중복 경보(JOB_ALERT vs STOCK_SYNC chat)와 함께 **Task 6에서 사용자 결정** | Task 4 리뷰 Important 1 |
+| F3 | A11 「전송 실패」 카드 집계 기준: `status='failed' OR (counts->>'errors')::int > 0` | Task 4 리뷰 |
+| F4 | 동기화 성공 뒤 보고 텔레그램 전송이 던지면 route가 500·「실패」 알림을 보내지만 job_runs는 `ok` — 경보 경로 정리 때 함께 | Task 4 재검토 |
+| F5 | `sendTelegramMessage` fetch에 타임아웃 없음(`AbortSignal.timeout(5_000)`) | Task 3 리뷰 Minor 4 |
+| F6 | `erp.job_runs.trigger`에 check 제약 없음 — 필요 시 새 마이그레이션 | Task 1 리뷰 Minor 6 |
