@@ -44,6 +44,12 @@ export interface DraftListing {
    * 판매 SKU는 주문 옵션으로 가린다(1-C).
    */
   linkMode: LinkMode;
+  /**
+   * 같은 쿠팡 item의 Wing·RG 짝 리스팅 키. buildDraft가 item을 만들 때 직접 기록한다 —
+   * altProductId·label이 같다고 라벨로 추정하면 itemName이 우연히 같은 다른 item과 잘못 짝지어질 수 있다.
+   * item에 Wing·RG 둘 다 있을 때만 있고, 한쪽만 있으면(RG 없음 등) undefined다.
+   */
+  pairKey?: string;
 }
 
 export interface DraftLink {
@@ -143,10 +149,14 @@ export function buildDraft(input: DraftInput): Draft {
 
       for (const { item, quantity } of members) {
         const multiplier = uneven ? quantity : quantity / minQty;
+        // 이 item의 Wing·RG 짝을 여기서 직접 정한다(라벨로 나중에 추정하지 않는다) — item에 둘 다 있을 때만 짝이다.
+        const wingKey = item.wingVid ? listingKey('coupang_wing', item.wingVid) : undefined;
+        const rgKey = item.rgVid ? listingKey('coupang_rg', item.rgVid) : undefined;
         for (const [channel, vid] of [['coupang_wing', item.wingVid], ['coupang_rg', item.rgVid]] as const) {
           if (!vid) continue;
           const key = listingKey(channel, vid);
-          listings.set(key, { key, channel, externalProductId: String(vid), externalOptionKey: '', altProductId: String(p.sellerProductId), label: `${p.productName} · ${item.itemName}`.trim(), linkMode: 'single' });
+          const pairKey = channel === 'coupang_wing' ? rgKey : wingKey;
+          listings.set(key, { key, channel, externalProductId: String(vid), externalOptionKey: '', altProductId: String(p.sellerProductId), label: `${p.productName} · ${item.itemName}`.trim(), linkMode: 'single', pairKey });
           addLink({ listingKey: key, skuKey, multiplier });
           vidLink.set(vid, { skuKey, multiplier, quantity });
         }
@@ -383,25 +393,20 @@ export function applyOverrides(draft: Draft, o: Overrides): Draft {
     return l;
   });
 
-  // Wing·RG 짝 검증: 같은 쿠팡 아이템의 Wing·RG 리스팅(altProductId·label이 같다)은
-  // 항상 같은 SKU를 가리켜야 한다. splitListing 등으로 한쪽만 옮기면 재고 이관이 반쪽만 되므로
-  // 여기서 막는다 — 둘 다 옮기라고 안내한다.
-  const wingRgPairs = new Map<string, { wing?: string; rg?: string }>();
-  for (const l of listings) {
-    if (l.channel !== 'coupang_wing' && l.channel !== 'coupang_rg') continue;
-    const groupKey = `${l.altProductId ?? ''}|${l.label ?? ''}`;
-    const entry = wingRgPairs.get(groupKey) ?? {};
-    if (l.channel === 'coupang_wing') entry.wing = l.key;
-    else entry.rg = l.key;
-    wingRgPairs.set(groupKey, entry);
-  }
+  // Wing·RG 짝 검증: buildDraft가 기록한 pairKey로 짝을 찾는다(altProductId·label로 추정하지 않는다 —
+  // itemName이 우연히 같은 다른 item의 리스팅과 잘못 짝지어질 수 있었다). 짝은 항상 같은 SKU를 가리켜야
+  // 한다 — splitListing 등으로 한쪽만 옮기면 재고 이관이 반쪽만 된다. 한쪽이 excludeListings로 빠졌으면
+  // 비교 대상이 없으므로 건너뛴다.
+  const listingByKey = new Map(listings.map((l) => [l.key, l]));
   const skusOfListing = (key: string) => new Set(links.filter((l) => l.listingKey === key).map((l) => l.skuKey));
-  for (const { wing, rg } of wingRgPairs.values()) {
-    if (!wing || !rg) continue;
-    const wingSkus = skusOfListing(wing);
-    const rgSkus = skusOfListing(rg);
-    const same = wingSkus.size === rgSkus.size && [...wingSkus].every((k) => rgSkus.has(k));
-    if (!same) throw new Error(`Wing·RG 짝이 다른 SKU를 가리킨다: ${wing} / ${rg} — 둘 다 splitListing 하라`);
+  for (const l of listings) {
+    if (!l.pairKey) continue;
+    const other = listingByKey.get(l.pairKey);
+    if (!other) continue;
+    const aSkus = skusOfListing(l.key);
+    const bSkus = skusOfListing(other.key);
+    const same = aSkus.size === bSkus.size && [...aSkus].every((k) => bSkus.has(k));
+    if (!same) throw new Error(`Wing·RG 짝이 다른 SKU를 가리킨다: ${l.key} / ${other.key} — 두 리스팅을 같은 SKU로 옮긴다`);
   }
 
   return { skus: [...skus.values()], listings, links, issues: draft.issues };

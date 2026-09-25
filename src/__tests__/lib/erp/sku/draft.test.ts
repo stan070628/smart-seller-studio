@@ -323,13 +323,13 @@ describe('applyOverrides', () => {
     expect(d.listings).toEqual(raw.listings);
   });
 
-  // --- 재검토 반영 1: Wing·RG 짝 검증 ---
+  // --- 재검토 반영 1: Wing·RG 짝 검증(pairKey 기반) ---
   it('[재검토 1] splitListing으로 Wing만 옮기면 Wing·RG 짝이 갈라져 던진다', () => {
     const raw = buildDraft(base);
     // 다슈 왁스 '1개' 옵션: wingVid 11 / rgVid 21이 같은 아이템의 짝이다.
     expect(() => applyOverrides(raw, {
       splitListing: [{ listingKey: 'coupang_wing|11|', toSkuKey: 'cp:100:분리' }],
-    })).toThrow('Wing·RG 짝이 다른 SKU를 가리킨다: coupang_wing|11| / coupang_rg|21| — 둘 다 splitListing 하라');
+    })).toThrow('Wing·RG 짝이 다른 SKU를 가리킨다: coupang_wing|11| / coupang_rg|21| — 두 리스팅을 같은 SKU로 옮긴다');
   });
 
   it('[재검토 1] Wing·RG를 함께 splitListing하면 통과한다', () => {
@@ -342,6 +342,42 @@ describe('applyOverrides', () => {
     });
     expect(d.links.find((l) => l.listingKey === 'coupang_wing|11|')!.skuKey).toBe('cp:100:분리');
     expect(d.links.find((l) => l.listingKey === 'coupang_rg|21|')!.skuKey).toBe('cp:100:분리');
+  });
+
+  it('[재검토 1] buildDraft가 Wing·RG 짝을 pairKey로 직접 기록한다', () => {
+    const raw = buildDraft(base);
+    expect(raw.listings.find((l) => l.key === 'coupang_wing|11|')?.pairKey).toBe('coupang_rg|21|');
+    expect(raw.listings.find((l) => l.key === 'coupang_rg|21|')?.pairKey).toBe('coupang_wing|11|');
+    // RG가 없는 아이템(다슈 3개, wingVid 13)은 짝이 없다.
+    expect(raw.listings.find((l) => l.key === 'coupang_wing|13|')?.pairKey).toBeUndefined();
+  });
+
+  it('[재검토 4-1] itemName이 같은 두 item(A: Wing+RG, B: Wing만)이 서로 다른 SKU라도 라벨로 잘못 짝지어 던지지 않는다', () => {
+    // 라벨 기반 추정이었다면 altProductId+label이 같은 두 item의 리스팅이 하나의 「짝」으로 오인돼,
+    // A의 RG와 B의 Wing이 비교되며(서로 다른 SKU라) 잘못 던졌을 것이다. pairKey는 item 단위로만 기록되므로 안전하다.
+    const raw = buildDraft({
+      coupangProducts: [{
+        sellerProductId: 900,
+        productName: '테스트상품',
+        items: [
+          {
+            itemName: '1개',
+            attributes: [{ attributeTypeName: '색상', attributeValueName: '블랙' }, { attributeTypeName: '수량', attributeValueName: '1개' }],
+            wingVid: 9001,
+            rgVid: 9002,
+          },
+          {
+            itemName: '1개',
+            attributes: [{ attributeTypeName: '색상', attributeValueName: '레드' }, { attributeTypeName: '수량', attributeValueName: '1개' }],
+            wingVid: 9003,
+            rgVid: null,
+          },
+        ],
+      }],
+      syncLinks: [], legacyChannels: [], legacyProductCosts: [], saleAttributions: [],
+    });
+    expect(raw.skus.map((s) => s.key).sort()).toEqual(['cp:900:레드', 'cp:900:블랙']);
+    expect(() => applyOverrides(raw, {})).not.toThrow();
   });
 
   // --- 재검토 반영 2: 흡수된 SKU를 splitListing으로 되살리지 못한다 ---
