@@ -634,7 +634,7 @@ await c.end();
 ```bash
 npx vercel env pull /tmp/ssv.env --environment=production
 grep -c -E '^(APP_URL|CRON_SECRET)=' /tmp/ssv.env   # Expected: 2
-node scripts/ops/set-cron-secrets.mjs /tmp/ssv.env
+node scripts/ops/set-cron-secrets.mjs /tmp/ssv.env https://smartsellerstudio.vercel.app
 rm /tmp/ssv.env
 ```
 Expected: `✅ vault.app_url (…자)` / `✅ vault.cron_secret (…자)`. `APP_URL`이 없으면 멈추고 사용자에게 운영 URL을 묻는다(GitHub secret `APP_URL`과 같은 값).
@@ -665,6 +665,8 @@ select cron.schedule(
   $job$
 );
 ```
+
+- [ ] **Step 3b: GitHub 예약 먼저 끄기** — `gh workflow disable stock-sync.yml` (main의 워크플로 파일은 병합 전까지 예약이 살아 있어 pg_cron과 이중 호출된다). 병합 후 수동 실행이 필요하면 `gh workflow enable`.
 
 - [ ] **Step 4: 🔴 사용자 승인 후 적용** — 「지금부터 운영 품절 동기화를 pg_cron이 호출한다. GitHub 예약은 끈다」를 알리고 승인받는다.
 
@@ -721,6 +723,12 @@ const r=(await c.query(\"select started_at,status, extract(epoch from started_at
 console.table(r);await c.end()})()"
 ```
 Expected: 8행 전후, `status` 전부 `ok`, `gap_h`가 모두 **2.9~3.1**. 하나라도 어긋나면 `select * from net._http_response order by id desc limit 5`로 응답 코드를 보고 원인을 찾는다.
+
+```sql
+select status, return_message from cron.job_run_details order by start_time desc limit 3;
+select status_code from net._http_response order by created desc limit 3;
+```
+401은 job_runs에 남지 않으므로 job_runs 공백 = 실패로 본다.
 
 - [ ] **Step 2: 결과를 사용자에게 보고** — 이전(5~6시간)과 이후 간격을 표로.
 
