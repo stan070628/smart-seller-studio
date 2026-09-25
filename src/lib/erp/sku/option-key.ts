@@ -15,6 +15,8 @@ export interface OptionKey {
 }
 
 const QTY_ATTR = /수량/;
+// 바코드·품번류 속성은 실물 옵션과 무관하게 일부 item에만 채워져 같은 물건을 다른 SKU로 가른다 — 옵션 조합에서 제외
+const NON_OPTION_ATTR = /Global Trade Item Number|Manufacturer Part Number|GTIN|EAN|바코드|모델명|모델 ?번호|품번/i;
 // `N개`(뒤에 `입`이 없는 것)·`N팩` 토큰. 여러 개면 마지막 것이 수량이다 — `1개 2개입`은 1개가 수량, 2개입은 내용물
 const QTY_TOKEN = /(^|\s)(\d+)\s*(개(?!입)|팩)(?=\s|$)/g;
 
@@ -31,7 +33,7 @@ export function optionKeyOf(item: { itemName: string; attributes?: ItemAttribute
   const qtyAttr = attrs.find((a) => a.attributeTypeName.trim() === '수량') ?? attrs.find((a) => QTY_ATTR.test(a.attributeTypeName));
   if (qtyAttr) {
     const option = attrs
-      .filter((a) => a !== qtyAttr)
+      .filter((a) => a !== qtyAttr && !NON_OPTION_ATTR.test(a.attributeTypeName))
       .map((a) => tidy(a.attributeValueName))
       .filter(Boolean)
       .join(' / ');

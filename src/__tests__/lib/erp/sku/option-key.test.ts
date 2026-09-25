@@ -66,4 +66,45 @@ describe('optionKeyOf', () => {
     expect(optionKeyOf({ itemName: '500ml × 2개' })).toEqual({ option: '500ml', quantity: 2 });
     expect(optionKeyOf({ itemName: '사이즈 2X' })).toEqual({ option: '사이즈 2X', quantity: 1 });
   });
+
+  it('GTIN 속성이 있는 item과 없는 item이 같은 option을 낸다', () => {
+    expect(optionKeyOf({
+      itemName: 'x',
+      attributes: [
+        { attributeTypeName: '색상', attributeValueName: '블랙' },
+        { attributeTypeName: '수량', attributeValueName: '1개' },
+        { attributeTypeName: 'Global Trade Item Number', attributeValueName: '8801234567890' },
+      ],
+    })).toEqual({ option: '블랙', quantity: 1 });
+
+    expect(optionKeyOf({
+      itemName: 'x',
+      attributes: [
+        { attributeTypeName: '색상', attributeValueName: '블랙' },
+        { attributeTypeName: '수량', attributeValueName: '2개' },
+      ],
+    })).toEqual({ option: '블랙', quantity: 2 });
+  });
+
+  it('Manufacturer Part Number 속성을 옵션에서 뺀다', () => {
+    expect(optionKeyOf({
+      itemName: 'x',
+      attributes: [
+        { attributeTypeName: '색상', attributeValueName: '블랙' },
+        { attributeTypeName: '수량', attributeValueName: '1개' },
+        { attributeTypeName: '(Parent) Manufacturer Part Number', attributeValueName: 'DASU-001' },
+      ],
+    })).toEqual({ option: '블랙', quantity: 1 });
+  });
+
+  it('값이 빈 속성은 옵션에서 뺀다', () => {
+    expect(optionKeyOf({
+      itemName: 'x',
+      attributes: [
+        { attributeTypeName: '색상', attributeValueName: '블랙' },
+        { attributeTypeName: '수량', attributeValueName: '1개' },
+        { attributeTypeName: '사이즈', attributeValueName: '' },
+      ],
+    })).toEqual({ option: '블랙', quantity: 1 });
+  });
 });
