@@ -363,5 +363,17 @@ export function applyOverrides(draft: Draft, o: Overrides): Draft {
   for (const [k, unit] of Object.entries(baseUnit)) { must(k); skus.get(k)!.baseUnitLabel = unit; }
   for (const k of archive) { must(k); skus.get(k)!.status = 'archived'; }
 
+  // 병합·분리로 리스팅이 가리키는 SKU 수가 바뀌었을 수 있다 — linkMode를 다시 센다.
+  // bundle은 사용자가 정하는 값이라 건드리지 않는다.
+  const skuCountByListing = new Map<string, number>();
+  for (const l of links) skuCountByListing.set(l.listingKey, (skuCountByListing.get(l.listingKey) ?? 0) + 1);
+  listings = listings.map((l) => {
+    if (l.linkMode === 'bundle') return l;
+    const count = skuCountByListing.get(l.key) ?? 0;
+    if (count === 1 && l.linkMode !== 'single') return { ...l, linkMode: 'single' };
+    if (count >= 2 && l.linkMode === 'single') return { ...l, linkMode: 'any_of' };
+    return l;
+  });
+
   return { skus: [...skus.values()], listings, links, issues: draft.issues };
 }

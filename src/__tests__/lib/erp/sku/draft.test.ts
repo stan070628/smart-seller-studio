@@ -298,6 +298,23 @@ describe('applyOverrides', () => {
     expect(d.skus.find((s) => s.key === 'cp:200:블랙-단독')).toMatchObject({ name: '왜건 블랙 단독', optionLabel: '블랙' });
   });
 
+  it('[리뷰 후속] any_of 리스팅을 splitListing으로 한 SKU로 모으면 linkMode가 single로 재계산된다', () => {
+    const raw = buildDraft({
+      ...base,
+      syncLinks: [
+        ...base.syncLinks,
+        { coupangVid: 11, channel: 'naver', productId: 903, optionKey: '', label: '다슈+왜건 묶음' },
+        { coupangVid: 31, channel: 'naver', productId: 903, optionKey: '', label: '다슈+왜건 묶음' },
+      ],
+    });
+    expect(raw.listings.find((l) => l.key === 'naver|903|')?.linkMode).toBe('any_of');
+
+    const d = applyOverrides(raw, {
+      splitListing: [{ listingKey: 'naver|903|', toSkuKey: 'cp:200:블랙-단독', name: '왜건 블랙 단독', optionLabel: '블랙' }],
+    });
+    expect(d.listings.find((l) => l.key === 'naver|903|')?.linkMode).toBe('single');
+  });
+
   it('[리뷰 9] overrides 필드가 없으면 빈 배열·객체로 취급해 원본을 그대로 돌려준다', () => {
     const raw = buildDraft(base);
     const d = applyOverrides(raw, {});
