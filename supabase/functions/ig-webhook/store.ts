@@ -20,5 +20,9 @@ export function supabaseStore(url: string, serviceRoleKey: string): Store {
       const { error } = await db.from('ig_dm_log').update(patch).eq('comment_id', commentId);
       return { error: error ? { code: error.code, message: error.message } : null };
     },
+    async logRequest(row) {
+      const { error } = await db.from('ig_dm_webhook_log').insert(row);
+      if (error) console.error('[ig-dm] webhook_log insert 실패', error.message);
+    },
   };
 }

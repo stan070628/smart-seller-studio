@@ -40,6 +40,17 @@ export interface Store {
     commentId: string,
     patch: { status: 'sent' | 'failed'; sent_at?: string; error?: string },
   ): Promise<{ error: StoreError | null }>;
+  /** 진단용 수신 기록 (ig_dm_webhook_log). 실패해도 본 처리에 영향을 주지 않는다 */
+  logRequest?(row: RequestLogRow): Promise<void>;
+}
+
+export interface RequestLogRow {
+  sig_ok: boolean;
+  http_status: number;
+  events: number;
+  matched: number;
+  note: string | null;
+  body_head: string | null;
 }
 
 export interface Deps { env: Env; store: Store; fetch: typeof fetch }
@@ -63,27 +74,43 @@ function handleVerify(req: Request, env: Env): Response {
   return text(p.get('hub.challenge') ?? '', 200);
 }
 
-async function handleEvent(req: Request, { env, store, fetch }: Deps): Promise<Response> {
+async function handleEvent(req: Request, deps: Deps): Promise<Response> {
+  const raw = await req.text();
+  const trace: RequestLogRow = { sig_ok: false, http_status: 0, events: 0, matched: 0, note: null, body_head: raw.slice(0, 1000) };
+  const res = await processEvent(raw, req.headers.get('x-hub-signature-256'), deps, trace);
+  trace.http_status = res.status;
+  try { await deps.store.logRequest?.(trace); } catch (e) { console.error('[ig-dm] 수신 기록 실패', e); }
+  return res;
+}
+
+async function processEvent(
+  raw: string, sigHeader: string | null, { env, store, fetch }: Deps, trace: RequestLogRow,
+): Promise<Response> {
   if (!env.IG_APP_SECRET || !env.IG_ACCESS_TOKEN) {
     console.error('[ig-dm] IG_APP_SECRET / IG_ACCESS_TOKEN 미설정');
+    trace.note = 'env-missing';
     return json({ ok: false }, 500);
   }
 
   // 서명은 원문으로 검증한다 — JSON 파싱 후 재직렬화하면 바이트가 달라진다
-  const raw = await req.text();
-  if (!(await verifySignature(raw, req.headers.get('x-hub-signature-256'), env.IG_APP_SECRET))) {
+  if (!(await verifySignature(raw, sigHeader, env.IG_APP_SECRET))) {
+    trace.note = sigHeader ? 'bad-signature' : 'no-signature-header';
     return json({ ok: false }, 401);
   }
+  trace.sig_ok = true;
 
   let body: unknown;
-  try { body = JSON.parse(raw); } catch { return json({ ok: true }); }
+  try { body = JSON.parse(raw); } catch { trace.note = 'not-json'; return json({ ok: true }); }
 
-  const events = extractComments(body).filter((e) => !isOwnComment(e));
-  if (!events.length) return json({ ok: true });
+  const all = extractComments(body);
+  trace.events = all.length;
+  const events = all.filter((e) => !isOwnComment(e));
+  if (!events.length) { trace.note = all.length ? 'own-comments-only' : 'no-comment-events'; return json({ ok: true }); }
 
   const { data: rules, error: rulesErr } = await store.loadActiveRules();
   if (rulesErr) {
     console.error('[ig-dm] 규칙 조회 실패', rulesErr.message);
+    trace.note = `rules-error:${rulesErr.message}`;
     return json({ ok: true }); // 재전송돼도 같은 실패라 200으로 끊는다
   }
 
@@ -117,6 +144,8 @@ async function handleEvent(req: Request, { env, store, fetch }: Deps): Promise<R
     results.push({ comment: ev.commentId, result: sent.ok ? 'sent' : `failed:${sent.status}` });
   }
 
+  trace.matched = results.length;
+  trace.note = results.length ? results.map((r) => r.result).join(',') : 'no-rule-match';
   if (results.length) console.log('[ig-dm]', JSON.stringify(results));
   return json({ ok: true });
 }

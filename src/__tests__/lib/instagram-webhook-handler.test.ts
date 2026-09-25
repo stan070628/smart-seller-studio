@@ -137,6 +137,19 @@ describe('POST', () => {
     expect(res.status).toBe(500);
   });
 
+  it('수신 기록: 서명 실패는 sig_ok=false, 정상 발송은 matched=1로 남긴다', async () => {
+    const { store } = fakeStore([rule()]);
+    const rows: any[] = [];
+    store.logRequest = async (r) => { rows.push(r); };
+    const body = commentBody('텐트');
+    await handle(post(body, signed(body, 'wrong')), { env, store, fetch: okFetch() as any });
+    await handle(post(body, signed(body)), { env, store, fetch: okFetch() as any });
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ sig_ok: false, http_status: 401, events: 0, note: 'bad-signature' });
+    expect(rows[1]).toMatchObject({ sig_ok: true, http_status: 200, events: 1, matched: 1, note: 'sent' });
+    expect(rows[1].body_head).toContain('텐트');
+  });
+
   it('JSON이 아니면 200으로 끊는다 (재전송 방지)', async () => {
     const body = 'not-json';
     const res = await handle(post(body, signed(body)), { env, store: fakeStore([]).store, fetch: okFetch() as any });
