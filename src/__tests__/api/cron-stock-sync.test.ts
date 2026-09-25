@@ -4,7 +4,7 @@ import { NextRequest } from 'next/server';
 
 const { mockRun, mockWith } = vi.hoisted(() => ({
   mockRun: vi.fn(),
-  mockWith: vi.fn(async (_job: string, fn: () => Promise<{ value: unknown }>) => (await fn()).value),
+  mockWith: vi.fn(async (_job: string, fn: () => Promise<{ value: unknown; counts?: Record<string, number> }>) => (await fn()).value),
 }));
 vi.mock('@/lib/stock-sync/run', () => ({ runStockSync: mockRun, formatSyncReport: () => 'report' }));
 vi.mock('@/lib/jobs/run-log', () => ({ withJobRun: mockWith }));
