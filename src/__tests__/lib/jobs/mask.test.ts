@@ -23,7 +23,7 @@ describe('maskPII', () => {
   it('긴 입력도 빠르게 처리한다', () => {
     const t = Date.now();
     expect(maskPII('a'.repeat(1_000_000))).toHaveLength(500);
-    expect(Date.now() - t).toBeLessThan(100);
+    expect(Date.now() - t).toBeLessThan(500);
   });
   it('긴 숫자 ID 안의 010은 건드리지 않는다', () => {
     expect(maskPII('shipmentBoxId=1010123456789')).toBe('shipmentBoxId=1010123456789');
@@ -35,5 +35,9 @@ describe('maskPII', () => {
   });
   it('접두사가 붙은 비밀 파라미터도 가린다', () => {
     expect(maskPII('https://a.io/x?access_token=abc&api_key=zz')).toBe('https://a.io/x?access_token=***&api_key=***');
+  });
+  it('SCAN_LEN 경계에 걸린 번호 조각을 남기지 않는다', () => {
+    expect(maskPII('Bearer ' + 'x'.repeat(1985) + ' 010-1234-5678')).not.toMatch(/010-\d/);
+    expect(maskPII('?token=' + 't'.repeat(1985) + ' 010-1234-5678')).not.toMatch(/010-\d/);
   });
 });

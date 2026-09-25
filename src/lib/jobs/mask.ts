@@ -8,8 +8,11 @@ const MAX_LEN = 500;
 const SCAN_LEN = 2_000; // 정규식 비용 상한. MAX_LEN + 최장 매치보다 충분히 커야 경계 누출이 없다
 
 export function maskPII(input: string): string {
-  return input
-    .slice(0, SCAN_LEN)
+  const window =
+    input.length > SCAN_LEN
+      ? input.slice(0, SCAN_LEN).replace(/[\d+\s.-]*\S{0,64}$/, '') // 경계에 걸린 번호·이메일 조각 제거
+      : input;
+  return window
     .replace(
       /(?<!\d)(\+82[-\s]?|0)(1[016789])([-\s]?)\d{3,4}([-\s]?)(\d{4})(?!\d)/g,
       (_m, p, a, s1, s2, d) => `${p}${a}${s1}****${s2}${d}`
