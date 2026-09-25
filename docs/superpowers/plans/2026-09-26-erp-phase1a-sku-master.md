@@ -297,7 +297,7 @@ git commit -m "feat(erp): 쿠팡 옵션에서 실물 옵션 키와 수량 추출
 1. 쿠팡 상품(sellerProductId)마다 item을 `optionKeyOf`로 가른다. 같은 `option`끼리 SKU 하나. SKU 키 = `cp:{sellerProductId}:{option}`(option이 빈 문자열이면 `cp:{sellerProductId}:`).
 2. 그룹 안 최소 수량이 기준 단위(배수 1). 각 item의 배수 = `quantity / 최소수량`. 나누어떨어지지 않으면 배수는 `quantity`로 두고 이슈 `uneven_multiplier`.
 3. item의 Wing vid → `coupang_wing` 리스팅, RG vid → `coupang_rg` 리스팅. 둘 다 같은 SKU·같은 배수. `alt_product_id` = sellerProductId.
-4. `stock_sync_links` 행마다 네이버·토스 리스팅(키: channel·productId·optionKey). 연결된 쿠팡 Wing vid가 가리키는 SKU·배수를 이어받는다. 한 리스팅에 SKU가 여럿 붙으면(N:1) 모두 연결하고 이슈 `multi_sku_listing`(정보성). 쿠팡 vid를 초안에서 못 찾으면 이슈 `sync_link_unresolved`.
+4. `stock_sync_links` 행마다 네이버·토스 리스팅(키: channel·productId·optionKey)을 만든다. 연결된 쿠팡 Wing vid가 가리키는 SKU·배수를 이어받는다. 한 리스팅에 vid가 여럿 붙어도 **가리키는 SKU가 하나면** 수량 옵션(1개/2개 등)이 여럿 묶인 것뿐이므로 최소 배수를 적용하고 이슈 `multi_vid_listing`(정보성). **가리키는 SKU가 둘 이상이면**(컬럼비아처럼 네이버 단일상품 하나가 서로 다른 실물 옵션을 함께 파는 경우) 이는 **번들(전부 소비)이 아니라 그중 하나를 파는 관계**이므로 리스팅의 `linkMode`를 `any_of`로 두고(그 외 리스팅은 `single`) 전부 연결한 뒤 이슈 `any_of_listing`(정보성). 쿠팡 vid를 하나도 못 찾으면 리스팅을 만들지 않고 이슈 `sync_link_unresolved`, 일부만 못 찾으면 리스팅은 만들고 같은 이슈의 detail에 `(일부)`를 붙여 남긴다.
 5. 레거시 대조(이슈만 만들고 초안을 바꾸지 않는다):
    - `product_cost_channels`의 vid가 초안 리스팅과 배수가 다르면 `legacy_multiplier_mismatch`.
    - pcc의 vid가 초안에 없으면 `legacy_listing_unresolved`.
@@ -789,7 +789,12 @@ const LABEL: Record<IssueKind, { title: string; decide: boolean; hint: string }>
   legacy_duplicate: { title: '옛 원가 행 중복', decide: true, hint: '빈 행이면 무시해도 된다. 이관은 SKU 기준이라 영향 없음' },
   sync_link_unresolved: { title: '품절 동기화 연결을 찾지 못함', decide: true, hint: '판매 종료 상품이면 excludeListings에 넣는다' },
   legacy_listing_unresolved: { title: '옛 매핑의 쿠팡 옵션이 현재 상품에 없음', decide: false, hint: '판매 종료·삭제 옵션. 과거 판매 대조용으로만 남는다' },
-  multi_vid_listing: { title: '여러 쿠팡 옵션이 붙은 채널 리스팅', decide: false, hint: '네이버 단일상품에 쿠팡 옵션 여러 개. 재고 전송(1-D)은 연결 SKU 합으로 계산한다' },
+  multi_vid_listing: { title: '같은 SKU의 수량 옵션 여러 개가 붙은 채널 리스팅', decide: false, hint: '네이버 단일상품에 수량만 다른 쿠팡 옵션 여러 개. 최소 배수를 적용했다' },
+  any_of_listing: { title: '여러 SKU 중 하나를 파는 채널 리스팅', decide: false, hint: '재고 전송은 연결 SKU 합계, 판매 SKU는 주문 옵션으로 가린다(1-C)' },
+  channel_quantity_mismatch: { title: '채널 옵션 수량이 쿠팡과 다름', decide: true, hint: 'setMultiplier로 채널 배수를 정한다' },
+  legacy_vid_multi_mapped: { title: '쿠팡 옵션 하나를 옛 원가 행 여러 개가 가리킴', decide: true, hint: '어느 행이 맞는지 확인(흰티 M/L 병합 의심 등)' },
+  suspect_merge: { title: '서로 다른 실물이 한 SKU로 묶였을 수 있음', decide: true, hint: 'splitListing으로 떼어낸다' },
+  quantity_invalid: { title: '수량 0', decide: true, hint: '옵션명을 확인한다' },
 };
 
 const esc = (s: string) => s.replace(/\|/g, '\\|');
@@ -1080,12 +1085,12 @@ const APPLY = process.argv.includes('--apply');
     const listingId = new Map<string, number>();
     for (const l of d.listings) {
       const { rows } = await c.query(
-        `insert into erp.channel_listings (channel, external_product_id, external_option_key, alt_product_id, label, active)
-         values ($1, $2, $3, $4, $5, true)
+        `insert into erp.channel_listings (channel, external_product_id, external_option_key, alt_product_id, label, link_mode, active)
+         values ($1, $2, $3, $4, $5, $6, true)
          on conflict (channel, external_product_id, external_option_key) do update
-           set alt_product_id = excluded.alt_product_id, label = excluded.label, active = true
+           set alt_product_id = excluded.alt_product_id, label = excluded.label, link_mode = excluded.link_mode, active = true
          returning id`,
-        [l.channel, l.externalProductId, l.externalOptionKey, l.altProductId, l.label],
+        [l.channel, l.externalProductId, l.externalOptionKey, l.altProductId, l.label, l.linkMode],
       );
       listingId.set(l.key, Number(rows[0].id));
     }
