@@ -14,7 +14,14 @@ loadEnvLocal();
 const DATE = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 const OUT = path.join(__dirname, '..', '..', 'docs', 'erp');
 
-type DbInput = Omit<DraftInput, 'coupangProducts'> & { sellerProductIds: number[] };
+interface OpsFacts {
+  naverSyncProducts: number;
+  naverSales90d: number;
+  naverSoldProducts90d: number;
+  costcoMap: { itemCode: string; itemLabel: string | null; productName: string | null }[];
+}
+
+type DbInput = Omit<DraftInput, 'coupangProducts'> & { sellerProductIds: number[]; ops: OpsFacts };
 
 async function collectDb(): Promise<DbInput> {
   const c = new pg.Client({ connectionString: process.env.SUPABASE_DB_URL, ssl: { rejectUnauthorized: false } });
@@ -29,7 +36,25 @@ async function collectDb(): Promise<DbInput> {
         from sale_records
        where voided_at is null and channel in ('coupang', 'rocket_growth') and coupang_order_item_id ~ '-[0-9]+$'
        group by 1, 2`)).rows;
+    // 운영 영향 메모용 실측(읽기 전용). 구매자 정보는 읽지 않는다 — 건수와 상품 수만.
+    const naverSync = (await c.query(`select count(distinct product_id)::int as n from stock_sync_links where channel = 'naver'`)).rows[0];
+    const naverSales = (await c.query(`
+      select count(*)::int as rows, count(distinct product_cost_id)::int as products
+        from sale_records
+       where voided_at is null and channel = 'naver' and sold_at >= (now() at time zone 'Asia/Seoul')::date - 90`)).rows[0];
+    const costco = (await c.query(`
+      select m.item_code, m.item_label, pc.product_name
+        from costco_item_map m left join product_costs pc on pc.id = m.product_cost_id
+       where m.item_code in ('693742', '888450')
+       order by m.item_code`)).rows;
+    const ops: OpsFacts = {
+      naverSyncProducts: Number(naverSync.n),
+      naverSales90d: Number(naverSales.rows),
+      naverSoldProducts90d: Number(naverSales.products),
+      costcoMap: costco.map((r) => ({ itemCode: String(r.item_code), itemLabel: r.item_label ?? null, productName: r.product_name ?? null })),
+    };
     return {
+      ops,
       legacyProductCosts: pcs.map((r) => ({
         id: String(r.id),
         productName: String(r.product_name),
@@ -86,7 +111,10 @@ async function collectCoupang(extraIds: number[]): Promise<{ products: DraftInpu
           const wing = it.vendorItemId ?? mp?.vendorItemId;
           return {
             itemName: String(it.itemName ?? ''),
-            attributes: Array.isArray(it.attributes) ? (it.attributes as { attributeTypeName: string; attributeValueName: string }[]) : [],
+            // 값이 빈 속성은 옵션 키에 쓰이지 않으므로 버린다(초안 JSON 크기 절감).
+            attributes: Array.isArray(it.attributes)
+              ? (it.attributes as { attributeTypeName: string; attributeValueName: string }[]).filter((a) => String(a.attributeValueName ?? '').trim() !== '')
+              : [],
             wingVid: wing ? Number(wing) : null,
             rgVid: rg?.vendorItemId ? Number(rg.vendorItemId) : null,
           };
@@ -103,15 +131,18 @@ async function collectCoupang(extraIds: number[]): Promise<{ products: DraftInpu
 (async () => {
   const db = await collectDb();
   const { products: coupangProducts, failed } = await collectCoupang(db.sellerProductIds);
-  const { sellerProductIds: _unused, ...rest } = db;
+  const { sellerProductIds: _unused, ops, ...rest } = db;
   void _unused;
   const input: DraftInput = { ...rest, coupangProducts };
   const draft = buildDraft(input);
   fs.mkdirSync(OUT, { recursive: true });
   fs.writeFileSync(path.join(OUT, `sku-draft-${DATE}.json`), JSON.stringify({ input, draft, coupangFetchFailed: failed }, null, 2));
+  const costcoLine = ops.costcoMap.length
+    ? ops.costcoMap.map((m) => `${m.itemCode} 「${m.itemLabel ?? '라벨 없음'}」→${m.productName ?? '연결 없음'}`).join(', ')
+    : '693742·888450 둘 다 costco_item_map에 없음';
   const notes = [
-    '네이버 판매 가져오기(naver-bulk-import)는 product_costs.naver_channel_product_no(2건: 흰티 L·XL)만 본다 — 품절 동기화에 연결된 네이버 상품 51개 중 나머지 판매는 기록되지 않았을 가능성이 크다. 1-C(주문 수집)에서 channel_listings로 해결한다.',
-    'costco_item_map 오매핑 의심: 693742 「프로틴커피쉐이크」→퓨어틴 초코, 888450 「PUMA주니어팬티5P」(ask)→극세사 타월. purchase_units 적재 전 확인이 필요하다.',
+    `네이버 판매 가져오기(naver-bulk-import)는 product_costs.naver_channel_product_no만 본다 — 품절 동기화에 연결된 네이버 상품은 ${ops.naverSyncProducts}개인데 최근 90일 네이버 판매 기록은 ${ops.naverSales90d}건(${ops.naverSoldProducts90d}개 상품)뿐이다(${DATE} 기준). 나머지 판매는 기록되지 않았을 가능성이 크다. 1-C(주문 수집)에서 channel_listings로 해결한다.`,
+    `costco_item_map 오매핑 의심(${DATE} 현재 연결): ${costcoLine}. purchase_units 적재 전 확인이 필요하다.`,
   ];
   if (failed.length) notes.push(`쿠팡 상품 상세 조회 실패 ${failed.length}건(판매 종료·삭제 상품일 수 있다): ${failed.join(', ')}`);
   fs.writeFileSync(path.join(OUT, `sku-review-${DATE}.md`), renderReport(draft, { date: DATE, notes }));
