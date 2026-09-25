@@ -1,56 +1,10 @@
 {
   "crons": [
-    {
-      "path": "/api/sourcing/cron/snapshot",
-      "schedule": "0 15 * * *"
-    },
-    {
-      "path": "/api/sourcing/cron/refresh-matview",
-      "schedule": "30 15 * * *"
-    },
-    {
-      "path": "/api/sourcing/costco/cron",
-      "schedule": "0 21 * * *"
-    },
-    {
-      "path": "/api/sourcing/costco/seasonal",
-      "schedule": "0 22 1 * *"
-    },
-    {
-      "path": "/api/sourcing/costco/naver-prices",
-      "schedule": "0 22 * * *"
-    },
-    {
-      "path": "/api/sourcing/naver-prices",
-      "schedule": "0 23 * * *"
-    },
-    {
-      "path": "/api/sourcing/cron/trend-seeds",
-      "schedule": "0 2 * * *"
-    },
-    {
-      "path": "/api/alerts/cron",
-      "schedule": "0 0 * * *"
-    },
-    {
-      "path": "/api/cron/refresh-dashboard-metrics",
-      "schedule": "0 18 * * *"
-    },
-    {
-      "path": "/api/cron/parse-receipts",
-      "schedule": "0 19 * * *"
-    },
-    {
-      "path": "/api/cron/purge-receipt-images",
-      "schedule": "30 18 * * *"
-    },
-    {
-      "path": "/api/listing/sourcing/check-dead-urls",
-      "schedule": "0 9 * * *"
-    },
-    {
-      "path": "/api/sourcing/cron/shortlist-verify",
-      "schedule": "0 16 * * *"
-    }
+    { "path": "/api/sourcing/costco/cron", "schedule": "0 21 * * *" },
+    { "path": "/api/sourcing/costco/seasonal", "schedule": "0 22 1 * *" },
+    { "path": "/api/sourcing/costco/naver-prices", "schedule": "0 22 * * *" },
+    { "path": "/api/cron/refresh-dashboard-metrics", "schedule": "0 18 * * *" },
+    { "path": "/api/cron/parse-receipts", "schedule": "0 19 * * *" },
+    { "path": "/api/cron/purge-receipt-images", "schedule": "30 18 * * *" }
   ]
 }
