@@ -1,0 +1,5 @@
+project_id = "smart_seller_studio"
+
+[functions.ig-webhook]
+# Meta 웹훅은 Authorization 헤더 없이 온다. 서명(X-Hub-Signature-256) 검증이 문지기다.
+verify_jwt = false
