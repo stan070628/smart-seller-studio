@@ -212,6 +212,48 @@ describe('buildDraft', () => {
     });
     expect(d9.issues).toContainEqual(expect.objectContaining({ kind: 'suspect_merge', ref: 'cp:701:' }));
   });
+
+  // --- 재검토 I-4: 곱셈 표기 오탐 제거 ---
+  it('[재검토 I-4] itemName의 곱셈 표기(330ml x 6 등)가 수량과 같으면 잔여 비교에서 지워 오탐을 만들지 않는다', () => {
+    const d10 = buildDraft({
+      coupangProducts: [{
+        sellerProductId: 801,
+        productName: 'q',
+        items: [
+          {
+            itemName: '6팩 (330ml x 6)',
+            attributes: [{ attributeTypeName: '개당 용량', attributeValueName: '330ml' }, { attributeTypeName: '수량', attributeValueName: '6개' }],
+            wingVid: 811,
+            rgVid: null,
+          },
+          {
+            itemName: '12팩 (330ml x 12)',
+            attributes: [{ attributeTypeName: '개당 용량', attributeValueName: '330ml' }, { attributeTypeName: '수량', attributeValueName: '12개' }],
+            wingVid: 812,
+            rgVid: null,
+          },
+        ],
+      }],
+      syncLinks: [], legacyChannels: [], legacyProductCosts: [], saleAttributions: [],
+    });
+    expect(d10.issues.filter((i) => i.kind === 'suspect_merge')).toEqual([]);
+  });
+
+  it('[재검토 I-4] 곱셈 표기를 지운 뒤에도 잔여가 다르면(블랙 vs 네이비 등) 여전히 suspect_merge를 남긴다', () => {
+    // 기존 참 신호 테스트를 회귀 방지로 유지한다.
+    const d11 = buildDraft({
+      coupangProducts: [{
+        sellerProductId: 601,
+        productName: 'x',
+        items: [
+          { itemName: '블랙 1개', attributes: [{ attributeTypeName: '색상', attributeValueName: '블랙' }, { attributeTypeName: '수량', attributeValueName: '1개' }], wingVid: 611, rgVid: null },
+          { itemName: '네이비 2개', attributes: [{ attributeTypeName: '색상', attributeValueName: '블랙' }, { attributeTypeName: '수량', attributeValueName: '2개' }], wingVid: 612, rgVid: null },
+        ],
+      }],
+      syncLinks: [], legacyChannels: [], legacyProductCosts: [], saleAttributions: [],
+    });
+    expect(d11.issues).toContainEqual(expect.objectContaining({ kind: 'suspect_merge', ref: 'cp:601:블랙' }));
+  });
 });
 
 describe('applyOverrides', () => {
@@ -398,5 +440,25 @@ describe('applyOverrides', () => {
     });
     expect(d.skus.find((s) => s.key === 'cp:100:')?.legacyProductCostIds).toEqual(['pc-dasu']);
     expect(d.skus.find((s) => s.key === 'cp:100:분리2')?.legacyProductCostIds).toEqual(['pc-dasu']);
+  });
+
+  // --- 재검토 I-2: 짝이 같은 SKU라도 배수가 다르면 던진다 ---
+  it('[재검토 I-2] Wing·RG 짝이 같은 SKU를 가리켜도 배수가 다르면 던진다', () => {
+    const raw = buildDraft(base);
+    expect(() => applyOverrides(raw, {
+      setMultiplier: [{ listingKey: 'coupang_wing|11|', skuKey: 'cp:100:', multiplier: 5 }],
+    })).toThrow('Wing·RG 짝의 배수가 다르다: coupang_wing|11| ×5 / coupang_rg|21| ×1 — 둘 다 같은 배수로 setMultiplier 한다');
+  });
+
+  it('[재검토 I-2] Wing·RG 짝을 같은 배수로 함께 setMultiplier하면 통과한다', () => {
+    const raw = buildDraft(base);
+    const d = applyOverrides(raw, {
+      setMultiplier: [
+        { listingKey: 'coupang_wing|11|', skuKey: 'cp:100:', multiplier: 5 },
+        { listingKey: 'coupang_rg|21|', skuKey: 'cp:100:', multiplier: 5 },
+      ],
+    });
+    expect(d.links.find((l) => l.listingKey === 'coupang_wing|11|')!.multiplier).toBe(5);
+    expect(d.links.find((l) => l.listingKey === 'coupang_rg|21|')!.multiplier).toBe(5);
   });
 });

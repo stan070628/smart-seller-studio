@@ -133,7 +133,7 @@ describe('renderReport — overrides 예시', () => {
     expect(md).toContain('> overrides 예시: `{"excludeListings": ["naver|902|"]}`');
   });
 
-  it('[재검토 2] legacy_spans_skus에 mergeSkus 예시를 싣는다', () => {
+  it('[재검토 I-3] legacy_spans_skus 예시는 자리표시자만 싣는다(실제 SKU 키를 추정하지 않는다)', () => {
     const d: Draft = {
       skus: [],
       listings: [],
@@ -141,7 +141,9 @@ describe('renderReport — overrides 예시', () => {
       issues: [{ kind: 'legacy_spans_skus', ref: 'pc-wagon', detail: 'SKU cp:200:블랙, cp:200:레드에 걸친다 — 입고 lot을 옵션별로 나눌 수 없어 기초 재고는 실사로 잡는다' }],
     };
     const md = renderReport(d, { date: '2026-09-26', notes: [] });
-    expect(md).toContain('> overrides 예시: `{"mergeSkus": [["cp:200:블랙", "cp:200:레드"]]}`');
+    expect(md).toContain('> overrides 예시: `{"mergeSkus": [["<SKU 키 1>", "<SKU 키 2>"]]}`');
+    expect(md).toContain('대부분 조치 불필요');
+    expect(md).toContain('같은 실물인데 SKU가 잘못 갈렸을 때만 병합한다(예: 1개입/2개입).');
   });
 
   it('[재검토 2] suspect_merge에 splitListing 예시(Wing·RG 둘 다)를 싣는다', () => {
@@ -172,6 +174,68 @@ describe('renderReport — overrides 예시', () => {
     };
     const md = renderReport(d, { date: '2026-09-26', notes: [] });
     expect(md).not.toContain('overrides 예시');
+  });
+});
+
+describe('renderReport — I-2: 짝 묶음은 배수가 같을 때만', () => {
+  it('Wing·RG 짝이 같은 SKU라도 배수가 다르면 한 줄로 묶지 않고 따로 보여준다', () => {
+    const d: Draft = {
+      skus: [{ key: 'cp:100:', name: '다슈 왁스', optionLabel: '', baseUnitLabel: null, status: 'active', legacyProductCostIds: [] }],
+      listings: [
+        { key: 'coupang_wing|11|', channel: 'coupang_wing', externalProductId: '11', externalOptionKey: '', altProductId: '100', label: '다슈 왁스 · 1개', linkMode: 'single', pairKey: 'coupang_rg|21|' },
+        { key: 'coupang_rg|21|', channel: 'coupang_rg', externalProductId: '21', externalOptionKey: '', altProductId: '100', label: '다슈 왁스 · 1개', linkMode: 'single', pairKey: 'coupang_wing|11|' },
+      ],
+      links: [
+        { listingKey: 'coupang_wing|11|', skuKey: 'cp:100:', multiplier: 1 },
+        { listingKey: 'coupang_rg|21|', skuKey: 'cp:100:', multiplier: 2 },
+      ],
+      issues: [],
+    };
+    const md = renderReport(d, { date: '2026-09-26', notes: [] });
+    expect(md).not.toContain('+');
+    expect(md).toContain('`coupang_wing\\|11\\|` 다슈 왁스 · 1개 ×1');
+    expect(md).toContain('`coupang_rg\\|21\\|` 다슈 왁스 · 1개 ×2');
+  });
+});
+
+describe('renderReport — M-3: 판단 필요 이슈 표의 보정 예시 열', () => {
+  it('setMultiplier 대상 종류는 그 리스팅 키·SKU·현재 초안 배수를 넣는다', () => {
+    const md = renderReport(draft, { date: '2026-09-26', notes: [] });
+    expect(md).toContain('| `coupang_wing\\|12\\|` | 레거시 배수 3 / 초안 배수 2 | `{"setMultiplier": [{"listingKey": "coupang_wing|12|", "skuKey": "cp:100:", "multiplier": 2}]}` |');
+  });
+
+  it('excludeListings 대상 종류는 그 키를 넣는다', () => {
+    const d: Draft = {
+      skus: [],
+      listings: [],
+      links: [],
+      issues: [{ kind: 'sync_link_unresolved', ref: 'naver|902|', detail: '쿠팡 vid 99를 초안에서 찾지 못했다' }],
+    };
+    const md = renderReport(d, { date: '2026-09-26', notes: [] });
+    expect(md).toContain('| `naver\\|902\\|` | 쿠팡 vid 99를 초안에서 찾지 못했다 | `{"excludeListings": ["naver|902|"]}` |');
+  });
+
+  it('예시가 없는 종류는 대상 열에 —를 넣는다', () => {
+    const d: Draft = {
+      skus: [],
+      listings: [],
+      links: [],
+      issues: [{ kind: 'sale_attribution_mismatch', ref: 'coupang_wing|32|', detail: '판매 2행은 pc-dasu, 매핑은 pc-wagon' }],
+    };
+    const md = renderReport(d, { date: '2026-09-26', notes: [] });
+    expect(md).toContain('| `coupang_wing\\|32\\|` | 판매 2행은 pc-dasu, 매핑은 pc-wagon | — |');
+  });
+});
+
+describe('renderReport — M-2/M-4: 머리말', () => {
+  it('쿠팡 승인완료(APPROVED) 상품 기준임을 밝힌다', () => {
+    const md = renderReport(draft, { date: '2026-09-26', notes: [] });
+    expect(md).toContain('쿠팡 승인완료(APPROVED) 상품 기준');
+  });
+
+  it('표 안의 키는 Obsidian 미리보기에서 복사하라고 안내한다', () => {
+    const md = renderReport(draft, { date: '2026-09-26', notes: [] });
+    expect(md).toContain('표 안의 키는 Obsidian 미리보기 화면에서 복사한다(원문에는 \\|가 섞인다).');
   });
 });
 

@@ -4,7 +4,11 @@ import type { Draft, DraftIssue, DraftListing, IssueKind } from './draft';
 const LABEL: Record<IssueKind, { title: string; decide: boolean; hint: string }> = {
   legacy_multiplier_mismatch: { title: '레거시 배수와 다름', decide: true, hint: 'setMultiplier로 맞는 배수를 정한다. 기준 단위(baseUnit)도 함께 적는다' },
   uneven_multiplier: { title: '수량이 나누어떨어지지 않음', decide: true, hint: '기준 단위를 정하고 setMultiplier로 배수를 준다' },
-  legacy_spans_skus: { title: '옛 원가 행이 SKU 여러 개에 걸침', decide: true, hint: '입고 lot을 옵션별로 못 나눈다 — 재고 이관 단계에서 기초 재고를 실사로 잡는다. 틀린 병합이면 mergeSkus로 합친다' },
+  legacy_spans_skus: {
+    title: '옛 원가 행이 SKU 여러 개에 걸침',
+    decide: true,
+    hint: '대부분 조치 불필요 — 사이즈·색상이 다른 옵션을 옛 원가 행 하나로 관리했을 뿐이다. 기초 재고는 재고 이관 단계에서 실사로 잡는다. 같은 실물인데 SKU가 잘못 갈렸을 때만 병합한다(예: 1개입/2개입).',
+  },
   sale_attribution_mismatch: { title: '판매 귀속과 현재 매핑이 다름', decide: true, hint: '어느 쪽이 맞는지 확인한다(옵션 색상·사이즈 오매핑 의심)' },
   legacy_duplicate: { title: '옛 원가 행 중복', decide: false, hint: '빈 행이면 무시해도 된다. 이관은 SKU 기준이라 영향 없음' },
   sync_link_unresolved: { title: '품절 동기화 연결을 찾지 못함', decide: true, hint: '판매 종료 상품이면 excludeListings에 넣는다' },
@@ -53,11 +57,10 @@ function overrideExample(kind: IssueKind, row: DraftIssue, d: Draft, listingByKe
     }
     case 'sync_link_unresolved':
       return `{"excludeListings": ["${row.ref}"]}`;
-    case 'legacy_spans_skus': {
-      const m = row.detail.match(/^SKU (.+?)에 걸친다/);
-      const keys = (m?.[1] ?? '').split(', ').filter(Boolean);
-      return `{"mergeSkus": [["${keys[0] ?? '<SKU 키 1>'}", "${keys[1] ?? '<SKU 키 2>'}"]]}`;
-    }
+    case 'legacy_spans_skus':
+      // 대부분은 조치가 필요 없는 정상 상황이라(사이즈·색상 옵션을 옛 원가 행 하나로 관리) detail에서
+      // SKU 키를 추정해 「정답처럼 보이는」 예시를 만들지 않는다 — 자리표시자만 준다.
+      return '{"mergeSkus": [["<SKU 키 1>", "<SKU 키 2>"]]}';
     case 'suspect_merge': {
       const wingListingKey = d.links.find((l) => l.skuKey === row.ref && listingByKey.get(l.listingKey)?.channel === 'coupang_wing')?.listingKey;
       const wing = wingListingKey ? listingByKey.get(wingListingKey) : undefined;
@@ -72,11 +75,38 @@ function overrideExample(kind: IssueKind, row: DraftIssue, d: Draft, listingByKe
   }
 }
 
+/**
+ * 판단 필요 이슈 표의 「보정 예시」 열 — setMultiplier·excludeListings처럼 그 행 자체의 값으로
+ * 뻔하게 채울 수 있는 종류만 만든다(setMultiplier는 그 리스팅 키·SKU·현재 초안 배수를 그대로 쓴다).
+ * 나머지는 '—'다 — 문맥 판단이 필요해 뻔한 정답이 없다.
+ */
+function rowOverrideExample(kind: IssueKind, row: DraftIssue, d: Draft): string {
+  switch (kind) {
+    case 'legacy_multiplier_mismatch':
+    case 'channel_quantity_mismatch': {
+      const link = d.links.find((l) => l.listingKey === row.ref);
+      if (!link) return '—';
+      return `\`{"setMultiplier": [{"listingKey": "${row.ref}", "skuKey": "${link.skuKey}", "multiplier": ${link.multiplier}}]}\``;
+    }
+    case 'uneven_multiplier': {
+      const link = d.links.find((l) => l.skuKey === row.ref);
+      if (!link) return '—';
+      return `\`{"setMultiplier": [{"listingKey": "${link.listingKey}", "skuKey": "${row.ref}", "multiplier": ${link.multiplier}}]}\``;
+    }
+    case 'sync_link_unresolved':
+      return `\`{"excludeListings": ["${row.ref}"]}\``;
+    default:
+      return '—';
+  }
+}
+
 export function renderReport(d: Draft, opts: { date: string; notes: string[] }): string {
   const listingByKey = new Map(d.listings.map((l) => [l.key, l]));
   const out: string[] = [];
   out.push(`# SKU 마스터 점검 보고서 ${opts.date}`, '');
   out.push('> 이 보고서를 확인하고 정할 것을 `docs/erp/sku-overrides.json`에 적은 뒤 적재한다(계획 1-A Task 6~7).', '');
+  out.push('> 쿠팡 승인완료(APPROVED) 상품 기준.', '');
+  out.push('> 표 안의 키는 Obsidian 미리보기 화면에서 복사한다(원문에는 \\|가 섞인다).', '');
   out.push('| 항목 | 수 |', '|---|---:|');
   out.push(`| SKU | ${d.skus.length} |`, `| 리스팅 | ${d.listings.length} |`, `| 연결 | ${d.links.length} |`);
   out.push(`| 판단 필요 이슈 | ${d.issues.filter((i) => LABEL[i.kind].decide).length} |`, `| 정보성 이슈 | ${d.issues.filter((i) => !LABEL[i.kind].decide).length} |`, '');
@@ -90,9 +120,12 @@ export function renderReport(d: Draft, opts: { date: string; notes: string[] }):
     if (LABEL[k].decide) {
       const example = overrideExample(k, rows[0], d, listingByKey);
       if (example) out.push(`> overrides 예시: \`${example}\``, '');
+      out.push('| 대상 | 내용 | 보정 예시 |', '|---|---|---|');
+      for (const r of rows) out.push(`| ${refCell(r.ref)} | ${esc(r.detail)} | ${rowOverrideExample(k, r, d)} |`);
+    } else {
+      out.push('| 대상 | 내용 |', '|---|---|');
+      for (const r of rows) out.push(`| ${refCell(r.ref)} | ${esc(r.detail)} |`);
     }
-    out.push('| 대상 | 내용 |', '|---|---|');
-    for (const r of rows) out.push(`| ${refCell(r.ref)} | ${esc(r.detail)} |`);
     out.push('');
   }
 
@@ -110,9 +143,10 @@ export function renderReport(d: Draft, opts: { date: string; notes: string[] }):
         continue;
       }
       let keyPart = `\`${esc(listing.key)}\``;
-      // Wing·RG 짝이 같은 SKU에 함께 연결돼 있으면 한 줄로 묶는다 — overrides의 splitListing이
-      // 「두 리스팅을 같은 SKU로」 요구하는 단위와 표시 단위를 맞춘다.
-      if (listing.pairKey && !printed.has(listing.pairKey) && skuLinks.some((x) => x.listingKey === listing.pairKey)) {
+      // Wing·RG 짝이 같은 SKU에 함께 연결돼 있고 배수도 같을 때만 한 줄로 묶는다 — 배수가 다르면
+      // 한 줄로 뭉쳐 보여줄 수 없는 서로 다른 사실이므로 각자 자기 배수로 따로 보여준다.
+      const pairLink = listing.pairKey ? skuLinks.find((x) => x.listingKey === listing.pairKey) : undefined;
+      if (listing.pairKey && pairLink && !printed.has(listing.pairKey) && pairLink.multiplier === l.multiplier) {
         printed.add(listing.pairKey);
         keyPart += ` + \`${esc(listing.pairKey)}\``;
       }

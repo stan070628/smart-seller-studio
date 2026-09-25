@@ -134,7 +134,17 @@ export function buildDraft(input: DraftInput): Draft {
       // 그룹 안 실물이 진짜로 같은지 의심되는 징후: itemName만으로 다시 갈랐을 때 남는 옵션이 갈리거나(속성 그룹핑이
       // itemName과 다른 실물을 하나로 묶었을 수 있다), 수량이 중복된다(수량만 다른 옵션이라면 보통 수량이 다 다르다).
       if (members.length > 1) {
-        const itemNameOptions = new Set(members.map((m) => optionKeyOf({ itemName: m.item.itemName }).option));
+        // itemName 잔여에 그 member 수량과 같은 곱셈 표기(`330ml x 6`처럼 수량을 다시 적어둔 것)가 남으면
+        // 수량만 다른 정상 옵션인데도 잔여 문자열이 갈려 오탐한다 — 비교 전에 지운다.
+        const stripQtyNotation = (residual: string, qty: number) =>
+          residual
+            .replace(new RegExp(`\\s*[x×*]\\s*${qty}(?=\\s*\\)|\\s|$)`, 'gi'), '')
+            .replace(/\(\s*\)/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+        const itemNameOptions = new Set(
+          members.map((m) => stripQtyNotation(optionKeyOf({ itemName: m.item.itemName }).option, m.quantity)),
+        );
         const qtyCounts = new Map<number, number>();
         for (const m of members) qtyCounts.set(m.quantity, (qtyCounts.get(m.quantity) ?? 0) + 1);
         const dupQty = [...qtyCounts.values()].some((c) => c > 1);
@@ -398,15 +408,23 @@ export function applyOverrides(draft: Draft, o: Overrides): Draft {
   // 한다 — splitListing 등으로 한쪽만 옮기면 재고 이관이 반쪽만 된다. 한쪽이 excludeListings로 빠졌으면
   // 비교 대상이 없으므로 건너뛴다.
   const listingByKey = new Map(listings.map((l) => [l.key, l]));
-  const skusOfListing = (key: string) => new Set(links.filter((l) => l.listingKey === key).map((l) => l.skuKey));
+  const linksOfListing = (key: string) => links.filter((l) => l.listingKey === key);
   for (const l of listings) {
     if (!l.pairKey) continue;
     const other = listingByKey.get(l.pairKey);
     if (!other) continue;
-    const aSkus = skusOfListing(l.key);
-    const bSkus = skusOfListing(other.key);
+    const aLinks = linksOfListing(l.key);
+    const bLinks = linksOfListing(other.key);
+    const aSkus = new Set(aLinks.map((x) => x.skuKey));
+    const bSkus = new Set(bLinks.map((x) => x.skuKey));
     const same = aSkus.size === bSkus.size && [...aSkus].every((k) => bSkus.has(k));
     if (!same) throw new Error(`Wing·RG 짝이 다른 SKU를 가리킨다: ${l.key} / ${other.key} — 두 리스팅을 같은 SKU로 옮긴다`);
+    // 같은 SKU를 가리키더라도 배수가 다르면 재고 이관 시 한쪽만 맞는 값이 된다 — 반드시 같은 배수여야 한다.
+    for (const skuKey of aSkus) {
+      const am = aLinks.find((x) => x.skuKey === skuKey)!.multiplier;
+      const bm = bLinks.find((x) => x.skuKey === skuKey)!.multiplier;
+      if (am !== bm) throw new Error(`Wing·RG 짝의 배수가 다르다: ${l.key} ×${am} / ${other.key} ×${bm} — 둘 다 같은 배수로 setMultiplier 한다`);
+    }
   }
 
   return { skus: [...skus.values()], listings, links, issues: draft.issues };
