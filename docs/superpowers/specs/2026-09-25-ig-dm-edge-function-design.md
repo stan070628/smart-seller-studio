@@ -51,11 +51,13 @@ src/__tests__/lib/instagram-dm.test.ts   → 새 위치를 import 하도록 경�
 
 | 이름 | 출처 |
 |---|---|
-| `IG_APP_SECRET` | Meta 앱 대시보드 → 앱 설정 → 기본 설정 |
+| `IG_APP_SECRET` | 🔴 **Instagram 앱 시크릿** — 이용 사례 → Instagram API 설정 페이지 상단 「Instagram 앱 시크릿 코드」. 앱 설정 → 기본 설정의 Meta 앱 시크릿이 **아니다** (2026-09-25 실측: Meta 앱 시크릿으로는 `bad-signature`, Instagram 앱 시크릿으로 통과) |
 | `IG_VERIFY_TOKEN` | 우리가 정하는 임의 문자열. 웹훅 등록 시 같은 값 입력 |
 | `IG_ACCESS_TOKEN` | 대시보드 Instagram → API 설정 → 토큰 생성 (60일) |
 | `IG_USER_ID` | 같은 화면의 Instagram 계정 ID |
 | `SUPABASE_URL` · `SUPABASE_SERVICE_ROLE_KEY` | Edge Function에 자동 주입 |
+
+⚠️ `supabase secrets set` 뒤에는 **반드시 `functions deploy`를 다시 한다.** 실행 중인 인스턴스는 옛 값을 들고 있어 2026-09-25에 맞는 시크릿을 넣고도 한 차례 실패로 오판했다.
 
 토큰 60일 만료 갱신은 이번 범위 밖이다. 만료일을 위키 프로젝트 문서에 적어두고 수동 갱신한다.
 
