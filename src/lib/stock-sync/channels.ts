@@ -36,9 +36,25 @@ export async function loadNaverProduct(originProductNo: number): Promise<NaverPr
   return { originProductNo, body, onSale: op.statusType === 'SALE', stocks };
 }
 
-export async function saveNaverStocks(p: NaverProduct, updates: Map<string, number>): Promise<void> {
+export type NaverDisplay = 'ON' | 'SUSPENSION';
+
+/**
+ * 재고 반영 뒤 스토어 전시를 어떻게 할지. 품절 상품이 스토어 홈·카테고리에 남지 않게 한다 (2026-09-25).
+ *   재고 합 0                          → SUSPENSION (전시 끔)
+ *   0에서 벗어남 · 현재 SUSPENSION     → ON        (동기화가 되살린 상품만 — 재고가 남아 있던 상품의 수동 숨김은 건드리지 않는다)
+ *   그 밖                              → null (변경 없음)
+ */
+export function naverDisplayAfterStocks(prevTotal: number, nextTotal: number, current: NaverDisplay | undefined): NaverDisplay | null {
+  if (nextTotal === 0) return current === 'SUSPENSION' ? null : 'SUSPENSION';
+  if (prevTotal === 0 && nextTotal > 0 && current === 'SUSPENSION') return 'ON';
+  return null;
+}
+
+/** @returns 함께 바꾼 전시 상태. 바꾸지 않았으면 null */
+export async function saveNaverStocks(p: NaverProduct, updates: Map<string, number>): Promise<NaverDisplay | null> {
   const op = p.body.originProduct;
   const combos: any[] = op.detailAttribute?.optionInfo?.optionCombinations ?? [];
+  const prevTotal = [...p.stocks.values()].reduce((n, q) => n + q, 0);
   if (combos.length === 0) {
     op.stockQuantity = updates.get('') ?? op.stockQuantity;
   } else {
@@ -52,7 +68,15 @@ export async function saveNaverStocks(p: NaverProduct, updates: Map<string, numb
       throw new Error('추가금 0원 옵션이 전부 품절이 돼 네이버가 저장을 거부한다 — 스마트스토어에서 판매중지 필요');
     }
   }
+  const nextTotal = combos.length === 0 ? (op.stockQuantity ?? 0) : combos.reduce((n: number, c: any) => n + (c.stockQuantity ?? 0), 0);
+  // 전시 상태는 원상품 GET 응답의 smartstoreChannelProduct에 실려 온다 (2026-09-25 실측). 없으면 건드리지 않는다.
+  const sc = p.body.smartstoreChannelProduct;
+  const display = sc ? naverDisplayAfterStocks(prevTotal, nextTotal, sc.channelProductDisplayStatusType) : null;
+  if (display) sc.channelProductDisplayStatusType = display;
+  // 🔴 PUT 입력 enum에 OUTOFSTOCK이 없다 (2026-09-25 실측: NotValidEnum). 재고 0이면 SALE로 보내도 네이버가 OUTOFSTOCK으로 유지한다.
+  if (op.statusType === 'OUTOFSTOCK') op.statusType = 'SALE';
   await getNaverCommerceClient().updateProduct(p.originProductNo, p.body);
+  return display;
 }
 
 // ─── 토스 ──────────────────────────────────────────────────
