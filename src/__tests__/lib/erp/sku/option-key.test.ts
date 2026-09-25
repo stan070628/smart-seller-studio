@@ -49,4 +49,21 @@ describe('optionKeyOf', () => {
       attributes: [{ attributeTypeName: '수량', attributeValueName: '단품' }],
     })).toEqual({ option: '', quantity: 1 });
   });
+
+  it('정확히 「수량」인 속성을 다른 수량류 속성보다 우선한다', () => {
+    expect(optionKeyOf({
+      itemName: 'x',
+      attributes: [
+        { attributeTypeName: '총 수량', attributeValueName: '20매' },
+        { attributeTypeName: '색상', attributeValueName: '블랙' },
+        { attributeTypeName: '수량', attributeValueName: '2개' },
+      ],
+    })).toEqual({ option: '20매 / 블랙', quantity: 2 });
+  });
+
+  it('수량 앞의 x·×·*·+ 구분자를 걷어낸다', () => {
+    expect(optionKeyOf({ itemName: '500ml x 2개' })).toEqual({ option: '500ml', quantity: 2 });
+    expect(optionKeyOf({ itemName: '500ml × 2개' })).toEqual({ option: '500ml', quantity: 2 });
+    expect(optionKeyOf({ itemName: '사이즈 2X' })).toEqual({ option: '사이즈 2X', quantity: 1 });
+  });
 });

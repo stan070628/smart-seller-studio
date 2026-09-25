@@ -20,7 +20,7 @@ const QTY_TOKEN = /(^|\s)(\d+)\s*(개(?!입)|팩)(?=\s|$)/g;
 
 const tidy = (s: string) => s.replace(/\s+/g, ' ').trim();
 /** 수량을 떼고 남은 구분자(`/`·`,`·`·`)를 양끝에서 걷어낸다 — `네이비 / L / 1개` → `네이비 / L` */
-const trimSep = (s: string) => tidy(s).replace(/^[\s/,·]+|[\s/,·]+$/g, '');
+const trimSep = (s: string) => tidy(s).replace(/^[\s/,·]+|(\s+[xX×*+])?[\s/,·]*$/g, '');
 const firstInt = (s: string) => {
   const m = s.match(/\d+/);
   return m ? Number(m[0]) : 1;
@@ -28,7 +28,7 @@ const firstInt = (s: string) => {
 
 export function optionKeyOf(item: { itemName: string; attributes?: ItemAttribute[] }): OptionKey {
   const attrs = item.attributes ?? [];
-  const qtyAttr = attrs.find((a) => QTY_ATTR.test(a.attributeTypeName));
+  const qtyAttr = attrs.find((a) => a.attributeTypeName.trim() === '수량') ?? attrs.find((a) => QTY_ATTR.test(a.attributeTypeName));
   if (qtyAttr) {
     const option = attrs
       .filter((a) => a !== qtyAttr)
