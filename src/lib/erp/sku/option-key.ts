@@ -3,10 +3,16 @@
  *
  * 다슈 1개/2개/3개, 퓨어틴 6팩/12팩처럼 수량만 다른 옵션은 재고가 같은 물건이라 SKU 하나로 묶고
  * 리스팅에 배수를 둔다. 반면 `2개입`·`750ml`·`45g`은 물건 자체의 내용이라 옵션에 남긴다.
+ *
+ * 쿠팡 item attribute에는 `exposed`('EXPOSED'=구매옵션, 'NONE'=검색옵션)가 붙는다. 검색옵션은
+ * 구매자가 고르는 실물 옵션이 아니라 검색 노출용 메타데이터라 SKU 키에 섞이면 키가 불안정해진다
+ * — 옵션 조합·수량 판정 양쪽에서 `exposed === 'NONE'`인 속성은 통째로 제외한다(필드가 없으면 포함).
+ * GTIN·품번 정규식(NON_OPTION_ATTR)은 exposed가 없는 옛 데이터를 위한 이중 안전장치로 유지한다.
  */
 export interface ItemAttribute {
   attributeTypeName: string;
   attributeValueName: string;
+  exposed?: string;
 }
 
 export interface OptionKey {
@@ -29,7 +35,7 @@ const firstInt = (s: string) => {
 };
 
 export function optionKeyOf(item: { itemName: string; attributes?: ItemAttribute[] }): OptionKey {
-  const attrs = item.attributes ?? [];
+  const attrs = (item.attributes ?? []).filter((a) => a.exposed !== 'NONE');
   const qtyAttr = attrs.find((a) => a.attributeTypeName.trim() === '수량') ?? attrs.find((a) => QTY_ATTR.test(a.attributeTypeName));
   if (qtyAttr) {
     const option = attrs

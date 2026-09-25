@@ -107,4 +107,25 @@ describe('optionKeyOf', () => {
       ],
     })).toEqual({ option: '블랙', quantity: 1 });
   });
+
+  it('exposed가 NONE인 속성(검색옵션)은 옵션에서 뺀다', () => {
+    expect(optionKeyOf({
+      itemName: 'x',
+      attributes: [
+        { attributeTypeName: '색상', attributeValueName: '옐로우', exposed: 'EXPOSED' },
+        { attributeTypeName: '소재', attributeValueName: '마이크로파이버', exposed: 'NONE' },
+        { attributeTypeName: '수량', attributeValueName: '1개', exposed: 'EXPOSED' },
+      ],
+    })).toEqual({ option: '옐로우', quantity: 1 });
+  });
+
+  it('exposed가 NONE인 「총 수량」은 수량 판정에 쓰이지 않는다', () => {
+    expect(optionKeyOf({
+      itemName: 'x',
+      attributes: [
+        { attributeTypeName: '수량', attributeValueName: '2개', exposed: 'EXPOSED' },
+        { attributeTypeName: '총 수량', attributeValueName: '20매', exposed: 'NONE' },
+      ],
+    })).toEqual({ option: '', quantity: 2 });
+  });
 });
