@@ -2852,14 +2852,12 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "36개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "옐로우",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95307553624,
@@ -2877,14 +2875,12 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "YELLOW",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95399288734,
@@ -2902,20 +2898,17 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "Global Trade Item Number",
                 "attributeValueName": "8805334768174",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "신발사이즈",
                 "attributeValueName": "270",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95841404577,
@@ -2927,14 +2920,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "베이지",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "신발사이즈",
                 "attributeValueName": "240",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95841404578,
@@ -2952,8 +2943,7 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95800691423,
@@ -2971,20 +2961,17 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "혼합색상",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "사이즈",
                 "attributeValueName": "S",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": null,
@@ -2996,20 +2983,17 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "혼합색상",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "사이즈",
                 "attributeValueName": "M",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": null,
@@ -3021,20 +3005,17 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "혼합색상",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "사이즈",
                 "attributeValueName": "L",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": null,
@@ -3052,20 +3033,17 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "핑크 체크",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "사이즈",
                 "attributeValueName": "L",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": null,
@@ -3077,20 +3055,17 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "핑크 체크",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "사이즈",
                 "attributeValueName": "M",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": null,
@@ -3102,20 +3077,17 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "핑크 체크",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "사이즈",
                 "attributeValueName": "S",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": null,
@@ -3133,14 +3105,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "라이트블루",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "사이즈",
                 "attributeValueName": "40x60",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95742151079,
@@ -3158,38 +3128,32 @@
               {
                 "attributeTypeName": "워터프루프 가능여부",
                 "attributeValueName": "워터프루프",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "개당 중량",
                 "attributeValueName": "4.5g",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "선케어/태닝 사용부위",
                 "attributeValueName": "페이스",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "피부타입",
                 "attributeValueName": "모든피부",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "사용대상",
                 "attributeValueName": "남녀공용",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               }
             ],
             "wingVid": null,
@@ -3207,14 +3171,12 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "핑크",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": null,
@@ -3226,14 +3188,12 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "민트",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": null,
@@ -3245,14 +3205,12 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "화이트",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": null,
@@ -3270,14 +3228,12 @@
               {
                 "attributeTypeName": "개당 용량",
                 "attributeValueName": "260ml",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "6개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": null,
@@ -3295,14 +3251,12 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "2개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "개당 용량",
                 "attributeValueName": "330ml",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95313492840,
@@ -3320,26 +3274,22 @@
               {
                 "attributeTypeName": "구성품",
                 "attributeValueName": "와이드뒤집개+국자+스패츌라+알뜰주걱+잼스푼",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "혼합색상",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "Global Trade Item Number",
                 "attributeValueName": "8809800669309",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               }
             ],
             "wingVid": 95572303136,
@@ -3357,14 +3307,12 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "3개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "개당 용량",
                 "attributeValueName": "450ml",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95742238983,
@@ -3382,14 +3330,12 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "화이트",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95800772823,
@@ -3407,20 +3353,17 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "Global Trade Item Number",
                 "attributeValueName": "4895151564886",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               }
             ],
             "wingVid": 95800625715,
@@ -3432,20 +3375,17 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "레드",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "Global Trade Item Number",
                 "attributeValueName": "4895151564893",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               }
             ],
             "wingVid": 95800625716,
@@ -3463,20 +3403,17 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블루 구름 (베개형 패드)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "사이즈",
                 "attributeValueName": "S",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": null,
@@ -3488,20 +3425,17 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블루 구름 (베개형 패드)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "사이즈",
                 "attributeValueName": "M",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": null,
@@ -3513,20 +3447,17 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블루 구름 (베개형 패드)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "사이즈",
                 "attributeValueName": "L",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": null,
@@ -3544,14 +3475,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "FREE",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95361327218,
@@ -3569,20 +3498,17 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "2개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "개당 중량",
                 "attributeValueName": "40g",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "향",
                 "attributeValueName": "화이트머스크&엠버향 + 토마토&리프향",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95558470109,
@@ -3600,14 +3526,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "85",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "8매",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": null,
@@ -3619,14 +3543,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "95",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "8매",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": null,
@@ -3638,14 +3560,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "90",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "8매",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": null,
@@ -3663,14 +3583,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "화이트",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "M",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95268506580,
@@ -3682,14 +3600,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "화이트",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "XL",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95268506578,
@@ -3701,14 +3617,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "화이트",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "L",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95268506577,
@@ -3720,14 +3634,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "화이트",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "S",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95268506579,
@@ -3745,44 +3657,37 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "총 수량",
                 "attributeValueName": "1",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "개당 용량",
                 "attributeValueName": "750ml",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "뷰티 향",
                 "attributeValueName": "레몬향",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "핸드워시 타입",
                 "attributeValueName": "액상",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "본품/리필",
                 "attributeValueName": "본품",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "핸드워시 용기타입",
                 "attributeValueName": "펌프형",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               }
             ],
             "wingVid": 95899123151,
@@ -3800,14 +3705,12 @@
               {
                 "attributeTypeName": "개당 중량",
                 "attributeValueName": "4.1kg",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95317335937,
@@ -3825,8 +3728,7 @@
               {
                 "attributeTypeName": "모델명/품번",
                 "attributeValueName": "아이리스 AC 공기순환기 PCF-SC15T-CT",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95325648394,
@@ -3844,20 +3746,17 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "혼합색상",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "개당 수량",
                 "attributeValueName": "10개입",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95551312631,
@@ -3875,14 +3774,12 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "개당 캡슐/정",
                 "attributeValueName": "90정",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95492063006,
@@ -3900,14 +3797,12 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "개당 수량",
                 "attributeValueName": "2개입",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95640486333,
@@ -3925,14 +3820,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "M",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95355556778,
@@ -3944,14 +3837,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "L",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95355556779,
@@ -3963,14 +3854,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "XL",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95355556784,
@@ -3982,14 +3871,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "화이트",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "M",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95355556781,
@@ -4001,14 +3888,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "화이트",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "L",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95355556780,
@@ -4020,14 +3905,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "화이트",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "XL",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95355556785,
@@ -4039,14 +3922,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "다크스톤",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "M",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95355556783,
@@ -4058,14 +3939,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "다크스톤",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "L",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95355556786,
@@ -4077,14 +3956,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "다크스톤",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "XL",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95355556782,
@@ -4102,14 +3979,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "M(100)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "네이비",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95285435329,
@@ -4121,14 +3996,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "L(105)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "네이비",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95285435330,
@@ -4140,14 +4013,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "M(100)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "카키",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95285435332,
@@ -4159,14 +4030,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "M(100)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "베이지",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95285435328,
@@ -4178,14 +4047,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "L(105)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "베이지",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95285435331,
@@ -4203,14 +4070,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "그린",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "M",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95449433937,
@@ -4222,14 +4087,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "그린",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "L",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95449433932,
@@ -4241,14 +4104,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "그린",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "XL",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95449433929,
@@ -4260,14 +4121,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "그린",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "XXL",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95449433927,
@@ -4279,14 +4138,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "네이비",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "M",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95449433928,
@@ -4298,14 +4155,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "네이비",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "L",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95449433938,
@@ -4317,14 +4172,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "네이비",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "XL",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95449433931,
@@ -4336,14 +4189,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "네이비",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "XXL",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95449433930,
@@ -4355,14 +4206,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "M",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95449433936,
@@ -4374,14 +4223,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "L",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95449433933,
@@ -4393,14 +4240,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "XL",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95449433935,
@@ -4412,14 +4257,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "XXL",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95449433934,
@@ -4437,14 +4280,12 @@
               {
                 "attributeTypeName": "개당 중량",
                 "attributeValueName": "510g",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95933141152,
@@ -4462,20 +4303,17 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "간식 맛",
                 "attributeValueName": "치킨말이고구마",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "개당 중량",
                 "attributeValueName": "1kg",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": null,
@@ -4493,20 +4331,17 @@
               {
                 "attributeTypeName": "Global Trade Item Number",
                 "attributeValueName": "8809843940823",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "개당 캡슐/정",
                 "attributeValueName": "60정",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95738609821,
@@ -4524,14 +4359,12 @@
               {
                 "attributeTypeName": "개당 중량",
                 "attributeValueName": "45g",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "7개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95626847868,
@@ -4543,14 +4376,12 @@
               {
                 "attributeTypeName": "개당 중량",
                 "attributeValueName": "45g",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "14개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95626847869,
@@ -4568,26 +4399,22 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블루",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "Parent Manufacturer Part Number",
                 "attributeValueName": "커클랜드 다용도타월",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "10개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "수건소재",
                 "attributeValueName": "마이크로파이버",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               }
             ],
             "wingVid": 95401822935,
@@ -4599,80 +4426,67 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "10개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "수건소재",
                 "attributeValueName": "마이크로파이버",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "옐로우",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "사이즈",
                 "attributeValueName": "40.6x40.6cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "가로길이",
                 "attributeValueName": "40.6cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "차량용 타월 용도",
                 "attributeValueName": "물기제거용",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "항목 너비가 짧은 가장자리",
                 "attributeValueName": "40.6cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "총 수량",
                 "attributeValueName": "10개",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "사용 대상",
                 "attributeValueName": "성인",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "특별한 기능",
                 "attributeValueName": "높은 흡수력",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "패턴",
                 "attributeValueName": "해당없음",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "Parent Manufacturer Part Number",
                 "attributeValueName": "커클랜드 다용도타월",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "수건 종류",
                 "attributeValueName": "청소용 천",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               }
             ],
             "wingVid": 95346957211,
@@ -4690,14 +4504,12 @@
               {
                 "attributeTypeName": "개당 중량",
                 "attributeValueName": "200g",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "총 수량",
                 "attributeValueName": "4개입",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95425949767,
@@ -4727,26 +4539,22 @@
               {
                 "attributeTypeName": "개당 중량",
                 "attributeValueName": "200g",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "비누 종류",
                 "attributeValueName": "일반비누",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "때비누 제형",
                 "attributeValueName": "고체형",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "총 수량",
                 "attributeValueName": "4개입",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95425918818,
@@ -4764,14 +4572,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "화이트",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "M(95)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95834453635,
@@ -4783,14 +4589,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "화이트",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "L(100)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95834453641,
@@ -4802,14 +4606,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "M(95)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95834453636,
@@ -4821,20 +4623,17 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "Global Trade Item Number",
                 "attributeValueName": "8809510261008",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "L(100)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95834453639,
@@ -4846,20 +4645,17 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "Global Trade Item Number",
                 "attributeValueName": "8809510261015",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "XL(105)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95834453640,
@@ -4871,14 +4667,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "화이트",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "XXL(110)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95834453642,
@@ -4890,20 +4684,17 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "화이트",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "Global Trade Item Number",
                 "attributeValueName": "8809510260933",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "XL(105)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95834453637,
@@ -4915,14 +4706,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "XXL(110)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95834453638,
@@ -4940,14 +4729,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "FREE",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "로즈",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95722958068,
@@ -4959,14 +4746,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "FREE",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "베이지",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95722958067,
@@ -4984,14 +4769,12 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "개당 수량",
                 "attributeValueName": "1입",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95497395115,
@@ -5009,14 +4792,12 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "개당 수량",
                 "attributeValueName": "30개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95551111527,
@@ -5034,14 +4815,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "XL",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "혼합색상",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": null,
@@ -5053,14 +4832,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "L",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "혼합색상",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": null,
@@ -5078,14 +4855,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "M",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "네이비/그레이/블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95313567431,
@@ -5097,14 +4872,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "L",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "네이비/그레이/블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95313567432,
@@ -5122,50 +4895,42 @@
               {
                 "attributeTypeName": "개당 용량",
                 "attributeValueName": "100ml",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "Global Trade Item Number",
                 "attributeValueName": "8809372270385",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "헤어왁스 세팅력",
                 "attributeValueName": "★★★★★",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "헤어왁스 타입",
                 "attributeValueName": "크림타입",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "성별",
                 "attributeValueName": "남성용",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "용기형태",
                 "attributeValueName": "캡용기형",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "사용대상",
                 "attributeValueName": "남성용",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               }
             ],
             "wingVid": 95638662074,
@@ -5177,44 +4942,37 @@
               {
                 "attributeTypeName": "개당 용량",
                 "attributeValueName": "100ml",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "2개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "헤어왁스 세팅력",
                 "attributeValueName": "★★★★★",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "헤어왁스 타입",
                 "attributeValueName": "크림타입",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "성별",
                 "attributeValueName": "남성용",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "용기형태",
                 "attributeValueName": "캡용기형",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "사용대상",
                 "attributeValueName": "남성용",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               }
             ],
             "wingVid": 95620972934,
@@ -5226,44 +4984,37 @@
               {
                 "attributeTypeName": "개당 용량",
                 "attributeValueName": "100ml",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "3개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "헤어왁스 세팅력",
                 "attributeValueName": "★★★★★",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "헤어왁스 타입",
                 "attributeValueName": "크림타입",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "성별",
                 "attributeValueName": "남성용",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "용기형태",
                 "attributeValueName": "캡용기형",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "사용대상",
                 "attributeValueName": "남성용",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               }
             ],
             "wingVid": 95620972933,
@@ -5281,14 +5032,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "그레이",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "34",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95869627734,
@@ -5300,14 +5049,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "베이지",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "32",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95869627736,
@@ -5319,14 +5066,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "그레이",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "32",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95869627737,
@@ -5338,14 +5083,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "베이지",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "34",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95869627735,
@@ -5363,14 +5106,12 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "개당 수량",
                 "attributeValueName": "30개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": null,
@@ -5400,20 +5141,17 @@
               {
                 "attributeTypeName": "Global Trade Item Number",
                 "attributeValueName": "8809773180146",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "개당 수량",
                 "attributeValueName": "2개입",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95835453387,
@@ -5425,14 +5163,12 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "개당 수량",
                 "attributeValueName": "1개입",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95835453388,
@@ -5450,20 +5186,17 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "화이트",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "L(105)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "Global Trade Item Number",
                 "attributeValueName": "4573677824560",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               }
             ],
             "wingVid": null,
@@ -5475,20 +5208,17 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "화이트",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "XL(110)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "Global Trade Item Number",
                 "attributeValueName": "4573677824577",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               }
             ],
             "wingVid": null,
@@ -5500,20 +5230,17 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블루",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "L(105)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "Global Trade Item Number",
                 "attributeValueName": "4573677824614",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               }
             ],
             "wingVid": null,
@@ -5531,20 +5258,17 @@
               {
                 "attributeTypeName": "개당 용량",
                 "attributeValueName": "95ml",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "개당 중량",
                 "attributeValueName": "95g",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95884938895,
@@ -5562,14 +5286,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "네이비블루/블루",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "M(95)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95841114863,
@@ -5581,14 +5303,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "네이비블루/블루",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "L(100)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95841114862,
@@ -5600,14 +5320,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "네이비블루/블루",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "XL(105)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95841114868,
@@ -5619,14 +5337,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "네이비/그린",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "M(95)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95841114866,
@@ -5638,14 +5354,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "네이비/그린",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "L(100)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95841114867,
@@ -5657,14 +5371,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "네이비/그린",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "XL(105)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95841114870,
@@ -5676,14 +5388,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "다크네이비/네이비",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "M(95)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95841114869,
@@ -5695,14 +5405,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "다크네이비/네이비",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "L(100)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95841114865,
@@ -5714,14 +5422,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "다크네이비/네이비",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "XL(105)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95841114864,
@@ -5739,14 +5445,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "105(L)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95943446307,
@@ -5758,14 +5462,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "100(M)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95943446309,
@@ -5777,14 +5479,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "110(XL)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95943446310,
@@ -5796,14 +5496,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "95(S)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95943446308,
@@ -5821,14 +5519,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "L(100)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "아이보리",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95897859220,
@@ -5840,14 +5536,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "S(90)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "아이보리",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95897859221,
@@ -5859,14 +5553,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "S(90)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "멜란지그레이",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95897859212,
@@ -5878,14 +5570,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "XL(105)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "아이보리",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95897859217,
@@ -5897,14 +5587,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "XL(105)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "멜란지그레이",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95897859214,
@@ -5916,14 +5604,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "L(100)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "네이비",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95897859215,
@@ -5935,14 +5621,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "L(100)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "멜란지그레이",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95897859211,
@@ -5954,14 +5638,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "M(95)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "아이보리",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95897859222,
@@ -5973,14 +5655,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "M(95)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "네이비",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95897859225,
@@ -5992,14 +5672,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "M(95)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "멜란지그레이",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95897859210,
@@ -6011,14 +5689,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "S(90)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "네이비",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95897859213,
@@ -6030,14 +5706,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "XL(105)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "네이비",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95897859216,
@@ -6055,14 +5729,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "110(XL)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "그레이",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95922371230,
@@ -6074,14 +5746,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "100(M)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "그레이",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95922371229,
@@ -6093,14 +5763,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "105(L)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "그레이",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95918560675,
@@ -6112,14 +5780,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "95(S)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "그레이",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95922371231,
@@ -6137,20 +5803,17 @@
               {
                 "attributeTypeName": "개당 중량",
                 "attributeValueName": "1010g",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "Global Trade Item Number",
                 "attributeValueName": "8809505140462",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95918388871,
@@ -6168,14 +5831,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "화이트+그레이스트라이프",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "160",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95924769344,
@@ -6187,14 +5848,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "화이트+그레이스트라이프",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "150",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95924769346,
@@ -6206,14 +5865,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "그레이+네이비스트라이프",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "130",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95924769343,
@@ -6225,14 +5882,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "그레이+네이비스트라이프",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "140",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95924769347,
@@ -6244,14 +5899,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "화이트+그레이스트라이프",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "140",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95924769340,
@@ -6263,14 +5916,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "화이트+그레이스트라이프",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "130",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95924769341,
@@ -6282,14 +5933,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "그레이+네이비스트라이프",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "150",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95924769345,
@@ -6301,14 +5950,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "그레이+네이비스트라이프",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "160",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95924769342,
@@ -6326,74 +5973,62 @@
               {
                 "attributeTypeName": "세탁방법",
                 "attributeValueName": "손세탁",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "사이즈",
                 "attributeValueName": "250mm",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "막힘/트임",
                 "attributeValueName": "트임",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "밑창 재질",
                 "attributeValueName": "폴리염화비닐(PVC)",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "신발사이즈",
                 "attributeValueName": "250",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "신발 소재(겉감)",
                 "attributeValueName": "폴리에스터",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "사용대상",
                 "attributeValueName": "남녀공용",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "패턴/프린트",
                 "attributeValueName": "자수",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "사용계절",
                 "attributeValueName": "사계절",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "색상계열",
                 "attributeValueName": "블랙",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               }
             ],
             "wingVid": 95933367273,
@@ -6405,74 +6040,62 @@
               {
                 "attributeTypeName": "세탁방법",
                 "attributeValueName": "손세탁",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "아이보리",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "사이즈",
                 "attributeValueName": "250mm",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "막힘/트임",
                 "attributeValueName": "트임",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "밑창 재질",
                 "attributeValueName": "폴리염화비닐(PVC)",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "신발사이즈",
                 "attributeValueName": "250",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "신발 소재(겉감)",
                 "attributeValueName": "폴리에스터",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "사용대상",
                 "attributeValueName": "남녀공용",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "패턴/프린트",
                 "attributeValueName": "자수",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "사용계절",
                 "attributeValueName": "사계절",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "색상계열",
                 "attributeValueName": "아이보리",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               }
             ],
             "wingVid": 95933367274,
@@ -6490,20 +6113,17 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "80개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "개당 용량",
                 "attributeValueName": "12ml",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "개당 중량",
                 "attributeValueName": "12g",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 96003058170,
@@ -6521,20 +6141,17 @@
               {
                 "attributeTypeName": "Global Trade Item Number",
                 "attributeValueName": "8809843942230",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "개당 캡슐/정",
                 "attributeValueName": "90정",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95975485654,
@@ -6552,14 +6169,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "S",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95988671110,
@@ -6571,14 +6186,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "M",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95988671116,
@@ -6590,14 +6203,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "L",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95988671109,
@@ -6609,14 +6220,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "S",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "그레이",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95988671112,
@@ -6628,14 +6237,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "M",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "그레이",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95988671120,
@@ -6647,14 +6254,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "L",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "그레이",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95988671121,
@@ -6666,14 +6271,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "S",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "브라운",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95988671111,
@@ -6685,14 +6288,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "M",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "브라운",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95988671118,
@@ -6704,14 +6305,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "L",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "브라운",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95988671124,
@@ -6729,14 +6328,12 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "개당 중량",
                 "attributeValueName": "260g",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 96002899160,
@@ -6754,14 +6351,12 @@
               {
                 "attributeTypeName": "개당 용량",
                 "attributeValueName": "750ml",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 96012683946,
@@ -6779,14 +6374,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "멜란지 그레이",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "155",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 96028320862,
@@ -6798,14 +6391,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "멜란지 그레이",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "165",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 96028320861,
@@ -6817,14 +6408,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "아이보리",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "165",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 96052306692,
@@ -6842,14 +6431,12 @@
               {
                 "attributeTypeName": "개당 용량",
                 "attributeValueName": "34ml",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 96080149273,
@@ -6867,20 +6454,17 @@
               {
                 "attributeTypeName": "개당 용량",
                 "attributeValueName": "330ml",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "Global Trade Item Number",
                 "attributeValueName": "8801121052549",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "6개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 96029477196,
@@ -6892,20 +6476,17 @@
               {
                 "attributeTypeName": "개당 용량",
                 "attributeValueName": "330ml",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "Global Trade Item Number",
                 "attributeValueName": "8801121052556",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "12개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 96029477195,
@@ -6935,14 +6516,12 @@
               {
                 "attributeTypeName": "개당 용량",
                 "attributeValueName": "330ml",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "6개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 96003437580,
@@ -6954,14 +6533,12 @@
               {
                 "attributeTypeName": "개당 용량",
                 "attributeValueName": "330ml",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "12개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 96003437579,
@@ -6979,14 +6556,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "FREE",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 96053998063,
@@ -7004,8 +6579,7 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "4개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 96051031852,
@@ -7023,14 +6597,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "그레이",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "모델명/품번",
                 "attributeValueName": "FW20",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 96050261335,
@@ -7048,8 +6620,7 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1세트",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 96043144293,
@@ -7067,92 +6638,77 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "카키",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "팬츠 핏",
                 "attributeValueName": "와이드핏",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "하의 밴딩 유무",
                 "attributeValueName": "부분밴딩",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "사용계절",
                 "attributeValueName": "사계절",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "상하의류 소재",
                 "attributeValueName": "면",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "관리 방법",
                 "attributeValueName": "손세탁",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "78(30)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "하의류 길이",
                 "attributeValueName": "롱",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "성별",
                 "attributeValueName": "남성",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "신축성 유무",
                 "attributeValueName": "신축성있음",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "바지 종류",
                 "attributeValueName": "면바지",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "허리 실측 너비",
                 "attributeValueName": "39cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "엉덩이 실측 둘레",
                 "attributeValueName": "103cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "모델명/품번",
                 "attributeValueName": "682350",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "하의 실측 총장",
                 "attributeValueName": "102cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               }
             ],
             "wingVid": 96027817270,
@@ -7164,92 +6720,77 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "카키",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "팬츠 핏",
                 "attributeValueName": "와이드핏",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "하의 밴딩 유무",
                 "attributeValueName": "부분밴딩",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "사용계절",
                 "attributeValueName": "사계절",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "상하의류 소재",
                 "attributeValueName": "면",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "관리 방법",
                 "attributeValueName": "손세탁",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "82(32)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "하의류 길이",
                 "attributeValueName": "롱",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "성별",
                 "attributeValueName": "남성",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "신축성 유무",
                 "attributeValueName": "신축성있음",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "바지 종류",
                 "attributeValueName": "면바지",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "허리 실측 너비",
                 "attributeValueName": "42cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "엉덩이 실측 둘레",
                 "attributeValueName": "108cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "모델명/품번",
                 "attributeValueName": "682350",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "하의 실측 총장",
                 "attributeValueName": "103cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               }
             ],
             "wingVid": 96027817263,
@@ -7261,92 +6802,77 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "카키",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "팬츠 핏",
                 "attributeValueName": "와이드핏",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "하의 밴딩 유무",
                 "attributeValueName": "부분밴딩",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "사용계절",
                 "attributeValueName": "사계절",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "상하의류 소재",
                 "attributeValueName": "면",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "관리 방법",
                 "attributeValueName": "손세탁",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "86(34)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "하의류 길이",
                 "attributeValueName": "롱",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "성별",
                 "attributeValueName": "남성",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "신축성 유무",
                 "attributeValueName": "신축성있음",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "바지 종류",
                 "attributeValueName": "면바지",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "허리 실측 너비",
                 "attributeValueName": "44cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "엉덩이 실측 둘레",
                 "attributeValueName": "113cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "모델명/품번",
                 "attributeValueName": "682350",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "하의 실측 총장",
                 "attributeValueName": "105cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               }
             ],
             "wingVid": 96027817265,
@@ -7358,92 +6884,77 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "카키",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "팬츠 핏",
                 "attributeValueName": "와이드핏",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "하의 밴딩 유무",
                 "attributeValueName": "부분밴딩",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "사용계절",
                 "attributeValueName": "사계절",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "상하의류 소재",
                 "attributeValueName": "면",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "관리 방법",
                 "attributeValueName": "손세탁",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "90(36)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "하의류 길이",
                 "attributeValueName": "롱",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "성별",
                 "attributeValueName": "남성",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "신축성 유무",
                 "attributeValueName": "신축성있음",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "바지 종류",
                 "attributeValueName": "면바지",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "허리 실측 너비",
                 "attributeValueName": "47cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "엉덩이 실측 둘레",
                 "attributeValueName": "118cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "모델명/품번",
                 "attributeValueName": "682350",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "하의 실측 총장",
                 "attributeValueName": "106cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               }
             ],
             "wingVid": 96027817273,
@@ -7455,92 +6966,77 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "차콜",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "팬츠 핏",
                 "attributeValueName": "와이드핏",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "하의 밴딩 유무",
                 "attributeValueName": "부분밴딩",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "사용계절",
                 "attributeValueName": "사계절",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "상하의류 소재",
                 "attributeValueName": "면",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "관리 방법",
                 "attributeValueName": "손세탁",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "78(30)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "하의류 길이",
                 "attributeValueName": "롱",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "성별",
                 "attributeValueName": "남성",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "신축성 유무",
                 "attributeValueName": "신축성있음",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "바지 종류",
                 "attributeValueName": "면바지",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "허리 실측 너비",
                 "attributeValueName": "39cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "엉덩이 실측 둘레",
                 "attributeValueName": "103cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "모델명/품번",
                 "attributeValueName": "682350",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "하의 실측 총장",
                 "attributeValueName": "102cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               }
             ],
             "wingVid": 96027817268,
@@ -7552,92 +7048,77 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "차콜",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "팬츠 핏",
                 "attributeValueName": "와이드핏",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "하의 밴딩 유무",
                 "attributeValueName": "부분밴딩",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "사용계절",
                 "attributeValueName": "사계절",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "상하의류 소재",
                 "attributeValueName": "면",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "관리 방법",
                 "attributeValueName": "손세탁",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "82(32)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "하의류 길이",
                 "attributeValueName": "롱",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "성별",
                 "attributeValueName": "남성",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "신축성 유무",
                 "attributeValueName": "신축성있음",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "바지 종류",
                 "attributeValueName": "면바지",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "허리 실측 너비",
                 "attributeValueName": "42cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "엉덩이 실측 둘레",
                 "attributeValueName": "108cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "모델명/품번",
                 "attributeValueName": "682350",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "하의 실측 총장",
                 "attributeValueName": "103cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               }
             ],
             "wingVid": 96027817264,
@@ -7649,92 +7130,77 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "차콜",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "팬츠 핏",
                 "attributeValueName": "와이드핏",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "하의 밴딩 유무",
                 "attributeValueName": "부분밴딩",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "사용계절",
                 "attributeValueName": "사계절",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "상하의류 소재",
                 "attributeValueName": "면",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "관리 방법",
                 "attributeValueName": "손세탁",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "86(34)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "하의류 길이",
                 "attributeValueName": "롱",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "성별",
                 "attributeValueName": "남성",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "신축성 유무",
                 "attributeValueName": "신축성있음",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "바지 종류",
                 "attributeValueName": "면바지",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "허리 실측 너비",
                 "attributeValueName": "44cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "엉덩이 실측 둘레",
                 "attributeValueName": "113cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "모델명/품번",
                 "attributeValueName": "682350",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "하의 실측 총장",
                 "attributeValueName": "105cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               }
             ],
             "wingVid": 96027817271,
@@ -7746,92 +7212,77 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "차콜",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "팬츠 핏",
                 "attributeValueName": "와이드핏",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "하의 밴딩 유무",
                 "attributeValueName": "부분밴딩",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "사용계절",
                 "attributeValueName": "사계절",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "상하의류 소재",
                 "attributeValueName": "면",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "관리 방법",
                 "attributeValueName": "손세탁",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "90(36)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "하의류 길이",
                 "attributeValueName": "롱",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "성별",
                 "attributeValueName": "남성",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "신축성 유무",
                 "attributeValueName": "신축성있음",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "바지 종류",
                 "attributeValueName": "면바지",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "허리 실측 너비",
                 "attributeValueName": "47cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "엉덩이 실측 둘레",
                 "attributeValueName": "118cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "모델명/품번",
                 "attributeValueName": "682350",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "하의 실측 총장",
                 "attributeValueName": "106cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               }
             ],
             "wingVid": 96027817266,
@@ -7843,92 +7294,77 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "베이지",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "팬츠 핏",
                 "attributeValueName": "와이드핏",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "하의 밴딩 유무",
                 "attributeValueName": "부분밴딩",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "사용계절",
                 "attributeValueName": "사계절",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "상하의류 소재",
                 "attributeValueName": "면",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "관리 방법",
                 "attributeValueName": "손세탁",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "78(30)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "하의류 길이",
                 "attributeValueName": "롱",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "성별",
                 "attributeValueName": "남성",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "신축성 유무",
                 "attributeValueName": "신축성있음",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "바지 종류",
                 "attributeValueName": "면바지",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "허리 실측 너비",
                 "attributeValueName": "39cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "엉덩이 실측 둘레",
                 "attributeValueName": "103cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "모델명/품번",
                 "attributeValueName": "682350",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "하의 실측 총장",
                 "attributeValueName": "102cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               }
             ],
             "wingVid": 96027817267,
@@ -7940,92 +7376,77 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "베이지",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "팬츠 핏",
                 "attributeValueName": "와이드핏",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "하의 밴딩 유무",
                 "attributeValueName": "부분밴딩",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "사용계절",
                 "attributeValueName": "사계절",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "상하의류 소재",
                 "attributeValueName": "면",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "관리 방법",
                 "attributeValueName": "손세탁",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "82(32)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "하의류 길이",
                 "attributeValueName": "롱",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "성별",
                 "attributeValueName": "남성",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "신축성 유무",
                 "attributeValueName": "신축성있음",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "바지 종류",
                 "attributeValueName": "면바지",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "허리 실측 너비",
                 "attributeValueName": "42cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "엉덩이 실측 둘레",
                 "attributeValueName": "108cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "모델명/품번",
                 "attributeValueName": "682350",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "하의 실측 총장",
                 "attributeValueName": "103cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               }
             ],
             "wingVid": 96027817272,
@@ -8037,92 +7458,77 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "베이지",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "팬츠 핏",
                 "attributeValueName": "와이드핏",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "하의 밴딩 유무",
                 "attributeValueName": "부분밴딩",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "사용계절",
                 "attributeValueName": "사계절",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "상하의류 소재",
                 "attributeValueName": "면",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "관리 방법",
                 "attributeValueName": "손세탁",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "86(34)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "하의류 길이",
                 "attributeValueName": "롱",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "성별",
                 "attributeValueName": "남성",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "신축성 유무",
                 "attributeValueName": "신축성있음",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "바지 종류",
                 "attributeValueName": "면바지",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "허리 실측 너비",
                 "attributeValueName": "44cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "엉덩이 실측 둘레",
                 "attributeValueName": "113cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "모델명/품번",
                 "attributeValueName": "682350",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "하의 실측 총장",
                 "attributeValueName": "105cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               }
             ],
             "wingVid": 96027817269,
@@ -8134,92 +7540,77 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "베이지",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "팬츠 핏",
                 "attributeValueName": "와이드핏",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "하의 밴딩 유무",
                 "attributeValueName": "부분밴딩",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "사용계절",
                 "attributeValueName": "사계절",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "상하의류 소재",
                 "attributeValueName": "면",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "관리 방법",
                 "attributeValueName": "손세탁",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "90(36)",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "하의류 길이",
                 "attributeValueName": "롱",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "성별",
                 "attributeValueName": "남성",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "신축성 유무",
                 "attributeValueName": "신축성있음",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "바지 종류",
                 "attributeValueName": "면바지",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "허리 실측 너비",
                 "attributeValueName": "47cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "엉덩이 실측 둘레",
                 "attributeValueName": "118cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "모델명/품번",
                 "attributeValueName": "682350",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "하의 실측 총장",
                 "attributeValueName": "106cm",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               }
             ],
             "wingVid": 96027817274,
@@ -8237,20 +7628,17 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "폴리지 그린",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "FREE",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95900577291,
@@ -8262,20 +7650,17 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "FREE",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95900577290,
@@ -8293,14 +7678,12 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "사이즈",
                 "attributeValueName": "30cm x 40.5cm",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95801393397,
@@ -8318,14 +7701,12 @@
               {
                 "attributeTypeName": "개당 중량",
                 "attributeValueName": "1.428kg",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95768861272,
@@ -8343,38 +7724,32 @@
               {
                 "attributeTypeName": "화장품 용기 타입",
                 "attributeValueName": "펌프형",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "개당 용량",
                 "attributeValueName": "750ml",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "피부고민",
                 "attributeValueName": "딥클렌징",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "피부타입",
                 "attributeValueName": "모든피부",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "2개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "사용 부위",
                 "attributeValueName": "얼굴",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               }
             ],
             "wingVid": 95742361922,
@@ -8386,38 +7761,32 @@
               {
                 "attributeTypeName": "화장품 용기 타입",
                 "attributeValueName": "펌프형",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "개당 용량",
                 "attributeValueName": "750ml",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "피부고민",
                 "attributeValueName": "딥클렌징",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "피부타입",
                 "attributeValueName": "모든피부",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "사용 부위",
                 "attributeValueName": "얼굴",
-                "exposed": "NONE",
-                "editable": true
+                "exposed": "NONE"
               }
             ],
             "wingVid": 95742361925,
@@ -8435,14 +7804,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "warm 조명",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95595708381,
@@ -8454,14 +7821,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "RGB조명",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95595708380,
@@ -8479,20 +7844,17 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "4세트",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "화이트+ 블랙 + 그린 + 레드",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "구성품",
                 "attributeValueName": "숟가락 + 젓가락",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95572193811,
@@ -8510,20 +7872,17 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "최소 중량",
                 "attributeValueName": "16g",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "개당 수량",
                 "attributeValueName": "40개입",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95552167365,
@@ -8541,14 +7900,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블랙 + 화이트",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "모델명/품번",
                 "attributeValueName": "YS57-25072",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95497597384,
@@ -8578,14 +7935,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "화이트",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "3개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95418983622,
@@ -8603,14 +7958,12 @@
               {
                 "attributeTypeName": "개당 중량",
                 "attributeValueName": "93.5g",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "10개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95402615643,
@@ -8628,20 +7981,17 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "화이트",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "사이즈",
                 "attributeValueName": "FREE",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95361406735,
@@ -8659,14 +8009,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "라이트멜란지그레이",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "S",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95355661694,
@@ -8678,14 +8026,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "라이트멜란지그레이",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "M",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95355661696,
@@ -8697,14 +8043,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "라이트멜란지그레이",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "L",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95355661695,
@@ -8716,14 +8060,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "라이트멜란지그레이",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "XL",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95355661699,
@@ -8735,14 +8077,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "차콜",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "S",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95355661701,
@@ -8754,14 +8094,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "차콜",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "M",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95355661698,
@@ -8773,14 +8111,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "차콜",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "L",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95355661692,
@@ -8792,14 +8128,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "차콜",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "XL",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95355661693,
@@ -8811,14 +8145,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "S",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95355661702,
@@ -8830,14 +8162,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "M",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95355661700,
@@ -8849,14 +8179,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "L",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95355661703,
@@ -8868,14 +8196,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "블랙",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "XL",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95355661697,
@@ -8893,14 +8219,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "화이트네이비",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "모델명/품번",
                 "attributeValueName": "FAN STAND",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95318066042,
@@ -8918,14 +8242,12 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "5개입",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "개당 중량",
                 "attributeValueName": "160g",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95317040258,
@@ -8943,14 +8265,12 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "개당 캡슐/정",
                 "attributeValueName": "500정",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": 95268145185,
@@ -8968,14 +8288,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "화이트그레이",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "사이즈",
                 "attributeValueName": "3단",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": null,
@@ -8987,14 +8305,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "화이트그레이",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "사이즈",
                 "attributeValueName": "1단",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": null,
@@ -9006,14 +8322,12 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "화이트그레이",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "사이즈",
                 "attributeValueName": "2단",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": null,
@@ -9031,14 +8345,12 @@
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "2개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "white",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": null,
@@ -9056,14 +8368,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "XL",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "혼합색상",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": null,
@@ -9075,14 +8385,12 @@
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "L",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "혼합색상",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": null,
@@ -9100,20 +8408,17 @@
               {
                 "attributeTypeName": "색상",
                 "attributeValueName": "화이트",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "패션의류/잡화 사이즈",
                 "attributeValueName": "FREE",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               },
               {
                 "attributeTypeName": "수량",
                 "attributeValueName": "1개",
-                "exposed": "EXPOSED",
-                "editable": true
+                "exposed": "EXPOSED"
               }
             ],
             "wingVid": null,
@@ -9230,9 +8535,9 @@
         "legacyProductCostIds": []
       },
       {
-        "key": "cp:16269631748:워터프루프 / 4.5g / 페이스 / 모든피부 / 남녀공용",
+        "key": "cp:16269631748:4.5g",
         "name": "[4회분] 닥터지 저자극 쿨링패치, 마일드업 선패치",
-        "optionLabel": "워터프루프 / 4.5g / 페이스 / 모든피부 / 남녀공용",
+        "optionLabel": "4.5g",
         "baseUnitLabel": null,
         "status": "active",
         "legacyProductCostIds": []
@@ -9442,9 +8747,9 @@
         ]
       },
       {
-        "key": "cp:16256947431:1 / 750ml / 레몬향 / 액상 / 본품 / 펌프형",
+        "key": "cp:16256947431:750ml",
         "name": "오스트레일리안 보태니컬 핸드워시 750ml + 여행용 소분 파우치 50ml",
-        "optionLabel": "1 / 750ml / 레몬향 / 액상 / 본품 / 펌프형",
+        "optionLabel": "750ml",
         "baseUnitLabel": null,
         "status": "active",
         "legacyProductCostIds": [
@@ -9742,9 +9047,9 @@
         ]
       },
       {
-        "key": "cp:16182237839:블루 / 마이크로파이버",
+        "key": "cp:16182237839:블루",
         "name": "코스트코 커클랜드 다용도 극세사 타월 10장 세차 청소",
-        "optionLabel": "블루 / 마이크로파이버",
+        "optionLabel": "블루",
         "baseUnitLabel": null,
         "status": "active",
         "legacyProductCostIds": [
@@ -9752,9 +9057,9 @@
         ]
       },
       {
-        "key": "cp:16182237839:마이크로파이버 / 옐로우 / 40.6x40.6cm / 40.6cm / 물기제거용 / 40.6cm / 10개 / 성인 / 높은 흡수력 / 해당없음 / 청소용 천",
+        "key": "cp:16182237839:옐로우",
         "name": "코스트코 커클랜드 다용도 극세사 타월 10장 세차 청소",
-        "optionLabel": "마이크로파이버 / 옐로우 / 40.6x40.6cm / 40.6cm / 물기제거용 / 40.6cm / 10개 / 성인 / 높은 흡수력 / 해당없음 / 청소용 천",
+        "optionLabel": "옐로우",
         "baseUnitLabel": null,
         "status": "active",
         "legacyProductCostIds": [
@@ -9782,9 +9087,9 @@
         ]
       },
       {
-        "key": "cp:16202985161:200g / 일반비누 / 고체형",
+        "key": "cp:16202985161:200g",
         "name": "코스트코 보태니컬 비누, 선물용 답례품 포장 4가지 향, 알로에 베라 위드 그린 티 익스트랙트, 와일드 베리 크러쉬, 프란지파니 위드 이브닝 프림로즈 오일, 핑크 리치",
-        "optionLabel": "200g / 일반비누 / 고체형",
+        "optionLabel": "200g",
         "baseUnitLabel": null,
         "status": "active",
         "legacyProductCostIds": [
@@ -9953,9 +9258,9 @@
         ]
       },
       {
-        "key": "cp:16262230452:100ml / ★★★★★ / 크림타입 / 남성용 / 캡용기형 / 남성용",
+        "key": "cp:16262230452:100ml",
         "name": "다슈 울트라 홀딩 파워 왁스",
-        "optionLabel": "100ml / ★★★★★ / 크림타입 / 남성용 / 캡용기형 / 남성용",
+        "optionLabel": "100ml",
         "baseUnitLabel": null,
         "status": "active",
         "legacyProductCostIds": [
@@ -10421,9 +9726,9 @@
         ]
       },
       {
-        "key": "cp:16349039276:손세탁 / 블랙 / 250mm / 트임 / 폴리염화비닐(PVC) / 250 / 폴리에스터 / 남녀공용 / 자수 / 사계절 / 블랙",
+        "key": "cp:16349039276:블랙 / 250mm",
         "name": "퐁실퐁실 리본자수 극세사 거실 슬리퍼 실내화 커플 룸슈즈 250mm",
-        "optionLabel": "손세탁 / 블랙 / 250mm / 트임 / 폴리염화비닐(PVC) / 250 / 폴리에스터 / 남녀공용 / 자수 / 사계절 / 블랙",
+        "optionLabel": "블랙 / 250mm",
         "baseUnitLabel": null,
         "status": "active",
         "legacyProductCostIds": [
@@ -10431,9 +9736,9 @@
         ]
       },
       {
-        "key": "cp:16349039276:손세탁 / 아이보리 / 250mm / 트임 / 폴리염화비닐(PVC) / 250 / 폴리에스터 / 남녀공용 / 자수 / 사계절 / 아이보리",
+        "key": "cp:16349039276:아이보리 / 250mm",
         "name": "퐁실퐁실 리본자수 극세사 거실 슬리퍼 실내화 커플 룸슈즈 250mm",
-        "optionLabel": "손세탁 / 아이보리 / 250mm / 트임 / 폴리염화비닐(PVC) / 250 / 폴리에스터 / 남녀공용 / 자수 / 사계절 / 아이보리",
+        "optionLabel": "아이보리 / 250mm",
         "baseUnitLabel": null,
         "status": "active",
         "legacyProductCostIds": []
@@ -10763,9 +10068,9 @@
         "legacyProductCostIds": []
       },
       {
-        "key": "cp:16294880149:펌프형 / 750ml / 딥클렌징 / 모든피부 / 얼굴",
+        "key": "cp:16294880149:750ml",
         "name": "이볼루덤 미셀라 워터, 프랑스 메이크업 클렌징, 아침 세안, 코스트코 인기 제품",
-        "optionLabel": "펌프형 / 750ml / 딥클렌징 / 모든피부 / 얼굴",
+        "optionLabel": "750ml",
         "baseUnitLabel": null,
         "status": "active",
         "legacyProductCostIds": []
@@ -15246,7 +14551,7 @@
       },
       {
         "listingKey": "coupang_rg|95845454300|",
-        "skuKey": "cp:16269631748:워터프루프 / 4.5g / 페이스 / 모든피부 / 남녀공용",
+        "skuKey": "cp:16269631748:4.5g",
         "multiplier": 1
       },
       {
@@ -15386,12 +14691,12 @@
       },
       {
         "listingKey": "coupang_wing|95899123151|",
-        "skuKey": "cp:16256947431:1 / 750ml / 레몬향 / 액상 / 본품 / 펌프형",
+        "skuKey": "cp:16256947431:750ml",
         "multiplier": 1
       },
       {
         "listingKey": "coupang_rg|95604134107|",
-        "skuKey": "cp:16256947431:1 / 750ml / 레몬향 / 액상 / 본품 / 펌프형",
+        "skuKey": "cp:16256947431:750ml",
         "multiplier": 1
       },
       {
@@ -15601,22 +14906,22 @@
       },
       {
         "listingKey": "coupang_wing|95401822935|",
-        "skuKey": "cp:16182237839:블루 / 마이크로파이버",
+        "skuKey": "cp:16182237839:블루",
         "multiplier": 1
       },
       {
         "listingKey": "coupang_rg|95401822934|",
-        "skuKey": "cp:16182237839:블루 / 마이크로파이버",
+        "skuKey": "cp:16182237839:블루",
         "multiplier": 1
       },
       {
         "listingKey": "coupang_wing|95346957211|",
-        "skuKey": "cp:16182237839:마이크로파이버 / 옐로우 / 40.6x40.6cm / 40.6cm / 물기제거용 / 40.6cm / 10개 / 성인 / 높은 흡수력 / 해당없음 / 청소용 천",
+        "skuKey": "cp:16182237839:옐로우",
         "multiplier": 1
       },
       {
         "listingKey": "coupang_rg|95373359497|",
-        "skuKey": "cp:16182237839:마이크로파이버 / 옐로우 / 40.6x40.6cm / 40.6cm / 물기제거용 / 40.6cm / 10개 / 성인 / 높은 흡수력 / 해당없음 / 청소용 천",
+        "skuKey": "cp:16182237839:옐로우",
         "multiplier": 1
       },
       {
@@ -15641,12 +14946,12 @@
       },
       {
         "listingKey": "coupang_wing|95425918818|",
-        "skuKey": "cp:16202985161:200g / 일반비누 / 고체형",
+        "skuKey": "cp:16202985161:200g",
         "multiplier": 1
       },
       {
         "listingKey": "coupang_rg|95434365920|",
-        "skuKey": "cp:16202985161:200g / 일반비누 / 고체형",
+        "skuKey": "cp:16202985161:200g",
         "multiplier": 1
       },
       {
@@ -15801,32 +15106,32 @@
       },
       {
         "listingKey": "coupang_wing|95638662074|",
-        "skuKey": "cp:16262230452:100ml / ★★★★★ / 크림타입 / 남성용 / 캡용기형 / 남성용",
+        "skuKey": "cp:16262230452:100ml",
         "multiplier": 1
       },
       {
         "listingKey": "coupang_rg|95638662072|",
-        "skuKey": "cp:16262230452:100ml / ★★★★★ / 크림타입 / 남성용 / 캡용기형 / 남성용",
+        "skuKey": "cp:16262230452:100ml",
         "multiplier": 1
       },
       {
         "listingKey": "coupang_wing|95620972934|",
-        "skuKey": "cp:16262230452:100ml / ★★★★★ / 크림타입 / 남성용 / 캡용기형 / 남성용",
+        "skuKey": "cp:16262230452:100ml",
         "multiplier": 2
       },
       {
         "listingKey": "coupang_rg|95620984888|",
-        "skuKey": "cp:16262230452:100ml / ★★★★★ / 크림타입 / 남성용 / 캡용기형 / 남성용",
+        "skuKey": "cp:16262230452:100ml",
         "multiplier": 2
       },
       {
         "listingKey": "coupang_wing|95620972933|",
-        "skuKey": "cp:16262230452:100ml / ★★★★★ / 크림타입 / 남성용 / 캡용기형 / 남성용",
+        "skuKey": "cp:16262230452:100ml",
         "multiplier": 3
       },
       {
         "listingKey": "coupang_rg|95620984889|",
-        "skuKey": "cp:16262230452:100ml / ★★★★★ / 크림타입 / 남성용 / 캡용기형 / 남성용",
+        "skuKey": "cp:16262230452:100ml",
         "multiplier": 3
       },
       {
@@ -16241,12 +15546,12 @@
       },
       {
         "listingKey": "coupang_wing|95933367273|",
-        "skuKey": "cp:16349039276:손세탁 / 블랙 / 250mm / 트임 / 폴리염화비닐(PVC) / 250 / 폴리에스터 / 남녀공용 / 자수 / 사계절 / 블랙",
+        "skuKey": "cp:16349039276:블랙 / 250mm",
         "multiplier": 1
       },
       {
         "listingKey": "coupang_wing|95933367274|",
-        "skuKey": "cp:16349039276:손세탁 / 아이보리 / 250mm / 트임 / 폴리염화비닐(PVC) / 250 / 폴리에스터 / 남녀공용 / 자수 / 사계절 / 아이보리",
+        "skuKey": "cp:16349039276:아이보리 / 250mm",
         "multiplier": 1
       },
       {
@@ -16471,22 +15776,22 @@
       },
       {
         "listingKey": "coupang_wing|95742361922|",
-        "skuKey": "cp:16294880149:펌프형 / 750ml / 딥클렌징 / 모든피부 / 얼굴",
+        "skuKey": "cp:16294880149:750ml",
         "multiplier": 2
       },
       {
         "listingKey": "coupang_rg|95742361915|",
-        "skuKey": "cp:16294880149:펌프형 / 750ml / 딥클렌징 / 모든피부 / 얼굴",
+        "skuKey": "cp:16294880149:750ml",
         "multiplier": 2
       },
       {
         "listingKey": "coupang_wing|95742361925|",
-        "skuKey": "cp:16294880149:펌프형 / 750ml / 딥클렌징 / 모든피부 / 얼굴",
+        "skuKey": "cp:16294880149:750ml",
         "multiplier": 1
       },
       {
         "listingKey": "coupang_rg|95742361917|",
-        "skuKey": "cp:16294880149:펌프형 / 750ml / 딥클렌징 / 모든피부 / 얼굴",
+        "skuKey": "cp:16294880149:750ml",
         "multiplier": 1
       },
       {
@@ -16976,17 +16281,17 @@
       },
       {
         "listingKey": "naver|13495880079|",
-        "skuKey": "cp:16182237839:블루 / 마이크로파이버",
+        "skuKey": "cp:16182237839:블루",
         "multiplier": 1
       },
       {
         "listingKey": "naver|13495880079|",
-        "skuKey": "cp:16182237839:마이크로파이버 / 옐로우 / 40.6x40.6cm / 40.6cm / 물기제거용 / 40.6cm / 10개 / 성인 / 높은 흡수력 / 해당없음 / 청소용 천",
+        "skuKey": "cp:16182237839:옐로우",
         "multiplier": 1
       },
       {
         "listingKey": "toss|698610759|10개 / 옐로우",
-        "skuKey": "cp:16182237839:마이크로파이버 / 옐로우 / 40.6x40.6cm / 40.6cm / 물기제거용 / 40.6cm / 10개 / 성인 / 높은 흡수력 / 해당없음 / 청소용 천",
+        "skuKey": "cp:16182237839:옐로우",
         "multiplier": 1
       },
       {
@@ -17236,12 +16541,12 @@
       },
       {
         "listingKey": "naver|13652269743|59565244507",
-        "skuKey": "cp:16294880149:펌프형 / 750ml / 딥클렌징 / 모든피부 / 얼굴",
+        "skuKey": "cp:16294880149:750ml",
         "multiplier": 1
       },
       {
         "listingKey": "naver|13652269743|59565244508",
-        "skuKey": "cp:16294880149:펌프형 / 750ml / 딥클렌징 / 모든피부 / 얼굴",
+        "skuKey": "cp:16294880149:750ml",
         "multiplier": 2
       },
       {
@@ -17256,7 +16561,7 @@
       },
       {
         "listingKey": "naver|13578595797|",
-        "skuKey": "cp:16262230452:100ml / ★★★★★ / 크림타입 / 남성용 / 캡용기형 / 남성용",
+        "skuKey": "cp:16262230452:100ml",
         "multiplier": 1
       },
       {
@@ -17361,7 +16666,7 @@
       },
       {
         "listingKey": "toss|698610759|10개 / 블루",
-        "skuKey": "cp:16182237839:블루 / 마이크로파이버",
+        "skuKey": "cp:16182237839:블루",
         "multiplier": 1
       },
       {
@@ -17457,14 +16762,9 @@
     ],
     "issues": [
       {
-        "kind": "suspect_merge",
-        "ref": "cp:16376323038:330ml",
-        "detail": "itemName 잔여 [(330ml x 6), (330ml x 12)] · 수량 [6,12] — 서로 다른 실물일 수 있다"
-      },
-      {
         "kind": "any_of_listing",
         "ref": "naver|13495880079|",
-        "detail": "SKU cp:16182237839:블루 / 마이크로파이버, cp:16182237839:마이크로파이버 / 옐로우 / 40.6x40.6cm / 40.6cm / 물기제거용 / 40.6cm / 10개 / 성인 / 높은 흡수력 / 해당없음 / 청소용 천 중 하나를 판다"
+        "detail": "SKU cp:16182237839:블루, cp:16182237839:옐로우 중 하나를 판다"
       },
       {
         "kind": "multi_vid_listing",

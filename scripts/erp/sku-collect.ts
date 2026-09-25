@@ -27,7 +27,8 @@ async function collectDb(): Promise<DbInput> {
   const c = new pg.Client({ connectionString: process.env.SUPABASE_DB_URL, ssl: { rejectUnauthorized: false } });
   await c.connect();
   try {
-    await c.query('set default_transaction_read_only = on');
+    // 세션 SET이 아니라 트랜잭션 단위로 읽기 전용을 건다 — 트랜잭션 pooler 모드에서도 모든 조회가 이 트랜잭션 안에서 돈다.
+    await c.query('BEGIN READ ONLY');
     const pcs = (await c.query(`select id, product_name, seller_product_id, vendor_item_id from product_costs`)).rows;
     const pcc = (await c.query(`select product_cost_id, channel_type, external_id, unit_multiplier from product_cost_channels`)).rows;
     const ssl = (await c.query(`select coupang_vendor_item_id, channel, product_id, option_key, label from stock_sync_links`)).rows;
@@ -53,6 +54,7 @@ async function collectDb(): Promise<DbInput> {
       naverSoldProducts90d: Number(naverSales.products),
       costcoMap: costco.map((r) => ({ itemCode: String(r.item_code), itemLabel: r.item_label ?? null, productName: r.product_name ?? null })),
     };
+    await c.query('COMMIT');
     return {
       ops,
       legacyProductCosts: pcs.map((r) => ({
@@ -79,6 +81,9 @@ async function collectDb(): Promise<DbInput> {
         .map((r) => ({ vid: Number(r.vid), productCostId: String(r.product_cost_id), rows: Number(r.rows) })),
       sellerProductIds: [...new Set(pcs.map((r) => Number(r.seller_product_id)).filter((n) => n > 0))],
     };
+  } catch (e) {
+    await c.query('ROLLBACK').catch(() => undefined);
+    throw e;
   } finally {
     await c.end();
   }
@@ -111,9 +116,14 @@ async function collectCoupang(extraIds: number[]): Promise<{ products: DraftInpu
           const wing = it.vendorItemId ?? mp?.vendorItemId;
           return {
             itemName: String(it.itemName ?? ''),
-            // 값이 빈 속성은 옵션 키에 쓰이지 않으므로 버린다(초안 JSON 크기 절감).
+            // 옵션 키가 쓰는 세 필드(이름·값·exposed)만 남기고, 값이 빈 속성은 버린다(초안 JSON 크기 절감).
+            // 빈 속성은 옵션 조합에서도 어차피 걸러지지만, 값이 빈 `수량` 속성까지 버리므로 그런 item은
+            // 수량을 itemName에서 읽는다(빈 값을 수량 1로 읽는 것보다 정확하다). exposed는 구매옵션(EXPOSED)과
+            // 검색옵션(NONE)을 가르는 데 필요하므로 유지한다.
             attributes: Array.isArray(it.attributes)
-              ? (it.attributes as { attributeTypeName: string; attributeValueName: string }[]).filter((a) => String(a.attributeValueName ?? '').trim() !== '')
+              ? (it.attributes as { attributeTypeName: string; attributeValueName: string; exposed?: string }[])
+                  .filter((a) => String(a.attributeValueName ?? '').trim() !== '')
+                  .map((a) => ({ attributeTypeName: a.attributeTypeName, attributeValueName: a.attributeValueName, ...(a.exposed ? { exposed: a.exposed } : {}) }))
               : [],
             wingVid: wing ? Number(wing) : null,
             rgVid: rg?.vendorItemId ? Number(rg.vendorItemId) : null,
