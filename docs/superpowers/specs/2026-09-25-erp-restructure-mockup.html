@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>스마트셀러 ERP 목업</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ground:#e7ecef;--surface:#fff;--chrome:#dae1e6;--chrome2:#eef2f4;
+  --line:#c2ccd3;--lineSoft:#e1e7ea;--ink:#16202a;--inkSub:#5c6b76;--inkMute:#8b98a2;
+  --accent:#be0014;--accentSoft:#fceff0;--accentLine:#eabfc4;
+  --profit:#0b6e39;--loss:#c22626;--info:#1c6291;--infoSoft:#e8f1f7;--warn:#9a6106;--warnSoft:#fdf3e0;
+  --side:#1d2731;--side2:#26323d;--sideInk:#c9d3db;
+  --rowH:27px;--ctrlH:26px;--mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font-family:'Noto Sans KR',system-ui,sans-serif;font-size:12px;color:var(--ink);background:var(--ground);display:grid;grid-template-rows:38px 1fr;overflow:hidden}
+button,input,select{font:inherit;font-size:12px}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right}
+
+/* 상단바 */
+.top{display:flex;align-items:center;gap:14px;padding:0 12px;background:var(--side);color:#fff}
+.logo{font-weight:700;letter-spacing:.02em;width:196px;display:flex;align-items:center;gap:8px}
+.logo b{background:var(--accent);width:18px;height:18px;display:inline-block}
+.search{flex:0 1 420px;display:flex;height:26px}
+.search input{flex:1;border:1px solid #3a4854;background:#26323d;color:#fff;padding:0 10px}
+.search input::placeholder{color:#8b98a2}
+.top .sp{flex:1}
+.tbtn{height:26px;padding:0 10px;border:1px solid #3a4854;background:#26323d;color:#dfe6eb;cursor:pointer;display:flex;align-items:center;gap:6px}
+.tbtn:hover{background:#31404c}
+.tbtn.label{border-color:var(--accent);background:#3a1a20;color:#ffd9dd}
+.dot{display:inline-block;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--accent);color:#fff;font-size:10px;line-height:16px;text-align:center}
+.who{color:#8b98a2}
+
+.main{display:grid;grid-template-columns:210px 1fr;min-height:0}
+/* 사이드 */
+.side{background:var(--side);color:var(--sideInk);overflow:auto;padding:6px 0;border-top:1px solid #0f161c}
+.grp>.gh{display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;font-weight:500}
+.grp>.gh:hover{background:var(--side2)}
+.gh .code{font-family:var(--mono);font-size:11px;color:#8b98a2;width:22px}
+.gh .car{margin-left:auto;color:#6b7a86;font-size:10px}
+.grp .items{display:none;padding:2px 0 6px}
+.grp.open .items{display:block}
+.grp.open>.gh{color:#fff}
+.it{display:flex;gap:8px;padding:4px 12px 4px 34px;cursor:pointer;color:#aab6c0}
+.it .c{font-family:var(--mono);font-size:10.5px;color:#6b7a86;width:26px}
+.it:hover{background:var(--side2);color:#fff}
+.it.on{background:#33111a;color:#fff;box-shadow:inset 3px 0 0 var(--accent)}
+.it .tag{margin-left:auto;font-size:9.5px;padding:0 4px;border:1px solid #4a5864;color:#8b98a2}
+.it .tag.new{border-color:#7a3a44;color:#f0a3ab}
+.side .foot{padding:10px 12px;color:#6b7a86;font-size:11px;border-top:1px solid #2b3742;margin-top:8px}
+
+/* 작업영역 */
+.work{display:grid;grid-template-rows:30px 1fr;min-width:0;min-height:0}
+.tabs{display:flex;align-items:flex-end;gap:2px;padding:0 8px;background:var(--chrome);border-bottom:1px solid var(--line)}
+.tab{height:26px;display:flex;align-items:center;gap:8px;padding:0 10px;background:#cfd7dd;border:1px solid var(--line);border-bottom:none;color:var(--inkSub);cursor:pointer}
+.tab.on{background:var(--surface);color:var(--ink);font-weight:500;height:28px;margin-bottom:-1px}
+.tab .x{color:var(--inkMute)}
+.body{display:grid;grid-template-columns:1fr auto;min-height:0}
+.page{padding:10px 12px;overflow:auto;min-width:0;display:flex;flex-direction:column}
+.ph{display:flex;align-items:baseline;gap:10px;margin-bottom:8px}
+.ph h1{margin:0;font-size:15px}
+.ph .code{font-family:var(--mono);color:var(--accent);font-weight:500}
+.ph .crumb{color:var(--inkMute)}
+.ph .hint{margin-left:auto;color:var(--inkMute)}
+
+.q{border:1px solid var(--line);background:var(--chrome2);margin-bottom:8px}
+.qt{padding:4px 10px;font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--inkSub);border-bottom:1px solid var(--lineSoft)}
+.qg{display:grid;grid-template-columns:repeat(3,1fr)}
+.qf{display:flex;border-right:1px solid var(--lineSoft);border-bottom:1px solid var(--lineSoft)}
+.qf label{min-width:74px;display:flex;align-items:center;padding:0 10px;background:var(--chrome);font-size:11.5px;font-weight:600;color:var(--inkSub);border-right:1px solid var(--lineSoft)}
+.qf .v{display:flex;align-items:center;gap:6px;padding:4px 10px;background:var(--surface);flex:1;flex-wrap:wrap}
+.qf.w2{grid-column:span 2}
+.seg{display:flex;border:1px solid var(--line)}
+.seg span{padding:2px 9px;cursor:pointer;border-right:1px solid var(--line)}
+.seg span:last-child{border-right:none}
+.seg span.on{background:var(--ink);color:#fff}
+select,input.i{height:24px;border:1px solid var(--line);background:#fff;padding:0 6px}
+.btn{height:var(--ctrlH);padding:0 12px;border:1px solid var(--line);background:#fff;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--chrome2)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.dark{background:var(--ink);border-color:var(--ink);color:#fff}
+.qa{display:flex;justify-content:flex-end;gap:6px;padding:6px 10px}
+
+.bar{display:flex;align-items:center;gap:6px;padding:5px 8px;background:var(--chrome);border:1px solid var(--line);border-bottom:none}
+.bar .cnt b{color:var(--accent)}
+.bar .sep{width:1px;height:16px;background:var(--line);margin:0 4px}
+.bar .r{margin-left:auto;display:flex;gap:6px}
+
+.gridwrap{border:1px solid var(--line);background:#fff;overflow:auto;flex:1;min-height:200px}
+table{border-collapse:collapse;width:100%;white-space:nowrap}
+th,td{height:var(--rowH);padding:0 8px;border-right:1px solid var(--lineSoft);border-bottom:1px solid var(--lineSoft)}
+th{position:sticky;top:0;background:var(--chrome);font-weight:600;color:var(--inkSub);text-align:left;border-bottom:1px solid var(--line);z-index:1}
+th.num{text-align:right}
+tbody tr:nth-child(even) td{background:#f7f9fa}
+tbody tr:hover td{background:var(--infoSoft)}
+tbody tr.sel td{background:var(--accentSoft)}
+tbody tr.focus td{background:#fff3c4}
+tfoot td{position:sticky;bottom:0;background:var(--chrome);font-weight:600;border-top:1px solid var(--line)}
+.ch{padding:1px 6px;font-size:11px;border:1px solid}
+.ch.cp{color:#b3161c;border-color:#efc2c4;background:#fff5f5}
+.ch.rg{color:#6a2bb3;border-color:#d9c6f1;background:#f8f3ff}
+.ch.nv{color:#037a38;border-color:#bfe3cc;background:#f1fbf4}
+.ch.ts{color:#0b5cd6;border-color:#c3d7f6;background:#f2f7ff}
+.st{font-size:11px;padding:1px 6px}
+.st.new{background:var(--warnSoft);color:var(--warn)}
+.st.ack{background:var(--infoSoft);color:var(--info)}
+.st.ship{background:#e8f5ec;color:var(--profit)}
+.st.miss{background:var(--accentSoft);color:var(--accent)}
+.status{display:flex;gap:14px;padding:4px 8px;color:var(--inkSub);background:var(--chrome);border:1px solid var(--line);border-top:none;font-size:11px}
+.status .r{margin-left:auto}
+
+/* 상세 패널 */
+.detail{width:340px;border-left:1px solid var(--line);background:#fff;display:flex;flex-direction:column;min-height:0}
+.detail.hide{display:none}
+.dh{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--chrome);border-bottom:1px solid var(--line);font-weight:600}
+.dh .x{margin-left:auto;cursor:pointer;color:var(--inkSub)}
+.db{padding:10px 12px;overflow:auto}
+.kv{display:grid;grid-template-columns:86px 1fr;border:1px solid var(--lineSoft);margin-bottom:10px}
+.kv div{padding:4px 8px;border-bottom:1px solid var(--lineSoft)}
+.kv div:nth-child(odd){background:var(--chrome2);color:var(--inkSub);font-weight:600}
+.sec{font-size:11px;font-weight:600;color:var(--inkSub);letter-spacing:.06em;margin:12px 0 6px}
+.tl{border-left:2px solid var(--line);margin-left:4px;padding-left:10px}
+.tl div{margin-bottom:6px;position:relative}
+.tl div:before{content:'';position:absolute;left:-15px;top:4px;width:8px;height:8px;background:var(--line)}
+.tl div.ok:before{background:var(--profit)}
+.tl small{color:var(--inkMute);font-family:var(--mono)}
+.da{display:flex;gap:6px;flex-wrap:wrap;padding:10px 12px;border-top:1px solid var(--line);background:var(--chrome2)}
+
+/* 라벨 화면 */
+.lab{display:grid;grid-template-columns:240px 1fr 330px;gap:8px;flex:1;min-height:0}
+.panel{border:1px solid var(--line);background:#fff;display:flex;flex-direction:column;min-height:0}
+.panel h3{margin:0;padding:6px 10px;font-size:11.5px;background:var(--chrome);border-bottom:1px solid var(--line);color:var(--inkSub)}
+.tpl{padding:6px 10px;border-bottom:1px solid var(--lineSoft);cursor:pointer;display:flex;justify-content:space-between}
+.tpl:hover{background:var(--chrome2)}
+.tpl.on{background:var(--accentSoft);box-shadow:inset 3px 0 0 var(--accent)}
+.tpl small{color:var(--inkMute)}
+.paperwrap{flex:1;overflow:auto;background:#9aa7b1;display:flex;justify-content:center;padding:18px}
+.paper{width:420px;height:594px;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.25);display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(3,1fr);gap:6px;padding:12px}
+.lb{border:1px dashed #b9c3ca;padding:8px;font-size:8.5px;line-height:1.45;display:flex;flex-direction:column}
+.lb.off{background:repeating-linear-gradient(45deg,#f3f5f6,#f3f5f6 6px,#fff 6px,#fff 12px);color:var(--inkMute);align-items:center;justify-content:center}
+.lb b{font-size:10.5px;margin-bottom:3px}
+.lb .row{display:flex;gap:4px}
+.lb .row span:first-child{color:#555;width:46px;flex:none}
+.lb .bc{margin-top:auto;height:20px;background:repeating-linear-gradient(90deg,#000 0 1px,#fff 1px 3px,#000 3px 5px,#fff 5px 6px)}
+.form{padding:8px 10px;overflow:auto}
+.form .f{display:grid;grid-template-columns:78px 1fr;align-items:center;margin-bottom:5px;gap:6px}
+.form .f span{color:var(--inkSub);font-weight:600;font-size:11.5px}
+.form input,.form select{width:100%}
+.note{margin:8px 10px;padding:6px 8px;background:var(--warnSoft);color:var(--warn);font-size:11px;border:1px solid #efd7a6}
+
+/* 재고 화면 */
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:0;border:1px solid var(--line);background:#fff;margin-bottom:8px}
+.kpi{padding:8px 12px;border-right:1px solid var(--lineSoft)}
+.kpi:last-child{border-right:none}
+.kpi small{color:var(--inkSub);font-weight:600}
+.kpi div{font-family:var(--mono);font-size:18px;margin-top:2px}
+.kpi.bad div{color:var(--accent)}
+.diff{color:var(--accent);font-weight:600}
+.okc{color:var(--profit)}
+
+.annot{position:fixed;right:14px;bottom:14px;background:#16202a;color:#fff;padding:10px 12px;max-width:330px;font-size:11.5px;line-height:1.55;box-shadow:0 4px 16px rgba(0,0,0,.3);z-index:9}
+.annot b{color:#ffb3ba}
+.annot .x{float:right;cursor:pointer;color:#8b98a2;margin-left:8px}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="logo"><b></b>스마트셀러 ERP</div>
+  <div class="search"><input placeholder="통합검색 — 주문번호 · 상품명 · 송장번호 · 수취인  (/ 키)"></div>
+  <div class="sp"></div>
+  <button class="tbtn label" onclick="go('C13')">🖨 라벨 인쇄</button>
+  <button class="tbtn" onclick="go('F13')">작업로그 <span class="dot">1</span> 실패</button>
+  <button class="tbtn">🔔 <span class="dot">3</span></button>
+  <span class="who">이승민 · 2026-09-25 (목)</span>
+</header>
+
+<div class="main">
+  <nav class="side" id="side"></nav>
+  <section class="work">
+    <div class="tabs" id="tabs"></div>
+    <div class="body">
+      <div class="page" id="page"></div>
+      <aside class="detail hide" id="detail"></aside>
+    </div>
+  </section>
+</div>
+
+<div class="annot" id="annot"><span class="x" onclick="this.parentNode.remove()">닫기 ✕</span>
+<b>목업 안내</b> — 데이터는 가짜입니다. 클릭해 볼 수 있는 화면:<br>
+· <b>A11 오늘 할 일</b>: 처리할 건수, 누르면 해당 목록<br>· <b>D11 상품마스터</b>: SKU·세트·소분 배수<br>· <b>B11 통합주문</b>: 행 클릭 → 오른쪽 상세 패널<br>
+· <b>C11 재고현황</b>: 자체보관·로켓그로스를 한 줄에, RG 실재고 대조<br>
+· <b>C13 라벨 인쇄</b>: 상단 빨간 버튼으로도 바로 진입<br>
+나머지 메뉴는 구조만 보여 줍니다.<br><b>v3</b>: 기획자 피드백 반영 — 오늘 할 일 · 마스터 SKU · 위치별 가용 · 표준 상태</div>
+
+<script>
+const MENU=[
+ {c:'A',n:'홈',items:[['A11','오늘 할 일','신규'],['A12','매출 추이']]},
+ {c:'B',n:'주문',items:[['B11','통합주문','신규'],['B12','주문↔상품 매핑','신규'],['B13','클레임·반품입고','신규'],['B15','문의','신규'],['B14','배송 (로지아이)']]},
+ {c:'C',n:'재고·매입',items:[['C11','재고현황','신규'],['C12','입고 (영수증 · RG 입고)'],['C13','라벨 인쇄'],['C14','코스트코 매입처'],['C15','발주 (제조·1688)','신규'],['C16','출고·판매차감','신규'],['C17','입출 이력','신규']]},
+ {c:'D',n:'상품',items:[['D11','상품마스터','신규'],['D12','쇼핑몰상품 조회/수정'],['D13','품절·재고 전송','신규'],['D14','채널 매핑']]},
+ {c:'E',n:'정산·통계',items:[['E11','채널 정산'],['E12','수익·원가'],['E13','광고비'],['E14','매출 통계'],['E15','마진 계산기','숨김→편입']]},
+ {c:'F',n:'운영',items:[['F11','플랜'],['F12','알림'],['F13','작업·전송 로그','신규'],['F14','회고']]},
+ {c:'G',n:'제작 도구',items:[['G11','상품등록'],['G12','URL 자동등록','숨김→편입'],['G13','1688 가져오기'],['G14','상세페이지 제작'],['G15','상표 사전검사','숨김→편입']]},
+ {c:'H',n:'설정',items:[['H11','채널 계정'],['H12','택배·출고지'],['H13','기초정보']]},
+];
+const NAME={};MENU.forEach(g=>g.items.forEach(i=>NAME[i[0]]=[g.n,i[1]]));
+let tabs=['A11','B11','C11','D11'],cur='A11';
+
+function side(){
+  const open=cur[0];
+  document.getElementById('side').innerHTML=MENU.map(g=>`<div class="grp ${g.c===open?'open':''}">
+   <div class="gh" onclick="this.parentNode.classList.toggle('open')"><span class="code">[${g.c}]</span>${g.n}<span class="car">▾</span></div>
+   <div class="items">${g.items.map(i=>`<div class="it ${i[0]===cur?'on':''}" onclick="go('${i[0]}')"><span class="c">${i[0]}</span>${i[1]}${i[2]?`<span class="tag ${i[2]==='신규'?'new':''}">${i[2]}</span>`:''}</div>`).join('')}</div></div>`).join('')+
+   `<div class="foot">« 메뉴 접기<br>메뉴 정의: erp-menu.ts 한 곳</div>`;
+}
+function tabbar(){
+  document.getElementById('tabs').innerHTML=tabs.map(t=>`<div class="tab ${t===cur?'on':''}" onclick="go('${t}')"><span style="font-family:var(--mono);font-size:11px;color:var(--inkMute)">${t}</span>${NAME[t][1]}<span class="x">✕</span></div>`).join('');
+}
+function head(code,hint){return `<div class="ph"><span class="code">${code}</span><h1>${NAME[code][1]}</h1><span class="crumb">${NAME[code][0]} › ${NAME[code][1]}</span><span class="hint">${hint||''}</span></div>`}
+
+const ORD=[
+ ['09-25 10:41','cp','쿠팡','3120557789','극세사 타월 40x80 옐로우','2',9800,'new','신규',''],
+ ['09-25 10:12','nv','스마트스토어','2025092511','시리얼 1.53kg','1',13900,'ack','발주확인','로지아이 대기'],
+ ['09-25 09:58','rg','로켓그로스','2213380021','핸드워시 공병 번들','3',21600,'ship','쿠팡 출고',''],
+ ['09-25 09:31','cp','쿠팡','3120551102','세차타월 노랑 10매','1',8900,'ack','발주확인','로지아이 대기'],
+ ['09-25 08:47','ts','토스','T2509250013','마스크팩 30매','2',24000,'miss','매핑필요',''],
+ ['09-24 22:15','nv','스마트스토어','2025092407','웨건 레드','1',59000,'ship','송장반영','406632922990'],
+ ['09-24 21:03','rg','로켓그로스','2213379844','극세사 타월 40x80 그레이','4',19600,'ship','쿠팡 출고',''],
+ ['09-24 19:44','cp','쿠팡','3120549916','시리얼 1.53kg','2',27800,'ship','송장반영','406632922975'],
+ ['09-24 18:20','rg','로켓그로스','2213379601','민트볼 500g','1',11900,'ship','쿠팡 출고',''],
+ ['09-24 16:02','nv','스마트스토어','2025092403','의류 반팔 L','1',19800,'ship','송장반영','406632922961'],
+];
+function today(){
+  const Q=[['신규 주문','발주확인 대기',6,'B11','warn'],['매핑 필요','마스터 미연결 주문',1,'B12','bad'],['로지아이 전달 · 송장 미반영','전달 후 6시간 초과',2,'B11','bad'],
+   ['클레임·반품','입고 판정 대기',1,'B13','warn'],['문의','미답변',3,'B15','warn'],['전송 실패','품절 동기화 3시간 전',1,'F13','bad'],
+   ['자체 안전재고 미만','직접발송 채널 품절 임박',1,'C11','warn'],['RG 대조 불일치','원장 ≠ 쿠팡 실재고',1,'C11','bad']];
+  return head('A11','숫자보다 처리할 건수 · 누르면 해당 목록으로')+`
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--line);background:#fff;margin-bottom:10px">
+  ${Q.map(q=>`<div onclick="go('${q[3]}')" style="padding:12px 14px;border-right:1px solid var(--lineSoft);border-bottom:1px solid var(--lineSoft);cursor:pointer">
+   <div style="display:flex;justify-content:space-between;align-items:baseline"><b>${q[0]}</b><span style="font-family:var(--mono);color:var(--inkMute);font-size:10.5px">${q[3]} →</span></div>
+   <div style="font-family:var(--mono);font-size:26px;margin:4px 0;color:${q[2]?(q[4]==='bad'?'var(--accent)':'var(--warn)'):'var(--inkMute)'}">${q[2]}</div>
+   <div style="color:var(--inkSub)">${q[1]}</div></div>`).join('')}</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+   <div class="panel"><h3>오늘 흐름 (표준 상태)</h3><div style="padding:10px;display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+    ${[['신규',6],['발주확인',3],['출고대기',4],['로지아이 전달',2],['송장반영',5],['배송완료',11]].map((x,i)=>`${i?'<span style="color:var(--inkMute)">→</span>':''}<span style="border:1px solid var(--line);padding:4px 8px;background:var(--chrome2)">${x[0]} <b style="font-family:var(--mono)">${x[1]}</b></span>`).join('')}
+    <div style="width:100%;margin-top:8px;color:var(--inkSub)">취소 0 · 반품 1 · 교환 0</div></div></div>
+   <div class="panel"><h3>어제 마감</h3><div class="kv" style="margin:10px"><div>매출</div><div class="num" style="text-align:left">412,300원 · 38건</div><div>로켓그로스</div><div>79% · 30건</div><div>직접발송</div><div>8건 (로지아이 8)</div><div>광고비</div><div>21,400원</div></div></div>
+  </div>`;
+}
+function master(){
+  const M=[
+   ['SKU-0012','극세사 타월 40x80 옐로우','단품','1장','코스트코 12장 팩','×12','쿠팡·RG·네이버',3],
+   ['SKU-0031','시리얼 1.53kg','단품','1봉','코스트코 1봉','×1','쿠팡·네이버',2],
+   ['SKU-0044','핸드워시 공병 번들','세트','공병 2 + 리필 1','구성품 2종','1:N',"쿠팡·RG",1],
+   ['SKU-0045','└ 핸드워시 리필 1L','구성품','1병','코스트코 3병 팩','×3','—',0],
+   ['SKU-0046','└ 공병 500ml','구성품','1개','1688 50개','×50','—',0],
+   ['SKU-0051','민트볼 500g','단품','1통','코스트코 2통 팩','×2','쿠팡·RG·토스',3],
+  ];
+  const rows=M.map(m=>`<tr><td class="num" style="text-align:left">${m[0]}</td><td>${m[1]}</td><td>${m[2]==='세트'?'<span class="st ack">세트</span>':m[2]==='구성품'?'<span class="st" style="background:#f3f5f6;color:#5c6b76">구성품</span>':'단품'}</td>
+   <td>${m[3]}</td><td>${m[4]}</td><td class="num">${m[5]}</td><td>${m[6]}</td><td class="num">${m[7]||''}</td></tr>`).join('');
+  return head('D11','모든 것의 기준 — 주문 매핑·재고·라벨·전송·원가가 이 SKU에 매달린다')+`
+  <div class="q"><div class="qt">조회조건</div><div class="qg"><div class="qf"><label>유형</label><div class="v"><div class="seg"><span class="on">전체</span><span>단품</span><span>세트</span><span>구성품</span></div></div></div>
+   <div class="qf w2"><label>검색</label><div class="v"><input class="i" style="flex:1" placeholder="SKU · 상품명 · 바코드"></div></div></div><div class="qa"><button class="btn dark">검색</button></div></div>
+  <div class="bar"><span class="cnt">조회 <b>6</b>건</span><span class="sep"></span><button class="btn pri">SKU 등록</button><button class="btn">세트 구성</button><button class="btn">라벨 인쇄</button><div class="r"><button class="btn">엑셀 ↓</button></div></div>
+  <div class="gridwrap"><table><thead><tr><th>SKU</th><th>상품명</th><th>유형</th><th>판매단위</th><th>매입단위</th><th class="num">소분 배수</th><th>연결 채널</th><th class="num">채널상품 수</th></tr></thead><tbody>${rows}</tbody></table></div>
+  <div class="status"><span>세트가 팔리면 구성품 재고가 차감된다</span><span>매입 1팩 입고 = 판매단위 × 소분 배수로 원장에 들어간다</span></div>`;
+}
+function orders(){
+  const rows=ORD.map((r,i)=>`<tr class="${i==1?'focus':''} ${i==0||i==3?'sel':''}" onclick="detail(${i})">
+   <td><input type="checkbox" ${i==0||i==3?'checked':''}></td><td class="num">${r[0]}</td><td><span class="ch ${r[1]}">${r[2]}</span></td>
+   <td class="num">${r[3]}</td><td>${r[4]}</td><td class="num">${r[5]}</td><td class="num">${r[6].toLocaleString()}</td>
+   <td><span class="st ${r[7]}">${r[8]}</span></td><td class="num" style="color:var(--inkSub)">${r[9]}</td></tr>`).join('');
+  return head('B11','Enter = 검색 · 행 클릭 = 상세')+`
+  <div class="q"><div class="qt">조회조건</div><div class="qg">
+   <div class="qf"><label>기간</label><div class="v"><div class="seg"><span>오늘</span><span class="on">7일</span><span>30일</span><span>직접</span></div></div></div>
+   <div class="qf"><label>채널</label><div class="v"><select><option>전체 (4)</option></select></div></div>
+   <div class="qf"><label>상태</label><div class="v"><select><option>전체</option><option>신규</option><option>발주확인</option><option>출고대기 (재고 할당)</option><option>로지아이 전달 · 송장 미반영</option><option>송장반영 (재고 차감)</option><option>배송완료</option><option>취소·반품·교환</option><option>매핑필요</option></select></div></div>
+   <div class="qf"><label>배송</label><div class="v"><div class="seg"><span class="on">전체</span><span>직접발송</span><span>로켓그로스</span></div></div></div>
+   <div class="qf w2"><label>검색</label><div class="v"><select><option>주문번호</option><option>상품명</option><option>수취인</option><option>송장번호</option></select><input class="i" style="flex:1" placeholder=""></div></div>
+  </div><div class="qa"><button class="btn">초기화</button><button class="btn dark">검색</button></div></div>
+  <div class="bar"><span class="cnt">조회 <b>128</b>건 · 선택 <b>2</b></span><span class="sep"></span>
+   <button class="btn pri">발주확인</button><button class="btn">매핑하기</button><button class="btn">메모</button>
+   <div class="r"><button class="btn">⟳ 지금 수집</button><button class="btn">엑셀 ↓</button><button class="btn">⚙ 컬럼</button></div></div>
+  <div class="gridwrap"><table><thead><tr><th style="width:28px"><input type="checkbox"></th><th>주문일시</th><th>채널</th><th>주문번호</th><th>상품 (마스터 기준)</th><th class="num">수량</th><th class="num">결제금액</th><th>상태</th><th>송장</th></tr></thead>
+  <tbody>${rows}</tbody><tfoot><tr><td></td><td colspan="4">합계 (조회 128건)</td><td class="num">312</td><td class="num">1,248,400</td><td></td><td></td></tr></tfoot></table></div>
+  <div class="status"><span>조회 0.4초</span><span>마지막 수집 10:12 (15분 주기)</span><span>매핑필요 <b style="color:var(--accent)">1</b></span><span class="r">1 / 7 페이지 · 20행</span></div>`;
+}
+function stock(){
+  // 상품, 자체보관, RG원장, RG실재고, 할당(자체), 할당(RG), 안전재고
+  const S=[
+   ['극세사 타월 40x80 옐로우',12,85,85,1,0,5],['극세사 타월 40x80 그레이',6,38,38,0,4,5],
+   ['시리얼 1.53kg',14,0,null,2,0,5],['세차타월 노랑 10매',30,0,null,1,0,10],
+   ['핸드워시 공병 번들',9,57,54,0,3,5],['마스크팩 30매',8,0,null,2,0,10],['민트볼 500g',0,21,21,0,1,0],
+  ];
+  let t=[0,0];let warn=0,mis=0;
+  const g=v=>v?v:'<span style="color:#b9c3ca">0</span>';
+  const rows=S.map(x=>{const [n,own,rg,rgr,ao,ar,safe]=x;t[0]+=own;t[1]+=rg;
+   const ownAv=Math.max(own-ao-safe,0), rgAv=rg-ar;
+   const diff=rgr===null?'':(rgr===rg?'<span class="okc">일치</span>':`<span class="diff">${rgr-rg} 불일치</span>`); if(rgr!==null&&rgr!==rg)mis++;
+   const low=own>0&&own-ao<safe; if(low)warn++;
+   const bar=(own+rg)?`<div style="display:flex;height:6px;width:80px;background:#eef2f4"><div style="width:${own/(own+rg)*80}px;background:#5c6b76"></div><div style="width:${rg/(own+rg)*80}px;background:#8a5cc7"></div></div>`:'';
+   return `<tr><td>${n}</td><td class="num"><b>${own+rg}</b></td><td>${bar}</td>
+    <td class="num">${g(own)}</td><td class="num">${g(ao)}</td><td class="num">${safe}</td><td class="num" style="background:#f4f7f9"><b>${ownAv}</b></td>
+    <td class="num">${g(rg)}</td><td class="num">${rgr===null?'<span style="color:#b9c3ca">—</span>':rgr}</td><td class="num">${diff}</td><td class="num" style="background:#f7f3fc"><b>${rgAv}</b></td>
+    <td>${low?`<span class="st miss">자체 안전재고 미만</span>`:''}</td></tr>`}).join('');
+  const sub='style="top:27px"';
+  return head('C11','한 상품 = 한 줄 · 가용은 위치별로 따로 · 재고 = 전표의 합계')+`
+  <div class="kpis"><div class="kpi"><small>총 재고</small><div>${t[0]+t[1]}</div></div><div class="kpi"><small>자체보관</small><div>${t[0]}</div></div>
+   <div class="kpi"><small>로켓그로스</small><div>${t[1]}</div></div><div class="kpi bad"><small>RG 대조 불일치</small><div>${mis}</div></div><div class="kpi bad"><small>자체 안전재고 미만</small><div>${warn}</div></div></div>
+  <div class="q"><div class="qt">조회조건</div><div class="qg">
+   <div class="qf"><label>보관</label><div class="v"><div class="seg"><span class="on">전체</span><span>자체보관 있음</span><span>RG 있음</span></div></div></div>
+   <div class="qf"><label>상태</label><div class="v"><select><option>전체</option><option>RG 불일치</option><option>안전재고 미만</option></select></div></div>
+   <div class="qf"><label>상품</label><div class="v"><input class="i" style="flex:1"></div></div></div>
+   <div class="qa"><button class="btn dark">검색</button></div></div>
+  <div class="bar"><span class="cnt">조회 <b>7</b>건</span><span class="sep"></span><button class="btn pri">입고 등록</button><button class="btn">RG 입고 (자체→RG 이동)</button><button class="btn">조정 전표</button><button class="btn">품절·재고 전송</button>
+   <div class="r"><button class="btn">RG 실재고 새로 대조</button><button class="btn">엑셀 ↓</button></div></div>
+  <div class="gridwrap"><table><thead>
+   <tr><th rowspan="2">상품 (마스터 SKU · 판매단위)</th><th rowspan="2" class="num">총 재고</th><th rowspan="2">구성</th>
+    <th colspan="4" style="text-align:center;border-bottom:1px solid var(--lineSoft);background:#d3dade">자체보관 → 직접발송 채널 (네이버·토스·쿠팡 판매자배송)</th>
+    <th colspan="4" style="text-align:center;border-bottom:1px solid var(--lineSoft);background:#ddd3ea">로켓그로스 → 쿠팡 RG 주문만</th><th rowspan="2">경고</th></tr>
+   <tr><th class="num" ${sub}>재고</th><th class="num" ${sub}>할당</th><th class="num" ${sub}>안전</th><th class="num" ${sub}>채널 전송값</th>
+       <th class="num" ${sub}>원장</th><th class="num" ${sub}>쿠팡 실재고</th><th class="num" ${sub}>대조</th><th class="num" ${sub}>가용</th></tr></thead>
+   <tbody>${rows}</tbody></table></div>
+  <div class="status"><span>채널 전송값 = 자체 재고 − 할당 − 안전재고 (RG 재고는 절대 합산하지 않음)</span><span>할당 = 주문 수집 시 · 차감 = 송장 반영 시</span><span class="r">행 클릭 → 입출 이력(C17)</span></div>`;
+}
+function label(){
+  const T=[['품질표시 2×3','공산품·의류',1],['영양성분 2×3','식품',0],['화장품 2×3','화장품',0],['이미지 2×2','박스 부착',0],['이미지 2×3','',0],['이미지 3×3','소형',0],['이벤트 카드','동봉용',0]];
+  const cell=on=>on?`<div class="lb"><b>극세사 타월 40x80</b>
+    <div class="row"><span>품명</span><span>극세사 수건</span></div><div class="row"><span>소재</span><span>폴리에스터 80% 나일론 20%</span></div>
+    <div class="row"><span>크기</span><span>40×80cm</span></div><div class="row"><span>제조국</span><span>중국</span></div>
+    <div class="row"><span>수입원</span><span>(판매자 정보)</span></div><div class="row"><span>A/S</span><span>고객센터</span></div><div class="bc"></div></div>`:`<div class="lb off">건너뜀</div>`;
+  return head('C13','A4 · 소분 라벨 — 송장 라벨은 로지아이(B14)')+`
+  <div class="lab">
+   <div class="panel"><h3>템플릿</h3>${T.map(t=>`<div class="tpl ${t[2]?'on':''}"><span>${t[0]}</span><small>${t[1]}</small></div>`).join('')}
+    <h3 style="border-top:1px solid var(--line)">저장된 라벨</h3>
+    <div class="tpl"><span>극세사 타월 옐로우</span><small>09-20</small></div><div class="tpl"><span>시리얼 소분</span><small>09-11</small></div><div class="tpl"><span>민트볼 500g</span><small>08-30</small></div></div>
+   <div class="panel"><h3>미리보기 — A4 1장 · 6칸 중 4칸 인쇄</h3><div class="paperwrap"><div class="paper">${[1,1,1,1,0,0].map(cell).join('')}</div></div></div>
+   <div class="panel"><h3>내용</h3><div class="form">
+     <div class="f"><span>상품</span><select><option>극세사 타월 40x80 옐로우 (마스터)</option></select></div>
+     <div class="f"><span>품명</span><input class="i" value="극세사 수건"></div>
+     <div class="f"><span>소재</span><input class="i" value="폴리에스터 80% 나일론 20%"></div>
+     <div class="f"><span>크기</span><input class="i" value="40×80cm"></div>
+     <div class="f"><span>제조국</span><input class="i" value="중국"></div>
+     <div class="f"><span>수입원</span><input class="i" value="(판매자 정보)"></div>
+     <div class="f"><span>바코드</span><input class="i" value="상품마스터에서 자동"></div>
+     <div class="f"><span>시작 칸</span><select><option>1번 칸부터</option><option>5번 칸부터 (쓰다 남은 용지)</option></select></div>
+     <div class="f"><span>매수</span><input class="i" value="4"></div>
+   </div>
+   <div class="note">🔵 입고(C12) 등록 시 "라벨 인쇄" 버튼으로 이 화면이 그 상품·수량으로 열립니다.</div>
+   <div class="da"><button class="btn">저장</button><button class="btn">PDF</button><button class="btn pri" style="margin-left:auto">🖨 인쇄</button></div></div>
+  </div>`;
+}
+function stub(code){
+  return head(code)+`<div class="q"><div class="qt">조회조건</div><div style="padding:10px;color:var(--inkMute)">이 메뉴의 조회조건</div></div>
+  <div class="bar"><span class="cnt">조회 <b>—</b>건</span><div class="r"><button class="btn">엑셀 ↓</button></div></div>
+  <div class="gridwrap" style="display:flex;align-items:center;justify-content:center;color:var(--inkMute)">같은 틀(조회조건 → 결과 툴바 → 그리드 → 상태바)로 들어갑니다</div>`;
+}
+function detail(i){
+  const r=ORD[i],d=document.getElementById('detail');d.classList.remove('hide');
+  d.innerHTML=`<div class="dh">주문 상세 <span class="ch ${r[1]}">${r[2]}</span><span class="x" onclick="this.closest('.detail').classList.add('hide')">✕</span></div>
+  <div class="db"><div class="kv"><div>주문번호</div><div class="num" style="text-align:left">${r[3]}</div><div>주문일시</div><div>2026-${r[0]}</div>
+   <div>수취인</div><div>김○○ · 010-****-1234</div><div>배송지</div><div>서울 성북구 ○○로 12</div><div>결제금액</div><div>${r[6].toLocaleString()}원</div></div>
+   <div class="sec">상품 매핑</div><div class="kv"><div>채널 상품</div><div>${r[4]}</div><div>마스터</div><div>${r[7]==='miss'?'<span class="st miss">미매핑 — 매핑 필요</span>':r[4]+' ✓'}</div><div>재고 차감</div><div>${r[7]==='miss'?'보류':r[5]+'개 차감'}</div></div>
+   <div class="sec">처리 이력</div><div class="tl"><div class="ok">주문 수집 <small>${r[0]}</small></div><div class="${r[7]!=='new'?'ok':''}">발주확인 <small>${r[7]!=='new'?'10:13':'—'}</small></div><div class="${r[9]&&r[9].length>6?'ok':''}">로지아이 송장 → 채널 반영 <small>${r[9]&&r[9].length>6?r[9]:'대기'}</small></div></div>
+  </div><div class="da"><button class="btn pri">발주확인</button><button class="btn">매핑 변경</button><button class="btn">채널에서 열기 ↗</button><button class="btn">메모</button></div>`;
+  document.querySelectorAll('tbody tr').forEach((tr,j)=>tr.classList.toggle('focus',j===i));
+}
+function go(code){
+  cur=code;if(!tabs.includes(code))tabs.push(code);
+  side();tabbar();
+  const p=document.getElementById('page');
+  p.innerHTML=code==='A11'?today():code==='B11'?orders():code==='C11'?stock():code==='C13'?label():code==='D11'?master():stub(code);
+  document.getElementById('detail').classList.add('hide');
+  if(code==='B11')detail(1);
+}
+go('A11');
+</script>
+</body>
+</html>
