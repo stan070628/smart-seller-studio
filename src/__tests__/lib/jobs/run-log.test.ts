@@ -13,6 +13,7 @@ beforeEach(() => {
   mockQuery.mockImplementation(async (sql: string) =>
     sql.startsWith('insert') ? { rows: [{ id: 42 }] } : { rows: [] },
   );
+  mockSend.mockResolvedValue(undefined);
 });
 
 describe('withJobRun', () => {
@@ -48,5 +49,13 @@ describe('withJobRun', () => {
     mockQuery.mockRejectedValue(new Error('db down'));
     const result = await withJobRun('stock-sync', async () => ({ value: 'still', counts: {} }));
     expect(result).toBe('still');
+  });
+
+  it('텔레그램 전송이 실패해도 원래 오류를 던진다', async () => {
+    mockSend.mockRejectedValueOnce(new Error('TELEGRAM_BOT_TOKEN 없음'));
+    await expect(
+      withJobRun('stock-sync', async () => { throw new Error('원래 오류'); }),
+    ).rejects.toThrow('원래 오류');
+    expect(mockQuery.mock.calls[1][1][1]).toBe('failed');
   });
 });

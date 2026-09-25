@@ -51,7 +51,11 @@ export async function withJobRun<T>(
     const msg = maskPII(e instanceof Error ? e.message : String(e));
     await finish('failed', {}, msg);
     const chatId = process.env.JOB_ALERT_TELEGRAM_CHAT_ID ?? '';
-    if (chatId) await sendTelegramMessage(chatId, `🔴 작업 실패 [${job}]: ${msg}`);
+    if (chatId) {
+      await sendTelegramMessage(chatId, `🔴 작업 실패 [${job}]: ${msg}`).catch((te) =>
+        console.error('[job_runs] 실패 경보 전송 실패:', te),
+      );
+    }
     throw e;
   }
 }
