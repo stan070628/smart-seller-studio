@@ -1,9 +1,8 @@
 name: 재고 품절 동기화
 
 on:
-  # 3시간마다 (Vercel Hobby는 cron 하루 1회 제한이라 여기서 호출한다)
-  schedule:
-    - cron: '0 */3 * * *'
+  # 예약 실행은 Supabase pg_cron으로 옮겼다(supabase/migrations/108_pg_cron_stock_sync.sql).
+  # GitHub 예약이 5~6시간 간격으로 밀려서다(2026-09-25 실측). 여기는 수동 실행용으로만 남긴다.
   workflow_dispatch:
     inputs:
       dry_run:
@@ -24,6 +23,6 @@ jobs:
         run: |
           code=$(curl -sS -o body.json -w '%{http_code}' --max-time 320 \
             -H "Authorization: Bearer $CRON_SECRET" \
-            "$APP_URL/api/cron/stock-sync?dryRun=$DRY")
+            "$APP_URL/api/cron/stock-sync?dryRun=$DRY&trigger=manual")
           cat body.json
           test "$code" = "200"
