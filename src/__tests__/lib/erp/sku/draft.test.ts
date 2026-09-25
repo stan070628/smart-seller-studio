@@ -322,4 +322,45 @@ describe('applyOverrides', () => {
     expect(d.links).toEqual(raw.links);
     expect(d.listings).toEqual(raw.listings);
   });
+
+  // --- 재검토 반영 1: Wing·RG 짝 검증 ---
+  it('[재검토 1] splitListing으로 Wing만 옮기면 Wing·RG 짝이 갈라져 던진다', () => {
+    const raw = buildDraft(base);
+    // 다슈 왁스 '1개' 옵션: wingVid 11 / rgVid 21이 같은 아이템의 짝이다.
+    expect(() => applyOverrides(raw, {
+      splitListing: [{ listingKey: 'coupang_wing|11|', toSkuKey: 'cp:100:분리' }],
+    })).toThrow('Wing·RG 짝이 다른 SKU를 가리킨다: coupang_wing|11| / coupang_rg|21| — 둘 다 splitListing 하라');
+  });
+
+  it('[재검토 1] Wing·RG를 함께 splitListing하면 통과한다', () => {
+    const raw = buildDraft(base);
+    const d = applyOverrides(raw, {
+      splitListing: [
+        { listingKey: 'coupang_wing|11|', toSkuKey: 'cp:100:분리' },
+        { listingKey: 'coupang_rg|21|', toSkuKey: 'cp:100:분리' },
+      ],
+    });
+    expect(d.links.find((l) => l.listingKey === 'coupang_wing|11|')!.skuKey).toBe('cp:100:분리');
+    expect(d.links.find((l) => l.listingKey === 'coupang_rg|21|')!.skuKey).toBe('cp:100:분리');
+  });
+
+  // --- 재검토 반영 2: 흡수된 SKU를 splitListing으로 되살리지 못한다 ---
+  it('[재검토 2] mergeSkus로 흡수된 키를 splitListing의 toSkuKey로 쓰면 던진다', () => {
+    const raw = buildDraft(base);
+    expect(() => applyOverrides(raw, {
+      mergeSkus: [['cp:200:블랙', 'cp:200:레드']],
+      splitListing: [{ listingKey: 'coupang_wing|31|', toSkuKey: 'cp:200:레드' }],
+    })).toThrow('흡수된 SKU를 되살리려 한다: cp:200:레드');
+  });
+
+  // --- 재검토 반영 3: splitListing이 legacyProductCostIds를 물려받는다 ---
+  it('[재검토 3] splitListing으로 만든 새 SKU가 원 SKU의 legacyProductCostIds를 물려받는다', () => {
+    const raw = buildDraft(base);
+    // coupang_wing|13|(다슈 3개, RG 없음)을 분리 — Wing·RG 짝 검증에 걸리지 않는다.
+    const d = applyOverrides(raw, {
+      splitListing: [{ listingKey: 'coupang_wing|13|', toSkuKey: 'cp:100:분리2' }],
+    });
+    expect(d.skus.find((s) => s.key === 'cp:100:')?.legacyProductCostIds).toEqual(['pc-dasu']);
+    expect(d.skus.find((s) => s.key === 'cp:100:분리2')?.legacyProductCostIds).toEqual(['pc-dasu']);
+  });
 });

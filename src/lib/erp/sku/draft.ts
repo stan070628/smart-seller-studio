@@ -311,6 +311,10 @@ export function applyOverrides(draft: Draft, o: Overrides): Draft {
     return [...map.values()];
   };
 
+  // mergeSkus로 지워진 키를 splitListing이 toSkuKey로 되살리면 legacyProductCostIds 등
+  // 병합 시 누적한 정보가 조용히 사라진다 — 기억해두고 되살리기를 막는다.
+  const absorbed = new Set<string>();
+
   for (const [keep, ...absorb] of mergeSkus) {
     must(keep);
     for (const a of absorb) {
@@ -319,12 +323,14 @@ export function applyOverrides(draft: Draft, o: Overrides): Draft {
       const target = skus.get(keep)!;
       target.legacyProductCostIds = [...new Set([...target.legacyProductCostIds, ...skus.get(a)!.legacyProductCostIds])].sort();
       skus.delete(a);
+      absorbed.add(a);
       links = links.map((l) => (l.skuKey === a ? { ...l, skuKey: keep } : l));
     }
   }
   links = dedupLinks(links);
 
   for (const sp of splitListing) {
+    if (absorbed.has(sp.toSkuKey)) throw new Error(`흡수된 SKU를 되살리려 한다: ${sp.toSkuKey}`);
     const targetLinks = links.filter((l) => l.listingKey === sp.listingKey);
     if (targetLinks.length === 0) throw new Error(`overrides가 없는 리스팅을 가리킨다: ${sp.listingKey}`);
     if (!skus.has(sp.toSkuKey)) {
@@ -335,7 +341,9 @@ export function applyOverrides(draft: Draft, o: Overrides): Draft {
         optionLabel: sp.optionLabel ?? origin.optionLabel,
         baseUnitLabel: null,
         status: 'active',
-        legacyProductCostIds: [],
+        // 분리 전 SKU가 참조하던 옛 원가 행을 그대로 물려받는다 — 두 SKU가 같은 옛 행을 공유하는
+        // 상태는 legacy_spans_skus와 같은 상황이라 여기서 끊지 않는다.
+        legacyProductCostIds: [...origin.legacyProductCostIds],
       });
     }
     links = links.map((l) => (l.listingKey === sp.listingKey ? { ...l, skuKey: sp.toSkuKey } : l));
@@ -374,6 +382,27 @@ export function applyOverrides(draft: Draft, o: Overrides): Draft {
     if (count >= 2 && l.linkMode === 'single') return { ...l, linkMode: 'any_of' };
     return l;
   });
+
+  // Wing·RG 짝 검증: 같은 쿠팡 아이템의 Wing·RG 리스팅(altProductId·label이 같다)은
+  // 항상 같은 SKU를 가리켜야 한다. splitListing 등으로 한쪽만 옮기면 재고 이관이 반쪽만 되므로
+  // 여기서 막는다 — 둘 다 옮기라고 안내한다.
+  const wingRgPairs = new Map<string, { wing?: string; rg?: string }>();
+  for (const l of listings) {
+    if (l.channel !== 'coupang_wing' && l.channel !== 'coupang_rg') continue;
+    const groupKey = `${l.altProductId ?? ''}|${l.label ?? ''}`;
+    const entry = wingRgPairs.get(groupKey) ?? {};
+    if (l.channel === 'coupang_wing') entry.wing = l.key;
+    else entry.rg = l.key;
+    wingRgPairs.set(groupKey, entry);
+  }
+  const skusOfListing = (key: string) => new Set(links.filter((l) => l.listingKey === key).map((l) => l.skuKey));
+  for (const { wing, rg } of wingRgPairs.values()) {
+    if (!wing || !rg) continue;
+    const wingSkus = skusOfListing(wing);
+    const rgSkus = skusOfListing(rg);
+    const same = wingSkus.size === rgSkus.size && [...wingSkus].every((k) => rgSkus.has(k));
+    if (!same) throw new Error(`Wing·RG 짝이 다른 SKU를 가리킨다: ${wing} / ${rg} — 둘 다 splitListing 하라`);
+  }
 
   return { skus: [...skus.values()], listings, links, issues: draft.issues };
 }

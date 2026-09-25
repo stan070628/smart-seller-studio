@@ -10,10 +10,10 @@ const LABEL: Record<IssueKind, { title: string; decide: boolean; hint: string }>
   sync_link_unresolved: { title: '품절 동기화 연결을 찾지 못함', decide: true, hint: '판매 종료 상품이면 excludeListings에 넣는다' },
   legacy_listing_unresolved: { title: '옛 매핑의 쿠팡 옵션이 현재 상품에 없음', decide: false, hint: '판매 종료·삭제 옵션. 과거 판매 대조용으로만 남는다' },
   multi_vid_listing: { title: '같은 SKU의 수량 옵션 여러 개가 붙은 채널 리스팅', decide: false, hint: '네이버 단일상품에 수량만 다른 쿠팡 옵션 여러 개. 최소 배수를 적용했다' },
-  any_of_listing: { title: '여러 SKU 중 하나를 파는 채널 리스팅', decide: false, hint: '재고 전송은 연결 SKU 합계, 판매 SKU는 주문 옵션으로 가린다(1-C)' },
-  channel_quantity_mismatch: { title: '채널 옵션 수량이 쿠팡과 다름', decide: true, hint: 'setMultiplier로 채널 배수를 정한다' },
+  any_of_listing: { title: '여러 SKU 중 하나를 파는 채널 리스팅', decide: false, hint: '재고 전송은 연결 SKU의 Σ floor(가용/배수), 판매 SKU는 주문 옵션으로 가리고 옵션이 없으면(네이버 단일상품) 수동 귀속 대기열로 보낸다(1-C)' },
+  channel_quantity_mismatch: { title: '채널 옵션 수량이 쿠팡과 다름', decide: true, hint: 'setMultiplier로 채널 배수를 정한다. 토스 옵션명에 수량이 없으면 쿠팡 단위를 그대로 판다고 보고 무시해도 된다' },
   legacy_vid_multi_mapped: { title: '쿠팡 옵션 하나를 옛 원가 행 여러 개가 가리킴', decide: true, hint: '어느 행이 맞는지 확인(흰티 M/L 병합 의심 등)' },
-  suspect_merge: { title: '서로 다른 실물이 한 SKU로 묶였을 수 있음', decide: true, hint: 'splitListing으로 떼어낸다' },
+  suspect_merge: { title: '서로 다른 실물이 한 SKU로 묶였을 수 있음', decide: true, hint: '같은 쿠팡 옵션의 Wing·RG 리스팅을 함께 splitListing으로 떼어낸다' },
   quantity_invalid: { title: '수량 0', decide: true, hint: '옵션명을 확인한다' },
 };
 
