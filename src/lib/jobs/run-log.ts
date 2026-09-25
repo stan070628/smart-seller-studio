@@ -19,9 +19,10 @@ export async function withJobRun<T>(
   fn: () => Promise<JobOutcome<T>>,
   opts: { trigger?: 'cron' | 'manual' } = {},
 ): Promise<T> {
-  const pool = getSourcingPool();
-  let runId: number | null = null;
+  let pool: ReturnType<typeof getSourcingPool> | null = null;
+  let runId: string | null = null;
   try {
+    pool = getSourcingPool();
     const { rows } = await pool.query(
       'insert into erp.job_runs (job, trigger) values ($1, $2) returning id',
       [job, opts.trigger ?? 'cron'],
@@ -32,7 +33,7 @@ export async function withJobRun<T>(
   }
 
   const finish = async (status: 'ok' | 'failed', counts: Record<string, number>, error: string | null) => {
-    if (runId === null) return;
+    if (runId === null || !pool) return;
     try {
       await pool.query(
         'update erp.job_runs set finished_at = now(), status = $2, counts = $3::jsonb, error = $4 where id = $1',
