@@ -741,6 +741,8 @@ select status_code from net._http_response order by created desc limit 3;
 - Create: `scripts/ops/investcock-dump.sh`
 - Create: `scripts/ops/compare-rowcounts.mjs`
 
+2026-09-25 읽기 전용 점검: 사용자 정의 타입·함수 기본값·트리거·뷰 의존·외부 FK 0건, nextval 23개 전부 소유 시퀀스, RLS 50/50 on·정책 0.
+
 - [ ] **Step 1: 테이블 목록 (투자콕 `backend/models.py`의 `__tablename__` 50개, 2026-09-25 추출)**
 
 ```text
@@ -885,6 +887,8 @@ console.log((await c.query('select job_name,max(started_at) from job_run_log gro
 Run: `bash scripts/ops/investcock-dump.sh`
 Expected: `/Volumes/Mac_SSD/backups/investcock/investcock-YYYYMMDD-HHMM.sql (약 5M)`. SSD가 없으면 멈춘다.
 
+복원은 반드시 `psql -f`로 한다 — 덤프의 `\restrict` 메타명령 때문에 대시보드 SQL 편집기에 붙여넣으면 실패한다.
+
 - [ ] **Step 3: 새 DB에 복원**
 
 ```bash
@@ -897,7 +901,9 @@ Expected: 오류 없이 종료. 확장 누락(`uuid-ossp`·`pgcrypto` 등) 오�
 - [ ] **Step 4: 행 수 대조**
 
 Run: `node scripts/ops/compare-rowcounts.mjs INVESTCOCK_DB_URL`
-Expected: `50/50 일치`, exit 0. 다르면(덤프 뒤 투자콕이 기록함) Step 2부터 다시.
+Expected: `50/50 일치`, exit 0. 다르면(덤프 뒤 투자콕이 기록함) Step 2부터 다시. 로그 표(job_run_log·ic_llm_call_logs·watch_alerts)는 덤프 이후 투자콕이 계속 쓰면 불일치가 난다 — 불일치가 이 표들뿐이고 원본이 더 많으면 Step 5 교체 직후 다시 덤프·복원한다.
+
+- [ ] **Step 4b: 새 프로젝트 공개 API 차단 확인** — 50개 표 전부 `relrowsecurity=true`인지 확인(원본은 전부 RLS on·정책 0이라 anon 차단 상태). 하나라도 false면 `revoke all on all tables in schema public from anon, authenticated;` 실행.
 
 - [ ] **Step 5: 🔴 사용자 작업 — 투자콕 접속 정보 교체** (비밀값이라 사용자가 직접 한다)
   1. Render → `investcock-api` → Environment → `DATABASE_URL`을 새 프로젝트 연결 문자열로 교체 → 저장(재배포됨).
