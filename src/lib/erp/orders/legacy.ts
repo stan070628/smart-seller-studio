@@ -45,10 +45,13 @@ export function pickLegacy(l: OrderLine, r: Resolution, idx: LegacyIndex): Legac
   const matches = direct(l, idx);
   if (candidates.length > 0) {
     const hit = matches.find((m) => candidates.includes(m.productCostId));
+    // 직접 매칭으로 고른 옛 상품은 옛 불러오기와 같은 단위로 센다: 쿠팡 pcc = 주문 수량 × unit_multiplier,
+    // RG vendor_item_id·네이버 채널상품번호 = 주문 수량 그대로(direct()가 배수 1로 준다). SKU 배수와 옛 상품 단위는 다를 수 있다.
+    if (hit) return { productCostId: hit.productCostId, qty: l.qty * Math.max(1, hit.multiplier) };
     const qty = r.alloc.length > 0
       ? r.alloc.reduce((s, a) => s + a.qty, 0)
       : l.qty * Math.min(...r.listingSkus.map((s) => s.multiplier));
-    return { productCostId: hit ? hit.productCostId : candidates[0], qty };
+    return { productCostId: candidates[0], qty };
   }
   if (matches.length > 0) return { productCostId: matches[0].productCostId, qty: l.qty * Math.max(1, matches[0].multiplier) };
   return null;
@@ -79,8 +82,19 @@ export interface LegacyRow {
   shippingSource: ShippingSource;
 }
 
-/** 키별로 묶어 쓸 행·무효화할 키를 정한다. 살아 있는 라인 = 팔림 + 옛 상품 있음 + 수량 > 0 */
-export function planLegacy(lines: LegacyLine[]): { upsert: LegacyRow[]; voidKeys: string[] } {
+export interface LegacyWarning {
+  key: string;
+  /** 팔림 라인이 있는데 옛 상품을 하나도 못 골랐다 — 기존 행은 그대로 둔다(쓰지도 무효화하지도 않는다) */
+  reason: 'sold_without_product_cost';
+}
+
+/**
+ * 키별로 묶어 쓸 행·무효화할 키를 정한다. 살아 있는 라인 = 팔림 + 옛 상품 있음 + 수량 > 0.
+ * 합산 단위: 같은 키 = 같은 주문·같은 상품 키(분리배송 박스)라 라인들은 같은 리스팅·같은 옛 상품을 고른다 — legacyQty를 그냥 더한다.
+ *   라인마다 옛 상품이 다르게 골라지면(연결 변경 직후 등) 첫 라인의 옛 상품에 다른 단위(bundle 구성·배수)의 수량이 섞일 수 있다.
+ *   지금 bundle 리스팅은 0건(2026-09-26 실측)이라 이 경우를 따로 가르지 않는다.
+ */
+export function planLegacy(lines: LegacyLine[]): { upsert: LegacyRow[]; voidKeys: string[]; warnings: LegacyWarning[] } {
   const groups = new Map<string, LegacyLine[]>();
   for (const l of lines) {
     const g = groups.get(l.legacyKey) ?? [];
@@ -89,10 +103,13 @@ export function planLegacy(lines: LegacyLine[]): { upsert: LegacyRow[]; voidKeys
   }
   const upsert: LegacyRow[] = [];
   const voidKeys: string[] = [];
+  const warnings: LegacyWarning[] = [];
   for (const [key, g] of groups) {
     const live = g.filter((l) => SOLD.has(l.status) && l.productCostId !== null && (l.legacyQty ?? 0) > 0);
     if (live.length === 0) {
-      if (g.some((l) => VOID.has(l.status))) voidKeys.push(key);
+      // 팔림인데 옛 상품이 사라졌다(연결 해제 등) — 판매는 유효하므로 무효화하지 않고 알린다
+      if (g.some((l) => SOLD.has(l.status) && l.productCostId === null)) warnings.push({ key, reason: 'sold_without_product_cost' });
+      else if (g.some((l) => VOID.has(l.status))) voidKeys.push(key);
       continue;
     }
     const saleAmount = live.reduce((s, l) => s + l.amount, 0);
@@ -110,5 +127,5 @@ export function planLegacy(lines: LegacyLine[]): { upsert: LegacyRow[]; voidKeys
       shippingSource: SHIPPING_SOURCE[first.channel],
     });
   }
-  return { upsert, voidKeys };
+  return { upsert, voidKeys, warnings };
 }

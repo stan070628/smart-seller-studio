@@ -37,7 +37,7 @@ describe('resolveLine', () => {
     expect(resolveLine(line({ channel: 'coupang_rg' }), new ListingIndex([L({})])).reason).toBe('no_listing');
   });
 
-  it('네이버: (원상품번호, optionCode) → 없으면 그 상품의 유일한 리스팅 → 아니면 option_unmatched', () => {
+  it('네이버: (원상품번호, optionCode) → 없으면 그 상품의 옵션 없는(\'\') 리스팅 → 아니면 option_unmatched', () => {
     const idx = new ListingIndex([
       L({ listingId: 10, channel: 'naver', productId: '500', optionKey: '111', skus: [{ skuId: 1, multiplier: 1 }] }),
       L({ listingId: 11, channel: 'naver', productId: '500', optionKey: '112', skus: [{ skuId: 2, multiplier: 1 }] }),
@@ -50,7 +50,7 @@ describe('resolveLine', () => {
     expect(resolveLine(nv('500', '999'), idx).reason).toBe('option_unmatched');
   });
 
-  it('토스: 정확 일치 → 옵션명 정규화 일치 → 유일한 리스팅 → option_unmatched', () => {
+  it('토스: 정확 일치 → 옵션명 정규화 일치 → option_unmatched', () => {
     const idx = new ListingIndex([
       L({ listingId: 20, channel: 'toss', productId: '800', optionKey: '블랙 / L', skus: [{ skuId: 5, multiplier: 1 }] }),
       L({ listingId: 21, channel: 'toss', productId: '800', optionKey: '화이트 / L', skus: [{ skuId: 6, multiplier: 1 }] }),
@@ -60,6 +60,33 @@ describe('resolveLine', () => {
     expect(resolveLine(tv('색상: 화이트 / 사이즈: L'), idx).listingId).toBe(21);
     expect(resolveLine(tv('화이트/L'), idx).listingId).toBe(21);
     expect(resolveLine(tv('그레이 / L'), idx).reason).toBe('option_unmatched');
+  });
+
+  it('옵션 키가 다른 유일한 리스팅은 고르지 않는다(모르는 옵션은 미귀속) — 네이버·토스', () => {
+    const nIdx = new ListingIndex([L({ listingId: 30, channel: 'naver', productId: '700', optionKey: '111', skus: [{ skuId: 1, multiplier: 1 }] })]);
+    expect(resolveLine(line({ channel: 'naver', productId: '700', optionKey: '222' }), nIdx))
+      .toMatchObject({ attribution: 'unattributed', reason: 'option_unmatched', alloc: [], listingId: null });
+    const tIdx = new ListingIndex([L({ listingId: 31, channel: 'toss', productId: '900', optionKey: '블랙 / L', skus: [{ skuId: 2, multiplier: 1 }] })]);
+    expect(resolveLine(line({ channel: 'toss', productId: '900', optionKey: '화이트 / M' }), tIdx))
+      .toMatchObject({ attribution: 'unattributed', reason: 'option_unmatched', alloc: [], listingId: null });
+  });
+
+  it('주문 옵션 키가 비었으면 그 상품의 유일한 리스팅을 쓴다(둘 이상이면 option_unmatched)', () => {
+    const one = new ListingIndex([L({ listingId: 32, channel: 'toss', productId: '901', optionKey: '단일', skus: [{ skuId: 3, multiplier: 1 }] })]);
+    expect(resolveLine(line({ channel: 'toss', productId: '901', optionKey: '' }), one)).toMatchObject({ listingId: 32, attribution: 'mapped' });
+    const two = new ListingIndex([
+      L({ listingId: 33, channel: 'naver', productId: '702', optionKey: '1', skus: [{ skuId: 4, multiplier: 1 }] }),
+      L({ listingId: 34, channel: 'naver', productId: '702', optionKey: '2', skus: [{ skuId: 5, multiplier: 1 }] }),
+    ]);
+    expect(resolveLine(line({ channel: 'naver', productId: '702', optionKey: '' }), two).reason).toBe('option_unmatched');
+  });
+
+  it('옵션이 안 맞아도 그 상품에 옵션 없는(\'\') 리스팅이 있으면 그것(단일상품)', () => {
+    const idx = new ListingIndex([
+      L({ listingId: 35, channel: 'naver', productId: '703', optionKey: '', skus: [{ skuId: 6, multiplier: 1 }] }),
+      L({ listingId: 36, channel: 'naver', productId: '703', optionKey: '9', skus: [{ skuId: 8, multiplier: 1 }] }),
+    ]);
+    expect(resolveLine(line({ channel: 'naver', productId: '703', optionKey: '5' }), idx).listingId).toBe(35);
   });
 
   it('옵션명 정규화: 칸마다 「이름:」 접두와 공백을 뗀다', () => {

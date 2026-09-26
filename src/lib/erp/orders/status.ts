@@ -20,21 +20,28 @@ const NAVER: Record<string, StdStatus> = {
 };
 const NAVER_CANCEL_OPEN = new Set(['CANCEL_REQUEST', 'CANCELING']);
 const NAVER_RETURN_OPEN = new Set(['RETURN_REQUEST', 'COLLECTING', 'COLLECT_DONE']);
+const isReject = (s: string | null) => s !== null && /REJECT/.test(s);
 
-/** 네이버 상품주문 상태 + 진행 중 클레임. 끝난 취소·반품은 상품주문 상태 자체가 CANCELED·RETURNED가 된다 */
+/**
+ * 네이버 상품주문 상태 + 진행 중 클레임. 끝난 취소·반품은 상품주문 상태 자체가 CANCELED·RETURNED가 된다.
+ * 직권 취소(ADMIN_CANCEL · ADMIN_CANCELING)는 취소 요청과 같게, 교환 클레임은 거부가 아니면 exchange(팔림 — 차감은 그대로)로 표시한다.
+ */
 export function naverStatus(productOrderStatus: string, claimType: string | null, claimStatus: string | null): StdStatus {
   const base = NAVER[productOrderStatus] ?? 'unknown';
   if (base === 'paid' || base === 'shipping' || base === 'delivered') {
     if (claimType === 'CANCEL' && claimStatus !== null && NAVER_CANCEL_OPEN.has(claimStatus)) return 'cancel_requested';
+    if (claimStatus === 'ADMIN_CANCELING' || (claimType === 'ADMIN_CANCEL' && !isReject(claimStatus))) return 'cancel_requested';
     if (claimType === 'RETURN' && claimStatus !== null && NAVER_RETURN_OPEN.has(claimStatus)) return 'return_requested';
+    if (claimType === 'EXCHANGE' && claimStatus !== null && !isReject(claimStatus)) return 'exchange';
   }
   return base;
 }
 
 // 토스 주문 v2 orderProductStatus 20종(공식 문서 GetOrderHistoriesCursorResponse) + 도착보장의 DELAY_SHIPPING
+//   + REVOKED_REQUEST(구매자가 취소·반품 요청을 철회) → 팔림 기본값 paid. 배송 후 철회여도 paid·delivered는 차감이 같다
 const TOSS: Record<string, StdStatus> = {
   BEFORE_PAYMENT: 'unpaid',
-  PAID: 'paid', PREPARING_PRODUCT: 'paid', DELAY_SHIPPING: 'paid', CLAIM_REJECTED_CANCEL: 'paid',
+  PAID: 'paid', PREPARING_PRODUCT: 'paid', DELAY_SHIPPING: 'paid', CLAIM_REJECTED_CANCEL: 'paid', REVOKED_REQUEST: 'paid',
   DELIVERING: 'shipping',
   DELIVERED: 'delivered', CLAIM_REJECTED_RETURN: 'delivered',
   CONFIRMED_ORDER: 'confirmed',

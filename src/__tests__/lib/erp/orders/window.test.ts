@@ -38,6 +38,9 @@ describe('KST 날짜·시각', () => {
     expect(isoFromChannel('2026-09-27 09:10:11')).toBe('2026-09-27T00:10:11.000Z');
     expect(isoFromChannel('2026-09-27T09:10:11.000+09:00')).toBe('2026-09-27T00:10:11.000Z');
     expect(isoFromChannel('2026-09-27T00:10:11Z')).toBe('2026-09-27T00:10:11.000Z');
+    expect(isoFromChannel('2026-09-27T09:10:11+0900')).toBe('2026-09-27T00:10:11.000Z');
+    expect(isoFromChannel('2026-09-27T09:10:11.000+0900')).toBe('2026-09-27T00:10:11.000Z');
+    expect(isoFromChannel('2026-09-27 09:10:11-0100')).toBe('2026-09-27T10:10:11.000Z');
     expect(() => isoFromChannel('어제')).toThrow(RangeError);
   });
 

@@ -29,6 +29,16 @@ describe('표준 상태', () => {
     expect(naverStatus('WHAT', null, null)).toBe('unknown');
   });
 
+  it('네이버: 직권 취소 진행 중은 cancel_requested, 교환 진행 중은 exchange(거부는 원 상태)', () => {
+    expect(naverStatus('PAYED', 'ADMIN_CANCEL', 'ADMIN_CANCELING')).toBe('cancel_requested');
+    expect(naverStatus('DELIVERING', 'ADMIN_CANCEL', null)).toBe('cancel_requested');
+    expect(naverStatus('PAYED', null, 'ADMIN_CANCELING')).toBe('cancel_requested');
+    expect(naverStatus('DELIVERED', 'EXCHANGE', 'EXCHANGE_REQUEST')).toBe('exchange');
+    expect(naverStatus('DELIVERED', 'EXCHANGE', 'COLLECTING')).toBe('exchange');
+    expect(naverStatus('DELIVERED', 'EXCHANGE', 'EXCHANGE_REDELIVERING')).toBe('exchange');
+    expect(naverStatus('DELIVERED', 'EXCHANGE', 'EXCHANGE_REJECT')).toBe('delivered');
+  });
+
   it('토스: 주문상품 상태 20종', () => {
     expect(tossStatus('BEFORE_PAYMENT')).toBe('unpaid');
     expect(tossStatus('PAID')).toBe('paid');
@@ -44,6 +54,7 @@ describe('표준 상태', () => {
     expect(tossStatus('COMPLETED_RETURN')).toBe('returned');
     expect(tossStatus('CLAIM_REJECTED_RETURN')).toBe('delivered');
     expect(tossStatus('COMPLETED_EXCHANGE')).toBe('exchange');
+    expect(tossStatus('REVOKED_REQUEST')).toBe('paid');
     expect(tossStatus('NEW_ONE')).toBe('unknown');
   });
 

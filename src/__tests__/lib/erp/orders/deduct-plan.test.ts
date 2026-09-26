@@ -70,4 +70,16 @@ describe('decideDeduction', () => {
   it('되돌린 뒤 여전히 무효면 reversed를 유지한다(none으로 떨어지지 않는다)', () => {
     expect(decideDeduction(base({ status: 'returned', state: 'reversed', version: 1 }), ON).state).toBe('reversed');
   });
+
+  it('뺀 라인이 여전히 팔림인데 연결이 사라지면(미귀속) 되돌리지 않고 posted를 유지한다', () => {
+    const posted = [{ skuId: 7, qty: 2, idemKey: K1 }];
+    expect(decideDeduction(base({ attribution: 'unattributed', alloc: [], state: 'posted', version: 1, posted }), ON))
+      .toEqual({ reverse: [], post: null, state: 'posted', note: 'unattributed' });
+  });
+
+  it('연결이 다른 SKU로 바뀌면(mapped) 되돌리고 다시 뺀다', () => {
+    const posted = [{ skuId: 7, qty: 2, idemKey: K1 }];
+    expect(decideDeduction(base({ alloc: [{ skuId: 8, qty: 2 }], state: 'posted', version: 1, posted }), ON))
+      .toEqual({ reverse: [K1], post: { version: 2, items: [{ skuId: 8, qty: 2, idemKey: 'sale:naver:2026092611111111:s8@2' }] }, state: 'posted', note: null });
+  });
 });

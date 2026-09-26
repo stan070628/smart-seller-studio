@@ -35,7 +35,8 @@ export function kstIso(d: Date): string {
 
 /** 채널 시각 문자열 → UTC ISO. 오프셋이 없으면 KST로 읽는다(쿠팡·토스는 KST 현지 시각을 준다) */
 export function isoFromChannel(s: string): string {
-  const v = String(s ?? '').trim().replace(' ', 'T');
+  // '+0900'처럼 콜론 없는 오프셋은 '+09:00'으로 고친다 — 엔진마다 받아들이는지가 다르다
+  const v = String(s ?? '').trim().replace(' ', 'T').replace(/(T[\d:.]+[+-]\d{2})(\d{2})$/, '$1:$2');
   const t = /([zZ]|[+-]\d{2}:?\d{2})$/.test(v) ? Date.parse(v) : Date.parse(`${v}+09:00`);
   if (!v || Number.isNaN(t)) throw new RangeError(`시각을 읽을 수 없다: ${s}`);
   return new Date(t).toISOString();

@@ -26,6 +26,19 @@ describe('pickLegacy', () => {
     expect(pickLegacy(line({}), mapped([{ skuId: 7, qty: 4 }]), idx())).toEqual({ productCostId: PC_B, qty: 4 });
   });
 
+  it('리스팅과 맞는 옛 상품(pcc)이면 수량 = 주문 수량 × pcc 배수(옛 불러오기와 같다) — SKU 배수와 달라도', () => {
+    // SKU 배수 3(alloc 6) · pcc 배수 2 → 옛 장부 수량 4
+    expect(pickLegacy(line({}), mapped([{ skuId: 7, qty: 6 }], [{ skuId: 7, multiplier: 3 }]), idx())).toEqual({ productCostId: PC_B, qty: 4 });
+    // pcc 배수 0 이하 → 1
+    const zero = idx({ pcc: new Map([['coupang_wing:70', [{ productCostId: PC_B, multiplier: 0 }]]]) });
+    expect(pickLegacy(line({}), mapped([{ skuId: 7, qty: 6 }], [{ skuId: 7, multiplier: 3 }]), zero)).toEqual({ productCostId: PC_B, qty: 2 });
+  });
+
+  it('네이버 채널상품번호로 맞으면 주문 수량 그대로(SKU 배수를 곱하지 않는다)', () => {
+    const r = mapped([{ skuId: 9, qty: 2 }], [{ skuId: 9, multiplier: 2 }]);
+    expect(pickLegacy(line({ channel: 'naver', productId: '500', altProductId: '555', qty: 1 }), r, idx())).toEqual({ productCostId: PC_C, qty: 1 });
+  });
+
   it('맞는 것이 없으면 SKU의 첫 옛 상품', () => {
     expect(pickLegacy(line({ productId: '71' }), mapped([{ skuId: 7, qty: 2 }]), idx())).toEqual({ productCostId: PC_A, qty: 2 });
   });
@@ -58,16 +71,21 @@ describe('planLegacy', () => {
     expect(p).toEqual({
       upsert: [{ key: 'wing-1-70', productCostId: PC_A, channel: 'coupang', soldAt: '2026-09-27', quantity: 6, sellingPrice: 1000, saleAmount: 3000, shippingSource: 'wing' }],
       voidKeys: [],
+      warnings: [],
     });
   });
 
   it('살아 있는 라인이 없고 무효 라인이 있으면 무효화, unknown만 있으면 건드리지 않는다', () => {
-    expect(planLegacy([L({ status: 'canceled' })])).toEqual({ upsert: [], voidKeys: ['wing-1-70'] });
-    expect(planLegacy([L({ status: 'unknown' })])).toEqual({ upsert: [], voidKeys: [] });
+    expect(planLegacy([L({ status: 'canceled' })])).toEqual({ upsert: [], voidKeys: ['wing-1-70'], warnings: [] });
+    expect(planLegacy([L({ status: 'unknown' })])).toEqual({ upsert: [], voidKeys: [], warnings: [] });
   });
 
-  it('옛 상품을 못 고른 라인은 쓰지 않는다', () => {
-    expect(planLegacy([L({ productCostId: null, legacyQty: null })])).toEqual({ upsert: [], voidKeys: [] });
+  it('팔림인데 옛 상품을 못 고른 키는 쓰지도 무효화하지도 않고 경고로 돌려준다(기존 행 유지)', () => {
+    expect(planLegacy([L({ productCostId: null, legacyQty: null })]))
+      .toEqual({ upsert: [], voidKeys: [], warnings: [{ key: 'wing-1-70', reason: 'sold_without_product_cost' }] });
+    // 같은 키에 무효 라인이 섞여 있어도 팔림 라인이 남아 있으면 무효화하지 않는다
+    expect(planLegacy([L({ productCostId: null, legacyQty: null }), L({ status: 'canceled' })]))
+      .toEqual({ upsert: [], voidKeys: [], warnings: [{ key: 'wing-1-70', reason: 'sold_without_product_cost' }] });
   });
 
   it('토스·RG·네이버 채널 값과 배송비 소스', () => {

@@ -2,7 +2,7 @@
 // 차감 판정표(순수). 라인 하나의 지금 상태와 「뺀 것(posted)」을 보고 이번에 할 일을 정한다 — DB는 deduct.ts가 쓴다.
 //   대상 = 팔림(SOLD) · 연결됨(mapped) · 결제 시각이 기초재고 시각 이후
 //   뺀 것 = 대상 alloc이면 그대로, 다르면(취소·부분 취소·연결 변경) 역전표 → (대상이면) 다음 버전으로 다시 뺀다
-//   unknown 상태는 아무것도 바꾸지 않는다
+//   unknown 상태는 아무것도 바꾸지 않는다 · 뺀 라인이 팔림인데 미귀속이 되면 뺀 것을 그대로 둔다
 import type { AllocItem } from './resolve';
 import { saleIdemKey } from './keys';
 import { SOLD, type OrderChannel, type StdStatus } from './types';
@@ -65,6 +65,9 @@ export function decideDeduction(l: DeductInput, ctx: { enabled: boolean; cutover
   const target = note === null;
 
   if (l.state === 'posted') {
+    // 팔림 그대로인데 연결만 사라졌다(리스팅 삭제·옵션 미일치) → 판매는 유효하다. 되돌리면 재고가 부풀어 오르므로 뺀 것을 둔다.
+    // 다른 SKU로 다시 연결(mapped)된 경우만 아래에서 되돌리고 다시 뺀다.
+    if (SOLD.has(l.status) && l.attribution !== 'mapped') return { reverse: [], post: null, state: 'posted', note: 'unattributed' };
     if (target && sig(l.posted) === sig(l.alloc)) return { reverse: [], post: null, state: 'posted', note: null };
     const reverse = l.posted.map((p) => p.idemKey);
     if (!target) return { reverse, post: null, state: 'reversed', note };

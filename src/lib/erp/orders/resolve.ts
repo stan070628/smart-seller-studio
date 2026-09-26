@@ -77,8 +77,12 @@ function findListing(l: OrderLine, idx: ListingIndex): { entry: ListingEntry | n
     const norm = all.filter((e) => normalizeOption(e.optionKey) === want);
     if (norm.length === 1) return { entry: norm[0], reason: null };
   }
-  // 그 상품의 리스팅이 하나뿐이면 옵션 표기가 달라도 그것이다(네이버 단일상품 · 토스 옵션 하나)
-  if (all.length === 1) return { entry: all[0], reason: null };
+  // 허용하는 대체는 둘뿐이다. 모르는 옵션을 「하나뿐이니 그것」으로 잡으면 다른 SKU에서 뺀다 — 미귀속으로 쌓는 편이 안전하다.
+  //   ① 그 상품에 옵션 없는('') 리스팅이 있으면 단일상품이다 → 그것
+  const single = all.find((e) => e.optionKey === '');
+  if (single) return { entry: single, reason: null };
+  //   ② 주문 쪽 옵션이 비었으면 그 상품의 유일한 리스팅
+  if (l.optionKey === '' && all.length === 1) return { entry: all[0], reason: null };
   return { entry: null, reason: 'option_unmatched' };
 }
 
