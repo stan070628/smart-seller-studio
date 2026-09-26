@@ -629,7 +629,7 @@ export class CoupangClient {
       `status=${params.status ?? 'ACCEPT'}`,  // status 필수
     ];
     if (params.maxPerPage) parts.push(`maxPerPage=${params.maxPerPage}`);
-    if (params.nextToken) parts.push(`nextToken=${params.nextToken}`);
+    if (params.nextToken) parts.push(`nextToken=${encodeURIComponent(params.nextToken)}`);
 
     const url = `/v2/providers/openapi/apis/api/v4/vendors/${this.vendorId}/ordersheets?${parts.join('&')}`;
     await sleep(API_DELAY);

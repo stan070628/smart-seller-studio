@@ -3,6 +3,7 @@
 // 운영 DB에서 주문 upsert·옛 장부·판매 차감·역전표·@n·재고 부족·기초 이전·bundle·any_of·사라진 라인을 **한 트랜잭션에서 시험하고 반드시 ROLLBACK**한다.
 // 커밋하는 경로가 없으므로 기초재고가 있는 원장에서도 돈다(ledger-selftest.ts와 다르다). 임시 SKU는 status='archived'.
 // 주문 시각을 2099년으로 둬 실제 주문과 사라짐 판정 구간이 겹치지 않게 한다. 채널 API는 부르지 않는다.
+// 🔴 마이그레이션 119(lease·absent_since·status_unmapped·legacy_voided_at) 적용 뒤에만 돈다.
 import pg from 'pg';
 import { loadEnvLocal } from './_env';
 import { postLotCreate } from '@/lib/erp/ledger/store';
@@ -124,17 +125,25 @@ const check = (name: string, ok: boolean, detail?: string) => results.push({ che
     check('bundle → SKU마다 한 전표(s1 −2 · s2 −4)', r.deduction_state === 'posted' && r.posted.length === 2 && (await selfQty(s1)) === 1 && (await selfQty(s2)) === 6, JSON.stringify(r));
 
     // 7. any_of
-    const [an] = await collect([mk(5, { productId: vAny })]);
+    const AN = mk(5, { productId: vAny });
+    const [an] = await collect([AN]);
     r = await lineRow(an);
     check('any_of → 미귀속 · none(unattributed)', r.deduction_state === 'none' && r.deduction_note === 'unattributed', JSON.stringify(r));
 
-    // 8. 응답에서 사라진 라인 = 취소
-    const ab = await markAbsentCanceled(c, 'coupang_wing', { field: 'ordered_at', from: '2099-01-01T00:00:00.000Z', to: '2099-01-02T00:00:00.000Z' },
-      [A.externalLineId, B.externalLineId]);
+    // 8. 응답에서 사라진 라인 = 취소 — 두 번 연속 사라져야 취소(설계 해석 #24). 수집 시작 시각은 먼 미래(이 트랜잭션의 라인이 모두 그 전에 처음 보였다)
+    const cover8 = { field: 'ordered_at' as const, from: '2099-01-01T00:00:00.000Z', to: '2099-01-02T00:00:00.000Z' };
+    const STARTED = '2100-01-01T00:00:00.000Z';
+    const ab1 = await markAbsentCanceled(c, 'coupang_wing', cover8, [A, B, AN], STARTED);
+    const rb1 = await lineRow(b);
+    check('처음 사라지면 absent_since만(상태 그대로)', ab1.ids.length === 0 && ab1.marked === 1 && ab1.refused === null && rb1.status === 'paid',
+      JSON.stringify({ ab1, rb1 }));
+    const ab = await markAbsentCanceled(c, 'coupang_wing', cover8, [A, B, AN], STARTED);
     await runDeductions(c, { enabled: true, cutover, lineIds: ab.ids, channel: 'coupang_wing', at: now(), includeOpen: false });
     const rb = await lineRow(b);
-    check('사라진 라인 2건 → canceled(ABSENT) · 부족 라인은 대상에서 빠진다(none · voided)',
-      ab.ids.length === 2 && rb.status === 'canceled' && rb.raw_status === 'ABSENT' && rb.deduction_state === 'none' && rb.deduction_note === 'voided', JSON.stringify({ ab, rb }));
+    check('두 번째로 사라진 라인 1건 → canceled(ABSENT) · 부족 라인은 대상에서 빠진다(none · voided)',
+      ab.ids.length === 1 && rb.status === 'canceled' && rb.raw_status === 'ABSENT' && rb.deduction_state === 'none' && rb.deduction_note === 'voided', JSON.stringify({ ab, rb }));
+    const empty = await markAbsentCanceled(c, 'coupang_wing', cover8, [], STARTED);
+    check('받은 라인 0건이면 사라짐 판정 거절(empty_fetch)', empty.refused?.reason === 'empty_fetch' && empty.ids.length === 0, JSON.stringify(empty));
   } catch (e) {
     check('예상 못 한 오류', false, (e as Error).message);
   } finally {

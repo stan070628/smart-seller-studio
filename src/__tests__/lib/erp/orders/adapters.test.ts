@@ -3,12 +3,14 @@ import wingFx from '@/__tests__/fixtures/orders/coupang-wing-ordersheets.json';
 import rgFx from '@/__tests__/fixtures/orders/coupang-rg-orders.json';
 import nvChangedFx from '@/__tests__/fixtures/orders/naver-last-changed.json';
 import nvOrdersFx from '@/__tests__/fixtures/orders/naver-product-orders.json';
+import nvPartialFx from '@/__tests__/fixtures/orders/naver-partial-claims.json';
 import tossFx from '@/__tests__/fixtures/orders/toss-orders.json';
 import { createWingAdapter, WING_STATUSES } from '@/lib/erp/orders/adapters/coupang-wing';
 import { createRgAdapter } from '@/lib/erp/orders/adapters/coupang-rg';
-import { createNaverAdapter } from '@/lib/erp/orders/adapters/naver';
+import { createNaverAdapter, normalizeNaverItem, optionLabel } from '@/lib/erp/orders/adapters/naver';
 import { createTossAdapter } from '@/lib/erp/orders/adapters/toss';
-import { expectNoPII } from './_pii';
+import type { NaverOrderRawItem } from '@/lib/listing/naver-commerce-client';
+import { FAKE_PII, expectNoPII } from './_pii';
 
 const W = { from: new Date('2026-09-26T11:07:04.989Z'), to: new Date('2026-09-27T03:00:00.000Z') };
 const EMPTY = { items: [], nextToken: null };
@@ -37,14 +39,36 @@ describe('쿠팡 판매자배송 어댑터', () => {
     // 결제 시각이 없으면 주문 시각(발주서는 결제완료부터 보인다)
     expect(r.lines[3].paidAt).toBe('2026-09-26T12:00:00.000Z');
     expect(r.lines[1].rawStatus).toBe('ACCEPT/CANCELED');
-    expect(r.cover).toEqual({ field: 'ordered_at', from: '2026-09-25T15:00:00.000Z', to: '2026-09-27T15:00:00.000Z' });
+    // (I2) 첫날(구간 시작일)은 사라짐 판정에서 뺀다 — cover는 시작일 다음 날 KST 0시부터
+    expect(r.cover).toEqual({ field: 'ordered_at', from: '2026-09-26T15:00:00.000Z', to: '2026-09-27T15:00:00.000Z' });
     expect(r.absenceMeansCancel).toBe(true);
+    expect(r.rejected).toEqual([]);
     expectNoPII(r.lines);
   });
 
   it('페이지 조회가 실패하면 던진다(일부만 받은 결과를 돌려주지 않는다)', async () => {
     const bad = createWingAdapter({ getOrders: vi.fn(async () => { throw new Error('429'); }) });
     await expect(bad.fetch(W)).rejects.toThrow('429');
+  });
+
+  it('(I5) 수량·id가 잘못된 품목은 버리고 rejected(라인 키 + 이유, 구매자 정보 없음)로 보고한다 — 나머지는 그대로', async () => {
+    const base = (wingFx.pages as Record<string, { items: Record<string, unknown>[] }>)['ACCEPT|'].items[0];
+    const items = base.orderItems as Record<string, unknown>[];
+    const order = { ...base, orderItems: [
+      items[0],
+      { ...items[0], vendorItemId: 70000000005, shippingCount: 1.5 },
+      { ...items[0], vendorItemId: 'bad id!' },
+    ] };
+    const badTime = { ...base, shipmentBoxId: 6200000009, orderedAt: 'not-a-time', orderItems: [items[0]] };
+    const g = vi.fn(async (p: { status?: string }) => (p.status === 'ACCEPT' ? { items: [order, badTime], nextToken: null } : EMPTY) as never);
+    const r = await createWingAdapter({ getOrders: g }).fetch(W);
+    expect(r.lines.map((l) => l.externalLineId)).toEqual(['6200000001:70000000001']);
+    expect(r.rejected).toEqual([
+      { lineKey: '6200000001:70000000005', reason: 'bad_qty' },
+      { lineKey: '(읽을 수 없음)', reason: 'bad_id' },
+      { lineKey: '6200000009:70000000001', reason: 'bad_time' },
+    ]);
+    for (const p of FAKE_PII) expect(JSON.stringify(r.rejected)).not.toContain(p);
   });
 });
 
@@ -64,9 +88,29 @@ describe('쿠팡 RG 어댑터', () => {
       ['41000000002:80000000003', 3, 15000, '2026-09-27T02:30:00.000Z'],
     ]);
     expect(r.lines[0]).toMatchObject({ channel: 'coupang_rg', status: 'paid', rawStatus: 'PAID', productId: '80000000001', orderedAt: '2026-09-27T01:00:00.000Z' });
-    expect(r.cover).toEqual({ field: 'paid_at', from: '2026-09-25T15:00:00.000Z', to: '2026-09-27T15:00:00.000Z' });
+    // (I2) 첫날 제외
+    expect(r.cover).toEqual({ field: 'paid_at', from: '2026-09-26T15:00:00.000Z', to: '2026-09-27T15:00:00.000Z' });
     expect(r.absenceMeansCancel).toBe(true);
+    expect(r.rejected).toEqual([]);
     expectNoPII(r.lines);
+  });
+
+  it('(I5) 수량이 정수가 아닌 품목·읽을 수 없는 결제 시각은 버리고 보고한다', async () => {
+    const f = vi.fn(async (_p: { paidDateFrom: string; paidDateTo: string; nextToken?: string }) => ({ items: [
+      { orderId: '41000000005', paidAt: '1790470800000', orderItems: [
+        { vendorItemId: 80000000001, productName: 'a', salesQuantity: 1, unitSalesPrice: 100, currency: 'KRW' },
+        { vendorItemId: 80000000002, productName: 'b', salesQuantity: -2, unitSalesPrice: 100, currency: 'KRW' },
+      ] },
+      { orderId: '41000000006', paidAt: 'garbage', orderItems: [
+        { vendorItemId: 80000000001, productName: 'a', salesQuantity: 1, unitSalesPrice: 100, currency: 'KRW' },
+      ] },
+    ], nextToken: null }) as never);
+    const r = await createRgAdapter({ getRocketGrowthOrders: f }).fetch(W);
+    expect(r.lines.map((l) => l.externalLineId)).toEqual(['41000000005:80000000001']);
+    expect(r.rejected).toEqual([
+      { lineKey: '41000000005:80000000002', reason: 'bad_qty' },
+      { lineKey: '41000000006:80000000001', reason: 'bad_time' },
+    ]);
   });
 
   it('30일이 넘는 구간은 29일(시작·끝 포함)씩 나눠 각 끝 날짜 + 1을 넘긴다', async () => {
@@ -102,7 +146,38 @@ describe('네이버 어댑터', () => {
     expect(r.lines[1].rawStatus).toBe('CANCELED/CANCEL_DONE');
     expect(r.cover).toBeNull();
     expect(r.absenceMeansCancel).toBe(false);
+    expect(r.rejected).toEqual([]);
     expectNoPII(r.lines);
+  });
+
+  it('(I4) 부분 취소 — 수량 = remainQuantity, 금액 = 결제 금액 × 남은/처음 수량 · 남은 수량 0 = 취소', () => {
+    const [partial, allGone] = (nvPartialFx.data as unknown as NaverOrderRawItem[]).map(normalizeNaverItem);
+    expect([partial.qty, partial.amount, partial.unitPrice, partial.status]).toEqual([1, 10000, 10000, 'paid']);
+    // 남은 수량 0: 상품주문 상태가 PAYED여도 취소. DB 수량 칸은 > 0이라 처음 수량을 남긴다(금액도 그대로 — 취소라 쓰이지 않는다)
+    expect([allGone.qty, allGone.amount, allGone.status]).toEqual([2, 19800, 'canceled']);
+    expectNoPII([partial, allGone]);
+  });
+
+  it('(M2) 입력형 옵션(「이름: 값」)·50자 넘는 옵션은 라벨에 남기지 않는다 — 선택형 옵션 이름은 남긴다', () => {
+    const custom = normalizeNaverItem((nvPartialFx.data as unknown as NaverOrderRawItem[])[2]);
+    expect(custom.productLabel).toBe('각인 텀블러 · (입력형 옵션 생략)');
+    expect(custom.optionKey).toBe('900');
+    expect(JSON.stringify(custom)).not.toContain('사랑해');
+    expect(optionLabel('블루 / S')).toBe('블루 / S');
+    expect(optionLabel('가'.repeat(51))).toBe('(입력형 옵션 생략)');
+    expect(optionLabel(undefined)).toBeNull();
+    expectNoPII([custom]);
+  });
+
+  it('(I5) 수량이 잘못된 상품주문은 버리고 보고한다(상세 조회 한 번이 채널 전체를 실패시키지 않는다)', async () => {
+    const good = (nvOrdersFx.data as unknown as NaverOrderRawItem[])[0];
+    const bad = { ...good, productOrder: { ...good.productOrder, productOrderId: '2026092700000099', quantity: 0 } };
+    const r = await createNaverAdapter({
+      getLastChangedStatuses: vi.fn(async () => ({ statuses: [{ productOrderId: '1' }], more: null })) as never,
+      queryProductOrders: vi.fn(async () => [good, bad] as never),
+    }, { sleepMs: 0 }).fetch(W);
+    expect(r.lines).toHaveLength(1);
+    expect(r.rejected).toEqual([{ lineKey: '2026092700000099', reason: 'bad_qty' }]);
   });
 
   it('변경 조회가 실패하면 던진다(옛 getOrders처럼 삼키지 않는다)', async () => {
@@ -135,12 +210,21 @@ describe('토스 어댑터', () => {
     ]);
     expect(r.lines[0]).toMatchObject({ channel: 'toss', externalOrderId: '5100000001', orderedAt: '2026-09-27T01:00:00.000Z', productLabel: '극세사 타월 · 그레이 / 10매' });
     expect(r.absenceMeansCancel).toBe(false);
+    expect(r.rejected).toEqual([]);
     expectNoPII(r.lines);
   });
 
   it('페이지 상한(200)을 넘으면 조용히 자르지 않고 던진다', async () => {
     const endless = vi.fn(async () => ({ results: [], nextCursor: 'again' }) as never);
     await expect(createTossAdapter({ getOrdersPage: endless }).fetch(W)).rejects.toThrow(/200페이지/);
+  });
+
+  it('(I5) 수량이 잘못된 주문상품은 버리고 보고한다', async () => {
+    const first = ((tossFx.pages as Record<string, { results: Record<string, unknown>[] }>)[''].results)[0];
+    const g = vi.fn(async () => ({ results: [first, { ...first, orderProductId: 9100000077, quantity: 'x' }], nextCursor: null }) as never);
+    const r = await createTossAdapter({ getOrdersPage: g }).fetch(W);
+    expect(r.lines).toHaveLength(1);
+    expect(r.rejected).toEqual([{ lineKey: '9100000077', reason: 'bad_qty' }]);
   });
 
   it('꼬리일수는 30일이다(설계 해석 #23 — 주문일 기준 API라 배송 후 반품 완료가 7일을 넘겨 온다)', () => {

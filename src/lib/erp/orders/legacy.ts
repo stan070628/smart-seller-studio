@@ -84,8 +84,11 @@ export interface LegacyRow {
 
 export interface LegacyWarning {
   key: string;
-  /** 팔림 라인이 있는데 옛 상품을 하나도 못 골랐다 — 기존 행은 그대로 둔다(쓰지도 무효화하지도 않는다) */
-  reason: 'sold_without_product_cost';
+  /**
+   * sold_without_product_cost: 팔림 라인이 있는데 옛 상품을 하나도 못 골랐다 — 기존 행은 그대로 둔다(쓰지도 무효화하지도 않는다)
+   * voided_elsewhere: 팔림인데 옛 장부 행이 수집기 아닌 곳(사람·옛 불러오기)에서 무효화돼 있다 — 되살리지 않는다(legacy-store.ts)
+   */
+  reason: 'sold_without_product_cost' | 'voided_elsewhere';
 }
 
 /**

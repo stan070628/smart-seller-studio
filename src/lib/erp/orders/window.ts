@@ -1,7 +1,7 @@
 // src/lib/erp/orders/window.ts
 // 수집 구간과 KST 날짜·시각 도우미. 채널 API는 KST 날짜(쿠팡·토스)나 +09:00 시각(네이버)으로 거른다.
 import { kstDate } from '@/lib/erp/stock/count-queue';
-import type { FetchWindow } from './types';
+import { LineRejectError, type FetchWindow } from './types';
 
 export const OVERLAP_MS = 48 * 3600_000;
 const DAY_MS = 86_400_000;
@@ -38,7 +38,7 @@ export function isoFromChannel(s: string): string {
   // '+0900'처럼 콜론 없는 오프셋은 '+09:00'으로 고친다 — 엔진마다 받아들이는지가 다르다
   const v = String(s ?? '').trim().replace(' ', 'T').replace(/(T[\d:.]+[+-]\d{2})(\d{2})$/, '$1:$2');
   const t = /([zZ]|[+-]\d{2}:?\d{2})$/.test(v) ? Date.parse(v) : Date.parse(`${v}+09:00`);
-  if (!v || Number.isNaN(t)) throw new RangeError(`시각을 읽을 수 없다: ${s}`);
+  if (!v || Number.isNaN(t)) throw new LineRejectError('bad_time', `시각을 읽을 수 없다: ${String(s).slice(0, 40)}`);
   return new Date(t).toISOString();
 }
 

@@ -5,7 +5,7 @@ import type { OrderAdapter, OrderLine } from '@/lib/erp/orders/types';
 const m = vi.hoisted(() => ({
   readCutover: vi.fn(), readCursor: vi.fn(), advanceCursor: vi.fn(), loadListingIndex: vi.fn(), loadLegacyIndex: vi.fn(),
   upsertOrderLines: vi.fn(), markAbsentCanceled: vi.fn(), reevaluateUnknownLines: vi.fn(), readDeductSetting: vi.fn(),
-  writeDeductEnabled: vi.fn(), syncLegacySales: vi.fn(),
+  writeDeductEnabled: vi.fn(), syncLegacySales: vi.fn(), ensureCursorRow: vi.fn(), takeLease: vi.fn(), releaseLease: vi.fn(),
 }));
 vi.mock('@/lib/erp/orders/store', () => ({
   readCutover: m.readCutover, readCursor: m.readCursor, advanceCursor: m.advanceCursor, loadListingIndex: m.loadListingIndex,
@@ -13,10 +13,11 @@ vi.mock('@/lib/erp/orders/store', () => ({
   reevaluateUnknownLines: m.reevaluateUnknownLines, readDeductSetting: m.readDeductSetting,
   // Task 5에서 collect.ts가 deduct.ts를 불러오면 필요하다
   writeDeductEnabled: m.writeDeductEnabled,
+  ensureCursorRow: m.ensureCursorRow, takeLease: m.takeLease, releaseLease: m.releaseLease,
 }));
 vi.mock('@/lib/erp/orders/legacy-store', () => ({ syncLegacySales: m.syncLegacySales }));
 
-import { collectChannel } from '@/lib/erp/orders/collect';
+import { collectChannel, reportAlerts, reportCounts } from '@/lib/erp/orders/collect';
 
 const CUT = '2026-09-26T11:07:04.989Z';
 const NOW = new Date('2026-09-27T03:00:00.000Z');
@@ -27,12 +28,11 @@ const LINE: OrderLine = {
 };
 const COVER = { field: 'paid_at' as const, from: '2026-09-25T15:00:00.000Z', to: '2026-09-27T15:00:00.000Z' };
 
+const LEASE_AT = '2026-09-27T02:59:59.000Z';
 let seq: string[];
-let lockOk: boolean;
 const client = {
-  query: vi.fn(async (sql: string) => {
-    seq.push(sql.split(' ')[0] === 'select' ? sql.slice(0, 30) : sql);
-    if (sql.startsWith('select pg_try_advisory_lock')) return { rows: [{ ok: lockOk }], rowCount: 1 };
+  query: vi.fn(async (sql: string, _p?: unknown[]) => {
+    seq.push(sql);
     return { rows: [], rowCount: 0 };
   }),
   release: vi.fn(),
@@ -42,36 +42,51 @@ const deduct = vi.fn(async (_db: unknown, _p: { enabled: boolean; cutover: strin
   ({ posted: 1, reversed: 0, short: 0, pending: 0, unchanged: 0 }));
 const adapter = (o: Partial<OrderAdapter> = {}): OrderAdapter => ({
   channel: 'coupang_rg', tailDays: 7,
-  fetch: vi.fn(async () => { seq.push('FETCH'); return { lines: [LINE], cover: COVER, absenceMeansCancel: true }; }),
+  fetch: vi.fn(async () => { seq.push('FETCH'); return { lines: [LINE], cover: COVER, absenceMeansCancel: true, rejected: [] }; }),
   ...o,
 });
 
 beforeEach(() => {
   vi.clearAllMocks();
   seq = [];
-  lockOk = true;
+  m.takeLease.mockImplementation(async () => { seq.push('LEASE'); return { ok: true, at: LEASE_AT }; });
+  m.releaseLease.mockImplementation(async () => { seq.push('RELEASE'); });
   m.readCutover.mockResolvedValue(CUT);
   m.readCursor.mockResolvedValue(null);
   m.loadListingIndex.mockResolvedValue(new ListingIndex([
     { listingId: 5, channel: 'coupang_rg', productId: '80000000001', optionKey: '', linkMode: 'single', skus: [{ skuId: 7, multiplier: 1 }] },
   ]));
   m.loadLegacyIndex.mockResolvedValue({ skuLegacy: new Map(), pcc: new Map(), pcByVendorItem: new Map(), pcByNaverChannelNo: new Map() });
-  m.upsertOrderLines.mockResolvedValue({ ids: [100], inserted: 1, updated: 0 });
-  m.markAbsentCanceled.mockResolvedValue({ ids: [90], legacyKeys: ['rg-1-2'] });
+  m.upsertOrderLines.mockResolvedValue({ ids: [100], changedIds: [100], inserted: 1, updated: 0, unchanged: 0 });
+  m.markAbsentCanceled.mockResolvedValue({ ids: [90], legacyKeys: ['rg-1-2'], marked: 2, absent: 3, refused: null });
   m.reevaluateUnknownLines.mockResolvedValue({ ids: [], legacyKeys: [], remaining: 0 });
   m.syncLegacySales.mockResolvedValue({ upserted: 1, inserted: 1, voided: 1, warnings: [] });
   m.readDeductSetting.mockResolvedValue({ enabled: false, enabledAt: null, by: null });
 });
 
 describe('collectChannel', () => {
-  it('채널 잠금을 못 잡으면 busy — 채널을 부르지 않는다', async () => {
-    lockOk = false;
+  it('(C1) 임대를 못 잡으면 busy — 조용한 성공이 아니라 실패로 보고하고(알림 대상) 채널을 부르지 않는다', async () => {
+    m.takeLease.mockResolvedValue({ ok: false, at: null });
     const a = adapter();
     const r = await collectChannel(pool, a, { now: NOW, dryRun: false, deduct });
-    expect(r).toMatchObject({ channel: 'coupang_rg', ok: true, skipped: 'busy' });
+    expect(r).toMatchObject({ channel: 'coupang_rg', ok: false, skipped: 'busy' });
+    expect(r.error).toMatch(/임대/);
     expect(a.fetch).not.toHaveBeenCalled();
+    expect(m.releaseLease).not.toHaveBeenCalled();
     expect(client.release).toHaveBeenCalled();
-    expect(seq.some((s) => s.startsWith('select pg_advisory_unlock'))).toBe(false);
+    expect(reportCounts([r])).toMatchObject({ errors: 1, busy: 1, coupang_rg_busy: 1 });
+    // 세션 advisory lock은 쓰지 않는다(트랜잭션 풀러)
+    expect(seq.some((s) => /pg_try_advisory_lock|pg_advisory_unlock/.test(s))).toBe(false);
+  });
+
+  it('(C1) 커서 행을 기초 시각으로 보장한 뒤 임대를 잡고, 끝나면 같은 주인으로 푼다', async () => {
+    await collectChannel(pool, adapter(), { now: NOW, dryRun: false, deduct });
+    expect(m.ensureCursorRow).toHaveBeenCalledWith(client, 'coupang_rg', CUT);
+    const owner = m.takeLease.mock.calls[0][2];
+    expect(typeof owner).toBe('string');
+    expect(m.releaseLease).toHaveBeenCalledWith(client, 'coupang_rg', owner);
+    expect(seq.indexOf('LEASE')).toBeLessThan(seq.indexOf('FETCH'));
+    expect(seq[seq.length - 1]).toBe('RELEASE');
   });
 
   it('첫 실행은 기초 시각부터 가져오고(트랜잭션 밖) 한 트랜잭션에서 upsert → 사라짐 → unknown 재판정 → 옛 장부 → 차감 → 커서', async () => {
@@ -79,18 +94,23 @@ describe('collectChannel', () => {
     const r = await collectChannel(pool, a, { now: NOW, dryRun: false, deduct });
     expect(a.fetch).toHaveBeenCalledWith({ from: new Date(CUT), to: NOW });
     expect(seq.indexOf('FETCH')).toBeLessThan(seq.indexOf('BEGIN'));
+    // 쓰기 트랜잭션 안에서 채널 트랜잭션 잠금
+    expect(seq[seq.indexOf('BEGIN') + 1]).toMatch(/^select pg_advisory_xact_lock\(\$1::int, \$2::int\)/);
+    expect(client.query.mock.calls.find((c) => String(c[0]).startsWith('select pg_advisory_xact_lock'))?.[1]).toEqual([7102, 2]);
     expect(m.upsertOrderLines.mock.calls[0][1][0]).toMatchObject({
       externalLineId: '41000000001:80000000001', legacyKey: 'rg-41000000001-80000000001',
       resolution: { attribution: 'mapped', alloc: [{ skuId: 7, qty: 2 }] }, legacy: null,
     });
-    expect(m.markAbsentCanceled).toHaveBeenCalledWith(client, 'coupang_rg', COVER, ['41000000001:80000000001']);
+    // 수집 시작 시각(임대를 잡은 DB 시각) 이전에 처음 본 라인만 사라짐 판정 대상
+    expect(m.markAbsentCanceled).toHaveBeenCalledWith(client, 'coupang_rg', COVER, [expect.objectContaining({ externalLineId: '41000000001:80000000001' })], LEASE_AT);
     expect(m.reevaluateUnknownLines).toHaveBeenCalledWith(client, 'coupang_rg');
     expect(m.syncLegacySales).toHaveBeenCalledWith(client, ['rg-41000000001-80000000001', 'rg-1-2']);
     expect(deduct).toHaveBeenCalledWith(client, { enabled: false, cutover: CUT, lineIds: [100, 90], channel: 'coupang_rg', at: NOW.toISOString() });
     expect(m.advanceCursor).toHaveBeenCalledWith(client, 'coupang_rg', NOW.toISOString());
     expect(seq.filter((s) => /^(BEGIN|COMMIT|ROLLBACK)/.test(s))).toEqual(['BEGIN', 'COMMIT']);
-    expect(seq[seq.length - 1]).toMatch(/^select pg_advisory_unlock/);
-    expect(r).toMatchObject({ ok: true, skipped: null, fetched: 1, inserted: 1, updated: 0, absent: 1, unattributed: 0,
+    expect(seq[seq.length - 1]).toBe('RELEASE');
+    expect(r).toMatchObject({ ok: true, skipped: null, fetched: 1, inserted: 1, updated: 0, unchanged: 0, absent: 1, absenceMarked: 2,
+      absenceRefused: null, rejected: 0, unattributed: 0,
       unknownReEvaluated: 0, unknownRemaining: 0,
       legacy: { upserted: 1, inserted: 1, voided: 1, warnings: 0 }, deduct: { posted: 1 }, window: { from: CUT, to: NOW.toISOString() } });
   });
@@ -105,7 +125,7 @@ describe('collectChannel', () => {
   });
 
   it('사라짐 판정은 absenceMeansCancel이 참일 때만', async () => {
-    await collectChannel(pool, adapter({ fetch: vi.fn(async () => ({ lines: [LINE], cover: null, absenceMeansCancel: false })) }), { now: NOW, dryRun: false, deduct });
+    await collectChannel(pool, adapter({ fetch: vi.fn(async () => ({ lines: [LINE], cover: null, absenceMeansCancel: false, rejected: [] })) }), { now: NOW, dryRun: false, deduct });
     expect(m.markAbsentCanceled).not.toHaveBeenCalled();
     expect(deduct.mock.calls[0][1].lineIds).toEqual([100]);
   });
@@ -117,6 +137,35 @@ describe('collectChannel', () => {
     expect(m.upsertOrderLines).not.toHaveBeenCalled();
     expect(m.advanceCursor).not.toHaveBeenCalled();
     expect(m.reevaluateUnknownLines).not.toHaveBeenCalled();
+    // 읽기만 하므로 임대·커서 행도 건드리지 않는다
+    expect(m.takeLease).not.toHaveBeenCalled();
+    expect(m.ensureCursorRow).not.toHaveBeenCalled();
+  });
+
+  it('(M3) 차감에는 새로 들어왔거나 바뀐 라인만 넘긴다', async () => {
+    m.upsertOrderLines.mockResolvedValue({ ids: [100, 101], changedIds: [101], inserted: 0, updated: 1, unchanged: 1 });
+    const r = await collectChannel(pool, adapter(), { now: NOW, dryRun: false, deduct });
+    expect(deduct.mock.calls[0][1].lineIds).toEqual([101, 90]);
+    expect(r).toMatchObject({ updated: 1, unchanged: 1 });
+  });
+
+  it('(I1) 사라짐 판정을 거절하면 나머지는 쓰고 보고서·counts·알림에 싣는다', async () => {
+    const refused = { reason: 'empty_fetch', absent: 4, seenInCover: 0, coverRows: 4 };
+    m.markAbsentCanceled.mockResolvedValue({ ids: [], legacyKeys: [], marked: 0, absent: 4, refused });
+    const r = await collectChannel(pool, adapter(), { now: NOW, dryRun: false, deduct });
+    expect(r).toMatchObject({ ok: true, absent: 0, absenceRefused: refused });
+    expect(m.advanceCursor).toHaveBeenCalled();
+    expect(reportCounts([r])).toMatchObject({ absence_refused: 1, coupang_rg_absence_refused: 1 });
+    expect(reportAlerts(r).join(' ')).toMatch(/사라짐 판정 거절.*empty_fetch/);
+  });
+
+  it('(I5) 어댑터가 버린 잘못된 라인은 세고(구매자 정보 없이) 알림 재료로 싣는다 — 채널 전체를 실패시키지 않는다', async () => {
+    const rejected = [{ lineKey: '41000000009:80000000001', reason: 'bad_qty' as const }];
+    const a = adapter({ fetch: vi.fn(async () => ({ lines: [LINE], cover: COVER, absenceMeansCancel: true, rejected })) });
+    const r = await collectChannel(pool, a, { now: NOW, dryRun: false, deduct });
+    expect(r).toMatchObject({ ok: true, rejected: 1, rejectedLines: rejected });
+    expect(reportCounts([r])).toMatchObject({ rejected: 1, coupang_rg_rejected: 1 });
+    expect(reportAlerts(r).join(' ')).toMatch(/잘못된 라인 1건/);
   });
 
   it('쓰다 실패하면 ROLLBACK · 커서 그대로 · 오류는 개인정보를 가린다 · 잠금은 푼다', async () => {
@@ -126,7 +175,7 @@ describe('collectChannel', () => {
     expect(r.error).toContain('010-****-5678');
     expect(seq).toContain('ROLLBACK');
     expect(m.advanceCursor).not.toHaveBeenCalled();
-    expect(seq[seq.length - 1]).toMatch(/^select pg_advisory_unlock/);
+    expect(seq[seq.length - 1]).toBe('RELEASE');
   });
 
   it('채널 호출이 실패하면 트랜잭션을 열지 않고 실패로 돌려준다', async () => {
@@ -145,11 +194,11 @@ describe('collectChannel', () => {
 
 describe('collectOrders · reportCounts', () => {
   it('채널을 차례로 돌고, 어댑터를 못 만든 채널(환경변수 없음)은 실패 보고만 남긴다', async () => {
-    const { collectOrders, reportCounts } = await import('@/lib/erp/orders/collect');
+    const { collectOrders } = await import('@/lib/erp/orders/collect');
     const factories = {
       coupang_wing: () => { throw new Error('COUPANG_ACCESS_KEY가 없다'); },
       coupang_rg: () => adapter(),
-      naver: () => adapter({ channel: 'naver', fetch: vi.fn(async () => ({ lines: [], cover: null, absenceMeansCancel: false })) }),
+      naver: () => adapter({ channel: 'naver', fetch: vi.fn(async () => ({ lines: [], cover: null, absenceMeansCancel: false, rejected: [] })) }),
       toss: () => adapter(),
     };
     const reports = await collectOrders({ channels: ['coupang_wing', 'coupang_rg', 'naver'], dryRun: false, now: NOW, pool, factories });

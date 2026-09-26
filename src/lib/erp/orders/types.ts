@@ -61,8 +61,27 @@ export interface FetchWindow {
   to: Date;
 }
 
+/** 어댑터가 버린 라인의 이유 — 코드만(값은 싣지 않는다. 잘못된 칸에 무엇이 들어 있을지 모른다) */
+export type RejectReason = 'bad_id' | 'bad_qty' | 'bad_time' | 'invalid';
+
+export interface RejectedLine {
+  /** 라인 키(형식이 맞을 때만) 또는 '(읽을 수 없음)'. 구매자 정보 없음 */
+  lineKey: string;
+  reason: RejectReason;
+}
+
+/** 라인 하나를 버려야 하는 오류 — 어댑터가 잡아 rejected로 옮긴다(채널 전체를 실패시키지 않는다, I5) */
+export class LineRejectError extends RangeError {
+  constructor(readonly reason: RejectReason, message: string) {
+    super(message);
+    this.name = 'LineRejectError';
+  }
+}
+
 export interface FetchResult {
   lines: OrderLine[];
+  /** 형식이 잘못돼 버린 라인(I5). 수집기가 세어 알린다 */
+  rejected: RejectedLine[];
   /** API가 실제로 거른 구간과 기준 칸([from, to), UTC ISO). 사라진 라인 판정에만 쓴다 */
   cover: { field: 'ordered_at' | 'paid_at'; from: string; to: string } | null;
   /** 응답에서 사라진 라인 = 취소(쿠팡 판매자배송·RG). 어댑터는 한 페이지라도 실패하면 던진다 — 여기 오면 끝까지 받은 것이다 */

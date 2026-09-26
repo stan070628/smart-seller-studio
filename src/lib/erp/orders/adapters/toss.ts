@@ -4,9 +4,9 @@
 // 🔴 orderer*·receiver*·address·detailAddress·zipCode·shippingNote는 옮기지 않는다.
 // 결제 시각 칸이 없다 — 결제 상태면 주문 시각을 결제 시각으로(설계 해석 #10).
 import type { TossOrder, TossShoppingClient } from '@/lib/listing/toss-shopping-client';
-import { assertExternalId } from '../keys';
+import { assertExternalId, assertQty, rejectReasonOf, safeLineKey } from '../keys';
 import { tossStatus } from '../status';
-import type { OrderAdapter, OrderLine } from '../types';
+import type { OrderAdapter, OrderLine, RejectedLine } from '../types';
 import { dayChunks, isoFromChannel, kstDay } from '../window';
 
 const MAX_PAGES = 200;
@@ -15,10 +15,11 @@ const TAIL_DAYS = 30;
 
 export type TossClient = Pick<TossShoppingClient, 'getOrdersPage'>;
 
+/** 주문상품 한 건 → 라인. 형식이 잘못되면 LineRejectError(어댑터가 rejected로 옮긴다 — I5) */
 export function normalizeTossOrder(o: TossOrder): OrderLine {
   const status = tossStatus(o.orderProductStatus);
   const orderedAt = isoFromChannel(o.orderedAt);
-  const qty = Number(o.quantity);
+  const qty = assertQty(o.quantity);
   const amount = Number(o.price) || 0;
   return {
     channel: 'toss',
@@ -45,20 +46,26 @@ export function createTossAdapter(client: TossClient): OrderAdapter {
     tailDays: TAIL_DAYS,
     async fetch(w) {
       const lines = new Map<string, OrderLine>();
+      const rejected = new Map<string, RejectedLine>();
       for (const c of dayChunks(kstDay(w.from), kstDay(w.to), 30)) {
         let cursor: string | undefined;
         let pages = 0;
         do {
           const r = await client.getOrdersPage({ startDate: c.from, endDate: c.to, nextCursor: cursor });
           for (const o of r.results) {
-            const l = normalizeTossOrder(o);
-            lines.set(l.externalLineId, l);
+            try {
+              const l = normalizeTossOrder(o);
+              lines.set(l.externalLineId, l);
+            } catch (e) {
+              const k = safeLineKey([o?.orderProductId]);
+              rejected.set(`${k}|${rejectReasonOf(e)}`, { lineKey: k, reason: rejectReasonOf(e) });
+            }
           }
           cursor = r.nextCursor ?? undefined;
           if (++pages >= MAX_PAGES && cursor) throw new Error(`토스 주문 ${c.from}~${c.to}: ${MAX_PAGES}페이지를 넘었다`);
         } while (cursor);
       }
-      return { lines: [...lines.values()], cover: null, absenceMeansCancel: false };
+      return { lines: [...lines.values()], rejected: [...rejected.values()], cover: null, absenceMeansCancel: false };
     },
   };
 }

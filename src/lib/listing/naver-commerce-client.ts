@@ -86,6 +86,10 @@ export interface NaverOrderRawItem {
     claimType?: string;
     claimStatus?: string;
     quantity: number;
+    /** 처음 주문 수량(부분 취소 전) */
+    initialQuantity?: number;
+    /** 부분 취소·반품 뒤 남은 수량 — 0이면 전부 취소 */
+    remainQuantity?: number;
     totalPaymentAmount: number;
     productOrderStatus: string;
     deliveryFeeAmount?: number;
@@ -171,6 +175,23 @@ function normalizeNaverOrder(raw: NaverOrderRawItem): NaverOrder {
 // 클라이언트
 // ─────────────────────────────────────────────────────────────
 
+/**
+ * 네이버 오류 응답 요약 — 로그·오류 문구용. JSON이면 message(없으면 error)·code·invalidInputs(칸 이름: 설명)만,
+ * JSON이 아니면 길이만 남긴다. 등록 재시도(registerProduct)가 invalidInputs 칸 이름으로 고르므로 그것은 남긴다.
+ */
+export function naverErrorSummary(text: string): string {
+  try {
+    const j = JSON.parse(text) as { code?: unknown; message?: unknown; error?: unknown; invalidInputs?: { name?: string; message?: string }[] };
+    const msg = String(j.message ?? j.error ?? '').slice(0, 300);
+    const details = Array.isArray(j.invalidInputs)
+      ? j.invalidInputs.map((i) => `${String(i?.name ?? '')}: ${String(i?.message ?? '')}`).join(', ').slice(0, 500)
+      : '';
+    return `${msg}${j.code !== undefined ? ` (code=${String(j.code)})` : ''}${details ? ` [${details}]` : ''}`;
+  } catch {
+    return `JSON 아닌 응답 ${Buffer.byteLength(text ?? '', 'utf8')}바이트 — 본문 생략`;
+  }
+}
+
 export class NaverCommerceClient {
   private readonly clientId: string;
   private readonly clientSecret: string;
@@ -243,19 +264,10 @@ export class NaverCommerceClient {
     const text = await res.text();
 
     if (!res.ok) {
-      let errMsg: string;
-      try {
-        const errJson = JSON.parse(text);
-        // invalidInputs 필드가 있으면 상세 필드별 오류 표시
-        const details = errJson.invalidInputs
-          ? errJson.invalidInputs.map((i: { name?: string; message?: string }) => `${i.name}: ${i.message}`).join(', ')
-          : '';
-        errMsg = (errJson.message || errJson.error || text) + (details ? ` [${details}]` : '');
-      } catch {
-        errMsg = text;
-      }
-      console.error('[네이버 API] 에러 응답 전문:', text.slice(0, 1000));
-      throw new Error(`[네이버 API] ${res.status}: ${errMsg}`);
+      // 응답 본문은 싣지 않는다 — 주문 조회 응답에는 구매자 이름·전화·주소가 있다(M6). code·message·invalidInputs만
+      const summary = naverErrorSummary(text);
+      console.error(`[네이버 API] ${method} ${path} → HTTP ${res.status} | ${summary}`);
+      throw new Error(`[네이버 API] ${res.status}: ${summary}`);
     }
 
     return text ? JSON.parse(text) as T : {} as T;

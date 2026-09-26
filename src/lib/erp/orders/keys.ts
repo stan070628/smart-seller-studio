@@ -2,17 +2,33 @@
 // 외부 id 검사 · 판매 멱등키 · 옛 장부(sale_records) 키.
 import { assertIdemKey } from '@/lib/erp/ledger/plan';
 import type { ShippingSource } from '@/lib/cost-management/sale-shipping';
-import type { OrderChannel } from './types';
+import { LineRejectError, type OrderChannel, type RejectReason } from './types';
 
 // 라인 키는 멱등키 안에 들어간다: '#'(전표 순번)·'@'(차감 버전)·공백이 섞이면 다른 전표와 키가 겹친다. DB check와 같은 식
 const EXT_ID = /^[0-9A-Za-z_-]+(:[0-9A-Za-z_-]+)*$/;
 
+const isExternalId = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length <= 120 && EXT_ID.test(v);
+
+/** 외부 id 검사. 어긋나면 LineRejectError('bad_id')(RangeError) — 어댑터는 그 라인만 버린다(I5) */
 export function assertExternalId(v: string, what: string): string {
-  if (typeof v !== 'string' || v.length === 0 || v.length > 120 || !EXT_ID.test(v)) {
-    throw new RangeError(`${what}가 잘못됐다: ${String(v)}`);
-  }
+  if (!isExternalId(v)) throw new LineRejectError('bad_id', `${what}가 잘못됐다: ${String(v).slice(0, 40)}`);
   return v;
 }
+
+/** 채널 수량 검사 — 양의 정수만. 어긋나면 LineRejectError('bad_qty') */
+export function assertQty(v: unknown, what = '수량'): number {
+  const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN;
+  if (!Number.isInteger(n) || n <= 0) throw new LineRejectError('bad_qty', `${what}가 양의 정수가 아니다`);
+  return n;
+}
+
+/** 버린 라인의 보고용 키 — 형식이 맞을 때만 그대로, 아니면 값을 싣지 않는다 */
+export function safeLineKey(parts: unknown[]): string {
+  const k = parts.map((p) => String(p ?? '')).join(':');
+  return isExternalId(k) ? k : '(읽을 수 없음)';
+}
+
+export const rejectReasonOf = (e: unknown): RejectReason => (e instanceof LineRejectError ? e.reason : 'invalid');
 
 /** 판매 차감 멱등키. SKU를 붙인다 — postConsume·reverse는 SKU 하나 단위라 bundle 라인의 SKU마다 키가 달라야 한다 */
 export function saleIdemKey(channel: OrderChannel, externalLineId: string, skuId: number, version: number): string {
