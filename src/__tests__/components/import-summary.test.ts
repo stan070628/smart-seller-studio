@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildImportSummary } from '@/components/orders/import-summary';
+import { buildImportSummary, summarizeOrdersSync } from '@/components/orders/import-summary';
 
 describe('buildImportSummary', () => {
   it('세 채널 모두 성공하면 채널별 결과와 총 신규 건수를 집계한다', () => {
@@ -53,5 +53,19 @@ describe('buildImportSummary', () => {
     ]);
     expect(summary.channels[0].voided).toBe(0);
     expect(summary.totalVoided).toBe(0);
+  });
+});
+
+describe('summarizeOrdersSync', () => {
+  it('주문 수집 보고서를 옛 결과 창 모양으로 — 신규 = 새 라인, 스킵 = 갱신, 취소 = 옛 장부 무효화', () => {
+    const s = summarizeOrdersSync([
+      { channel: 'coupang_wing', ok: true, fetched: 5, inserted: 2, updated: 3, legacy: { upserted: 5, inserted: 2, voided: 1 }, error: null },
+      { channel: 'naver', ok: false, fetched: 0, inserted: 0, updated: 0, legacy: { upserted: 0, inserted: 0, voided: 0 }, error: '[네이버 API] 500' },
+    ]);
+    expect(s.channels).toEqual([
+      { channel: '윙', success: true, imported: 2, skipped: 3, total: 5, voided: 1 },
+      { channel: '네이버', success: false, imported: 0, skipped: 0, total: 0, voided: 0, error: '[네이버 API] 500' },
+    ]);
+    expect(s).toMatchObject({ totalImported: 2, totalVoided: 1, hasError: true });
   });
 });

@@ -1,0 +1,23 @@
+{
+  "_note": "쿠팡 RG 주문 조회(rg_open_api) — getRocketGrowthOrders 반환 모양. paidAt은 ms 문자열. paidDateTo는 배타 끝",
+  "pages": {
+    "2026-09-26|2026-09-28|": {
+      "items": [
+        { "orderId": "41000000001", "paidAt": "1790470800000", "orderItems": [
+          { "vendorItemId": 80000000001, "productName": "퓨어틴 커피 330ml 6개입", "salesQuantity": 1, "unitSalesPrice": 21900, "currency": "KRW" },
+          { "vendorItemId": 80000000001, "productName": "퓨어틴 커피 330ml 6개입", "salesQuantity": 1, "unitSalesPrice": 21900, "currency": "KRW" },
+          { "vendorItemId": 80000000002, "productName": "샘플", "salesQuantity": 0, "unitSalesPrice": 0, "currency": "KRW" }
+        ] }
+      ],
+      "nextToken": "n2"
+    },
+    "2026-09-26|2026-09-28|n2": {
+      "items": [
+        { "orderId": "41000000002", "paidAt": "1790476200000", "orderItems": [
+          { "vendorItemId": 80000000003, "productName": "니트 건조대 2단", "salesQuantity": 3, "unitSalesPrice": 5000, "currency": "KRW" }
+        ] }
+      ],
+      "nextToken": null
+    }
+  }
+}

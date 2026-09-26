@@ -48,6 +48,17 @@ describe('POST sales — sale_amount', () => {
     expect(sql).toContain('sale_amount');
     expect(params).toContain(30000);
   });
+
+  it('channel: toss는 허용된다(M2 — 토스 채널 판매도 기록해야 한다)', async () => {
+    const { POST } = await import('@/app/api/cost-management/products/[id]/sales/route');
+    const res = await POST(
+      makeRequest('prod-1', { sold_at: '2026-07-10', quantity: 1, selling_price: 5000, channel: 'toss' }),
+      { params: Promise.resolve({ id: 'prod-1' }) },
+    );
+    expect(res.status).toBe(201);
+    const params = mockQuery.mock.calls[1][1] as unknown[];
+    expect(params).toContain('toss');
+  });
 });
 
 describe('PATCH sales — sale_amount 재계산', () => {
@@ -73,5 +84,18 @@ describe('PATCH sales — sale_amount 재계산', () => {
     // UPDATE에 sale_amount 재계산이 포함돼야 함
     expect(sql).toContain('sale_amount');
     expect(sql).toMatch(/sale_amount\s*=\s*COALESCE/);
+  });
+
+  it('channel: toss는 허용된다(M2)', async () => {
+    const { PATCH } = await import('@/app/api/cost-management/sales/[id]/route');
+    const req = new NextRequest('http://localhost/api/cost-management/sales/sale-1', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channel: 'toss' }),
+    });
+    const res = await PATCH(req, { params: Promise.resolve({ id: 'sale-1' }) });
+    expect(res.status).toBe(200);
+    const params = mockQuery.mock.calls[0][1] as unknown[];
+    expect(params).toContain('toss');
   });
 });

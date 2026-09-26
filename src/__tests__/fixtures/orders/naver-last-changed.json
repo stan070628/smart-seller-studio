@@ -1,0 +1,13 @@
+{
+  "_note": "네이버 변경 상품주문(last-changed-statuses) data 모양. more가 있으면 moreFrom·moreSequence로 다음 페이지",
+  "pages": {
+    "": {
+      "statuses": [{ "productOrderId": "2026092700000001" }, { "productOrderId": "2026092700000002" }],
+      "more": { "moreFrom": "2026-09-27T09:00:00.000+09:00", "moreSequence": "0000000002" }
+    },
+    "0000000002": {
+      "statuses": [{ "productOrderId": "2026092700000003" }, { "productOrderId": "2026092700000001" }],
+      "more": null
+    }
+  }
+}

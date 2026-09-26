@@ -19,6 +19,7 @@ import StockTable from './StockTable';
 import HistoryPanel from './HistoryPanel';
 import CsvImportDialog from './CsvImportDialog';
 import CountQueuePanel from './CountQueuePanel';
+import OrdersSyncPanel from './OrdersSyncPanel';
 import { fetchRecon, fetchStock, postAdjust, postRgApply, postRgArrive } from './api';
 import {
   computeKpis, defaultCost, filterGroups, filterRows, filtersActive, groupRows, parseRecon, rgArriveQty, rgDiff, stageKey, summarizeStaged,
@@ -155,7 +156,7 @@ export default function StockClient() {
     // 입고중이 남은 채 RG를 늘리면 같은 물건을 두 번 센다 — 먼저 「입고 완료 옮기기」를 하라고 알린다
     const pendingArrive = items.filter((x) => rgArriveQty(x.row, recon) > 0).length;
     const ok = await confirmDialog({
-      message: `RG 실재고를 원장에 반영합니다 — SKU ${items.length}개\n\n늘림 +${won(plus)}개 · 줄임 −${won(minus)}개\n평가액 영향(추정) ${signed(valueDelta)}원\n\n판매 차감(1-C2) 전이라 RG 판매도 차이로 보입니다. 확인한 것만 반영하세요.${pendingArrive > 0 ? `\n\n⚠ RG입고중이 남은 SKU ${pendingArrive}개 — 보낸 물건이 들어온 것이면 먼저 「입고 완료 옮기기」를 누르세요(반영만 하면 입고중이 남아 두 번 셉니다).` : ''}`,
+      message: `RG 실재고를 원장에 반영합니다 — SKU ${items.length}개\n\n늘림 +${won(plus)}개 · 줄임 −${won(minus)}개\n평가액 영향(추정) ${signed(valueDelta)}원\n\n판매 차감이 꺼져 있으면(기록만) RG 판매도 차이로 보입니다. 확인한 것만 반영하세요.${pendingArrive > 0 ? `\n\n⚠ RG입고중이 남은 SKU ${pendingArrive}개 — 보낸 물건이 들어온 것이면 먼저 「입고 완료 옮기기」를 누르세요(반영만 하면 입고중이 남아 두 번 셉니다).` : ''}`,
       confirmLabel: '반영',
     });
     if (!ok) return;
@@ -245,6 +246,8 @@ export default function StockClient() {
           last
         />
       </div>
+
+      <OrdersSyncPanel onChanged={() => void load()} />
 
       <CountQueuePanel rowById={rowById} busy={saving} onSave={saveOne} />
 

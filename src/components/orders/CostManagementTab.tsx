@@ -15,7 +15,7 @@ import ReceiptIngestModal from './ReceiptIngestModal';
 import AdSpendPasteModal from './AdSpendPasteModal';
 import RgShipmentHistoryPopover from './RgShipmentHistoryPopover';
 import ChannelEditPopover from './ChannelEditPopover';
-import { buildImportSummary, type ImportSummary } from './import-summary';
+import { summarizeOrdersSync, type ImportSummary } from './import-summary';
 import GroupRow from './cost-table/GroupRow';
 import ProductRowComponent from './cost-table/ProductRow';
 import ProductDetailPanel from './cost-table/ProductDetailPanel';
@@ -354,34 +354,23 @@ export default function CostManagementTab() {
   async function runAllBulkImport() {
     setImportingAll(true);
     try {
-      const range = getDateRange(preset, customFrom, customTo);
-      const [rgRes, wingRes, naverRes] = await Promise.all([
-        fetch('/api/cost-management/rg-bulk-import', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
-        }),
-        fetch('/api/cost-management/wing-bulk-import', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(range ?? {}),
-        }),
-        fetch('/api/cost-management/naver-bulk-import', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(range ?? {}),
-        }),
-      ]);
-      const [rgJson, wingJson, naverJson] = await Promise.all([
-        rgRes.json(), wingRes.json(), naverRes.json(),
-      ]);
-
-      const summary = buildImportSummary([
-        { channel: 'RG', json: rgJson },
-        { channel: '윙', json: wingJson },
-        { channel: '네이버', json: naverJson },
-      ]);
-      setImportResult(summary);
+      // ERP 1-C2a: 채널별 옛 불러오기 3개 대신 주문 수집을 한 번 돌린다(기초재고 시각 이후 · 옛 장부 자동 기록 · 15분마다 자동)
+      const res = await fetch('/api/erp/orders/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const json = await res.json().catch(() => null);
+      setImportResult(
+        json?.success
+          ? summarizeOrdersSync(json.data)
+          : {
+              channels: [{ channel: '주문 수집', success: false, imported: 0, skipped: 0, total: 0, voided: 0, error: json?.error ?? `요청 실패 (${res.status})` }],
+              totalImported: 0,
+              totalVoided: 0,
+              hasError: true,
+            },
+      );
       setLastSyncedAt(
         new Date().toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
       );
@@ -988,6 +977,7 @@ export default function CostManagementTab() {
         <button
           onClick={runAllBulkImport}
           disabled={importingAll}
+          title="판매는 15분마다 자동 수집됩니다(2026-09-26 기초재고 이후). 누르면 지금 한 번 더 수집합니다"
           style={{ ...btnStyle, opacity: importingAll ? 0.6 : 1, cursor: importingAll ? 'not-allowed' : 'pointer' }}
         >
           <CloudDownload size={12} /> {importingAll ? '가져오는 중…' : '판매 가져오기'}

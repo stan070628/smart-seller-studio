@@ -48,10 +48,6 @@ function emptyForm(): SaleForm {
 
 function fmt(n: number) { return n.toLocaleString('ko-KR'); }
 
-interface ImportForm {
-  from: string;
-  to: string;
-}
 
 interface CouponPolicyForm {
   rate: string;
@@ -86,10 +82,6 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [showImportForm, setShowImportForm] = useState(false);
-  const [importForm, setImportForm] = useState<ImportForm>({
-    from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-    to: new Date().toISOString().slice(0, 10),
-  });
   const [couponPolicy, setCouponPolicy] = useState<DownloadCouponPolicy | null>(
     downloadCouponPolicy ?? null
   );
@@ -262,20 +254,23 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
   async function runImport() {
     setImporting(true);
     try {
-      const res = await fetch(`/api/cost-management/products/${productId}/coupang-import`, {
+      // ERP 1-C2a: 상품별 채널 조회(옛 coupang-import — 무접두 키로 이중 기록) 대신 주문 수집을 한 번 돌린다
+      const res = await fetch('/api/erp/orders/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(importForm),
+        body: JSON.stringify({}),
       });
-      const json = await res.json();
-      if (json.success) {
-        const { imported, skipped } = json.data;
-        toast.success(`${imported}건 가져옴, ${skipped}건 중복 스킵`);
+      const json = await res.json().catch(() => null);
+      if (json?.success) {
+        const reports = json.data as { ok: boolean; inserted: number }[];
+        const added = reports.reduce((s, r) => s + (r.inserted ?? 0), 0);
+        const failed = reports.filter((r) => !r.ok).length;
+        toast.success(`주문 수집 — 새 라인 ${added}건${failed > 0 ? ` · 실패 채널 ${failed}개` : ''}`);
         await load();
         onChanged();
         setShowImportForm(false);
       } else {
-        toast.error(json.error ?? '가져오기에 실패했습니다.');
+        toast.error(json?.error ?? '수집에 실패했습니다.');
       }
     } finally {
       setImporting(false);
@@ -303,14 +298,12 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
       {showImportForm && (
         <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '6px', padding: '10px', marginBottom: '8px', fontSize: '11px' }}>
           <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <input type="date" value={importForm.from} onChange={(e) => setImportForm((f) => ({ ...f, from: e.target.value }))}
-              style={{ padding: '3px 6px', borderRadius: '4px', border: '1px solid #bae6fd', fontSize: '11px', color: '#18181b' }} />
-            <span style={{ color: '#64748b' }}>~</span>
-            <input type="date" value={importForm.to} onChange={(e) => setImportForm((f) => ({ ...f, to: e.target.value }))}
-              style={{ padding: '3px 6px', borderRadius: '4px', border: '1px solid #bae6fd', fontSize: '11px', color: '#18181b' }} />
+            <span style={{ color: '#475569' }}>
+              판매는 15분마다 모든 채널에서 자동 수집됩니다(2026-09-26 기초재고 이후). 그 전 기간은 다시 불러오지 않습니다.
+            </span>
             <button onClick={runImport} disabled={importing}
               style={{ padding: '3px 10px', borderRadius: '4px', background: '#1d4ed8', color: '#fff', border: 'none', fontSize: '11px', cursor: importing ? 'not-allowed' : 'pointer' }}>
-              {importing ? '가져오는 중...' : '실행'}
+              {importing ? '수집 중...' : '지금 수집'}
             </button>
           </div>
         </div>

@@ -4,6 +4,9 @@ import type { AdjustResult } from '@/lib/erp/ledger/adjust-store';
 import type { HistoryRow, RecentAdjust, RgReconResponse, StockListRow } from '@/lib/erp/stock/queries';
 import type { ImportSummary } from '@/lib/erp/ledger/opening-import';
 import type { CountQueueResponse } from '@/lib/erp/stock/count-queue';
+import type { DayLine, OrdersStatus } from '@/lib/erp/orders/queries';
+import type { BackfillPreview } from '@/lib/erp/orders/deduct';
+import type { ChannelReport, DeductSummary } from '@/lib/erp/orders/collect';
 
 export type ApiResult<T> =
   | { ok: true; data: T }
@@ -69,6 +72,13 @@ export const postRgApply = (items: RgApplyItem[]) => call<AdjustResult[]>('/api/
 export const postRgArrive = (items: RgArriveItem[]) =>
   call<{ skuId: number; qty: number; requestId: string; outcome: 'posted' | 'duplicate' }[]>('/api/erp/stock/rg-arrive', { items });
 export const fetchCountQueue = (n: number) => call<CountQueueResponse>(`/api/erp/stock/count-queue?n=${n}`);
+export const fetchOrdersStatus = () => call<OrdersStatus>('/api/erp/orders/status');
+export const fetchDayLines = (channel: string, date: string) =>
+  call<DayLine[]>(`/api/erp/orders/lines?channel=${encodeURIComponent(channel)}&date=${encodeURIComponent(date)}`);
+export const fetchDeductPreview = () => call<BackfillPreview>('/api/erp/orders/deduct-preview');
+export const postDeductEnable = (expectedLines: number) =>
+  call<{ preview: BackfillPreview; summary: DeductSummary }>('/api/erp/orders/deduct-enable', { confirm: true, expectedLines });
+export const postOrdersSync = (channel?: string) => call<ChannelReport[]>('/api/erp/orders/sync', channel ? { channel } : {});
 
 /**
  * 실사표 불러오기. `commit:true`인데 검사 오류가 있으면 서버가 422 `{ success:false, data:<오류가 담긴 요약> }`로

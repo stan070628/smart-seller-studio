@@ -66,7 +66,8 @@ export interface NaverAddressBook {
 }
 
 // product-orders/query API 실제 응답 구조 (data 배열의 각 원소)
-interface NaverOrderRawItem {
+// 🔴 order.ordererName·ordererTel·productOrder.shippingAddress는 구매자 개인정보다 — 주문 수집(erp/orders/adapters/naver.ts)은 버린다
+export interface NaverOrderRawItem {
   order: {
     orderId: string;
     orderDate: string;
@@ -78,7 +79,17 @@ interface NaverOrderRawItem {
     productOrderId: string;
     productName: string;
     productId?: string;
+    /** 원상품번호(originProductNo) — ERP 리스팅의 external_product_id */
+    originalProductId?: string;
+    /** 옵션 조합 id — ERP 리스팅의 external_option_key(없으면 단일상품) */
+    optionCode?: string;
+    claimType?: string;
+    claimStatus?: string;
     quantity: number;
+    /** 처음 주문 수량(부분 취소 전) */
+    initialQuantity?: number;
+    /** 부분 취소·반품 뒤 남은 수량 — 0이면 전부 취소 */
+    remainQuantity?: number;
     totalPaymentAmount: number;
     productOrderStatus: string;
     deliveryFeeAmount?: number;
@@ -111,6 +122,10 @@ export interface NaverOrder {
   claimStatus: string | null;
   productName: string;
   channelProductNo: number | null;
+  /** 원상품번호 — 2026-09-26까지 버려지던 칸(ERP 1-C2a에서 살림) */
+  originalProductId?: string | null;
+  /** 옵션 조합 id */
+  optionCode?: string | null;
   quantity: number;
   totalPaymentAmount: number;
   deliveryFeeAmount: number;
@@ -136,6 +151,8 @@ function normalizeNaverOrder(raw: NaverOrderRawItem): NaverOrder {
     claimStatus: claim?.claimStatus ?? null,
     productName: productOrder.productName,
     channelProductNo: productOrder.productId ? Number(productOrder.productId) || null : null,
+    originalProductId: productOrder.originalProductId ?? null,
+    optionCode: productOrder.optionCode ?? null,
     quantity: productOrder.quantity,
     totalPaymentAmount: productOrder.totalPaymentAmount,
     deliveryFeeAmount: productOrder.deliveryFeeAmount ?? 0,
@@ -157,6 +174,24 @@ function normalizeNaverOrder(raw: NaverOrderRawItem): NaverOrder {
 // ─────────────────────────────────────────────────────────────
 // 클라이언트
 // ─────────────────────────────────────────────────────────────
+
+/**
+ * 네이버 오류 응답 요약 — 로그·오류 문구용. JSON이면 message(없으면 error)·code·invalidInputs(칸 이름: 설명)만,
+ * JSON이 아니면 길이만 남긴다. 등록 재시도(registerProduct)가 invalidInputs 칸 이름으로 고르므로 그것은 남긴다.
+ */
+export function naverErrorSummary(text: string): string {
+  try {
+    const j = JSON.parse(text) as { code?: unknown; message?: unknown; error?: unknown; invalidInputs?: { name?: string; message?: string }[] };
+    const msg = String(j.message ?? j.error ?? '').slice(0, 300);
+    // M4 — 500자에서 자르면 registerProduct 재시도가 찾는 칸 이름이 뒤쪽 항목에서 잘려나갔다. 2000자로 올린다
+    const details = Array.isArray(j.invalidInputs)
+      ? j.invalidInputs.map((i) => `${String(i?.name ?? '')}: ${String(i?.message ?? '')}`).join(', ').slice(0, 2000)
+      : '';
+    return `${msg}${j.code !== undefined ? ` (code=${String(j.code)})` : ''}${details ? ` [${details}]` : ''}`;
+  } catch {
+    return `JSON 아닌 응답 ${Buffer.byteLength(text ?? '', 'utf8')}바이트 — 본문 생략`;
+  }
+}
 
 export class NaverCommerceClient {
   private readonly clientId: string;
@@ -230,19 +265,10 @@ export class NaverCommerceClient {
     const text = await res.text();
 
     if (!res.ok) {
-      let errMsg: string;
-      try {
-        const errJson = JSON.parse(text);
-        // invalidInputs 필드가 있으면 상세 필드별 오류 표시
-        const details = errJson.invalidInputs
-          ? errJson.invalidInputs.map((i: { name?: string; message?: string }) => `${i.name}: ${i.message}`).join(', ')
-          : '';
-        errMsg = (errJson.message || errJson.error || text) + (details ? ` [${details}]` : '');
-      } catch {
-        errMsg = text;
-      }
-      console.error('[네이버 API] 에러 응답 전문:', text.slice(0, 1000));
-      throw new Error(`[네이버 API] ${res.status}: ${errMsg}`);
+      // 응답 본문은 싣지 않는다 — 주문 조회 응답에는 구매자 이름·전화·주소가 있다(M6). code·message·invalidInputs만
+      const summary = naverErrorSummary(text);
+      console.error(`[네이버 API] ${method} ${path} → HTTP ${res.status} | ${summary}`);
+      throw new Error(`[네이버 API] ${res.status}: ${summary}`);
     }
 
     return text ? JSON.parse(text) as T : {} as T;
@@ -487,6 +513,35 @@ export class NaverCommerceClient {
 
     const rawItems = detail.data ?? [];
     return { contents: rawItems.map(normalizeNaverOrder) };
+  }
+
+  /**
+   * 변경 상품주문 한 페이지(ERP 주문 수집). lastChangedType을 생략해 모든 변경(결제·발송·취소·반품·교환)을 받는다.
+   * from~to는 24시간 이하, +09:00 ISO. 응답 data.more가 있으면 more.moreFrom·moreSequence로 다음 페이지를 부른다.
+   * getOrders와 달리 실패를 삼키지 않는다 — 수집기는 「끝까지 받았다」를 믿어야 한다.
+   */
+  async getLastChangedStatuses(p: { from: string; to: string; moreSequence?: string }): Promise<{
+    statuses: { productOrderId: string }[];
+    more: { moreFrom: string; moreSequence: string } | null;
+  }> {
+    const query = new URLSearchParams({ lastChangedFrom: p.from, lastChangedTo: p.to, limitCount: '300' });
+    if (p.moreSequence) query.set('moreSequence', p.moreSequence);
+    const res = await this.request<{
+      data?: { lastChangeStatuses?: { productOrderId: string }[]; more?: { moreFrom: string; moreSequence: string } | null };
+    }>('GET', `/external/v1/pay-order/seller/product-orders/last-changed-statuses?${query.toString()}`);
+    return { statuses: res.data?.lastChangeStatuses ?? [], more: res.data?.more ?? null };
+  }
+
+  /** 상품주문 상세(최대 300건). 응답에는 구매자 정보가 있다 — 호출자가 버린다 */
+  async queryProductOrders(productOrderIds: string[]): Promise<NaverOrderRawItem[]> {
+    if (productOrderIds.length === 0) return [];
+    if (productOrderIds.length > 300) throw new RangeError(`상품주문 상세는 한 번에 300건까지다: ${productOrderIds.length}`);
+    const res = await this.request<{ data?: NaverOrderRawItem[] }>(
+      'POST',
+      '/external/v1/pay-order/seller/product-orders/query',
+      { productOrderIds },
+    );
+    return res.data ?? [];
   }
 
   // ─── 정산 조회 ────────────────────────────────────────────
