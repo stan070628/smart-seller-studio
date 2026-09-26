@@ -6232,7 +6232,19 @@ git commit -m "feat(erp): 영수증 확정 화면에서 옵션(SKU)별 입고 �
 390px 폭으로 `http://localhost:3000/m/receipt`를 연다. 확정 대기 줄이 있는 영수증이 있으면 상세로 들어가 분배 칸(자동 안내 / 옵션별 수량 / SKU 검색)이 줄 아래에 붙어 보이는지, 하단 확정 버튼과 겹치지 않는지 확인한다. 🔴 **「입고 확정」은 누르지 않는다**(실제 입고가 생긴다). 확정 대기 영수증이 없으면 이 확인은 건너뛰고 컴포넌트 테스트로 갈음한다고 기록한다.
 
 ---
-### Task 8: 🔴 사용자 게이트 — 기초재고 입력과 원장 RG = 쿠팡 RG
+### Task 8: 1-C1 마무리 — 병합·배포를 게이트보다 먼저
+
+> 🔵 **순서 변경(2026-09-26 컨트롤러 검토):** 원래는 게이트(기초재고 입력) 뒤에 병합했으나, 그러면 게이트~배포 사이 운영 앱의 옛 코드로 한 영수증 확정·RG 입고가 원장에서 빠진다. **코드를 먼저 배포하고 게이트를 마지막에 둔다.** 배포 뒤 게이트 전까지 들어온 입고는 원장에 이미 전표가 생기므로, 그 SKU는 실사표 불러오기에서 제외되고 화면의 「지금 개수」로 입력한다(불러오기 미리보기가 제외 목록을 보여준다).
+
+
+- [ ] **Step 1:** 전체 테스트와 타입 — `npx vitest run`(실패 수 ≤ 기준선), `npx tsc --noEmit`(0 오류), `npx next build`(성공 — 새 라우트·페이지가 빌드되는지. 실패하면 main에서도 실패하는지 먼저 확인해 원인을 가른다)
+- [ ] **Step 2:** 최종 리뷰(superpowers:requesting-code-review) — 설계서 §1~§7과 이 계획서 「설계 해석」 표를 기준으로. 지적은 고치고 `fix(erp): …`로 커밋한다.
+- [ ] **Step 3:** 브랜치 푸시 → PR(`gh pr create`). 본문: Task 0~7 요약 · 「설계 해석」 표 · 게이트는 배포 뒤(Task 9) · 「하지 않는 것」 표 · 끝에 `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
+- [ ] **Step 4:** 🔴 **병합은 사용자 확인 후.** 병합 뒤 Vercel 배포 성공을 확인하고(`gh api repos/stan070628/smart-seller-studio/commits/<병합 SHA>/status`), 곧바로 Task 9 게이트로 간다. 사용자에게 `/m/stock`을 휴대폰 홈 화면에 추가하는 법을 한 줄로 안내한다.
+
+---
+
+### Task 9: 🔴 사용자 게이트(배포 뒤) — 기초재고 입력과 원장 RG = 쿠팡 RG
 
 > 이 Task는 **사용자가 화면에서 입력한다.** 컨트롤러는 준비·안내·검증만 한다. 서브에이전트에게 맡기지 않는다.
 
@@ -6244,13 +6256,13 @@ Expected: 실패 수 ≤ 기준선(Task 0 Step 1) · tsc 0 · 자가시험 26행
 - [ ] **Step 2: 사용자에게 알리고 준비한다**
 
 컨트롤러가 사용자에게 한 번에 전한다.
-1. 🔴 **지금부터 이 브랜치가 병합·배포될 때까지 운영 앱(Vercel)에서 영수증 확정·RG 입고 등록을 하지 않는다** — 운영에 떠 있는 옛 코드는 원장에 쓰지 않아, 기초재고 이후 입고가 원장에서 빠진다(Task 9 Step 4에서 점검한다).
+1. 🔵 **코드는 이미 배포돼 있다(Task 8).** 게이트는 배포 직후 바로 한다 — 그 사이 영수증 확정·RG 입고를 했다면 해당 SKU는 불러오기에서 빠지고 화면에서 「지금 개수」로 입력한다.
 2. 실사표: `docs/erp/opening-count-2026-09-26.csv`(1-B에서 사용자가 채운 것)를 쓰거나, 새로 세려면 `npx --no-install tsx scripts/erp/opening-collect.ts --carry=docs/erp/opening-count-2026-09-26.csv --force`로 옛 입력을 옮긴 새 실사표를 뽑는다(오늘 날짜 파일). 고칠 칸은 `self_count`·`rg_inbound`·`unit_cost`. **실사를 마친 시각을 기억해 둔다**(24시간 안에 불러와야 한다).
 3. 1-B에서 남긴 입력: 단가 빈칸 6건(쿨매트 핑크 · 쿨매트 블루 구름(베개형) S · 105(L) 블랙 · 화이트+그레이스트라이프 150 · 니트 건조대 2단 · 마크곤잘레스) · **퓨어틴 초코(`cp:16368156484:330ml`) 단가는 팩당 12,995**(옛 이력 재계산은 박스 단위 중복 입고 때문에 틀린다 — 불러오기 창의 「단가 입력」에 적는다) · 퓨어틴 초코 실사 11의 단위(병/팩) · 승인 목록 밖 RG 재고 4건(`95812283106`·`95932746388`·`95833506834`·`95693450298`, 합계 8개) — 웹 불러오기는 이것들을 경고로만 보이고 싣지 않는다. 스크립트 대조(Step 5)에서 빼려면 `docs/erp/opening-overrides.json`의 `ignoreRgVids`에 사유와 함께 적는다(사용자 결정).
 
-- [ ] **Step 3: 사용자가 실사표를 불러온다** (`npm run dev` · 사용자 로그인 · 1440px)
+- [ ] **Step 3: 사용자가 실사표를 불러온다** (운영 앱 또는 `npm run dev` · 사용자 로그인 · 1440px)
 
-`http://localhost:3000/erp/stock` → 「실사표 불러오기(CSV)」 → 파일 고르기 → **실사를 마친 시각** → 「미리보기」 → 오류가 0이 될 때까지 「단가 입력」을 채우고 다시 미리보기 → 컨트롤러가 합계(전표 수·집·RG입고중·RG·평가액)와 경고·제외 목록을 사용자에게 읽어 준다 → **사용자 승인** → 「불러오기」.
+`/erp/stock` → 「실사표 불러오기(CSV)」 → 파일 고르기 → **실사를 마친 시각** → 「미리보기」 → 오류가 0이 될 때까지 「단가 입력」을 채우고 다시 미리보기 → 컨트롤러가 합계(전표 수·집·RG입고중·RG·평가액)와 경고·제외 목록을 사용자에게 읽어 준다 → **사용자 승인** → 「불러오기」.
 Expected: `기초재고 N건을 불러왔습니다` 토스트, 표의 「원장 없음」이 불러온 SKU에서 사라진다. 실사표에서 빠진 SKU는 나중에 화면에서 첫 「지금 개수」를 적으면 기초재고가 된다.
 
 - [ ] **Step 4: RG 대조 → 반영** (사용자)
@@ -6280,26 +6292,6 @@ Expected: `❌ 기초 전표가 N건 있다 — 기초재고 적재 뒤에는 �
 git add docs/superpowers/plans/2026-09-26-erp-phase1c1-stock-adjust.md docs/erp/
 git commit -m "docs(erp): 1-C1 기초재고 입력 결과 — 원장 RG = 쿠팡 RG"
 ```
-
----
-
-### Task 9: 1-C1 마무리
-
-- [ ] **Step 1:** 전체 테스트와 타입 — `npx vitest run`(실패 수 ≤ 기준선), `npx tsc --noEmit`(0 오류), `npx next build`(성공 — 새 라우트·페이지가 빌드되는지. 실패하면 main에서도 실패하는지 먼저 확인해 원인을 가른다)
-- [ ] **Step 2:** 최종 리뷰(superpowers:requesting-code-review) — 설계서 §1~§7과 이 계획서 「설계 해석」 표를 기준으로. 지적은 고치고 `fix(erp): …`로 커밋한다.
-- [ ] **Step 3:** 브랜치 푸시 → PR(`gh pr create`). 본문: Task 0~8 요약 · 「설계 해석」 표 · 「적재 결과」 · 「하지 않는 것」 표 · 끝에 `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
-- [ ] **Step 4:** 🔴 병합·배포 뒤 잔여 점검(읽기 전용) — Task 8 이후 운영 옛 코드로 들어간 입고·RG 보내기가 원장에서 빠졌는지 본다.
-```bash
-node -e "
-const fs=require('fs');const {Client}=require('pg');for(const l of fs.readFileSync('.env.local','utf8').split('\n')){const m=l.match(/^([A-Z_]+)=(.*)\$/);if(m)process.env[m[1]]=m[2].replace(/^[\"']|[\"']\$/g,'')}
-(async()=>{const c=new Client({connectionString:process.env.SUPABASE_DB_URL,ssl:{rejectUnauthorized:false}});await c.connect();
-const cut=\"(select cursor_at from erp.sync_cursors where name='ledger_cutover')\";
-const r=await c.query('select count(*)::int n from cost_entries ce where ce.source_receipt_line_id is not null and ce.created_at > '+cut+' and not exists (select 1 from erp.stock_ledger l where l.ref_type = \'receipt_line\' and l.ref_id = ce.source_receipt_line_id::text)');
-const g=await c.query('select count(*)::int n from rg_shipment_events e where e.created_at > '+cut+' and not exists (select 1 from erp.stock_ledger l where l.ref_type = \'rg_shipment\' and l.ref_id = e.id::text)');
-console.log('원장에 없는 영수증 입고', r.rows[0].n, '· 원장에 없는 RG 보내기', g.rows[0].n);await c.end()})()"
-```
-Expected: 둘 다 0. 0이 아니면 사용자에게 알리고 재고현황에서 조정(집 ±수량)으로 맞춘다.
-- [ ] **Step 5:** 🔴 **병합은 사용자 확인 후.** 병합되면 사용자에게 `/m/stock`을 휴대폰 홈 화면에 추가하는 법을 한 줄로 안내한다.
 
 ---
 
