@@ -61,7 +61,10 @@ describe('GET /api/erp/stock', () => {
 
   it('SKU별 위치 재고·평가액·단가를 돌려준다', async () => {
     poolRows = () => ({
-      rows: [{ id: '7', key: 'cp:1:블랙', name: '왜건', option_label: '블랙', legacy: ['pc-1'], self: 3, rg_inbound: 0, rg: 2, value: '5000', has_ledger: true, lot_cost: 1000, legacy_cost: null, base_unit_label: null }],
+      rows: [{
+        id: '7', key: 'cp:1:블랙', name: '왜건', option_label: '블랙', legacy: ['pc-1'], self: 3, rg_inbound: 0, rg: 2, value: '5000', self_value: '3000',
+        has_ledger: true, lot_cost: 1000, legacy_cost: null, base_unit_label: null, last_counted_at: new Date('2026-09-20T01:00:00Z'),
+      }],
       rowCount: 1,
     });
     const { GET } = await import('@/app/api/erp/stock/route');
@@ -69,6 +72,7 @@ describe('GET /api/erp/stock', () => {
     expect(json.data).toEqual([{
       skuId: 7, key: 'cp:1:블랙', name: '왜건', option: '블랙', legacyProductCostIds: ['pc-1'],
       self: 3, rgInbound: 0, rg: 2, value: 5000, hasLedger: true, lotCost: 1000, legacyCost: null, costNeedsInput: false,
+      selfValue: 3000, lastCountedAt: '2026-09-20T01:00:00.000Z',
     }]);
   });
 

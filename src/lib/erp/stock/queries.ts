@@ -25,6 +25,10 @@ export interface StockListRow {
   legacyCost: number | null;
   /** 미리 채울 단가가 없다(최근 lot도, 쓸 수 있는 옛 입고도 없다) — 재고를 늘리려면 사람이 단가를 적는다 */
   costNeedsInput: boolean;
+  /** 집 위치 원장 평가액 — 오늘 셀 목록의 금액 순서 */
+  selfValue: number;
+  /** 집 마지막 실사(센 기록, erp.stock_counts) 시각. 한 번도 안 셌으면 null */
+  lastCountedAt: string | null;
 }
 
 export interface HistoryRow {
@@ -75,6 +79,8 @@ export async function listStock(db: Db): Promise<StockListRow[]> {
             coalesce(sum(h.qty) filter (where h.location = 'rg_inbound'), 0)::int as rg_inbound,
             coalesce(sum(h.qty) filter (where h.location = 'rg'), 0)::int as rg,
             coalesce(sum(h.value), 0)::bigint as value,
+            coalesce(sum(h.value) filter (where h.location = 'self'), 0)::bigint as self_value,
+            (select max(c.counted_at) from erp.stock_counts c where c.sku_id = s.id and c.location = 'self') as last_counted_at,
             exists (select 1 from erp.stock_ledger x where x.sku_id = s.id) as has_ledger,
             (select l.unit_cost from erp.stock_ledger l
               where l.sku_id = s.id and l.lot_id is null
@@ -97,6 +103,7 @@ export async function listStock(db: Db): Promise<StockListRow[]> {
       skuId: Number(r.id), key: r.key, name: r.name, option: r.option_label ?? '', legacyProductCostIds: r.legacy ?? [],
       self: Number(r.self), rgInbound: Number(r.rg_inbound), rg: Number(r.rg), value: Number(r.value),
       hasLedger: r.has_ledger === true, lotCost, legacyCost, costNeedsInput: lotCost === null && legacyCost === null,
+      selfValue: Number(r.self_value), lastCountedAt: r.last_counted_at ? iso(r.last_counted_at) : null,
     };
   });
 }

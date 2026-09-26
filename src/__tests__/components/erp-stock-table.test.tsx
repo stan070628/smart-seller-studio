@@ -5,7 +5,7 @@ import { filterGroups, groupRows, type StockRow } from '@/components/erp/stock/s
 
 const row = (o: Partial<StockRow>): StockRow => ({
   skuId: 1, key: 'k1', name: '왜건', option: '블랙', legacyProductCostIds: [], self: 3, rgInbound: 1, rg: 2, value: 6000,
-  hasLedger: true, lotCost: 1000, legacyCost: null, costNeedsInput: false, ...o,
+  hasLedger: true, lotCost: 1000, legacyCost: null, costNeedsInput: false, selfValue: 0, lastCountedAt: null, ...o,
 });
 const ROWS = [
   row({}),
