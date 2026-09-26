@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 사람이 PC(`/erp/stock`)·휴대폰(`/m/stock`)에서 원장 재고를 고치고(빈 위치의 첫 「지금 개수」 = 기초재고), 실사표 CSV로 기초재고를 한 번에 불러오며, 코스트코 영수증 확정과 RG 보내기가 같은 트랜잭션에서 원장에 기록되게 한다. 관문: **원장 RG = 쿠팡 RG 실재고**.
+**Goal:** 사람이 PC(`/erp/stock`)·휴대폰(`/m/stock`)에서 원장 재고를 고치고(빈 위치의 첫 「지금 개수」 = 기초재고), 품목이 많아도 실사가 돌도록 상품 단위로 묶어 보고 「오늘 셀 목록」(센 기록 기반 순환 실사)을 따라 세며, 실사표 CSV로 기초재고를 한 번에 불러오며, 코스트코 영수증 확정과 RG 보내기가 같은 트랜잭션에서 원장에 기록되게 한다. 관문: **원장 RG = 쿠팡 RG 실재고**.
 
 **Architecture:** 조정은 1-B 원장 위에 얹는 얇은 층이다. 무엇을 기록할지는 순수 함수(`adjust.ts` — 지금 개수→차이 · 단가 출처 · 화면 재고 불일치 409 · 기초/조정 구분 · 커서 규칙)가 정하고, 기록은 `adjust-store.ts`가 1-B `store.ts`(SKU 잠금·멱등·FIFO)를 불러 한다. 화면은 `/api/erp/stock/*` 한 벌을 PC·휴대폰이 같이 쓴다. 영수증 확정·RG 보내기는 기존 라우트의 트랜잭션 **안에서** 원장 함수(`receipt.ts`·`rg-ship.ts`)를 부른다.
 
@@ -18,7 +18,7 @@
 - 작업 폴더: `~/dev/smart_seller_studio/.worktrees/erp-restructure` (브랜치 `feature/erp-restructure`, main `5b5d995f`까지 fast-forward). 모든 명령은 여기서.
 - **합격 기준** = 새 테스트 전부 통과 + 전체 실패 수 ≤ 기준선(Task 0 Step 1에서 잰다 — 1-B 때 13건, 전부 ERP 무관) + `npx tsc --noEmit` 0 오류.
 - **DB는 운영 Supabase 하나다.** 스크립트·마이그레이션은 `SUPABASE_DB_URL`, 앱 서버 코드(`getSourcingPool()` — `src/lib/sourcing/db.ts`)는 `SOURCING_DATABASE_URL`로 붙는다. 둘이 같은 DB인지 Task 1 Step 0에서 확인한다(값은 출력하지 않는다). 비밀값 출력 금지.
-- 마이그레이션: `node scripts/apply-migration.mjs 115`(트랜잭션으로 감싼다 — 파일 안에 BEGIN/COMMIT 금지). **운영 적용 허용** — 원장 0행·`purchase_units` 0행이다.
+- 마이그레이션: `node scripts/apply-migration.mjs 115`(트랜잭션으로 감싼다 — 파일 안에 BEGIN/COMMIT 금지). **운영 적용 허용** — 원장 0행·`purchase_units` 0행이다. Task 4c의 `116`(센 기록 `erp.stock_counts`, 새 테이블)도 같은 방식·같은 허용이다.
 - 스크립트 실행: `npx --no-install tsx scripts/erp/<파일>.ts`. 첫 줄에서 `loadEnvLocal()`(`scripts/erp/_env.ts`). 스크립트는 `new pg.Client({ connectionString: process.env.SUPABASE_DB_URL, ssl: { rejectUnauthorized: false } })`로 접속한다.
 - **erp 스키마 접근(1-B P4):** 서버 코드는 `pg` 직접(`getSourcingPool()`), supabase-js로 `erp`를 읽지 않는다. `pg.Pool`·`PoolClient`·`pg.Client`는 모두 1-B `Db` 인터페이스(`src/lib/erp/ledger/store.ts`)를 만족한다.
 - **인증:** 새 `/api/erp/*`는 전부 첫 줄에서 `requireAuth`(`src/lib/supabase/auth.ts` — 미인증이면 401 `Response`)를 부른다. `src/proxy.ts`는 `/api/`를 통과시키므로 **핸들러가 막아야 한다.** 테스트는 `vi.mock('@/lib/auth', () => ({ getCurrentUser: … }))`로 로그인 상태를 만든다(`src/__tests__/api/rg-shipments.test.ts` 방식).
@@ -47,6 +47,7 @@
 | 12 | §3 휴대폰 「최근 수정 5건」 | 서버 기준(`ref_type='adjust'` 묶음) — PC에서 고친 것도 보인다 | 기기 간 공유 |
 | 13 | (없음) 휴대폰 진입점 | 주소 직접(`/m/stock`, 홈 화면 추가). 링크는 만들지 않는다 | `/m`에는 목록 화면이 없다 |
 | 14 | (Task 2 리뷰) 빈 위치의 ±수량 · 옛 단가 · 기준 시각 · 요청 id | ① 빈 (SKU·위치)의 **+수량 = expected 0인 「지금 개수」**(기초 전표·`opening:` 키·커서), −수량은 400 「비어 있는 위치에서는 뺄 수 없다」 ② **`base_unit_label`이 정해진 SKU는 옛 `cost_entries` 단가를 쓰지 않는다** — 조정 서버·재고 목록 미리 채움 모두 null, 목록에 `costNeedsInput` → 사람이 단가를 적는다(없으면 422) ③ `ledger_cutover` = **가장 이른 기초 시각**(`least()` upsert — 화면 조정·실사표 불러오기·`opening-apply` 공통, 스크립트의 「다른 값이면 중단」 제거) ④ 요청 id는 소문자로 맞추고, 한 요청 안 중복·다른 SKU·위치에 쓰인 id는 400, 멱등키 unique 위반(23505)은 409 ⑤ `rg` 위치 ⇔ `rg_reconcile` 사유 | ① 입력 방식에 따라 같은 첫 입력이 기초/조정으로 갈리지 않게 ② 옛 입고는 묶음·박스 단위일 수 있어 조용히 틀린 원가가 들어간다 ③ 어느 경로가 먼저 들어가도 소급 시작점이 같다 ④ 같은 id의 다른 조정을 `duplicate`로 삼키면 기록이 사라진다 |
+| 15 | 결정 5(2026-09-26 추가) 「오늘 셀 목록 · 상품 단위 묶기 · 센 기록」(Task 4b·4c·5) | ① 센 기록(`erp.stock_counts`, 116)은 **`count` 방식 입력마다**(PC 칸·실사 모드·오늘 셀 목록·휴대폰·RG 대조) 조정과 **같은 트랜잭션**에서 한 줄 — 차이 0 포함, ±수량은 남기지 않는다. 실사표 불러오기도 불러온 SKU의 **집 센 개수**를 한 줄씩(0 포함, 시각 = 실사를 마친 시각) ② 같은 요청 판정에 원장과 함께 **`stock_counts.request_id`**(unique)도 본다. unique 위반(23505)은 409 ③ 오늘 셀 목록·「마지막 실사」는 **집(`self`) 센 기록만** 본다. 금액 = **집 평가액**, 제외 = 원장 전표가 없는 SKU(「재고 0이고 전표도 없다」와 같다) · 오늘(KST) 센 SKU, 동점은 SKU id 순. 화면(PC 패널·휴대폰)은 목록을 **열 때 한 번** 받고 **집에서 센** 카드만 뺀다 ④ 화면은 차이 0 「지금 개수」를 막지 않는다(「차이 없음 — 센 기록만 남깁니다」) — Task 4의 `EditCell`·실사 모드가 차이 0을 버리던 것을 고친다 ⑤ 묶음 합계는 **전체 옵션** 합, 조회조건은 옵션에 걸어 맞는 옵션만 보이고, 조회조건이 걸리면 묶음을 모두 펼친다. RG 차이는 합이 아니라 **불일치 옵션 수** | ① 「세어 봤더니 맞다」가 남아야 순환 실사가 돈다. ±수량은 센 개수가 아니다. 불러오기를 빼면 기초재고를 막 센 SKU가 「한 번도 안 센」 것으로 첫 목록을 채운다 ② 차이 0이면 원장에 쓰지 않아 기존 중복 판정(원장 `ref_id`)이 재전송을 못 알아본다 ③ 목록은 집에서 세는 일이다. 다시 받으면 센 만큼 다음 SKU가 채워져 「오늘 N개」가 끝나지 않는다 ④ 막으면 센 기록이 남지 않는다 ⑤ 합계가 필터에 따라 바뀌면 상품 재고를 잘못 읽는다. RG 차이 합은 +1·−1이 상쇄돼 0으로 보인다 |
 
 ## 1-C1 탐색 사실 (2026-09-26 읽기 전용)
 
@@ -68,13 +69,15 @@
 | `supabase/migrations/115_erp_ledger_reason_purchase_units.sql` | 원장 `reason` + 검사 · `purchase_units` 1:N |
 | `src/lib/erp/ledger/plan.ts`·`store.ts` (수정) | 전표에 `reason` 칸 |
 | `src/lib/erp/ledger/adjust.ts` | 조정 순수 로직: 입력 검사 · 차이 · 기초/조정 · 커서 · 단가 출처 · 오류 타입 · 멱등키 |
-| `src/lib/erp/ledger/adjust-store.ts` | 조정 기록(잠금·중복·재고 확인·단가 조회·커서) · 여러 건 |
+| `src/lib/erp/ledger/adjust-store.ts` | 조정 기록(잠금·중복·재고 확인·단가 조회·커서) · 여러 건 · 센 기록(`recordCount`, Task 4c) |
 | `src/lib/erp/ledger/opening-db.ts` | (옮김) `readDb`·`readRgLinks`·`fetchRgStock` |
-| `src/lib/erp/ledger/opening-import.ts` | 실사표 불러오기 계획(순수) + 적재(DB) |
+| `src/lib/erp/ledger/opening-import.ts` | 실사표 불러오기 계획(순수) + 적재(DB) · 집 센 기록(Task 4c) |
 | `src/lib/erp/ledger/rg-ship.ts` | RG 보내기 → SKU별 `self → rg_inbound` |
 | `src/lib/erp/ledger/receipt.ts` | 영수증 줄 → SKU 후보·분배·`receipt` lot·품번 학습 |
 | `src/lib/erp/ledger/purchase-units.ts` | `purchase_units` 첫 적재 계획(순수) |
-| `src/lib/erp/stock/queries.ts` | 재고 화면 조회(목록·이력·최근·RG 원장·활성 SKU) |
+| `supabase/migrations/116_erp_stock_counts.sql` | 센 기록 `erp.stock_counts`(차이 0인 실사도 남긴다 · `request_id` unique) — Task 4c |
+| `src/lib/erp/stock/queries.ts` | 재고 화면 조회(목록·이력·최근·RG 원장·활성 SKU) · 목록에 집 평가액·마지막 실사(Task 4c) |
+| `src/lib/erp/stock/count-queue.ts` | 「오늘 셀 목록」 규칙(순수) · KST 날짜 — Task 4c |
 | `src/lib/erp/stock/http.ts` | `/api/erp/*` 공용: 트랜잭션 · 오류 → HTTP · 요청 본문 변환 |
 | `src/app/api/erp/stock/route.ts` | GET 목록 |
 | `src/app/api/erp/stock/adjust/route.ts` | POST 조정(1건·실사 모드 여러 건) |
@@ -83,17 +86,19 @@
 | `src/app/api/erp/stock/recent/route.ts` | GET 최근 조정 |
 | `src/app/api/erp/stock/rg-reconcile/route.ts` | GET 대조 · POST 반영 |
 | `src/app/api/erp/stock/import/route.ts` | POST 실사표 미리보기·적재 |
+| `src/app/api/erp/stock/count-queue/route.ts` | GET 오늘 셀 목록 — Task 4c |
 | `src/app/api/erp/receipts/[id]/sku-options/route.ts` | GET 영수증 줄별 SKU 후보 |
 | `src/app/erp/layout.tsx`·`src/app/erp/page.tsx`·`src/app/erp/stock/page.tsx` | PC 화면 틀 |
 | `src/lib/nav-items.tsx` (수정) | 사이드바 「재고·매입 > 재고현황」 |
-| `src/components/erp/stock/stock-view.ts` | 화면 순수 계산(필터·KPI·편집 차이·요청 본문·내보내기) |
+| `src/components/erp/stock/stock-view.ts` | 화면 순수 계산(필터·KPI·편집 차이·요청 본문·내보내기) · 상품 단위 묶기(Task 4b) |
 | `src/components/erp/stock/api.ts` | 화면의 서버 호출 |
 | `src/components/erp/stock/StockClient.tsx` | PC 화면 컨테이너(조회조건·KPI·도구줄·실사 모드·RG 반영) |
-| `src/components/erp/stock/StockTable.tsx` | 재고 표 |
-| `src/components/erp/stock/EditCell.tsx` | 칸 편집 팝오버 |
+| `src/components/erp/stock/StockTable.tsx` | 재고 표 — 상품 묶음·펼치기(Task 4b) · 「마지막 실사」 칸(Task 4c) |
+| `src/components/erp/stock/CountQueuePanel.tsx` | PC 「오늘 셀 목록」 패널 — Task 4c |
+| `src/components/erp/stock/EditCell.tsx` | 칸 편집 팝오버(차이 0 지금 개수 허용 · `countOnly` — Task 4c) |
 | `src/components/erp/stock/HistoryPanel.tsx` | 우측 입출 이력 + 되돌리기 |
 | `src/components/erp/stock/CsvImportDialog.tsx` | 실사표 불러오기 창 |
-| `src/components/erp/stock/MobileStock.tsx` · `src/app/m/stock/{layout,page}.tsx` | 휴대폰 화면 |
+| `src/components/erp/stock/MobileStock.tsx` · `src/app/m/stock/{layout,page}.tsx` | 휴대폰 화면 — 오늘 셀 목록으로 시작 → 검색 |
 | `src/app/api/cost-management/rg-shipments/route.ts` (수정) · `src/components/orders/RocketGrowthShipmentModal.tsx` (수정) · `src/components/orders/rg-sku-split.ts` | RG 보내기 SKU 수량 |
 | `src/app/api/receipts/[id]/confirm/route.ts` (수정) · `src/components/receipt/ReceiptDetail.tsx` (수정) · `src/components/receipt/ReceiptSkuSplit.tsx` · `src/components/receipt/sku-split.ts` | 영수증 확정 → 원장 입고 |
 | `scripts/erp/purchase-units-seed.ts` | `purchase_units` 첫 적재 |
@@ -3951,7 +3956,1943 @@ git commit -m "feat(erp): /erp/stock 페이지와 사이드바 「재고·매입
 5. 깨진 곳이 있으면 고치고 `fix(erp): …`로 커밋한 뒤 다시 본다. 스크린샷 한 장을 사용자에게 보여준다.
 
 ---
-### Task 5: 휴대폰 재고 수정 `/m/stock`
+### Task 4b: 상품 단위로 묶어 보기
+
+> 결정 5(2026-09-26 추가): 품목이 많아지면 SKU 한 줄씩 보는 표로는 실사가 힘들다 → `erp.skus.name`(쿠팡 상품명)으로 묶어 **한 줄 = 상품**(옵션 수 · 합계 집/입고중/RG/평가액), 펼치면 옵션 행. 옵션 1개 상품은 그대로 한 줄. Task 4에서 만든 표·컨테이너 위에 얹는다(API 변경 없음).
+
+**Files:**
+- Modify: `src/components/erp/stock/stock-view.ts`, `src/components/erp/stock/StockTable.tsx`, `src/components/erp/stock/StockClient.tsx`
+- Modify: `src/__tests__/components/erp-stock-view.test.ts`
+- Test: `src/__tests__/components/erp-stock-table.test.tsx`
+
+#### 4b-A. 묶기 순수 함수
+
+- [ ] **Step 1: 실패하는 테스트 작성**
+
+`src/__tests__/components/erp-stock-view.test.ts` 맨 위 import
+```ts
+import {
+  computeKpis, defaultCost, editDiff, filterRows, localInputToIso, summarizeStaged, toAdjustItems, toExportCsv,
+  type RgRecon, type StagedEdit, type StockRow,
+} from '@/components/erp/stock/stock-view';
+```
+을 아래로 바꾼다.
+```ts
+import {
+  computeKpis, defaultCost, editDiff, filterGroups, filterRows, filtersActive, groupRows, localInputToIso, summarizeStaged, toAdjustItems, toExportCsv,
+  type RgRecon, type StagedEdit, type StockRow,
+} from '@/components/erp/stock/stock-view';
+```
+
+같은 파일 끝에 더한다.
+```ts
+
+describe('상품 단위 묶기', () => {
+  const rows = [
+    row({ skuId: 1, key: 'k1', name: '왜건', option: '블랙', self: 3, rgInbound: 1, rg: 2, value: 6000 }),
+    row({ skuId: 2, key: 'k2', name: '왜건', option: '베이지', self: 0, rgInbound: 0, rg: 0, value: 0 }),
+    row({ skuId: 3, key: 'k3', name: '매트', option: '', self: 4, rgInbound: 0, rg: 1, value: 2500 }),
+  ];
+
+  it('상품명으로 묶어 집·입고중·RG(원장)·평가액을 더하고 옵션 수를 센다(나온 순서 유지)', () => {
+    const g = groupRows(rows, null);
+    expect(g.map((x) => [x.name, x.options.length, x.self, x.rgInbound, x.rg, x.value, x.rgActual, x.rgMismatch])).toEqual([
+      ['왜건', 2, 3, 1, 2, 6000, null, null],
+      ['매트', 1, 4, 0, 1, 2500, null, null],
+    ]);
+  });
+
+  it('대조 뒤에는 RG 실재고를 더하고 불일치를 옵션 단위로 센다(합이 상쇄돼도 가려지지 않는다)', () => {
+    // 블랙 2→1(−1) · 베이지 0→1(+1) — 상품 합은 2 = 2지만 옵션 둘 다 틀렸다
+    const r2: RgRecon = { ...recon, actual: new Map([[1, 1], [2, 1]]) };
+    const [wagon] = groupRows(rows, r2);
+    expect([wagon.rgActual, wagon.rgMismatch]).toEqual([2, 2]);
+  });
+
+  it('조회조건은 옵션에 건다 — 맞는 옵션이 있는 묶음만 남기고 그 옵션만 보인다(합계는 전체 옵션)', () => {
+    const g = groupRows(rows, null);
+    expect(filterGroups(g, { q: '', onlyStocked: true, onlyRgMismatch: false }, null).map((v) => [v.group.name, v.shown.map((r) => r.skuId), v.group.self]))
+      .toEqual([['왜건', [1], 3], ['매트', [3], 4]]);
+    expect(filterGroups(g, { q: '베이지', onlyStocked: false, onlyRgMismatch: false }, null).map((v) => v.shown.map((r) => r.skuId))).toEqual([[2]]);
+    // 상품명으로 찾으면 그 상품의 옵션이 모두 보인다
+    expect(filterGroups(g, { q: '왜건', onlyStocked: false, onlyRgMismatch: false }, null).map((v) => v.shown.length)).toEqual([2]);
+  });
+
+  it('조회조건이 하나라도 걸리면 filtersActive(공백만 있는 검색어는 아니다)', () => {
+    expect(filtersActive({ q: ' ', onlyStocked: false, onlyRgMismatch: false })).toBe(false);
+    expect(filtersActive({ q: '왜건', onlyStocked: false, onlyRgMismatch: false })).toBe(true);
+    expect(filtersActive({ q: '', onlyStocked: true, onlyRgMismatch: false })).toBe(true);
+    expect(filtersActive({ q: '', onlyStocked: false, onlyRgMismatch: true })).toBe(true);
+  });
+});
+```
+
+- [ ] **Step 2: 실패 확인**
+
+Run: `npx vitest run src/__tests__/components/erp-stock-view.test.ts`
+Expected: 새 4건 FAIL — `groupRows is not a function`(기존 테스트는 PASS)
+
+- [ ] **Step 3: 구현**
+
+`src/components/erp/stock/stock-view.ts`의 `filterRows` 함수 바로 뒤(`export interface Kpis {` 앞)에 넣는다.
+```ts
+
+/** 조회조건이 하나라도 걸려 있다 — 표가 묶음을 모두 펼친다 */
+export const filtersActive = (f: Filters): boolean => f.q.trim() !== '' || f.onlyStocked || f.onlyRgMismatch;
+
+/** 상품 단위 묶음 — erp.skus.name(쿠팡 상품명)이 같은 옵션들. 합계는 전체 옵션 기준 */
+export interface StockGroup {
+  name: string;
+  options: StockRow[];
+  self: number;
+  rgInbound: number;
+  /** 원장 RG 합 */
+  rg: number;
+  value: number;
+  /** RG 실재고 합. 대조 전이면 null */
+  rgActual: number | null;
+  /** RG 차이가 있는 옵션 수(합이 상쇄돼도 옵션 단위로 센다). 대조 전이면 null */
+  rgMismatch: number | null;
+}
+
+/** 표에 그릴 묶음 하나 — shown은 조회조건에 맞는 옵션만 */
+export interface GroupView {
+  group: StockGroup;
+  shown: StockRow[];
+}
+
+/** 상품명으로 묶는다. 순서는 처음 나온 순서(목록 API가 상품명·옵션 순으로 준다). 옵션 1개 상품도 묶음 하나다(표가 한 줄로 그린다) */
+export function groupRows(rows: StockRow[], recon: RgRecon | null): StockGroup[] {
+  const byName = new Map<string, StockRow[]>();
+  for (const r of rows) {
+    const list = byName.get(r.name);
+    if (list) list.push(r);
+    else byName.set(r.name, [r]);
+  }
+  return [...byName].map(([name, options]) => {
+    const sum = (f: (r: StockRow) => number) => options.reduce((s, r) => s + f(r), 0);
+    return {
+      name,
+      options,
+      self: sum((r) => r.self),
+      rgInbound: sum((r) => r.rgInbound),
+      rg: sum((r) => r.rg),
+      value: sum((r) => r.value),
+      rgActual: recon ? sum((r) => rgActual(r, recon) ?? 0) : null,
+      rgMismatch: recon ? options.filter((r) => (rgDiff(r, recon) ?? 0) !== 0).length : null,
+    };
+  });
+}
+
+/** 조회조건은 옵션에 건다 — 맞는 옵션이 하나라도 있으면 묶음을 남기고 그 옵션만 보인다(묶음 합계는 전체 옵션 그대로) */
+export function filterGroups(groups: StockGroup[], f: Filters, recon: RgRecon | null): GroupView[] {
+  return groups.map((group) => ({ group, shown: filterRows(group.options, f, recon) })).filter((v) => v.shown.length > 0);
+}
+```
+
+- [ ] **Step 4: 통과 확인과 커밋**
+
+Run: `npx vitest run src/__tests__/components/erp-stock-view.test.ts && npx tsc --noEmit`
+Expected: 전부 PASS, 0 오류
+```bash
+git add src/components/erp/stock/stock-view.ts src/__tests__/components/erp-stock-view.test.ts
+git commit -m "feat(erp): 재고 행을 상품 단위로 묶는 순수 함수 — 합계·옵션 수·옵션에 거는 조회조건"
+```
+
+#### 4b-B. 표가 묶음을 그린다
+
+- [ ] **Step 5: 실패하는 테스트 작성**
+
+`src/__tests__/components/erp-stock-table.test.tsx`:
+```tsx
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent, within } from '@testing-library/react';
+import StockTable from '@/components/erp/stock/StockTable';
+import { filterGroups, groupRows, type StockRow } from '@/components/erp/stock/stock-view';
+
+const row = (o: Partial<StockRow>): StockRow => ({
+  skuId: 1, key: 'k1', name: '왜건', option: '블랙', legacyProductCostIds: [], self: 3, rgInbound: 1, rg: 2, value: 6000,
+  hasLedger: true, lotCost: 1000, legacyCost: null, costNeedsInput: false, ...o,
+});
+const ROWS = [
+  row({}),
+  row({ skuId: 2, key: 'k2', option: '베이지', self: 5, rgInbound: 0, rg: 0, value: 5000 }),
+  row({ skuId: 3, key: 'k3', name: '매트', option: '', self: 4, rgInbound: 0, rg: 0, value: 2000 }),
+];
+const NO_FILTER = { q: '', onlyStocked: false, onlyRgMismatch: false };
+
+function renderTable(forceOpen = false) {
+  const onEdit = vi.fn();
+  const onSelect = vi.fn();
+  render(
+    <StockTable
+      views={filterGroups(groupRows(ROWS, null), NO_FILTER, null)}
+      forceOpen={forceOpen}
+      recon={null}
+      staged={new Map()}
+      countMode={false}
+      editing={null}
+      selected={null}
+      busy={false}
+      onEdit={onEdit}
+      onCancelEdit={() => {}}
+      onSubmitEdit={() => {}}
+      onSelect={onSelect}
+      onRgApply={() => {}}
+    />,
+  );
+  return { onEdit, onSelect };
+}
+const trOf = (text: string) => screen.getByText(text).closest('tr')!;
+
+describe('StockTable — 상품 묶음', () => {
+  it('옵션 여러 개인 상품은 합계 한 줄로 접혀 있고, 누르면 옵션 행이 펼쳐진다', () => {
+    const { onSelect } = renderTable();
+    const group = trOf('왜건');
+    expect(within(group).getByText('옵션 2')).toBeInTheDocument();
+    expect(within(group).getByText('8')).toBeInTheDocument(); // 집 3 + 5
+    expect(within(group).queryByTitle('눌러서 고칩니다')).toBeNull(); // 묶음 줄은 고치지 않는다
+    expect(screen.queryByText('베이지')).not.toBeInTheDocument();
+    fireEvent.click(group);
+    expect(screen.getByText('베이지')).toBeInTheDocument();
+    expect(onSelect).not.toHaveBeenCalled(); // 묶음 줄은 이력을 열지 않는다
+    fireEvent.click(trOf('왜건'));
+    expect(screen.queryByText('베이지')).not.toBeInTheDocument();
+  });
+
+  it('옵션 1개 상품은 묶지 않고 한 줄 — 그 줄에서 바로 고치고, 누르면 이력', () => {
+    const { onEdit, onSelect } = renderTable();
+    const mat = trOf('매트');
+    expect(within(mat).queryByText(/^옵션 /)).toBeNull();
+    fireEvent.click(within(mat).getAllByTitle('눌러서 고칩니다')[0]);
+    expect(onEdit).toHaveBeenCalledWith(3, 'self');
+    fireEvent.click(mat);
+    expect(onSelect).toHaveBeenCalledWith(3);
+  });
+
+  it('전체 펼치기·전체 접기', () => {
+    renderTable();
+    fireEvent.click(screen.getByText('전체 펼치기'));
+    expect(screen.getByText('블랙')).toBeInTheDocument();
+    expect(screen.getByText('베이지')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('전체 접기'));
+    expect(screen.queryByText('블랙')).not.toBeInTheDocument();
+  });
+
+  it('조회조건이 걸리면(forceOpen) 묶음이 펼쳐져 있고 펼치기 버튼은 잠긴다', () => {
+    renderTable(true);
+    expect(screen.getByText('베이지')).toBeInTheDocument();
+    expect(screen.getByText('전체 접기')).toBeDisabled();
+  });
+});
+```
+
+- [ ] **Step 6: 실패 확인**
+
+Run: `npx vitest run src/__tests__/components/erp-stock-table.test.tsx`
+Expected: FAIL — `views`를 받지 않는 옛 표(`rows` 없음으로 렌더 오류)
+
+- [ ] **Step 7: `StockTable.tsx`를 묶음 표로 바꾼다**
+
+`src/components/erp/stock/StockTable.tsx` 전체를 아래로 바꾼다.
+```tsx
+'use client';
+
+/**
+ * 재고 표 — 상품 단위로 묶는다(결정 5). 옵션이 여러 개인 상품은 합계 한 줄(누르면 펼침), 옵션 1개 상품은 그대로 한 줄.
+ * 고치는 칸(집·RG입고중)은 옵션 행에만 있다. 옵션 행을 누르면 우측 이력. RG 차이가 있으면 옵션 행마다 「반영」.
+ * 조회조건이 걸리면(forceOpen) 묶음을 모두 펼쳐 맞는 옵션을 바로 보인다.
+ */
+import React, { useState } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
+import { E } from '@/lib/design-tokens';
+import { Tag, bandStyle, btnStyle, numTdStyle, thStyle } from '@/components/orders/erp-ui';
+import EditCell from './EditCell';
+import {
+  defaultCost, editDiff, rgActual, rgDiff, stageKey, won,
+  type EditLocation, type GroupView, type RgRecon, type StagedEdit, type StockRow,
+} from './stock-view';
+
+interface Props {
+  views: GroupView[];
+  /** 조회조건이 걸려 있다 — 묶음을 모두 펼친다 */
+  forceOpen: boolean;
+  recon: RgRecon | null;
+  staged: Map<string, StagedEdit>;
+  countMode: boolean;
+  editing: { skuId: number; location: EditLocation } | null;
+  selected: number | null;
+  busy: boolean;
+  onEdit: (skuId: number, location: EditLocation) => void;
+  onCancelEdit: () => void;
+  onSubmitEdit: (e: StagedEdit) => void;
+  onSelect: (skuId: number) => void;
+  onRgApply: (row: StockRow) => void;
+}
+
+const HEADERS = ['상품', '옵션', '집', 'RG입고중', 'RG(원장)', 'RG실재고', '차이', '단가', '평가액'];
+
+const textTd: React.CSSProperties = {
+  borderBottom: `1px solid ${E.lineSoft}`, borderRight: `1px solid ${E.lineSoft}`, padding: '4px 8px',
+  fontSize: 12, color: E.ink, whiteSpace: 'nowrap', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis',
+};
+const smallBtn: React.CSSProperties = { ...btnStyle, height: 20, padding: '0 6px', fontSize: 10.5 };
+
+export default function StockTable({
+  views, forceOpen, recon, staged, countMode, editing, selected, busy, onEdit, onCancelEdit, onSubmitEdit, onSelect, onRgApply,
+}: Props) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const multi = views.filter((v) => v.group.options.length > 1);
+  const toggle = (name: string) =>
+    setExpanded((s) => {
+      const n = new Set(s);
+      if (n.has(name)) n.delete(name);
+      else n.add(name);
+      return n;
+    });
+
+  // 줄무늬는 화면에 보이는 줄 순서로 센다(묶음·옵션 줄 공통)
+  let stripe = 0;
+
+  const optionRow = (r: StockRow, child: boolean) => {
+    const i = stripe++;
+    const diff = rgDiff(r, recon);
+    const actual = rgActual(r, recon);
+    const cost = defaultCost(r);
+    const cell = (loc: EditLocation) => {
+      const s = staged.get(stageKey(r.skuId, loc));
+      const value = loc === 'self' ? r.self : r.rgInbound;
+      const isEditing = editing?.skuId === r.skuId && editing.location === loc;
+      return (
+        <td
+          title="눌러서 고칩니다"
+          onClick={(e) => { e.stopPropagation(); if (!isEditing) onEdit(r.skuId, loc); }}
+          style={{ ...numTdStyle, position: 'relative', cursor: 'pointer', background: s ? E.warnSoft : undefined }}
+        >
+          {s ? (
+            <>
+              <span style={{ textDecoration: 'line-through', color: E.inkMute }}>{won(value)}</span>
+              {' → '}
+              <b>{won(value + editDiff(s))}</b>
+            </>
+          ) : won(value)}
+          {isEditing && (
+            <EditCell row={r} location={loc} staged={s} countMode={countMode} onSubmit={onSubmitEdit} onCancel={onCancelEdit} />
+          )}
+        </td>
+      );
+    };
+    return (
+      <tr
+        key={r.skuId}
+        onClick={() => onSelect(r.skuId)}
+        style={{ height: E.rowH, cursor: 'pointer', background: selected === r.skuId ? E.infoSoft : i % 2 ? E.chrome2 : E.surface }}
+      >
+        <td style={textTd} title={r.key}>
+          {child ? <span style={{ color: E.inkMute, paddingLeft: 14 }}>└</span> : <span>{r.name}</span>}{' '}
+          {!r.hasLedger && <Tag tone={E.inkMute} title="원장 전표가 아직 없습니다 — 첫 「지금 개수」가 기초재고가 됩니다">원장 없음</Tag>}
+        </td>
+        <td style={textTd}>{r.option || '—'}</td>
+        {cell('self')}
+        {cell('rg_inbound')}
+        <td style={numTdStyle}>{won(r.rg)}</td>
+        <td style={numTdStyle}>{actual === null ? '—' : won(actual)}</td>
+        <td style={{ ...numTdStyle, color: diff ? E.loss : E.inkMute }}>
+          {diff === null ? '—' : diff === 0 ? '0' : (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              {diff > 0 ? '+' : ''}{won(diff)}
+              <button type="button" disabled={busy} onClick={(e) => { e.stopPropagation(); onRgApply(r); }} style={smallBtn}>
+                반영
+              </button>
+            </span>
+          )}
+        </td>
+        <td style={numTdStyle}>{cost === null ? '—' : won(cost)}</td>
+        <td style={numTdStyle}>{won(r.value)}</td>
+      </tr>
+    );
+  };
+
+  const groupRow = (v: GroupView, open: boolean) => {
+    const g = v.group;
+    const i = stripe++;
+    const stagedN = g.options.filter((r) => staged.has(stageKey(r.skuId, 'self')) || staged.has(stageKey(r.skuId, 'rg_inbound'))).length;
+    return (
+      <tr
+        key={`g:${g.name}`}
+        aria-expanded={open}
+        onClick={() => { if (!forceOpen) toggle(g.name); }}
+        style={{ height: E.rowH, cursor: forceOpen ? 'default' : 'pointer', background: i % 2 ? E.chrome2 : E.surface, fontWeight: 600 }}
+      >
+        <td style={textTd}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+            <span>{g.name}</span>
+            <Tag tone={E.inkSub}>{v.shown.length < g.options.length ? `옵션 ${v.shown.length}/${g.options.length}` : `옵션 ${g.options.length}`}</Tag>
+            {stagedN > 0 && <Tag tone={E.warn}>담김 {stagedN}</Tag>}
+          </span>
+        </td>
+        <td style={{ ...textTd, color: E.inkMute }}>합계</td>
+        <td style={numTdStyle}>{won(g.self)}</td>
+        <td style={numTdStyle}>{won(g.rgInbound)}</td>
+        <td style={numTdStyle}>{won(g.rg)}</td>
+        <td style={numTdStyle}>{g.rgActual === null ? '—' : won(g.rgActual)}</td>
+        <td style={{ ...numTdStyle, color: g.rgMismatch ? E.loss : E.inkMute }}>
+          {g.rgMismatch === null ? '—' : g.rgMismatch === 0 ? '0' : `불일치 ${g.rgMismatch}옵션`}
+        </td>
+        <td style={numTdStyle}>—</td>
+        <td style={numTdStyle}>{won(g.value)}</td>
+      </tr>
+    );
+  };
+
+  return (
+    <div style={{ background: E.surface, border: `1px solid ${E.line}`, overflow: 'auto', maxHeight: 'calc(100vh - 300px)' }}>
+      <div style={bandStyle}>
+        <span style={{ flex: 1 }}>
+          상품별 재고 — 원장 기준 · 상품 줄을 누르면 옵션이 펼쳐집니다 · 집·RG입고중 칸을 누르면 고칩니다 · 옵션 줄을 누르면 입출 이력
+        </span>
+        <button type="button" disabled={forceOpen} onClick={() => setExpanded(new Set(multi.map((v) => v.group.name)))} style={smallBtn}>
+          전체 펼치기
+        </button>
+        <button type="button" disabled={forceOpen} onClick={() => setExpanded(new Set())} style={smallBtn}>
+          전체 접기
+        </button>
+      </div>
+      <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+        <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+          <tr>{HEADERS.map((h) => <th key={h} style={thStyle}>{h}</th>)}</tr>
+        </thead>
+        <tbody>
+          {views.map((v) => {
+            if (v.group.options.length === 1) return optionRow(v.shown[0], false);
+            const open = forceOpen || expanded.has(v.group.name);
+            return (
+              <React.Fragment key={`g:${v.group.name}`}>
+                {groupRow(v, open)}
+                {open && v.shown.map((r) => optionRow(r, true))}
+              </React.Fragment>
+            );
+          })}
+          {views.length === 0 && (
+            <tr><td colSpan={HEADERS.length} style={{ padding: 24, textAlign: 'center', color: E.inkMute, fontSize: 12 }}>표시할 SKU가 없습니다</td></tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+```
+
+- [ ] **Step 8: 컨테이너가 묶음을 넘긴다**
+
+`src/components/erp/stock/StockClient.tsx`에서 네 곳을 고친다.
+
+(1) import
+```tsx
+import {
+  computeKpis, defaultCost, editDiff, filterRows, parseRecon, rgDiff, stageKey, summarizeStaged, toAdjustItems, toExportCsv, won,
+  type EditLocation, type Filters, type RgRecon, type StagedEdit, type StockRow,
+} from './stock-view';
+```
+을 아래로.
+```tsx
+import {
+  computeKpis, defaultCost, editDiff, filterGroups, filterRows, filtersActive, groupRows, parseRecon, rgDiff, stageKey, summarizeStaged,
+  toAdjustItems, toExportCsv, won,
+  type EditLocation, type Filters, type RgRecon, type StagedEdit, type StockRow,
+} from './stock-view';
+```
+
+(2)
+```tsx
+  const visible = useMemo(() => filterRows(rows, filters, recon), [rows, filters, recon]);
+```
+을 아래로(내보내기·상태바는 SKU 단위 그대로 `visible`을 쓴다).
+```tsx
+  const visible = useMemo(() => filterRows(rows, filters, recon), [rows, filters, recon]);
+  const groups = useMemo(() => groupRows(rows, recon), [rows, recon]);
+  const views = useMemo(() => filterGroups(groups, filters, recon), [groups, filters, recon]);
+```
+
+(3)
+```tsx
+          <StockTable
+            rows={visible}
+```
+을 아래로.
+```tsx
+          <StockTable
+            views={views}
+            forceOpen={filtersActive(filters)}
+```
+
+(4)
+```tsx
+            <span>표시 <span style={statNumStyle}>{visible.length}</span> / {rows.length} SKU</span>
+```
+을 아래로.
+```tsx
+            <span>
+              표시 상품 <span style={statNumStyle}>{views.length}</span> · SKU <span style={statNumStyle}>{visible.length}</span> / {rows.length} SKU
+            </span>
+```
+
+- [ ] **Step 9: 통과 확인과 커밋**
+
+Run: `npx vitest run src/__tests__/components/erp-stock-table.test.tsx src/__tests__/components/erp-stock-view.test.ts src/__tests__/components/erp-stock-edit-cell.test.tsx && npx tsc --noEmit`
+Expected: 전부 PASS, 0 오류
+```bash
+git add src/components/erp/stock/StockTable.tsx src/components/erp/stock/StockClient.tsx src/__tests__/components/erp-stock-table.test.tsx
+git commit -m "feat(erp): 재고현황 상품 단위 묶어 보기 — 합계 줄·펼치기/접기·옵션에 거는 조회조건"
+```
+
+- [ ] **Step 10: 🔴 화면 확인 — 컨트롤러가 직접(서브에이전트 아님)**
+
+개발 서버·로그인은 Task 4 Step 17 그대로. 1440px로 `http://localhost:3000/erp/stock`을 연다. 확인: 옵션 여러 개인 상품이 「▸ 상품명 [옵션 N]」 합계 한 줄로 접혀 있음 · 누르면 옵션 행(└ 들여쓰기)이 펼쳐지고 다시 누르면 접힘 · 「전체 펼치기/접기」 · 옵션 1개 상품은 한 줄이고 집·RG입고중 칸 편집 팝오버가 뜸(「취소」로 닫는다) · 묶음 줄 칸은 편집이 뜨지 않음 · 검색어를 넣으면 맞는 옵션만 펼쳐져 보이고 묶음 태그가 「옵션 k/N」 · 「재고 있는 것만」·「RG 불일치만」(대조 후)도 같은 방식 · 실사 모드에서 옵션 칸을 담으면 접힌 묶음 줄에 「담김 n」 · 상태바 「표시 상품 · SKU」 · 콘솔 오류 없음. 🔴 **저장·반영 버튼은 누르지 않는다.** 깨진 곳은 고쳐 `fix(erp): …`로 커밋하고 스크린샷 한 장을 사용자에게 보여준다.
+
+---
+### Task 4c: 센 기록과 오늘 셀 목록
+
+> 결정 5(2026-09-26 추가) · 「추가 설계」: **센 기록 `erp.stock_counts`** — `count` 방식 입력은 차이가 0이어도 한 줄 남긴다(원장 전표는 여전히 차이가 있을 때만). **오늘 셀 목록** — 집(`self`)에서 매일 N개(기본 8), ① 한 번도 안 센 SKU 중 재고 금액 큰 순 ② 마지막 실사가 오래된 순(같으면 금액 큰 순). 오늘 이미 센 것은 빠지고, 재고 0이고 원장 전표도 없는 SKU는 제외. 날마다 저장하지 않고 요청 때 계산. 해석은 「설계 해석」 15번.
+
+**Files:**
+- Create: `supabase/migrations/116_erp_stock_counts.sql`
+- Modify: `src/lib/erp/ledger/adjust-store.ts`, `src/lib/erp/ledger/opening-import.ts`, `src/app/api/erp/stock/import/route.ts`, `src/lib/erp/stock/http.ts`, `src/lib/erp/stock/queries.ts`, `scripts/erp/ledger-selftest.ts`
+- Create: `src/lib/erp/stock/count-queue.ts`, `src/app/api/erp/stock/count-queue/route.ts`, `src/components/erp/stock/CountQueuePanel.tsx`
+- Modify: `src/components/erp/stock/stock-view.ts`, `src/components/erp/stock/api.ts`, `src/components/erp/stock/EditCell.tsx`, `src/components/erp/stock/StockTable.tsx`, `src/components/erp/stock/StockClient.tsx`
+- Modify(테스트): `src/__tests__/lib/erp/ledger/adjust-store.test.ts`, `src/__tests__/lib/erp/ledger/opening-import.test.ts`, `src/__tests__/api/erp-stock-import.test.ts`, `src/__tests__/api/erp-stock.test.ts`, `src/__tests__/components/erp-stock-view.test.ts`, `src/__tests__/components/erp-stock-edit-cell.test.tsx`, `src/__tests__/components/erp-stock-table.test.tsx`
+- Test: `src/__tests__/lib/erp/stock/count-queue.test.ts`, `src/__tests__/api/erp-stock-count-queue.test.ts`, `src/__tests__/components/erp-count-queue-panel.test.tsx`
+
+#### 4c-A. 마이그레이션 116 — 센 기록
+
+- [ ] **Step 1: 마이그레이션 작성**
+
+`supabase/migrations/116_erp_stock_counts.sql`:
+```sql
+-- 116_erp_stock_counts.sql
+-- ERP 1-C1 추가(2026-09-26 결정 5). 「센 기록」 — 사람이 실제로 센 개수를 차이가 없어도 남긴다.
+-- 원장(stock_ledger)은 재고가 바뀔 때만 전표를 쓰므로 「세어 봤더니 맞았다」가 남지 않는다 → 오늘 셀 목록(순환 실사)이
+-- 마지막 실사 시각을 알 수 없다. 원장 전표는 여전히 차이가 있을 때만 쓴다.
+--   ledger_qty          = 센 시점(SKU 잠금 안)의 그 위치 원장 재고
+--   adjustment_idem_key = 그때 쓴 조정·기초 전표의 원 멱등키(adj:<uuid> · opening:<sku>:<위치>). 차이 0이면 null.
+--                         차감 전표의 행 키는 뒤에 #순번이 붙어 이 값과 같지 않으므로 FK를 걸지 않는다
+--   request_id          = 화면 요청 id(조정의 requestId). unique — 같은 요청의 재전송이 두 줄을 만들지 않는다.
+--                         실사표 불러오기는 서버가 줄마다 새로 만든다
+--   counted_at          = 센 시각(화면 조정 = 기록 시각, 실사표 = 실사를 마친 시각)
+-- 고치거나 지우는 경로는 없다(앱은 insert만 한다). 조정을 되돌려도 「그때 그렇게 셌다」는 남는다.
+
+create table if not exists erp.stock_counts (
+  id                   bigserial   primary key,
+  sku_id               bigint      not null references erp.skus(id),
+  location             text        not null check (location in ('self', 'rg_inbound', 'rg')),
+  counted_qty          integer     not null check (counted_qty >= 0),
+  ledger_qty           integer     not null check (ledger_qty >= 0),
+  adjustment_idem_key  text,
+  counted_at           timestamptz not null default now(),
+  request_id           uuid        not null,
+  created_at           timestamptz not null default now(),
+  constraint stock_counts_request_id_key unique (request_id)
+);
+
+-- 「SKU별 집 마지막 실사」(재고 목록·오늘 셀 목록)를 읽는 순서
+create index if not exists stock_counts_last_idx on erp.stock_counts (sku_id, location, counted_at desc);
+
+alter table erp.stock_counts enable row level security;
+```
+
+- [ ] **Step 2: 적용**
+
+Run: `node scripts/apply-migration.mjs 116`
+Expected: `✅ 116_erp_stock_counts.sql`, exit 0. (**운영 적용 허용** — 새 테이블이고 기존 행을 건드리지 않는다.)
+
+- [ ] **Step 3: 확인** (읽기 전용)
+
+```bash
+node -e "
+const fs=require('fs');const {Client}=require('pg');for(const l of fs.readFileSync('.env.local','utf8').split('\n')){const m=l.match(/^([A-Z_]+)=(.*)\$/);if(m)process.env[m[1]]=m[2].replace(/^[\"']|[\"']\$/g,'')}
+(async()=>{const c=new Client({connectionString:process.env.SUPABASE_DB_URL,ssl:{rejectUnauthorized:false}});await c.connect();
+const cols=await c.query(\"select column_name, data_type, is_nullable from information_schema.columns where table_schema='erp' and table_name='stock_counts' order by ordinal_position\");
+console.log(cols.rows.map(x=>x.column_name+' '+x.data_type+' '+x.is_nullable).join('\n'));
+const u=await c.query(\"select conname from pg_constraint where conrelid='erp.stock_counts'::regclass and contype='u'\");
+const r=await c.query(\"select relrowsecurity from pg_class where oid='erp.stock_counts'::regclass\");
+const n=await c.query('select count(*)::int n from erp.stock_counts');
+console.log('unique:',u.rows.map(x=>x.conname).join(','),'· rls:',r.rows[0].relrowsecurity,'· 행:',n.rows[0].n);await c.end()})()"
+```
+Expected: 9칸(`id` … `request_id uuid NO` · `created_at`), `unique: stock_counts_request_id_key · rls: true · 행: 0`.
+
+- [ ] **Step 4: 커밋**
+
+```bash
+git add supabase/migrations/116_erp_stock_counts.sql
+git commit -m "feat(erp): 마이그레이션 116 — 센 기록 erp.stock_counts(차이 0인 실사도 남긴다)"
+```
+
+#### 4c-B. 조정이 센 기록을 남긴다
+
+- [ ] **Step 5: 실패하는 테스트 작성**
+
+`src/__tests__/lib/erp/ledger/adjust-store.test.ts`에서 세 곳을 고친다.
+
+(1) 가짜 DB 옵션 — 
+```ts
+  /** 같은 요청 id로 이미 기록된 전표의 SKU·위치 */
+  dup?: { sku_id: number; location: string };
+```
+을 아래로.
+```ts
+  /** 같은 요청 id로 이미 기록된 전표의 SKU·위치 */
+  dup?: { sku_id: number; location: string };
+  /** 같은 요청 id로 이미 남은 센 기록의 SKU·위치(차이 0 실사는 전표 없이 이것만 남는다) */
+  countDup?: { sku_id: number; location: string };
+```
+
+(2) 가짜 DB 분기 —
+```ts
+      if (sql.startsWith('select sku_id, location from erp.stock_ledger where ref_type')) return { rows: o.dup ? [o.dup] : [], rowCount: o.dup ? 1 : 0 };
+```
+을 아래로.
+```ts
+      if (sql.startsWith('select sku_id, location from erp.stock_ledger where ref_type')) return { rows: o.dup ? [o.dup] : [], rowCount: o.dup ? 1 : 0 };
+      if (sql.startsWith('select sku_id, location from erp.stock_counts')) return { rows: o.countDup ? [o.countDup] : [], rowCount: o.countDup ? 1 : 0 };
+      if (sql.startsWith('insert into erp.stock_counts')) return { rows: [], rowCount: 1 };
+```
+
+(3) `const inserts = …` 줄 바로 아래에 넣는다.
+```ts
+const countInserts = (calls: { sql: string; params: unknown[] }[]) => calls.filter((c) => c.sql.startsWith('insert into erp.stock_counts'));
+```
+
+그리고 파일 끝(`describe('ensureCutover', …)` 뒤)에 더한다.
+```ts
+
+describe('센 기록(stock_counts)', () => {
+  // 넣는 칸 순서: sku_id, location, counted_qty, ledger_qty, adjustment_idem_key, request_id, counted_at
+  it('지금 개수는 차이가 0이어도 센 기록 한 줄(조정 키 null) — 원장에는 쓰지 않는다', async () => {
+    const f = fakeDb({ onHand: { qty: 5, n: 1 } });
+    const r = await applyAdjustment(f.db, input({ value: 5, expected: 5 }));
+    expect(r.outcome).toBe('noop');
+    expect(inserts(f.calls)).toHaveLength(0);
+    expect(countInserts(f.calls).map((c) => c.params)).toEqual([[7, 'self', 5, 5, null, REQ, AT]]);
+  });
+
+  it('차이가 있으면 센 기록에 그 조정의 원 멱등키(adj:<uuid>, #순번 없음)', async () => {
+    const f = fakeDb({ onHand: { qty: 10, n: 2 }, lots: [{ lot_id: 1, qty: 10, unit_cost: 700, lot_at: 1 }] });
+    await applyAdjustment(f.db, input({ value: 7, expected: 10, reason: 'damage' }));
+    expect(countInserts(f.calls).map((c) => c.params)).toEqual([[7, 'self', 7, 10, `adj:${REQ}`, REQ, AT]]);
+  });
+
+  it('빈 위치의 첫 지금 개수는 기초 키(opening:<sku>:<위치>)', async () => {
+    const f = fakeDb({ onHand: { qty: 0, n: 0 } });
+    await applyAdjustment(f.db, input({ unitCost: 700 }));
+    expect(countInserts(f.calls).map((c) => c.params)).toEqual([[7, 'self', 5, 0, 'opening:7:self', REQ, AT]]);
+  });
+
+  it('RG 대조도 지금 개수라 센 기록(위치 rg)', async () => {
+    const f = fakeDb({ onHand: { qty: 4, n: 1 } });
+    await applyAdjustment(f.db, input({ location: 'rg', reason: 'rg_reconcile', value: 4, expected: 4 }));
+    expect(countInserts(f.calls).map((c) => c.params[1])).toEqual(['rg']);
+  });
+
+  it('±수량은 센 개수가 아니다 — 센 기록을 남기지 않는다', async () => {
+    const f = fakeDb({ onHand: { qty: 2, n: 1 }, lotCost: 800 });
+    await applyAdjustment(f.db, input({ mode: 'delta', value: 3, expected: undefined, reason: 'return_in' }));
+    expect(countInserts(f.calls)).toHaveLength(0);
+  });
+
+  it('차이 0 실사의 재전송은 센 기록으로 알아본다 — duplicate, 재고를 읽지도 더 쓰지도 않는다', async () => {
+    const f = fakeDb({ countDup: { sku_id: 7, location: 'self' }, onHand: { qty: 5, n: 1 } });
+    const r = await applyAdjustment(f.db, input({ value: 5, expected: 5 }));
+    expect(r.outcome).toBe('duplicate');
+    expect(f.calls.some((c) => c.sql.startsWith('select coalesce(sum(qty)'))).toBe(false);
+    expect(countInserts(f.calls)).toHaveLength(0);
+  });
+
+  it('센 기록에 쓰인 요청 id가 다른 SKU·위치면 AdjustInputError(duplicate로 삼키지 않는다)', async () => {
+    const f = fakeDb({ countDup: { sku_id: 8, location: 'self' }, onHand: { qty: 5, n: 1 } });
+    await expect(applyAdjustment(f.db, input({ value: 5, expected: 5 }))).rejects.toBeInstanceOf(AdjustInputError);
+    expect(countInserts(f.calls)).toHaveLength(0);
+  });
+
+  it('화면 재고가 낡았으면(StaleCountError) 센 기록도 남기지 않는다', async () => {
+    const f = fakeDb({ onHand: { qty: 4, n: 1 } });
+    await expect(applyAdjustment(f.db, input({ value: 3, expected: 5 }))).rejects.toBeInstanceOf(StaleCountError);
+    expect(countInserts(f.calls)).toHaveLength(0);
+  });
+});
+```
+
+`src/__tests__/api/erp-stock.test.ts`의 `describe('erpError', () => {` 블록 안 첫 테스트 바로 뒤에 더한다.
+```ts
+
+  it('센 기록 요청 id unique 위반(23505)도 409 — 겹친 요청이 먼저 셌다', async () => {
+    const e = Object.assign(new Error('duplicate key value violates unique constraint "stock_counts_request_id_key"'), {
+      code: '23505', constraint: 'stock_counts_request_id_key',
+    });
+    const res = erpError(e);
+    expect(res.status).toBe(409);
+    expect((await res.json()).code).toBe('conflict');
+  });
+```
+
+- [ ] **Step 6: 실패 확인**
+
+Run: `npx vitest run src/__tests__/lib/erp/ledger/adjust-store.test.ts src/__tests__/api/erp-stock.test.ts`
+Expected: 새 테스트 FAIL — 센 기록 insert가 없다(0건) · duplicate 판정이 센 기록을 보지 않는다 · 센 기록 unique 위반이 500. 기존 테스트는 PASS.
+
+- [ ] **Step 7: 구현 — `adjust-store.ts`**
+
+`src/lib/erp/ledger/adjust-store.ts`의 머리 주석 3행
+```ts
+// 순서: 입력 검사 → SKU 잠금 → 같은 요청 확인 → 그 위치 재고 → 규칙(adjust.ts) → FIFO 차감 또는 새 lot → (기초면) 커서.
+```
+을 아래로.
+```ts
+// 순서: 입력 검사 → SKU 잠금 → 같은 요청 확인(전표·센 기록) → 그 위치 재고 → 규칙(adjust.ts) → FIFO 차감 또는 새 lot → (기초면) 커서
+//       → (지금 개수면) 센 기록(erp.stock_counts — 차이가 0이어도 한 줄. 오늘 셀 목록이 마지막 실사를 여기서 읽는다).
+```
+
+`export async function applyAdjustment(` 부터 그 함수 끝(`/** 여러 건(실사 모드·RG 일괄 반영).` 주석 바로 앞)까지를 아래로 바꾼다.
+```ts
+const NONE = { kind: null, qty: 0, idemKey: null, unitCost: null, costSource: null } as const;
+
+/** 센 기록 한 줄(erp.stock_counts). 지금 개수 방식만 부른다 — ±수량은 센 개수가 아니다. 호출자가 SKU를 잠갔다 */
+export async function recordCount(
+  db: Db,
+  c: { skuId: number; location: Location; countedQty: number; ledgerQty: number; idemKey: string | null; requestId: string; countedAt: string },
+): Promise<void> {
+  await db.query(
+    `insert into erp.stock_counts (sku_id, location, counted_qty, ledger_qty, adjustment_idem_key, request_id, counted_at)
+     values ($1, $2, $3, $4, $5, $6, $7)`,
+    [c.skuId, c.location, c.countedQty, c.ledgerQty, c.idemKey, c.requestId, c.countedAt],
+  );
+}
+
+export async function applyAdjustment(db: Db, p: AdjustInput): Promise<AdjustResult> {
+  validateAdjustInput(p);
+  const base = { skuId: p.skuId, location: p.location, requestId: p.requestId };
+  await lockSku(db, p.skuId);
+
+  // 같은 요청 id의 재전송만 duplicate다. 다른 SKU·위치에 쓰인 id면 조용히 삼키지 않고 거부한다.
+  // 차이 0인 지금 개수는 원장에 아무것도 쓰지 않으므로 센 기록도 함께 본다 — 재전송이 센 기록을 두 줄 만들지 않게
+  for (const sql of [
+    `select sku_id, location from erp.stock_ledger where ref_type = 'adjust' and ref_id = $1 limit 1`,
+    `select sku_id, location from erp.stock_counts where request_id = $1 limit 1`,
+  ]) {
+    const dup = await db.query(sql, [p.requestId]);
+    if (dup.rows.length === 0) continue;
+    const d = dup.rows[0];
+    if (Number(d.sku_id) === p.skuId && d.location === p.location) return { ...base, outcome: 'duplicate', ...NONE };
+    throw new AdjustInputError('요청 id가 다른 조정에 이미 쓰였다');
+  }
+
+  const { rows } = await db.query(
+    `select coalesce(sum(qty), 0)::int as qty, count(*)::int as n from erp.stock_ledger where sku_id = $1 and location = $2`,
+    [p.skuId, p.location],
+  );
+  const onHand = Number(rows[0].qty);
+  const step = planAdjustment({ mode: p.mode, value: p.value, expected: p.expected, onHand, locationEmpty: Number(rows[0].n) === 0 });
+  const out = await postStep(db, p, step);
+  if (p.mode === 'count') {
+    await recordCount(db, {
+      skuId: p.skuId, location: p.location, countedQty: p.value, ledgerQty: onHand, idemKey: out.idemKey, requestId: p.requestId, countedAt: p.occurredAt,
+    });
+  }
+  return out;
+}
+
+/** 규칙이 정한 한 걸음을 원장에 쓴다: 차이 0 → 기록 없음 · 음수 → FIFO 차감 · 양수 → 새 lot(단가: 입력 → 최근 lot → 옛 입고) */
+async function postStep(db: Db, p: AdjustInput, step: ReturnType<typeof planAdjustment>): Promise<AdjustResult> {
+  const base = { skuId: p.skuId, location: p.location, requestId: p.requestId };
+  if (step.diff === 0) return { ...base, outcome: 'noop', ...NONE };
+
+  const ref = { refType: 'adjust', refId: p.requestId, note: p.note };
+  if (step.diff < 0) {
+    const idemKey = adjustIdemKey(p.requestId);
+    const r = await postConsume(db, {
+      skuId: p.skuId, location: p.location, qty: -step.diff, kind: 'adjust', reason: p.reason, occurredAt: p.occurredAt, idemKey, ...ref,
+    });
+    // 잠금 안에서 요청 id를 확인했으니 여기 오면 불변식 위반이다(입력 오류가 아니라 500)
+    if (!r.posted) throw new Error(`멱등키 ${idemKey}가 이미 있다`);
+    return { ...base, outcome: 'posted', kind: 'adjust', qty: step.diff, idemKey, unitCost: null, costSource: null };
+  }
+
+  // 단가는 필요한 만큼만 조회한다: 입력 → 최근 lot → 옛 입고
+  let cost = pickUnitCost(p.unitCost, null, null);
+  if (!cost) cost = pickUnitCost(undefined, await latestLotCost(db, p.skuId), null);
+  if (!cost) cost = pickUnitCost(undefined, null, await legacyUnitCost(db, p.skuId));
+  if (!cost) throw new CostRequiredError(p.skuId);
+
+  const opening = step.lotKind === 'opening';
+  const idemKey = opening ? openingIdemKey(p.skuId, p.location) : adjustIdemKey(p.requestId);
+  const r = await postLotCreate(db, {
+    skuId: p.skuId, location: p.location, qty: step.diff, unitCost: cost.unitCost, kind: step.lotKind,
+    reason: opening ? 'opening' : p.reason, occurredAt: p.occurredAt, idemKey, ...ref,
+  });
+  // 기초 키는 빈 위치에서만 쓰고 조정 키는 요청 id가 새것일 때만 쓰므로 여기 오면 불변식 위반이다(500)
+  if (!r.posted) throw new Error(`멱등키 ${idemKey}가 이미 있다`);
+  if (step.setsCutover) await ensureCutover(db, p.occurredAt);
+  return { ...base, outcome: 'posted', kind: step.lotKind, qty: step.diff, idemKey, unitCost: cost.unitCost, costSource: cost.source };
+}
+
+```
+
+같은 파일 `AdjustResult`의 `outcome` 주석
+```ts
+  /** posted = 기록 · duplicate = 같은 요청이 이미 기록됨 · noop = 차이 0 */
+```
+을 아래로.
+```ts
+  /** posted = 기록 · duplicate = 같은 요청이 이미 기록됨 · noop = 차이 0(지금 개수면 센 기록만 남는다) */
+```
+
+- [ ] **Step 8: 구현 — 센 기록 unique 위반도 409**
+
+`src/lib/erp/stock/http.ts`의
+```ts
+/** Postgres unique 위반(23505) 중 erp.stock_ledger.idem_key */
+function isIdemKeyConflict(e: unknown): boolean {
+  const pg = e as { code?: unknown; constraint?: unknown } | null;
+  return !!pg && pg.code === '23505' && typeof pg.constraint === 'string' && pg.constraint.includes('idem_key');
+}
+```
+을 아래로.
+```ts
+/** Postgres unique 위반(23505) 중 erp.stock_ledger.idem_key · erp.stock_counts.request_id(겹친 같은 요청이 먼저 셌다) */
+function isIdemKeyConflict(e: unknown): boolean {
+  const pg = e as { code?: unknown; constraint?: unknown } | null;
+  return !!pg && pg.code === '23505' && typeof pg.constraint === 'string'
+    && (pg.constraint.includes('idem_key') || pg.constraint === 'stock_counts_request_id_key');
+}
+```
+
+- [ ] **Step 9: 통과 확인과 커밋**
+
+Run: `npx vitest run src/__tests__/lib/erp/ledger/adjust-store.test.ts src/__tests__/api/erp-stock.test.ts src/__tests__/api/erp-stock-rg.test.ts && npx tsc --noEmit`
+Expected: 전부 PASS(기존 + 새 9), 0 오류
+```bash
+git add src/lib/erp/ledger/adjust-store.ts src/lib/erp/stock/http.ts src/__tests__/lib/erp/ledger/adjust-store.test.ts src/__tests__/api/erp-stock.test.ts
+git commit -m "feat(erp): 지금 개수마다 센 기록 — 차이 0도 남기고 재전송은 센 기록으로 중복 판정"
+```
+
+#### 4c-C. 실사표 불러오기도 집 센 개수를 남긴다
+
+> 불러오기가 센 기록을 남기지 않으면 기초재고를 막 센 SKU들이 「한 번도 안 센 SKU」로 오늘 셀 목록 맨 앞을 채운다.
+
+- [ ] **Step 10: 실패하는 테스트 작성**
+
+`src/__tests__/lib/erp/ledger/opening-import.test.ts`에서 네 곳을 고친다.
+
+(1) `describe('planOpeningImport', () => {`의 첫 테스트 끝
+```ts
+    expect(p.totals).toEqual({ self: 3, rgInbound: 1, rg: 2, value: 6000, entries: 3 });
+  });
+```
+을 아래로.
+```ts
+    expect(p.totals).toEqual({ self: 3, rgInbound: 1, rg: 2, value: 6000, entries: 3 });
+    expect(p.selfCounts).toEqual([{ skuId: 7, qty: 3 }]);
+  });
+
+  it('집 0개로 센 행도 센 개수로 남긴다(전표는 없다) · 빈칸·전표 있는 SKU는 남기지 않는다', () => {
+    expect(planOpeningImport({ ...base, rows: [row({ selfCount: 0 })] }).selfCounts).toEqual([{ skuId: 7, qty: 0 }]);
+    expect(planOpeningImport({ ...base, rows: [row({ selfCount: null })] }).selfCounts).toEqual([]);
+    expect(planOpeningImport({ ...base, rows: [row({ selfCount: 3 })], stockedSkuIds: new Set([7]) }).selfCounts).toEqual([]);
+  });
+```
+
+(2) 가짜 DB 분기 —
+```ts
+      if (sql.startsWith('insert into erp.sync_cursors')) return { rows: [], rowCount: 1 };
+      throw new Error(`예상 못 한 SQL: ${sql.slice(0, 60)}`);
+```
+을 아래로(이 파일의 가짜 DB는 하나뿐이다).
+```ts
+      if (sql.startsWith('insert into erp.sync_cursors')) return { rows: [], rowCount: 1 };
+      if (sql.startsWith('insert into erp.stock_counts')) return { rows: [], rowCount: 1 };
+      throw new Error(`예상 못 한 SQL: ${sql.slice(0, 60)}`);
+```
+
+(3) `describe('commitOpeningImport', () => {` 안의
+```ts
+  const AT = '2026-09-27T01:00:00.000Z';
+```
+을 아래로.
+```ts
+  const AT = '2026-09-27T01:00:00.000Z';
+  const COUNTED = '2026-09-27T09:30:00+09:00';
+  const opts = { fileName: 'count.csv', cutoverAt: AT, countedAt: COUNTED, selfCounts: [] as { skuId: number; qty: number }[] };
+```
+그리고 이 블록의 `commitOpeningImport(f.db, plan, { fileName: 'count.csv', cutoverAt: AT })` 두 곳을 모두 `commitOpeningImport(f.db, plan, opts)`로 바꾼다.
+
+(4) `describe('commitOpeningImport', () => {` 블록 끝(마지막 `it` 뒤)에 더한다.
+```ts
+
+  it('집 센 개수마다 센 기록 — 0개도(조정 키 null), 전표를 쓴 집은 기초 키 · 0개로 센 SKU도 잠그고 빈 원장을 확인한다', async () => {
+    const f = fakeDb();
+    await commitOpeningImport(f.db, plan, { ...opts, selfCounts: [{ skuId: 9, qty: 2 }, { skuId: 7, qty: 3 }, { skuId: 5, qty: 0 }] });
+    const locks = f.calls.filter((c) => c.sql.startsWith('select pg_advisory_xact_lock($1::int')).map((c) => c.params[1]);
+    expect(locks.slice(0, 3)).toEqual([5, 7, 9]);
+    const counts = f.calls.filter((c) => c.sql.startsWith('insert into erp.stock_counts'));
+    // [sku_id, location, counted_qty, ledger_qty, adjustment_idem_key, counted_at]
+    expect(counts.map((c) => [c.params[0], c.params[1], c.params[2], c.params[3], c.params[4], c.params[6]])).toEqual([
+      [5, 'self', 0, 0, null, COUNTED],
+      [7, 'self', 3, 0, 'opening:7:self', COUNTED],
+      [9, 'self', 2, 0, 'opening:9:self', COUNTED],
+    ]);
+    // 요청 id는 줄마다 새 uuid
+    expect(new Set(counts.map((c) => c.params[5])).size).toBe(3);
+    expect(String(counts[0].params[5])).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it('0개로 센 SKU에 미리보기 뒤 전표가 생겼어도 ImportConflictError', async () => {
+    const f = fakeDb({ 5: 1 });
+    await expect(commitOpeningImport(f.db, plan, { ...opts, selfCounts: [{ skuId: 5, qty: 0 }] })).rejects.toBeInstanceOf(ImportConflictError);
+    expect(f.calls.some((c) => c.sql.startsWith('insert'))).toBe(false);
+  });
+```
+
+`src/__tests__/api/erp-stock-import.test.ts`의 `it('단가를 입력하면 한 트랜잭션으로 적재한다', …)`에서
+```ts
+    const json = await (await POST(post({ csv: CSV, fileName: 'count.csv', countedAt: new Date().toISOString(), unitCostOverrides: { k9: 800 }, commit: true }))).json();
+```
+을 아래로.
+```ts
+    const countedAt = new Date().toISOString();
+    const json = await (await POST(post({ csv: CSV, fileName: 'count.csv', countedAt, unitCostOverrides: { k9: 800 }, commit: true }))).json();
+```
+그리고 같은 테스트의
+```ts
+    expect(opts).toEqual({ fileName: 'count.csv', cutoverAt: json.data.cutoverAt });
+```
+를 아래로.
+```ts
+    expect(opts).toEqual({ fileName: 'count.csv', cutoverAt: json.data.cutoverAt, countedAt, selfCounts: [{ skuId: 7, qty: 3 }, { skuId: 9, qty: 1 }] });
+    expect(json.data.selfCounts).toBeUndefined(); // 적재용 내부 값 — 응답에 싣지 않는다
+```
+
+- [ ] **Step 11: 실패 확인**
+
+Run: `npx vitest run src/__tests__/lib/erp/ledger/opening-import.test.ts src/__tests__/api/erp-stock-import.test.ts`
+Expected: 새 테스트와 바뀐 `opts` 비교 FAIL(`selfCounts` 없음 · 센 기록 insert 0건)
+
+- [ ] **Step 12: 구현**
+
+`src/lib/erp/ledger/opening-import.ts`에서 다섯 곳을 고친다.
+
+(1) import
+```ts
+import { lockSku, postLotCreate, type Db } from './store';
+import { ensureCutover } from './adjust-store';
+import { openingIdemKey } from './adjust';
+```
+을 아래로.
+```ts
+import { randomUUID } from 'node:crypto';
+import { lockSku, postLotCreate, type Db } from './store';
+import { ensureCutover, recordCount } from './adjust-store';
+import { openingIdemKey } from './adjust';
+```
+
+(2) `ImportPreview`의
+```ts
+  totals: ImportTotals;
+}
+
+/** /api/erp/stock/import 응답 */
+export interface ImportSummary extends Omit<ImportPreview, 'plan'> {
+```
+를 아래로.
+```ts
+  totals: ImportTotals;
+  /** 불러올 SKU의 집 센 개수(0 포함) — 적재 때 센 기록(erp.stock_counts)으로 남긴다. 응답에는 싣지 않는다 */
+  selfCounts: { skuId: number; qty: number }[];
+}
+
+/** /api/erp/stock/import 응답 */
+export interface ImportSummary extends Omit<ImportPreview, 'plan' | 'selfCounts'> {
+```
+
+(3) `planOpeningImport`의 반환
+```ts
+  return {
+    plan, errors, warnings, excluded,
+```
+를 아래로.
+```ts
+  return {
+    plan, errors, warnings, excluded,
+    selfCounts: included.map((r) => ({ skuId: r.skuId, qty: r.selfCount ?? 0 })),
+```
+
+(4) `commitOpeningImport` 전체를 아래로 바꾼다.
+```ts
+/** 호출자 트랜잭션 안에서 기초 전표를 쓴다. 전역 잠금 → SKU 오름차순 잠금·빈 원장 재확인 → 전표 → 집 센 기록 → 커서.
+ *  집 0개로 센 SKU는 전표가 없지만 센 기록은 남긴다 — 그 SKU도 잠그고 빈 원장을 다시 확인한다 */
+export async function commitOpeningImport(
+  db: Db,
+  plan: ImportPlanRow[],
+  p: { fileName: string; cutoverAt: string; countedAt: string; selfCounts: { skuId: number; qty: number }[] },
+): Promise<number> {
+  await db.query('select pg_advisory_xact_lock($1::bigint)', [OPENING_LOCK]);
+  const ids = [...new Set([...plan.map((r) => r.skuId), ...p.selfCounts.map((c) => c.skuId)])].sort((a, b) => a - b);
+  for (const id of ids) {
+    await lockSku(db, id);
+    const { rows } = await db.query('select count(*)::int as n from erp.stock_ledger where sku_id = $1', [id]);
+    if (Number(rows[0].n) > 0) throw new ImportConflictError(`SKU ${id}에 미리보기 뒤 전표가 생겼다 — 다시 미리보기한다`);
+  }
+  let n = 0;
+  for (const r of [...plan].sort((a, b) => a.skuId - b.skuId)) {
+    const res = await postLotCreate(db, {
+      skuId: r.skuId, location: r.location, qty: r.qty, unitCost: r.unitCost, kind: 'opening', reason: 'opening',
+      occurredAt: p.cutoverAt, idemKey: openingIdemKey(r.skuId, r.location), refType: 'opening', refId: p.fileName,
+    });
+    if (res.posted) n++;
+  }
+  // 센 시각 = 실사를 마친 시각(기초 전표 시각 cutoverAt과 다르다). 빈 원장을 확인했으니 원장 재고는 0
+  const selfPosted = new Set(plan.filter((r) => r.location === 'self').map((r) => r.skuId));
+  for (const c of [...p.selfCounts].sort((a, b) => a.skuId - b.skuId)) {
+    await recordCount(db, {
+      skuId: c.skuId, location: 'self', countedQty: c.qty, ledgerQty: 0,
+      idemKey: selfPosted.has(c.skuId) ? openingIdemKey(c.skuId, 'self') : null,
+      requestId: randomUUID(), countedAt: p.countedAt,
+    });
+  }
+  if (n > 0) await ensureCutover(db, p.cutoverAt);
+  return n;
+}
+```
+
+(5) `src/app/api/erp/stock/import/route.ts`의
+```ts
+    const committed = await withTx((c) => commitOpeningImport(c, p.plan, { fileName, cutoverAt }));
+```
+를 아래로(`countedAt`은 `planOpeningImport`가 검사했다 — 오류가 있으면 여기 오지 않는다).
+```ts
+    const committed = await withTx((c) => commitOpeningImport(c, p.plan, { fileName, cutoverAt, countedAt, selfCounts: p.selfCounts }));
+```
+
+- [ ] **Step 13: 자가시험에 센 기록 두 줄을 더한다**
+
+`scripts/erp/ledger-selftest.ts`의
+```ts
+    check('같은 요청 재전송은 duplicate(기록 없음)', again2.outcome === 'duplicate');
+```
+바로 아래에 넣는다.
+```ts
+
+    // 센 기록(116): 지금 개수는 차이가 0이어도 한 줄 · 그 재전송은 센 기록으로 duplicate
+    const reqSame = randomUUID();
+    const same = { skuId: adj, location: 'self' as const, mode: 'count' as const, value: 3, expected: 3, reason: 'count_diff' as const, requestId: reqSame, occurredAt: '2026-02-02T10:00:00+09:00' };
+    const oSame = await applyAdjustment(c, { ...same });
+    const againSame = await applyAdjustment(c, { ...same });
+    const counts = (await c.query(
+      'select counted_qty, ledger_qty, adjustment_idem_key from erp.stock_counts where sku_id = $1 order by id', [adj],
+    )).rows;
+    check('지금 개수마다 센 기록 한 줄 — 기초·조정 키, 차이 0은 null',
+      oSame.outcome === 'noop' && counts.length === 3
+        && counts[0].adjustment_idem_key === `opening:${adj}:self` && counts[1].adjustment_idem_key === `adj:${req2}`
+        && counts[2].adjustment_idem_key === null && counts[2].counted_qty === 3 && counts[2].ledger_qty === 3,
+      JSON.stringify(counts));
+    check('차이 0 실사의 재전송은 duplicate — 센 기록을 더 쓰지 않는다', againSame.outcome === 'duplicate' && counts.length === 3, againSame.outcome);
+```
+그리고 머리 주석의 흔적 지우기 SQL
+```ts
+//   delete from erp.stock_ledger where sku_id in (select id from erp.skus where key like 'selftest%');
+```
+을 아래로.
+```ts
+//   delete from erp.stock_ledger where sku_id in (select id from erp.skus where key like 'selftest%');
+//   delete from erp.stock_counts where sku_id in (select id from erp.skus where key like 'selftest%');
+```
+
+Run: `npx --no-install tsx scripts/erp/ledger-selftest.ts`
+Expected: 표 **28행 전부 ✅**(26 + 새 2), exit 0. (롤백 트랜잭션이라 `erp.stock_counts`에 흔적이 남지 않는다 — Step 3의 확인 명령을 다시 돌려 `행: 0`.) 🔴 기초 전표가 이미 있어 자가시험이 거부하면 이 실행은 건너뛰고 「실행 기록」에 적는다.
+
+- [ ] **Step 14: 통과 확인과 커밋**
+
+Run: `npx vitest run src/__tests__/lib/erp/ledger src/__tests__/api/erp-stock-import.test.ts && npx tsc --noEmit`
+Expected: 전부 PASS, 0 오류
+```bash
+git add src/lib/erp/ledger/opening-import.ts src/app/api/erp/stock/import/route.ts scripts/erp/ledger-selftest.ts src/__tests__/lib/erp/ledger/opening-import.test.ts src/__tests__/api/erp-stock-import.test.ts
+git commit -m "feat(erp): 실사표 불러오기도 집 센 개수를 센 기록으로 · 자가시험 센 기록 2행"
+```
+
+#### 4c-D. 오늘 셀 목록 규칙(순수) · 목록 칸 · API
+
+- [ ] **Step 15: 실패하는 테스트 작성**
+
+`src/__tests__/lib/erp/stock/count-queue.test.ts`:
+```ts
+import { describe, it, expect } from 'vitest';
+import { DEFAULT_QUEUE_N, kstDate, pickCountQueue } from '@/lib/erp/stock/count-queue';
+
+const TODAY = '2026-09-27';
+const r = (skuId: number, selfValue: number, hasLedger = true) => ({ skuId, selfValue, hasLedger });
+const ids = (xs: { skuId: number }[]) => xs.map((x) => x.skuId);
+
+describe('kstDate', () => {
+  it('ISO를 KST 날짜로', () => {
+    expect(kstDate('2026-09-26T15:00:00Z')).toBe('2026-09-27');
+    expect(kstDate('2026-09-26T14:59:59Z')).toBe('2026-09-26');
+    expect(kstDate(new Date('2026-09-27T00:00:00+09:00'))).toBe('2026-09-27');
+  });
+});
+
+describe('pickCountQueue', () => {
+  it('한 번도 안 센 SKU — 집 재고 금액 큰 순', () => {
+    expect(ids(pickCountQueue([r(1, 100), r(2, 900), r(3, 500)], new Map(), { today: TODAY }))).toEqual([2, 3, 1]);
+  });
+
+  it('센 적이 있으면 마지막 실사가 오래된 순, 같으면 금액 큰 순', () => {
+    const counts = new Map([[1, '2026-09-20T01:00:00Z'], [2, '2026-09-25T01:00:00Z'], [3, '2026-09-20T01:00:00Z']]);
+    expect(ids(pickCountQueue([r(1, 100), r(2, 900), r(3, 500)], counts, { today: TODAY }))).toEqual([3, 1, 2]);
+  });
+
+  it('안 센 SKU가 센 SKU보다 앞선다(금액과 무관)', () => {
+    expect(ids(pickCountQueue([r(1, 5000), r(2, 10)], new Map([[1, '2026-09-01T00:00:00Z']]), { today: TODAY }))).toEqual([2, 1]);
+  });
+
+  it('오늘(KST) 센 SKU는 빠진다 — 날짜 경계는 KST', () => {
+    const counts = new Map([
+      [1, '2026-09-26T15:00:00Z'], // 27일 00:00 KST — 오늘
+      [2, '2026-09-26T14:59:59Z'], // 26일 23:59 KST — 어제
+    ]);
+    expect(ids(pickCountQueue([r(1, 100), r(2, 100)], counts, { today: TODAY }))).toEqual([2]);
+  });
+
+  it('원장 전표가 하나도 없는 SKU는 빠진다(재고 0이고 전표도 없다 = 판매하지 않는 옵션)', () => {
+    expect(ids(pickCountQueue([r(1, 0, false), r(2, 0, true)], new Map(), { today: TODAY }))).toEqual([2]);
+  });
+
+  it('N개까지(기본 8) · 금액이 같으면 SKU id 순(순서가 흔들리지 않게)', () => {
+    const rows = Array.from({ length: 10 }, (_, i) => r(10 - i, 100));
+    expect(DEFAULT_QUEUE_N).toBe(8);
+    expect(ids(pickCountQueue(rows, new Map(), { today: TODAY }))).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(pickCountQueue(rows, new Map(), { n: 3, today: TODAY })).toHaveLength(3);
+  });
+});
+```
+
+`src/__tests__/api/erp-stock-count-queue.test.ts`:
+```ts
+// src/__tests__/api/erp-stock-count-queue.test.ts
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { NextRequest } from 'next/server';
+
+const { mockGetCurrentUser, mockGetPool } = vi.hoisted(() => ({ mockGetCurrentUser: vi.fn(), mockGetPool: vi.fn() }));
+vi.mock('@/lib/auth', () => ({ getCurrentUser: mockGetCurrentUser }));
+vi.mock('@/lib/sourcing/db', () => ({ getSourcingPool: mockGetPool }));
+
+const dbRow = (id: number, o: Record<string, unknown> = {}) => ({
+  id: String(id), key: `k${id}`, name: `상품${id}`, option_label: '', legacy: [], base_unit_label: null,
+  self: 1, rg_inbound: 0, rg: 0, value: '1000', self_value: '1000', has_ledger: true, lot_cost: 1000, legacy_cost: null, last_counted_at: null, ...o,
+});
+const get = (url: string) => new NextRequest(`http://localhost${url}`);
+let sql = '';
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-09-27T03:00:00Z')); // KST 2026-09-27 12:00
+  mockGetCurrentUser.mockResolvedValue({ userId: 'u-1', email: 't@example.com' });
+  mockGetPool.mockReturnValue({
+    query: vi.fn(async (q: string) => {
+      sql = q;
+      return {
+        rows: [
+          dbRow(1, { self_value: '500' }),
+          dbRow(2, { self_value: '9000', last_counted_at: new Date('2026-09-20T01:00:00Z') }),
+          dbRow(3, { self_value: '100' }),
+          dbRow(4, { self_value: '8000', last_counted_at: new Date('2026-09-27T00:30:00Z') }), // 오늘(KST 09:30) 셌다
+          dbRow(5, { self: 0, value: '0', self_value: '0', has_ledger: false }), // 전표 없음
+        ],
+        rowCount: 5,
+      };
+    }),
+  });
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe('GET /api/erp/stock/count-queue', () => {
+  it('로그인하지 않으면 401', async () => {
+    mockGetCurrentUser.mockResolvedValue(null);
+    const { GET } = await import('@/app/api/erp/stock/count-queue/route');
+    expect((await GET(get('/api/erp/stock/count-queue'))).status).toBe(401);
+  });
+
+  it('우선순위대로 — 안 센 것(집 금액 순) → 오래된 것. 오늘 센 것·전표 없는 것은 빠진다', async () => {
+    const { GET } = await import('@/app/api/erp/stock/count-queue/route');
+    const json = await (await GET(get('/api/erp/stock/count-queue'))).json();
+    expect(json.data.today).toBe('2026-09-27');
+    expect(json.data.n).toBe(8);
+    expect(json.data.items.map((x: { skuId: number }) => x.skuId)).toEqual([1, 3, 2]);
+    expect(json.data.items[2]).toMatchObject({ name: '상품2', selfValue: 9000, lastCountedAt: '2026-09-20T01:00:00.000Z' });
+    expect(sql).toMatch(/from erp\.stock_counts c where c\.sku_id = s\.id and c\.location = 'self'/);
+  });
+
+  it('n은 1~30으로 자르고, 숫자가 아니면 기본 8', async () => {
+    const { GET } = await import('@/app/api/erp/stock/count-queue/route');
+    expect((await (await GET(get('/api/erp/stock/count-queue?n=1'))).json()).data.items.map((x: { skuId: number }) => x.skuId)).toEqual([1]);
+    expect((await (await GET(get('/api/erp/stock/count-queue?n=99'))).json()).data.n).toBe(30);
+    expect((await (await GET(get('/api/erp/stock/count-queue?n=abc'))).json()).data.n).toBe(8);
+  });
+});
+```
+
+`src/__tests__/api/erp-stock.test.ts`의 `it('SKU별 위치 재고·평가액·단가를 돌려준다', …)`에서
+```ts
+      rows: [{ id: '7', key: 'cp:1:블랙', name: '왜건', option_label: '블랙', legacy: ['pc-1'], self: 3, rg_inbound: 0, rg: 2, value: '5000', has_ledger: true, lot_cost: 1000, legacy_cost: null, base_unit_label: null }],
+```
+을 아래로.
+```ts
+      rows: [{
+        id: '7', key: 'cp:1:블랙', name: '왜건', option_label: '블랙', legacy: ['pc-1'], self: 3, rg_inbound: 0, rg: 2, value: '5000', self_value: '3000',
+        has_ledger: true, lot_cost: 1000, legacy_cost: null, base_unit_label: null, last_counted_at: new Date('2026-09-20T01:00:00Z'),
+      }],
+```
+그리고 같은 테스트의 기대값
+```ts
+      self: 3, rgInbound: 0, rg: 2, value: 5000, hasLedger: true, lotCost: 1000, legacyCost: null, costNeedsInput: false,
+    }]);
+```
+을 아래로.
+```ts
+      self: 3, rgInbound: 0, rg: 2, value: 5000, hasLedger: true, lotCost: 1000, legacyCost: null, costNeedsInput: false,
+      selfValue: 3000, lastCountedAt: '2026-09-20T01:00:00.000Z',
+    }]);
+```
+
+- [ ] **Step 16: 실패 확인**
+
+Run: `npx vitest run src/__tests__/lib/erp/stock/count-queue.test.ts src/__tests__/api/erp-stock-count-queue.test.ts src/__tests__/api/erp-stock.test.ts`
+Expected: FAIL — `count-queue` 모듈·라우트 없음, 목록에 `selfValue`·`lastCountedAt` 없음
+
+- [ ] **Step 17: 구현 — 목록 칸**
+
+`src/lib/erp/stock/queries.ts`의 `StockListRow` 끝
+```ts
+  /** 미리 채울 단가가 없다(최근 lot도, 쓸 수 있는 옛 입고도 없다) — 재고를 늘리려면 사람이 단가를 적는다 */
+  costNeedsInput: boolean;
+}
+```
+을 아래로.
+```ts
+  /** 미리 채울 단가가 없다(최근 lot도, 쓸 수 있는 옛 입고도 없다) — 재고를 늘리려면 사람이 단가를 적는다 */
+  costNeedsInput: boolean;
+  /** 집 위치 원장 평가액 — 오늘 셀 목록의 금액 순서 */
+  selfValue: number;
+  /** 집 마지막 실사(센 기록, erp.stock_counts) 시각. 한 번도 안 셌으면 null */
+  lastCountedAt: string | null;
+}
+```
+
+`listStock`의 SQL에서
+```ts
+            coalesce(sum(h.value), 0)::bigint as value,
+```
+를 아래로.
+```ts
+            coalesce(sum(h.value), 0)::bigint as value,
+            coalesce(sum(h.value) filter (where h.location = 'self'), 0)::bigint as self_value,
+            (select max(c.counted_at) from erp.stock_counts c where c.sku_id = s.id and c.location = 'self') as last_counted_at,
+```
+같은 함수의 반환 객체
+```ts
+      hasLedger: r.has_ledger === true, lotCost, legacyCost, costNeedsInput: lotCost === null && legacyCost === null,
+    };
+```
+를 아래로.
+```ts
+      hasLedger: r.has_ledger === true, lotCost, legacyCost, costNeedsInput: lotCost === null && legacyCost === null,
+      selfValue: Number(r.self_value), lastCountedAt: r.last_counted_at ? iso(r.last_counted_at) : null,
+    };
+```
+
+- [ ] **Step 18: 구현 — 규칙과 API**
+
+`src/lib/erp/stock/count-queue.ts`:
+```ts
+// src/lib/erp/stock/count-queue.ts
+// 「오늘 셀 목록」(순환 실사, 2026-09-26 결정 5) — 집(self)에서 오늘 셀 SKU N개를 고른다. 날마다 저장하지 않고 요청 때 계산한다.
+// 우선순위: ① 한 번도 안 센 SKU — 집 재고 금액 큰 순 ② 마지막 실사가 오래된 순(같으면 금액 큰 순). 그래도 같으면 SKU id 순.
+// 빠지는 것: 오늘(KST) 이미 센 SKU · 원장 전표가 하나도 없는 SKU(재고 0이고 전표도 없다 = 판매하지 않는 옵션).
+// 순수 함수 — 서버(라우트)와 화면(마지막 실사 날짜 표시)이 같이 쓴다.
+import type { StockListRow } from './queries';
+
+export const DEFAULT_QUEUE_N = 8;
+export const MAX_QUEUE_N = 30;
+
+export type QueueCandidate = Pick<StockListRow, 'skuId' | 'selfValue' | 'hasLedger'>;
+
+/** GET /api/erp/stock/count-queue 응답 */
+export interface CountQueueResponse {
+  /** 오늘(KST, YYYY-MM-DD) */
+  today: string;
+  n: number;
+  items: StockListRow[];
+}
+
+/** ISO(또는 Date) → KST 날짜 YYYY-MM-DD */
+export function kstDate(v: string | Date): string {
+  const t = typeof v === 'string' ? Date.parse(v) : v.getTime();
+  return new Date(t + 9 * 3600_000).toISOString().slice(0, 10);
+}
+
+/**
+ * @param counts SKU → 집 마지막 실사 시각(ISO). 없으면 한 번도 안 셌다
+ * @param opts.today 오늘(KST YYYY-MM-DD) — 이날 센 SKU는 빠진다
+ */
+export function pickCountQueue<T extends QueueCandidate>(
+  rows: T[],
+  counts: ReadonlyMap<number, string>,
+  opts: { n?: number; today: string },
+): T[] {
+  const n = opts.n ?? DEFAULT_QUEUE_N;
+  const last = (r: T): number | null => {
+    const v = counts.get(r.skuId);
+    return v === undefined ? null : Date.parse(v);
+  };
+  return rows
+    .filter((r) => {
+      if (!r.hasLedger) return false;
+      const v = counts.get(r.skuId);
+      return v === undefined || kstDate(v) < opts.today;
+    })
+    .sort((a, b) => {
+      const la = last(a);
+      const lb = last(b);
+      if ((la === null) !== (lb === null)) return la === null ? -1 : 1;
+      if (la !== null && lb !== null && la !== lb) return la - lb;
+      if (a.selfValue !== b.selfValue) return b.selfValue - a.selfValue;
+      return a.skuId - b.skuId;
+    })
+    .slice(0, Math.max(0, n));
+}
+```
+
+`src/app/api/erp/stock/count-queue/route.ts`:
+```ts
+// GET /api/erp/stock/count-queue?n=8 — 오늘 셀 목록(집). 저장하지 않고 요청 때 계산한다(규칙: lib/erp/stock/count-queue.ts).
+// 화면(PC 패널·휴대폰)은 열 때 한 번 받고, 센 줄은 화면에서 뺀다 — 다시 받으면 센 만큼 다음 SKU가 채워진다.
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/supabase/auth';
+import { getSourcingPool } from '@/lib/sourcing/db';
+import { listStock } from '@/lib/erp/stock/queries';
+import { DEFAULT_QUEUE_N, MAX_QUEUE_N, kstDate, pickCountQueue, type CountQueueResponse } from '@/lib/erp/stock/count-queue';
+import { erpError } from '@/lib/erp/stock/http';
+
+export const dynamic = 'force-dynamic';
+
+export async function GET(request: NextRequest) {
+  const auth = await requireAuth(request);
+  if (auth instanceof Response) return auth;
+  const raw = Number(request.nextUrl.searchParams.get('n') ?? String(DEFAULT_QUEUE_N));
+  const n = Number.isInteger(raw) ? Math.min(Math.max(raw, 1), MAX_QUEUE_N) : DEFAULT_QUEUE_N;
+  try {
+    const rows = await listStock(getSourcingPool());
+    // 집 마지막 실사는 목록 행에 이미 실려 있다(listStock이 erp.stock_counts에서 읽는다)
+    const counts = new Map<number, string>();
+    for (const r of rows) if (r.lastCountedAt) counts.set(r.skuId, r.lastCountedAt);
+    const today = kstDate(new Date());
+    const data: CountQueueResponse = { today, n, items: pickCountQueue(rows, counts, { n, today }) };
+    return NextResponse.json({ success: true, data });
+  } catch (e) {
+    return erpError(e);
+  }
+}
+```
+
+- [ ] **Step 19: 화면 테스트 고정값에 새 칸을 넣는다**
+
+`StockRow`(= `StockListRow`)에 필수 칸 둘이 생겨 화면 테스트의 행 고정값이 타입 오류가 된다. 세 파일에서 `costNeedsInput: false,`를 `costNeedsInput: false, selfValue: 0, lastCountedAt: null,`로 바꾼다(각 파일 한 곳).
+- `src/__tests__/components/erp-stock-view.test.ts` — `row()` 고정값
+- `src/__tests__/components/erp-stock-edit-cell.test.tsx` — `row` 고정값
+- `src/__tests__/components/erp-stock-table.test.tsx` — `row()` 고정값(Task 4b)
+
+- [ ] **Step 20: 통과 확인과 커밋**
+
+Run: `npx vitest run src/__tests__/lib/erp/stock src/__tests__/api/erp-stock-count-queue.test.ts src/__tests__/api/erp-stock.test.ts src/__tests__/components/erp-stock-view.test.ts src/__tests__/components/erp-stock-edit-cell.test.tsx src/__tests__/components/erp-stock-table.test.tsx && npx tsc --noEmit`
+Expected: 전부 PASS, 0 오류
+```bash
+git add src/lib/erp/stock/count-queue.ts src/lib/erp/stock/queries.ts src/app/api/erp/stock/count-queue src/__tests__/lib/erp/stock/count-queue.test.ts src/__tests__/api/erp-stock-count-queue.test.ts src/__tests__/api/erp-stock.test.ts src/__tests__/components/erp-stock-view.test.ts src/__tests__/components/erp-stock-edit-cell.test.tsx src/__tests__/components/erp-stock-table.test.tsx
+git commit -m "feat(erp): 오늘 셀 목록 규칙과 GET /api/erp/stock/count-queue · 목록에 집 평가액·마지막 실사"
+```
+
+#### 4c-E. 화면 — 차이 0 지금 개수 · 「마지막 실사」 칸 · 「오늘 셀 목록」 패널
+
+> 🔵 화면이 차이 0 「지금 개수」를 막으면 센 기록이 남지 않는다(Task 4의 `EditCell`은 차이 0이면 저장을 막고, 실사 모드는 차이 0 편집을 버렸다). 이제 **지금 개수는 차이가 없어도 저장·담기가 된다**(「차이 없음 — 센 기록만 남깁니다」).
+
+- [ ] **Step 21: 실패하는 테스트 작성**
+
+`src/__tests__/components/erp-stock-edit-cell.test.tsx`의 `describe('EditCell', () => {` 블록 끝(`it('실사 모드에서는 「담기」', …)` 뒤)에 더한다.
+```tsx
+
+  it('지금 개수가 원장과 같아도 저장된다 — 센 기록만 남는다', () => {
+    const onSubmit = vi.fn();
+    render(<EditCell row={row} location="self" countMode={false} onSubmit={onSubmit} onCancel={() => {}} />);
+    expect(screen.getByText('차이 없음 — 센 기록만 남깁니다')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('저장'));
+    expect(onSubmit).toHaveBeenCalledWith({ skuId: 1, location: 'self', mode: 'count', value: 10, expected: 10, reason: 'count_diff', note: '', unitCost: null });
+  });
+
+  it('countOnly면 ±수량 전환이 없다(오늘 셀 목록)', () => {
+    render(<EditCell row={row} location="self" countMode={false} countOnly onSubmit={vi.fn()} onCancel={() => {}} />);
+    expect(screen.queryByText('±수량')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('지금 개수')).toHaveValue('10');
+  });
+```
+
+`src/__tests__/components/erp-stock-view.test.ts`의
+```ts
+  it('실사 모드 요약: 늘림·줄임·평가액 영향(추정)', () => {
+    const byId = new Map([[1, row()], [2, row({ skuId: 2, lotCost: 500 })]]);
+    expect(summarizeStaged([edit({ unitCost: 1200 }), edit({ skuId: 2, value: 1, expected: 3 })], byId))
+      .toEqual({ count: 2, plus: 2, minus: 2, valueDelta: 2 * 1200 - 2 * 500 });
+  });
+```
+를 아래로.
+```ts
+  it('실사 모드 요약: 늘림·줄임·차이 없음(센 기록만)·평가액 영향(추정)', () => {
+    const byId = new Map([[1, row()], [2, row({ skuId: 2, lotCost: 500 })], [3, row({ skuId: 3 })]]);
+    expect(summarizeStaged([edit({ unitCost: 1200 }), edit({ skuId: 2, value: 1, expected: 3 }), edit({ skuId: 3, value: 3, expected: 3 })], byId))
+      .toEqual({ count: 3, plus: 2, minus: 2, same: 1, valueDelta: 2 * 1200 - 2 * 500 });
+  });
+```
+
+`src/__tests__/components/erp-stock-table.test.tsx`의 `describe('StockTable — 상품 묶음', () => {` 블록 끝에 더한다.
+```tsx
+
+  it('「마지막 실사」 — 옵션은 날짜(KST) 또는 「안 셈」, 묶음은 안 센 옵션 수', () => {
+    render(
+      <StockTable
+        views={filterGroups(groupRows([
+          row({ lastCountedAt: '2026-09-26T15:30:00Z' }),
+          row({ skuId: 2, key: 'k2', option: '베이지' }),
+        ], null), NO_FILTER, null)}
+        forceOpen
+        recon={null} staged={new Map()} countMode={false} editing={null} selected={null} busy={false}
+        onEdit={() => {}} onCancelEdit={() => {}} onSubmitEdit={() => {}} onSelect={() => {}} onRgApply={() => {}}
+      />,
+    );
+    expect(screen.getByText('마지막 실사')).toBeInTheDocument();
+    expect(screen.getByText('2026-09-27')).toBeInTheDocument();
+    expect(within(trOf('베이지')).getByText('안 셈')).toBeInTheDocument();
+    expect(within(trOf('왜건')).getByText('안 셈 1')).toBeInTheDocument();
+  });
+```
+
+`src/__tests__/components/erp-count-queue-panel.test.tsx`:
+```tsx
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
+import CountQueuePanel from '@/components/erp/stock/CountQueuePanel';
+import type { StockRow } from '@/components/erp/stock/stock-view';
+import { server } from '../mocks/server';
+
+const row = (o: Partial<StockRow>): StockRow => ({
+  skuId: 1, key: 'k1', name: '왜건', option: '블랙', legacyProductCostIds: [], self: 5, rgInbound: 0, rg: 0, value: 3500,
+  hasLedger: true, lotCost: 700, legacyCost: null, costNeedsInput: false, selfValue: 3500, lastCountedAt: null, ...o,
+});
+const A = row({});
+const B = row({ skuId: 2, key: 'k2', name: '매트', option: '', self: 2, selfValue: 1400, lastCountedAt: '2026-09-20T01:00:00Z' });
+const serveQueue = () =>
+  server.use(http.get('/api/erp/stock/count-queue', () => HttpResponse.json({ success: true, data: { today: '2026-09-27', n: 8, items: [A, B] } })));
+
+describe('CountQueuePanel', () => {
+  it('오늘 셀 목록을 보이고, 센 개수를 저장하면(차이가 없어도) 그 줄이 빠진다', async () => {
+    serveQueue();
+    const onSave = vi.fn(async () => true);
+    render(<CountQueuePanel rowById={new Map([[1, A], [2, B]])} busy={false} onSave={onSave} />);
+    expect(await screen.findByText('왜건')).toBeInTheDocument();
+    expect(screen.getByText(/남은 2 \/ 2개/)).toBeInTheDocument();
+    expect(screen.getByText('안 셈')).toBeInTheDocument();
+    expect(screen.getByText('2026-09-20')).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: '세기' })[0]);
+    expect(screen.queryByText('±수량')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('저장'));
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ skuId: 1, location: 'self', mode: 'count', value: 5, expected: 5, reason: 'count_diff' })));
+    await waitFor(() => expect(screen.queryByText('왜건')).not.toBeInTheDocument());
+    expect(screen.getByText(/남은 1 \/ 2개/)).toBeInTheDocument();
+  });
+
+  it('저장이 실패하면 줄을 남긴다', async () => {
+    serveQueue();
+    const onSave = vi.fn(async () => false);
+    render(<CountQueuePanel rowById={new Map([[1, A], [2, B]])} busy={false} onSave={onSave} />);
+    fireEvent.click((await screen.findAllByRole('button', { name: '세기' }))[0]);
+    fireEvent.click(screen.getByText('저장'));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(screen.getByText('왜건')).toBeInTheDocument();
+  });
+});
+```
+
+- [ ] **Step 22: 실패 확인**
+
+Run: `npx vitest run src/__tests__/components/erp-stock-edit-cell.test.tsx src/__tests__/components/erp-stock-view.test.ts src/__tests__/components/erp-stock-table.test.tsx src/__tests__/components/erp-count-queue-panel.test.tsx`
+Expected: 새 테스트 FAIL — 차이 0이면 「저장」이 잠겨 있다 · `countOnly` 없음 · `same` 없음 · 「마지막 실사」 칸 없음 · 패널 모듈 없음
+
+- [ ] **Step 23: 구현 — `EditCell.tsx`**
+
+`src/components/erp/stock/EditCell.tsx`에서 여섯 곳을 고친다.
+
+(1) 머리 주석
+```tsx
+ * 실사 모드에서는 저장하지 않고 담는다(StockClient가 한 번에 저장한다).
+ */
+```
+를 아래로.
+```tsx
+ * 실사 모드에서는 저장하지 않고 담는다(StockClient가 한 번에 저장한다).
+ * 지금 개수는 원장과 같아도 저장·담기가 된다 — 원장 전표 없이 센 기록(erp.stock_counts)만 남는다(결정 5).
+ * `countOnly`면 ±수량 전환을 숨긴다(오늘 셀 목록 — 센 개수만 받는다).
+ */
+```
+
+(2) Props
+```tsx
+  countMode: boolean;
+  onSubmit: (e: StagedEdit) => void;
+```
+를 아래로.
+```tsx
+  countMode: boolean;
+  /** 지금 개수만(±수량 전환 없음) */
+  countOnly?: boolean;
+  onSubmit: (e: StagedEdit) => void;
+```
+
+(3)
+```tsx
+export default function EditCell({ row, location, staged, countMode, onSubmit, onCancel }: Props) {
+```
+를 아래로.
+```tsx
+export default function EditCell({ row, location, staged, countMode, countOnly = false, onSubmit, onCancel }: Props) {
+```
+
+(4)
+```tsx
+  const canSubmit = valid && diff !== 0 && !needsCost;
+```
+를 아래로(±수량은 0이 이미 무효라 차이 0은 지금 개수뿐이다).
+```tsx
+  const canSubmit = valid && !needsCost;
+```
+
+(5) 방식 전환 버튼 묶음 — `countOnly`면 그리지 않는다(숨기기만 하면 버튼이 DOM에 남는다).
+```tsx
+      <div style={{ ...segStyle, marginBottom: 6 }}>
+        {(['count', 'delta'] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => switchMode(m)}
+            style={{ ...segBtnStyle, flex: 1, background: mode === m ? E.ink : E.surface, color: mode === m ? '#fff' : E.ink }}
+          >
+            {m === 'count' ? '지금 개수' : '±수량'}
+          </button>
+        ))}
+      </div>
+```
+을 아래로.
+```tsx
+      {!countOnly && (
+        <div style={{ ...segStyle, marginBottom: 6 }}>
+          {(['count', 'delta'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => switchMode(m)}
+              style={{ ...segBtnStyle, flex: 1, background: mode === m ? E.ink : E.surface, color: mode === m ? '#fff' : E.ink }}
+            >
+              {m === 'count' ? '지금 개수' : '±수량'}
+            </button>
+          ))}
+        </div>
+      )}
+```
+
+(6) 차이 표시
+```tsx
+          ? diff === 0 ? '차이 없음' : `${won(onHand)} → ${won(onHand + diff)} (${diff > 0 ? '+' : ''}${won(diff)})`
+```
+를 아래로.
+```tsx
+          ? diff === 0 ? '차이 없음 — 센 기록만 남깁니다' : `${won(onHand)} → ${won(onHand + diff)} (${diff > 0 ? '+' : ''}${won(diff)})`
+```
+
+- [ ] **Step 24: 구현 — `stock-view.ts`·`api.ts`**
+
+`src/components/erp/stock/stock-view.ts`의 `summarizeStaged` 전체를 아래로 바꾼다.
+```ts
+/** 실사 모드 저장 전 확인 창의 숫자. same = 차이 없는 지금 개수(센 기록만 남는다). 평가액 영향은 추정(줄 때는 최근 단가, 늘 때는 입력 단가) */
+export function summarizeStaged(
+  list: StagedEdit[],
+  rowById: Map<number, StockRow>,
+): { count: number; plus: number; minus: number; same: number; valueDelta: number } {
+  let plus = 0;
+  let minus = 0;
+  let same = 0;
+  let valueDelta = 0;
+  for (const e of list) {
+    const d = editDiff(e);
+    if (d === 0) {
+      same++;
+      continue;
+    }
+    const row = rowById.get(e.skuId);
+    const base = row ? defaultCost(row) : null;
+    const cost = d > 0 ? (e.unitCost ?? base ?? 0) : (base ?? 0);
+    if (d > 0) plus += d;
+    else minus += -d;
+    valueDelta += d * cost;
+  }
+  return { count: list.length, plus, minus, same, valueDelta };
+}
+```
+
+`src/components/erp/stock/api.ts`에서
+```ts
+import type { ImportSummary } from '@/lib/erp/ledger/opening-import';
+```
+를 아래로.
+```ts
+import type { ImportSummary } from '@/lib/erp/ledger/opening-import';
+import type { CountQueueResponse } from '@/lib/erp/stock/count-queue';
+```
+그리고
+```ts
+export const postRgApply = (items: RgApplyItem[]) => call<AdjustResult[]>('/api/erp/stock/rg-reconcile', { items });
+```
+바로 아래에 넣는다.
+```ts
+export const fetchCountQueue = (n: number) => call<CountQueueResponse>(`/api/erp/stock/count-queue?n=${n}`);
+```
+
+- [ ] **Step 25: 구현 — `StockTable.tsx`에 「마지막 실사」 칸**
+
+`src/components/erp/stock/StockTable.tsx`(Task 4b 판)에서 여섯 곳을 고친다.
+
+(1) import 끝에 한 줄 더한다 —
+```tsx
+} from './stock-view';
+```
+를 아래로.
+```tsx
+} from './stock-view';
+import { kstDate } from '@/lib/erp/stock/count-queue';
+```
+
+(2)
+```tsx
+const HEADERS = ['상품', '옵션', '집', 'RG입고중', 'RG(원장)', 'RG실재고', '차이', '단가', '평가액'];
+```
+를 아래로.
+```tsx
+const HEADERS = ['상품', '옵션', '집', 'RG입고중', 'RG(원장)', 'RG실재고', '차이', '단가', '평가액', '마지막 실사'];
+```
+
+(3) 담긴 칸 표시 — 차이 없는 지금 개수도 담기므로 「→ 같은 값」 대신 확인 표시를 한다.
+```tsx
+          {s ? (
+            <>
+              <span style={{ textDecoration: 'line-through', color: E.inkMute }}>{won(value)}</span>
+              {' → '}
+              <b>{won(value + editDiff(s))}</b>
+            </>
+          ) : won(value)}
+```
+를 아래로.
+```tsx
+          {s ? (
+            editDiff(s) === 0 ? (
+              <b title="차이 없음 — 센 기록만 남깁니다">{won(value)} ✓</b>
+            ) : (
+              <>
+                <span style={{ textDecoration: 'line-through', color: E.inkMute }}>{won(value)}</span>
+                {' → '}
+                <b>{won(value + editDiff(s))}</b>
+              </>
+            )
+          ) : won(value)}
+```
+
+(4) 옵션 행 끝
+```tsx
+        <td style={numTdStyle}>{cost === null ? '—' : won(cost)}</td>
+        <td style={numTdStyle}>{won(r.value)}</td>
+      </tr>
+    );
+  };
+```
+를 아래로.
+```tsx
+        <td style={numTdStyle}>{cost === null ? '—' : won(cost)}</td>
+        <td style={numTdStyle}>{won(r.value)}</td>
+        <td style={{ ...numTdStyle, color: r.lastCountedAt ? E.ink : E.inkMute }}>{r.lastCountedAt ? kstDate(r.lastCountedAt) : '안 셈'}</td>
+      </tr>
+    );
+  };
+```
+
+(5) 묶음 행 — 안 센 옵션 수, 모두 셌으면 가장 오래된 날짜.
+```tsx
+    const stagedN = g.options.filter((r) => staged.has(stageKey(r.skuId, 'self')) || staged.has(stageKey(r.skuId, 'rg_inbound'))).length;
+```
+를 아래로.
+```tsx
+    const stagedN = g.options.filter((r) => staged.has(stageKey(r.skuId, 'self')) || staged.has(stageKey(r.skuId, 'rg_inbound'))).length;
+    const neverCounted = g.options.filter((r) => !r.lastCountedAt).length;
+    const oldest = g.options.map((r) => r.lastCountedAt).filter((x): x is string => x !== null).sort()[0] ?? null;
+```
+그리고 묶음 행 끝
+```tsx
+        <td style={numTdStyle}>—</td>
+        <td style={numTdStyle}>{won(g.value)}</td>
+      </tr>
+```
+를 아래로.
+```tsx
+        <td style={numTdStyle}>—</td>
+        <td style={numTdStyle}>{won(g.value)}</td>
+        <td style={{ ...numTdStyle, color: neverCounted ? E.inkMute : E.ink }} title={neverCounted ? undefined : '가장 오래된 옵션의 실사 날짜'}>
+          {neverCounted ? `안 셈 ${neverCounted}` : oldest ? kstDate(oldest) : '—'}
+        </td>
+      </tr>
+```
+
+(6) 표 설명 띠
+```tsx
+          상품별 재고 — 원장 기준 · 상품 줄을 누르면 옵션이 펼쳐집니다 · 집·RG입고중 칸을 누르면 고칩니다 · 옵션 줄을 누르면 입출 이력
+```
+을 아래로.
+```tsx
+          상품별 재고 — 원장 기준 · 상품 줄을 누르면 옵션이 펼쳐집니다 · 집·RG입고중 칸을 누르면 고칩니다(개수가 같아도 저장하면 실사로 남습니다) · 옵션 줄을 누르면 입출 이력
+```
+
+- [ ] **Step 26: 구현 — `CountQueuePanel.tsx`**
+
+`src/components/erp/stock/CountQueuePanel.tsx`:
+```tsx
+'use client';
+
+/**
+ * 「오늘 셀 목록」(PC) — 집에서 오늘 셀 SKU N개(결정 5). 「세기」를 누르면 칸 편집(EditCell)이 지금 개수로만 열리고,
+ * 저장하면(차이가 없어도 센 기록이 남는다) 그 줄이 목록에서 빠진다.
+ * 목록은 화면을 열 때 한 번 받는다 — 다시 받으면 센 만큼 다음 SKU가 채워져 「오늘 N개」가 끝나지 않는다.
+ */
+import React, { useEffect, useState } from 'react';
+import { ClipboardList } from 'lucide-react';
+import { E } from '@/lib/design-tokens';
+import { bandStyle, btnStyle, numTdStyle, thStyle } from '@/components/orders/erp-ui';
+import { DEFAULT_QUEUE_N, kstDate } from '@/lib/erp/stock/count-queue';
+import EditCell from './EditCell';
+import { fetchCountQueue } from './api';
+import { won, type StagedEdit, type StockRow } from './stock-view';
+
+interface Props {
+  /** 최신 목록 행 — 세는 사이 원장이 바뀌었으면(저장 뒤 다시 불러온 값) 이 값으로 편집을 연다 */
+  rowById: Map<number, StockRow>;
+  busy: boolean;
+  /** 저장. 성공하면 true — 그 줄을 목록에서 뺀다 */
+  onSave: (e: StagedEdit) => Promise<boolean>;
+}
+
+const HEADERS = ['상품', '옵션', '집(원장)', '집 평가액', '마지막 실사', ''];
+const textTd: React.CSSProperties = {
+  borderBottom: `1px solid ${E.lineSoft}`, borderRight: `1px solid ${E.lineSoft}`, padding: '4px 8px',
+  fontSize: 12, color: E.ink, whiteSpace: 'nowrap', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis',
+};
+const smallBtn: React.CSSProperties = { ...btnStyle, height: 20, padding: '0 8px', fontSize: 10.5 };
+
+export default function CountQueuePanel({ rowById, busy, onSave }: Props) {
+  const [items, setItems] = useState<StockRow[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState(true);
+  const [editing, setEditing] = useState<number | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void fetchCountQueue(DEFAULT_QUEUE_N).then((r) => {
+      if (!alive) return;
+      if (!r.ok) {
+        setError(r.error);
+        return;
+      }
+      setItems(r.data.items);
+      setTotal(r.data.items.length);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  async function submit(e: StagedEdit) {
+    if (!(await onSave(e))) return;
+    setItems((list) => (list ?? []).filter((r) => r.skuId !== e.skuId));
+    setEditing(null);
+  }
+
+  const left = items?.length ?? 0;
+  const status =
+    items === null ? (error ? '불러오지 못했습니다' : '불러오는 중…')
+      : total === 0 ? '셀 SKU가 없습니다(원장 전표가 있는 SKU만 고릅니다)'
+        : left === 0 ? `오늘 ${total}개를 다 셌습니다`
+          : `남은 ${left} / ${total}개`;
+
+  return (
+    <div style={{ background: E.surface, border: `1px solid ${E.line}`, marginBottom: 10 }}>
+      <div style={bandStyle}>
+        <ClipboardList size={12} />
+        <span style={{ flex: 1 }}>오늘 셀 목록 — 집 · {status}</span>
+        <button type="button" onClick={() => setOpen((v) => !v)} style={smallBtn}>{open ? '접기' : '펼치기'}</button>
+      </div>
+      {error && <div role="alert" style={{ padding: '6px 10px', color: E.loss, fontSize: 11.5 }}>{error}</div>}
+      {open && items && items.length > 0 && (
+        <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+          <thead>
+            <tr>{HEADERS.map((h, i) => <th key={i} style={thStyle}>{h}</th>)}</tr>
+          </thead>
+          <tbody>
+            {items.map((item) => {
+              const r = rowById.get(item.skuId) ?? item;
+              return (
+                <tr key={r.skuId} style={{ height: E.rowH }}>
+                  <td style={textTd} title={r.key}>{r.name}</td>
+                  <td style={textTd}>{r.option || '—'}</td>
+                  <td style={numTdStyle}>{won(r.self)}</td>
+                  <td style={numTdStyle}>{won(r.selfValue)}</td>
+                  <td style={{ ...numTdStyle, color: r.lastCountedAt ? E.ink : E.inkMute }}>{r.lastCountedAt ? kstDate(r.lastCountedAt) : '안 셈'}</td>
+                  <td style={{ ...numTdStyle, position: 'relative', textAlign: 'center' }}>
+                    <button type="button" disabled={busy} onClick={() => setEditing(r.skuId)} style={smallBtn}>세기</button>
+                    {editing === r.skuId && (
+                      <EditCell row={r} location="self" countMode={false} countOnly onSubmit={(e) => void submit(e)} onCancel={() => setEditing(null)} />
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+```
+
+- [ ] **Step 27: 구현 — `StockClient.tsx`**
+
+`src/components/erp/stock/StockClient.tsx`에서 여섯 곳을 고친다.
+
+(1) import
+```tsx
+import CsvImportDialog from './CsvImportDialog';
+```
+를 아래로.
+```tsx
+import CsvImportDialog from './CsvImportDialog';
+import CountQueuePanel from './CountQueuePanel';
+```
+
+(2) `saveOne` 전체를 아래로 바꾼다(오늘 셀 목록이 성공 여부를 알아야 줄을 뺀다).
+```tsx
+  /** 한 칸 바로 저장. 성공하면 true */
+  async function saveOne(edit: StagedEdit): Promise<boolean> {
+    setSaving(true);
+    const r = await postAdjust(toAdjustItems([edit], uuidv4));
+    setSaving(false);
+    if (!r.ok) {
+      toast.error(r.error);
+      if (r.code === 'stale') await load();
+      return false;
+    }
+    const res = r.data[0];
+    toast.success(
+      res.outcome === 'noop' ? '차이 없음 — 센 기록만 남겼습니다'
+        : res.outcome === 'duplicate' ? '이미 저장된 요청입니다'
+          : `${res.kind === 'opening' ? '기초재고' : '조정'} ${res.qty > 0 ? '+' : ''}${res.qty} 기록했습니다`,
+    );
+    setEditing(null);
+    await load();
+    return true;
+  }
+```
+
+(3) `stage` 안의
+```tsx
+      if (editDiff(edit) === 0) n.delete(k);
+      else n.set(k, edit);
+```
+를 아래로.
+```tsx
+      // 차이 없는 지금 개수도 담는다 — 저장하면 센 기록이 남는다
+      n.set(k, edit);
+```
+`editDiff`를 더 쓰지 않으므로 import(Task 4b 판)의
+```tsx
+  computeKpis, defaultCost, editDiff, filterGroups, filterRows, filtersActive, groupRows, parseRecon, rgDiff, stageKey, summarizeStaged,
+```
+를 아래로.
+```tsx
+  computeKpis, defaultCost, filterGroups, filterRows, filtersActive, groupRows, parseRecon, rgDiff, stageKey, summarizeStaged,
+```
+
+(4) `saveStaged`의 확인 문구
+```tsx
+      message: `실사 변경 ${s.count}건을 저장합니다.\n\n늘림 +${won(s.plus)}개 · 줄임 −${won(s.minus)}개\n평가액 영향(추정) ${signed(s.valueDelta)}원\n\n하나라도 실패하면 전부 저장되지 않습니다.`,
+```
+를 아래로.
+```tsx
+      message: `실사 ${s.count}건을 저장합니다.\n\n늘림 +${won(s.plus)}개 · 줄임 −${won(s.minus)}개 · 차이 없음 ${s.same}건(센 기록만)\n평가액 영향(추정) ${signed(s.valueDelta)}원\n\n하나라도 실패하면 전부 저장되지 않습니다.`,
+```
+그리고 성공 토스트
+```tsx
+    toast.success(`${r.data.filter((x) => x.outcome === 'posted').length}건 저장했습니다`);
+```
+를 아래로.
+```tsx
+    toast.success(`${r.data.filter((x) => x.outcome === 'posted').length}건 기록 · ${r.data.filter((x) => x.outcome === 'noop').length}건 차이 없음(센 기록)`);
+```
+
+(5) 실사 모드 저장 버튼 문구
+```tsx
+            변경 {staged.size}건 저장
+```
+을 아래로.
+```tsx
+            실사 {staged.size}건 저장
+```
+
+(6) KPI 묶음 바로 뒤(도구줄 `<div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>` 바로 앞)에 넣는다.
+```tsx
+      <CountQueuePanel rowById={rowById} busy={saving} onSave={saveOne} />
+
+```
+그리고 `onSubmitEdit={(e) => { if (countMode) stage(e); else void saveOne(e); }}`는 그대로 둔다(반환값을 쓰지 않는다).
+
+- [ ] **Step 28: 통과 확인과 커밋**
+
+Run: `npx vitest run src/__tests__/components/erp-stock-edit-cell.test.tsx src/__tests__/components/erp-stock-view.test.ts src/__tests__/components/erp-stock-table.test.tsx src/__tests__/components/erp-count-queue-panel.test.tsx && npx tsc --noEmit && npx eslint src/components/erp/stock`
+Expected: 전부 PASS, tsc 0 오류, eslint 오류 0
+```bash
+git add src/components/erp/stock src/__tests__/components/erp-stock-edit-cell.test.tsx src/__tests__/components/erp-stock-view.test.ts src/__tests__/components/erp-stock-table.test.tsx src/__tests__/components/erp-count-queue-panel.test.tsx
+git commit -m "feat(erp): 재고현황 「오늘 셀 목록」 패널 · 「마지막 실사」 칸 · 차이 없는 지금 개수도 센 기록으로"
+```
+
+- [ ] **Step 29: 🔴 화면 확인 — 컨트롤러가 직접(서브에이전트 아님)**
+
+개발 서버·로그인은 Task 4 Step 17 그대로. 1440px로 `http://localhost:3000/erp/stock`을 연다. 확인: KPI 아래 「오늘 셀 목록 — 집 · …」 띠 · 기초재고 전(원장 0행)이면 「셀 SKU가 없습니다(원장 전표가 있는 SKU만 고릅니다)」 · 접기/펼치기 · 표 끝 「마지막 실사」 칸(전부 「안 셈」, 묶음은 「안 셈 N」) · 칸 편집에서 개수를 그대로 두면 「차이 없음 — 센 기록만 남깁니다」와 함께 「저장」이 켜짐(「취소」로 닫는다) · 실사 모드에서 같은 값을 담으면 칸이 「n ✓」 · 콘솔 오류 없음. `curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/erp/stock/count-queue` → `401`(로그인 쿠키 없음). 🔴 **저장·「세기」 저장 버튼은 누르지 않는다** — 로컬 서버도 운영 DB다. 목록이 채워진 모습은 Task 9 기초재고 뒤에 확인한다. 깨진 곳은 고쳐 `fix(erp): …`로 커밋하고 스크린샷을 사용자에게 보여준다.
+
+---
+### Task 5: 휴대폰 재고 수정 `/m/stock` — 「오늘 셀 목록」으로 시작
+
+> 결정 5(2026-09-26 추가): 휴대폰은 **「오늘 셀 목록」(Task 4c)으로 연다** — N개 카드를 차례로 세고, 목록 밖 SKU는 검색으로 찾는다. 저장한 카드는 목록에서 빠진다(목록은 열 때 한 번 받는다). 개수가 같아도 저장하면 센 기록이 남는다. 나머지(위치 탭 · −/+ · 사유 · 메모 · 늘 때 단가 · 최근 수정 5건 · 같은 API)는 그대로다.
 
 **Files:**
 - Create: `src/app/m/stock/layout.tsx`, `src/app/m/stock/page.tsx`, `src/components/erp/stock/MobileStock.tsx`
@@ -3969,21 +5910,40 @@ import { server } from '../mocks/server';
 
 const ROW = {
   skuId: 1, key: 'cp:1:블랙', name: '왜건', option: '블랙', legacyProductCostIds: [], self: 5, rgInbound: 1, rg: 2, value: 5600,
-  hasLedger: true, lotCost: 700, legacyCost: null,
+  hasLedger: true, lotCost: 700, legacyCost: null, costNeedsInput: false, selfValue: 3500, lastCountedAt: null,
 };
+const OTHER = { ...ROW, skuId: 2, key: 'cp:2:레드', name: '매트', option: '레드', self: 3, rgInbound: 0, rg: 0, value: 2100, selfValue: 2100 };
+
+// 콜백 안에서만 채워진다 — 선언 타입을 넓혀 둬야 TS가 null로 좁히지 않는다
+type Body = { items: Record<string, unknown>[] };
+function serve(onAdjust?: (b: Body) => void) {
+  server.use(
+    http.get('/api/erp/stock', () => HttpResponse.json({ success: true, data: [ROW, OTHER] })),
+    http.get('/api/erp/stock/recent', () => HttpResponse.json({ success: true, data: [] })),
+    http.get('/api/erp/stock/count-queue', () => HttpResponse.json({ success: true, data: { today: '2026-09-27', n: 8, items: [ROW] } })),
+    http.post('/api/erp/stock/adjust', async ({ request }) => {
+      const b = (await request.json()) as Body;
+      onAdjust?.(b);
+      const item = b.items[0];
+      const same = item.value === item.expected;
+      return HttpResponse.json({ success: true, data: [{ outcome: same ? 'noop' : 'posted', kind: same ? null : 'adjust', qty: Number(item.value) - Number(item.expected) }] });
+    }),
+  );
+}
 
 describe('MobileStock', () => {
-  it('SKU를 골라 지금 개수를 줄이고 저장하면 count 조정을 보낸다', async () => {
-    // 콜백 안에서만 채워진다 — 선언 타입을 넓혀 둬야 TS가 null로 좁히지 않는다
-    let body = null as { items: Record<string, unknown>[] } | null;
-    server.use(
-      http.get('/api/erp/stock', () => HttpResponse.json({ success: true, data: [ROW] })),
-      http.get('/api/erp/stock/recent', () => HttpResponse.json({ success: true, data: [] })),
-      http.post('/api/erp/stock/adjust', async ({ request }) => {
-        body = (await request.json()) as { items: Record<string, unknown>[] };
-        return HttpResponse.json({ success: true, data: [{ outcome: 'posted', kind: 'adjust', qty: -2 }] });
-      }),
-    );
+  it('오늘 셀 목록 카드로 시작한다 — 검색 전에는 목록 밖 SKU를 보이지 않는다', async () => {
+    serve();
+    render(<MobileStock />);
+    expect(await screen.findByText('왜건')).toBeInTheDocument();
+    expect(screen.getByText(/남은 1 \/ 1개/)).toBeInTheDocument();
+    expect(screen.getByText(/안 셈/)).toBeInTheDocument();
+    expect(screen.queryByText('매트')).not.toBeInTheDocument();
+  });
+
+  it('카드를 골라 지금 개수를 줄여 저장하면 count 조정을 보내고, 그 카드가 목록에서 빠진다', async () => {
+    let body = null as Body | null;
+    serve((b) => { body = b; });
     render(<MobileStock />);
     fireEvent.click(await screen.findByText('왜건'));
     fireEvent.click(screen.getByLabelText('하나 빼기'));
@@ -3994,17 +5954,40 @@ describe('MobileStock', () => {
     expect(body!.items[0]).toMatchObject({ skuId: 1, location: 'self', mode: 'count', value: 3, expected: 5, reason: 'count_diff' });
     expect(String(body!.items[0].requestId)).toMatch(/^[0-9a-f-]{36}$/);
     expect(await screen.findByText(/저장했습니다/)).toBeInTheDocument();
+    expect(screen.getByText(/오늘 1개를 다 셌습니다/)).toBeInTheDocument();
+    expect(screen.queryByText('왜건')).not.toBeInTheDocument();
   });
 
-  it('RG입고중 탭은 그 위치 재고에서 시작한다', async () => {
-    server.use(
-      http.get('/api/erp/stock', () => HttpResponse.json({ success: true, data: [ROW] })),
-      http.get('/api/erp/stock/recent', () => HttpResponse.json({ success: true, data: [] })),
-    );
+  it('개수가 같아도 저장된다 — 센 기록만 남는다', async () => {
+    let body = null as Body | null;
+    serve((b) => { body = b; });
+    render(<MobileStock />);
+    fireEvent.click(await screen.findByText('왜건'));
+    expect(screen.getByText('차이 없음 — 센 기록만 남깁니다')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '맞습니다 — 센 기록 저장' }));
+    await waitFor(() => expect(body).not.toBeNull());
+    expect(body!.items[0]).toMatchObject({ skuId: 1, location: 'self', mode: 'count', value: 5, expected: 5 });
+    expect(await screen.findByText(/센 기록을 저장했습니다/)).toBeInTheDocument();
+  });
+
+  it('목록에 없는 SKU는 검색으로 찾는다', async () => {
+    serve();
+    render(<MobileStock />);
+    await screen.findByText('왜건');
+    fireEvent.change(screen.getByLabelText('상품 검색'), { target: { value: '매트' } });
+    fireEvent.click(await screen.findByText('매트'));
+    expect(screen.getByLabelText('지금 개수')).toHaveValue(3);
+  });
+
+  it('RG입고중 탭은 그 위치 재고에서 시작하고, 거기서 센 것은 오늘 셀 목록(집)에서 빼지 않는다', async () => {
+    serve();
     render(<MobileStock />);
     fireEvent.click(await screen.findByText('왜건'));
     fireEvent.click(screen.getByRole('button', { name: 'RG입고중' }));
     expect(screen.getByLabelText('지금 개수')).toHaveValue(1);
+    fireEvent.click(screen.getByRole('button', { name: '맞습니다 — 센 기록 저장' }));
+    expect(await screen.findByText(/센 기록을 저장했습니다/)).toBeInTheDocument();
+    expect(screen.getByText(/남은 1 \/ 1개/)).toBeInTheDocument();
   });
 });
 ```
@@ -4021,7 +6004,9 @@ Expected: FAIL — 모듈 없음
 'use client';
 
 /**
- * 휴대폰 재고 수정. 검색 → SKU 카드 → 위치 탭(집·RG입고중) → 지금 개수(−/+) · 사유 · 메모 → 저장.
+ * 휴대폰 재고 수정. 「오늘 셀 목록」(집 N개) 카드로 시작한다(결정 5) → 카드 → 위치 탭(집·RG입고중) → 지금 개수(−/+) · 사유 · 메모 → 저장.
+ * 목록 밖 SKU는 검색으로 찾는다. 개수가 같아도 저장하면 센 기록(erp.stock_counts)이 남는다.
+ * 목록은 열 때 한 번 받고, 집에서 센 카드는 화면에서 뺀다 — 다시 받으면 센 만큼 다음 SKU가 채워져 「오늘 N개」가 끝나지 않는다.
  * PC와 같은 API(/api/erp/stock/adjust)를 쓴다. RG는 여기서 고치지 않는다(PC의 RG 실재고 대조로만).
  * 영수증 화면 틀: 480px · 상단 52px(레이아웃) · 하단 고정 버튼.
  */
@@ -4029,16 +6014,20 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { REASON_LABEL, USER_REASONS, type UserReason } from '@/lib/erp/ledger/adjust';
 import type { RecentAdjust } from '@/lib/erp/stock/queries';
-import { fetchRecent, fetchStock, postAdjust } from './api';
-import { LOC_LABEL, defaultCost, filterRows, fmtKst, onHandAt, toAdjustItems, totalOf, won, type EditLocation, type StockRow } from './stock-view';
+import { DEFAULT_QUEUE_N, kstDate } from '@/lib/erp/stock/count-queue';
+import { fetchCountQueue, fetchRecent, fetchStock, postAdjust } from './api';
+import { LOC_LABEL, defaultCost, filterRows, fmtKst, onHandAt, toAdjustItems, won, type EditLocation, type StockRow } from './stock-view';
 
 const TABS: EditLocation[] = ['self', 'rg_inbound'];
 const field = { width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #d1d5db', padding: '0 10px', fontSize: '14px', boxSizing: 'border-box', backgroundColor: '#fff' } as const;
 const card = { backgroundColor: '#fff', borderRadius: '12px', padding: '12px', border: '1px solid #e5e7eb', marginBottom: '8px' } as const;
+const sectionTitle = { fontSize: '13px', fontWeight: 700, color: '#111827', margin: '4px 0 6px' } as const;
 
 export default function MobileStock() {
   const [rows, setRows] = useState<StockRow[]>([]);
   const [recent, setRecent] = useState<RecentAdjust[]>([]);
+  const [queue, setQueue] = useState<StockRow[] | null>(null);
+  const [queueTotal, setQueueTotal] = useState(0);
   const [q, setQ] = useState('');
   const [sel, setSel] = useState<number | null>(null);
   const [loc, setLoc] = useState<EditLocation>('self');
@@ -4058,26 +6047,45 @@ export default function MobileStock() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const row = sel === null ? null : rows.find((r) => r.skuId === sel) ?? null;
+  // 오늘 셀 목록은 열 때 한 번만 받는다
+  useEffect(() => {
+    let alive = true;
+    void fetchCountQueue(DEFAULT_QUEUE_N).then((r) => {
+      if (!alive) return;
+      if (!r.ok) {
+        setMsg({ ok: false, text: r.error });
+        return;
+      }
+      setQueue(r.data.items);
+      setQueueTotal(r.data.items.length);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // 최신 원장 값(rows)을 먼저 쓴다 — 목록 카드는 열 때의 값이다
+  const row = sel === null ? null : rows.find((r) => r.skuId === sel) ?? queue?.find((r) => r.skuId === sel) ?? null;
   const onHand = row ? onHandAt(row, loc) : 0;
 
   function pick(r: StockRow, l: EditLocation) {
-    setSel(r.skuId);
+    const fresh = rows.find((x) => x.skuId === r.skuId) ?? r;
+    setSel(fresh.skuId);
     setLoc(l);
-    setCount(onHandAt(r, l));
-    const c = defaultCost(r);
+    setCount(onHandAt(fresh, l));
+    const c = defaultCost(fresh);
     setCostRaw(c === null ? '' : String(c));
     setMsg(null);
   }
 
-  const list = useMemo(() => {
-    const base = q.trim() ? filterRows(rows, { q, onlyStocked: false, onlyRgMismatch: false }, null) : rows.filter((r) => totalOf(r) > 0);
-    return base.slice(0, 40);
-  }, [rows, q]);
+  const results = useMemo(
+    () => (q.trim() ? filterRows(rows, { q, onlyStocked: false, onlyRgMismatch: false }, null).slice(0, 40) : []),
+    [rows, q],
+  );
 
   const diff = count - onHand;
   const cost = /^\d+$/.test(costRaw.trim()) ? Number(costRaw.trim()) : null;
-  const canSave = !!row && diff !== 0 && !(diff > 0 && cost === null) && !saving;
+  const canSave = !!row && !(diff > 0 && cost === null) && !saving;
 
   async function save() {
     if (!row || !canSave) return;
@@ -4093,10 +6101,35 @@ export default function MobileStock() {
       if (r.code === 'stale') await load();
       return;
     }
-    setMsg({ ok: true, text: `${row.name} ${LOC_LABEL[loc]} ${won(onHand)} → ${won(count)} 저장했습니다` });
+    setMsg({
+      ok: true,
+      text: diff === 0
+        ? `${row.name} ${LOC_LABEL[loc]} ${won(count)}개 맞습니다 — 센 기록을 저장했습니다`
+        : `${row.name} ${LOC_LABEL[loc]} ${won(onHand)} → ${won(count)} 저장했습니다`,
+    });
+    // 오늘 셀 목록은 집 실사다 — 집에서 센 카드만 뺀다
+    if (loc === 'self') setQueue((list) => (list ? list.filter((x) => x.skuId !== row.skuId) : list));
     setNote('');
+    setSel(null);
     await load();
   }
+
+  const skuCard = (r: StockRow) => (
+    <button
+      key={r.skuId}
+      type="button"
+      onClick={() => pick(r, 'self')}
+      style={{ ...card, display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer' }}
+    >
+      <div style={{ fontSize: '14px', fontWeight: 700, color: '#111827' }}>{r.name}</div>
+      <div style={{ fontSize: '12px', color: '#374151', marginTop: '2px' }}>{r.option || '—'}</div>
+      <div style={{ fontSize: '12px', color: '#374151', marginTop: '6px' }}>
+        집 {won(r.self)} · 입고중 {won(r.rgInbound)} · RG {won(r.rg)} · 마지막 실사 {r.lastCountedAt ? kstDate(r.lastCountedAt) : '안 셈'}
+      </div>
+    </button>
+  );
+
+  const left = queue?.length ?? 0;
 
   return (
     <div style={{ padding: '12px 16px', paddingBottom: '96px' }}>
@@ -4108,26 +6141,22 @@ export default function MobileStock() {
 
       {!row && (
         <>
-          <input aria-label="상품 검색" value={q} onChange={(e) => setQ(e.target.value)} placeholder="상품·옵션 검색 (비우면 재고 있는 것)" style={{ ...field, marginBottom: '10px' }} />
-          {list.map((r) => (
-            <button
-              key={r.skuId}
-              type="button"
-              onClick={() => pick(r, 'self')}
-              style={{ ...card, display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer' }}
-            >
-              <div style={{ fontSize: '14px', fontWeight: 700, color: '#111827' }}>{r.name}</div>
-              <div style={{ fontSize: '12px', color: '#374151', marginTop: '2px' }}>{r.option || '—'}</div>
-              <div style={{ fontSize: '12px', color: '#374151', marginTop: '6px' }}>
-                집 {won(r.self)} · 입고중 {won(r.rgInbound)} · RG {won(r.rg)}
-              </div>
-            </button>
-          ))}
-          {list.length === 0 && <div style={{ padding: '16px', color: '#6b7280', fontSize: '13px' }}>검색 결과가 없습니다</div>}
+          <div style={sectionTitle}>
+            오늘 셀 목록 · 집{' '}
+            <span style={{ fontWeight: 500, color: '#6b7280' }}>
+              {queue === null ? '불러오는 중…' : queueTotal === 0 ? '셀 SKU가 없습니다' : left === 0 ? `오늘 ${queueTotal}개를 다 셌습니다` : `남은 ${left} / ${queueTotal}개`}
+            </span>
+          </div>
+          {(queue ?? []).map((r) => skuCard(rows.find((x) => x.skuId === r.skuId) ?? r))}
+
+          <div style={{ ...sectionTitle, marginTop: '16px' }}>다른 상품</div>
+          <input aria-label="상품 검색" value={q} onChange={(e) => setQ(e.target.value)} placeholder="상품·옵션 검색" style={{ ...field, marginBottom: '10px' }} />
+          {results.map(skuCard)}
+          {q.trim() !== '' && results.length === 0 && <div style={{ padding: '16px', color: '#6b7280', fontSize: '13px' }}>검색 결과가 없습니다</div>}
 
           {recent.length > 0 && (
             <div style={{ marginTop: '16px' }}>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: '#111827', marginBottom: '6px' }}>최근 수정</div>
+              <div style={sectionTitle}>최근 수정</div>
               {recent.map((a) => (
                 <div key={`${a.requestId}:${a.location}`} style={{ ...card, fontSize: '12px', color: '#374151' }}>
                   <b>{a.name}</b>{a.option ? ` · ${a.option}` : ''} · {LOC_LABEL[a.location]}{' '}
@@ -4183,7 +6212,7 @@ export default function MobileStock() {
               <button type="button" aria-label="하나 더하기" onClick={() => setCount((c) => c + 1)} style={{ width: '52px', height: '52px', borderRadius: '26px', border: '1px solid #d1d5db', backgroundColor: '#fff', fontSize: '24px' }}>+</button>
             </div>
             <div style={{ marginTop: '8px', fontSize: '13px', fontWeight: 700, color: diff > 0 ? '#1a7f37' : diff < 0 ? '#b91c1c' : '#6b7280' }}>
-              {diff === 0 ? '차이 없음' : `${won(onHand)} → ${won(count)} (${diff > 0 ? '+' : ''}${won(diff)})`}
+              {diff === 0 ? '차이 없음 — 센 기록만 남깁니다' : `${won(onHand)} → ${won(count)} (${diff > 0 ? '+' : ''}${won(diff)})`}
             </div>
           </div>
 
@@ -4205,7 +6234,7 @@ export default function MobileStock() {
               onClick={() => void save()}
               style={{ width: '100%', height: '50px', borderRadius: '12px', border: 'none', backgroundColor: canSave ? '#1a7f37' : '#9ca3af', color: '#fff', fontSize: '16px', fontWeight: 700 }}
             >
-              {saving ? '저장 중…' : '저장'}
+              {saving ? '저장 중…' : diff === 0 ? '맞습니다 — 센 기록 저장' : '저장'}
             </button>
           </div>
         </>
@@ -4247,7 +6276,7 @@ export default function StockMobileLayout({ children }: { children: React.ReactN
 `src/app/m/stock/page.tsx`:
 ```tsx
 /**
- * 휴대폰 재고 수정 — 검색 → 지금 개수 → 저장
+ * 휴대폰 재고 수정 — 오늘 셀 목록 → 지금 개수 → 저장 (목록 밖은 검색)
  */
 import MobileStock from '@/components/erp/stock/MobileStock';
 
@@ -4258,16 +6287,16 @@ export default function MobileStockPage() {
 
 - [ ] **Step 4: 통과 확인과 커밋**
 
-Run: `npx vitest run src/__tests__/components/erp-mobile-stock.test.tsx && npx tsc --noEmit`
-Expected: 2건 PASS, 0 오류
+Run: `npx vitest run src/__tests__/components/erp-mobile-stock.test.tsx && npx tsc --noEmit && npx eslint src/components/erp/stock/MobileStock.tsx src/app/m/stock`
+Expected: 5건 PASS, tsc 0 오류, eslint 오류 0(`load`의 setState는 await 뒤라 `react-hooks/set-state-in-effect`에 걸리지 않는다 — 걸리면 StockClient처럼 이유를 적은 한 줄 예외를 단다)
 ```bash
 git add src/app/m/stock src/components/erp/stock/MobileStock.tsx src/__tests__/components/erp-mobile-stock.test.tsx
-git commit -m "feat(erp): 휴대폰 재고 수정 /m/stock — 검색·지금 개수·사유·최근 수정"
+git commit -m "feat(erp): 휴대폰 재고 수정 /m/stock — 오늘 셀 목록으로 시작·검색·지금 개수·사유·최근 수정"
 ```
 
 - [ ] **Step 5: 🔴 화면 확인 — 컨트롤러가 직접**
 
-개발 서버·로그인은 Task 4 Step 17 그대로. 브라우저 창을 **390px 폭**으로 줄여 `http://localhost:3000/m/stock`을 연다. 확인: 헤더 52px · 가로 스크롤 없음 · 검색 → 카드 → 탭 전환 시 지금 개수가 그 위치 원장 값으로 바뀜 · −/+ · 차이 표시 · 늘리면 단가 칸이 뜸 · 하단 「저장」 버튼이 가려지지 않음(키보드 없는 상태). 🔴 **「저장」은 누르지 않는다.** 스크린샷을 사용자에게 보여준다. 깨진 곳은 고쳐 `fix(erp): …`로 커밋한다.
+개발 서버·로그인은 Task 4 Step 17 그대로. 브라우저 창을 **390px 폭**으로 줄여 `http://localhost:3000/m/stock`을 연다. 확인: 헤더 52px · 가로 스크롤 없음 · 맨 위 「오늘 셀 목록 · 집」(기초재고 전이면 「셀 SKU가 없습니다」) · 「다른 상품」 검색 → 카드 → 탭 전환 시 지금 개수가 그 위치 원장 값으로 바뀜 · −/+ · 차이 표시(같으면 「차이 없음 — 센 기록만 남깁니다」·버튼 「맞습니다 — 센 기록 저장」) · 늘리면 단가 칸이 뜸 · 하단 버튼이 가려지지 않음(키보드 없는 상태). 🔴 **저장 버튼은 누르지 않는다.** 스크린샷을 사용자에게 보여준다. 깨진 곳은 고쳐 `fix(erp): …`로 커밋한다. 카드가 채워진 목록은 Task 9 Step 6에서 확인한다.
 
 ---
 ### Task 6: RG 보내기 → SKU `self → rg_inbound` (트랜잭션 안으로)
@@ -6240,7 +8269,7 @@ git commit -m "feat(erp): 영수증 확정 화면에서 옵션(SKU)별 입고 �
 
 - [ ] **Step 1:** 전체 테스트와 타입 — `npx vitest run`(실패 수 ≤ 기준선), `npx tsc --noEmit`(0 오류), `npx next build`(성공 — 새 라우트·페이지가 빌드되는지. 실패하면 main에서도 실패하는지 먼저 확인해 원인을 가른다)
 - [ ] **Step 2:** 최종 리뷰(superpowers:requesting-code-review) — 설계서 §1~§7과 이 계획서 「설계 해석」 표를 기준으로. 지적은 고치고 `fix(erp): …`로 커밋한다.
-- [ ] **Step 3:** 브랜치 푸시 → PR(`gh pr create`). 본문: Task 0~7 요약 · 「설계 해석」 표 · 게이트는 배포 뒤(Task 9) · 「하지 않는 것」 표 · 끝에 `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
+- [ ] **Step 3:** 브랜치 푸시 → PR(`gh pr create`). 본문: Task 0~7 요약(4b 상품 묶어 보기 · 4c 센 기록·오늘 셀 목록 포함 — 마이그레이션 116은 이미 운영 적용) · 「설계 해석」 표 · 게이트는 배포 뒤(Task 9) · 「하지 않는 것」 표 · 끝에 `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
 - [ ] **Step 4:** 🔴 **병합은 사용자 확인 후.** 병합 뒤 Vercel 배포 성공을 확인하고(`gh api repos/stan070628/smart-seller-studio/commits/<병합 SHA>/status`), 곧바로 Task 9 게이트로 간다. 사용자에게 `/m/stock`을 휴대폰 홈 화면에 추가하는 법을 한 줄로 안내한다.
 
 ---
@@ -6252,7 +8281,7 @@ git commit -m "feat(erp): 영수증 확정 화면에서 옵션(SKU)별 입고 �
 - [ ] **Step 1: 전체 테스트·타입·자가시험(기초재고 전 마지막)**
 
 Run: `npx vitest run 2>&1 | tail -6 && npx tsc --noEmit && npx --no-install tsx scripts/erp/ledger-selftest.ts`
-Expected: 실패 수 ≤ 기준선(Task 0 Step 1) · tsc 0 · 자가시험 26행 전부 ✅ · 원장 0행(Task 2 Step 15의 흔적 확인 명령으로 `{ ledger: 0, skus: 0, cursor: 0 }`).
+Expected: 실패 수 ≤ 기준선(Task 0 Step 1) · tsc 0 · 자가시험 28행 전부 ✅(Task 4c에서 센 기록 2행 추가) · 원장 0행(Task 2 Step 15의 흔적 확인 명령으로 `{ ledger: 0, skus: 0, cursor: 0 }`).
 
 - [ ] **Step 2: 사용자에게 알리고 준비한다**
 
@@ -6284,7 +8313,7 @@ Expected: `❌ 기초 전표가 N건 있다 — 기초재고 적재 뒤에는 �
 
 - [ ] **Step 6: 휴대폰으로 한 건** (사용자, 선택)
 
-390px에서 `/m/stock` → 아무 SKU 하나를 실제로 세어 「저장」 → PC `/erp/stock`에서 그 행을 눌러 이력에 조정 전표가 보이는지, 필요하면 「되돌리기」가 되는지 확인한다.
+390px에서 `/m/stock` → 「오늘 셀 목록」 카드(기초재고가 들어갔으니 이제 채워진다 — 불러오기가 집 센 기록을 남겼으므로 실사표 시각이 오늘이면 그 SKU들은 빠져 있다) 하나를 실제로 세어 「저장」 → 카드가 목록에서 빠지는지 · PC `/erp/stock`에서 그 행의 「마지막 실사」가 오늘인지 · 차이가 있었다면 이력에 조정 전표가 보이고 「되돌리기」가 되는지 확인한다.
 
 - [ ] **Step 7: 기록과 커밋**
 
@@ -6306,7 +8335,9 @@ git commit -m "docs(erp): 1-C1 기초재고 입력 결과 — 원장 RG = 쿠팡
 | `sale_records` RG 무효 1,062건(≈99%가 `rg-bulk-import` 30일 구간 경계 버그 — 끝 날짜 배타) | 판매 수집을 어댑터로 바꿀 때 함께. 옛 수익 화면 RG 매출 과소 가능성 |
 | Wing 판매 키 중복(`wing-…`/`…`) | 같은 이유 |
 | 채널 재고 전송 | 1-D |
-| 바코드 스캔(휴대폰) | SKU 바코드(`erp.skus.barcode`)를 먼저 채운다 |
+| 바코드 스캔(휴대폰) | **후순위**(결정 5) — SKU 바코드(`erp.skus.barcode`)를 먼저 채운 뒤 |
+| 「이상한 것만 표시」(판매 대비 재고가 이상한 SKU만 걸러 보기) | 판매 차감이 있어야 의미가 있다(결정 5) — 1-C2 |
+| 오늘 셀 목록 저장·N 설정 화면 · 센 기록 고치기·지우기 | 목록은 요청 때 계산한다(결정 5). N은 주소 `?n=`(1~30)만. 센 기록은 insert만 — 틀리게 셌으면 다시 세면 마지막 값이 된다 |
 | TanStack Table/Query · ERP 화면 틀 | 2단계. 1-C1 화면은 `E` 토큰 + 손 테이블 |
 | 영수증 밖 입고 경로(수기 입고 폼 `POST /api/cost-management/products/[id]/entries` 등)의 원장 기록 | 설계서 §4는 영수증 확정만 다룬다. 그 경로로 들어온 입고는 당분간 재고현황에서 조정(±수량·반품입고/기타)으로 맞춘다 — 1-C2에서 경로를 모을지 정한다 |
 | 영수증·RG 보내기 전표의 화면 되돌리기 | 옛 `cost_entries`와 짝이라 원장만 되돌리면 둘이 어긋난다. 틀리면 조정으로 맞춘다 |
