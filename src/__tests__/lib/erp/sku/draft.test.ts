@@ -254,6 +254,38 @@ describe('buildDraft', () => {
     });
     expect(d11.issues).toContainEqual(expect.objectContaining({ kind: 'suspect_merge', ref: 'cp:601:블랙' }));
   });
+
+  it('vid로 어느 SKU에도 닿지 않은 옛 원가 행은 같은 seller_product_id의 SKU 전부에 잇는다(P1)', () => {
+    const d = buildDraft({
+      ...base,
+      legacyProductCosts: [...base.legacyProductCosts, { id: 'pc-orphan', productName: '왜건 옛 행', sellerProductId: 200, vendorItemId: null }],
+    });
+    const wagon = d.skus.filter((s) => s.key.startsWith('cp:200:'));
+    expect(wagon).toHaveLength(2);
+    for (const s of wagon) expect(s.legacyProductCostIds).toContain('pc-orphan');
+    expect(d.issues).toContainEqual(expect.objectContaining({ kind: 'legacy_spans_skus', ref: 'pc-orphan' }));
+  });
+
+  it('쿠팡 상품이 없거나 가상 seller_product_id(음수)인 옛 원가 행은 잇지 않는다', () => {
+    const d = buildDraft({
+      ...base,
+      legacyProductCosts: [
+        ...base.legacyProductCosts,
+        { id: 'pc-lost', productName: '사라진 상품', sellerProductId: 999, vendorItemId: null },
+        { id: 'pc-virtual', productName: '가상', sellerProductId: -3, vendorItemId: null },
+      ],
+    });
+    for (const s of d.skus) {
+      expect(s.legacyProductCostIds).not.toContain('pc-lost');
+      expect(s.legacyProductCostIds).not.toContain('pc-virtual');
+    }
+  });
+
+  it('vid로 이미 닿은 옛 원가 행은 2차 연결로 늘리지 않는다', () => {
+    const d = buildDraft(base);
+    const withWagon = d.skus.filter((s) => s.legacyProductCostIds.includes('pc-wagon')).map((s) => s.key).sort();
+    expect(withWagon).toEqual(['cp:200:레드', 'cp:200:블랙']);
+  });
 });
 
 describe('applyOverrides', () => {

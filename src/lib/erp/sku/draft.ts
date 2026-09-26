@@ -267,6 +267,17 @@ export function buildDraft(input: DraftInput): Draft {
   for (const pc of input.legacyProductCosts) {
     if (pc.vendorItemId && vidLink.has(pc.vendorItemId)) note(pc.id, vidLink.get(pc.vendorItemId)!.skuKey);
   }
+  // P1: vid로 어느 SKU에도 닿지 않은 옛 원가 행(pcc·vendor_item_id 없음)은 같은 seller_product_id의 SKU 전부에 잇는다.
+  //     원가·입고 이력이 SKU에서 끊기면 기초재고 단가를 못 찾는다. 여러 SKU면 아래에서 legacy_spans_skus로 올라간다.
+  const skuKeysBySpid = new Map<number, string[]>();
+  for (const k of skus.keys()) {
+    const m = /^cp:(\d+):/.exec(k);
+    if (m) skuKeysBySpid.set(Number(m[1]), [...(skuKeysBySpid.get(Number(m[1])) ?? []), k]);
+  }
+  for (const pc of input.legacyProductCosts) {
+    if (pcSkus.has(pc.id) || pc.sellerProductId <= 0) continue;
+    for (const k of skuKeysBySpid.get(pc.sellerProductId) ?? []) note(pc.id, k);
+  }
   for (const [pc, set] of pcSkus) {
     if (set.size > 1) issues.push({ kind: 'legacy_spans_skus', ref: pc, detail: `SKU ${[...set].join(', ')}에 걸친다 — 입고 lot을 옵션별로 나눌 수 없어 기초 재고는 실사로 잡는다` });
   }
