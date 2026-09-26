@@ -22,10 +22,12 @@ export interface AdjustResult {
   costSource: AdjustCostSource | null;
 }
 
-/** 처음 기초재고가 들어간 시각. 이미 있으면 두지 않는다 — 1-C2 판매 소급의 시작점 */
+/** 기초재고 기준 시각 = 가장 이른 기초 시각. 이미 있으면 더 이른 쪽을 남긴다 — 1-C2 판매 소급의 시작점.
+ *  (화면 조정·실사표 불러오기·opening-apply 스크립트 어느 쪽이 먼저 들어가도 같은 값이 된다) */
 export async function ensureCutover(db: Db, at: string): Promise<void> {
   await db.query(
-    `insert into erp.sync_cursors (name, cursor_at) values ('ledger_cutover', $1) on conflict (name) do nothing`,
+    `insert into erp.sync_cursors (name, cursor_at) values ('ledger_cutover', $1)
+     on conflict (name) do update set cursor_at = least(erp.sync_cursors.cursor_at, excluded.cursor_at), updated_at = now()`,
     [at],
   );
 }
@@ -42,16 +44,20 @@ export async function latestLotCost(db: Db, skuId: number): Promise<number | nul
   return rows.length > 0 ? Number(rows[0].unit_cost) : null;
 }
 
-/** 옛 cost_entries(SKU의 legacy_product_cost_ids)의 최근 단가 */
+/** 옛 cost_entries(SKU의 legacy_product_cost_ids)의 최근 단가.
+ *  기준 단위(base_unit_label)가 정해진 SKU는 null — 옛 입고는 다른 단위(묶음·박스)일 수 있어 사람이 단가를 적는다 */
 export async function legacyUnitCost(db: Db, skuId: number): Promise<number | null> {
   const { rows } = await db.query(
-    `select round(ce.unit_cost)::int as unit_cost from cost_entries ce
-       join erp.skus s on ce.product_cost_id = any(s.legacy_product_cost_ids)
-      where s.id = $1
-      order by ce.received_at desc, ce.created_at desc limit 1`,
+    `select s.base_unit_label,
+            (select round(ce.unit_cost)::int from cost_entries ce
+              where ce.product_cost_id = any(s.legacy_product_cost_ids)
+              order by ce.received_at desc nulls last, ce.created_at desc nulls last limit 1) as unit_cost
+       from erp.skus s where s.id = $1`,
     [skuId],
   );
-  return rows.length > 0 ? Number(rows[0].unit_cost) : null;
+  const r = rows[0];
+  if (!r || r.base_unit_label !== null || r.unit_cost === null || r.unit_cost === undefined) return null;
+  return Number(r.unit_cost);
 }
 
 export async function applyAdjustment(db: Db, p: AdjustInput): Promise<AdjustResult> {
@@ -60,8 +66,13 @@ export async function applyAdjustment(db: Db, p: AdjustInput): Promise<AdjustRes
   const none = { kind: null, qty: 0, idemKey: null, unitCost: null, costSource: null };
   await lockSku(db, p.skuId);
 
-  const dup = await db.query(`select 1 from erp.stock_ledger where ref_type = 'adjust' and ref_id = $1 limit 1`, [p.requestId]);
-  if (dup.rows.length > 0) return { ...base, outcome: 'duplicate', ...none };
+  // 같은 요청 id의 재전송만 duplicate다. 다른 SKU·위치에 쓰인 id면 조용히 삼키지 않고 거부한다
+  const dup = await db.query(`select sku_id, location from erp.stock_ledger where ref_type = 'adjust' and ref_id = $1 limit 1`, [p.requestId]);
+  if (dup.rows.length > 0) {
+    const d = dup.rows[0];
+    if (Number(d.sku_id) === p.skuId && d.location === p.location) return { ...base, outcome: 'duplicate', ...none };
+    throw new AdjustInputError('요청 id가 다른 조정에 이미 쓰였다');
+  }
 
   const { rows } = await db.query(
     `select coalesce(sum(qty), 0)::int as qty, count(*)::int as n from erp.stock_ledger where sku_id = $1 and location = $2`,
@@ -78,7 +89,8 @@ export async function applyAdjustment(db: Db, p: AdjustInput): Promise<AdjustRes
     const r = await postConsume(db, {
       skuId: p.skuId, location: p.location, qty: -step.diff, kind: 'adjust', reason: p.reason, occurredAt: p.occurredAt, idemKey, ...ref,
     });
-    if (!r.posted) throw new AdjustInputError(`멱등키 ${idemKey}가 이미 있다`);
+    // 잠금 안에서 요청 id를 확인했으니 여기 오면 불변식 위반이다(입력 오류가 아니라 500)
+    if (!r.posted) throw new Error(`멱등키 ${idemKey}가 이미 있다`);
     return { ...base, outcome: 'posted', kind: 'adjust', qty: step.diff, idemKey, unitCost: null, costSource: null };
   }
 
@@ -94,7 +106,8 @@ export async function applyAdjustment(db: Db, p: AdjustInput): Promise<AdjustRes
     skuId: p.skuId, location: p.location, qty: step.diff, unitCost: cost.unitCost, kind: step.lotKind,
     reason: opening ? 'opening' : p.reason, occurredAt: p.occurredAt, idemKey, ...ref,
   });
-  if (!r.posted) throw new AdjustInputError(`멱등키 ${idemKey}가 이미 있다`);
+  // 기초 키는 빈 위치에서만 쓰고 조정 키는 요청 id가 새것일 때만 쓰므로 여기 오면 불변식 위반이다(500)
+  if (!r.posted) throw new Error(`멱등키 ${idemKey}가 이미 있다`);
   if (step.setsCutover) await ensureCutover(db, p.occurredAt);
   return { ...base, outcome: 'posted', kind: step.lotKind, qty: step.diff, idemKey, unitCost: cost.unitCost, costSource: cost.source };
 }
@@ -102,6 +115,7 @@ export async function applyAdjustment(db: Db, p: AdjustInput): Promise<AdjustRes
 /** 여러 건(실사 모드·RG 일괄 반영). 호출자 트랜잭션 하나 — 실패하면 몇 번째인지 AdjustItemError로 던진다 */
 export async function applyAdjustments(db: Db, items: AdjustInput[]): Promise<AdjustResult[]> {
   const seen = new Set<string>();
+  const ids = new Set<string>();
   items.forEach((p, i) => {
     try {
       validateAdjustInput(p);
@@ -111,6 +125,9 @@ export async function applyAdjustments(db: Db, items: AdjustInput[]): Promise<Ad
     const k = `${p.skuId}:${p.location}`;
     if (seen.has(k)) throw new AdjustItemError(i, p.skuId, p.location, new AdjustInputError('같은 SKU·위치가 한 요청에 두 번 있다'));
     seen.add(k);
+    // requestId는 validateAdjustInput이 소문자로 맞췄다
+    if (ids.has(p.requestId)) throw new AdjustItemError(i, p.skuId, p.location, new AdjustInputError('같은 요청 id가 한 요청에 두 번 있다'));
+    ids.add(p.requestId);
   });
   // 1-B 인계(I4): 여러 SKU를 한 트랜잭션에 기록할 때는 sku_id 오름차순으로 먼저 잠가 교착을 피한다
   for (const id of [...new Set(items.map((p) => p.skuId))].sort((a, b) => a - b)) await lockSku(db, id);

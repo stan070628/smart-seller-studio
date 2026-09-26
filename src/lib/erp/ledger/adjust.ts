@@ -81,6 +81,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const ISO_WITH_OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
 const ALLOWED_REASONS: readonly string[] = [...USER_REASONS, 'rg_reconcile'];
 
+/** 입력 검사. 통과하면 requestId를 소문자로 맞춘다(대소문자만 다른 재전송도 같은 요청 — 멱등키·ref_id가 한 가지로) */
 export function validateAdjustInput(p: AdjustInput): void {
   const bad = (m: string): never => {
     throw new AdjustInputError(m);
@@ -96,8 +97,11 @@ export function validateAdjustInput(p: AdjustInput): void {
     bad(`방식이 잘못됐다: ${String(p.mode)}`);
   }
   if (!ALLOWED_REASONS.includes(p.reason)) bad(`사유가 잘못됐다: ${String(p.reason)}`);
+  // RG 위치는 「RG 실재고 대조」로만 고치고, 그 사유는 RG 위치에만 쓴다
+  if ((p.location === 'rg') !== (p.reason === 'rg_reconcile')) bad('RG 위치는 RG 대조 사유로만 고친다(그 사유도 RG 위치 전용이다)');
   if (p.unitCost !== undefined && (!Number.isInteger(p.unitCost) || p.unitCost < 0)) bad(`단가는 0 이상 정수다: ${p.unitCost}`);
-  if (!UUID.test(p.requestId)) bad(`요청 id는 uuid다: ${p.requestId}`);
+  if (typeof p.requestId !== 'string' || !UUID.test(p.requestId)) bad(`요청 id는 uuid다: ${p.requestId}`);
+  p.requestId = p.requestId.toLowerCase();
   if (!ISO_WITH_OFFSET.test(p.occurredAt)) bad(`발생 시각은 오프셋 있는 ISO다: ${p.occurredAt}`);
   if (p.note !== undefined && p.note.length > 200) bad('메모는 200자까지다');
 }
@@ -117,6 +121,11 @@ export function planAdjustment(p: { mode: AdjustMode; value: number; expected?: 
     const diff = p.value - p.onHand;
     const lotKind = p.locationEmpty ? 'opening' : 'adjust';
     return { diff, lotKind, setsCutover: lotKind === 'opening' && diff > 0 };
+  }
+  // 빈 위치의 +수량 = expected 0인 지금 개수(기초재고) · −수량은 뺄 재고가 없다
+  if (p.locationEmpty) {
+    if (p.value < 0) throw new AdjustInputError('비어 있는 위치에서는 뺄 수 없다');
+    return { diff: p.value, lotKind: 'opening', setsCutover: p.value > 0 };
   }
   return { diff: p.value, lotKind: 'adjust', setsCutover: false };
 }

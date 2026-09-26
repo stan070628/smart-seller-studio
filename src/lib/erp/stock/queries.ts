@@ -21,8 +21,10 @@ export interface StockListRow {
   hasLedger: boolean;
   /** 최근 lot 단가(위치 무관, 되돌린 lot 제외) */
   lotCost: number | null;
-  /** 옛 cost_entries 최근 단가 */
+  /** 옛 cost_entries 최근 단가. 기준 단위가 정해진 SKU는 null(옛 입고는 다른 단위일 수 있다) */
   legacyCost: number | null;
+  /** 미리 채울 단가가 없다(최근 lot도, 쓸 수 있는 옛 입고도 없다) — 재고를 늘리려면 사람이 단가를 적는다 */
+  costNeedsInput: boolean;
 }
 
 export interface HistoryRow {
@@ -68,7 +70,7 @@ const iso = (v: unknown): string => (v instanceof Date ? v.toISOString() : Strin
 
 export async function listStock(db: Db): Promise<StockListRow[]> {
   const { rows } = await db.query(
-    `select s.id, s.key, s.name, s.option_label, s.legacy_product_cost_ids::text[] as legacy,
+    `select s.id, s.key, s.name, s.option_label, s.base_unit_label, s.legacy_product_cost_ids::text[] as legacy,
             coalesce(sum(h.qty) filter (where h.location = 'self'), 0)::int as self,
             coalesce(sum(h.qty) filter (where h.location = 'rg_inbound'), 0)::int as rg_inbound,
             coalesce(sum(h.qty) filter (where h.location = 'rg'), 0)::int as rg,
@@ -80,18 +82,23 @@ export async function listStock(db: Db): Promise<StockListRow[]> {
               order by l.occurred_at desc, l.id desc limit 1) as lot_cost,
             (select round(ce.unit_cost)::int from cost_entries ce
               where ce.product_cost_id = any(s.legacy_product_cost_ids)
-              order by ce.received_at desc, ce.created_at desc limit 1) as legacy_cost
+              order by ce.received_at desc nulls last, ce.created_at desc nulls last limit 1) as legacy_cost
        from erp.skus s
        left join erp.stock_on_hand h on h.sku_id = s.id
       where s.status = 'active'
       group by s.id
       order by s.name, s.option_label, s.id`,
   );
-  return rows.map((r) => ({
-    skuId: Number(r.id), key: r.key, name: r.name, option: r.option_label ?? '', legacyProductCostIds: r.legacy ?? [],
-    self: Number(r.self), rgInbound: Number(r.rg_inbound), rg: Number(r.rg), value: Number(r.value),
-    hasLedger: r.has_ledger === true, lotCost: num(r.lot_cost), legacyCost: num(r.legacy_cost),
-  }));
+  return rows.map((r) => {
+    // adjust-store legacyUnitCost와 같은 규칙: 기준 단위가 정해진 SKU는 옛 입고 단가를 쓰지 않는다
+    const legacyCost = r.base_unit_label === null || r.base_unit_label === undefined ? num(r.legacy_cost) : null;
+    const lotCost = num(r.lot_cost);
+    return {
+      skuId: Number(r.id), key: r.key, name: r.name, option: r.option_label ?? '', legacyProductCostIds: r.legacy ?? [],
+      self: Number(r.self), rgInbound: Number(r.rg_inbound), rg: Number(r.rg), value: Number(r.value),
+      hasLedger: r.has_ledger === true, lotCost, legacyCost, costNeedsInput: lotCost === null && legacyCost === null,
+    };
+  });
 }
 
 export async function skuHistory(db: Db, skuId: number, limit = 300): Promise<HistoryRow[]> {

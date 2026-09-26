@@ -20,6 +20,7 @@ vi.mock('@/lib/erp/ledger/store', async (orig) => ({
 }));
 
 import { AdjustItemError, StaleCountError } from '@/lib/erp/ledger/adjust';
+import { erpError } from '@/lib/erp/stock/http';
 
 const REQ = '3f2b8c1e-9d4a-4e6b-8a7c-1b2c3d4e5f60';
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
@@ -53,15 +54,33 @@ describe('GET /api/erp/stock', () => {
 
   it('SKU별 위치 재고·평가액·단가를 돌려준다', async () => {
     poolRows = () => ({
-      rows: [{ id: '7', key: 'cp:1:블랙', name: '왜건', option_label: '블랙', legacy: ['pc-1'], self: 3, rg_inbound: 0, rg: 2, value: '5000', has_ledger: true, lot_cost: 1000, legacy_cost: null }],
+      rows: [{ id: '7', key: 'cp:1:블랙', name: '왜건', option_label: '블랙', legacy: ['pc-1'], self: 3, rg_inbound: 0, rg: 2, value: '5000', has_ledger: true, lot_cost: 1000, legacy_cost: null, base_unit_label: null }],
       rowCount: 1,
     });
     const { GET } = await import('@/app/api/erp/stock/route');
     const json = await (await GET(get('/api/erp/stock'))).json();
     expect(json.data).toEqual([{
       skuId: 7, key: 'cp:1:블랙', name: '왜건', option: '블랙', legacyProductCostIds: ['pc-1'],
-      self: 3, rgInbound: 0, rg: 2, value: 5000, hasLedger: true, lotCost: 1000, legacyCost: null,
+      self: 3, rgInbound: 0, rg: 2, value: 5000, hasLedger: true, lotCost: 1000, legacyCost: null, costNeedsInput: false,
     }]);
+  });
+
+  it('기준 단위가 정해진 SKU는 옛 입고 단가를 미리 채우지 않고 단가 입력이 필요하다고 알린다', async () => {
+    let sql = '';
+    poolRows = (q) => {
+      sql = q;
+      return {
+        rows: [
+          { id: '7', key: 'k7', name: 'a', option_label: '', legacy: ['pc-1'], self: 0, rg_inbound: 0, rg: 0, value: '0', has_ledger: false, lot_cost: null, legacy_cost: 650, base_unit_label: '개' },
+          { id: '9', key: 'k9', name: 'b', option_label: '', legacy: ['pc-2'], self: 0, rg_inbound: 0, rg: 0, value: '0', has_ledger: false, lot_cost: null, legacy_cost: 650, base_unit_label: null },
+        ],
+        rowCount: 2,
+      };
+    };
+    const { GET } = await import('@/app/api/erp/stock/route');
+    const json = await (await GET(get('/api/erp/stock'))).json();
+    expect(json.data.map((r: { legacyCost: number | null; costNeedsInput: boolean }) => [r.legacyCost, r.costNeedsInput])).toEqual([[null, true], [650, false]]);
+    expect(sql).toMatch(/received_at desc nulls last, ce\.created_at desc nulls last/);
   });
 });
 
@@ -191,5 +210,32 @@ describe('GET /api/erp/stock/recent', () => {
     const json = await (await GET(get('/api/erp/stock/recent?limit=99'))).json();
     expect(limit).toBe(20);
     expect(json.data).toEqual([{ requestId: REQ, skuId: 7, name: '왜건', option: '블랙', location: 'self', qty: -2, reason: 'damage', occurredAt: '2026-09-27T02:00:00.000Z' }]);
+  });
+});
+
+describe('erpError', () => {
+  it('멱등키 unique 위반(23505)은 409 — 겹친 요청이 먼저 기록했다', async () => {
+    const e = Object.assign(new Error('duplicate key value violates unique constraint "stock_ledger_idem_key_key"'), {
+      code: '23505', constraint: 'stock_ledger_idem_key_key',
+    });
+    const res = erpError(e);
+    expect(res.status).toBe(409);
+    expect((await res.json()).code).toBe('conflict');
+    expect(erpError(new AdjustItemError(0, 7, 'self', e)).status).toBe(409);
+  });
+
+  it('다른 unique 위반은 500', () => {
+    const e = Object.assign(new Error('dup'), { code: '23505', constraint: 'skus_key_key' });
+    expect(erpError(e).status).toBe(500);
+  });
+
+  it('되돌릴 전표가 없으면 404', async () => {
+    const res = erpError(new Error('되돌릴 전표가 없다: opening:7:self'));
+    expect(res.status).toBe(404);
+    expect((await res.json()).code).toBe('not_found');
+  });
+
+  it('원장 불변식 위반(일반 Error)은 500', () => {
+    expect(erpError(new AdjustItemError(0, 7, 'self', new Error('멱등키 adj:x가 이미 있다'))).status).toBe(500);
   });
 });

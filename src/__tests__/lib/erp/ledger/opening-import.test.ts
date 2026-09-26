@@ -119,7 +119,10 @@ describe('commitOpeningImport', () => {
       ['opening:7:rg', 'opening', 'opening', 'opening', 'count.csv'],
       ['opening:9:self', 'opening', 'opening', 'opening', 'count.csv'],
     ]);
-    expect(f.calls.find((c) => c.sql.startsWith('insert into erp.sync_cursors'))!.params).toEqual([AT]);
+    const cur = f.calls.find((c) => c.sql.startsWith('insert into erp.sync_cursors'))!;
+    expect(cur.params).toEqual([AT]);
+    // 기준 시각 = 가장 이른 기초 시각(화면 조정으로 먼저 들어간 기초가 있으면 그쪽이 남는다)
+    expect(cur.sql).toMatch(/least\(erp\.sync_cursors\.cursor_at, excluded\.cursor_at\)/);
   });
 
   it('미리보기 뒤 그 사이 전표가 생긴 SKU가 있으면 ImportConflictError(아무것도 쓰지 않는다)', async () => {

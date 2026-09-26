@@ -133,10 +133,9 @@ async function expectError(c: pg.Client, name: string, fn: () => Promise<unknown
       o1.kind === 'opening' && r1.length === 1 && r1[0].kind === 'opening' && r1[0].reason === 'opening' && r1[0].idem_key === `opening:${adj}:self`,
       JSON.stringify(r1));
     const cursorAfter = await cursorOf();
-    check('기초 전표가 ledger_cutover를 적는다(이미 있으면 그대로)',
-      cursorBefore
-        ? new Date(cursorAfter).getTime() === new Date(cursorBefore).getTime()
-        : cursorAfter !== null && new Date(cursorAfter).getTime() === new Date(AT1).getTime(),
+    check('기초 전표가 ledger_cutover를 적는다(이미 있으면 더 이른 쪽)',
+      cursorAfter !== null && new Date(cursorAfter).getTime() ===
+        (cursorBefore ? Math.min(new Date(cursorBefore).getTime(), new Date(AT1).getTime()) : new Date(AT1).getTime()),
       `before ${String(cursorBefore)} · after ${String(cursorAfter)}`);
 
     const req2 = randomUUID();

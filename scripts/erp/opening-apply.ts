@@ -5,8 +5,9 @@
 // 필수: docs/erp/opening-overrides.json의 countedAt(실사를 마친 시각, 오프셋 있는 ISO). 적재 시점에 24시간 이내여야 한다.
 // 단가: overrides unitCost[SKU 키] > 옛 입고 이력(실사 보유 수량으로 다시 계산) > CSV unit_cost(이력이 없을 때만).
 // 기본(점검): 적재할 합계와 멈출 이유만 출력한다.
-// --apply : 한 트랜잭션. 전역 잠금 → 기초 전표 재확인 → 기준 시각 커서 선점 → 전표. 기초 전표가 이미 있으면 거부한다(고칠 때는 조정 전표).
+// --apply : 한 트랜잭션. 전역 잠금 → 기초 전표 재확인 → 기준 시각 커서 → 전표. 기초 전표가 이미 있으면 거부한다(고칠 때는 조정 전표).
 //           기준 시각(cutoverAt)은 RG 재고를 읽기 직전 시각이다 — 1-C 판매 소급의 시작점.
+//           커서는 가장 이른 기초 시각이다(ensureCutover의 least()) — 이미 더 이른 값이 있으면 그대로 둔다.
 // --verify: rg-reconcile과 같다.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -18,6 +19,7 @@ import {
   checkCountedAt, groupSkus, parseCountCsv, resolveOpeningCosts, rgOutsideActive, rgQtyBySku,
 } from '@/lib/erp/ledger/opening';
 import { postLotCreate } from '@/lib/erp/ledger/store';
+import { ensureCutover } from '@/lib/erp/ledger/adjust-store';
 import type { Location } from '@/lib/erp/ledger/fifo';
 
 loadEnvLocal();
@@ -124,21 +126,14 @@ async function main(): Promise<void> {
 
     await c.query('BEGIN');
     try {
-      // 겹친 실행 방지: 전역 잠금 → 잠금 안에서 기초 전표를 다시 센다 → 커서를 선점한다
+      // 겹친 실행 방지: 전역 잠금 → 잠금 안에서 기초 전표를 다시 센다 → 커서(가장 이른 기초 시각) → 전표
       await c.query('select pg_advisory_xact_lock($1::bigint)', [OPENING_LOCK]);
       const again = Number((await c.query(`select count(*) from erp.stock_ledger where kind = 'opening'`)).rows[0].count);
       if (again > 0) throw new Error(`잠금 뒤 다시 보니 기초 전표가 이미 ${again}건 있다 — 중단`);
-      await c.query(
-        `insert into erp.sync_cursors (name, cursor_at) values ('ledger_cutover', $1) on conflict (name) do nothing`,
-        [cutoverAt],
-      );
-      const cur = (await c.query(`select cursor_at from erp.sync_cursors where name = 'ledger_cutover'`)).rows[0]?.cursor_at;
-      if (!cur || new Date(cur).getTime() !== new Date(cutoverAt).getTime()) {
-        throw new Error(`ledger_cutover 커서가 이미 다른 값(${cur instanceof Date ? cur.toISOString() : String(cur)})이다 — 중단`);
-      }
+      await ensureCutover(c, cutoverAt);
       for (const p of plan) {
         await postLotCreate(c, {
-          skuId: p.skuId, location: p.location, qty: p.qty, unitCost: p.unitCost, kind: 'opening',
+          skuId: p.skuId, location: p.location, qty: p.qty, unitCost: p.unitCost, kind: 'opening', reason: 'opening',
           occurredAt: cutoverAt, idemKey: `opening:${p.skuId}:${p.location}`, refType: 'opening', refId: file,
         });
       }

@@ -41,8 +41,17 @@ export function erpError(e: unknown): NextResponse {
   if (inner instanceof ImportConflictError) return fail(409, 'conflict', msg, extra);
   if (inner instanceof AdjustInputError || inner instanceof RangeError) return fail(400, 'invalid', msg, extra);
   if (inner instanceof Error && /음수가 된다/.test(inner.message)) return fail(409, 'negative', msg, extra);
+  // 겹친 요청이 같은 멱등키를 먼저 기록했다(잠금은 SKU 단위라 같은 요청 id를 다른 SKU에 동시에 보내면 여기로 온다)
+  if (isIdemKeyConflict(inner)) return fail(409, 'conflict', '같은 요청이 이미 기록됐다 — 다시 보고 적는다', extra);
+  if (inner instanceof Error && inner.message.startsWith('되돌릴 전표가 없다')) return fail(404, 'not_found', msg, extra);
   console.error('[erp]', e);
   return fail(500, 'server', '서버 오류');
+}
+
+/** Postgres unique 위반(23505) 중 erp.stock_ledger.idem_key */
+function isIdemKeyConflict(e: unknown): boolean {
+  const pg = e as { code?: unknown; constraint?: unknown } | null;
+  return !!pg && pg.code === '23505' && typeof pg.constraint === 'string' && pg.constraint.includes('idem_key');
 }
 
 export const badRequest = (error: string) => fail(400, 'invalid', error);

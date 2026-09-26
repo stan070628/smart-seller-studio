@@ -26,9 +26,21 @@ describe('planAdjustment', () => {
       .toEqual({ diff: 0, lotKind: 'opening', setsCutover: false });
   });
 
-  it('±수량은 입력 그대로이고 기초재고가 되지 않는다', () => {
-    expect(planAdjustment({ mode: 'delta', value: 2, onHand: 0, locationEmpty: true }))
+  it('±수량은 비어 있지 않은 위치에서 입력 그대로이고 기초재고가 되지 않는다', () => {
+    expect(planAdjustment({ mode: 'delta', value: 2, onHand: 3, locationEmpty: false }))
       .toEqual({ diff: 2, lotKind: 'adjust', setsCutover: false });
+    expect(planAdjustment({ mode: 'delta', value: -2, onHand: 3, locationEmpty: false }))
+      .toEqual({ diff: -2, lotKind: 'adjust', setsCutover: false });
+  });
+
+  it('빈 위치의 +수량은 expected 0인 지금 개수와 같다 — 기초재고 + ledger_cutover', () => {
+    expect(planAdjustment({ mode: 'delta', value: 2, onHand: 0, locationEmpty: true }))
+      .toEqual({ diff: 2, lotKind: 'opening', setsCutover: true });
+  });
+
+  it('빈 위치의 −수량은 AdjustInputError', () => {
+    expect(() => planAdjustment({ mode: 'delta', value: -1, onHand: 0, locationEmpty: true })).toThrow(AdjustInputError);
+    expect(() => planAdjustment({ mode: 'delta', value: -1, onHand: 0, locationEmpty: true })).toThrow('비어 있는 위치에서는 뺄 수 없다');
   });
 
   it('화면이 본 재고와 저장 시점 재고가 다르면 StaleCountError', () => {
@@ -60,6 +72,13 @@ describe('validateAdjustInput', () => {
   it('정상 입력은 통과', () => {
     expect(() => validateAdjustInput(base)).not.toThrow();
     expect(() => validateAdjustInput({ ...base, mode: 'delta', value: -2, expected: undefined })).not.toThrow();
+    expect(() => validateAdjustInput({ ...base, location: 'rg', reason: 'rg_reconcile' })).not.toThrow();
+  });
+
+  it('요청 id를 소문자로 맞춘다(대소문자만 다른 재전송도 같은 요청)', () => {
+    const p = { ...base, requestId: REQ.toUpperCase() };
+    validateAdjustInput(p);
+    expect(p.requestId).toBe(REQ);
   });
 
   it.each<[string, Partial<AdjustInput>]>([
@@ -73,6 +92,8 @@ describe('validateAdjustInput', () => {
     ['음수 단가', { unitCost: -1 }],
     ['잘못된 위치', { location: 'home' as never }],
     ['201자 메모', { note: 'x'.repeat(201) }],
+    ['RG 위치인데 RG 대조 사유가 아님', { location: 'rg', reason: 'count_diff' }],
+    ['RG 대조 사유인데 RG 위치가 아님', { location: 'self', reason: 'rg_reconcile' }],
   ])('%s → AdjustInputError', (_, patch) => {
     expect(() => validateAdjustInput({ ...base, ...patch })).toThrow(AdjustInputError);
   });
