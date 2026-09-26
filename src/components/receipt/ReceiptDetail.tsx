@@ -11,6 +11,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Badge, Progress } from '@/lib/receipt/view';
 import ReceiptLineRow, { type LineData, type ProductOption } from './ReceiptLineRow';
+import ReceiptSkuSplit from './ReceiptSkuSplit';
+import { emptyDraft, toSkuSplits, type LineSkuOptions, type SkuCandidateView, type SplitDraft } from './sku-split';
 
 interface CheckDetail {
   status: string;
@@ -57,6 +59,10 @@ export default function ReceiptDetail({ draftId }: { draftId: string }) {
   const [confirming, setConfirming] = useState(false);
   /** 폐기는 두 번 눌러야 실행된다. window.confirm은 모바일에서 거칠고 테스트도 어렵다 */
   const [discardArmed, setDiscardArmed] = useState(false);
+  // 1-C1: 확정 대기 줄의 재고 SKU 후보(원장 입고 분배) · 사람이 고른 분배 · SKU 검색 목록(처음 검색할 때 읽는다)
+  const [skuOptions, setSkuOptions] = useState<Record<number, LineSkuOptions>>({});
+  const [splitDrafts, setSplitDrafts] = useState<Record<number, SplitDraft>>({});
+  const [allSkus, setAllSkus] = useState<SkuCandidateView[] | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -88,10 +94,36 @@ export default function ReceiptDetail({ draftId }: { draftId: string }) {
     }
   }, []);
 
+  /** 확정 대기 줄의 재고 SKU 후보. 실패해도 조용히 넘긴다 — 후보 하나인 줄은 서버가 알아서 넣는다 */
+  const loadSkuOptions = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/erp/receipts/${draftId}/sku-options`);
+      const json = await res.json();
+      if (json.success) setSkuOptions(json.data as Record<number, LineSkuOptions>);
+    } catch {
+      // 무시
+    }
+  }, [draftId]);
+
+  const loadAllSkus = useCallback(async () => {
+    if (allSkus !== null) return;
+    try {
+      const res = await fetch('/api/erp/stock');
+      const json = await res.json();
+      if (json.success) {
+        setAllSkus((json.data as { skuId: number; key: string; name: string; option: string }[])
+          .map((s) => ({ skuId: s.skuId, key: s.key, name: s.name, option: s.option })));
+      }
+    } catch {
+      // 무시 — 검색 결과가 비어 보일 뿐이다
+    }
+  }, [allSkus]);
+
   useEffect(() => {
     void load();
     void loadProducts();
-  }, [load, loadProducts]);
+    void loadSkuOptions();
+  }, [load, loadProducts, loadSkuOptions]);
 
   const busy = d?.badge.busy ?? false;
   useEffect(() => {
@@ -110,8 +142,8 @@ export default function ReceiptDetail({ draftId }: { draftId: string }) {
     if (!json.success) { setError(json.error ?? '수정 실패'); return; }
     setError(null);
     // 줄을 고칠 때마다 상품 목록도 다시 읽는다 — 그 사이 새로 만든 상품이 보이도록
-    await Promise.all([load(), loadProducts()]);
-  }, [draftId, load, loadProducts]);
+    await Promise.all([load(), loadProducts(), loadSkuOptions()]);
+  }, [draftId, load, loadProducts, loadSkuOptions]);
 
   async function confirm() {
     setConfirming(true);
@@ -120,7 +152,7 @@ export default function ReceiptDetail({ draftId }: { draftId: string }) {
       const res = await fetch(`/api/receipts/${draftId}/confirm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ sku_splits: toSkuSplits(skuOptions, splitDrafts) }),
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error ?? '확정 실패');
@@ -131,7 +163,7 @@ export default function ReceiptDetail({ draftId }: { draftId: string }) {
           ? `${created.length}건 입고, ${failed.length}건 실패: ${failed.map((f) => `${f.line_no}번 ${f.error}`).join(' / ')}`
           : `${created.length}건 입고 완료`,
       );
-      await load();
+      await Promise.all([load(), loadSkuOptions()]);
     } catch (e) {
       setError(e instanceof Error ? e.message : '확정 실패');
     } finally {
@@ -245,7 +277,18 @@ export default function ReceiptDetail({ draftId }: { draftId: string }) {
       )}
 
       {d.lines.map((l) => (
-        <ReceiptLineRow key={l.id} line={l} products={products} onPatch={patchLine} />
+        <div key={l.id}>
+          <ReceiptLineRow line={l} products={products} onPatch={patchLine} />
+          {skuOptions[l.line_no] && l.cost_entry_id == null && l.decision === 'ingest' && (
+            <ReceiptSkuSplit
+              options={skuOptions[l.line_no]}
+              draft={splitDrafts[l.line_no] ?? emptyDraft()}
+              allSkus={allSkus ?? []}
+              onChange={(dr) => setSplitDrafts((m) => ({ ...m, [l.line_no]: dr }))}
+              onNeedSkus={() => void loadAllSkus()}
+            />
+          )}
+        </div>
       ))}
 
       {/* 잘못 찍은 영수증에 출구를 준다. 확정된 줄이 하나라도 있으면 서버가 409로 막는다 */}

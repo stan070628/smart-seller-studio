@@ -242,8 +242,42 @@ describe('ReceiptDetail', () => {
         HttpResponse.json({ success: true, data: [
           { id: 'p-1', product_name: '커클랜드 타월', subdivision_unit: 10 },
         ] })),
+      http.get(`/api/erp/receipts/${DRAFT_ID}/sku-options`, () => HttpResponse.json({ success: true, data: {} })),
     );
   }
+
+  it('🔴 옵션이 여러 개면 옵션별 수량을 받아 확정 요청(sku_splits)에 싣는다', async () => {
+    mockDetail(detail());
+    let sent = null as { sku_splits?: unknown } | null;
+    server.use(
+      http.get(`/api/erp/receipts/${DRAFT_ID}/sku-options`, () => HttpResponse.json({ success: true, data: { 1: {
+        source: 'product', expectedQty: { qty: 1, approx: false },
+        candidates: [
+          { skuId: 11, key: 'cp:1:블랙', name: '라운드티', option: '블랙' },
+          { skuId: 12, key: 'cp:1:레드', name: '라운드티', option: '레드' },
+        ],
+      } } })),
+      http.post(`/api/receipts/${DRAFT_ID}/confirm`, async ({ request }) => {
+        sent = (await request.json()) as { sku_splits?: unknown };
+        return HttpResponse.json({ success: true, data: { created: [{ line_no: 1 }], skipped: [], failed: [] } });
+      }),
+    );
+    render(<ReceiptDetail draftId={DRAFT_ID} />);
+    fireEvent.change(await screen.findByLabelText('라운드티 · 블랙 수량'), { target: { value: '1' } });
+    fireEvent.click(screen.getByText('1건 입고 확정'));
+    await waitFor(() => expect(sent).not.toBeNull());
+    expect(sent!.sku_splits).toEqual({ 1: [{ sku_id: 11, qty: 1 }, { sku_id: 12, qty: 0 }] });
+  });
+
+  it('후보가 하나면 자동 안내만 보인다', async () => {
+    mockDetail(detail());
+    server.use(http.get(`/api/erp/receipts/${DRAFT_ID}/sku-options`, () => HttpResponse.json({ success: true, data: { 1: {
+      source: 'learned', expectedQty: { qty: 1, approx: false },
+      candidates: [{ skuId: 11, key: 'cp:1:블랙', name: '라운드티', option: '블랙' }],
+    } } })));
+    render(<ReceiptDetail draftId={DRAFT_ID} />);
+    expect(await screen.findByText(/재고: 라운드티 · 블랙 · 1개 자동/)).toBeInTheDocument();
+  });
 
   it('🔴 할인 반영 금액을 보여주고 할인 전 금액을 함께 밝힌다', async () => {
     mockDetail(detail());
