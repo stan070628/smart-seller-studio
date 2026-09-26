@@ -1,0 +1,153 @@
+// src/components/erp/stock/stock-view.ts
+// 재고현황 화면의 순수 계산 — 필터·KPI·편집 차이·요청 본문·내보내기. 컴포넌트는 그리기만 한다(PC·휴대폰 공용).
+import type { StockListRow, RgReconResponse } from '@/lib/erp/stock/queries';
+import type { OpeningIssue } from '@/lib/erp/ledger/opening';
+import type { UserReason } from '@/lib/erp/ledger/adjust';
+import type { AdjustItemBody } from './api';
+
+export type StockRow = StockListRow;
+/** 사람이 고치는 위치. RG는 「RG 실재고 대조」로만 고친다 */
+export type EditLocation = 'self' | 'rg_inbound';
+
+export interface RgRecon {
+  fetchedAt: string;
+  actual: Map<number, number>;
+  issues: OpeningIssue[];
+  inactive: { skuId: number; qty: number }[];
+}
+
+export interface Filters {
+  q: string;
+  onlyStocked: boolean;
+  onlyRgMismatch: boolean;
+}
+
+export interface StagedEdit {
+  skuId: number;
+  location: EditLocation;
+  mode: 'count' | 'delta';
+  value: number;
+  /** 편집을 시작할 때 화면이 본 원장 재고 — 서버가 다르면 409 */
+  expected: number;
+  reason: UserReason;
+  note: string;
+  /** 늘어날 때만 */
+  unitCost: number | null;
+}
+
+export const won = (n: number) => n.toLocaleString('ko-KR');
+export const stageKey = (skuId: number, loc: EditLocation) => `${skuId}:${loc}`;
+export const defaultCost = (r: StockRow): number | null => r.lotCost ?? r.legacyCost;
+export const onHandAt = (r: StockRow, loc: EditLocation): number => (loc === 'self' ? r.self : r.rgInbound);
+export const totalOf = (r: StockRow): number => r.self + r.rgInbound + r.rg;
+export const LOC_LABEL: Record<'self' | 'rg_inbound' | 'rg', string> = { self: '집', rg_inbound: 'RG입고중', rg: 'RG' };
+
+export function rgActual(r: StockRow, recon: RgRecon | null): number | null {
+  return recon ? (recon.actual.get(r.skuId) ?? 0) : null;
+}
+
+export function rgDiff(r: StockRow, recon: RgRecon | null): number | null {
+  const a = rgActual(r, recon);
+  return a === null ? null : a - r.rg;
+}
+
+export function editDiff(e: Pick<StagedEdit, 'mode' | 'value' | 'expected'>): number {
+  return e.mode === 'count' ? e.value - e.expected : e.value;
+}
+
+export function filterRows(rows: StockRow[], f: Filters, recon: RgRecon | null): StockRow[] {
+  const q = f.q.trim().toLowerCase();
+  return rows.filter((r) => {
+    if (q && !`${r.name} ${r.option} ${r.key}`.toLowerCase().includes(q)) return false;
+    if (f.onlyStocked && totalOf(r) === 0) return false;
+    if (f.onlyRgMismatch && !rgDiff(r, recon)) return false;
+    return true;
+  });
+}
+
+export interface Kpis {
+  total: number;
+  self: number;
+  rgInbound: number;
+  rg: number;
+  value: number;
+  /** 대조 전이면 null */
+  rgMismatch: number | null;
+}
+
+export function computeKpis(rows: StockRow[], recon: RgRecon | null): Kpis {
+  const sum = (f: (r: StockRow) => number) => rows.reduce((s, r) => s + f(r), 0);
+  return {
+    total: sum(totalOf),
+    self: sum((r) => r.self),
+    rgInbound: sum((r) => r.rgInbound),
+    rg: sum((r) => r.rg),
+    value: sum((r) => r.value),
+    rgMismatch: recon ? rows.filter((r) => rgDiff(r, recon) !== 0).length : null,
+  };
+}
+
+/** 편집 → /api/erp/stock/adjust 본문. 요청마다 새 id(멱등 — 두 번 눌러도 한 번만 기록된다) */
+export function toAdjustItems(list: StagedEdit[], newId: () => string): AdjustItemBody[] {
+  return list.map((e) => ({
+    skuId: e.skuId,
+    location: e.location,
+    mode: e.mode,
+    value: e.value,
+    ...(e.mode === 'count' ? { expected: e.expected } : {}),
+    reason: e.reason,
+    ...(e.note ? { note: e.note } : {}),
+    unitCost: e.unitCost,
+    requestId: newId(),
+  }));
+}
+
+/** 실사 모드 저장 전 확인 창의 숫자. 평가액 영향은 추정(줄 때는 최근 단가, 늘 때는 입력 단가) */
+export function summarizeStaged(list: StagedEdit[], rowById: Map<number, StockRow>): { count: number; plus: number; minus: number; valueDelta: number } {
+  let plus = 0;
+  let minus = 0;
+  let valueDelta = 0;
+  for (const e of list) {
+    const d = editDiff(e);
+    const row = rowById.get(e.skuId);
+    const base = row ? defaultCost(row) : null;
+    const cost = d > 0 ? (e.unitCost ?? base ?? 0) : (base ?? 0);
+    if (d > 0) plus += d;
+    else minus += -d;
+    valueDelta += d * cost;
+  }
+  return { count: list.length, plus, minus, valueDelta };
+}
+
+export function parseRecon(d: RgReconResponse): RgRecon {
+  return { fetchedAt: d.fetchedAt, actual: new Map(d.rows.map((r) => [r.skuId, r.actual])), issues: d.issues, inactive: d.inactive };
+}
+
+const csvCell = (v: string | number | null) => {
+  const s = v === null ? '' : String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+
+/** 엑셀↓ — 지금 보이는 행 그대로. BOM을 붙여 엑셀이 한글을 깨지 않게 한다 */
+export function toExportCsv(rows: StockRow[], recon: RgRecon | null): string {
+  const head = ['sku_key', '상품', '옵션', '집', 'RG입고중', 'RG(원장)', 'RG실재고', '차이', '단가', '평가액'];
+  const lines = rows.map((r) =>
+    [r.key, r.name, r.option, r.self, r.rgInbound, r.rg, rgActual(r, recon), rgDiff(r, recon), defaultCost(r), r.value].map(csvCell).join(','),
+  );
+  return `﻿${[head.join(','), ...lines].join('\n')}\n`;
+}
+
+/** <input type="datetime-local">의 기본값(지금, KST) */
+export function toKstLocalInput(d: Date): string {
+  return new Date(d.getTime() + 9 * 3600_000).toISOString().slice(0, 16);
+}
+
+/** 'YYYY-MM-DDTHH:mm'(KST) → 오프셋 있는 ISO */
+export function localInputToIso(v: string): string {
+  return `${v}:00+09:00`;
+}
+
+/** 이력·최근 수정의 시각 표시(KST, MM.DD HH:mm) */
+export function fmtKst(iso: string): string {
+  return new Date(iso).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+}
