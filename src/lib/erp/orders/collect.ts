@@ -24,7 +24,7 @@ import {
   reevaluateUnknownLines, releaseLease, takeLease, upsertOrderLines, type AbsenceRefusal, type AbsenceResult, type ResolvedLine,
 } from './store';
 import type { OrderAdapter, OrderChannel, RejectedLine } from './types';
-import { backfillStart, windowFor } from './window';
+import { backfillEnd, backfillStart, windowFor } from './window';
 
 /** 주문 수집 트랜잭션 잠금 네임스페이스(원장 SKU 잠금 7101과 겹치지 않는다) */
 const LOCK_NS = 7102;
@@ -99,7 +99,7 @@ const NO_ABSENCE: AbsenceResult = { ids: [], legacyKeys: [], marked: 0, absent: 
 export async function collectChannel(
   pool: Connectable,
   adapter: OrderAdapter,
-  opts: { now: Date; dryRun: boolean; deduct: DeductRunner; backfillFrom?: string },
+  opts: { now: Date; dryRun: boolean; deduct: DeductRunner; backfillFrom?: string; backfillTo?: string },
 ): Promise<ChannelReport> {
   const ch = adapter.channel;
   const backfill = opts.backfillFrom !== undefined;
@@ -111,6 +111,7 @@ export async function collectChannel(
     const cutover = await readCutover(c);
     // 과거 보충 시작일은 임대·채널 호출 전에 검사한다(범위 밖이면 아무것도 하지 않는다)
     const bfStart = backfill ? backfillStart(opts.backfillFrom as string, cutover) : null;
+    const bfEnd = bfStart ? backfillEnd(opts.backfillTo, bfStart, opts.now) : null;
     // 수집 시작 시각 — 사라짐 판정은 이 시각 전에 처음 본 라인만 본다(겹친 실행이 방금 넣은 라인을 오판하지 않게)
     let startedAt = opts.now.toISOString();
     if (!opts.dryRun) {
@@ -123,8 +124,8 @@ export async function collectChannel(
       startedAt = lease.at ?? startedAt;
     }
 
-    const w = bfStart
-      ? { from: bfStart, to: new Date(opts.now.getTime()) }
+    const w = bfStart && bfEnd
+      ? { from: bfStart, to: new Date(bfEnd.getTime()) }
       : windowFor({ cursor: await readCursor(c, ch), cutover, now: opts.now, tailDays: adapter.tailDays });
     report.window = { from: w.from.toISOString(), to: w.to.toISOString() };
 
@@ -135,7 +136,10 @@ export async function collectChannel(
 
     const listings = await loadListingIndex(c);
     const legacyIdx = await loadLegacyIndex(c);
-    const kept = bfStart ? res.lines.filter((l) => Date.parse(l.orderedAt) >= bfStart.getTime()) : res.lines;
+    // 보충 구간 밖(시작 전 · 끝 뒤)에 주문된 라인은 쓰지 않고 센다 — 끝 뒤 라인은 다음 조각이나 보통 수집이 받는다
+    const kept = bfStart && bfEnd
+      ? res.lines.filter((l) => { const t = Date.parse(l.orderedAt); return t >= bfStart.getTime() && t < bfEnd.getTime(); })
+      : res.lines;
     report.backfillSkipped = res.lines.length - kept.length;
     const resolved: ResolvedLine[] = kept.map((l) => {
       const resolution = resolveLine(l, listings);
@@ -194,6 +198,8 @@ export async function collectOrders(p: {
   factories?: Record<OrderChannel, () => OrderAdapter>;
   /** 과거 보충 시작일(KST YYYY-MM-DD) — 설계 해석 #25 */
   backfillFrom?: string;
+  /** 과거 보충 끝날(그날 포함). 없으면 지금까지 */
+  backfillTo?: string;
 }): Promise<ChannelReport[]> {
   const pool = p.pool ?? getSourcingPool();
   const factories = p.factories ?? ADAPTER_FACTORIES;
@@ -207,7 +213,7 @@ export async function collectOrders(p: {
       out.push({ ...emptyReport(ch, p.dryRun, p.backfillFrom !== undefined), error: errText(e) });
       continue;
     }
-    out.push(await collectChannel(pool, adapter, { now, dryRun: p.dryRun, deduct: runDeductions, backfillFrom: p.backfillFrom }));
+    out.push(await collectChannel(pool, adapter, { now, dryRun: p.dryRun, deduct: runDeductions, backfillFrom: p.backfillFrom, backfillTo: p.backfillTo }));
   }
   return out;
 }

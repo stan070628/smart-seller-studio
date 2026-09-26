@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { maskPII } from '@/lib/jobs/mask';
 import { runOrdersSync } from '@/lib/erp/orders/run';
-import { checkBackfillFrom } from '@/lib/erp/orders/backfill-request';
+import { checkBackfillFrom, checkBackfillTo } from '@/lib/erp/orders/backfill-request';
 import { BackfillError } from '@/lib/erp/orders/window';
 import { ORDER_CHANNELS, isOrderChannel } from '@/lib/erp/orders/types';
 
@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic';
  *
  * 호출은 Supabase pg_cron(supabase/migrations/118_pg_cron_orders_sync.sql)이 15분마다 한다. 실행 기록은 erp.job_runs('orders-sync').
  * `?dryRun=1` = 가져와서 연결만 세고 쓰지 않는다 · `?channel=<coupang_wing|coupang_rg|naver|toss>` = 그 채널만 ·
- * `?backfillFrom=YYYY-MM-DD` = 한 번만 쓰는 과거 보충(설계 해석 #25 — 사라짐 판정·커서 이동 없음, 틀리면 400). 셋 중 하나라도 있으면 manual로 남는다.
+ * `?backfillFrom=YYYY-MM-DD[&backfillTo=YYYY-MM-DD]` = 한 번만 쓰는 과거 보충(끝날 포함 — 줄이 많으면 나눠 부른다)(설계 해석 #25 — 사라짐 판정·커서 이동 없음, 틀리면 400). 셋 중 하나라도 있으면 manual로 남는다.
  */
 export async function GET(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET ?? '';
@@ -30,12 +30,15 @@ export async function GET(request: NextRequest) {
   }
   const dryRun = sp.get('dryRun') === '1';
   const bfRaw = sp.get('backfillFrom');
-  const manual = dryRun || channel !== null || bfRaw !== null || sp.get('trigger') === 'manual';
+  const btRaw = sp.get('backfillTo');
+  const manual = dryRun || channel !== null || bfRaw !== null || btRaw !== null || sp.get('trigger') === 'manual';
   try {
     const backfillFrom = await checkBackfillFrom(bfRaw);
+    const backfillTo = await checkBackfillTo(btRaw, backfillFrom);
     const reports = await runOrdersSync({
       channels: channel ? [channel] : [...ORDER_CHANNELS], dryRun, trigger: manual ? 'manual' : 'cron',
       ...(backfillFrom !== undefined ? { backfillFrom } : {}),
+      ...(backfillTo !== undefined ? { backfillTo } : {}),
     });
     return NextResponse.json({ success: true, reports });
   } catch (e) {

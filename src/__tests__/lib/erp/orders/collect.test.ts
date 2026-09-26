@@ -268,6 +268,24 @@ describe('collectChannel — 과거 보충(backfillFrom · 결정 5)', () => {
     expect(m.takeLease).not.toHaveBeenCalled();
   });
 
+  it('backfillTo — 구간 끝을 그날 다음 날 KST 0시로 줄이고, 그 뒤에 주문된 라인은 쓰지 않고 센다(Vercel 300초 안에 나눠 부르기)', async () => {
+    const a = both();
+    const r = await collectChannel(pool, a, { now: NOW, dryRun: false, deduct, backfillFrom: '2026-09-01', backfillTo: '2026-09-07' });
+    expect(a.fetch).toHaveBeenCalledWith({ from: new Date('2026-08-31T15:00:00.000Z'), to: new Date('2026-09-07T15:00:00.000Z') });
+    // OLD(9/5)만 남고 LINE(기초 이후)은 구간 밖
+    expect(m.upsertOrderLines.mock.calls[0][1].map((l: OrderLine) => l.externalLineId)).toEqual([OLD.externalLineId]);
+    expect(r).toMatchObject({ ok: true, backfill: true, fetched: 1, backfillSkipped: 1, window: { to: '2026-09-07T15:00:00.000Z' } });
+    expect(m.advanceCursor).not.toHaveBeenCalled();
+  });
+
+  it('backfillTo가 시작일보다 앞이면 채널을 부르지 않고 실패로 보고한다', async () => {
+    const a = both();
+    const r = await collectChannel(pool, a, { now: NOW, dryRun: false, deduct, backfillFrom: '2026-09-10', backfillTo: '2026-09-05' });
+    expect(r).toMatchObject({ ok: false, backfill: true });
+    expect(a.fetch).not.toHaveBeenCalled();
+    expect(m.takeLease).not.toHaveBeenCalled();
+  });
+
   it('보통 수집은 backfill: false · backfillSkipped 0', async () => {
     const r = await collectChannel(pool, adapter(), { now: NOW, dryRun: false, deduct });
     expect(r).toMatchObject({ backfill: false, backfillSkipped: 0 });
@@ -281,5 +299,7 @@ describe('collectChannel — 과거 보충(backfillFrom · 결정 5)', () => {
     const factories = { coupang_wing: () => a, coupang_rg: () => a, naver: () => a, toss: () => a };
     const reports = await collectOrders({ channels: ['coupang_rg'], dryRun: true, now: NOW, pool, factories, backfillFrom: '2026-09-01' });
     expect(reports[0]).toMatchObject({ backfill: true, window: { from: '2026-08-31T15:00:00.000Z' } });
+    const narrowed = await collectOrders({ channels: ['coupang_rg'], dryRun: true, now: NOW, pool, factories, backfillFrom: '2026-09-01', backfillTo: '2026-09-03' });
+    expect(narrowed[0]).toMatchObject({ window: { from: '2026-08-31T15:00:00.000Z', to: '2026-09-03T15:00:00.000Z' } });
   });
 });

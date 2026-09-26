@@ -18,12 +18,15 @@ export async function runOrdersSync(p: {
   trigger: 'cron' | 'manual';
   /** 과거 보충 시작일(KST YYYY-MM-DD). 호출자가 형식·범위를 먼저 검사한다 */
   backfillFrom?: string;
+  /** 과거 보충 끝날(그날 포함) — backfillFrom과 함께만 */
+  backfillTo?: string;
 }): Promise<ChannelReport[]> {
   const reports = await withJobRun(
     'orders-sync',
     async () => {
       const r = await collectOrders({
         channels: p.channels, dryRun: p.dryRun, ...(p.backfillFrom !== undefined ? { backfillFrom: p.backfillFrom } : {}),
+        ...(p.backfillTo !== undefined ? { backfillTo: p.backfillTo } : {}),
       });
       // busy는 실패가 아니다 — 다른 수집(수동 클릭 ↔ 크론)이 이 채널의 임대를 잡고 있을 뿐이다. 전부-실패 판정에서 뺀다
       const active = r.filter((x) => x.skipped !== 'busy');

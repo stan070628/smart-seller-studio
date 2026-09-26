@@ -170,7 +170,18 @@ describe('과거 보충(backfillFrom · 결정 5)', () => {
     expect(m.collectOrders).toHaveBeenCalledWith({ channels: ['naver'], dryRun: true, backfillFrom: '2026-09-01' });
     expect(m.withJobRun).toHaveBeenCalledWith('orders-sync', expect.any(Function), { trigger: 'manual' });
     expect((await GET(cron('?backfillFrom=2026-09-30'))).status).toBe(400);
+    // backfillTo는 backfillFrom과 함께만 · 시작일보다 앞이면 400
+    expect((await GET(cron('?backfillTo=2026-09-07'))).status).toBe(400);
+    expect((await GET(cron('?backfillFrom=2026-09-10&backfillTo=2026-09-05'))).status).toBe(400);
     expect((await GET(cron('?backfillFrom=2026-09-01', 'x'))).status).toBe(401);
     expect(m.collectOrders).toHaveBeenCalledTimes(1);
+  });
+
+  it('GET ?backfillFrom=…&backfillTo=… — 끝날을 함께 넘긴다(RG처럼 줄이 많은 채널을 나눠 부른다)', async () => {
+    m.collectOrders.mockResolvedValue([rep('coupang_rg', true)]);
+    const { GET } = await import('@/app/api/cron/orders-sync/route');
+    const res = await GET(cron('?backfillFrom=2026-09-01&backfillTo=2026-09-07&channel=coupang_rg'));
+    expect(res.status).toBe(200);
+    expect(m.collectOrders).toHaveBeenCalledWith({ channels: ['coupang_rg'], dryRun: false, backfillFrom: '2026-09-01', backfillTo: '2026-09-07' });
   });
 });

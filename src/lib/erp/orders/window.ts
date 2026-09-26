@@ -82,6 +82,17 @@ export function parseBackfillDay(v: unknown): string {
   return v;
 }
 
+/**
+ * 과거 보충 구간 끝 = to일 다음 날 KST 0시(그날 포함). 없으면 지금. 시작보다 뒤여야 하고 지금을 넘지 않는다.
+ * 줄이 많은 채널(RG 657줄)은 한 번에 쓰면 Vercel 300초를 넘는다(2026-09-27 504) — 며칠씩 나눠 부르려고 둔다.
+ */
+export function backfillEnd(to: string | undefined, start: Date, now: Date): Date {
+  if (to === undefined) return now;
+  const end = kstDayStart(addDays(parseBackfillDay(to), 1));
+  if (end.getTime() <= start.getTime()) throw new BackfillError(`과거 보충 끝날 ${to}이(가) 시작일보다 앞이다`);
+  return end.getTime() < now.getTime() ? end : now;
+}
+
 /** 과거 보충 구간 시작 = 그날 KST 0시. 기초 시각보다 앞이어야 하고 기초 시각 − 62일보다 앞으로 가지 않는다 */
 export function backfillStart(day: string, cutover: string): Date {
   const start = kstDayStart(parseBackfillDay(day));
