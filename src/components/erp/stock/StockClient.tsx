@@ -20,7 +20,8 @@ import HistoryPanel from './HistoryPanel';
 import CsvImportDialog from './CsvImportDialog';
 import { fetchRecon, fetchStock, postAdjust, postRgApply } from './api';
 import {
-  computeKpis, defaultCost, editDiff, filterRows, parseRecon, rgDiff, stageKey, summarizeStaged, toAdjustItems, toExportCsv, won,
+  computeKpis, defaultCost, editDiff, filterGroups, filterRows, filtersActive, groupRows, parseRecon, rgDiff, stageKey, summarizeStaged,
+  toAdjustItems, toExportCsv, won,
   type EditLocation, type Filters, type RgRecon, type StagedEdit, type StockRow,
 } from './stock-view';
 
@@ -55,6 +56,8 @@ export default function StockClient() {
   useEffect(() => { void load(); }, [load]);
 
   const visible = useMemo(() => filterRows(rows, filters, recon), [rows, filters, recon]);
+  const groups = useMemo(() => groupRows(rows, recon), [rows, recon]);
+  const views = useMemo(() => filterGroups(groups, filters, recon), [groups, filters, recon]);
   const kpi = useMemo(() => computeKpis(rows, recon), [rows, recon]);
   const rowById = useMemo(() => new Map(rows.map((r) => [r.skuId, r])), [rows]);
   const mismatches = useMemo(() => (recon ? rows.filter((r) => (rgDiff(r, recon) ?? 0) !== 0) : []), [rows, recon]);
@@ -257,7 +260,8 @@ export default function StockClient() {
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <StockTable
-            rows={visible}
+            views={views}
+            forceOpen={filtersActive(filters)}
             recon={recon}
             staged={staged}
             countMode={countMode}
@@ -271,7 +275,9 @@ export default function StockClient() {
             onRgApply={(row) => void applyRg([row])}
           />
           <div style={statusBarStyle}>
-            <span>표시 <span style={statNumStyle}>{visible.length}</span> / {rows.length} SKU</span>
+            <span>
+              표시 상품 <span style={statNumStyle}>{views.length}</span> · SKU <span style={statNumStyle}>{visible.length}</span> / {rows.length} SKU
+            </span>
             {loading && <span>불러오는 중…</span>}
             {countMode && <span style={{ color: E.accent }}>실사 모드 — 칸을 고치면 담기고, 「변경 저장」에서 한 번에 기록합니다</span>}
           </div>
