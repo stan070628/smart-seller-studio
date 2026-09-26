@@ -154,13 +154,21 @@ export function toAdjustItems(list: StagedEdit[], newId: () => string): AdjustIt
   }));
 }
 
-/** 실사 모드 저장 전 확인 창의 숫자. 평가액 영향은 추정(줄 때는 최근 단가, 늘 때는 입력 단가) */
-export function summarizeStaged(list: StagedEdit[], rowById: Map<number, StockRow>): { count: number; plus: number; minus: number; valueDelta: number } {
+/** 실사 모드 저장 전 확인 창의 숫자. same = 차이 없는 지금 개수(센 기록만 남는다). 평가액 영향은 추정(줄 때는 최근 단가, 늘 때는 입력 단가) */
+export function summarizeStaged(
+  list: StagedEdit[],
+  rowById: Map<number, StockRow>,
+): { count: number; plus: number; minus: number; same: number; valueDelta: number } {
   let plus = 0;
   let minus = 0;
+  let same = 0;
   let valueDelta = 0;
   for (const e of list) {
     const d = editDiff(e);
+    if (d === 0) {
+      same++;
+      continue;
+    }
     const row = rowById.get(e.skuId);
     const base = row ? defaultCost(row) : null;
     const cost = d > 0 ? (e.unitCost ?? base ?? 0) : (base ?? 0);
@@ -168,7 +176,7 @@ export function summarizeStaged(list: StagedEdit[], rowById: Map<number, StockRo
     else minus += -d;
     valueDelta += d * cost;
   }
-  return { count: list.length, plus, minus, valueDelta };
+  return { count: list.length, plus, minus, same, valueDelta };
 }
 
 export function parseRecon(d: RgReconResponse): RgRecon {

@@ -3,6 +3,7 @@
 import type { AdjustResult } from '@/lib/erp/ledger/adjust-store';
 import type { HistoryRow, RecentAdjust, RgReconResponse, StockListRow } from '@/lib/erp/stock/queries';
 import type { ImportSummary } from '@/lib/erp/ledger/opening-import';
+import type { CountQueueResponse } from '@/lib/erp/stock/count-queue';
 
 export type ApiResult<T> =
   | { ok: true; data: T }
@@ -59,6 +60,7 @@ export const postReverse = (idemKey: string) => call<{ ids: number[] }>('/api/er
 export const fetchRecent = (limit: number) => call<RecentAdjust[]>(`/api/erp/stock/recent?limit=${limit}`);
 export const fetchRecon = () => call<RgReconResponse>('/api/erp/stock/rg-reconcile');
 export const postRgApply = (items: RgApplyItem[]) => call<AdjustResult[]>('/api/erp/stock/rg-reconcile', { items });
+export const fetchCountQueue = (n: number) => call<CountQueueResponse>(`/api/erp/stock/count-queue?n=${n}`);
 
 /**
  * 실사표 불러오기. `commit:true`인데 검사 오류가 있으면 서버가 422 `{ success:false, data:<오류가 담긴 요약> }`로

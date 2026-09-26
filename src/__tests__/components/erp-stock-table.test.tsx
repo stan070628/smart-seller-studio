@@ -77,4 +77,22 @@ describe('StockTable — 상품 묶음', () => {
     expect(screen.getByText('베이지')).toBeInTheDocument();
     expect(screen.getByText('전체 접기')).toBeDisabled();
   });
+
+  it('「마지막 실사」 — 옵션은 날짜(KST) 또는 「안 셈」, 묶음은 안 센 옵션 수', () => {
+    render(
+      <StockTable
+        views={filterGroups(groupRows([
+          row({ lastCountedAt: '2026-09-26T15:30:00Z' }),
+          row({ skuId: 2, key: 'k2', option: '베이지' }),
+        ], null), NO_FILTER, null)}
+        forceOpen
+        recon={null} staged={new Map()} countMode={false} editing={null} selected={null} busy={false}
+        onEdit={() => {}} onCancelEdit={() => {}} onSubmitEdit={() => {}} onSelect={() => {}} onRgApply={() => {}}
+      />,
+    );
+    expect(screen.getByText('마지막 실사')).toBeInTheDocument();
+    expect(screen.getByText('2026-09-27')).toBeInTheDocument();
+    expect(within(trOf('베이지')).getByText('안 셈')).toBeInTheDocument();
+    expect(within(trOf('왜건')).getByText('안 셈 1')).toBeInTheDocument();
+  });
 });

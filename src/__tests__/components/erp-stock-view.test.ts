@@ -50,10 +50,10 @@ describe('편집', () => {
       { skuId: 2, location: 'self', mode: 'delta', value: -1, reason: 'damage', unitCost: null, requestId: 'id-1' },
     ]);
   });
-  it('실사 모드 요약: 늘림·줄임·평가액 영향(추정)', () => {
-    const byId = new Map([[1, row()], [2, row({ skuId: 2, lotCost: 500 })]]);
-    expect(summarizeStaged([edit({ unitCost: 1200 }), edit({ skuId: 2, value: 1, expected: 3 })], byId))
-      .toEqual({ count: 2, plus: 2, minus: 2, valueDelta: 2 * 1200 - 2 * 500 });
+  it('실사 모드 요약: 늘림·줄임·차이 없음(센 기록만)·평가액 영향(추정)', () => {
+    const byId = new Map([[1, row()], [2, row({ skuId: 2, lotCost: 500 })], [3, row({ skuId: 3 })]]);
+    expect(summarizeStaged([edit({ unitCost: 1200 }), edit({ skuId: 2, value: 1, expected: 3 }), edit({ skuId: 3, value: 3, expected: 3 })], byId))
+      .toEqual({ count: 3, plus: 2, minus: 2, same: 1, valueDelta: 2 * 1200 - 2 * 500 });
   });
 });
 

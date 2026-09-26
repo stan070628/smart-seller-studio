@@ -5,6 +5,8 @@
  * 늘어나면 새 lot 단가를 받는다 — 최근 lot → 옛 입고 단가를 미리 채우고 고칠 수 있다.
  * `row.costNeedsInput`이면(최근 lot도, 쓸 수 있는 옛 입고도 없다) 미리 채울 값이 없어 사람이 반드시 적어야 한다 — 안내를 다르게 보인다.
  * 실사 모드에서는 저장하지 않고 담는다(StockClient가 한 번에 저장한다).
+ * 지금 개수는 원장과 같아도 저장·담기가 된다 — 원장 전표 없이 센 기록(erp.stock_counts)만 남는다(결정 5).
+ * `countOnly`면 ±수량 전환을 숨긴다(오늘 셀 목록 — 센 개수만 받는다).
  */
 import React, { useState } from 'react';
 import { E } from '@/lib/design-tokens';
@@ -17,11 +19,13 @@ interface Props {
   location: EditLocation;
   staged?: StagedEdit;
   countMode: boolean;
+  /** 지금 개수만(±수량 전환 없음) */
+  countOnly?: boolean;
   onSubmit: (e: StagedEdit) => void;
   onCancel: () => void;
 }
 
-export default function EditCell({ row, location, staged, countMode, onSubmit, onCancel }: Props) {
+export default function EditCell({ row, location, staged, countMode, countOnly = false, onSubmit, onCancel }: Props) {
   const onHand = onHandAt(row, location);
   const initialCost = staged?.unitCost ?? defaultCost(row);
   // row.hasLedger는 SKU 전체 기준이라 그 위치가 정확히 비어 있는지 화면은 모른다 — 서버(adjust-store)가
@@ -41,7 +45,7 @@ export default function EditCell({ row, location, staged, countMode, onSubmit, o
   const needsCost = diff > 0 && cost === null;
   // 빈 위치의 ±수량은 늘리기(+)만 된다 — 줄이면(−) 뺄 재고가 없다(서버 400과 같은 규칙)
   const emptyDeltaBlocked = locationEmpty && mode === 'delta' && value !== null && value < 0;
-  const canSubmit = valid && diff !== 0 && !needsCost && !emptyDeltaBlocked;
+  const canSubmit = valid && !needsCost && !emptyDeltaBlocked;
 
   function switchMode(m: 'count' | 'delta') {
     setMode(m);
@@ -77,18 +81,20 @@ export default function EditCell({ row, location, staged, countMode, onSubmit, o
           {mode === 'delta' ? ' · 줄이기(−)는 할 수 없습니다' : ''}.
         </div>
       )}
-      <div style={{ ...segStyle, marginBottom: 6 }}>
-        {(['count', 'delta'] as const).map((m) => (
-          <button
-            key={m}
-            type="button"
-            onClick={() => switchMode(m)}
-            style={{ ...segBtnStyle, flex: 1, background: mode === m ? E.ink : E.surface, color: mode === m ? '#fff' : E.ink }}
-          >
-            {m === 'count' ? '지금 개수' : '±수량'}
-          </button>
-        ))}
-      </div>
+      {!countOnly && (
+        <div style={{ ...segStyle, marginBottom: 6 }}>
+          {(['count', 'delta'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => switchMode(m)}
+              style={{ ...segBtnStyle, flex: 1, background: mode === m ? E.ink : E.surface, color: mode === m ? '#fff' : E.ink }}
+            >
+              {m === 'count' ? '지금 개수' : '±수량'}
+            </button>
+          ))}
+        </div>
+      )}
       <input
         autoFocus
         aria-label={mode === 'count' ? '지금 개수' : '±수량'}
@@ -101,7 +107,7 @@ export default function EditCell({ row, location, staged, countMode, onSubmit, o
         {emptyDeltaBlocked
           ? '비어 있는 위치에서는 뺄 수 없습니다(+ 만 기초재고로 기록됩니다)'
           : valid
-            ? diff === 0 ? '차이 없음' : `${won(onHand)} → ${won(onHand + diff)} (${diff > 0 ? '+' : ''}${won(diff)})`
+            ? diff === 0 ? '차이 없음 — 센 기록만 남깁니다' : `${won(onHand)} → ${won(onHand + diff)} (${diff > 0 ? '+' : ''}${won(diff)})`
             : mode === 'count' ? '0 이상 정수' : '0이 아닌 정수(예: -2)'}
       </div>
       {!locationEmpty && (

@@ -40,6 +40,20 @@ describe('EditCell', () => {
     expect(screen.getByText('담기')).toBeInTheDocument();
   });
 
+  it('지금 개수가 원장과 같아도 저장된다 — 센 기록만 남는다', () => {
+    const onSubmit = vi.fn();
+    render(<EditCell row={row} location="self" countMode={false} onSubmit={onSubmit} onCancel={() => {}} />);
+    expect(screen.getByText('차이 없음 — 센 기록만 남깁니다')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('저장'));
+    expect(onSubmit).toHaveBeenCalledWith({ skuId: 1, location: 'self', mode: 'count', value: 10, expected: 10, reason: 'count_diff', note: '', unitCost: null });
+  });
+
+  it('countOnly면 ±수량 전환이 없다(오늘 셀 목록)', () => {
+    render(<EditCell row={row} location="self" countMode={false} countOnly onSubmit={vi.fn()} onCancel={() => {}} />);
+    expect(screen.queryByText('±수량')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('지금 개수')).toHaveValue('10');
+  });
+
   describe('원장 전표가 없는 위치(빈 위치)', () => {
     const emptyRow: StockRow = { ...row, hasLedger: false };
 

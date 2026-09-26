@@ -18,9 +18,10 @@ import {
 import StockTable from './StockTable';
 import HistoryPanel from './HistoryPanel';
 import CsvImportDialog from './CsvImportDialog';
+import CountQueuePanel from './CountQueuePanel';
 import { fetchRecon, fetchStock, postAdjust, postRgApply } from './api';
 import {
-  computeKpis, defaultCost, editDiff, filterGroups, filterRows, filtersActive, groupRows, parseRecon, rgDiff, stageKey, summarizeStaged,
+  computeKpis, defaultCost, filterGroups, filterRows, filtersActive, groupRows, parseRecon, rgDiff, stageKey, summarizeStaged,
   toAdjustItems, toExportCsv, won,
   type EditLocation, type Filters, type RgRecon, type StagedEdit, type StockRow,
 } from './stock-view';
@@ -63,27 +64,33 @@ export default function StockClient() {
   const mismatches = useMemo(() => (recon ? rows.filter((r) => (rgDiff(r, recon) ?? 0) !== 0) : []), [rows, recon]);
   const selectedRow = selected === null ? null : rowById.get(selected) ?? null;
 
-  async function saveOne(edit: StagedEdit) {
+  /** 한 칸 바로 저장. 성공하면 true */
+  async function saveOne(edit: StagedEdit): Promise<boolean> {
     setSaving(true);
     const r = await postAdjust(toAdjustItems([edit], uuidv4));
     setSaving(false);
     if (!r.ok) {
       toast.error(r.error);
       if (r.code === 'stale') await load();
-      return;
+      return false;
     }
     const res = r.data[0];
-    toast.success(res.outcome === 'noop' ? '차이가 없어 기록하지 않았습니다' : `${res.kind === 'opening' ? '기초재고' : '조정'} ${res.qty > 0 ? '+' : ''}${res.qty} 기록했습니다`);
+    toast.success(
+      res.outcome === 'noop' ? '차이 없음 — 센 기록만 남겼습니다'
+        : res.outcome === 'duplicate' ? '이미 저장된 요청입니다'
+          : `${res.kind === 'opening' ? '기초재고' : '조정'} ${res.qty > 0 ? '+' : ''}${res.qty} 기록했습니다`,
+    );
     setEditing(null);
     await load();
+    return true;
   }
 
   function stage(edit: StagedEdit) {
     setStaged((m) => {
       const n = new Map(m);
       const k = stageKey(edit.skuId, edit.location);
-      if (editDiff(edit) === 0) n.delete(k);
-      else n.set(k, edit);
+      // 차이 없는 지금 개수도 담는다 — 저장하면 센 기록이 남는다
+      n.set(k, edit);
       return n;
     });
     setEditing(null);
@@ -94,7 +101,7 @@ export default function StockClient() {
     if (list.length === 0) return;
     const s = summarizeStaged(list, rowById);
     const ok = await confirmDialog({
-      message: `실사 변경 ${s.count}건을 저장합니다.\n\n늘림 +${won(s.plus)}개 · 줄임 −${won(s.minus)}개\n평가액 영향(추정) ${signed(s.valueDelta)}원\n\n하나라도 실패하면 전부 저장되지 않습니다.`,
+      message: `실사 ${s.count}건을 저장합니다.\n\n늘림 +${won(s.plus)}개 · 줄임 −${won(s.minus)}개 · 차이 없음 ${s.same}건(센 기록만)\n평가액 영향(추정) ${signed(s.valueDelta)}원\n\n하나라도 실패하면 전부 저장되지 않습니다.`,
       confirmLabel: '저장',
     });
     if (!ok) return;
@@ -110,7 +117,7 @@ export default function StockClient() {
       await load();
       return;
     }
-    toast.success(`${r.data.filter((x) => x.outcome === 'posted').length}건 저장했습니다`);
+    toast.success(`${r.data.filter((x) => x.outcome === 'posted').length}건 기록 · ${r.data.filter((x) => x.outcome === 'noop').length}건 차이 없음(센 기록)`);
     setStaged(new Map());
     setCountMode(false);
     await load();
@@ -221,6 +228,8 @@ export default function StockClient() {
         />
       </div>
 
+      <CountQueuePanel rowById={rowById} busy={saving} onSave={saveOne} />
+
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
         <button type="button" disabled={reconLoading} onClick={() => void loadRecon()} style={reconLoading ? disabledBtnStyle : btnStyle}>
           <RefreshCw size={12} /> {reconLoading ? '대조 중…' : 'RG 실재고 대조'}
@@ -244,7 +253,7 @@ export default function StockClient() {
         </button>
         {countMode && (
           <button type="button" disabled={staged.size === 0 || saving} onClick={() => void saveStaged()} style={staged.size === 0 || saving ? disabledBtnStyle : primaryBtnStyle}>
-            변경 {staged.size}건 저장
+            실사 {staged.size}건 저장
           </button>
         )}
       </div>

@@ -14,6 +14,7 @@ import {
   defaultCost, editDiff, rgActual, rgDiff, stageKey, won,
   type EditLocation, type GroupView, type RgRecon, type StagedEdit, type StockRow,
 } from './stock-view';
+import { kstDate } from '@/lib/erp/stock/count-queue';
 
 interface Props {
   views: GroupView[];
@@ -32,7 +33,7 @@ interface Props {
   onRgApply: (row: StockRow) => void;
 }
 
-const HEADERS = ['상품', '옵션', '집', 'RG입고중', 'RG(원장)', 'RG실재고', '차이', '단가', '평가액'];
+const HEADERS = ['상품', '옵션', '집', 'RG입고중', 'RG(원장)', 'RG실재고', '차이', '단가', '평가액', '마지막 실사'];
 
 const textTd: React.CSSProperties = {
   borderBottom: `1px solid ${E.lineSoft}`, borderRight: `1px solid ${E.lineSoft}`, padding: '4px 8px',
@@ -72,11 +73,15 @@ export default function StockTable({
           style={{ ...numTdStyle, position: 'relative', cursor: 'pointer', background: s ? E.warnSoft : undefined }}
         >
           {s ? (
-            <>
-              <span style={{ textDecoration: 'line-through', color: E.inkMute }}>{won(value)}</span>
-              {' → '}
-              <b>{won(value + editDiff(s))}</b>
-            </>
+            editDiff(s) === 0 ? (
+              <b title="차이 없음 — 센 기록만 남깁니다">{won(value)} ✓</b>
+            ) : (
+              <>
+                <span style={{ textDecoration: 'line-through', color: E.inkMute }}>{won(value)}</span>
+                {' → '}
+                <b>{won(value + editDiff(s))}</b>
+              </>
+            )
           ) : won(value)}
           {isEditing && (
             <EditCell row={r} location={loc} staged={s} countMode={countMode} onSubmit={onSubmitEdit} onCancel={onCancelEdit} />
@@ -111,6 +116,7 @@ export default function StockTable({
         </td>
         <td style={numTdStyle}>{cost === null ? '—' : won(cost)}</td>
         <td style={numTdStyle}>{won(r.value)}</td>
+        <td style={{ ...numTdStyle, color: r.lastCountedAt ? E.ink : E.inkMute }}>{r.lastCountedAt ? kstDate(r.lastCountedAt) : '안 셈'}</td>
       </tr>
     );
   };
@@ -119,6 +125,8 @@ export default function StockTable({
     const g = v.group;
     const i = stripe++;
     const stagedN = g.options.filter((r) => staged.has(stageKey(r.skuId, 'self')) || staged.has(stageKey(r.skuId, 'rg_inbound'))).length;
+    const neverCounted = g.options.filter((r) => !r.lastCountedAt).length;
+    const oldest = g.options.map((r) => r.lastCountedAt).filter((x): x is string => x !== null).sort()[0] ?? null;
     return (
       <tr
         key={`g:${g.name}`}
@@ -144,6 +152,9 @@ export default function StockTable({
         </td>
         <td style={numTdStyle}>—</td>
         <td style={numTdStyle}>{won(g.value)}</td>
+        <td style={{ ...numTdStyle, color: neverCounted ? E.inkMute : E.ink }} title={neverCounted ? undefined : '가장 오래된 옵션의 실사 날짜'}>
+          {neverCounted ? `안 셈 ${neverCounted}` : oldest ? kstDate(oldest) : '—'}
+        </td>
       </tr>
     );
   };
@@ -152,7 +163,7 @@ export default function StockTable({
     <div style={{ background: E.surface, border: `1px solid ${E.line}`, overflow: 'auto', maxHeight: 'calc(100vh - 300px)' }}>
       <div style={bandStyle}>
         <span style={{ flex: 1 }}>
-          상품별 재고 — 원장 기준 · 상품 줄을 누르면 옵션이 펼쳐집니다 · 집·RG입고중 칸을 누르면 고칩니다 · 옵션 줄을 누르면 입출 이력
+          상품별 재고 — 원장 기준 · 상품 줄을 누르면 옵션이 펼쳐집니다 · 집·RG입고중 칸을 누르면 고칩니다(개수가 같아도 저장하면 실사로 남습니다) · 옵션 줄을 누르면 입출 이력
         </span>
         <button type="button" disabled={forceOpen} onClick={() => setExpanded(new Set(multi.map((v) => v.group.name)))} style={smallBtn}>
           전체 펼치기
