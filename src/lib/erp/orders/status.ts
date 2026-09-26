@@ -1,6 +1,6 @@
 // src/lib/erp/orders/status.ts
 // 채널 상태 문자열 → 표준 상태. 모르는 값은 'unknown' — 수집기는 기존 상태를 유지하고 unknown_status로 센다.
-import type { StdStatus } from './types';
+import type { OrderChannel, StdStatus } from './types';
 
 const WING: Record<string, StdStatus> = {
   ACCEPT: 'paid', INSTRUCT: 'paid',
@@ -54,3 +54,21 @@ const TOSS: Record<string, StdStatus> = {
 };
 
 export const tossStatus = (s: string): StdStatus => TOSS[s] ?? 'unknown';
+
+/**
+ * (설계 해석 #23) 저장된 `raw_status`만으로 status='unknown' 라인을 다시 판정한다 — 채널을 다시 부르지 않는다.
+ * 네이버 claim 기반 세부 상태(cancel_requested 등)는 claimType이 raw_status에 없어 복원하지 못한다 — 기본 상태표만 다시 확인한다.
+ * unknown이었던 라인은 claim 분기를 타지 않으므로(claim 로직은 base가 이미 paid·shipping·delivered일 때만 적용) 정보 손실이 없다.
+ */
+export function statusFromRaw(ch: OrderChannel, rawStatus: string): StdStatus {
+  switch (ch) {
+    case 'coupang_wing':
+      return rawStatus.endsWith('/CANCELED') ? 'canceled' : WING[rawStatus] ?? 'unknown';
+    case 'coupang_rg':
+      return 'paid'; // RG는 unknown이 되지 않는다(normalizeRgOrder가 항상 'PAID'/'paid')
+    case 'naver':
+      return NAVER[rawStatus.split('/')[0]] ?? 'unknown';
+    case 'toss':
+      return tossStatus(rawStatus);
+  }
+}

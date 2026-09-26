@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { naverStatus, tossStatus, wingStatus } from '@/lib/erp/orders/status';
+import { naverStatus, statusFromRaw, tossStatus, wingStatus } from '@/lib/erp/orders/status';
 import { SOLD, VOID } from '@/lib/erp/orders/types';
 
 describe('표준 상태', () => {
@@ -56,6 +56,20 @@ describe('표준 상태', () => {
     expect(tossStatus('COMPLETED_EXCHANGE')).toBe('exchange');
     expect(tossStatus('REVOKED_REQUEST')).toBe('paid');
     expect(tossStatus('NEW_ONE')).toBe('unknown');
+  });
+
+  it('statusFromRaw: 저장된 raw_status만으로 unknown 라인을 다시 판정한다(설계 해석 #23) — claim 세부 상태는 복원하지 않는다', () => {
+    expect(statusFromRaw('coupang_wing', 'SOMETHING_NEW')).toBe('unknown');
+    expect(statusFromRaw('coupang_wing', 'ACCEPT')).toBe('paid');
+    expect(statusFromRaw('coupang_wing', 'ACCEPT/CANCELED')).toBe('canceled');
+    expect(statusFromRaw('coupang_rg', 'PAID')).toBe('paid');
+    expect(statusFromRaw('naver', 'WHAT')).toBe('unknown');
+    expect(statusFromRaw('naver', 'PAYED')).toBe('paid');
+    // claimType이 없어 세부 상태(cancel_requested 등)는 복원 못 한다 — 기본 상태만
+    expect(statusFromRaw('naver', 'PAYED/CANCEL_REQUEST')).toBe('paid');
+    expect(statusFromRaw('naver', 'CANCELED')).toBe('canceled');
+    expect(statusFromRaw('toss', 'NEW_ONE')).toBe('unknown');
+    expect(statusFromRaw('toss', 'DELIVERED')).toBe('delivered');
   });
 
   it('팔림·무효 집합은 겹치지 않고 unknown은 어디에도 없다', () => {
