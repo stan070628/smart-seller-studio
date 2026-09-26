@@ -6,6 +6,7 @@
 // --apply : 트랜잭션 하나로 적재한다. 키 기준 upsert라 다시 돌려도 안전하다. 오류가 나면 전부 롤백하고 exit 1.
 //           초안에서 빠진 연결은 지운다(listing_skus는 초안이 원장이다). skus·channel_listings는 지우지 않고
 //           보관(archived / active=false)한다.
+//           보관·비활성화·연결 삭제는 origin='draft' 행에만 한다 — 1-B 이후 손으로 만든 행(manual)은 건드리지 않는다.
 // --verify: 적재 결과 점검표(1-1 완료 기준)를 읽기 전용으로 출력한다.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -80,11 +81,18 @@ async function dryRun(draftFile: string, d: Draft): Promise<void> {
   await c.connect();
   try {
     await c.query('BEGIN READ ONLY');
-    const dbSkus = (await c.query(`select key, name, option_label, base_unit_label, status, legacy_product_cost_ids::text[] as legacy from erp.skus`)).rows;
-    const dbListings = (await c.query(`select id, channel, external_product_id, external_option_key, alt_product_id, label, link_mode, active from erp.channel_listings`)).rows;
+    const dbSkus = (await c.query(`select key, name, option_label, base_unit_label, status, legacy_product_cost_ids::text[] as legacy from erp.skus where origin = 'draft'`)).rows;
+    const dbListings = (await c.query(`select id, channel, external_product_id, external_option_key, alt_product_id, label, link_mode, active from erp.channel_listings where origin = 'draft'`)).rows;
     const dbLinks = (await c.query(`
       select l.channel || '|' || l.external_product_id || '|' || l.external_option_key as lkey, s.key as skey, x.multiplier
-      from erp.listing_skus x join erp.channel_listings l on l.id = x.listing_id join erp.skus s on s.id = x.sku_id`)).rows;
+      from erp.listing_skus x join erp.channel_listings l on l.id = x.listing_id join erp.skus s on s.id = x.sku_id
+      where x.origin = 'draft'`)).rows;
+    const manualSkus = (await c.query(`select key from erp.skus where origin = 'manual'`)).rows;
+    const manualListings = (await c.query(`select channel, external_product_id, external_option_key from erp.channel_listings where origin = 'manual'`)).rows;
+    const manualLinks = (await c.query(`
+      select l.channel || '|' || l.external_product_id || '|' || l.external_option_key as lkey, s.key as skey
+      from erp.listing_skus x join erp.channel_listings l on l.id = x.listing_id join erp.skus s on s.id = x.sku_id
+      where x.origin = 'manual'`)).rows;
     await c.query('COMMIT');
 
     const skuByKey = new Map(dbSkus.map((r) => [r.key as string, r]));
@@ -122,6 +130,13 @@ async function dryRun(draftFile: string, d: Draft): Promise<void> {
     const byChannel = new Map<string, number>();
     for (const l of d.listings) byChannel.set(l.channel, (byChannel.get(l.channel) ?? 0) + 1);
 
+    const manualSkuKeys = new Set(manualSkus.map((r) => r.key as string));
+    const manualListingKeys = new Set(manualListings.map((r) => `${r.channel}|${r.external_product_id}|${r.external_option_key}`));
+    const manualLinkKeys = new Set(manualLinks.map((r) => `${r.lkey}→${r.skey}`));
+    const skuConflict = d.skus.filter((s) => manualSkuKeys.has(s.key)).length;
+    const listingConflict = d.listings.filter((l) => manualListingKeys.has(l.key)).length;
+    const linkConflict = d.links.filter((k) => manualLinkKeys.has(`${k.listingKey}→${k.skuKey}`)).length;
+
     console.log(`${draftFile} + overrides → SKU ${d.skus.length}(active ${d.skus.filter((s) => s.status === 'active').length}) · 리스팅 ${d.listings.length} · 연결 ${d.links.length}`);
     console.log(`  리스팅 채널: ${[...byChannel].map(([k, v]) => `${k} ${v}`).join(' · ')}`);
     console.log(`  link_mode: ${[...modes].map(([k, v]) => `${k} ${v}`).join(' · ')}`);
@@ -129,7 +144,8 @@ async function dryRun(draftFile: string, d: Draft): Promise<void> {
     console.log('--apply 시 변경:');
     console.log(`  SKU      삽입 ${skuIns} · 갱신 ${skuUpd} · 동일 ${skuSame} · 보관(archived) ${skuArchive}`);
     console.log(`  리스팅   삽입 ${lIns} · 갱신 ${lUpd} · 동일 ${lSame} · 비활성화 ${lDeactivate}`);
-    console.log(`  연결     전체 ${d.links.length} 재작성 (신규 ${kAdd} · 배수변경 ${kChg} · 삭제 ${kDel})`);
+    console.log(`  연결     draft ${d.links.length} 재작성 (신규 ${kAdd} · 배수변경 ${kChg} · 삭제 ${kDel})`);
+    console.log(`  manual 충돌 SKU ${skuConflict} · 리스팅 ${listingConflict} · 연결 ${linkConflict} — 0이 아니면 --apply가 실패한다`);
     if (absent.length > 0) {
       console.log(`DB에 있으나 초안에 없는 SKU ${absent.length}건:`);
       for (const r of absent) console.log(`  - ${r.key} [${r.status}] ${r.name}`);
@@ -153,44 +169,65 @@ async function apply(d: Draft): Promise<void> {
     const skuId = new Map<string, number>();
     for (const s of d.skus) {
       const { rows } = await c.query(
-        `insert into erp.skus (key, name, option_label, base_unit_label, status, legacy_product_cost_ids)
-         values ($1, $2, $3, $4, $5, $6::uuid[])
+        `insert into erp.skus (key, name, option_label, base_unit_label, status, legacy_product_cost_ids, origin)
+         values ($1, $2, $3, $4, $5, $6::uuid[], 'draft')
          on conflict (key) do update set name = excluded.name, option_label = excluded.option_label,
            base_unit_label = excluded.base_unit_label, status = excluded.status,
            legacy_product_cost_ids = excluded.legacy_product_cost_ids, updated_at = now()
+         where erp.skus.origin = 'draft'
          returning id`,
         [s.key, s.name, s.optionLabel, s.baseUnitLabel, s.status, s.legacyProductCostIds],
       );
+      if (rows.length === 0) throw new Error(`초안 키 ${s.key}가 manual SKU와 겹친다 — 초안을 고친다`);
       skuId.set(s.key, Number(rows[0].id));
     }
     const archived = await c.query(
-      `update erp.skus set status = 'archived', updated_at = now() where status <> 'archived' and not (key = any($1::text[]))`,
+      `update erp.skus set status = 'archived', updated_at = now()
+        where status <> 'archived' and origin = 'draft' and not (key = any($1::text[]))`,
       [d.skus.map((s) => s.key)],
     );
+    // P5: SKU 키는 동결이다. 초안에서 키가 사라지거나 병합(overrides)으로 보관되는 SKU에 원장 재고가 있으면
+    //     재고가 보이지 않게 된다 — 보관을 반영한 뒤 같은 트랜잭션에서 확인하고, 있으면 전부 롤백한다.
+    const stocked = await c.query(
+      `select s.key, h.location, h.qty
+         from erp.skus s join erp.stock_on_hand h on h.sku_id = s.id
+        where s.status = 'archived' and s.origin = 'draft' and h.qty <> 0`,
+    );
+    if (stocked.rows.length > 0) {
+      throw new Error(`재고가 있는 SKU를 보관하려 한다 — 키가 바뀌었거나 병합됐다. 초안(overrides)을 고친다:\n  ${stocked.rows.map((r) => `${r.key} ${r.location} ${r.qty}`).join('\n  ')}`);
+    }
 
     const listingId = new Map<string, number>();
     for (const l of d.listings) {
       const { rows } = await c.query(
-        `insert into erp.channel_listings (channel, external_product_id, external_option_key, alt_product_id, label, link_mode, active)
-         values ($1, $2, $3, $4, $5, $6, true)
+        `insert into erp.channel_listings (channel, external_product_id, external_option_key, alt_product_id, label, link_mode, active, origin)
+         values ($1, $2, $3, $4, $5, $6, true, 'draft')
          on conflict (channel, external_product_id, external_option_key) do update
            set alt_product_id = excluded.alt_product_id, label = excluded.label, link_mode = excluded.link_mode, active = true
+         where erp.channel_listings.origin = 'draft'
          returning id`,
         [l.channel, l.externalProductId, l.externalOptionKey, l.altProductId, l.label, l.linkMode],
       );
+      if (rows.length === 0) throw new Error(`초안 리스팅 ${l.key}가 manual 리스팅과 겹친다 — 초안을 고친다`);
       listingId.set(l.key, Number(rows[0].id));
     }
     const deactivated = await c.query(
-      `update erp.channel_listings set active = false where active and not (id = any($1::bigint[]))`,
+      `update erp.channel_listings set active = false where active and origin = 'draft' and not (id = any($1::bigint[]))`,
       [[...listingId.values()]],
     );
 
-    await c.query('delete from erp.listing_skus');
+    await c.query(`delete from erp.listing_skus where origin = 'draft'`);
     for (const k of d.links) {
       const lid = listingId.get(k.listingKey);
       const sid = skuId.get(k.skuKey);
       if (!lid || !sid) throw new Error(`연결 대상 누락: ${k.listingKey} → ${k.skuKey}`);
-      await c.query('insert into erp.listing_skus (listing_id, sku_id, multiplier) values ($1, $2, $3)', [lid, sid, k.multiplier]);
+      const { rows } = await c.query(
+        `insert into erp.listing_skus (listing_id, sku_id, multiplier, origin) values ($1, $2, $3, 'draft')
+         on conflict (listing_id, sku_id) do nothing
+         returning 1`,
+        [lid, sid, k.multiplier],
+      );
+      if (rows.length === 0) throw new Error(`연결 ${k.listingKey}→${k.skuKey}가 manual 연결과 겹친다 — 초안을 고친다`);
     }
     await c.query('COMMIT');
     console.log(`✅ 적재 완료 — SKU ${skuId.size}(보관 ${archived.rowCount}) · 리스팅 ${listingId.size}(비활성화 ${deactivated.rowCount}) · 연결 ${d.links.length}`);
