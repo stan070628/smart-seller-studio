@@ -69,6 +69,11 @@ describe('labelForHref', () => {
     expect(labelForHref('/')).toBe('대시보드');
   });
 
+  it('재고현황은 재고·매입의 하위 항목 라벨을 쓴다', () => {
+    expect(labelForHref('/erp/stock')).toBe('재고현황');
+    expect(labelForHref('/erp')).toBe('재고·매입');
+  });
+
   it('중복 슬래시를 정규화한다', () => {
     expect(labelForHref('//listing')).toBe('상품등록');
   });
