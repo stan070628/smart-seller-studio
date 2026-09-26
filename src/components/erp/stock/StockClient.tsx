@@ -51,6 +51,7 @@ export default function StockClient() {
     setHistoryKey((k) => k + 1);
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- 진입 시 원장을 불러온다(불러오는 중 표시가 목적)
   useEffect(() => { void load(); }, [load]);
 
   const visible = useMemo(() => filterRows(rows, filters, recon), [rows, filters, recon]);

@@ -40,6 +40,7 @@ export default function HistoryPanel({ row, refreshKey, onClose, onChanged }: Pr
   }, [row.skuId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- SKU·새로고침이 바뀌면 옛 이력을 버리고 다시 부른다
     setItems(null);
     void load();
   }, [load, refreshKey]);
