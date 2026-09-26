@@ -7,6 +7,7 @@ const m = vi.hoisted(() => ({
   withJobRun: vi.fn(async (_job: string, fn: () => Promise<{ value: unknown; counts?: Record<string, number> }>) => (await fn()).value),
   send: vi.fn(async () => undefined),
   getCurrentUser: vi.fn(),
+  readCutover: vi.fn(),
 }));
 vi.mock('@/lib/erp/orders/collect', async () => {
   const actual = await vi.importActual<typeof import('@/lib/erp/orders/collect')>('@/lib/erp/orders/collect');
@@ -15,6 +16,12 @@ vi.mock('@/lib/erp/orders/collect', async () => {
 vi.mock('@/lib/jobs/run-log', () => ({ withJobRun: m.withJobRun }));
 vi.mock('@/lib/telegram/client', () => ({ sendTelegramMessage: m.send }));
 vi.mock('@/lib/auth', () => ({ getCurrentUser: m.getCurrentUser }));
+// 보충 시작일 범위 검사가 기초 시각을 읽는다(읽기만) — 실 DB를 건드리지 않는다
+vi.mock('@/lib/sourcing/db', () => ({ getSourcingPool: () => ({}) }));
+vi.mock('@/lib/erp/orders/store', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/erp/orders/store')>('@/lib/erp/orders/store');
+  return { ...actual, readCutover: m.readCutover };
+});
 
 const rep = (channel: string, ok: boolean, error: string | null = null) => ({
   channel, ok, skipped: null, dryRun: false, window: null, fetched: ok ? 3 : 0, inserted: ok ? 2 : 0, updated: 1, absent: 0,
@@ -29,6 +36,7 @@ beforeEach(() => {
   vi.stubEnv('CRON_SECRET', 's3cret');
   vi.stubEnv('JOB_ALERT_TELEGRAM_CHAT_ID', 'chat-1');
   m.collectOrders.mockResolvedValue([rep('coupang_wing', true), rep('coupang_rg', true), rep('naver', true), rep('toss', true)]);
+  m.readCutover.mockResolvedValue('2026-09-26T11:07:04.989Z');
 });
 afterEach(() => vi.unstubAllEnvs());
 
@@ -109,5 +117,60 @@ describe('POST /api/erp/orders/sync', () => {
     await POST(post({ channel: 'toss' }));
     expect(m.collectOrders).toHaveBeenCalledWith({ channels: ['toss'], dryRun: false });
     expect((await POST(post({ channel: 'x' }))).status).toBe(400);
+  });
+});
+
+describe('과거 보충(backfillFrom · 결정 5)', () => {
+  const post = (body: unknown) => new NextRequest('http://localhost/api/erp/orders/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+  it('POST { backfillFrom, channel, dryRun } — 보충 시작일을 넘기고 manual로 남긴다 · counts.backfill = 1', async () => {
+    m.getCurrentUser.mockResolvedValue({ userId: 'u-1', email: 't@example.com' });
+    m.collectOrders.mockResolvedValue([rep('toss', true)]);
+    const { POST } = await import('@/app/api/erp/orders/sync/route');
+    const res = await POST(post({ backfillFrom: '2026-09-01', channel: 'toss', dryRun: true }));
+    expect(res.status).toBe(200);
+    expect(m.collectOrders).toHaveBeenCalledWith({ channels: ['toss'], dryRun: true, backfillFrom: '2026-09-01' });
+    expect(m.withJobRun).toHaveBeenCalledWith('orders-sync', expect.any(Function), { trigger: 'manual' });
+    const outcome = await m.withJobRun.mock.calls[0][1]();
+    expect(outcome.counts).toMatchObject({ backfill: 1, dry_run: 1 });
+  });
+
+  it('POST { dryRun: true }만 — 보통 구간 드라이런(보충 아님)', async () => {
+    m.getCurrentUser.mockResolvedValue({ userId: 'u-1', email: 't@example.com' });
+    const { POST } = await import('@/app/api/erp/orders/sync/route');
+    await POST(post({ dryRun: true }));
+    expect(m.collectOrders).toHaveBeenCalledWith({ channels: ['coupang_wing', 'coupang_rg', 'naver', 'toss'], dryRun: true });
+    const outcome = await m.withJobRun.mock.calls[0][1]();
+    expect(outcome.counts).toMatchObject({ backfill: 0 });
+  });
+
+  it('POST — 형식·범위(기초 이후 · 62일 초과)·dryRun 값이 틀리면 400이고 수집하지 않는다', async () => {
+    m.getCurrentUser.mockResolvedValue({ userId: 'u-1', email: 't@example.com' });
+    const { POST } = await import('@/app/api/erp/orders/sync/route');
+    for (const body of [{ backfillFrom: '2026/09/01' }, { backfillFrom: '2026-02-30' }, { backfillFrom: '2026-09-27' }, { backfillFrom: '2026-07-01' }, { backfillFrom: 20260901 }, { dryRun: 'yes' }]) {
+      const res = await POST(post(body));
+      expect(res.status).toBe(400);
+    }
+    expect(m.collectOrders).not.toHaveBeenCalled();
+    expect(m.withJobRun).not.toHaveBeenCalled();
+  });
+
+  it('POST — 로그인하지 않으면 보충도 401', async () => {
+    m.getCurrentUser.mockResolvedValue(null);
+    const { POST } = await import('@/app/api/erp/orders/sync/route');
+    expect((await POST(post({ backfillFrom: '2026-09-01' }))).status).toBe(401);
+    expect(m.readCutover).not.toHaveBeenCalled();
+  });
+
+  it('GET 크론 라우트 ?backfillFrom=…&channel=…&dryRun=1 — 컨트롤러가 비밀값으로 부른다 · 틀리면 400', async () => {
+    m.collectOrders.mockResolvedValue([rep('naver', true)]);
+    const { GET } = await import('@/app/api/cron/orders-sync/route');
+    const res = await GET(cron('?backfillFrom=2026-09-01&channel=naver&dryRun=1'));
+    expect(res.status).toBe(200);
+    expect(m.collectOrders).toHaveBeenCalledWith({ channels: ['naver'], dryRun: true, backfillFrom: '2026-09-01' });
+    expect(m.withJobRun).toHaveBeenCalledWith('orders-sync', expect.any(Function), { trigger: 'manual' });
+    expect((await GET(cron('?backfillFrom=2026-09-30'))).status).toBe(400);
+    expect((await GET(cron('?backfillFrom=2026-09-01', 'x'))).status).toBe(401);
+    expect(m.collectOrders).toHaveBeenCalledTimes(1);
   });
 });

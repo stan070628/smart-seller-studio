@@ -4,6 +4,9 @@
 //   → 한 트랜잭션[pg_advisory_xact_lock(7102, 채널) → upsert → 사라진 라인(두 번 연속) → unknown 재판정(#23) → 옛 장부 → 차감 → 커서]
 //   → 임대 반납(주인일 때만).
 // 세션 advisory lock은 쓰지 않는다 — Supavisor 트랜잭션 풀러에서는 문장마다 다른 백엔드에 붙어 잠금·해제가 어긋난다.
+// 과거 보충(backfillFrom — 결정 5 · 설계 해석 #25): 구간 시작만 그날 KST 0시로 바꾼다(끝 = 지금). 사라짐 판정은 통째로 끄고(absent_since도 안 적는다)
+//   커서는 움직이지 않는다. 임대·트랜잭션 잠금·upsert·옛 장부·unknown 재판정·차감은 그대로 — 차감은 진짜 기초 시각으로 판정하므로 기초 이전 라인은 none(pre_cutover).
+//   보충 시작일 전에 주문된 라인(네이버 변경 조회가 끌고 오는 옛 주문)은 쓰지 않고 backfillSkipped로 센다.
 // 실패는 던지지 않고 보고서(ok:false)로 돌려준다 — 한 채널 실패가 다른 채널을 막지 않는다. 오류 문구는 maskPII를 거친다.
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
@@ -21,7 +24,7 @@ import {
   reevaluateUnknownLines, releaseLease, takeLease, upsertOrderLines, type AbsenceRefusal, type AbsenceResult, type ResolvedLine,
 } from './store';
 import type { OrderAdapter, OrderChannel, RejectedLine } from './types';
-import { windowFor } from './window';
+import { backfillStart, windowFor } from './window';
 
 /** 주문 수집 트랜잭션 잠금 네임스페이스(원장 SKU 잠금 7101과 겹치지 않는다) */
 const LOCK_NS = 7102;
@@ -47,6 +50,8 @@ export interface ChannelReport {
   ok: boolean;
   skipped: 'busy' | null;
   dryRun: boolean;
+  /** 과거 보충 실행(backfillFrom) — 사라짐 판정·커서 이동 없음 */
+  backfill: boolean;
   window: { from: string; to: string } | null;
   fetched: number;
   inserted: number;
@@ -64,6 +69,8 @@ export interface ChannelReport {
   /** 버린 라인 표본(라인 키 + 이유 코드. 구매자 정보 없음) */
   rejectedLines: RejectedLine[];
   unattributed: number;
+  /** 과거 보충에서 보충 시작일 전에 주문돼 쓰지 않은 라인 수(보통 수집은 0) */
+  backfillSkipped: number;
   /** 이번에 새로 받은 라인 중 unknown 상태 수(어댑터 응답 기준) */
   unknownStatus: number;
   /** 매핑 안 된(status_unmapped) 저장 라인 중 이번에 raw_status로 다시 판정해 바뀐 수(설계 해석 #23·#24). dryRun은 재판정하지 않아 항상 0 */
@@ -79,8 +86,8 @@ export interface Connectable {
   connect(): Promise<PoolClient>;
 }
 
-export const emptyReport = (channel: OrderChannel, dryRun: boolean): ChannelReport => ({
-  channel, ok: false, skipped: null, dryRun, window: null, fetched: 0, inserted: 0, updated: 0, unchanged: 0, absent: 0,
+export const emptyReport = (channel: OrderChannel, dryRun: boolean, backfill = false): ChannelReport => ({
+  channel, ok: false, skipped: null, dryRun, backfill, backfillSkipped: 0, window: null, fetched: 0, inserted: 0, updated: 0, unchanged: 0, absent: 0,
   absenceMarked: 0, absenceRefused: null, rejected: 0, rejectedLines: [], unattributed: 0, unknownStatus: 0, unknownReEvaluated: 0, unknownRemaining: null,
   legacy: { upserted: 0, inserted: 0, voided: 0, warnings: 0 }, deduct: null, error: null,
 });
@@ -92,15 +99,18 @@ const NO_ABSENCE: AbsenceResult = { ids: [], legacyKeys: [], marked: 0, absent: 
 export async function collectChannel(
   pool: Connectable,
   adapter: OrderAdapter,
-  opts: { now: Date; dryRun: boolean; deduct: DeductRunner },
+  opts: { now: Date; dryRun: boolean; deduct: DeductRunner; backfillFrom?: string },
 ): Promise<ChannelReport> {
   const ch = adapter.channel;
-  const report = emptyReport(ch, opts.dryRun);
+  const backfill = opts.backfillFrom !== undefined;
+  const report = emptyReport(ch, opts.dryRun, backfill);
   const c = await pool.connect();
   const owner = randomUUID();
   let leased = false;
   try {
     const cutover = await readCutover(c);
+    // 과거 보충 시작일은 임대·채널 호출 전에 검사한다(범위 밖이면 아무것도 하지 않는다)
+    const bfStart = backfill ? backfillStart(opts.backfillFrom as string, cutover) : null;
     // 수집 시작 시각 — 사라짐 판정은 이 시각 전에 처음 본 라인만 본다(겹친 실행이 방금 넣은 라인을 오판하지 않게)
     let startedAt = opts.now.toISOString();
     if (!opts.dryRun) {
@@ -113,8 +123,9 @@ export async function collectChannel(
       startedAt = lease.at ?? startedAt;
     }
 
-    const cursor = await readCursor(c, ch);
-    const w = windowFor({ cursor, cutover, now: opts.now, tailDays: adapter.tailDays });
+    const w = bfStart
+      ? { from: bfStart, to: new Date(opts.now.getTime()) }
+      : windowFor({ cursor: await readCursor(c, ch), cutover, now: opts.now, tailDays: adapter.tailDays });
     report.window = { from: w.from.toISOString(), to: w.to.toISOString() };
 
     // 채널 호출은 트랜잭션 밖 — 수십 초 동안 원장 잠금을 잡지 않는다
@@ -124,7 +135,9 @@ export async function collectChannel(
 
     const listings = await loadListingIndex(c);
     const legacyIdx = await loadLegacyIndex(c);
-    const resolved: ResolvedLine[] = res.lines.map((l) => {
+    const kept = bfStart ? res.lines.filter((l) => Date.parse(l.orderedAt) >= bfStart.getTime()) : res.lines;
+    report.backfillSkipped = res.lines.length - kept.length;
+    const resolved: ResolvedLine[] = kept.map((l) => {
       const resolution = resolveLine(l, listings);
       return { ...l, resolution, legacyKey: legacyKeyOf(l), legacy: pickLegacy(l, resolution, legacyIdx) };
     });
@@ -138,7 +151,8 @@ export async function collectChannel(
       // 임대가 만료돼 다른 실행이 들어와도 쓰기는 채널마다 한 줄로 선다(트랜잭션 잠금 — 풀러에서도 안전)
       await c.query('select pg_advisory_xact_lock($1::int, $2::int)', [LOCK_NS, CHANNEL_LOCK[ch]]);
       const up = await upsertOrderLines(c, resolved);
-      const absent = res.absenceMeansCancel && res.cover
+      // 과거 보충은 사라짐 판정을 하지 않는다 — 긴 옛 구간의 누락을 취소로 읽으면 멀쩡한 판매가 무효가 된다
+      const absent = !backfill && res.absenceMeansCancel && res.cover
         ? await markAbsentCanceled(c, ch, res.cover, resolved, startedAt)
         : NO_ABSENCE;
       // 설계 해석 #23 — 채널을 다시 부르지 않고 저장된 raw_status로 매핑 안 된 라인을 다시 판정한다
@@ -149,7 +163,8 @@ export async function collectChannel(
       const deduct = await opts.deduct(c, {
         enabled: setting.enabled, cutover, lineIds: [...up.changedIds, ...absent.ids, ...reeval.ids], channel: ch, at: opts.now.toISOString(),
       });
-      await advanceCursor(c, ch, opts.now.toISOString());
+      // 과거 보충은 커서를 앞으로도 뒤로도 움직이지 않는다(보통 수집의 구간이 그대로 이어진다)
+      if (!backfill) await advanceCursor(c, ch, opts.now.toISOString());
       await c.query('COMMIT');
       return {
         ...report, ok: true, inserted: up.inserted, updated: up.updated, unchanged: up.unchanged,
@@ -177,6 +192,8 @@ export async function collectOrders(p: {
   now?: Date;
   pool?: Connectable;
   factories?: Record<OrderChannel, () => OrderAdapter>;
+  /** 과거 보충 시작일(KST YYYY-MM-DD) — 설계 해석 #25 */
+  backfillFrom?: string;
 }): Promise<ChannelReport[]> {
   const pool = p.pool ?? getSourcingPool();
   const factories = p.factories ?? ADAPTER_FACTORIES;
@@ -187,10 +204,10 @@ export async function collectOrders(p: {
     try {
       adapter = factories[ch]();
     } catch (e) {
-      out.push({ ...emptyReport(ch, p.dryRun), error: errText(e) });
+      out.push({ ...emptyReport(ch, p.dryRun, p.backfillFrom !== undefined), error: errText(e) });
       continue;
     }
-    out.push(await collectChannel(pool, adapter, { now, dryRun: p.dryRun, deduct: runDeductions }));
+    out.push(await collectChannel(pool, adapter, { now, dryRun: p.dryRun, deduct: runDeductions, backfillFrom: p.backfillFrom }));
   }
   return out;
 }

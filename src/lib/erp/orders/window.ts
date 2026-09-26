@@ -62,3 +62,33 @@ export function hourChunks(w: FetchWindow, spanMs = DAY_MS - 1000): FetchWindow[
   }
   return out;
 }
+
+/** 과거 보충(결정 5 · 설계 해석 #25)은 기초 시각 − 이 일수보다 앞으로 가지 않는다 */
+export const BACKFILL_MAX_DAYS = 62;
+
+/** 과거 보충 시작일이 잘못됐다 — 라우트는 400, 수집기는 그 채널 실패로 보고한다 */
+export class BackfillError extends RangeError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'BackfillError';
+  }
+}
+
+/** 과거 보충 시작일 형식 검사 — 실제 있는 KST 날짜 YYYY-MM-DD만 */
+export function parseBackfillDay(v: unknown): string {
+  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(Date.parse(`${v}T00:00:00Z`)) || addDays(v, 0) !== v) {
+    throw new BackfillError(`과거 보충 시작일은 YYYY-MM-DD(KST)여야 한다: ${String(v).slice(0, 30)}`);
+  }
+  return v;
+}
+
+/** 과거 보충 구간 시작 = 그날 KST 0시. 기초 시각보다 앞이어야 하고 기초 시각 − 62일보다 앞으로 가지 않는다 */
+export function backfillStart(day: string, cutover: string): Date {
+  const start = kstDayStart(parseBackfillDay(day));
+  const cut = Date.parse(cutover);
+  if (start.getTime() >= cut) throw new BackfillError(`과거 보충 시작일 ${day}이(가) 기초 시각(${cutover}) 이후다 — 기초 이후는 보통 수집이 받는다`);
+  if (start.getTime() < cut - BACKFILL_MAX_DAYS * DAY_MS) {
+    throw new BackfillError(`과거 보충 시작일 ${day}이(가) 기초 시각 − ${BACKFILL_MAX_DAYS}일보다 앞이다`);
+  }
+  return start;
+}

@@ -130,6 +130,21 @@ describe('runDeductions', () => {
     await expect(runDeductions(db, { enabled: true, cutover: CUT, lineIds: [1], channel: null, at: AT })).rejects.toThrow('connection reset');
   });
 
+  it('과거 보충(결정 5) — 스위치가 켜져 있어도 기초 이전 결제 라인은 none(pre_cutover)이고, 같은 묶음의 기초 이후 라인만 뺀다', async () => {
+    lines = [
+      row({ id: 1, external_line_id: '2026090500000001', paid_at: new Date('2026-09-05T01:00:00.000Z'), deduction_state: 'pending' }),
+      row({ id: 2, external_line_id: '2026092700000002', alloc: [{ skuId: 9, qty: 1 }] }),
+    ];
+    const s = await runDeductions(db, { enabled: true, cutover: CUT, lineIds: [1, 2], channel: 'naver', at: AT });
+    expect(m.postConsume).toHaveBeenCalledTimes(1);
+    expect(m.postConsume.mock.calls[0][1]).toMatchObject({ skuId: 9, idemKey: 'sale:naver:2026092700000002:s9' });
+    expect(updates()).toEqual([
+      { id: 1, state: 'none', note: 'pre_cutover', posted: [], version: 0 },
+      { id: 2, state: 'posted', note: null, posted: [{ skuId: 9, qty: 1, idemKey: 'sale:naver:2026092700000002:s9' }], version: 1 },
+    ]);
+    expect(s).toMatchObject({ posted: 1, unchanged: 1 });
+  });
+
   it('includeOpen:false면 넘긴 라인만(자가시험·개별 재처리)', async () => {
     lines = [];
     await runDeductions(db, { enabled: true, cutover: CUT, lineIds: [7], channel: 'toss', at: AT, includeOpen: false });

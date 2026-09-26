@@ -208,3 +208,78 @@ describe('collectOrders · reportCounts', () => {
     expect(counts).toMatchObject({ channels: 3, errors: 1, coupang_wing_error: 1, coupang_rg_error: 0, coupang_rg_fetched: 1, coupang_rg_new: 1, naver_fetched: 0 });
   });
 });
+
+describe('collectChannel — 과거 보충(backfillFrom · 결정 5)', () => {
+  // 기초 이전(9/5) 라인과 기초 이후 라인을 같이 받는다
+  const OLD: OrderLine = {
+    ...LINE, externalOrderId: '41000000002', externalLineId: '41000000002:80000000001',
+    orderedAt: '2026-09-05T01:00:00.000Z', paidAt: '2026-09-05T01:00:00.000Z',
+  };
+  const both = () => adapter({ fetch: vi.fn(async () => { seq.push('FETCH'); return { lines: [OLD, LINE], cover: COVER, absenceMeansCancel: true, rejected: [] }; }) });
+
+  it('구간 시작만 9/1 KST 0시로 바꾸고(끝 = 지금) 사라짐 판정·커서 이동은 하지 않는다 — 임대·트랜잭션 잠금·upsert·옛 장부·차감은 그대로', async () => {
+    m.upsertOrderLines.mockResolvedValue({ ids: [100, 101], changedIds: [100, 101], inserted: 2, updated: 0, unchanged: 0 });
+    const a = both();
+    const r = await collectChannel(pool, a, { now: NOW, dryRun: false, deduct, backfillFrom: '2026-09-01' });
+    expect(a.fetch).toHaveBeenCalledWith({ from: new Date('2026-08-31T15:00:00.000Z'), to: NOW });
+    expect(m.takeLease).toHaveBeenCalled();
+    expect(m.releaseLease).toHaveBeenCalled();
+    expect(client.query.mock.calls.find((c) => String(c[0]).startsWith('select pg_advisory_xact_lock'))?.[1]).toEqual([7102, 2]);
+    expect(m.upsertOrderLines.mock.calls[0][1].map((l: OrderLine) => l.externalLineId)).toEqual([OLD.externalLineId, LINE.externalLineId]);
+    // 사라짐 판정 없음(absent_since도 적지 않는다) · 커서는 앞으로도 뒤로도 움직이지 않는다
+    expect(m.markAbsentCanceled).not.toHaveBeenCalled();
+    expect(m.advanceCursor).not.toHaveBeenCalled();
+    expect(m.syncLegacySales).toHaveBeenCalledWith(client, ['rg-41000000002-80000000001', 'rg-41000000001-80000000001']);
+    // 차감기는 돌되 기초 시각은 진짜 기초 시각 — 보충 시작일이 아니다(9/5 라인은 pre_cutover로 남는다)
+    expect(deduct).toHaveBeenCalledWith(client, { enabled: false, cutover: CUT, lineIds: [100, 101], channel: 'coupang_rg', at: NOW.toISOString() });
+    expect(seq.filter((s) => /^(BEGIN|COMMIT|ROLLBACK)/.test(s))).toEqual(['BEGIN', 'COMMIT']);
+    expect(r).toMatchObject({
+      ok: true, backfill: true, window: { from: '2026-08-31T15:00:00.000Z', to: NOW.toISOString() },
+      fetched: 2, inserted: 2, absent: 0, absenceMarked: 0, absenceRefused: null, backfillSkipped: 0,
+    });
+  });
+
+  it('보충 시작일 전에 주문된 라인(네이버 변경 조회가 끌고 오는 8월 주문)은 쓰지 않고 센다', async () => {
+    const aug: OrderLine = { ...OLD, externalLineId: '41000000003:80000000001', externalOrderId: '41000000003', orderedAt: '2026-08-20T01:00:00.000Z', paidAt: '2026-08-20T01:00:00.000Z' };
+    const a = adapter({ fetch: vi.fn(async () => ({ lines: [aug, OLD], cover: null, absenceMeansCancel: false, rejected: [] })) });
+    const r = await collectChannel(pool, a, { now: NOW, dryRun: false, deduct, backfillFrom: '2026-09-01' });
+    expect(m.upsertOrderLines.mock.calls[0][1].map((l: OrderLine) => l.externalLineId)).toEqual([OLD.externalLineId]);
+    expect(r).toMatchObject({ ok: true, fetched: 1, backfillSkipped: 1 });
+  });
+
+  it('dryRun + 보충 — 보충 구간으로 가져와 세기만 하고 쓰지 않는다', async () => {
+    const a = both();
+    const r = await collectChannel(pool, a, { now: NOW, dryRun: true, deduct, backfillFrom: '2026-09-01' });
+    expect(a.fetch).toHaveBeenCalledWith({ from: new Date('2026-08-31T15:00:00.000Z'), to: NOW });
+    expect(r).toMatchObject({ ok: true, dryRun: true, backfill: true, fetched: 2 });
+    expect(seq).not.toContain('BEGIN');
+    expect(m.takeLease).not.toHaveBeenCalled();
+    expect(m.upsertOrderLines).not.toHaveBeenCalled();
+  });
+
+  it('범위를 벗어난 시작일(기초 이후 · 62일 초과 · 형식)은 채널을 부르지 않고 실패로 보고한다', async () => {
+    for (const bad of ['2026-09-27', '2026-07-01', '2026/09/01']) {
+      const a = both();
+      const r = await collectChannel(pool, a, { now: NOW, dryRun: false, deduct, backfillFrom: bad });
+      expect(r).toMatchObject({ ok: false, backfill: true });
+      expect(r.error).toMatch(/보충/);
+      expect(a.fetch).not.toHaveBeenCalled();
+    }
+    expect(m.takeLease).not.toHaveBeenCalled();
+  });
+
+  it('보통 수집은 backfill: false · backfillSkipped 0', async () => {
+    const r = await collectChannel(pool, adapter(), { now: NOW, dryRun: false, deduct });
+    expect(r).toMatchObject({ backfill: false, backfillSkipped: 0 });
+    expect(m.markAbsentCanceled).toHaveBeenCalled();
+    expect(m.advanceCursor).toHaveBeenCalled();
+  });
+
+  it('collectOrders는 backfillFrom을 채널마다 넘긴다', async () => {
+    const { collectOrders } = await import('@/lib/erp/orders/collect');
+    const a = both();
+    const factories = { coupang_wing: () => a, coupang_rg: () => a, naver: () => a, toss: () => a };
+    const reports = await collectOrders({ channels: ['coupang_rg'], dryRun: true, now: NOW, pool, factories, backfillFrom: '2026-09-01' });
+    expect(reports[0]).toMatchObject({ backfill: true, window: { from: '2026-08-31T15:00:00.000Z' } });
+  });
+});

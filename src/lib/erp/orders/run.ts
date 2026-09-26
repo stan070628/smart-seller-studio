@@ -5,17 +5,26 @@
 // 반환하고 counts.busy_all로만 남긴다. 일부만 실패해도 200으로 남되,
 // reportAlerts(설계 해석 #24 — busy·사라짐 판정 거절·버린 라인·매핑 안 된 상태·옛 장부 경고)가 뭔가 있으면
 // 같은 채팅에 채널별 확인 문구를 보낸다. 구매자 정보는 reportAlerts가 담지 않으므로 여기도 없다.
+// 과거 보충(backfillFrom — 설계 해석 #25)도 같은 작업 이름으로 남기고 counts.backfill = 1로 가른다.
 // busy는 겹친 실행에서 흔히 나오므로 텔레그램 알림 줄에는 싣지 않는다(counts에는 남는다 — reportCounts의 busy·<채널>_busy).
 import { withJobRun } from '@/lib/jobs/run-log';
 import { sendTelegramMessage } from '@/lib/telegram/client';
 import { collectOrders, reportAlerts, reportCounts, type ChannelReport } from './collect';
 import { CHANNEL_LABEL, type OrderChannel } from './types';
 
-export async function runOrdersSync(p: { channels: OrderChannel[]; dryRun: boolean; trigger: 'cron' | 'manual' }): Promise<ChannelReport[]> {
+export async function runOrdersSync(p: {
+  channels: OrderChannel[];
+  dryRun: boolean;
+  trigger: 'cron' | 'manual';
+  /** 과거 보충 시작일(KST YYYY-MM-DD). 호출자가 형식·범위를 먼저 검사한다 */
+  backfillFrom?: string;
+}): Promise<ChannelReport[]> {
   const reports = await withJobRun(
     'orders-sync',
     async () => {
-      const r = await collectOrders({ channels: p.channels, dryRun: p.dryRun });
+      const r = await collectOrders({
+        channels: p.channels, dryRun: p.dryRun, ...(p.backfillFrom !== undefined ? { backfillFrom: p.backfillFrom } : {}),
+      });
       // busy는 실패가 아니다 — 다른 수집(수동 클릭 ↔ 크론)이 이 채널의 임대를 잡고 있을 뿐이다. 전부-실패 판정에서 뺀다
       const active = r.filter((x) => x.skipped !== 'busy');
       if (active.length > 0 && active.every((x) => !x.ok)) {
@@ -24,6 +33,8 @@ export async function runOrdersSync(p: { channels: OrderChannel[]; dryRun: boole
       const counts = reportCounts(r);
       // 모든 채널이 busy였다(active가 비었다) — 던지지 않고 이 값으로만 남긴다
       counts.busy_all = r.length > 0 && active.length === 0 ? 1 : 0;
+      counts.backfill = p.backfillFrom !== undefined ? 1 : 0;
+      counts.dry_run = p.dryRun ? 1 : 0;
       return { value: r, counts };
     },
     { trigger: p.trigger },

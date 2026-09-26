@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { addDays, dayChunks, hourChunks, isoFromChannel, kstDay, kstDayStart, kstIso, windowFor } from '@/lib/erp/orders/window';
+import {
+  BACKFILL_MAX_DAYS, BackfillError, addDays, backfillStart, dayChunks, hourChunks, isoFromChannel, kstDay, kstDayStart, kstIso, parseBackfillDay, windowFor,
+} from '@/lib/erp/orders/window';
 
 const CUT = '2026-09-26T11:07:04.989Z';
 const H = 3600_000;
@@ -59,5 +61,26 @@ describe('KST 날짜·시각', () => {
     expect(cs[cs.length - 1].to).toEqual(to);
     for (let i = 1; i < cs.length; i++) expect(cs[i].from).toEqual(cs[i - 1].to);
     for (const c of cs) expect(c.to.getTime() - c.from.getTime()).toBeLessThan(24 * H);
+  });
+});
+
+describe('과거 보충(backfill) 시작일', () => {
+  it('parseBackfillDay는 실제 있는 YYYY-MM-DD만 받는다', () => {
+    expect(parseBackfillDay('2026-09-01')).toBe('2026-09-01');
+    for (const bad of ['2026-9-1', '2026-02-30', '20260901', '2026-09-01T00:00:00Z', '', 20260901, null]) {
+      expect(() => parseBackfillDay(bad)).toThrow(BackfillError);
+    }
+  });
+
+  it('backfillStart = 그날 KST 0시 — 기초 시각보다 앞이고 기초 시각 − 62일 이후만', () => {
+    expect(BACKFILL_MAX_DAYS).toBe(62);
+    expect(backfillStart('2026-09-01', CUT).toISOString()).toBe('2026-08-31T15:00:00.000Z');
+    // 기초 당일 0시(KST)는 기초 시각보다 앞이다
+    expect(backfillStart('2026-09-26', CUT).toISOString()).toBe('2026-09-25T15:00:00.000Z');
+    // 기초 시각 이후 날짜는 보충이 아니다
+    expect(() => backfillStart('2026-09-27', CUT)).toThrow(/기초/);
+    // 62일 경계: 07-27 KST 0시 = 07-26 15:00Z ≥ 컷 − 62일(07-26 11:07Z) · 07-26은 넘는다
+    expect(backfillStart('2026-07-27', CUT).toISOString()).toBe('2026-07-26T15:00:00.000Z');
+    expect(() => backfillStart('2026-07-26', CUT)).toThrow(/62일/);
   });
 });

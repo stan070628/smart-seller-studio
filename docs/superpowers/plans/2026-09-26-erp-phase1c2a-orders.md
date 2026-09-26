@@ -63,6 +63,7 @@
 | 22 | §5 「채널·날짜를 누르면 그날 라인 목록」 | 날짜 = **주문 시각의 KST 날짜**. 패널 건수 = 라인 수와 주문 수 둘 다(채널 관리자 화면은 주문 수, 네이버는 상품주문 수로 센다) | 게이트 ① 대조표가 채널 화면의 기준과 같아야 한다 |
 | 23 | (Task 2 리뷰 후속) 늦은 반품·모르는 상태 | ① **토스 꼬리일수 30일**(#6의 7일을 대체) — 주문일로 거르는 API라 배송 후 반품 완료가 7일을 넘겨 온다. 적용은 토스 어댑터(Task 3 수정). ② 수집기는 `unknown` 상태 라인을 다음 수집에서 **다시 판정**하고, `unknown`이 1건 이상이면 텔레그램 알림(Task 4). 둘 다 Task 2(순수 로직)에서는 구현하지 않는다 | unknown은 「지금 상태 유지」라 조용히 쌓이면 취소·반품이 영영 반영되지 않는다. 새 상태 문자열은 사람이 매핑표에 더해야 하므로 알림이 필요하다 |
 | 24 | (Task 3·4 리뷰 후속) 잠금·사라짐·상태·거절 라인·옛 장부 무효 출처 | **① 임대(C1)**: `erp.sync_cursors`의 `orders:<channel>` 행(없으면 기초 시각으로 만든다 — 커서 없음과 같은 구간)에 autocommit `update … set lease_until = now() + 10분, lease_owner = <실행 id> where lease_until is null or < now() returning now()`. 못 잡으면 `busy` + **ok:false**(알림 대상 — 조용한 성공이 아니다). finally에서 주인일 때만 반납. 쓰기 트랜잭션 첫 문장 `pg_advisory_xact_lock(7102, 채널번호)`. 임대를 잡은 DB 시각 = 수집 시작 시각. dryRun은 쓰지 않으므로 임대를 잡지 않는다. **② 사라짐 두 번 연속(I1)**: 대상은 `first_seen_at < 수집 시작`인 cover 안 비취소 라인. 처음 사라지면 `absent_since`만 적고(상태 그대로), 이미 `absent_since`가 있으면 취소. 다시 보이면 upsert가 지운다. **거절**(아무것도 안 바꾸고 보고서 `absenceRefused`·counts `<ch>_absence_refused`): cover 안에서 받은 라인 0건 · 사라짐 ≥ 5이고 받은 수보다 많음 · 사라짐이 cover 행의 20% 초과 — 🔵 **20% 문턱은 사라짐 2건 이상에만** 건다(1건만 사라진 한가한 주의 진짜 취소가 cover를 벗어날 때까지 막히지 않게). 거절해도 upsert·차감·커서는 진행한다. **③ 첫날 제외(I2)**: Wing·RG cover 시작 = KST (시작일 + 1) 0시. **④ status_unmapped(I3)**: upsert가 `status_unmapped = (이번 상태가 unknown)`을 쓴다(status는 이전 값 유지). 재판정·남은 수는 이 칸으로 센다 — 이미 있던 라인은 unknown이 와도 status가 그대로라 `status='unknown'`으로는 못 찾았다. **⑤ 네이버 부분 취소(I4)**: 수량 = `remainQuantity ?? quantity`, `remainQuantity = 0` → 취소(수량 칸은 처음 수량), 금액 = `totalPaymentAmount × 남은 ÷ initialQuantity`(initialQuantity > 0일 때 — totalPaymentAmount가 처음 수량 기준이라는 가정, **실측 전**). **⑥ 거절 라인(I5)**: 어댑터가 수량(양의 정수 — 0은 예전처럼 건너뜀)·id·시각을 검사하고, 어긋난 라인만 버려 `rejected: [{lineKey, reason}]`(이유 코드 `bad_id·bad_qty·bad_time·invalid`, 라인 키는 형식이 맞을 때만 — 값·구매자 정보 없음)로 돌려준다. 수집기는 `rejected`·표본 20건을 보고서와 counts에 싣는다. **⑦ 옛 장부 무효 출처(I6)**: 수집기가 `sale_records`를 무효화하면 같은 트랜잭션 `now()`를 그 키의 `order_lines.legacy_voided_at`에 남긴다. 다시 팔림이 되면 `voided_at`이 그 시각과 같은 행만 되살린다 — 사람·옛 불러오기가 무효화한 행은 두고 경고 `voided_elsewhere`. **⑧ 입력형 옵션(M2)**: 네이버 `productOption`에 `:`가 있거나 50자를 넘으면 라벨에 `(입력형 옵션 생략)` — 선택형 조합 옵션도 `색상: 블루`처럼 `:`를 쓰면 같이 가려지지만 연결은 `optionCode`라 잃는 것이 없다(토스 `optionName`은 연결 키라 가리지 않는다). **⑨ 안 바뀐 라인(M3)**: upsert `where (…) is distinct from (…)` — 안 바뀐 라인은 쓰지도 `updated`로 세지도 않고 차감에 넘기지 않는다(차감기는 pending·skipped_short를 따로 본다). **⑩ 기초 당일(M7)**: 기초 시각 이전 주문도 첫 구간(기초 KST 날짜 전체)에 섞여 upsert되고 옛 장부(`sale_records`)에 쓰인다 — 같은 키라 옛 불러오기 행과 겹쳐도 두 번 세지 않고, 차감은 `pre_cutover`로 빠진다. 무해하다. 칸: 마이그레이션 **119**(`lease_until`·`lease_owner`·`absent_since`·`status_unmapped`·`legacy_voided_at`) | 세션 잠금은 트랜잭션 풀러에서 다른 백엔드에 붙어 잠금·해제가 어긋난다. 한 번의 빈 응답·페이지 누락으로 멀쩡한 판매를 되돌리면 재고가 부풀어 오르고, 조용히 거절하면 아무도 모른다 — 두 번 확인하고 거절은 보고한다. 형식이 틀린 라인 하나로 채널 전체가 멈추면 나머지 주문이 늦어진다 |
+| 25 | (결정 5 — 2026-09-27) 매출 공백 과거 보충 | **한 번만 쓰는 보충 모드** `backfillFrom: 'YYYY-MM-DD'`(KST) — `collectChannel`·`collectOrders`·`runOrdersSync` 옵션, `POST /api/erp/orders/sync` body `{ backfillFrom?, channel?, dryRun? }`(로그인), 크론 라우트 `GET /api/cron/orders-sync?backfillFrom=…&channel=…&dryRun=1`(CRON_SECRET — 컨트롤러용). **범위**: 그날 KST 0시 < 기초 시각 · ≥ 기초 시각 − 62일, 형식·범위가 틀리면 400(수집기도 다시 검사해 그 채널 실패로 보고, 임대·채널 호출 전). **구간**: 시작만 그날 0시로 바꾸고 끝 = 지금(기초 이후 라인도 함께 받아 보통처럼 처리). **끈 것**: ① 사라짐 판정 통째로(`absent_since`도 안 적고 취소도 안 한다 — cover를 돌려줘도 무시) ② 커서 이동(앞으로도 뒤로도 — `advanceCursor`를 부르지 않는다. 커서 행이 없으면 임대용으로 기초 시각 행만 만든다 = 커서 없음과 같은 구간). **그대로**: 임대 · `pg_advisory_xact_lock(7102, 채널)` · upsert · unknown 재판정 · 옛 장부 동기화 · 차감기(진짜 기초 시각으로 판정 → 기초 이전 결제 라인은 `none`/`pre_cutover`, 기초 이후 라인은 보통대로). **보충 시작일 전에 주문된 라인은 쓰지 않는다**(`backfillSkipped` — 네이버 변경 조회는 9월에 확정된 8월 주문도 끌고 온다. 보충 범위를 선언한 날짜로 묶는다). 보고서 `backfill: true` · `window` · `backfillSkipped`, counts `backfill`·`dry_run`. 어댑터는 이미 긴 구간을 조각낸다: 판매자배송 31일 · RG 29일(+1 배타) · 토스 30일 · 네이버 24시간 미만 조각(26일 → 27조각 + 조각마다 more) | 옛 장부가 판매자배송 9/10 · RG 9/19에서 멈춰 수익 화면에 공백이 있다. 긴 옛 구간에서 사라짐을 취소로 읽으면 멀쩡한 9월 판매가 무효가 되고, 커서를 옮기면 보통 수집 구간이 뒤틀린다. 차감 판정은 기초 시각이 막으므로 보충이 원장을 건드리지 않는다 |
 
 ## 1-C2a 탐색 사실 (2026-09-26 읽기 전용)
 
@@ -5342,6 +5343,31 @@ console.log((await c.query(\"select channel, left(coupang_order_item_id, strpos(
 await c.query('ROLLBACK');await c.end()})()"
 ```
 Expected: 라인 상태는 `pending`(연결됨·기초 이후 결제) · `none`(미귀속·취소·기초 이전)뿐 · 원장 `kind`에 `sale` 없음 · 커서 `orders:<채널>` 4줄 · `sale_records`에 `naver-`·`toss-` 행이 새로 생겼다.
+
+- [ ] **Step 4b: 🔴 과거 보충 9/1~(결정 5 · 설계 해석 #25) — 채널마다 보통 첫 수집 뒤에, 드라이런 → 실제**
+
+채널마다 Step 4의 보통 첫 수집(실제)이 끝난 뒤에 한다(커서 행이 먼저 생긴다 — 보충은 커서를 움직이지 않는다). 채널을 하나씩 부른다(한 번에 넷을 부르면 300초 한도에 닿을 수 있다). Step 4 (1)의 명령 마지막 인자만 바꾼다(`?channel=<채널>&backfillFrom=2026-09-01&dryRun=1` → 확인 뒤 `&dryRun=1`을 뺀다). 크론 라우트는 비밀값(Vault)으로 부르므로 컨트롤러가 로그인 없이 운영(토스는 Vercel 프록시·토큰 필요)에 대고 부를 수 있다. 화면에서는 `POST /api/erp/orders/sync` body `{ "channel": "<채널>", "backfillFrom": "2026-09-01", "dryRun": true }`로 같은 일을 한다.
+
+(1) **보충 전 건수** — 읽기만:
+```bash
+node -e "
+const fs=require('fs');const {Client}=require('pg');for(const l of fs.readFileSync('.env.local','utf8').split('\n')){const m=l.match(/^([A-Z_]+)=(.*)\$/);if(m)process.env[m[1]]=m[2].replace(/^[\"']|[\"']\$/g,'')}
+(async()=>{const c=new Client({connectionString:process.env.SUPABASE_DB_URL,ssl:{rejectUnauthorized:false}});await c.connect();await c.query('BEGIN READ ONLY');
+console.log((await c.query(\"select channel, left(coupang_order_item_id, strpos(coupang_order_item_id,'-')) pfx, count(*)::int n, count(voided_at)::int voided, sum(case when voided_at is null then sale_amount end)::bigint amount from sale_records where sold_at >= '2026-09-01' and sold_at < '2026-09-26' group by 1,2 order by 1,2\")).rows);
+console.log((await c.query(\"select name, cursor_at from erp.sync_cursors order by 1\")).rows);
+await c.query('ROLLBACK');await c.end()})()"
+```
+(`sale_amount` = 마이그레이션 087의 실매출 칸.)
+
+(2) **드라이런** — Expected: `ok` · `backfill: true` · `window.from = 2026-08-31T15:00:00.000Z` · `fetched`가 채널 관리자 화면의 9/1~오늘 주문 수와 비슷 · `rejected` 0 · 네이버는 `backfillSkipped`(8월 주문) 수를 본다. 🔴 FAIL이면 실제 보충 전에 멈춘다.
+
+(3) **실제 보충** — Expected: `ok` · `absent: 0` · `absenceMarked: 0` · `absenceRefused: null` · `deduct.posted: 0`(스위치가 꺼져 있다 — 켜진 뒤라도 기초 이전 라인은 `pre_cutover`로 빠진다).
+
+(4) **보충 뒤 건수** — (1)을 다시 돌린다. Expected: 9/1~9/25 `sale_records` 행 수가 늘었다(판매자배송 9/10 이후 · RG 9/19 이후 · 네이버·토스 새 접두 행). 기존 `wing-`·`rg-` 행은 같은 키로 **판매일 = 결제일 · 금액 = 주문가 기준으로 다시 써질 수 있다**(설계 해석 #8 — 수익 화면 9월 금액이 조금 달라질 수 있음을 사용자에게 알린다). **`voided` 수는 늘지 않아야 한다** — 보충은 사라짐 판정을 하지 않으므로 무효가 생기지 않는다(늘었다면 채널이 취소로 보고한 라인이다 — 표본을 본다). 커서 `orders:<채널>`은 (1)과 같다. 추가로:
+```sql
+select channel, deduction_state, deduction_note, count(*) from erp.order_lines where paid_at < '2026-09-26T11:07:04.989Z' group by 1,2,3;
+```
+Expected: 기초 이전 라인은 `none`(`pre_cutover`·`voided`·`unattributed`·`not_paid`)뿐 — `pending`·`posted` 0.
 
 - [ ] **Step 5: pg_cron 118 적용 · 다음 실행 확인**
 

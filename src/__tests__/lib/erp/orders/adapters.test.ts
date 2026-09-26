@@ -231,3 +231,60 @@ describe('토스 어댑터', () => {
     expect(adapter.tailDays).toBe(30);
   });
 });
+
+describe('과거 보충 구간(9/1 → 지금, 26일+) — 긴 구간을 조각으로 끝까지 돈다', () => {
+  const BF = { from: new Date('2026-08-31T15:00:00.000Z'), to: new Date('2026-09-27T03:00:00.000Z') };
+
+  it('네이버 — 24시간 미만 조각을 빈틈없이 이어 모두 부르고, 조각마다 more를 끝까지 넘긴다 · 상세는 모은 id로 한 번', async () => {
+    const calls: { from: string; to: string; moreSequence?: string }[] = [];
+    const get = vi.fn(async (p: { from: string; to: string; moreSequence?: string }) => {
+      calls.push(p);
+      // 둘째 조각만 다음 페이지가 있다
+      if (calls.length === 2) return { statuses: [{ productOrderId: '2026090200000001' }], more: { moreFrom: '2026-09-02T12:00:00.000+09:00', moreSequence: 's2' } };
+      return { statuses: p.moreSequence ? [{ productOrderId: '2026090200000002' }] : [], more: null };
+    });
+    const q = vi.fn(async (_ids: string[]) => [] as never);
+    await createNaverAdapter({ getLastChangedStatuses: get, queryProductOrders: q }, { sleepMs: 0 }).fetch(BF);
+    const first = calls.filter((c) => !c.moreSequence);
+    // 26일 12시간 → 24시간 − 1초 조각 27개
+    expect(first).toHaveLength(27);
+    expect(first[0].from).toBe('2026-09-01T00:00:00.000+09:00');
+    expect(first[first.length - 1].to).toBe('2026-09-27T12:00:00.000+09:00');
+    for (let i = 1; i < first.length; i++) expect(first[i].from).toBe(first[i - 1].to);
+    for (const c of first) expect(Date.parse(c.to) - Date.parse(c.from)).toBeLessThan(86_400_000);
+    // more 페이지는 같은 조각의 끝을 유지한다
+    expect(calls[2]).toEqual({ from: '2026-09-02T12:00:00.000+09:00', to: calls[1].to, moreSequence: 's2' });
+    expect(q).toHaveBeenCalledTimes(1);
+    expect(q.mock.calls[0][0]).toEqual(['2026090200000001', '2026090200000002']);
+  });
+
+  it('쿠팡 판매자배송 — 9/1~9/27은 한 조각(31일 이내), 31일을 넘으면 상태마다 31일씩 나눈다', async () => {
+    const f = vi.fn(async (_p: { createdAtFrom: string; createdAtTo: string; status?: string; nextToken?: string }) => EMPTY as never);
+    await createWingAdapter({ getOrders: f }).fetch(BF);
+    expect(new Set(f.mock.calls.map((c) => `${c[0].createdAtFrom}~${c[0].createdAtTo}`))).toEqual(new Set(['2026-09-01~2026-09-27']));
+    expect(f).toHaveBeenCalledTimes(WING_STATUSES.length);
+    f.mockClear();
+    await createWingAdapter({ getOrders: f }).fetch({ from: new Date('2026-08-31T15:00:00.000Z'), to: new Date('2026-10-05T03:00:00.000Z') });
+    expect(f.mock.calls.filter((c) => c[0].status === 'ACCEPT').map((c) => [c[0].createdAtFrom, c[0].createdAtTo])).toEqual([
+      ['2026-09-01', '2026-10-01'], ['2026-10-02', '2026-10-05'],
+    ]);
+    expect(f).toHaveBeenCalledTimes(WING_STATUSES.length * 2);
+  });
+
+  it('쿠팡 RG — 9/1~9/27은 한 조각(paidDateTo = 9/28 배타)', async () => {
+    const f = vi.fn(async (_p: { paidDateFrom: string; paidDateTo: string; nextToken?: string }) => EMPTY as never);
+    const r = await createRgAdapter({ getRocketGrowthOrders: f }).fetch(BF);
+    expect(f.mock.calls.map((c) => [c[0].paidDateFrom, c[0].paidDateTo])).toEqual([['2026-09-01', '2026-09-28']]);
+    // cover는 계속 돌려주지만 보충 실행은 사라짐 판정을 하지 않는다(수집기)
+    expect(r.absenceMeansCancel).toBe(true);
+  });
+
+  it('토스 — 한 번에 30일(API 상한 31일 이내)씩, 30일을 넘으면 나눈다', async () => {
+    const f = vi.fn(async (_p: { startDate: string; endDate: string; nextCursor?: string }) => ({ results: [], nextCursor: null }) as never);
+    await createTossAdapter({ getOrdersPage: f }).fetch(BF);
+    expect(f.mock.calls.map((c) => [c[0].startDate, c[0].endDate])).toEqual([['2026-09-01', '2026-09-27']]);
+    f.mockClear();
+    await createTossAdapter({ getOrdersPage: f }).fetch({ from: new Date('2026-08-31T15:00:00.000Z'), to: new Date('2026-10-05T03:00:00.000Z') });
+    expect(f.mock.calls.map((c) => [c[0].startDate, c[0].endDate])).toEqual([['2026-09-01', '2026-09-30'], ['2026-10-01', '2026-10-05']]);
+  });
+});
