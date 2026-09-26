@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
+// ─── Mock: 로그인 상태 (라우트가 requireAuth를 부른다) ──────────────
+vi.mock('@/lib/auth', () => ({
+  getCurrentUser: vi.fn(async () => ({ userId: 'user-1', email: 'test@example.com' })),
+}));
+
 // ─── Mock: toss-shopping-client ─────────────────────────────────
 const mockGetOrders = vi.fn();
 vi.mock('@/lib/listing/toss-shopping-client', () => ({
