@@ -44,9 +44,10 @@
 | 파일 | 책임 |
 |---|---|
 | `supabase/migrations/111_erp_origin.sql` | skus·channel_listings·listing_skus에 `origin`(draft/manual) |
+| `supabase/migrations/112_erp_origin_default_manual.sql` | `origin` 기본값을 manual로(적재 스크립트만 draft를 명시) — Task 1 리뷰 |
 | `scripts/erp/sku-apply.ts` (수정) | 보관·비활성화·연결 재작성을 `origin='draft'`로 한정 · 재고 있는 SKU 보관 거부 |
 | `src/lib/erp/sku/draft.ts` (수정) | P1 — seller_product_id 2차 연결 |
-| `supabase/migrations/112_erp_stock_ledger.sql` | 원장 테이블·트리거·뷰·`sync_cursors` |
+| `supabase/migrations/113_erp_stock_ledger.sql` | 원장 테이블·트리거·뷰·`sync_cursors` |
 | `src/lib/erp/ledger/fifo.ts` | 위치 타입 · FIFO 배분 |
 | `src/lib/erp/ledger/plan.ts` | 전표 계획(lot 생성·차감·이동·역전표) — 순수 함수 |
 | `src/lib/erp/ledger/store.ts` | 잠금·멱등·lot 조회·전표 기록 |
@@ -288,12 +289,12 @@ git commit -m "chore(erp): P1 반영 초안 재생성·재적재"
 ### Task 4: 원장 스키마
 
 **Files:**
-- Create: `supabase/migrations/112_erp_stock_ledger.sql`
+- Create: `supabase/migrations/113_erp_stock_ledger.sql`
 
 - [ ] **Step 1: 마이그레이션 작성**
 
 ```sql
--- 112_erp_stock_ledger.sql
+-- 113_erp_stock_ledger.sql
 -- ERP 1-B: 재고 원장. 재고는 저장하지 않고 전표 합계로 계산한다.
 --
 -- lot: 「lot을 만든 전표」(기초·입고·양수 조정, lot_id null)의 id가 곧 lot 번호다.
@@ -391,13 +392,13 @@ alter table erp.sync_cursors enable row level security;
 
 - [ ] **Step 2: 적용**
 
-Run: `node scripts/apply-migration.mjs 112`
+Run: `node scripts/apply-migration.mjs 113`
 Expected: 성공, exit 0
 
 - [ ] **Step 3: 커밋**
 
 ```bash
-git add supabase/migrations/112_erp_stock_ledger.sql
+git add supabase/migrations/113_erp_stock_ledger.sql
 git commit -m "feat(erp): 재고 원장 스키마 — insert-only 전표 · lot · 음수 금지 · 재고 뷰"
 ```
 
@@ -1008,7 +1009,7 @@ async function expectError(c: pg.Client, name: string, fn: () => Promise<unknown
 - [ ] **Step 6: 자가시험 실행**
 
 Run: `npx --no-install tsx scripts/erp/ledger-selftest.ts`
-Expected: 9행 전부 ✅, exit 0. ❌가 있으면 마이그레이션 112나 store를 고친다(마이그레이션은 `create or replace`/`drop trigger if exists`라 다시 적용 가능. 테이블 정의를 바꿔야 하면 `113_…`로 alter한다).
+Expected: 9행 전부 ✅, exit 0. ❌가 있으면 마이그레이션 113이나 store를 고친다(마이그레이션은 `create or replace`/`drop trigger if exists`라 다시 적용 가능. 테이블 정의를 바꿔야 하면 `114_…`로 alter한다).
 
 그리고 흔적이 없는지 확인한다:
 ```bash
