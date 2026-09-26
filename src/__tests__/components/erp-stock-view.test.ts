@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  computeKpis, defaultCost, editDiff, filterRows, localInputToIso, summarizeStaged, toAdjustItems, toExportCsv,
+  computeKpis, defaultCost, editDiff, filterGroups, filterRows, filtersActive, groupRows, localInputToIso, summarizeStaged, toAdjustItems, toExportCsv,
   type RgRecon, type StagedEdit, type StockRow,
 } from '@/components/erp/stock/stock-view';
 
@@ -65,5 +65,44 @@ describe('내보내기', () => {
   });
   it('datetime-local 값은 KST 오프셋 ISO로', () => {
     expect(localInputToIso('2026-09-27T09:30')).toBe('2026-09-27T09:30:00+09:00');
+  });
+});
+
+describe('상품 단위 묶기', () => {
+  const rows = [
+    row({ skuId: 1, key: 'k1', name: '왜건', option: '블랙', self: 3, rgInbound: 1, rg: 2, value: 6000 }),
+    row({ skuId: 2, key: 'k2', name: '왜건', option: '베이지', self: 0, rgInbound: 0, rg: 0, value: 0 }),
+    row({ skuId: 3, key: 'k3', name: '매트', option: '', self: 4, rgInbound: 0, rg: 1, value: 2500 }),
+  ];
+
+  it('상품명으로 묶어 집·입고중·RG(원장)·평가액을 더하고 옵션 수를 센다(나온 순서 유지)', () => {
+    const g = groupRows(rows, null);
+    expect(g.map((x) => [x.name, x.options.length, x.self, x.rgInbound, x.rg, x.value, x.rgActual, x.rgMismatch])).toEqual([
+      ['왜건', 2, 3, 1, 2, 6000, null, null],
+      ['매트', 1, 4, 0, 1, 2500, null, null],
+    ]);
+  });
+
+  it('대조 뒤에는 RG 실재고를 더하고 불일치를 옵션 단위로 센다(합이 상쇄돼도 가려지지 않는다)', () => {
+    // 블랙 2→1(−1) · 베이지 0→1(+1) — 상품 합은 2 = 2지만 옵션 둘 다 틀렸다
+    const r2: RgRecon = { ...recon, actual: new Map([[1, 1], [2, 1]]) };
+    const [wagon] = groupRows(rows, r2);
+    expect([wagon.rgActual, wagon.rgMismatch]).toEqual([2, 2]);
+  });
+
+  it('조회조건은 옵션에 건다 — 맞는 옵션이 있는 묶음만 남기고 그 옵션만 보인다(합계는 전체 옵션)', () => {
+    const g = groupRows(rows, null);
+    expect(filterGroups(g, { q: '', onlyStocked: true, onlyRgMismatch: false }, null).map((v) => [v.group.name, v.shown.map((r) => r.skuId), v.group.self]))
+      .toEqual([['왜건', [1], 3], ['매트', [3], 4]]);
+    expect(filterGroups(g, { q: '베이지', onlyStocked: false, onlyRgMismatch: false }, null).map((v) => v.shown.map((r) => r.skuId))).toEqual([[2]]);
+    // 상품명으로 찾으면 그 상품의 옵션이 모두 보인다
+    expect(filterGroups(g, { q: '왜건', onlyStocked: false, onlyRgMismatch: false }, null).map((v) => v.shown.length)).toEqual([2]);
+  });
+
+  it('조회조건이 하나라도 걸리면 filtersActive(공백만 있는 검색어는 아니다)', () => {
+    expect(filtersActive({ q: ' ', onlyStocked: false, onlyRgMismatch: false })).toBe(false);
+    expect(filtersActive({ q: '왜건', onlyStocked: false, onlyRgMismatch: false })).toBe(true);
+    expect(filtersActive({ q: '', onlyStocked: true, onlyRgMismatch: false })).toBe(true);
+    expect(filtersActive({ q: '', onlyStocked: false, onlyRgMismatch: true })).toBe(true);
   });
 });

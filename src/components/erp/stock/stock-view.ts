@@ -65,6 +65,58 @@ export function filterRows(rows: StockRow[], f: Filters, recon: RgRecon | null):
   });
 }
 
+/** 조회조건이 하나라도 걸려 있다 — 표가 묶음을 모두 펼친다 */
+export const filtersActive = (f: Filters): boolean => f.q.trim() !== '' || f.onlyStocked || f.onlyRgMismatch;
+
+/** 상품 단위 묶음 — erp.skus.name(쿠팡 상품명)이 같은 옵션들. 합계는 전체 옵션 기준 */
+export interface StockGroup {
+  name: string;
+  options: StockRow[];
+  self: number;
+  rgInbound: number;
+  /** 원장 RG 합 */
+  rg: number;
+  value: number;
+  /** RG 실재고 합. 대조 전이면 null */
+  rgActual: number | null;
+  /** RG 차이가 있는 옵션 수(합이 상쇄돼도 옵션 단위로 센다). 대조 전이면 null */
+  rgMismatch: number | null;
+}
+
+/** 표에 그릴 묶음 하나 — shown은 조회조건에 맞는 옵션만 */
+export interface GroupView {
+  group: StockGroup;
+  shown: StockRow[];
+}
+
+/** 상품명으로 묶는다. 순서는 처음 나온 순서(목록 API가 상품명·옵션 순으로 준다). 옵션 1개 상품도 묶음 하나다(표가 한 줄로 그린다) */
+export function groupRows(rows: StockRow[], recon: RgRecon | null): StockGroup[] {
+  const byName = new Map<string, StockRow[]>();
+  for (const r of rows) {
+    const list = byName.get(r.name);
+    if (list) list.push(r);
+    else byName.set(r.name, [r]);
+  }
+  return [...byName].map(([name, options]) => {
+    const sum = (f: (r: StockRow) => number) => options.reduce((s, r) => s + f(r), 0);
+    return {
+      name,
+      options,
+      self: sum((r) => r.self),
+      rgInbound: sum((r) => r.rgInbound),
+      rg: sum((r) => r.rg),
+      value: sum((r) => r.value),
+      rgActual: recon ? sum((r) => rgActual(r, recon) ?? 0) : null,
+      rgMismatch: recon ? options.filter((r) => (rgDiff(r, recon) ?? 0) !== 0).length : null,
+    };
+  });
+}
+
+/** 조회조건은 옵션에 건다 — 맞는 옵션이 하나라도 있으면 묶음을 남기고 그 옵션만 보인다(묶음 합계는 전체 옵션 그대로) */
+export function filterGroups(groups: StockGroup[], f: Filters, recon: RgRecon | null): GroupView[] {
+  return groups.map((group) => ({ group, shown: filterRows(group.options, f, recon) })).filter((v) => v.shown.length > 0);
+}
+
 export interface Kpis {
   total: number;
   self: number;
