@@ -87,6 +87,12 @@ async function dryRun(draftFile: string, d: Draft): Promise<void> {
       select l.channel || '|' || l.external_product_id || '|' || l.external_option_key as lkey, s.key as skey, x.multiplier
       from erp.listing_skus x join erp.channel_listings l on l.id = x.listing_id join erp.skus s on s.id = x.sku_id
       where x.origin = 'draft'`)).rows;
+    const manualSkus = (await c.query(`select key from erp.skus where origin = 'manual'`)).rows;
+    const manualListings = (await c.query(`select channel, external_product_id, external_option_key from erp.channel_listings where origin = 'manual'`)).rows;
+    const manualLinks = (await c.query(`
+      select l.channel || '|' || l.external_product_id || '|' || l.external_option_key as lkey, s.key as skey
+      from erp.listing_skus x join erp.channel_listings l on l.id = x.listing_id join erp.skus s on s.id = x.sku_id
+      where x.origin = 'manual'`)).rows;
     await c.query('COMMIT');
 
     const skuByKey = new Map(dbSkus.map((r) => [r.key as string, r]));
@@ -124,6 +130,13 @@ async function dryRun(draftFile: string, d: Draft): Promise<void> {
     const byChannel = new Map<string, number>();
     for (const l of d.listings) byChannel.set(l.channel, (byChannel.get(l.channel) ?? 0) + 1);
 
+    const manualSkuKeys = new Set(manualSkus.map((r) => r.key as string));
+    const manualListingKeys = new Set(manualListings.map((r) => `${r.channel}|${r.external_product_id}|${r.external_option_key}`));
+    const manualLinkKeys = new Set(manualLinks.map((r) => `${r.lkey}→${r.skey}`));
+    const skuConflict = d.skus.filter((s) => manualSkuKeys.has(s.key)).length;
+    const listingConflict = d.listings.filter((l) => manualListingKeys.has(l.key)).length;
+    const linkConflict = d.links.filter((k) => manualLinkKeys.has(`${k.listingKey}→${k.skuKey}`)).length;
+
     console.log(`${draftFile} + overrides → SKU ${d.skus.length}(active ${d.skus.filter((s) => s.status === 'active').length}) · 리스팅 ${d.listings.length} · 연결 ${d.links.length}`);
     console.log(`  리스팅 채널: ${[...byChannel].map(([k, v]) => `${k} ${v}`).join(' · ')}`);
     console.log(`  link_mode: ${[...modes].map(([k, v]) => `${k} ${v}`).join(' · ')}`);
@@ -131,7 +144,8 @@ async function dryRun(draftFile: string, d: Draft): Promise<void> {
     console.log('--apply 시 변경:');
     console.log(`  SKU      삽입 ${skuIns} · 갱신 ${skuUpd} · 동일 ${skuSame} · 보관(archived) ${skuArchive}`);
     console.log(`  리스팅   삽입 ${lIns} · 갱신 ${lUpd} · 동일 ${lSame} · 비활성화 ${lDeactivate}`);
-    console.log(`  연결     전체 ${d.links.length} 재작성 (신규 ${kAdd} · 배수변경 ${kChg} · 삭제 ${kDel})`);
+    console.log(`  연결     draft ${d.links.length} 재작성 (신규 ${kAdd} · 배수변경 ${kChg} · 삭제 ${kDel})`);
+    console.log(`  manual 충돌 SKU ${skuConflict} · 리스팅 ${listingConflict} · 연결 ${linkConflict} — 0이 아니면 --apply가 실패한다`);
     if (absent.length > 0) {
       console.log(`DB에 있으나 초안에 없는 SKU ${absent.length}건:`);
       for (const r of absent) console.log(`  - ${r.key} [${r.status}] ${r.name}`);
@@ -155,8 +169,8 @@ async function apply(d: Draft): Promise<void> {
     const skuId = new Map<string, number>();
     for (const s of d.skus) {
       const { rows } = await c.query(
-        `insert into erp.skus (key, name, option_label, base_unit_label, status, legacy_product_cost_ids)
-         values ($1, $2, $3, $4, $5, $6::uuid[])
+        `insert into erp.skus (key, name, option_label, base_unit_label, status, legacy_product_cost_ids, origin)
+         values ($1, $2, $3, $4, $5, $6::uuid[], 'draft')
          on conflict (key) do update set name = excluded.name, option_label = excluded.option_label,
            base_unit_label = excluded.base_unit_label, status = excluded.status,
            legacy_product_cost_ids = excluded.legacy_product_cost_ids, updated_at = now()
@@ -176,8 +190,8 @@ async function apply(d: Draft): Promise<void> {
     const listingId = new Map<string, number>();
     for (const l of d.listings) {
       const { rows } = await c.query(
-        `insert into erp.channel_listings (channel, external_product_id, external_option_key, alt_product_id, label, link_mode, active)
-         values ($1, $2, $3, $4, $5, $6, true)
+        `insert into erp.channel_listings (channel, external_product_id, external_option_key, alt_product_id, label, link_mode, active, origin)
+         values ($1, $2, $3, $4, $5, $6, true, 'draft')
          on conflict (channel, external_product_id, external_option_key) do update
            set alt_product_id = excluded.alt_product_id, label = excluded.label, link_mode = excluded.link_mode, active = true
          where erp.channel_listings.origin = 'draft'
@@ -197,11 +211,13 @@ async function apply(d: Draft): Promise<void> {
       const lid = listingId.get(k.listingKey);
       const sid = skuId.get(k.skuKey);
       if (!lid || !sid) throw new Error(`연결 대상 누락: ${k.listingKey} → ${k.skuKey}`);
-      await c.query(
-        `insert into erp.listing_skus (listing_id, sku_id, multiplier) values ($1, $2, $3)
-         on conflict (listing_id, sku_id) do nothing`,
+      const { rows } = await c.query(
+        `insert into erp.listing_skus (listing_id, sku_id, multiplier, origin) values ($1, $2, $3, 'draft')
+         on conflict (listing_id, sku_id) do nothing
+         returning 1`,
         [lid, sid, k.multiplier],
       );
+      if (rows.length === 0) throw new Error(`연결 ${k.listingKey}→${k.skuKey}가 manual 연결과 겹친다 — 초안을 고친다`);
     }
     await c.query('COMMIT');
     console.log(`✅ 적재 완료 — SKU ${skuId.size}(보관 ${archived.rowCount}) · 리스팅 ${listingId.size}(비활성화 ${deactivated.rowCount}) · 연결 ${d.links.length}`);
