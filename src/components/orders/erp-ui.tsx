@@ -80,12 +80,17 @@ export const segBtnStyle: React.CSSProperties = {
   whiteSpace: 'nowrap',
 };
 
+// borderWidth/borderStyle/borderColor를 롱핸드로 나눠 적는다(숏핸드 `border`가 아니다) —
+// 이 값을 그대로 펼쳐 쓰는 곳(EditCell·CsvImportDialog 등)이 borderColor만 덧씌우는데,
+// 베이스가 숏핸드면 리렌더 사이에 React가 "충돌하는 속성" 경고를 낸다(같은 색이라도 표기 방식이 갈리면 발생).
 export const inputStyle: React.CSSProperties = {
   font: 'inherit',
   fontSize: 12,
   color: E.ink,
   background: E.surface,
-  border: `1px solid ${E.line}`,
+  borderWidth: 1,
+  borderStyle: 'solid',
+  borderColor: E.line,
   padding: '2px 6px',
   height: 24,
   boxSizing: 'border-box',
@@ -102,7 +107,9 @@ export const btnStyle: React.CSSProperties = {
   fontWeight: 500,
   color: E.ink,
   background: E.surface,
-  border: `1px solid ${E.line}`,
+  borderWidth: 1,
+  borderStyle: 'solid',
+  borderColor: E.line,
   cursor: 'pointer',
   whiteSpace: 'nowrap',
 };

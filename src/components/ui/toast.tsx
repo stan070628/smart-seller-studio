@@ -2,7 +2,7 @@
 
 import React, { useSyncExternalStore } from 'react';
 
-type ToastKind = 'success' | 'error';
+type ToastKind = 'success' | 'error' | 'warning';
 interface ToastItem { id: number; kind: ToastKind; message: string; }
 
 let items: ToastItem[] = [];
@@ -23,6 +23,7 @@ function push(kind: ToastKind, message: string) {
 export const toast = {
   success: (message: string) => push('success', message),
   error: (message: string) => push('error', message),
+  warning: (message: string) => push('warning', message),
 };
 
 export function Toaster() {
@@ -34,7 +35,7 @@ export function Toaster() {
           key={t.id}
           onClick={() => { items = items.filter((x) => x.id !== t.id); emit(); }}
           style={{
-            background: t.kind === 'success' ? '#16a34a' : '#dc2626',
+            background: t.kind === 'success' ? '#16a34a' : t.kind === 'warning' ? '#d97706' : '#dc2626',
             color: '#fff', padding: '10px 16px', borderRadius: 10, fontSize: 13,
             boxShadow: '0 4px 16px rgba(0,0,0,0.2)', cursor: 'pointer',
             maxWidth: 360, whiteSpace: 'pre-line',

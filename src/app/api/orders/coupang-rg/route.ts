@@ -9,6 +9,7 @@
  */
 
 import { NextRequest } from 'next/server';
+import { requireAuth } from '@/lib/supabase/auth';
 import { getCoupangClient } from '@/lib/listing/coupang-client';
 import { getOrdersCache, setOrdersCache } from '@/lib/dashboard/orders-cache';
 
@@ -57,6 +58,9 @@ function splitInto30DayChunks(from: string, to: string): Array<{ from: string; t
 }
 
 export async function GET(request: NextRequest) {
+  // 2026-09-26 탐색: 로그인 없이 구매자 정보를 돌려주고 있었다(ERP 1-C1 보안 선행)
+  const auth = await requireAuth(request);
+  if (auth instanceof Response) return auth;
   const sp = request.nextUrl.searchParams;
 
   const today = new Date();

@@ -1,6 +1,7 @@
 // scripts/erp/ledger-selftest.ts
 // 사용법: npx --no-install tsx scripts/erp/ledger-selftest.ts
 // 운영 DB에서 원장 트리거·제약·뷰가 설계대로 동작하는지 시험한다. 대부분은 한 트랜잭션 안에서 하고 끝에 ROLLBACK한다.
+// 1-C1: 조정 전표(지금 개수·±수량·기초재고·중복 요청·화면 재고 불일치·되돌리기·사유 검사)도 같은 롤백 트랜잭션에서 시험한다.
 // 예외: 동시성 시험(concurrency)은 두 접속이 서로의 커밋을 봐야 하므로 임시 SKU·lot을 커밋했다가 곧바로 지운다
 // (원장은 삭제를 막으므로 한 트랜잭션 안에서만 guard 트리거를 끄고 지운다 — ALTER TABLE도 트랜잭션이라 밖에서는 보이지 않는다).
 // 임시 SKU는 전부 status='archived'로 만든다 — 중간에 죽어 흔적이 남아도 활성 SKU가 아니므로 opening-apply(「실사표에 없는 활성 SKU」)를 막지 않는다.
@@ -9,12 +10,15 @@
 //   begin;
 //   alter table erp.stock_ledger disable trigger stock_ledger_guard;
 //   delete from erp.stock_ledger where sku_id in (select id from erp.skus where key like 'selftest%');
+//   delete from erp.stock_counts where sku_id in (select id from erp.skus where key like 'selftest%');
 //   alter table erp.stock_ledger enable trigger stock_ledger_guard;
 //   delete from erp.skus where key like 'selftest%';
 //   commit;
 import pg from 'pg';
 import { loadEnvLocal } from './_env';
+import { randomUUID } from 'node:crypto';
 import { postConsume, postLotCreate, postTransfer, reverse } from '@/lib/erp/ledger/store';
+import { applyAdjustment } from '@/lib/erp/ledger/adjust-store';
 
 loadEnvLocal();
 
@@ -111,6 +115,72 @@ async function expectError(c: pg.Client, name: string, fn: () => Promise<unknown
     await expectError(c, 'lot 생성 전표는 단가 필수', () => c.query(
       `insert into erp.stock_ledger (sku_id, location, qty, kind, occurred_at, idem_key) values ($1, 'self', 1, 'receipt', now(), $2)`,
       [sku, `st:${sku}:nocost`],
+    ), /check constraint/);
+
+    // ── 1-C1 조정 전표(마이그레이션 115 · adjust-store) ─────────────────
+    const adj = Number((await c.query(
+      `insert into erp.skus (key, name, origin, status) values ($1, '자가시험-조정', 'manual', 'archived') returning id`, [`selftest:adj:${Date.now()}`],
+    )).rows[0].id);
+    const adjSelf = async () =>
+      (await c.query('select qty, value from erp.stock_on_hand where sku_id = $1 and location = $2', [adj, 'self'])).rows[0] ?? { qty: 0, value: 0 };
+    const cursorOf = async () =>
+      (await c.query(`select cursor_at from erp.sync_cursors where name = 'ledger_cutover'`)).rows[0]?.cursor_at ?? null;
+    const cursorBefore = await cursorOf();
+    const AT1 = '2026-02-01T09:00:00+09:00';
+
+    const o1 = await applyAdjustment(c, { skuId: adj, location: 'self', mode: 'count', value: 5, expected: 0, reason: 'count_diff', unitCost: 700, requestId: randomUUID(), occurredAt: AT1 });
+    const r1 = (await c.query('select kind, reason, idem_key from erp.stock_ledger where sku_id = $1', [adj])).rows;
+    check('빈 위치의 첫 지금개수 = 기초 전표(kind·사유 opening, opening:<sku>:self)',
+      o1.kind === 'opening' && r1.length === 1 && r1[0].kind === 'opening' && r1[0].reason === 'opening' && r1[0].idem_key === `opening:${adj}:self`,
+      JSON.stringify(r1));
+    const cursorAfter = await cursorOf();
+    check('기초 전표가 ledger_cutover를 적는다(이미 있으면 더 이른 쪽)',
+      cursorAfter !== null && new Date(cursorAfter).getTime() ===
+        (cursorBefore ? Math.min(new Date(cursorBefore).getTime(), new Date(AT1).getTime()) : new Date(AT1).getTime()),
+      `before ${String(cursorBefore)} · after ${String(cursorAfter)}`);
+
+    const req2 = randomUUID();
+    const o2 = await applyAdjustment(c, { skuId: adj, location: 'self', mode: 'count', value: 3, expected: 5, reason: 'damage', requestId: req2, occurredAt: '2026-02-02T09:00:00+09:00' });
+    let a = await adjSelf();
+    check('지금개수 3 → 조정 −2(사유 damage) · 3개 2,100원', o2.kind === 'adjust' && o2.qty === -2 && Number(a.qty) === 3 && Number(a.value) === 2100, JSON.stringify({ o2, a }));
+
+    const again2 = await applyAdjustment(c, { skuId: adj, location: 'self', mode: 'count', value: 3, expected: 5, reason: 'damage', requestId: req2, occurredAt: '2026-02-02T09:00:00+09:00' });
+    check('같은 요청 재전송은 duplicate(기록 없음)', again2.outcome === 'duplicate');
+
+    // 센 기록(116): 지금 개수는 차이가 0이어도 한 줄 · 그 재전송은 센 기록으로 duplicate
+    const reqSame = randomUUID();
+    const same = { skuId: adj, location: 'self' as const, mode: 'count' as const, value: 3, expected: 3, reason: 'count_diff' as const, requestId: reqSame, occurredAt: '2026-02-02T10:00:00+09:00' };
+    const oSame = await applyAdjustment(c, { ...same });
+    const againSame = await applyAdjustment(c, { ...same });
+    const counts = (await c.query(
+      'select counted_qty, ledger_qty, adjustment_idem_key from erp.stock_counts where sku_id = $1 order by id', [adj],
+    )).rows;
+    check('지금 개수마다 센 기록 한 줄 — 기초·조정 키, 차이 0은 null',
+      oSame.outcome === 'noop' && counts.length === 3
+        && counts[0].adjustment_idem_key === `opening:${adj}:self` && counts[1].adjustment_idem_key === `adj:${req2}`
+        && counts[2].adjustment_idem_key === null && counts[2].counted_qty === 3 && counts[2].ledger_qty === 3,
+      JSON.stringify(counts));
+    check('차이 0 실사의 재전송은 duplicate — 센 기록을 더 쓰지 않는다', againSame.outcome === 'duplicate' && counts.length === 3, againSame.outcome);
+
+    await expectError(c, '화면 재고와 다르면 거부(StaleCountError)', () => applyAdjustment(c, {
+      skuId: adj, location: 'self', mode: 'count', value: 1, expected: 5, reason: 'count_diff', requestId: randomUUID(), occurredAt: '2026-02-03T09:00:00+09:00',
+    }), /재고가 바뀌었다/);
+
+    const o3 = await applyAdjustment(c, { skuId: adj, location: 'self', mode: 'delta', value: 2, reason: 'return_in', requestId: randomUUID(), occurredAt: '2026-02-04T09:00:00+09:00' });
+    a = await adjSelf();
+    check('±수량 +2는 최근 lot 단가(700)로 새 lot · 5개 3,500원', o3.kind === 'adjust' && o3.costSource === 'lot' && o3.unitCost === 700 && Number(a.qty) === 5 && Number(a.value) === 3500, JSON.stringify({ o3, a }));
+
+    await reverse(c, `adj:${req2}`, { occurredAt: '2026-02-05T09:00:00+09:00', note: '자가시험 되돌리기' });
+    a = await adjSelf();
+    check('조정(−2) 되돌리기 후 7개', Number(a.qty) === 7, JSON.stringify(a));
+
+    await expectError(c, 'adjust 전표는 사유 필수', () => c.query(
+      `insert into erp.stock_ledger (sku_id, location, qty, kind, unit_cost, occurred_at, idem_key) values ($1, 'self', 1, 'adjust', 100, now(), $2)`,
+      [adj, `st:${adj}:noreason`],
+    ), /check constraint/);
+    await expectError(c, '허용 밖 사유 거부', () => c.query(
+      `insert into erp.stock_ledger (sku_id, location, qty, kind, unit_cost, occurred_at, idem_key, reason) values ($1, 'self', 1, 'adjust', 100, now(), $2, 'bogus')`,
+      [adj, `st:${adj}:bogus`],
     ), /check constraint/);
   } catch (e) {
     check('예상 못 한 오류', false, (e as Error).message);

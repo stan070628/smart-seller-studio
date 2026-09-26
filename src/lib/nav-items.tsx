@@ -83,6 +83,28 @@ export const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    href: '/erp',
+    label: '재고·매입',
+    icon: (
+      <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path d="M21 8l-9-5-9 5 9 5 9-5z" strokeWidth="1.5" strokeLinejoin="round" />
+        <path d="M3 8v8l9 5 9-5V8" strokeWidth="1.5" strokeLinejoin="round" />
+        <path d="M12 13v8" strokeWidth="1.5" />
+      </svg>
+    ),
+    children: [
+      {
+        href: '/erp/stock',
+        label: '재고현황',
+        icon: (
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path d="M4 6h16M4 12h16M4 18h10" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+        ),
+      },
+    ],
+  },
+  {
     href: '/plan',
     label: '플랜',
     icon: (

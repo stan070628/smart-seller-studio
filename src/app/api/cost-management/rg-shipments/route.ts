@@ -3,6 +3,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { getCurrentUser } from '@/lib/auth';
 import { computeFifoBatchOps } from '@/lib/cost-management/rg-shipment';
+import {
+  RgShipInputError, RgShipStockError, postRgShipTransfers, validateRgShipItems, type RgShipSkuItem,
+} from '@/lib/erp/ledger/rg-ship';
 
 interface RgShipmentItem {
   product_cost_id: string;
@@ -102,6 +105,15 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // 1-C1: SKU별 보낸 수량 → 원장 self → rg_inbound. 없으면(옛 화면) 원장 기록 없이 옛 흐름만 돈다
+  let skuItems: RgShipSkuItem[];
+  try {
+    skuItems = validateRgShipItems(body?.sku_items);
+  } catch (e) {
+    return NextResponse.json({ success: false, error: (e as Error).message }, { status: 400 });
+  }
+  const wingInboundId = typeof body?.wing_inbound_id === 'string' ? body.wing_inbound_id.trim().slice(0, 60) : '';
+
   const pool = getSourcingPool();
   const client = await pool.connect();
 
@@ -179,34 +191,44 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    await client.query('COMMIT');
-
-    // FIFO 완료 후 별도로 이벤트 기록 (트랜잭션 밖 — 실패해도 FIFO에 영향 없음)
-    try {
-      const { rows: eventRows } = await pool.query(
-        `INSERT INTO rg_shipment_events (user_id, shipped_at, total_shipping_fee)
-         VALUES ($1, $2, $3) RETURNING id`,
-        [user.userId, shipped_at, total_shipping_fee],
+    // 이벤트 기록 — 1-C1부터 트랜잭션 안에서 한다(원장 이동 전표의 멱등키가 event id를 쓴다).
+    // 예전에는 트랜잭션 밖이라 기록이 실패해도 FIFO만 커밋됐다 — 이제는 함께 성공하거나 함께 되돌린다.
+    const { rows: eventRows } = await client.query(
+      `INSERT INTO rg_shipment_events (user_id, shipped_at, total_shipping_fee)
+       VALUES ($1, $2, $3) RETURNING id`,
+      [user.userId, shipped_at, total_shipping_fee],
+    );
+    const eventId = String(eventRows[0].id);
+    for (const item of items as RgShipmentItem[]) {
+      await client.query(
+        `INSERT INTO rg_shipment_event_items
+           (shipment_event_id, product_cost_id, product_name, quantity, unit_rg_fee)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [eventId, item.product_cost_id, productNames.get(item.product_cost_id) as string, item.quantity, item.unit_rg_fee],
       );
-      const eventId = eventRows[0].id as string;
-      for (const item of items as RgShipmentItem[]) {
-        const productName = productNames.get(item.product_cost_id);
-        if (productName) {
-          await pool.query(
-            `INSERT INTO rg_shipment_event_items
-               (shipment_event_id, product_cost_id, product_name, quantity, unit_rg_fee)
-             VALUES ($1, $2, $3, $4, $5)`,
-            [eventId, item.product_cost_id, productName, item.quantity, item.unit_rg_fee],
-          );
-        }
-      }
-    } catch (eventErr) {
-      console.warn('[rg-shipments] 이벤트 기록 실패', eventErr);
     }
 
-    return NextResponse.json({ success: true, data: { affected_entries: affectedEntries, split_entries: splitEntries } });
+    // 원장: SKU별 self → rg_inbound. 원장 전표 없는 SKU는 건너뛰고(ledger.skipped) 화면이 알린다
+    const ledger = await postRgShipTransfers(client, {
+      eventId,
+      occurredAt: new Date().toISOString(),
+      note: `RG 보내기 ${shipped_at}${wingInboundId ? ` · Wing 입고 ID ${wingInboundId}` : ''}`,
+      items: skuItems,
+    });
+
+    await client.query('COMMIT');
+    return NextResponse.json({
+      success: true,
+      data: { affected_entries: affectedEntries, split_entries: splitEntries, event_id: eventId, ledger },
+    });
   } catch (err) {
-    await client.query('ROLLBACK');
+    await client.query('ROLLBACK').catch(() => {});
+    if (err instanceof RgShipStockError) {
+      return NextResponse.json({ success: false, error: `${err.message} — 재고현황에서 집 재고를 먼저 고치세요` }, { status: 409 });
+    }
+    if (err instanceof RgShipInputError) {
+      return NextResponse.json({ success: false, error: err.message }, { status: 400 });
+    }
     console.error('[rg-shipments]', err);
     return NextResponse.json({ success: false, error: '서버 오류' }, { status: 500 });
   } finally {

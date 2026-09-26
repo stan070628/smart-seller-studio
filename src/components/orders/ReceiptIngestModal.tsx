@@ -14,6 +14,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Badge, Progress } from '@/lib/receipt/view';
 import type { LineData, ProductOption } from '@/components/receipt/ReceiptLineRow';
+import { linesNeedingPhone, preOpeningNotice, type LineSkuOptions } from '@/components/receipt/sku-split';
 
 interface DraftCard {
   id: string;
@@ -75,6 +76,15 @@ export default function ReceiptIngestModal({ onClose, onConfirmed }: Props) {
   const [confirming, setConfirming] = useState(false);
   /** 검산이 지목한 줄. 클릭하면 강조된다 */
   const [highlight, setHighlight] = useState<number | null>(null);
+  /** 실사 이전 구매라 원장 입고를 건너뛴 SKU 안내(I3) */
+  const [info, setInfo] = useState<string | null>(null);
+  /**
+   * 확정 대기 줄의 재고 SKU 후보(1-C1). 이 모달에는 옵션 나누기·SKU 고르기 화면이 없다 —
+   * 후보가 0개이거나 2개 이상인 줄이 있으면 확정을 막고 휴대폰 영수증 화면으로 보낸다(그대로 보내면 그 줄만 실패한다).
+   * 'ok'가 아니면 어느 줄이 그런지 모르므로 확정을 막는다.
+   */
+  const [skuOptions, setSkuOptions] = useState<Record<number, LineSkuOptions>>({});
+  const [skuOptionsStatus, setSkuOptionsStatus] = useState<'loading' | 'ok' | 'failed'>('loading');
 
   const loadList = useCallback(async () => {
     try {
@@ -113,14 +123,30 @@ export default function ReceiptIngestModal({ onClose, onConfirmed }: Props) {
     }
   }, []);
 
+  const loadSkuOptions = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`/api/erp/receipts/${id}/sku-options`);
+      const json = await res.json();
+      if (!json.success) { setSkuOptionsStatus('failed'); return; }
+      setSkuOptions(json.data as Record<number, LineSkuOptions>);
+      setSkuOptionsStatus('ok');
+    } catch {
+      setSkuOptionsStatus('failed');
+    }
+  }, []);
+
   useEffect(() => {
     void loadList();
     void loadProducts();
   }, [loadList, loadProducts]);
 
   useEffect(() => {
-    if (selected) void loadDetail(selected);
-  }, [selected, loadDetail]);
+    if (!selected) return;
+    setSkuOptionsStatus('loading');
+    setSkuOptions({});
+    void loadDetail(selected);
+    void loadSkuOptions(selected);
+  }, [selected, loadDetail, loadSkuOptions]);
 
   const patchLine = useCallback(async (lineNo: number, patch: Record<string, unknown>) => {
     if (!selected) return;
@@ -132,14 +158,15 @@ export default function ReceiptIngestModal({ onClose, onConfirmed }: Props) {
     const json = await res.json();
     if (!json.success) { setError(json.error ?? '수정 실패'); return; }
     setError(null);
-    // 줄을 고칠 때마다 상품 목록도 다시 읽는다 — 그 사이 새로 만든 상품이 보이도록
-    await Promise.all([loadDetail(selected), loadList(), loadProducts()]);
-  }, [selected, loadDetail, loadList, loadProducts]);
+    // 줄을 고칠 때마다 상품 목록도 다시 읽는다 — 그 사이 새로 만든 상품이 보이도록. 상품이 바뀌면 SKU 후보도 바뀐다
+    await Promise.all([loadDetail(selected), loadList(), loadProducts(), loadSkuOptions(selected)]);
+  }, [selected, loadDetail, loadList, loadProducts, loadSkuOptions]);
 
   async function confirm() {
     if (!selected) return;
     setConfirming(true);
     setError(null);
+    setInfo(null);
     try {
       const res = await fetch(`/api/receipts/${selected}/confirm`, {
         method: 'POST',
@@ -155,7 +182,9 @@ export default function ReceiptIngestModal({ onClose, onConfirmed }: Props) {
           ? `${created.length}건 입고, ${failed.length}건 실패: ${failed.map((f) => `${f.line_no}번 ${f.error}`).join(' / ')}`
           : `${created.length}건 입고 완료`,
       );
+      setInfo(preOpeningNotice(json.data.skipped_pre_opening));
       await loadDetail(selected);
+      await loadSkuOptions(selected);
       await loadList();
       onConfirmed();
     } catch (e) {
@@ -164,6 +193,10 @@ export default function ReceiptIngestModal({ onClose, onConfirmed }: Props) {
       setConfirming(false);
     }
   }
+
+  const needPhone = skuOptionsStatus === 'ok' ? linesNeedingPhone(skuOptions) : [];
+  const confirmBlocked = skuOptionsStatus !== 'ok' || needPhone.length > 0;
+  const canConfirm = !!detail && detail.progress.ready > 0 && !confirmBlocked;
 
   const failedChecks: [string, CheckDetail][] = Object.entries(detail?.verify_detail ?? {})
     .filter(([k, v]) =>
@@ -251,7 +284,7 @@ export default function ReceiptIngestModal({ onClose, onConfirmed }: Props) {
               {drafts.map((d) => (
                 <button
                   key={d.id}
-                  onClick={() => { setSelected(d.id); setResult(null); setHighlight(null); }}
+                  onClick={() => { setSelected(d.id); setResult(null); setInfo(null); setHighlight(null); }}
                   style={{
                     padding: '6px 12px', borderRadius: '8px', whiteSpace: 'nowrap',
                     border: `1px solid ${selected === d.id ? '#18181b' : '#e5e5e5'}`,
@@ -321,6 +354,42 @@ export default function ReceiptIngestModal({ onClose, onConfirmed }: Props) {
                     }}>{result}</div>
                   )}
 
+                  {info && (
+                    <div role="status" style={{
+                      background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px',
+                      padding: '10px 12px', marginBottom: '10px', fontSize: '12px', color: '#1d4ed8',
+                    }}>{info}</div>
+                  )}
+
+                  {detail.progress.ready > 0 && needPhone.length > 0 && selected && (
+                    <div style={{
+                      background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px',
+                      padding: '10px 12px', marginBottom: '10px', fontSize: '12px', color: '#92400e',
+                    }}>
+                      옵션이 여러 개인 줄 {needPhone.length}개는 휴대폰 영수증 화면에서 옵션별 수량을 나눠 확정합니다
+                      {' '}({needPhone.join(', ')}번 줄).{' '}
+                      <a
+                        href={`/m/receipt/${selected}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ color: '#b45309', fontWeight: 700, textDecoration: 'underline' }}
+                      >휴대폰 영수증 화면 열기</a>
+                    </div>
+                  )}
+
+                  {detail.progress.ready > 0 && skuOptionsStatus === 'failed' && selected && (
+                    <div style={{
+                      background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px',
+                      padding: '10px 12px', marginBottom: '10px', fontSize: '12px', color: '#b91c1c',
+                    }}>
+                      옵션 정보를 불러오지 못해 확정할 수 없습니다.{' '}
+                      <button
+                        onClick={() => void loadSkuOptions(selected)}
+                        style={{ border: 'none', background: 'none', color: '#b91c1c', textDecoration: 'underline', cursor: 'pointer', fontSize: '12px', fontWeight: 700, padding: 0 }}
+                      >다시 시도</button>
+                    </div>
+                  )}
+
                   {error && (
                     <div role="alert" style={{
                       background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px',
@@ -370,12 +439,12 @@ export default function ReceiptIngestModal({ onClose, onConfirmed }: Props) {
               </span>
               <button
                 onClick={() => void confirm()}
-                disabled={confirming || !detail || detail.progress.ready === 0}
+                disabled={confirming || !canConfirm}
                 style={{
                   padding: '9px 20px', borderRadius: '8px', border: 'none',
-                  background: !detail || detail.progress.ready === 0 ? '#d4d4d8' : '#18181b',
+                  background: !canConfirm ? '#d4d4d8' : '#18181b',
                   color: '#fff', fontSize: '13px', fontWeight: 700,
-                  cursor: !detail || detail.progress.ready === 0 ? 'default' : 'pointer',
+                  cursor: !canConfirm ? 'default' : 'pointer',
                 }}
               >
                 {confirming ? '입고 중…' : `${detail?.progress.ready ?? 0}건 입고 확정`}

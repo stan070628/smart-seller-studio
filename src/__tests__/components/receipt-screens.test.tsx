@@ -242,8 +242,122 @@ describe('ReceiptDetail', () => {
         HttpResponse.json({ success: true, data: [
           { id: 'p-1', product_name: '커클랜드 타월', subdivision_unit: 10 },
         ] })),
+      http.get(`/api/erp/receipts/${DRAFT_ID}/sku-options`, () => HttpResponse.json({ success: true, data: {} })),
     );
   }
+
+  it('🔴 옵션이 여러 개면 옵션별 수량을 받아 확정 요청(sku_splits)에 싣는다', async () => {
+    mockDetail(detail());
+    let sent = null as { sku_splits?: unknown } | null;
+    server.use(
+      http.get(`/api/erp/receipts/${DRAFT_ID}/sku-options`, () => HttpResponse.json({ success: true, data: { 1: {
+        source: 'product', expectedQty: { qty: 1, approx: false },
+        candidates: [
+          { skuId: 11, key: 'cp:1:블랙', name: '라운드티', option: '블랙' },
+          { skuId: 12, key: 'cp:1:레드', name: '라운드티', option: '레드' },
+        ],
+      } } })),
+      http.post(`/api/receipts/${DRAFT_ID}/confirm`, async ({ request }) => {
+        sent = (await request.json()) as { sku_splits?: unknown };
+        return HttpResponse.json({ success: true, data: { created: [{ line_no: 1 }], skipped: [], failed: [] } });
+      }),
+    );
+    render(<ReceiptDetail draftId={DRAFT_ID} />);
+    fireEvent.change(await screen.findByLabelText('라운드티 · 블랙 수량'), { target: { value: '1' } });
+    fireEvent.click(screen.getByText('1건 입고 확정'));
+    await waitFor(() => expect(sent).not.toBeNull());
+    expect(sent!.sku_splits).toEqual({ 1: [{ sku_id: 11, qty: 1 }, { sku_id: 12, qty: 0 }] });
+  });
+
+  it('후보가 하나면 자동 안내만 보인다', async () => {
+    mockDetail(detail());
+    server.use(http.get(`/api/erp/receipts/${DRAFT_ID}/sku-options`, () => HttpResponse.json({ success: true, data: { 1: {
+      source: 'learned', expectedQty: { qty: 1, approx: false },
+      candidates: [{ skuId: 11, key: 'cp:1:블랙', name: '라운드티', option: '블랙' }],
+    } } })));
+    render(<ReceiptDetail draftId={DRAFT_ID} />);
+    expect(await screen.findByText(/재고: 라운드티 · 블랙 · 1개 자동/)).toBeInTheDocument();
+  });
+
+  const twoOptions = { 1: {
+    source: 'product', expectedQty: { qty: 2, approx: false },
+    candidates: [
+      { skuId: 11, key: 'cp:1:블랙', name: '라운드티', option: '블랙' },
+      { skuId: 12, key: 'cp:1:레드', name: '라운드티', option: '레드' },
+    ],
+  } };
+  const confirmButton = async () => (await screen.findByText('1건 입고 확정')).closest('button') as HTMLButtonElement;
+
+  it('🔴 옵션 정보를 못 불러오면 알리고 다시 시도할 수 있다 — 그동안 확정을 막는다', async () => {
+    mockDetail(detail());
+    let fail = true;
+    server.use(http.get(`/api/erp/receipts/${DRAFT_ID}/sku-options`, () => (fail
+      ? HttpResponse.json({ success: false, error: 'db down' }, { status: 500 })
+      : HttpResponse.json({ success: true, data: {} }))));
+    render(<ReceiptDetail draftId={DRAFT_ID} />);
+    expect(await screen.findByText('옵션 정보를 불러오지 못했습니다')).toBeInTheDocument();
+    expect((await confirmButton()).disabled).toBe(true);
+    expect(screen.getByText(/옵션 정보를 불러온 뒤 확정할 수 있습니다/)).toBeInTheDocument();
+    fail = false;
+    fireEvent.click(screen.getByText('다시 시도'));
+    await waitFor(() => expect(screen.queryByText('옵션 정보를 불러오지 못했습니다')).not.toBeInTheDocument());
+    await waitFor(async () => expect((await confirmButton()).disabled).toBe(false));
+  });
+
+  it('🔴 옵션별 합이 입고 수량과 다르면 확정을 막고 줄 번호를 알린다', async () => {
+    mockDetail(detail());
+    server.use(http.get(`/api/erp/receipts/${DRAFT_ID}/sku-options`, () => HttpResponse.json({ success: true, data: twoOptions })));
+    render(<ReceiptDetail draftId={DRAFT_ID} />);
+    fireEvent.change(await screen.findByLabelText('라운드티 · 블랙 수량'), { target: { value: '1' } });
+    expect((await confirmButton()).disabled).toBe(true);
+    expect(screen.getByText('1번 줄 옵션 수량을 나눠 주세요')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('라운드티 · 레드 수량'), { target: { value: '1' } });
+    expect((await confirmButton()).disabled).toBe(false);
+    expect(screen.queryByText(/옵션 수량을 나눠 주세요/)).not.toBeInTheDocument();
+  });
+
+  it('🔴 후보 하나인 줄도 「다른 SKU로 바꾸기」로 아무 활성 SKU나 골라 보낼 수 있다(manual 표시)', async () => {
+    mockDetail(detail());
+    let sent = null as { sku_splits?: unknown } | null;
+    server.use(
+      http.get(`/api/erp/receipts/${DRAFT_ID}/sku-options`, () => HttpResponse.json({ success: true, data: { 1: {
+        source: 'product', expectedQty: { qty: 1, approx: false },
+        candidates: [{ skuId: 11, key: 'cp:1:블랙', name: '라운드티', option: '블랙' }],
+      } } })),
+      http.get('/api/erp/stock', () => HttpResponse.json({ success: true, data: [
+        { skuId: 11, key: 'cp:1:블랙', name: '라운드티', option: '블랙' },
+        { skuId: 99, key: 'cp:9', name: '머그컵', option: '' },
+      ] })),
+      http.post(`/api/receipts/${DRAFT_ID}/confirm`, async ({ request }) => {
+        sent = (await request.json()) as { sku_splits?: unknown };
+        return HttpResponse.json({ success: true, data: { created: [{ line_no: 1 }], skipped: [], failed: [] } });
+      }),
+    );
+    render(<ReceiptDetail draftId={DRAFT_ID} />);
+    fireEvent.click(await screen.findByText('다른 SKU로 바꾸기'));
+    const search = screen.getByLabelText('바꿀 재고 SKU 검색');
+    fireEvent.focus(search);
+    fireEvent.change(search, { target: { value: '머그' } });
+    fireEvent.click(await screen.findByText('+ 머그컵'));
+    expect(screen.getByText(/재고: 머그컵 · 1개 전부 \(바꿈\)/)).toBeInTheDocument();
+    fireEvent.click(await confirmButton());
+    await waitFor(() => expect(sent).not.toBeNull());
+    expect(sent!.sku_splits).toEqual({ 1: [{ sku_id: 99, qty: null, manual: true }] });
+  });
+
+  it('줄의 상품을 바꾸면 그 줄에 나눠 둔 옵션 수량을 지운다', async () => {
+    mockDetail(detail());
+    server.use(
+      http.get(`/api/erp/receipts/${DRAFT_ID}/sku-options`, () => HttpResponse.json({ success: true, data: twoOptions })),
+      http.patch(`/api/receipts/${DRAFT_ID}/lines/1`, () => HttpResponse.json({ success: true })),
+    );
+    render(<ReceiptDetail draftId={DRAFT_ID} />);
+    const input = await screen.findByLabelText('라운드티 · 블랙 수량');
+    fireEvent.change(input, { target: { value: '2' } });
+    expect((input as HTMLInputElement).value).toBe('2');
+    fireEvent.change(screen.getByLabelText('입고할 상품'), { target: { value: '' } });
+    await waitFor(() => expect((screen.getByLabelText('라운드티 · 블랙 수량') as HTMLInputElement).value).toBe(''));
+  });
 
   it('🔴 할인 반영 금액을 보여주고 할인 전 금액을 함께 밝힌다', async () => {
     mockDetail(detail());
@@ -287,6 +401,21 @@ describe('ReceiptDetail', () => {
     fireEvent.click(await screen.findByText('1건 입고 확정'));
 
     expect(await screen.findByText('1건 입고 완료')).toBeInTheDocument();
+  });
+
+  it('🔴 실사 이전 구매라 원장 입고를 건너뛴 SKU를 알린다', async () => {
+    mockDetail(detail());
+    server.use(http.post(`/api/receipts/${DRAFT_ID}/confirm`, () =>
+      HttpResponse.json({ success: true, data: {
+        created: [{ line_no: 1 }], skipped: [], failed: [],
+        skipped_pre_opening: [{ line_no: 1, sku_id: 11, qty: 1, name: '라운드티 · 블랙' }],
+      } })));
+
+    render(<ReceiptDetail draftId={DRAFT_ID} />);
+    fireEvent.click(await screen.findByText('1건 입고 확정'));
+
+    expect(await screen.findByText('1건 입고 완료')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('실사 이전 구매라 원장 입고는 건너뜀: 라운드티 · 블랙');
   });
 
   it('🔴 일부 실패하면 어느 줄이 왜 실패했는지 보여준다', async () => {
