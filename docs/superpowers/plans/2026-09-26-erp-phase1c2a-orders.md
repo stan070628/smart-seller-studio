@@ -5475,6 +5475,8 @@ git commit -m "docs(erp): 1-C2a 게이트 ② 판매 차감 켜기 기록"
 
 ## 실행 기록
 
+- 2026-09-26 네이버 실제 응답 필드 확인(조회 전용, 키 이름만 — 값·구매자 정보 미출력): `productOrder`에 **`originalProductId` 있음** ✅, `productOption`(옵션 문자열) 있음, **`optionCode`는 이번 표본(단일상품 주문으로 보임)에 없음** — 옵션 상품 주문에서 확인 필요(없으면 설계상 미귀속으로 남을 뿐 잘못 빼지 않음). `remainQuantity`·`initialQuantity`(부분 취소) 필드 있음. 토스는 로컬에 접근 토큰이 없어 첫 시험 수집(Vercel)에서 확인
+
 > 실행 중 사용자 답·결정을 즉시 적는다(세션이 끊겨도 같은 질문을 반복하지 않게).
 
 - 기준선(Task 0 Step 1): 2026-09-26 · vitest 실패 13 · tsc 0. Step 2 재확인 일치(ledger_cutover 단일 커서 · orders/order_lines/settings 없음 · bundle 리스팅 없음)
