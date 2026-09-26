@@ -5,6 +5,9 @@
 import type { PoolClient } from 'pg';
 import type { Db } from '@/lib/erp/ledger/store';
 import { maskPII } from '@/lib/jobs/mask';
+import { getSourcingPool } from '@/lib/sourcing/db';
+import { ADAPTER_FACTORIES } from './adapters';
+import { runDeductions } from './deduct';
 import { legacyKeyOf } from './keys';
 import { pickLegacy } from './legacy';
 import { syncLegacySales } from './legacy-store';
@@ -131,4 +134,46 @@ export async function collectChannel(
     if (locked) await c.query('select pg_advisory_unlock($1::int, $2::int)', [LOCK_NS, CHANNEL_LOCK[ch]]).catch(() => {});
     c.release();
   }
+}
+
+/** 크론·화면 공용: 채널을 차례로 수집한다. 한 채널 실패(어댑터 생성 포함)가 다른 채널을 막지 않는다 */
+export async function collectOrders(p: {
+  channels: OrderChannel[];
+  dryRun: boolean;
+  now?: Date;
+  pool?: Connectable;
+  factories?: Record<OrderChannel, () => OrderAdapter>;
+}): Promise<ChannelReport[]> {
+  const pool = p.pool ?? getSourcingPool();
+  const factories = p.factories ?? ADAPTER_FACTORIES;
+  const now = p.now ?? new Date();
+  const out: ChannelReport[] = [];
+  for (const ch of p.channels) {
+    let adapter: OrderAdapter;
+    try {
+      adapter = factories[ch]();
+    } catch (e) {
+      out.push({ ...emptyReport(ch, p.dryRun), error: errText(e) });
+      continue;
+    }
+    out.push(await collectChannel(pool, adapter, { now, dryRun: p.dryRun, deduct: runDeductions }));
+  }
+  return out;
+}
+
+/** erp.job_runs.counts — 채널별 <ch>_fetched·<ch>_new·<ch>_error(0/1) + 합계. 수집 현황 패널이 마지막 실행의 채널 성패를 여기서 읽는다 */
+export function reportCounts(reports: ChannelReport[]): Record<string, number> {
+  const counts: Record<string, number> = { channels: reports.length, errors: 0, fetched: 0, inserted: 0, posted: 0, short: 0, unattributed: 0 };
+  for (const r of reports) {
+    counts[`${r.channel}_fetched`] = r.fetched;
+    counts[`${r.channel}_new`] = r.inserted;
+    counts[`${r.channel}_error`] = r.ok ? 0 : 1;
+    counts.errors += r.ok ? 0 : 1;
+    counts.fetched += r.fetched;
+    counts.inserted += r.inserted;
+    counts.posted += r.deduct?.posted ?? 0;
+    counts.short += r.deduct?.short ?? 0;
+    counts.unattributed += r.unattributed;
+  }
+  return counts;
 }

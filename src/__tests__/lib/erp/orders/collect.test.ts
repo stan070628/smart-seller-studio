@@ -142,3 +142,20 @@ describe('collectChannel', () => {
     expect((a.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0].from.toISOString()).toBe('2026-10-03T00:15:00.000Z');
   });
 });
+
+describe('collectOrders · reportCounts', () => {
+  it('채널을 차례로 돌고, 어댑터를 못 만든 채널(환경변수 없음)은 실패 보고만 남긴다', async () => {
+    const { collectOrders, reportCounts } = await import('@/lib/erp/orders/collect');
+    const factories = {
+      coupang_wing: () => { throw new Error('COUPANG_ACCESS_KEY가 없다'); },
+      coupang_rg: () => adapter(),
+      naver: () => adapter({ channel: 'naver', fetch: vi.fn(async () => ({ lines: [], cover: null, absenceMeansCancel: false })) }),
+      toss: () => adapter(),
+    };
+    const reports = await collectOrders({ channels: ['coupang_wing', 'coupang_rg', 'naver'], dryRun: false, now: NOW, pool, factories });
+    expect(reports.map((r) => [r.channel, r.ok])).toEqual([['coupang_wing', false], ['coupang_rg', true], ['naver', true]]);
+    expect(reports[0].error).toContain('COUPANG_ACCESS_KEY');
+    const counts = reportCounts(reports);
+    expect(counts).toMatchObject({ channels: 3, errors: 1, coupang_wing_error: 1, coupang_rg_error: 0, coupang_rg_fetched: 1, coupang_rg_new: 1, naver_fetched: 0 });
+  });
+});
