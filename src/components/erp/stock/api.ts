@@ -59,4 +59,22 @@ export const postReverse = (idemKey: string) => call<{ ids: number[] }>('/api/er
 export const fetchRecent = (limit: number) => call<RecentAdjust[]>(`/api/erp/stock/recent?limit=${limit}`);
 export const fetchRecon = () => call<RgReconResponse>('/api/erp/stock/rg-reconcile');
 export const postRgApply = (items: RgApplyItem[]) => call<AdjustResult[]>('/api/erp/stock/rg-reconcile', { items });
-export const postImport = (body: ImportBody) => call<ImportSummary>('/api/erp/stock/import', body);
+
+/**
+ * 실사표 불러오기. `commit:true`인데 검사 오류가 있으면 서버가 422 `{ success:false, data:<오류가 담긴 요약> }`로
+ * 응답한다 — 실패가 아니라 「오류를 보여줄 요약」이다. 화면이 오류 목록을 그리려면 이 data가 필요하므로
+ * 여기서만 422+data를 성공으로 취급한다(다른 라우트의 실패 응답에는 data가 없다).
+ */
+export async function postImport(body: ImportBody): Promise<ApiResult<ImportSummary>> {
+  try {
+    const res = await fetch('/api/erp/stock/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const json = await res.json().catch(() => null);
+    if (res.status === 422 && json?.data) return { ok: true, data: json.data as ImportSummary };
+    if (!res.ok || !json?.success) {
+      return { ok: false, status: res.status, error: json?.error ?? `요청 실패 (${res.status})`, code: json?.code, index: json?.index };
+    }
+    return { ok: true, data: json.data as ImportSummary };
+  } catch (e) {
+    return { ok: false, status: 0, error: e instanceof Error ? e.message : '네트워크 오류' };
+  }
+}

@@ -140,24 +140,32 @@ export default function CsvImportDialog({ onClose, onCommitted }: Props) {
                   <tr>{['SKU', '보유', '적재 단가', '출처', '단가 입력'].map((h) => <th key={h} style={thStyle}>{h}</th>)}</tr>
                 </thead>
                 <tbody>
-                  {preview.costs.map((c) => (
-                    <tr key={c.skuId} style={{ background: c.unitCost === null ? E.accentSoft : undefined }}>
-                      <td style={{ ...numTdStyle, textAlign: 'left', fontFamily: 'inherit' }}>{c.skuKey}</td>
-                      <td style={numTdStyle}>{won(c.onHand)}</td>
-                      <td style={numTdStyle}>{c.unitCost === null ? '—' : won(c.unitCost)}</td>
-                      <td style={{ ...numTdStyle, fontFamily: 'inherit' }}>{SOURCE_LABEL[c.source] ?? c.source}</td>
-                      <td style={numTdStyle}>
-                        <input
-                          aria-label={`${c.skuKey} 단가`}
-                          inputMode="numeric"
-                          value={costInput[c.skuKey] ?? ''}
-                          placeholder={c.unitCost === null ? '필수' : '바꿀 때만'}
-                          onChange={(e) => { setCostInput((m) => ({ ...m, [c.skuKey]: e.target.value })); touch(); }}
-                          style={{ ...inputStyle, width: 90, textAlign: 'right', fontFamily: E.mono }}
-                        />
-                      </td>
-                    </tr>
-                  ))}
+                  {preview.costs.map((c) => {
+                    // 기준 단위가 정해졌는데 단가가 옛 입고 이력에서 왔으면(옛 단위가 다를 수 있다) 서버가 오류로 막는다 —
+                    // 값이 채워져 있어도 사람이 확인해 다시 적어야 한다(opening.ts resolveOpeningCosts의 baseUnitCheck와 같은 조건).
+                    const baseUnitBlocked = c.source === 'history' && c.baseUnitLabel !== null;
+                    const needsOverride = c.unitCost === null || baseUnitBlocked;
+                    return (
+                      <tr key={c.skuId} style={{ background: needsOverride ? E.accentSoft : undefined }}>
+                        <td style={{ ...numTdStyle, textAlign: 'left', fontFamily: 'inherit' }}>{c.skuKey}</td>
+                        <td style={numTdStyle}>{won(c.onHand)}</td>
+                        <td style={numTdStyle}>{c.unitCost === null ? '—' : won(c.unitCost)}</td>
+                        <td style={{ ...numTdStyle, fontFamily: 'inherit' }}>
+                          {SOURCE_LABEL[c.source] ?? c.source}{baseUnitBlocked ? ` · 기준 단위 「${c.baseUnitLabel}」 확인 필요` : ''}
+                        </td>
+                        <td style={numTdStyle}>
+                          <input
+                            aria-label={`${c.skuKey} 단가`}
+                            inputMode="numeric"
+                            value={costInput[c.skuKey] ?? ''}
+                            placeholder={c.unitCost === null ? '필수' : baseUnitBlocked ? '필수(단위 확인)' : '바꿀 때만'}
+                            onChange={(e) => { setCostInput((m) => ({ ...m, [c.skuKey]: e.target.value })); touch(); }}
+                            style={{ ...inputStyle, width: 90, textAlign: 'right', fontFamily: E.mono, borderColor: needsOverride ? E.loss : E.line }}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
