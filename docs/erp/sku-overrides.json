@@ -1,14 +1,32 @@
 {
-  "mergeSkus": [["cp:16320666229:1개입", "cp:16320666229:2개입"]],
+  "mergeSkus": [
+    [
+      "cp:16320666229:1개입",
+      "cp:16320666229:2개입"
+    ],
+    [
+      "cp:16256947431:750ml",
+      "cp:16350383334:단일상품"
+    ]
+  ],
   "setMultiplier": [
-    { "listingKey": "coupang_wing|95835453387|", "skuKey": "cp:16320666229:1개입", "multiplier": 2 },
-    { "listingKey": "coupang_rg|95835453386|", "skuKey": "cp:16320666229:1개입", "multiplier": 2 }
+    {
+      "listingKey": "coupang_wing|95835453387|",
+      "skuKey": "cp:16320666229:1개입",
+      "multiplier": 2
+    },
+    {
+      "listingKey": "coupang_rg|95835453386|",
+      "skuKey": "cp:16320666229:1개입",
+      "multiplier": 2
+    }
   ],
   "excludeListings": [],
   "rename": {},
   "baseUnit": {
     "cp:16263936282:45g": "7개입 1팩 (코스트코 14개입 1박스 = 2팩)",
-    "cp:16320666229:1개입": "1개 (코스트코 2개입을 나눠 판매)"
+    "cp:16320666229:1개입": "1개 (코스트코 2개입을 나눠 판매)",
+    "cp:16256947431:750ml": "750ml 1병(+여행용 파우치 50ml)"
   },
   "archive": []
 }
