@@ -6,6 +6,7 @@ import { buildEntryPayload } from '@/lib/receipt/entry-payload';
 import { createCostEntry } from '@/lib/cost-management/create-entry';
 import { syncDraftStatus } from '@/lib/receipt/draft-status';
 import type { AttributedLine } from '@/lib/receipt/discount';
+import { ReceiptSplitError, parseSkuSplits, postReceiptLots, type SplitItem } from '@/lib/erp/ledger/receipt';
 import type { TaxType } from '@/lib/receipt/types';
 
 /** DB에서 읽어온 초안 줄. 확정에 필요한 필드만 */
@@ -23,7 +24,8 @@ interface DraftLineRecord extends ConfirmCandidate {
 /**
  * POST /api/receipts/[id]/confirm — 영수증 줄을 입고로 확정한다.
  *
- * Body: `{ line_nos?: number[] }` — 생략하면 확정 가능한 줄 전부
+ * Body: `{ line_nos?: number[], sku_splits?: { [line_no]: [{ sku_id, qty }] } }` — line_nos를 생략하면 확정 가능한 줄 전부.
+ * sku_splits = 원장 입고의 옵션(SKU) 분배(1-C1). 후보가 하나인 줄은 생략해도 서버가 전부 그 SKU로 넣는다.
  *
  * 확정 단위는 **줄**이다. 각 줄은 독립된 트랜잭션에서 성공/실패하고,
  * 성공하면 자기가 만든 `cost_entry_id`를 기록한다. 이미 기록된 줄은
@@ -45,6 +47,12 @@ export async function POST(
     Array.isArray(body?.line_nos) && body.line_nos.every((n: unknown) => typeof n === 'number')
       ? body.line_nos
       : undefined;
+  let skuSplits: Record<number, SplitItem[]>;
+  try {
+    skuSplits = parseSkuSplits(body?.sku_splits);
+  } catch (e) {
+    return NextResponse.json({ success: false, error: e instanceof ReceiptSplitError ? e.message : 'sku_splits 형식 오류' }, { status: 400 });
+  }
 
   const pool = getSourcingPool();
 
@@ -148,6 +156,21 @@ export async function POST(
         if (upd.rowCount === 0) {
           throw new Error('이미 확정된 줄입니다.');
         }
+
+        // 1-C1: 원장 self 입고. 같은 트랜잭션 — 원장 기록이 실패하면 이 줄의 입고(cost_entries)도 만들지 않는다.
+        // 수량 = 이 입고의 판매단위 수량(소분이면 팩 수), 단가 = 그 판매단위 원가
+        const e = entry as { quantity: string | number; unit_cost: string | number };
+        await postReceiptLots(client, {
+          lineId: dbLine.id,
+          lineNo: line.line_no,
+          itemCode: dbLine.item_code,
+          itemLabel: dbLine.item_label,
+          productCostId: line.product_cost_id as string,
+          packs: Number(e.quantity),
+          unitCost: Number(e.unit_cost),
+          receivedAt,
+          requested: skuSplits[line.line_no] ?? null,
+        });
 
         // 매핑 학습 — 다음 장보기에서 같은 품번이 자동으로 채워진다
         const upsert = mappingUpsertFrom({
