@@ -52,9 +52,9 @@ export async function insertRows(db: Db, rows: LedgerRow[]): Promise<number[]> {
   const ids: number[] = [];
   for (const r of rows) {
     const { rows: out } = await db.query(
-      `insert into erp.stock_ledger (sku_id, location, qty, kind, lot_id, unit_cost, occurred_at, ref_type, ref_id, reverses_id, idem_key, note)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) returning id`,
-      [r.skuId, r.location, r.qty, r.kind, r.lotId, r.unitCost, r.occurredAt, r.refType, r.refId, r.reversesId, r.idemKey, r.note],
+      `insert into erp.stock_ledger (sku_id, location, qty, kind, lot_id, unit_cost, occurred_at, ref_type, ref_id, reverses_id, idem_key, note, reason)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) returning id`,
+      [r.skuId, r.location, r.qty, r.kind, r.lotId, r.unitCost, r.occurredAt, r.refType, r.refId, r.reversesId, r.idemKey, r.note, r.reason ?? null],
     );
     ids.push(Number(out[0].id));
   }

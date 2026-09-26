@@ -11,7 +11,7 @@ const lots: LotBalance[] = [
 describe('planLotCreate', () => {
   it('lot_id 없이 단가를 가진 양수 전표 하나', () => {
     expect(planLotCreate({ skuId: 1, location: 'self', qty: 4, unitCost: 500, kind: 'opening', occurredAt: AT, idemKey: 'opening:1:self', refType: 'opening', refId: 'x.csv' }))
-      .toEqual([{ skuId: 1, location: 'self', qty: 4, kind: 'opening', lotId: null, unitCost: 500, occurredAt: AT, refType: 'opening', refId: 'x.csv', reversesId: null, idemKey: 'opening:1:self', note: null }]);
+      .toEqual([{ skuId: 1, location: 'self', qty: 4, kind: 'opening', lotId: null, unitCost: 500, occurredAt: AT, refType: 'opening', refId: 'x.csv', reversesId: null, idemKey: 'opening:1:self', note: null, reason: null }]);
   });
 
   it.each([-1, 1.5])('단가 %s는 RangeError', (u) => {
@@ -79,5 +79,15 @@ describe('assertIdemKey', () => {
     expect(() => planLotCreate({ skuId: 1, location: 'self', qty: 1, unitCost: 1, kind: 'receipt', occurredAt: AT, idemKey: 'r#1' })).toThrow(RangeError);
     expect(() => planConsume({ skuId: 1, location: 'self', qty: 1, kind: 'sale', occurredAt: AT, idemKey: 'rev:s' }, lots)).toThrow(RangeError);
     expect(() => planTransfer({ skuId: 1, from: 'self', to: 'rg', qty: 1, occurredAt: AT, idemKey: 't#0' }, lots)).toThrow(RangeError);
+  });
+});
+
+describe('사유(reason)', () => {
+  it('lot 생성·차감 전표는 사유를 싣고, 이동·역전표는 비운다', () => {
+    expect(planLotCreate({ skuId: 1, location: 'self', qty: 1, unitCost: 1, kind: 'adjust', reason: 'return_in', occurredAt: AT, idemKey: 'adj:x' })[0].reason).toBe('return_in');
+    expect(planConsume({ skuId: 1, location: 'self', qty: 1, kind: 'adjust', reason: 'damage', occurredAt: AT, idemKey: 'adj:y' }, lots)[0].reason).toBe('damage');
+    expect(planTransfer({ skuId: 1, from: 'self', to: 'rg_inbound', qty: 1, occurredAt: AT, idemKey: 't' }, lots)[0].reason).toBeNull();
+    const stored: StoredRow = { id: 5, skuId: 1, location: 'self', qty: -1, kind: 'adjust', lotId: 10, unitCost: null, occurredAt: AT, refType: 'adjust', refId: 'r', reversesId: null, idemKey: 'adj:y#0', note: null, reason: 'damage' };
+    expect(planReversal(stored, { occurredAt: AT, idemKey: 'rev:adj:y#0' }).reason).toBeNull();
   });
 });

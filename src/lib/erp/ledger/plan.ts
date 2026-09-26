@@ -4,6 +4,9 @@ import { allocateFifo, assertQty, type Location, type LotBalance } from './fifo'
 
 export type LedgerKind = 'opening' | 'receipt' | 'transfer' | 'sale' | 'return' | 'adjust' | 'reversal';
 
+/** 원장 사유(마이그레이션 115). opening = 기초재고(서버가 정한다) · rg_reconcile = RG 실재고 대조 반영 · 나머지는 화면에서 고른다 */
+export type Reason = 'opening' | 'count_diff' | 'damage' | 'loss' | 'sample' | 'return_in' | 'other' | 'rg_reconcile';
+
 export interface LedgerRow {
   skuId: number;
   location: Location;
@@ -19,6 +22,8 @@ export interface LedgerRow {
   reversesId: number | null;
   idemKey: string;
   note: string | null;
+  /** kind='adjust'면 필수(DB 검사). 이동·역전표는 null */
+  reason?: Reason | null;
 }
 
 export interface StoredRow extends LedgerRow {
@@ -39,6 +44,7 @@ export interface LotCreateInput extends RefInput {
   kind: 'opening' | 'receipt' | 'adjust';
   occurredAt: string;
   idemKey: string;
+  reason?: Reason;
 }
 
 export interface ConsumeInput extends RefInput {
@@ -48,6 +54,7 @@ export interface ConsumeInput extends RefInput {
   kind: 'sale' | 'adjust';
   occurredAt: string;
   idemKey: string;
+  reason?: Reason;
 }
 
 export interface TransferInput extends RefInput {
@@ -72,7 +79,7 @@ export function planLotCreate(p: LotCreateInput): LedgerRow[] {
   if (!Number.isInteger(p.unitCost) || p.unitCost < 0) throw new RangeError(`단가는 0 이상의 정수여야 한다: ${p.unitCost}`);
   return [{
     skuId: p.skuId, location: p.location, qty: p.qty, kind: p.kind, lotId: null, unitCost: p.unitCost,
-    occurredAt: p.occurredAt, ...refOf(p), reversesId: null, idemKey: p.idemKey,
+    occurredAt: p.occurredAt, ...refOf(p), reversesId: null, idemKey: p.idemKey, reason: p.reason ?? null,
   }];
 }
 
@@ -81,7 +88,7 @@ export function planConsume(p: ConsumeInput, lots: LotBalance[]): LedgerRow[] {
   assertIdemKey(p.idemKey);
   return allocateFifo(lots, p.qty).map((t, i) => ({
     skuId: p.skuId, location: p.location, qty: -t.qty, kind: p.kind, lotId: t.lotId, unitCost: null,
-    occurredAt: p.occurredAt, ...refOf(p), reversesId: null, idemKey: `${p.idemKey}#${i}`,
+    occurredAt: p.occurredAt, ...refOf(p), reversesId: null, idemKey: `${p.idemKey}#${i}`, reason: p.reason ?? null,
   }));
 }
 
@@ -90,7 +97,7 @@ export function planTransfer(p: TransferInput, fromLots: LotBalance[]): LedgerRo
   assertIdemKey(p.idemKey);
   if (p.from === p.to) throw new RangeError(`출발지와 도착지가 같다: ${p.from}`);
   return allocateFifo(fromLots, p.qty).flatMap((t, i) => {
-    const common = { skuId: p.skuId, kind: 'transfer' as const, lotId: t.lotId, unitCost: null, occurredAt: p.occurredAt, ...refOf(p), reversesId: null };
+    const common = { skuId: p.skuId, kind: 'transfer' as const, lotId: t.lotId, unitCost: null, occurredAt: p.occurredAt, ...refOf(p), reversesId: null, reason: null };
     return [
       { ...common, location: p.from, qty: -t.qty, idemKey: `${p.idemKey}#${i}:out` },
       { ...common, location: p.to, qty: t.qty, idemKey: `${p.idemKey}#${i}:in` },
@@ -104,5 +111,6 @@ export function planReversal(orig: StoredRow, p: { occurredAt: string; idemKey: 
   return {
     skuId: orig.skuId, location: orig.location, qty: -orig.qty, kind: 'reversal', lotId: orig.lotId ?? orig.id, unitCost: null,
     occurredAt: p.occurredAt, refType: orig.refType, refId: orig.refId, reversesId: orig.id, idemKey: p.idemKey, note: p.note ?? null,
+    reason: null,
   };
 }

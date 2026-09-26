@@ -33,7 +33,7 @@ describe('store', () => {
     expect(f.calls[0].params).toEqual([7101, 7]);
     expect(f.calls[1].sql).toMatch(/^select 1 from erp\.stock_ledger/);
     expect(f.calls[1].params).toEqual(['opening:7:self', 'opening:7:self#%']);
-    expect(f.calls[2].params).toEqual([7, 'self', 3, 'opening', null, 900, AT, null, null, null, 'opening:7:self', null]);
+    expect(f.calls[2].params).toEqual([7, 'self', 3, 'opening', null, 900, AT, null, null, null, 'opening:7:self', null, null]);
   });
 
   it('이미 기록된 멱등키면 쓰지 않는다', async () => {
@@ -104,5 +104,12 @@ describe('store', () => {
 
   it('reverse할 전표가 없으면 던진다', async () => {
     await expect(reverse(f.db, 'nope', { occurredAt: AT })).rejects.toThrow('되돌릴 전표가 없다');
+  });
+
+  it('사유를 13번째 인자(reason 칸)로 기록한다', async () => {
+    await postLotCreate(f.db, { skuId: 7, location: 'self', qty: 1, unitCost: 100, kind: 'adjust', reason: 'return_in', occurredAt: AT, idemKey: 'adj:r' });
+    const ins = f.calls.find((c) => c.sql.startsWith('insert into erp.stock_ledger'))!;
+    expect(ins.sql).toContain('reason');
+    expect(ins.params[12]).toBe('return_in');
   });
 });
