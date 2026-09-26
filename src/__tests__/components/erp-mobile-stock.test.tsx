@@ -9,12 +9,17 @@ const ROW = {
   hasLedger: true, lotCost: 700, legacyCost: null, costNeedsInput: false, selfValue: 3500, lastCountedAt: null,
 };
 const OTHER = { ...ROW, skuId: 2, key: 'cp:2:레드', name: '매트', option: '레드', self: 3, rgInbound: 0, rg: 0, value: 2100, selfValue: 2100 };
+// 원장 전표가 전혀 없는 SKU(hasLedger: false) — PC EditCell의 locationEmpty와 같은 근사치
+const EMPTY = {
+  ...ROW, skuId: 3, key: 'cp:3:그레이', name: '스툴', option: '그레이', self: 0, rgInbound: 0, rg: 0, value: 0,
+  hasLedger: false, lotCost: null, legacyCost: null, costNeedsInput: true, selfValue: 0,
+};
 
 // 콜백 안에서만 채워진다 — 선언 타입을 넓혀 둬야 TS가 null로 좁히지 않는다
 type Body = { items: Record<string, unknown>[] };
 function serve(onAdjust?: (b: Body) => void) {
   server.use(
-    http.get('/api/erp/stock', () => HttpResponse.json({ success: true, data: [ROW, OTHER] })),
+    http.get('/api/erp/stock', () => HttpResponse.json({ success: true, data: [ROW, OTHER, EMPTY] })),
     http.get('/api/erp/stock/recent', () => HttpResponse.json({ success: true, data: [] })),
     http.get('/api/erp/stock/count-queue', () => HttpResponse.json({ success: true, data: { today: '2026-09-27', n: 8, items: [ROW] } })),
     http.post('/api/erp/stock/adjust', async ({ request }) => {
@@ -84,5 +89,40 @@ describe('MobileStock', () => {
     fireEvent.click(screen.getByRole('button', { name: '맞습니다 — 센 기록 저장' }));
     expect(await screen.findByText(/센 기록을 저장했습니다/)).toBeInTheDocument();
     expect(screen.getByText(/남은 1 \/ 1개/)).toBeInTheDocument();
+  });
+
+  it('원장 전표가 없는 SKU는 기초재고 안내를 보이고 사유를 숨긴다(PC EditCell과 같은 규칙)', async () => {
+    serve();
+    render(<MobileStock />);
+    await screen.findByText('왜건');
+    fireEvent.change(screen.getByLabelText('상품 검색'), { target: { value: '스툴' } });
+    fireEvent.click(await screen.findByText('스툴'));
+    expect(screen.getByText('원장 전표가 없는 위치입니다 — 이번 「지금 개수」가 기초재고로 기록됩니다.')).toBeInTheDocument();
+    expect(screen.queryByLabelText('사유')).not.toBeInTheDocument();
+  });
+
+  it('원장 전표가 없는 SKU도 개수가 같으면 차이 없음 문구를 그대로 보인다', async () => {
+    serve();
+    render(<MobileStock />);
+    await screen.findByText('왜건');
+    fireEvent.change(screen.getByLabelText('상품 검색'), { target: { value: '스툴' } });
+    fireEvent.click(await screen.findByText('스툴'));
+    expect(screen.getByLabelText('지금 개수')).toHaveValue(0);
+    expect(screen.getByText('차이 없음 — 센 기록만 남깁니다')).toBeInTheDocument();
+  });
+
+  it('원장 전표가 없는 SKU에서 늘려 저장하면 기초재고로 기록되고, 화면에는 여전히 사유 없이 담긴다', async () => {
+    let body = null as Body | null;
+    serve((b) => { body = b; });
+    render(<MobileStock />);
+    await screen.findByText('왜건');
+    fireEvent.change(screen.getByLabelText('상품 검색'), { target: { value: '스툴' } });
+    fireEvent.click(await screen.findByText('스툴'));
+    fireEvent.click(screen.getByLabelText('하나 더하기'));
+    expect(screen.getByLabelText('단가')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('단가'), { target: { value: '1000' } });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => expect(body).not.toBeNull());
+    expect(body!.items[0]).toMatchObject({ skuId: 3, location: 'self', mode: 'count', value: 1, expected: 0 });
   });
 });

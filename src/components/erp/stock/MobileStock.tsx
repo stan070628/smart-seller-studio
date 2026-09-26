@@ -16,7 +16,9 @@ import { fetchCountQueue, fetchRecent, fetchStock, postAdjust } from './api';
 import { LOC_LABEL, defaultCost, filterRows, fmtKst, onHandAt, toAdjustItems, won, type EditLocation, type StockRow } from './stock-view';
 
 const TABS: EditLocation[] = ['self', 'rg_inbound'];
-const field = { width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #d1d5db', padding: '0 10px', fontSize: '14px', boxSizing: 'border-box', backgroundColor: '#fff' } as const;
+// 다크 테마 전역 스타일(body color: 밝은 회색)이 /m으로 새어 들어와 글자가 거의 안 보였다 —
+// 여기서 밝은 배경에 맞는 글자색을 명시로 고정한다(placeholder는 아래 .ms-input 스코프 스타일).
+const field = { width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #d1d5db', padding: '0 10px', fontSize: '14px', boxSizing: 'border-box', backgroundColor: '#fff', color: '#111827' } as const;
 const card = { backgroundColor: '#fff', borderRadius: '12px', padding: '12px', border: '1px solid #e5e7eb', marginBottom: '8px' } as const;
 const sectionTitle = { fontSize: '13px', fontWeight: 700, color: '#111827', margin: '4px 0 6px' } as const;
 
@@ -65,6 +67,9 @@ export default function MobileStock() {
   // 최신 원장 값(rows)을 먼저 쓴다 — 목록 카드는 열 때의 값이다
   const row = sel === null ? null : rows.find((r) => r.skuId === sel) ?? queue?.find((r) => r.skuId === sel) ?? null;
   const onHand = row ? onHandAt(row, loc) : 0;
+  // row.hasLedger는 SKU 전체 기준이라 그 위치가 정확히 비어 있는지 화면은 모른다 — 서버(adjust-store)가
+  // (SKU·위치) 단위로 다시 확인한다. PC EditCell과 같은 근사치로 안내·사유 숨김만 여기서 다룬다.
+  const locationEmpty = row ? !row.hasLedger : false;
 
   function pick(r: StockRow, l: EditLocation) {
     const fresh = rows.find((x) => x.skuId === r.skuId) ?? r;
@@ -131,6 +136,8 @@ export default function MobileStock() {
 
   return (
     <div style={{ padding: '12px 16px', paddingBottom: '96px' }}>
+      {/* 다크 테마 body color가 placeholder에도 새어 들어온다 — 이 화면 안에서만 밝게 고정 */}
+      <style>{`.ms-input::placeholder { color: #9ca3af; }`}</style>
       {msg && (
         <div role={msg.ok ? 'status' : 'alert'} style={{ ...card, backgroundColor: msg.ok ? '#e7f6ec' : '#fdecec', color: msg.ok ? '#1a7f37' : '#b91c1c', fontSize: '13px', fontWeight: 700 }}>
           {msg.text}
@@ -148,7 +155,7 @@ export default function MobileStock() {
           {(queue ?? []).map((r) => skuCard(rows.find((x) => x.skuId === r.skuId) ?? r))}
 
           <div style={{ ...sectionTitle, marginTop: '16px' }}>다른 상품</div>
-          <input aria-label="상품 검색" value={q} onChange={(e) => setQ(e.target.value)} placeholder="상품·옵션 검색" style={{ ...field, marginBottom: '10px' }} />
+          <input aria-label="상품 검색" className="ms-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="상품·옵션 검색" style={{ ...field, marginBottom: '10px' }} />
           {results.map(skuCard)}
           {q.trim() !== '' && results.length === 0 && <div style={{ padding: '16px', color: '#6b7280', fontSize: '13px' }}>검색 결과가 없습니다</div>}
 
@@ -194,10 +201,16 @@ export default function MobileStock() {
             ))}
           </div>
 
+          {locationEmpty && (
+            <div style={{ ...card, backgroundColor: '#f3f4f6', color: '#374151', fontSize: '12px', lineHeight: 1.5 }}>
+              원장 전표가 없는 위치입니다 — 이번 「지금 개수」가 기초재고로 기록됩니다.
+            </div>
+          )}
+
           <div style={{ ...card, textAlign: 'center' }}>
             <div style={{ fontSize: '12px', color: '#6b7280' }}>지금 개수 (원장 {won(onHand)})</div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginTop: '8px' }}>
-              <button type="button" aria-label="하나 빼기" onClick={() => setCount((c) => Math.max(0, c - 1))} style={{ width: '52px', height: '52px', borderRadius: '26px', border: '1px solid #d1d5db', backgroundColor: '#fff', fontSize: '24px' }}>−</button>
+              <button type="button" aria-label="하나 빼기" onClick={() => setCount((c) => Math.max(0, c - 1))} style={{ width: '52px', height: '52px', borderRadius: '26px', border: '1px solid #d1d5db', backgroundColor: '#fff', color: '#111827', fontSize: '24px' }}>−</button>
               <input
                 type="number"
                 min={0}
@@ -205,22 +218,24 @@ export default function MobileStock() {
                 aria-label="지금 개수"
                 value={count}
                 onChange={(e) => setCount(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
-                style={{ width: '96px', height: '52px', textAlign: 'center', fontSize: '24px', fontWeight: 700, borderRadius: '10px', border: '1px solid #d1d5db' }}
+                style={{ width: '96px', height: '52px', textAlign: 'center', fontSize: '24px', fontWeight: 700, borderRadius: '10px', border: '1px solid #d1d5db', color: '#111827' }}
               />
-              <button type="button" aria-label="하나 더하기" onClick={() => setCount((c) => c + 1)} style={{ width: '52px', height: '52px', borderRadius: '26px', border: '1px solid #d1d5db', backgroundColor: '#fff', fontSize: '24px' }}>+</button>
+              <button type="button" aria-label="하나 더하기" onClick={() => setCount((c) => c + 1)} style={{ width: '52px', height: '52px', borderRadius: '26px', border: '1px solid #d1d5db', backgroundColor: '#fff', color: '#111827', fontSize: '24px' }}>+</button>
             </div>
             <div style={{ marginTop: '8px', fontSize: '13px', fontWeight: 700, color: diff > 0 ? '#1a7f37' : diff < 0 ? '#b91c1c' : '#6b7280' }}>
               {diff === 0 ? '차이 없음 — 센 기록만 남깁니다' : `${won(onHand)} → ${won(count)} (${diff > 0 ? '+' : ''}${won(diff)})`}
             </div>
           </div>
 
-          <select aria-label="사유" value={reason} onChange={(e) => setReason(e.target.value as UserReason)} style={{ ...field, marginBottom: '8px' }}>
-            {USER_REASONS.map((r) => <option key={r} value={r}>{REASON_LABEL[r]}</option>)}
-          </select>
-          {diff > 0 && (
-            <input aria-label="단가" inputMode="numeric" value={costRaw} onChange={(e) => setCostRaw(e.target.value)} placeholder="늘어난 재고 단가(원)" style={{ ...field, marginBottom: '8px', borderColor: cost === null ? '#f87171' : '#d1d5db' }} />
+          {!locationEmpty && (
+            <select aria-label="사유" value={reason} onChange={(e) => setReason(e.target.value as UserReason)} style={{ ...field, marginBottom: '8px' }}>
+              {USER_REASONS.map((r) => <option key={r} value={r}>{REASON_LABEL[r]}</option>)}
+            </select>
           )}
-          <input aria-label="메모" value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} placeholder="메모(선택)" style={field} />
+          {diff > 0 && (
+            <input aria-label="단가" className="ms-input" inputMode="numeric" value={costRaw} onChange={(e) => setCostRaw(e.target.value)} placeholder="늘어난 재고 단가(원)" style={{ ...field, marginBottom: '8px', borderColor: cost === null ? '#f87171' : '#d1d5db' }} />
+          )}
+          <input aria-label="메모" className="ms-input" value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} placeholder="메모(선택)" style={field} />
 
           <div style={{
             position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: '480px',
