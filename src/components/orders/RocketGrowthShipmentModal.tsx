@@ -7,6 +7,7 @@ import { toast } from '@/components/ui/toast';
 import { confirmDialog } from '@/components/ui/confirm';
 import { useDraftPersist, loadDraft } from '@/hooks/useDraftPersist';
 import { RG_SHIPMENT_DRAFT_KEY } from './draft-keys';
+import { buildSkuItems, skusForProduct, type SkuOption } from './rg-sku-split';
 
 interface RgShipmentDraft {
   shippedAt: string;
@@ -33,6 +34,17 @@ export default function RocketGrowthShipmentModal({ products, onClose, onCreated
   const [totalFee, setTotalFee] = useState('');
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  // 1-C1: 원장 SKU(집 재고 포함). 불러오지 못해도 옛 흐름(원가 배분)은 그대로 쓸 수 있다
+  const [skus, setSkus] = useState<SkuOption[]>([]);
+  const [skuQty, setSkuQty] = useState<Record<number, string>>({});
+  const [wingInboundId, setWingInboundId] = useState('');
+
+  useEffect(() => {
+    fetch('/api/erp/stock')
+      .then((r) => r.json())
+      .then((j) => { if (j.success) setSkus(j.data as SkuOption[]); })
+      .catch(() => {});
+  }, []);
 
   // ── 초안 저장/복원 ── 전역 액션 모달 하나뿐이라 고정 키를 쓴다(ShippingGroupModal과 동일).
   useEffect(() => {
@@ -80,6 +92,15 @@ export default function RocketGrowthShipmentModal({ products, onClose, onCreated
       if (!ok) return;
     }
 
+    const split = buildSkuItems(activeItems.map((i) => ({ id: i.id, qty: i.qty })), skus, skuQty);
+    if (split.mismatched.length > 0) {
+      const lines = split.mismatched
+        .map((m) => `- ${products.find((p) => p.id === m.productId)?.product_name ?? m.productId}: 보낼 ${m.productQty}개 · SKU 합 ${m.skuSum}개`)
+        .join('\n');
+      const ok = await confirmDialog({ message: `옵션별 수량 합이 보낼 수량과 다릅니다:\n\n${lines}\n\n원장에는 옵션별 수량대로 기록됩니다. 계속할까요?` });
+      if (!ok) return;
+    }
+
     setSaving(true);
     try {
       const items = activeItems.map((item) => ({
@@ -91,11 +112,17 @@ export default function RocketGrowthShipmentModal({ products, onClose, onCreated
       const res = await fetch('/api/cost-management/rg-shipments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shipped_at: shippedAt, total_shipping_fee: feeNum, items }),
+        body: JSON.stringify({
+          shipped_at: shippedAt, total_shipping_fee: feeNum, items,
+          sku_items: split.items, wing_inbound_id: wingInboundId,
+        }),
       });
       const json = await res.json();
       if (json.success) {
         clearRgDraftNow();
+        const skipped = (json.data?.ledger?.skipped ?? []) as unknown[];
+        if (skipped.length > 0) toast.error(`원장 기초재고가 없는 SKU ${skipped.length}개는 원장 기록을 건너뛰었습니다`);
+        else toast.success('로켓그로스 입고를 등록했습니다');
         onCreated();
         onClose();
       } else {
@@ -147,6 +174,18 @@ export default function RocketGrowthShipmentModal({ products, onClose, onCreated
             />
           </div>
 
+          {/* Wing 입고 ID — 원장 이동 전표의 메모로 남긴다 */}
+          <div style={{ marginBottom: '16px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 600, color: '#555', marginBottom: '6px' }}>Wing 입고 ID (선택)</div>
+            <input
+              value={wingInboundId}
+              onChange={(e) => setWingInboundId(e.target.value)}
+              placeholder="예: 12345678"
+              aria-label="Wing 입고 ID"
+              style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #e5e5e5', fontSize: '12px', boxSizing: 'border-box' }}
+            />
+          </div>
+
           {/* 상품 목록 */}
           <div style={{ marginBottom: '16px' }}>
             <div style={{ fontSize: '11px', fontWeight: 600, color: '#555', marginBottom: '8px' }}>보낼 수량 입력</div>
@@ -163,8 +202,10 @@ export default function RocketGrowthShipmentModal({ products, onClose, onCreated
                 const qty = parseInt(qtyStr) || 0;
                 const unitFee = qty > 0 ? (unitFees.get(p.id) ?? 0) : null;
                 const overStock = qty > p.current_stock;
+                const linked = skusForProduct(p.id, skus);
                 return (
-                  <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '1fr 60px 80px 70px', gap: '8px', padding: '8px 12px', alignItems: 'center', borderBottom: '1px solid #f0f0f0', background: qty === 0 ? '#f5f5f7' : '#fff' }}>
+                  <React.Fragment key={p.id}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 80px 70px', gap: '8px', padding: '8px 12px', alignItems: 'center', borderBottom: '1px solid #f0f0f0', background: qty === 0 ? '#f5f5f7' : '#fff' }}>
                     <span style={{ fontSize: '11px', color: '#18181b', fontWeight: 500 }}>{p.product_name}</span>
                     <span style={{ fontSize: '11px', textAlign: 'right', color: '#71717a' }}>{fmt(p.current_stock)}개</span>
                     <div style={{ textAlign: 'right' }}>
@@ -186,6 +227,29 @@ export default function RocketGrowthShipmentModal({ products, onClose, onCreated
                       {unitFee !== null ? `${fmt(unitFee)}원` : '—'}
                     </span>
                   </div>
+                  {qty > 0 && (
+                    <div style={{ padding: '4px 12px 8px 24px', borderBottom: '1px solid #f0f0f0', background: '#fff', fontSize: '10.5px', color: '#555' }}>
+                      {linked.length === 0 && <span style={{ color: '#999' }}>연결된 재고 SKU 없음 — 원장 기록 없이 보냅니다</span>}
+                      {linked.length === 1 && (
+                        <span>재고 SKU {linked[0].option || linked[0].name} · {fmt(qty)}개 자동 (집 원장 {fmt(linked[0].self)}개)</span>
+                      )}
+                      {linked.length > 1 && linked.map((s) => (
+                        <label key={s.skuId} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px' }}>
+                          <span style={{ flex: 1 }}>{s.option || s.name} <span style={{ color: '#999' }}>(집 {fmt(s.self)})</span></span>
+                          <input
+                            type="number"
+                            min={0}
+                            aria-label={`${s.option || s.name} 보낼 수량`}
+                            value={skuQty[s.skuId] ?? ''}
+                            onChange={(e) => setSkuQty((prev) => ({ ...prev, [s.skuId]: e.target.value }))}
+                            placeholder="0"
+                            style={{ width: '56px', padding: '2px 6px', borderRadius: '6px', border: '1px solid #e5e5e5', fontSize: '11px', textAlign: 'right' }}
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  </React.Fragment>
                 );
               })}
             </div>
