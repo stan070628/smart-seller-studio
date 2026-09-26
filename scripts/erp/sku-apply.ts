@@ -186,6 +186,16 @@ async function apply(d: Draft): Promise<void> {
         where status <> 'archived' and origin = 'draft' and not (key = any($1::text[]))`,
       [d.skus.map((s) => s.key)],
     );
+    // P5: SKU 키는 동결이다. 초안에서 키가 사라지거나 병합(overrides)으로 보관되는 SKU에 원장 재고가 있으면
+    //     재고가 보이지 않게 된다 — 보관을 반영한 뒤 같은 트랜잭션에서 확인하고, 있으면 전부 롤백한다.
+    const stocked = await c.query(
+      `select s.key, h.location, h.qty
+         from erp.skus s join erp.stock_on_hand h on h.sku_id = s.id
+        where s.status = 'archived' and s.origin = 'draft' and h.qty <> 0`,
+    );
+    if (stocked.rows.length > 0) {
+      throw new Error(`재고가 있는 SKU를 보관하려 한다 — 키가 바뀌었거나 병합됐다. 초안(overrides)을 고친다:\n  ${stocked.rows.map((r) => `${r.key} ${r.location} ${r.qty}`).join('\n  ')}`);
+    }
 
     const listingId = new Map<string, number>();
     for (const l of d.listings) {

@@ -1032,7 +1032,9 @@ git commit -m "feat(erp): 원장 기록 — SKU 잠금·멱등·FIFO 차감·이
 ### Task 7: 재고가 있는 SKU의 보관 거부 (P5)
 
 **Files:**
-- Modify: `scripts/erp/sku-apply.ts` (`apply()` — SKU 보관 update 바로 앞)
+- Modify: `scripts/erp/sku-apply.ts` (`apply()` — SKU 보관 update 바로 뒤)
+
+> 🔵 **실행 중 변경(2026-09-26):** 아래 코드는 「초안에서 사라진 키」만 본다. 병합 overrides로 초안 안에서 `archived`가 되는 SKU를 놓치므로, **보관을 반영한 뒤 같은 트랜잭션에서 `status='archived' and origin='draft'`인 SKU의 재고를 검사**하는 것으로 바꿔 구현했다(두 경로를 한 번에 막는다).
 
 - [ ] **Step 1: 보관 전에 재고 확인을 넣는다**
 
