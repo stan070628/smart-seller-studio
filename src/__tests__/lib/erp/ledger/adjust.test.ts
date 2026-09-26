@@ -112,4 +112,10 @@ describe('멱등키', () => {
     expect(isReversibleKey(`rev:adj:${REQ}`)).toBe(false);
     expect(isReversibleKey(`adj:${REQ}#0`)).toBe(false);
   });
+  it('🔴 RG 입고 완료(rgdone:<uuid>)도 되돌릴 수 있다 — 옛 원가 기록과 짝이 없는 원장만의 이동이다', () => {
+    expect(isReversibleKey(`rgdone:${REQ}`)).toBe(true);
+    expect(isReversibleKey(`rgdone:${REQ}#0:in`)).toBe(false);
+    expect(isReversibleKey('rgdone:7')).toBe(false);
+    expect(isReversibleKey(`rgship:${REQ}:7`)).toBe(false);
+  });
 });

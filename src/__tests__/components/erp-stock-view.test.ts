@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  computeKpis, defaultCost, editDiff, filterGroups, filterRows, filtersActive, groupRows, localInputToIso, summarizeStaged, toAdjustItems, toExportCsv,
+  computeKpis, defaultCost, editDiff, rgArriveQty, filterGroups, filterRows, filtersActive, groupRows, localInputToIso, summarizeStaged, toAdjustItems, toExportCsv,
   type RgRecon, type StagedEdit, type StockRow,
 } from '@/components/erp/stock/stock-view';
 
@@ -104,5 +104,17 @@ describe('상품 단위 묶기', () => {
     expect(filtersActive({ q: '왜건', onlyStocked: false, onlyRgMismatch: false })).toBe(true);
     expect(filtersActive({ q: '', onlyStocked: true, onlyRgMismatch: false })).toBe(true);
     expect(filtersActive({ q: '', onlyStocked: false, onlyRgMismatch: true })).toBe(true);
+  });
+});
+
+describe('rgArriveQty (「입고 완료 m개 옮기기」)', () => {
+  const rc = (actual: number): RgRecon => ({ fetchedAt: 'x', actual: new Map([[1, actual]]), issues: [], inactive: [] });
+  it('🔴 m = min(입고중, RG 실재고 − 원장 RG) — RG 실재고가 원장보다 많고 입고중이 남았을 때만', () => {
+    expect(rgArriveQty(row({ rg: 2, rgInbound: 5 }), rc(4))).toBe(2);
+    expect(rgArriveQty(row({ rg: 2, rgInbound: 1 }), rc(4))).toBe(1);
+    expect(rgArriveQty(row({ rg: 2, rgInbound: 0 }), rc(4))).toBe(0);
+    expect(rgArriveQty(row({ rg: 4, rgInbound: 3 }), rc(4))).toBe(0);
+    expect(rgArriveQty(row({ rg: 5, rgInbound: 3 }), rc(4))).toBe(0);
+    expect(rgArriveQty(row({ rg: 2, rgInbound: 3 }), null)).toBe(0);
   });
 });

@@ -1,6 +1,6 @@
 'use client';
 
-/** 우측 입출 이력. 조정·기초 묶음(같은 원 멱등키)마다 「되돌리기」 하나 — 역전표를 남긴다 */
+/** 우측 입출 이력. 조정·기초·RG 입고 완료 묶음(같은 원 멱등키)마다 「되돌리기」 하나 — 역전표를 남긴다 */
 import React, { useCallback, useEffect, useState } from 'react';
 import { Undo2, X } from 'lucide-react';
 import { E } from '@/lib/design-tokens';
@@ -48,8 +48,14 @@ export default function HistoryPanel({ row, refreshKey, onClose, onChanged }: Pr
   async function undo(h: HistoryRow) {
     const group = (items ?? []).filter((x) => x.baseKey === h.baseKey);
     const qty = group.reduce((s, x) => s + x.qty, 0);
+    // 이동(RG 입고 완료 rgdone:)은 출발 −·도착 + 한 쌍이라 합이 0이다 — 어디서 어디로 몇 개인지 보인다
+    const from = group.find((x) => x.qty < 0);
+    const to = group.find((x) => x.qty > 0);
+    const what = h.kind === 'transfer' && from && to
+      ? `${LOC_LABEL[from.location]} → ${LOC_LABEL[to.location]} ${won(group.filter((x) => x.qty > 0).reduce((s, x) => s + x.qty, 0))}개`
+      : `${LOC_LABEL[h.location]} ${qty > 0 ? '+' : ''}${won(qty)}개${h.reason ? ` · ${REASON_LABEL[h.reason]}` : ''}`;
     const ok = await confirmDialog({
-      message: `이 ${KIND_LABEL[h.kind] ?? h.kind} 전표를 되돌립니다(지우지 않고 역전표를 남깁니다).\n\n${LOC_LABEL[h.location]} ${qty > 0 ? '+' : ''}${won(qty)}개${h.reason ? ` · ${REASON_LABEL[h.reason]}` : ''}`,
+      message: `이 ${KIND_LABEL[h.kind] ?? h.kind} 전표를 되돌립니다(지우지 않고 역전표를 남깁니다).\n\n${what}`,
       confirmLabel: '되돌리기',
       danger: true,
     });

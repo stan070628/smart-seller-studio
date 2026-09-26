@@ -36,7 +36,8 @@ export interface ImportPreview {
   plan: ImportPlanRow[];
   errors: string[];
   warnings: string[];
-  excluded: { skuKey: string; reason: string }[];
+  /** kind: stocked = 원장에 전표가 이미 있는 SKU(집·입고중·RG 모두 불러오지 않는다) · blank = self_count 빈칸 */
+  excluded: { skuKey: string; kind: 'stocked' | 'blank'; reason: string }[];
   /** 보유 수량이 있는 SKU의 적재 단가와 출처(화면이 단가 입력 칸을 그린다) */
   costs: ResolvedCost[];
   totals: ImportTotals;
@@ -72,7 +73,7 @@ export function planOpeningImport(input: {
 }): ImportPreview {
   const errors: string[] = [];
   const warnings: string[] = [];
-  const excluded: { skuKey: string; reason: string }[] = [];
+  const excluded: ImportPreview['excluded'] = [];
   const active = new Map(input.skus.map((s) => [s.id, s]));
   const activeKeys = new Set(input.skus.map((s) => s.key));
 
@@ -91,8 +92,8 @@ export function planOpeningImport(input: {
     const s = active.get(r.skuId);
     if (!s) { errors.push(`실사표의 SKU ${r.skuId}(${r.skuKey})가 활성 SKU가 아니다`); continue; }
     if (s.key !== r.skuKey) { errors.push(`SKU ${r.skuId} 키가 다르다: 실사표 ${r.skuKey} / DB ${s.key}`); continue; }
-    if (input.stockedSkuIds.has(r.skuId)) { excluded.push({ skuKey: r.skuKey, reason: '원장에 이미 전표가 있다 — 재고현황에서 조정으로 고친다' }); continue; }
-    if (r.selfCount === null) { excluded.push({ skuKey: r.skuKey, reason: 'self_count 빈칸 — 불러오지 않는다(나중에 화면에서 적으면 기초재고가 된다)' }); continue; }
+    if (input.stockedSkuIds.has(r.skuId)) { excluded.push({ skuKey: r.skuKey, kind: 'stocked', reason: '원장에 이미 전표가 있다 — 재고현황에서 조정으로 고친다' }); continue; }
+    if (r.selfCount === null) { excluded.push({ skuKey: r.skuKey, kind: 'blank', reason: 'self_count 빈칸 — 불러오지 않는다(나중에 화면에서 적으면 기초재고가 된다)' }); continue; }
     if (r.selfCount < 0) { errors.push(`self_count 음수: ${r.skuKey}`); continue; }
     if (r.rgInbound < 0) { errors.push(`rg_inbound 음수: ${r.skuKey}`); continue; }
     included.push(r);

@@ -29,6 +29,12 @@ export interface RgApplyItem {
   unitCost: number | null;
 }
 
+export interface RgArriveItem {
+  skuId: number;
+  qty: number;
+  requestId: string;
+}
+
 export interface ImportBody {
   csv: string;
   fileName: string;
@@ -60,6 +66,8 @@ export const postReverse = (idemKey: string) => call<{ ids: number[] }>('/api/er
 export const fetchRecent = (limit: number) => call<RecentAdjust[]>(`/api/erp/stock/recent?limit=${limit}`);
 export const fetchRecon = () => call<RgReconResponse>('/api/erp/stock/rg-reconcile');
 export const postRgApply = (items: RgApplyItem[]) => call<AdjustResult[]>('/api/erp/stock/rg-reconcile', { items });
+export const postRgArrive = (items: RgArriveItem[]) =>
+  call<{ skuId: number; qty: number; requestId: string; outcome: 'posted' | 'duplicate' }[]>('/api/erp/stock/rg-arrive', { items });
 export const fetchCountQueue = (n: number) => call<CountQueueResponse>(`/api/erp/stock/count-queue?n=${n}`);
 
 /**

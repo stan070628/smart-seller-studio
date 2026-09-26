@@ -403,6 +403,21 @@ describe('ReceiptDetail', () => {
     expect(await screen.findByText('1건 입고 완료')).toBeInTheDocument();
   });
 
+  it('🔴 실사 이전 구매라 원장 입고를 건너뛴 SKU를 알린다', async () => {
+    mockDetail(detail());
+    server.use(http.post(`/api/receipts/${DRAFT_ID}/confirm`, () =>
+      HttpResponse.json({ success: true, data: {
+        created: [{ line_no: 1 }], skipped: [], failed: [],
+        skipped_pre_opening: [{ line_no: 1, sku_id: 11, qty: 1, name: '라운드티 · 블랙' }],
+      } })));
+
+    render(<ReceiptDetail draftId={DRAFT_ID} />);
+    fireEvent.click(await screen.findByText('1건 입고 확정'));
+
+    expect(await screen.findByText('1건 입고 완료')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('실사 이전 구매라 원장 입고는 건너뜀: 라운드티 · 블랙');
+  });
+
   it('🔴 일부 실패하면 어느 줄이 왜 실패했는지 보여준다', async () => {
     mockDetail(detail());
     server.use(http.post(`/api/receipts/${DRAFT_ID}/confirm`, () =>

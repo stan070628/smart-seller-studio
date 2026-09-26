@@ -40,6 +40,9 @@ export class ReceiptSplitError extends Error {
  */
 export const LEARNED_LABEL_SUFFIX = '[영수증 확정 학습]';
 
+/** 옵션 나누기·SKU 고르기를 하는 곳. PC 모달에는 그 화면이 없다 */
+export const PHONE_SCREEN = '휴대폰 영수증 화면(/m/receipt)';
+
 const strip = (c: SkuCandidate): SkuCandidate => ({ skuId: c.skuId, key: c.key, name: c.name, option: c.option });
 
 export const skuLabel = (c: { name: string; option?: string | null }): string => (c.option ? `${c.name} · ${c.option}` : c.name);
@@ -110,8 +113,9 @@ export function resolveReceiptSplit(
     return out.sort((a, b) => a.skuId - b.skuId);
   }
   if (candidates.length === 1) return [{ skuId: candidates[0], qty: packs }];
-  if (candidates.length === 0) throw new ReceiptSplitError('이 품목에 연결된 재고 SKU가 없습니다 — 확정 화면에서 SKU를 골라 주세요.');
-  throw new ReceiptSplitError(`옵션이 ${candidates.length}개입니다 — 확정 화면에서 옵션별 수량을 나눠 주세요.`);
+  // PC 영수증 모달(ReceiptIngestModal)에는 나누기·고르기 화면이 없다 — 어디서 하는지를 사유에 적는다
+  if (candidates.length === 0) throw new ReceiptSplitError(`이 품목에 연결된 재고 SKU가 없습니다 — ${PHONE_SCREEN}에서 SKU를 골라 주세요.`);
+  throw new ReceiptSplitError(`옵션이 ${candidates.length}개입니다 — ${PHONE_SCREEN}에서 옵션별 수량을 나눠 주세요.`);
 }
 
 /** 요청 본문 sku_splits: { [line_no]: [{ sku_id, qty, manual? }] } */
@@ -160,6 +164,10 @@ export async function loadSkuOptions(
  * 멱등키 receipt:<receipt_line_id>:<sku_id>.
  * 학습: 사람이 분배를 보냈을 때(나눈·고른·바꾼 SKU)만 품번 연결을 purchase_units에 기억한다(LEARNED_LABEL_SUFFIX 참조).
  * 후보 하나 자동 입고는 사람이 고른 것이 없으므로 기억하지 않는다.
+ *
+ * 실사 이전 구매(I3): 그 SKU에 되돌리지 않은 self 기초(opening) 전표가 있고 그 시각이 구매일 KST 자정 이후면
+ * 물건은 이미 기초재고로 세어졌다 — 원장 입고를 건너뛰고 skippedPreOpening으로 돌려준다(이중 계상 방지).
+ * 옛 원가 기록(cost_entries)은 호출자가 그대로 남긴다. 조회는 모든 SKU를 잠근 뒤에 한다(다른 트랜잭션이 기초를 끼워 넣지 못하게).
  */
 export async function postReceiptLots(
   db: Db,
@@ -167,7 +175,7 @@ export async function postReceiptLots(
     lineId: string; lineNo: number; itemCode: string | null; itemLabel: string; productCostId: string;
     packs: number; unitCost: number; receivedAt: string; requested?: SplitItem[] | null;
   },
-): Promise<{ skuId: number; qty: number }[]> {
+): Promise<{ split: { skuId: number; qty: number }[]; skippedPreOpening: { skuId: number; qty: number; label: string }[] }> {
   const opts = (await loadSkuOptions(db, [{ lineNo: p.lineNo, itemCode: p.itemCode, productCostId: p.productCostId }])).get(p.lineNo)!;
   const candIds = opts.candidates.map((c) => c.skuId);
   const reqIds = (p.requested ?? []).map((r) => r.skuId).filter((id) => Number.isInteger(id) && id > 0);
@@ -191,11 +199,24 @@ export async function postReceiptLots(
   // 1-B 인계(I4): 여러 SKU는 오름차순으로 먼저 잠근다(split은 이미 오름차순)
   for (const s of split) await lockSku(db, s.skuId);
   const occurredAt = `${p.receivedAt}T00:00:00+09:00`;
+  const { rows: opened } = await db.query(
+    `select distinct o.sku_id from erp.stock_ledger o
+      where o.sku_id = any($1::bigint[]) and o.location = 'self' and o.kind = 'opening' and o.occurred_at >= $2::timestamptz
+        and not exists (select 1 from erp.stock_ledger r where r.reverses_id = o.id)`,
+    [split.map((s) => s.skuId), occurredAt],
+  );
+  const preOpening = new Set(opened.map((r) => Number(r.sku_id)));
+  const skippedPreOpening: { skuId: number; qty: number; label: string }[] = [];
   for (const s of split) {
-    await postLotCreate(db, {
-      skuId: s.skuId, location: 'self', qty: s.qty, unitCost: p.unitCost, kind: 'receipt', occurredAt,
-      idemKey: `receipt:${p.lineId}:${s.skuId}`, refType: 'receipt_line', refId: p.lineId, note: p.itemLabel.slice(0, 100),
-    });
+    if (preOpening.has(s.skuId)) {
+      skippedPreOpening.push({ skuId: s.skuId, qty: s.qty, label: labelOf(s.skuId) });
+    } else {
+      await postLotCreate(db, {
+        skuId: s.skuId, location: 'self', qty: s.qty, unitCost: p.unitCost, kind: 'receipt', occurredAt,
+        idemKey: `receipt:${p.lineId}:${s.skuId}`, refType: 'receipt_line', refId: p.lineId, note: p.itemLabel.slice(0, 100),
+      });
+    }
+    // 품번 학습은 건너뛴 SKU도 한다 — 연결은 원장 입고와 무관하게 맞다
     if (learn) {
       await db.query(
         `insert into erp.purchase_units (supplier, supplier_code, label, sku_id) values ('costco', $1, $2, $3)
@@ -204,5 +225,5 @@ export async function postReceiptLots(
       );
     }
   }
-  return split;
+  return { split, skippedPreOpening };
 }

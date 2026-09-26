@@ -51,6 +51,17 @@ export function rgDiff(r: StockRow, recon: RgRecon | null): number | null {
   return a === null ? null : a - r.rg;
 }
 
+/**
+ * 「입고 완료 m개 옮기기」의 m = min(RG입고중, RG 실재고 − 원장 RG). 대조 전이거나 RG 실재고가 원장 이하, 입고중 0이면 0.
+ * 보낸 물건이 RG에 들어가 실재고가 늘어난 것을 「반영」(rg 지금 개수 조정)으로 맞추면 입고중이 그대로 남아 두 번 센다 —
+ * 먼저 입고중에서 옮기고, 남은 차이만 「반영」한다.
+ */
+export function rgArriveQty(r: StockRow, recon: RgRecon | null): number {
+  const d = rgDiff(r, recon);
+  if (d === null || d <= 0 || r.rgInbound <= 0) return 0;
+  return Math.min(r.rgInbound, d);
+}
+
 export function editDiff(e: Pick<StagedEdit, 'mode' | 'value' | 'expected'>): number {
   return e.mode === 'count' ? e.value - e.expected : e.value;
 }

@@ -12,7 +12,7 @@ import { useRouter } from 'next/navigation';
 import type { Badge, Progress } from '@/lib/receipt/view';
 import ReceiptLineRow, { type LineData, type ProductOption } from './ReceiptLineRow';
 import ReceiptSkuSplit from './ReceiptSkuSplit';
-import { blockedLines, emptyDraft, toSkuSplits, type LineSkuOptions, type SkuCandidateView, type SplitDraft } from './sku-split';
+import { blockedLines, emptyDraft, preOpeningNotice, toSkuSplits, type LineSkuOptions, type SkuCandidateView, type SplitDraft } from './sku-split';
 
 interface CheckDetail {
   status: string;
@@ -56,6 +56,8 @@ export default function ReceiptDetail({ draftId }: { draftId: string }) {
   const [products, setProducts] = useState<ProductOption[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
+  /** 실사 이전 구매라 원장 입고를 건너뛴 SKU 안내(I3) */
+  const [info, setInfo] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   /** 폐기는 두 번 눌러야 실행된다. window.confirm은 모바일에서 거칠고 테스트도 어렵다 */
   const [discardArmed, setDiscardArmed] = useState(false);
@@ -164,6 +166,7 @@ export default function ReceiptDetail({ draftId }: { draftId: string }) {
   async function confirm() {
     setConfirming(true);
     setError(null);
+    setInfo(null);
     try {
       const res = await fetch(`/api/receipts/${draftId}/confirm`, {
         method: 'POST',
@@ -179,6 +182,7 @@ export default function ReceiptDetail({ draftId }: { draftId: string }) {
           ? `${created.length}건 입고, ${failed.length}건 실패: ${failed.map((f) => `${f.line_no}번 ${f.error}`).join(' / ')}`
           : `${created.length}건 입고 완료`,
       );
+      setInfo(preOpeningNotice(json.data.skipped_pre_opening));
       await Promise.all([load(), loadSkuOptions()]);
     } catch (e) {
       setError(e instanceof Error ? e.message : '확정 실패');
@@ -292,6 +296,11 @@ export default function ReceiptDetail({ draftId }: { draftId: string }) {
                       marginBottom: '12px', fontSize: '13px', color: '#1a7f37', fontWeight: 700 }}>
           {result}
         </div>
+      )}
+
+      {info && (
+        <div role="status" style={{ backgroundColor: '#eff6ff', borderRadius: '10px', padding: '12px',
+                                    marginBottom: '12px', fontSize: '13px', color: '#1d4ed8' }}>{info}</div>
       )}
 
       {error && (

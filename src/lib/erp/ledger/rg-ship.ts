@@ -2,7 +2,8 @@
 // RG 보내기 → 원장 self → rg_inbound 이동(SKU별). 옛 rg-shipments 라우트의 트랜잭션 안에서 부른다.
 // self(집) 위치에 원장 전표가 하나도 없는 SKU는 건너뛴다(기초재고 전에도 옛 원가 배분 흐름이 막히지 않게) —
 // 호출자가 사용자에게 알린다. 'rg' 등 다른 위치에만 전표가 있는 SKU도 옮길 원본(self)이 비어 있으므로 건너뛴다.
-// self 전표가 있는데 집 재고가 모자라면 던진다 — 호출자가 전부 되돌린다. 입고 완료(rg_inbound → rg)는 1-C2.
+// self 전표가 있는데 집 재고가 모자라면 던진다 — 호출자가 전부 되돌린다. 입고 완료(rg_inbound → rg)는 1-C1에서는 사람이
+// 재고 화면 RG 대조의 「입고 완료 m개 옮기기」로(rg-arrive.ts), 자동 판정은 1-C2.
 import { InsufficientStockError } from './fifo';
 import { lockSku, postTransfer, type Db } from './store';
 

@@ -55,7 +55,7 @@ beforeEach(() => {
   });
   mockCreate.mockResolvedValue({ entry: { id: 'ce-1', quantity: '4', unit_cost: 2500 }, carryoverOut: null, isSubdivisionMode: false });
   mockSync.mockResolvedValue('unchanged');
-  mockPostLots.mockImplementation(async () => { order.push('ledger'); return [{ skuId: 7, qty: 4 }]; });
+  mockPostLots.mockImplementation(async () => { order.push('ledger'); return { split: [{ skuId: 7, qty: 4 }], skippedPreOpening: [] }; });
 });
 
 describe('POST /api/receipts/[id]/confirm — 원장 입고', () => {
@@ -92,5 +92,23 @@ describe('POST /api/receipts/[id]/confirm — 원장 입고', () => {
     expect(res.status).toBe(400);
     expect((await res.json()).error).toBe('옵션 분배(sku_splits) 형식이 잘못됐습니다.');
     expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('🔴 실사 이전 구매로 원장 입고를 건너뛴 SKU를 응답에 싣는다 — 입고(cost_entries)는 그대로 확정', async () => {
+    mockPostLots.mockImplementation(async () => {
+      order.push('ledger');
+      return { split: [{ skuId: 7, qty: 4 }], skippedPreOpening: [{ skuId: 7, qty: 4, label: '라운드티 · 블랙' }] };
+    });
+    const { POST } = await import('@/app/api/receipts/[id]/confirm/route');
+    const json = await (await POST(post({}), ctx)).json();
+    expect(json.data.created).toEqual([{ line_no: 1, cost_entry_id: 'ce-1' }]);
+    expect(json.data.skipped_pre_opening).toEqual([{ line_no: 1, sku_id: 7, qty: 4, name: '라운드티 · 블랙' }]);
+    expect(order).toEqual(['BEGIN', 'ledger', 'COMMIT']);
+  });
+
+  it('건너뛴 SKU가 없으면 skipped_pre_opening은 빈 배열', async () => {
+    const { POST } = await import('@/app/api/receipts/[id]/confirm/route');
+    const json = await (await POST(post({}), ctx)).json();
+    expect(json.data.skipped_pre_opening).toEqual([]);
   });
 });

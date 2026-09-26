@@ -32,6 +32,7 @@ function renderTable(forceOpen = false) {
       onSubmitEdit={() => {}}
       onSelect={onSelect}
       onRgApply={() => {}}
+      onRgArrive={() => {}}
     />,
   );
   return { onEdit, onSelect };
@@ -87,12 +88,46 @@ describe('StockTable — 상품 묶음', () => {
         ], null), NO_FILTER, null)}
         forceOpen
         recon={null} staged={new Map()} countMode={false} editing={null} selected={null} busy={false}
-        onEdit={() => {}} onCancelEdit={() => {}} onSubmitEdit={() => {}} onSelect={() => {}} onRgApply={() => {}}
+        onEdit={() => {}} onCancelEdit={() => {}} onSubmitEdit={() => {}} onSelect={() => {}} onRgApply={() => {}} onRgArrive={() => {}}
       />,
     );
     expect(screen.getByText('마지막 실사')).toBeInTheDocument();
     expect(screen.getByText('2026-09-27')).toBeInTheDocument();
     expect(within(trOf('베이지')).getByText('안 셈')).toBeInTheDocument();
     expect(within(trOf('왜건')).getByText('안 셈 1')).toBeInTheDocument();
+  });
+});
+
+describe('StockTable — RG 입고 완료 옮기기', () => {
+  function renderRecon(rows: StockRow[], actual: [number, number][]) {
+    const onRgApply = vi.fn();
+    const onRgArrive = vi.fn();
+    const recon = { fetchedAt: 'x', actual: new Map(actual), issues: [], inactive: [] };
+    render(
+      <StockTable
+        views={filterGroups(groupRows(rows, recon), NO_FILTER, recon)}
+        forceOpen
+        recon={recon} staged={new Map()} countMode={false} editing={null} selected={null} busy={false}
+        onEdit={() => {}} onCancelEdit={() => {}} onSubmitEdit={() => {}} onSelect={() => {}}
+        onRgApply={onRgApply} onRgArrive={onRgArrive}
+      />,
+    );
+    return { onRgApply, onRgArrive };
+  }
+
+  it('🔴 RG 실재고 > 원장 RG이고 입고중이 남은 행에 「입고 완료 m개 옮기기」(m = min(입고중, 차이)) — 「반영」 옆', () => {
+    const { onRgArrive, onRgApply } = renderRecon([row({ rgInbound: 1, rg: 2 }), row({ skuId: 3, key: 'k3', name: '매트', option: '', rgInbound: 5, rg: 0 })], [[1, 4], [3, 2]]);
+    const r1 = trOf('블랙');
+    fireEvent.click(within(r1).getByRole('button', { name: '입고 완료 1개 옮기기' }));
+    expect(onRgArrive).toHaveBeenCalledWith(expect.objectContaining({ skuId: 1 }), 1);
+    expect(onRgApply).not.toHaveBeenCalled();
+    expect(within(r1).getByRole('button', { name: '반영' })).toBeInTheDocument();
+    expect(within(trOf('매트')).getByRole('button', { name: '입고 완료 2개 옮기기' })).toBeInTheDocument();
+  });
+
+  it('입고중이 없거나 RG 실재고가 원장 이하이면 옮기기 버튼이 없다', () => {
+    renderRecon([row({ rgInbound: 0, rg: 2 }), row({ skuId: 3, key: 'k3', name: '매트', option: '', rgInbound: 5, rg: 4 })], [[1, 4], [3, 2]]);
+    expect(screen.queryByRole('button', { name: /입고 완료/ })).toBeNull();
+    expect(screen.getAllByRole('button', { name: '반영' })).toHaveLength(2);
   });
 });

@@ -3,15 +3,16 @@
 /**
  * 재고 표 — 상품 단위로 묶는다(결정 5). 옵션이 여러 개인 상품은 합계 한 줄(누르면 펼침), 옵션 1개 상품은 그대로 한 줄.
  * 고치는 칸(집·RG입고중)은 옵션 행에만 있다. 옵션 행을 누르면 우측 이력. RG 차이가 있으면 옵션 행마다 「반영」.
+ * RG 실재고가 원장보다 많고 입고중이 남았으면 그 앞에 「입고 완료 m개 옮기기」(입고중 → RG, 먼저 누를 것).
  * 조회조건이 걸리면(forceOpen) 묶음을 모두 펼쳐 맞는 옵션을 바로 보인다.
  */
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { E } from '@/lib/design-tokens';
-import { Tag, bandStyle, btnStyle, numTdStyle, thStyle } from '@/components/orders/erp-ui';
+import { Tag, bandStyle, btnStyle, numTdStyle, primaryBtnStyle, thStyle } from '@/components/orders/erp-ui';
 import EditCell from './EditCell';
 import {
-  defaultCost, editDiff, rgActual, rgDiff, stageKey, won,
+  defaultCost, editDiff, rgActual, rgArriveQty, rgDiff, stageKey, won,
   type EditLocation, type GroupView, type RgRecon, type StagedEdit, type StockRow,
 } from './stock-view';
 import { kstDate } from '@/lib/erp/stock/count-queue';
@@ -31,6 +32,8 @@ interface Props {
   onSubmitEdit: (e: StagedEdit) => void;
   onSelect: (skuId: number) => void;
   onRgApply: (row: StockRow) => void;
+  /** 입고중 → RG로 qty개 옮긴다(RG 입고 완료). qty = rgArriveQty */
+  onRgArrive: (row: StockRow, qty: number) => void;
 }
 
 const HEADERS = ['상품', '옵션', '집', 'RG입고중', 'RG(원장)', 'RG실재고', '차이', '단가', '평가액', '마지막 실사'];
@@ -40,9 +43,10 @@ const textTd: React.CSSProperties = {
   fontSize: 12, color: E.ink, whiteSpace: 'nowrap', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis',
 };
 const smallBtn: React.CSSProperties = { ...btnStyle, height: 20, padding: '0 6px', fontSize: 10.5 };
+const smallPrimaryBtn: React.CSSProperties = { ...primaryBtnStyle, height: 20, padding: '0 6px', fontSize: 10.5 };
 
 export default function StockTable({
-  views, forceOpen, recon, staged, countMode, editing, selected, busy, onEdit, onCancelEdit, onSubmitEdit, onSelect, onRgApply,
+  views, forceOpen, recon, staged, countMode, editing, selected, busy, onEdit, onCancelEdit, onSubmitEdit, onSelect, onRgApply, onRgArrive,
 }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const multi = views.filter((v) => v.group.options.length > 1);
@@ -62,6 +66,7 @@ export default function StockTable({
     const diff = rgDiff(r, recon);
     const actual = rgActual(r, recon);
     const cost = defaultCost(r);
+    const arrive = rgArriveQty(r, recon);
     const cell = (loc: EditLocation) => {
       const s = staged.get(stageKey(r.skuId, loc));
       const value = loc === 'self' ? r.self : r.rgInbound;
@@ -108,6 +113,17 @@ export default function StockTable({
           {diff === null ? '—' : diff === 0 ? '0' : (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               {diff > 0 ? '+' : ''}{won(diff)}
+              {arrive > 0 && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  title="보낸 물건이 RG에 들어갔습니다 — RG입고중에서 RG로 옮깁니다. 남은 차이만 「반영」하세요"
+                  onClick={(e) => { e.stopPropagation(); onRgArrive(r, arrive); }}
+                  style={smallPrimaryBtn}
+                >
+                  입고 완료 {won(arrive)}개 옮기기
+                </button>
+              )}
               <button type="button" disabled={busy} onClick={(e) => { e.stopPropagation(); onRgApply(r); }} style={smallBtn}>
                 반영
               </button>

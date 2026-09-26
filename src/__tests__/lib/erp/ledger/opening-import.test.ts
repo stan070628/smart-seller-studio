@@ -47,13 +47,14 @@ describe('planOpeningImport', () => {
   it('원장에 전표가 있는 SKU는 빼고 조정으로 안내한다', () => {
     const p = planOpeningImport({ ...base, rows: [row({ selfCount: 3 })], stockedSkuIds: new Set([7]) });
     expect(p.plan).toEqual([]);
-    expect(p.excluded).toEqual([{ skuKey: 'k7', reason: expect.stringContaining('조정') }]);
+    expect(p.excluded).toEqual([{ skuKey: 'k7', kind: 'stocked', reason: expect.stringContaining('조정') }]);
   });
 
   it('self_count 빈칸은 불러오지 않는다(경고 아님 · 제외 목록)', () => {
     const p = planOpeningImport({ ...base, rows: [row({ selfCount: null })] });
     expect(p.plan).toEqual([]);
     expect(p.excluded[0].reason).toContain('빈칸');
+    expect(p.excluded[0].kind).toBe('blank');
     expect(p.errors).toEqual([]);
   });
 

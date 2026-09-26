@@ -43,8 +43,14 @@ function card(over: Record<string, unknown> = {}) {
   };
 }
 
-function mock(d: Record<string, unknown> = detail(), cards = [card()]) {
+const oneCandidate = { 1: {
+  source: 'learned', expectedQty: { qty: 17, approx: false },
+  candidates: [{ skuId: 11, key: 'k11', name: '노랑타월', option: '' }],
+} };
+
+function mock(d: Record<string, unknown> = detail(), cards = [card()], skuOptions: Record<string, unknown> = oneCandidate) {
   server.use(
+    http.get(`/api/erp/receipts/${DRAFT_ID}/sku-options`, () => HttpResponse.json({ success: true, data: skuOptions })),
     http.get('/api/receipts', () => HttpResponse.json({ success: true, data: cards })),
     http.get(`/api/receipts/${DRAFT_ID}`, () => HttpResponse.json({ success: true, data: d })),
     http.get('/api/cost-management/products/options', () =>
@@ -110,10 +116,60 @@ describe('ReceiptIngestModal', () => {
       HttpResponse.json({ success: true, data: { created: [{ line_no: 1 }], skipped: [], failed: [] } })));
 
     open();
-    fireEvent.click(await screen.findByText('1건 입고 확정'));
+    await waitFor(async () => expect(await screen.findByText('1건 입고 확정')).not.toBeDisabled());
+    fireEvent.click(screen.getByText('1건 입고 확정'));
 
     expect(await screen.findByText('1건 입고 완료')).toBeInTheDocument();
     await waitFor(() => expect(onConfirmed).toHaveBeenCalled());
+  });
+
+  it('🔴 옵션이 하나뿐인 영수증은 전과 같이 확정한다(본문 {})', async () => {
+    mock();
+    let sent: unknown = null;
+    server.use(http.post(`/api/receipts/${DRAFT_ID}/confirm`, async ({ request }) => {
+      sent = await request.json();
+      return HttpResponse.json({ success: true, data: { created: [{ line_no: 1 }], skipped: [], failed: [], skipped_pre_opening: [] } });
+    }));
+    open();
+    await waitFor(async () => expect(await screen.findByText('1건 입고 확정')).not.toBeDisabled());
+    fireEvent.click(screen.getByText('1건 입고 확정'));
+    await waitFor(() => expect(sent).toEqual({}));
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('🔴 옵션을 나누거나 SKU를 골라야 하는 줄이 있으면 확정을 막고 휴대폰 영수증 화면으로 안내한다', async () => {
+    mock(detail(), [card()], {
+      1: { source: 'product', expectedQty: { qty: 17, approx: false }, candidates: [
+        { skuId: 11, key: 'k11', name: '노랑타월', option: 'S' },
+        { skuId: 12, key: 'k12', name: '노랑타월', option: 'L' },
+      ] },
+      2: { source: 'none', expectedQty: { qty: 1, approx: false }, candidates: [] },
+    });
+    open();
+    expect(await screen.findByText(/옵션이 여러 개인 줄 2개는 휴대폰 영수증 화면에서 옵션별 수량을 나눠 확정합니다/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /휴대폰 영수증 화면 열기/ })).toHaveAttribute('href', `/m/receipt/${DRAFT_ID}`);
+    expect(screen.getByText('1건 입고 확정')).toBeDisabled();
+  });
+
+  it('옵션 정보를 못 불러오면 확정을 막는다', async () => {
+    mock();
+    server.use(http.get(`/api/erp/receipts/${DRAFT_ID}/sku-options`, () => HttpResponse.json({ success: false, error: 'x' }, { status: 500 })));
+    open();
+    expect(await screen.findByText(/옵션 정보를 불러오지 못해 확정할 수 없습니다/)).toBeInTheDocument();
+    expect(screen.getByText('1건 입고 확정')).toBeDisabled();
+  });
+
+  it('🔴 실사 이전 구매라 원장 입고를 건너뛴 SKU를 알린다', async () => {
+    mock();
+    server.use(http.post(`/api/receipts/${DRAFT_ID}/confirm`, () =>
+      HttpResponse.json({ success: true, data: {
+        created: [{ line_no: 1 }], skipped: [], failed: [],
+        skipped_pre_opening: [{ line_no: 1, sku_id: 11, qty: 17, name: '노랑타월' }],
+      } })));
+    open();
+    await waitFor(async () => expect(await screen.findByText('1건 입고 확정')).not.toBeDisabled());
+    fireEvent.click(screen.getByText('1건 입고 확정'));
+    expect(await screen.findByRole('status')).toHaveTextContent('실사 이전 구매라 원장 입고는 건너뜀: 노랑타월');
   });
 
   it('확정할 줄이 없으면 버튼이 잠긴다', async () => {

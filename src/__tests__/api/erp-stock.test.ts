@@ -243,6 +243,13 @@ describe('POST /api/erp/stock/reverse', () => {
     expect(mockReverse).not.toHaveBeenCalled();
   });
 
+  it('🔴 RG 입고 완료(rgdone:) 전표도 되돌린다', async () => {
+    mockReverse.mockResolvedValue({ posted: true, ids: [11, 12] });
+    const { POST } = await import('@/app/api/erp/stock/reverse/route');
+    expect((await POST(post('/api/erp/stock/reverse', { idemKey: `rgdone:${REQ}` }))).status).toBe(200);
+    expect(mockReverse).toHaveBeenCalledWith(client, `rgdone:${REQ}`, expect.anything());
+  });
+
   it('트랜잭션 안에서 reverse를 부른다', async () => {
     mockReverse.mockResolvedValue({ posted: true, ids: [10] });
     const { POST } = await import('@/app/api/erp/stock/reverse/route');

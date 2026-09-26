@@ -32,6 +32,9 @@ interface DraftLineRecord extends ConfirmCandidate {
  * 성공하면 자기가 만든 `cost_entry_id`를 기록한다. 이미 기록된 줄은
  * 다시 확정되지 않는다 — 같은 요청을 두 번 보내도 입고가 두 번 생기지 않는다.
  *
+ * 응답 `skipped_pre_opening: [{ line_no, sku_id, qty, name }]` = 기초재고(실사) 이전 구매라 원장 입고를 건너뛴 SKU.
+ * 그 줄의 입고(cost_entries)는 확정됐다 — 물건이 이미 기초재고에 세어져 있어 원장에 두 번 넣지 않는다(receipt.ts).
+ *
  * `line_no` 오름차순 직렬로 처리한다. 같은 상품이 여러 줄에 나올 때
  * 소분 이월이 처리 순서에 의존하기 때문이다.
  */
@@ -107,6 +110,8 @@ export async function POST(
 
     const created: { line_no: number; cost_entry_id: string }[] = [];
     const failed: { line_no: number; error: string }[] = [];
+    // 실사 이전 구매라 원장 입고를 건너뛴 SKU(I3) — 입고(cost_entries)는 확정됐다. 화면이 안내한다
+    const skippedPreOpening: { line_no: number; sku_id: number; qty: number; name: string }[] = [];
 
     // 줄마다 독립된 트랜잭션. 하나가 실패해도 앞서 확정된 것은 남는다
     for (const line of confirmable) {
@@ -161,7 +166,7 @@ export async function POST(
         // 1-C1: 원장 self 입고. 같은 트랜잭션 — 원장 기록이 실패하면 이 줄의 입고(cost_entries)도 만들지 않는다.
         // 수량 = 이 입고의 판매단위 수량(소분이면 팩 수), 단가 = 그 판매단위 원가
         const e = entry as { quantity: string | number; unit_cost: string | number };
-        await postReceiptLots(client, {
+        const ledger = await postReceiptLots(client, {
           lineId: dbLine.id,
           lineNo: line.line_no,
           itemCode: dbLine.item_code,
@@ -203,6 +208,9 @@ export async function POST(
 
         await client.query('COMMIT');
         created.push({ line_no: line.line_no, cost_entry_id: entryId });
+        for (const k of ledger.skippedPreOpening) {
+          skippedPreOpening.push({ line_no: line.line_no, sku_id: k.skuId, qty: k.qty, name: k.label });
+        }
       } catch (err) {
         await client.query('ROLLBACK');
         failed.push({
@@ -216,7 +224,7 @@ export async function POST(
 
     await syncDraftStatus(pool, id);
 
-    return NextResponse.json({ success: true, data: { created, skipped, failed } });
+    return NextResponse.json({ success: true, data: { created, skipped, failed, skipped_pre_opening: skippedPreOpening } });
   } catch (err) {
     const msg = err instanceof Error ? err.message : '서버 오류';
     return NextResponse.json({ success: false, error: msg }, { status: 500 });

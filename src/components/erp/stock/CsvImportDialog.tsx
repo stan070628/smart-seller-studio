@@ -74,6 +74,8 @@ export default function CsvImportDialog({ onClose, onCommitted }: Props) {
     }
   }
 
+  // 접힌 목록 안에만 두면 「실사표를 넣었는데 왜 안 들어갔지」를 놓친다 — 수는 밖에 보인다
+  const stockedN = preview ? preview.excluded.filter((x) => x.kind === 'stocked').length : 0;
   const canCommit = !!preview && !stale && preview.errors.length === 0 && preview.totals.entries > 0 && !busy;
 
   return (
@@ -102,7 +104,7 @@ export default function CsvImportDialog({ onClose, onCommitted }: Props) {
           </button>
         </div>
         <div style={{ padding: '0 12px 8px', color: E.inkSub, fontSize: 11 }}>
-          형식은 1-B 실사표(`docs/erp/opening-count-*.csv`)와 같습니다. self_count가 빈 행은 건너뛰고, 원장에 전표가 있는 SKU는 「조정」으로 고칩니다.
+          형식은 1-B 실사표(`docs/erp/opening-count-*.csv`)와 같습니다. self_count가 빈 행은 건너뛰고, 원장에 전표가 있는 SKU는 불러오지 않습니다(재고현황에서 「지금 개수」·RG 대조로 고칩니다).
         </div>
         {error && <div role="alert" style={{ margin: '0 12px 8px', padding: 8, border: `1px solid ${E.loss}`, color: E.loss }}>{error}</div>}
 
@@ -126,6 +128,11 @@ export default function CsvImportDialog({ onClose, onCommitted }: Props) {
               <div style={{ border: `1px solid ${E.warn}`, background: E.warnSoft, color: E.warn, padding: 8, marginBottom: 8 }}>
                 <b>경고 {preview.warnings.length}건</b>
                 {preview.warnings.map((m) => <div key={m}>· {m}</div>)}
+              </div>
+            )}
+            {stockedN > 0 && (
+              <div style={{ border: `1px solid ${E.line}`, background: E.chrome2, color: E.ink, padding: 8, marginBottom: 8 }}>
+                원장에 이미 전표가 있는 SKU {stockedN}개 — 불러오지 않음(집·입고중·RG 모두; 화면·RG 대조로 입력)
               </div>
             )}
             {preview.excluded.length > 0 && (

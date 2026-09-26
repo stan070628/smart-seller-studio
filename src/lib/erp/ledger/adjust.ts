@@ -147,6 +147,9 @@ export function pickUnitCost(
 export const adjustIdemKey = (requestId: string): string => `adj:${requestId}`;
 export const openingIdemKey = (skuId: number, location: Location): string => `opening:${skuId}:${location}`;
 
-const REVERSIBLE = /^(adj:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|opening:\d+:(self|rg_inbound|rg))$/i;
-/** 화면에서 되돌릴 수 있는 원 멱등키(순번 없는 것). 영수증·RG 보내기 전표는 옛 원가 기록과 짝이라 여기서 되돌리지 않는다 */
+const REVERSIBLE = /^((adj|rgdone):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|opening:\d+:(self|rg_inbound|rg))$/i;
+/**
+ * 화면에서 되돌릴 수 있는 원 멱등키(순번 없는 것): 조정 adj: · 기초 opening: · RG 입고 완료 rgdone:(rg-arrive.ts — 원장만의 이동).
+ * 영수증·RG 보내기 전표는 옛 원가 기록과 짝이라 여기서 되돌리지 않는다
+ */
 export const isReversibleKey = (k: string): boolean => REVERSIBLE.test(k);

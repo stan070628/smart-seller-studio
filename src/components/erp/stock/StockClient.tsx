@@ -19,9 +19,9 @@ import StockTable from './StockTable';
 import HistoryPanel from './HistoryPanel';
 import CsvImportDialog from './CsvImportDialog';
 import CountQueuePanel from './CountQueuePanel';
-import { fetchRecon, fetchStock, postAdjust, postRgApply } from './api';
+import { fetchRecon, fetchStock, postAdjust, postRgApply, postRgArrive } from './api';
 import {
-  computeKpis, defaultCost, filterGroups, filterRows, filtersActive, groupRows, parseRecon, rgDiff, stageKey, summarizeStaged,
+  computeKpis, defaultCost, filterGroups, filterRows, filtersActive, groupRows, parseRecon, rgArriveQty, rgDiff, stageKey, summarizeStaged,
   toAdjustItems, toExportCsv, won,
   type EditLocation, type Filters, type RgRecon, type StagedEdit, type StockRow,
 } from './stock-view';
@@ -152,8 +152,10 @@ export default function StockClient() {
     const plus = items.reduce((s, x) => s + Math.max(x.actual - x.row.rg, 0), 0);
     const minus = items.reduce((s, x) => s + Math.max(x.row.rg - x.actual, 0), 0);
     const valueDelta = items.reduce((s, x) => s + (x.actual - x.row.rg) * (defaultCost(x.row) ?? 0), 0);
+    // 입고중이 남은 채 RG를 늘리면 같은 물건을 두 번 센다 — 먼저 「입고 완료 옮기기」를 하라고 알린다
+    const pendingArrive = items.filter((x) => rgArriveQty(x.row, recon) > 0).length;
     const ok = await confirmDialog({
-      message: `RG 실재고를 원장에 반영합니다 — SKU ${items.length}개\n\n늘림 +${won(plus)}개 · 줄임 −${won(minus)}개\n평가액 영향(추정) ${signed(valueDelta)}원\n\n판매 차감(1-C2) 전이라 RG 판매도 차이로 보입니다. 확인한 것만 반영하세요.`,
+      message: `RG 실재고를 원장에 반영합니다 — SKU ${items.length}개\n\n늘림 +${won(plus)}개 · 줄임 −${won(minus)}개\n평가액 영향(추정) ${signed(valueDelta)}원\n\n판매 차감(1-C2) 전이라 RG 판매도 차이로 보입니다. 확인한 것만 반영하세요.${pendingArrive > 0 ? `\n\n⚠ RG입고중이 남은 SKU ${pendingArrive}개 — 보낸 물건이 들어온 것이면 먼저 「입고 완료 옮기기」를 누르세요(반영만 하면 입고중이 남아 두 번 셉니다).` : ''}`,
       confirmLabel: '반영',
     });
     if (!ok) return;
@@ -164,6 +166,22 @@ export default function StockClient() {
     setSaving(false);
     if (!r.ok) { toast.error(r.error); await load(); return; }
     toast.success(`RG ${r.data.filter((x) => x.outcome === 'posted').length}건 반영했습니다`);
+    await load();
+  }
+
+  /** RG 입고 완료: 입고중 → RG qty개. 이것을 먼저 하고 남은 차이만 「반영」한다(반영만 하면 입고중이 남아 두 번 센다) */
+  async function arriveRg(row: StockRow, qty: number) {
+    const label = row.option ? `${row.name} · ${row.option}` : row.name;
+    const ok = await confirmDialog({
+      message: `${label}\n\nRG입고중 ${won(row.rgInbound)}개 중 ${won(qty)}개를 RG로 옮깁니다(입고 완료).\n원장 RG ${won(row.rg)} → ${won(row.rg + qty)}개 · RG입고중 ${won(row.rgInbound)} → ${won(row.rgInbound - qty)}개`,
+      confirmLabel: '옮기기',
+    });
+    if (!ok) return;
+    setSaving(true);
+    const r = await postRgArrive([{ skuId: row.skuId, qty, requestId: uuidv4() }]);
+    setSaving(false);
+    if (!r.ok) { toast.error(r.error); await load(); return; }
+    toast.success(r.data[0]?.outcome === 'duplicate' ? '이미 옮긴 요청입니다' : `RG 입고 완료 ${won(qty)}개 옮겼습니다`);
     await load();
   }
 
@@ -282,6 +300,7 @@ export default function StockClient() {
             onSubmitEdit={(e) => { if (countMode) stage(e); else void saveOne(e); }}
             onSelect={setSelected}
             onRgApply={(row) => void applyRg([row])}
+            onRgArrive={(row, qty) => void arriveRg(row, qty)}
           />
           <div style={statusBarStyle}>
             <span>

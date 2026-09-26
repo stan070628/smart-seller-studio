@@ -12,6 +12,10 @@ describe('resolveReceiptSplit', () => {
     expect(() => resolveReceiptSplit(4, [])).toThrow(/SKU를 골라 주세요/);
     expect(() => resolveReceiptSplit(4, [7, 8])).toThrow(/옵션별 수량을 나눠 주세요/);
   });
+  it('🔴 나누기·고르기가 필요한 줄의 실패 사유는 휴대폰 영수증 화면을 가리킨다(PC 모달에는 나누기 화면이 없다)', () => {
+    expect(() => resolveReceiptSplit(4, [])).toThrow('휴대폰 영수증 화면(/m/receipt)에서 SKU를 골라 주세요');
+    expect(() => resolveReceiptSplit(4, [7, 8])).toThrow('휴대폰 영수증 화면(/m/receipt)에서 옵션별 수량을 나눠 주세요');
+  });
   it('분배 합은 입고 수량과 같아야 하고, 결과는 SKU 오름차순', () => {
     expect(resolveReceiptSplit(4, [7, 8], [{ skuId: 8, qty: 1 }, { skuId: 7, qty: 3 }])).toEqual([{ skuId: 7, qty: 3 }, { skuId: 8, qty: 1 }]);
     expect(() => resolveReceiptSplit(4, [7, 8], [{ skuId: 7, qty: 3 }])).toThrow(/합 3개가 입고 수량 4개와 다릅니다/);
@@ -97,7 +101,7 @@ describe('parseSkuSplits', () => {
   });
 });
 
-function fakeDb(o: { productRows?: Record<string, unknown>[]; extraSkus?: Record<string, unknown>[]; active?: number[] } = {}) {
+function fakeDb(o: { productRows?: Record<string, unknown>[]; extraSkus?: Record<string, unknown>[]; active?: number[]; openedAfter?: number[] } = {}) {
   const calls: { sql: string; params: unknown[] }[] = [];
   let nextId = 100;
   const db: Db = {
@@ -115,6 +119,10 @@ function fakeDb(o: { productRows?: Record<string, unknown>[]; extraSkus?: Record
       }
       if (sql.startsWith('select pg_advisory_xact_lock')) return { rows: [], rowCount: 1 };
       if (sql.startsWith('select 1 from erp.stock_ledger')) return { rows: [], rowCount: 0 };
+      if (sql.startsWith('select distinct o.sku_id from erp.stock_ledger o')) {
+        const ids = (params[0] as number[]).filter((id) => (o.openedAfter ?? []).includes(id));
+        return { rows: ids.map((id) => ({ sku_id: String(id) })), rowCount: ids.length };
+      }
       if (sql.startsWith('insert into erp.stock_ledger')) return { rows: [{ id: nextId++ }], rowCount: 1 };
       if (sql.startsWith('set constraints')) return { rows: [], rowCount: null };
       if (sql.startsWith('insert into erp.purchase_units')) return { rows: [], rowCount: 1 };
@@ -135,8 +143,8 @@ describe('postReceiptLots', () => {
 
   it('SKU 오름차순으로 receipt lot(구매일 KST 자정)을 만들고, 사람이 나눈 SKU를 표시해 기억한다', async () => {
     const f = fakeDb({ productRows, active: [21, 22] });
-    const split = await postReceiptLots(f.db, { ...base, requested: [{ skuId: 22, qty: 1 }, { skuId: 21, qty: 3 }] });
-    expect(split).toEqual([{ skuId: 21, qty: 3 }, { skuId: 22, qty: 1 }]);
+    const r = await postReceiptLots(f.db, { ...base, requested: [{ skuId: 22, qty: 1 }, { skuId: 21, qty: 3 }] });
+    expect(r).toEqual({ split: [{ skuId: 21, qty: 3 }, { skuId: 22, qty: 1 }], skippedPreOpening: [] });
     const ins = f.calls.filter((c) => c.sql.startsWith('insert into erp.stock_ledger'));
     expect(ins.map((c) => [c.params[0], c.params[1], c.params[2], c.params[3], c.params[5], c.params[6], c.params[7], c.params[8], c.params[10]])).toEqual([
       [21, 'self', 3, 'receipt', 2500, '2026-09-20T00:00:00+09:00', 'receipt_line', 'line-1', 'receipt:line-1:21'],
@@ -150,13 +158,13 @@ describe('postReceiptLots', () => {
 
   it('🔴 후보 하나 자동 입고는 학습하지 않는다(사람이 고른 것이 없다)', async () => {
     const f = fakeDb({ productRows: [productRows[0]], active: [21] });
-    expect(await postReceiptLots(f.db, base)).toEqual([{ skuId: 21, qty: 4 }]);
+    expect((await postReceiptLots(f.db, base)).split).toEqual([{ skuId: 21, qty: 4 }]);
     expect(f.calls.some((c) => c.sql.startsWith('insert into erp.purchase_units'))).toBe(false);
   });
 
   it('「다른 SKU로 바꾸기」로 고른 후보 밖 SKU는 받고 기억한다', async () => {
     const f = fakeDb({ productRows: [productRows[0]], extraSkus: [{ id: '99', name: '머그컵', option_label: null }], active: [21, 99] });
-    expect(await postReceiptLots(f.db, { ...base, requested: [{ skuId: 99, qty: null, manual: true }] })).toEqual([{ skuId: 99, qty: 4 }]);
+    expect((await postReceiptLots(f.db, { ...base, requested: [{ skuId: 99, qty: null, manual: true }] })).split).toEqual([{ skuId: 99, qty: 4 }]);
     expect(f.calls.filter((c) => c.sql.startsWith('insert into erp.purchase_units')).map((c) => c.params)).toEqual([['111', `라운드티 ${LEARNED_LABEL_SUFFIX}`, 99]]);
   });
 
@@ -170,5 +178,32 @@ describe('postReceiptLots', () => {
     const f = fakeDb({ productRows, active: [21, 22] });
     await postReceiptLots(f.db, { ...base, itemCode: null, requested: [{ skuId: 21, qty: 4 }] });
     expect(f.calls.some((c) => c.sql.startsWith('insert into erp.purchase_units'))).toBe(false);
+  });
+
+  it('🔴 실사 이전 구매(기초 전표 시각 ≥ 구매일 KST 자정)인 SKU는 원장 입고를 건너뛰고 알린다 — 기초재고에 이미 세었다', async () => {
+    const f = fakeDb({ productRows, active: [21, 22], openedAfter: [22] });
+    const r = await postReceiptLots(f.db, { ...base, requested: [{ skuId: 22, qty: 1 }, { skuId: 21, qty: 3 }] });
+    expect(r.split).toEqual([{ skuId: 21, qty: 3 }, { skuId: 22, qty: 1 }]);
+    expect(r.skippedPreOpening).toEqual([{ skuId: 22, qty: 1, label: '라운드티 · 레드' }]);
+    const ins = f.calls.filter((c) => c.sql.startsWith('insert into erp.stock_ledger'));
+    expect(ins.map((c) => c.params[0])).toEqual([21]);
+    // 기초 조회는 두 SKU를 모두 잠근 뒤, 구매일 KST 자정을 기준으로 self·opening·되돌리지 않은 전표만 본다
+    const q = f.calls.findIndex((c) => c.sql.startsWith('select distinct o.sku_id'));
+    const locks = f.calls.map((c, i) => [c, i] as const).filter(([c]) => c.sql.startsWith('select pg_advisory_xact_lock')).map(([, i]) => i);
+    expect(locks.slice(0, 2).every((i) => i < q)).toBe(true);
+    expect(f.calls[q].params).toEqual([[21, 22], '2026-09-20T00:00:00+09:00']);
+    expect(f.calls[q].sql).toMatch(/location = 'self'/);
+    expect(f.calls[q].sql).toMatch(/kind = 'opening'/);
+    expect(f.calls[q].sql).toMatch(/occurred_at >= \$2::timestamptz/);
+    expect(f.calls[q].sql).toMatch(/reverses_id = o\.id/);
+    // 품번 학습은 그대로(사람이 나눴다)
+    expect(f.calls.filter((c) => c.sql.startsWith('insert into erp.purchase_units'))).toHaveLength(2);
+  });
+
+  it('모든 SKU가 실사 이전 구매면 원장에 아무것도 쓰지 않는다', async () => {
+    const f = fakeDb({ productRows: [productRows[0]], active: [21], openedAfter: [21] });
+    const r = await postReceiptLots(f.db, base);
+    expect(r).toEqual({ split: [{ skuId: 21, qty: 4 }], skippedPreOpening: [{ skuId: 21, qty: 4, label: '라운드티 · 블랙' }] });
+    expect(f.calls.some((c) => c.sql.startsWith('insert into erp.stock_ledger'))).toBe(false);
   });
 });

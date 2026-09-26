@@ -72,3 +72,21 @@ export function blockedLines(options: Record<number, LineSkuOptions>, drafts: Re
   }
   return out.sort((a, b) => a - b);
 }
+
+/**
+ * PC 영수증 모달(ReceiptIngestModal)이 확정을 막을 줄 번호(오름차순) — 옵션 나누기·SKU 고르기가 필요한 줄.
+ * 나누기·고르기 전의 blockedLines와 같은 기준(후보 0개 · 2개 이상)이되, 소분 추정 수량 줄도 넣는다 —
+ * PC 모달에는 나누기 화면이 없어 서버에 맡길 수 없다. 이런 줄은 휴대폰 영수증 화면(/m/receipt/<id>)에서 확정한다.
+ */
+export function linesNeedingPhone(options: Record<number, LineSkuOptions>): number[] {
+  return Object.entries(options)
+    .filter(([, o]) => o.candidates.length !== 1)
+    .map(([k]) => Number(k))
+    .sort((a, b) => a - b);
+}
+
+/** 확정 응답 skipped_pre_opening(실사 이전 구매라 원장 입고를 건너뛴 SKU) → 안내 한 줄. 없으면 null */
+export function preOpeningNotice(list: { name: string }[] | undefined | null): string | null {
+  if (!list || list.length === 0) return null;
+  return `실사 이전 구매라 원장 입고는 건너뜀: ${[...new Set(list.map((x) => x.name))].join(', ')}`;
+}
