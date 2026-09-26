@@ -1183,3 +1183,16 @@ git commit -m "feat(erp): SKU 마스터 적재 스크립트(트랜잭션·멱등
 | 마스터버니 얼음주머니 | 1-B 과거 판매 이관 때 보관 상태 SKU를 만들어 7월 RG 판매 8건을 연결 |
 | any_of 판매 귀속 | 네이버 단일상품(옵션 없음) 판매는 SKU를 가릴 수 없으므로 1-C에서 수동 귀속 대기열로 |
 | 재고 원장 전표 | 차감 시점의 SKU·수량을 전표에 스냅샷으로 저장(배수를 고쳐도 과거 재고 불변) — Task 1 리뷰 |
+
+## 1-A 최종 리뷰 → 1-B 착수 전 선행 조건 (2026-09-26)
+
+| # | 조건 | 처리 |
+|---|---|---|
+| P1 | 옛 원가 행 28건(원가 기록 약 52행 — 오타니·컬럼비아 반팔·코오롱 니트·아머올 등)이 어느 SKU에도 역참조되지 않았다(pcc·vendor_item_id 없음). 전부 같은 seller_product_id의 SKU가 있다 | buildDraft에 seller_product_id 2차 연결 추가(여러 SKU면 legacy_spans_skus) → 초안 재생성·재적재 |
+| P2 | `sku-apply --apply`는 「초안이 전부」라 가정 — 1-B·1-C가 만든 SKU·리스팅·연결을 보관·비활성화·삭제한다 | 마이그레이션 111: `origin text not null default 'draft'`(draft/manual)을 세 테이블에 두고 적재의 보관·비활성화·삭제를 `origin='draft'`로 한정 |
+| P3 | 당근(리스팅 없음)·any_of(판매 SKU 미정) 주문을 담을 구조 | order_lines에 `sku_id` + 수량 스냅샷, `listing_id` nullable, 「미귀속」 상태 |
+| P4 | erp 스키마 접근 경로 | 화면은 서버 라우트에서 `pg` 직접 접속(현행 run-log 방식). supabase-js로 가려면 grant·스키마 노출 마이그레이션 필요 — 1-B 계획서에 명시 |
+| P5 | SKU 키는 쿠팡 옵션명에서 나온다 | 1-A 이후 키는 동결, 원장·주문은 id를 참조 |
+| 기타 | 배수>1 SKU의 기준 단위(다슈·이볼루덤·퓨어틴) 채우기 · report 예시 로직 중복 정리 · `--verify` 채널 필터 · updated_at 트리거 · validate() 테스트 | 1-B 첫 정리 커밋 |
+
+사용자 결정 추가: 핸드워시 16256947431·16350383334는 같은 물건 → 병합(SKU 215, 보관 1).
