@@ -5476,8 +5476,8 @@ git commit -m "docs(erp): 1-C2a 게이트 ② 판매 차감 켜기 기록"
 
 > 실행 중 사용자 답·결정을 즉시 적는다(세션이 끊겨도 같은 질문을 반복하지 않게).
 
-- 기준선(Task 0 Step 1):
-- 117 적용(Task 1):
+- 기준선(Task 0 Step 1): 2026-09-26 · vitest 실패 13 · tsc 0. Step 2 재확인 일치(ledger_cutover 단일 커서 · orders/order_lines/settings 없음 · bundle 리스팅 없음)
+- 117 적용(Task 1): 2026-09-26 적용 완료(commit d9600512213e53b644116c1bee991678ceda5a30). 검사 5종 확인 · settings deduct_enabled=false · 세 표 RLS true
 - 자가시험(Task 5 Step 9):
 - 병합·배포(Task 9):
 - 드라이런·첫 수집(Task 9 Step 4):
