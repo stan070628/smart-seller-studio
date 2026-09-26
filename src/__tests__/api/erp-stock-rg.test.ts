@@ -23,7 +23,14 @@ let client: { query: ReturnType<typeof vi.fn>; release: ReturnType<typeof vi.fn>
 beforeEach(() => {
   vi.clearAllMocks();
   mockGetCurrentUser.mockResolvedValue({ userId: 'u-1', email: 't@example.com' });
-  client = { query: vi.fn(async () => ({ rows: [], rowCount: 0 })), release: vi.fn() };
+  // 활성 SKU 확인은 이제 트랜잭션 안(client)에서 한다 — pool이 아니라 client가 그 SQL을 답한다
+  client = {
+    query: vi.fn(async (sql: string) => {
+      if (sql.startsWith("select id from erp.skus where status = 'active'")) return { rows: [{ id: 7 }, { id: 9 }], rowCount: 2 };
+      return { rows: [], rowCount: 0 };
+    }),
+    release: vi.fn(),
+  };
   mockGetPool.mockReturnValue({
     query: vi.fn(async (sql: string) => {
       if (sql.startsWith('select sku_id, qty from erp.stock_on_hand')) return { rows: [{ sku_id: '7', qty: 5 }], rowCount: 1 };
@@ -54,6 +61,17 @@ describe('GET /api/erp/stock/rg-reconcile', () => {
 });
 
 describe('POST /api/erp/stock/rg-reconcile', () => {
+  it('로그인하지 않으면 401이고 쓰지 않는다', async () => {
+    mockGetCurrentUser.mockResolvedValue(null);
+    const { POST } = await import('@/app/api/erp/stock/rg-reconcile/route');
+    const res = await POST(new NextRequest('http://localhost/api/erp/stock/rg-reconcile', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: [{ skuId: 7, expected: 5, actual: 4, requestId: REQ }] }),
+    }));
+    expect(res.status).toBe(401);
+    expect(mockApply).not.toHaveBeenCalled();
+  });
+
   it('확인한 행을 RG 위치 지금개수 조정(사유 rg_reconcile)으로 한 트랜잭션에 반영한다', async () => {
     mockApply.mockResolvedValue([]);
     const { POST } = await import('@/app/api/erp/stock/rg-reconcile/route');
@@ -73,6 +91,21 @@ describe('POST /api/erp/stock/rg-reconcile', () => {
     const res = await POST(new NextRequest('http://localhost/api/erp/stock/rg-reconcile', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ items: [{ skuId: 11, expected: 0, actual: 1, requestId: REQ }] }),
+    }));
+    expect(res.status).toBe(400);
+    expect(mockApply).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['빈 문자열', ''],
+    ['불리언', true],
+    ['배열', []],
+    ['null', null],
+  ])('actual이 실수가 아니면(%s) 400', async (_label, actual) => {
+    const { POST } = await import('@/app/api/erp/stock/rg-reconcile/route');
+    const res = await POST(new NextRequest('http://localhost/api/erp/stock/rg-reconcile', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: [{ skuId: 7, expected: 5, actual, requestId: REQ }] }),
     }));
     expect(res.status).toBe(400);
     expect(mockApply).not.toHaveBeenCalled();

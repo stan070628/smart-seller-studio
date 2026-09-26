@@ -79,6 +79,39 @@ describe('planOpeningImport', () => {
     const p = planOpeningImport({ ...base, rows: [row({ selfCount: 1 })], countedAt: '2026-09-25T09:00:00+09:00' });
     expect(p.errors.join('\n')).toContain('24시간');
   });
+
+  it('기준 단위가 정해진 SKU의 단가가 옛 입고 이력에서 왔으면 오류 — 단가 입력을 요구한다', () => {
+    const withUnit: OpeningSku[] = [{ id: 7, key: 'k7', name: '왜건', optionLabel: '블랙', legacyProductCostIds: ['pc-7'], baseUnitLabel: '개' }];
+    const p = planOpeningImport({ ...base, skus: withUnit, rows: [row({ selfCount: 3 })] });
+    expect(p.errors.join('\n')).toContain('k7: 기준 단위 「개」인데 단가가 옛 입고 이력(1000원)에서 왔다 — 단가를 입력한다');
+  });
+
+  it('기준 단위 단가 오류는 화면 단가 입력(override)으로 해소된다', () => {
+    const withUnit: OpeningSku[] = [{ id: 7, key: 'k7', name: '왜건', optionLabel: '블랙', legacyProductCostIds: ['pc-7'], baseUnitLabel: '개' }];
+    const p = planOpeningImport({ ...base, skus: withUnit, rows: [row({ selfCount: 3 })], overrides: { k7: 1200 } });
+    expect(p.errors.join('\n')).not.toContain('기준 단위');
+    expect(p.plan).toEqual([{ skuId: 7, key: 'k7', location: 'self', qty: 3, unitCost: 1200 }]);
+  });
+
+  it('기준 단위가 없거나 단가가 override·csv에서 왔으면 기준 단위 오류가 없다', () => {
+    const p = planOpeningImport({ ...base, rows: [row({ selfCount: 3 })] });
+    expect(p.errors.join('\n')).not.toContain('기준 단위');
+  });
+
+  it('배수 > 1인데 기준 단위가 없는 SKU를 경고로 남긴다', () => {
+    const p = planOpeningImport({
+      ...base, rows: [row({ selfCount: 3 })],
+      baseUnitMissing: [{ key: 'k9', name: '타월', maxMultiplier: 2 }],
+    });
+    expect(p.warnings.some((w) => w.includes('기준 단위 미정') && w.includes('k9'))).toBe(true);
+  });
+
+  it('기준 단위 미정 목록이 없으면(빈 배열·undefined) 경고를 남기지 않는다', () => {
+    const p1 = planOpeningImport({ ...base, rows: [row({ selfCount: 3 })], baseUnitMissing: [] });
+    const p2 = planOpeningImport({ ...base, rows: [row({ selfCount: 3 })] });
+    expect(p1.warnings.some((w) => w.includes('기준 단위 미정'))).toBe(false);
+    expect(p2.warnings.some((w) => w.includes('기준 단위 미정'))).toBe(false);
+  });
 });
 
 function fakeDb(counts: Record<number, number> = {}) {

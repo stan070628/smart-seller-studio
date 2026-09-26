@@ -55,11 +55,14 @@ export async function POST(request: NextRequest) {
       }
       return p;
     });
-    const active = await activeSkuIds(getSourcingPool());
-    inputs.forEach((p, i) => {
-      if (!active.has(p.skuId)) throw new AdjustItemError(i, p.skuId, p.location, new AdjustInputError(`활성 SKU가 아니다: ${p.skuId}`));
+    // 활성 SKU 확인은 같은 트랜잭션 안에서 한다 — 조회와 기록 사이에 SKU가 비활성화되는 것을 막는다
+    const results = await withTx(async (c) => {
+      const active = await activeSkuIds(c);
+      inputs.forEach((p, i) => {
+        if (!active.has(p.skuId)) throw new AdjustItemError(i, p.skuId, p.location, new AdjustInputError(`활성 SKU가 아니다: ${p.skuId}`));
+      });
+      return applyAdjustments(c, inputs);
     });
-    const results = await withTx((c) => applyAdjustments(c, inputs));
     return NextResponse.json({ success: true, data: results });
   } catch (e) {
     return erpError(e);

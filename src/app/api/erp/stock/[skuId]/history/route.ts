@@ -12,7 +12,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (auth instanceof Response) return auth;
   const { skuId } = await params;
   const id = Number(skuId);
-  if (!Number.isInteger(id) || id <= 0) return badRequest(`SKU id가 잘못됐다: ${skuId}`);
+  if (!Number.isInteger(id) || id <= 0 || id > 2147483647) return badRequest(`SKU id가 잘못됐다: ${skuId}`);
   try {
     return NextResponse.json({ success: true, data: await skuHistory(getSourcingPool(), id) });
   } catch (e) {

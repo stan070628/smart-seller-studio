@@ -41,7 +41,14 @@ beforeEach(() => {
     if (sql.startsWith("select id from erp.skus where status = 'active'")) return { rows: [{ id: 7 }, { id: 9 }], rowCount: 2 };
     throw new Error(`예상 못 한 SQL: ${sql.slice(0, 50)}`);
   };
-  client = { query: vi.fn(async () => ({ rows: [], rowCount: 0 })), release: vi.fn() };
+  // 활성 SKU 확인은 이제 트랜잭션 안(client)에서 한다 — pool이 아니라 client가 그 SQL을 답한다
+  client = {
+    query: vi.fn(async (sql: string) => {
+      if (sql.startsWith("select id from erp.skus where status = 'active'")) return { rows: [{ id: 7 }, { id: 9 }], rowCount: 2 };
+      return { rows: [], rowCount: 0 };
+    }),
+    release: vi.fn(),
+  };
   mockGetPool.mockReturnValue({ query: vi.fn(async (sql: string) => poolRows(sql)), connect: vi.fn(async () => client) });
 });
 
@@ -115,7 +122,7 @@ describe('POST /api/erp/stock/adjust', () => {
     expect(inputs).toEqual([{
       skuId: 7, location: 'self', mode: 'count', value: 5, expected: 3, reason: 'count_diff', unitCost: 900, requestId: REQ, occurredAt: expect.stringMatching(ISO),
     }]);
-    expect(clientSql()).toEqual(['BEGIN', 'COMMIT']);
+    expect(clientSql()).toEqual(['BEGIN', "select id from erp.skus where status = 'active'", 'COMMIT']);
     expect(client.release).toHaveBeenCalledTimes(1);
   });
 
@@ -126,16 +133,62 @@ describe('POST /api/erp/stock/adjust', () => {
     expect(res.status).toBe(409);
     const json = await res.json();
     expect(json).toMatchObject({ success: false, code: 'stale', index: 0, skuId: 7 });
-    expect(clientSql()).toEqual(['BEGIN', 'ROLLBACK']);
+    expect(clientSql()).toEqual(['BEGIN', "select id from erp.skus where status = 'active'", 'ROLLBACK']);
+  });
+
+  it('rg가 아닌 잘못된 위치는 「위치는 self·rg_inbound만」, rg는 기존 안내문', async () => {
+    const { POST } = await import('@/app/api/erp/stock/adjust/route');
+    const resBad = await POST(post('/api/erp/stock/adjust', { items: [{ ...item, location: 'warehouse' }] }));
+    expect(resBad.status).toBe(400);
+    expect((await resBad.json()).error).toContain('위치는 self·rg_inbound만');
+
+    const resRg = await POST(post('/api/erp/stock/adjust', { items: [{ ...item, location: 'rg' }] }));
+    expect(resRg.status).toBe(400);
+    expect((await resRg.json()).error).toContain('RG 실재고 대조');
+  });
+
+  it('items가 500건을 넘으면 400', async () => {
+    const { POST } = await import('@/app/api/erp/stock/adjust/route');
+    const many = Array.from({ length: 501 }, () => item);
+    const res = await POST(post('/api/erp/stock/adjust', { items: many }));
+    expect(res.status).toBe(400);
+    expect(mockApply).not.toHaveBeenCalled();
+  });
+
+  it('items가 500건이면 통과한다(경계값)', async () => {
+    mockApply.mockResolvedValue([]);
+    const { POST } = await import('@/app/api/erp/stock/adjust/route');
+    const many = Array.from({ length: 500 }, () => item);
+    const res = await POST(post('/api/erp/stock/adjust', { items: many }));
+    expect(res.status).toBe(200);
   });
 });
 
 describe('GET /api/erp/stock/[skuId]/history', () => {
   const ctx = (skuId: string) => ({ params: Promise.resolve({ skuId }) });
 
+  it('로그인하지 않으면 401', async () => {
+    mockGetCurrentUser.mockResolvedValue(null);
+    const { GET } = await import('@/app/api/erp/stock/[skuId]/history/route');
+    expect((await GET(get('/api/erp/stock/7/history'), ctx('7'))).status).toBe(401);
+  });
+
   it('숫자가 아닌 SKU는 400', async () => {
     const { GET } = await import('@/app/api/erp/stock/[skuId]/history/route');
     expect((await GET(get('/api/erp/stock/abc/history'), ctx('abc'))).status).toBe(400);
+  });
+
+  it('postgres integer 상한(2147483647)을 넘는 SKU id는 400', async () => {
+    const { GET } = await import('@/app/api/erp/stock/[skuId]/history/route');
+    const res = await GET(get('/api/erp/stock/2147483648/history'), ctx('2147483648'));
+    expect(res.status).toBe(400);
+  });
+
+  it('상한값 2147483647은 통과한다(경계값)', async () => {
+    poolRows = () => ({ rows: [], rowCount: 0 });
+    const { GET } = await import('@/app/api/erp/stock/[skuId]/history/route');
+    const res = await GET(get('/api/erp/stock/2147483647/history'), ctx('2147483647'));
+    expect(res.status).toBe(200);
   });
 
   it('되돌리기는 되돌리지 않은 조정·기초 묶음에만 연다', async () => {
@@ -159,6 +212,13 @@ describe('GET /api/erp/stock/[skuId]/history', () => {
 });
 
 describe('POST /api/erp/stock/reverse', () => {
+  it('로그인하지 않으면 401', async () => {
+    mockGetCurrentUser.mockResolvedValue(null);
+    const { POST } = await import('@/app/api/erp/stock/reverse/route');
+    expect((await POST(post('/api/erp/stock/reverse', { idemKey: `adj:${REQ}` }))).status).toBe(401);
+    expect(mockReverse).not.toHaveBeenCalled();
+  });
+
   it('조정·기초 키가 아니면 400', async () => {
     const { POST } = await import('@/app/api/erp/stock/reverse/route');
     expect((await POST(post('/api/erp/stock/reverse', { idemKey: 'receipt:x:7' }))).status).toBe(400);
@@ -195,9 +255,24 @@ describe('POST /api/erp/stock/reverse', () => {
     expect(res.status).toBe(409);
     expect((await res.json()).code).toBe('negative');
   });
+
+  it('대문자가 섞인 키도 소문자로 맞춰 되돌린다(재전송 대소문자 차이가 다른 요청이 되지 않는다)', async () => {
+    mockReverse.mockResolvedValue({ posted: true, ids: [10] });
+    const { POST } = await import('@/app/api/erp/stock/reverse/route');
+    const mixed = `ADJ:${REQ.toUpperCase()}`;
+    const res = await POST(post('/api/erp/stock/reverse', { idemKey: mixed }));
+    expect(res.status).toBe(200);
+    expect(mockReverse).toHaveBeenCalledWith(client, mixed.toLowerCase(), expect.anything());
+  });
 });
 
 describe('GET /api/erp/stock/recent', () => {
+  it('로그인하지 않으면 401', async () => {
+    mockGetCurrentUser.mockResolvedValue(null);
+    const { GET } = await import('@/app/api/erp/stock/recent/route');
+    expect((await GET(get('/api/erp/stock/recent'))).status).toBe(401);
+  });
+
   it('최근 조정을 요청 단위로 돌려준다(limit 1~20)', async () => {
     let limit: unknown = null;
     mockGetPool.mockReturnValue({

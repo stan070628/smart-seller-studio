@@ -13,7 +13,9 @@ export async function POST(request: NextRequest) {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
   const body = await request.json().catch(() => null);
-  const idemKey = body?.idemKey;
+  // 대소문자만 다른 재전송도 같은 전표를 가리켜야 한다 — validateAdjustInput이 requestId를 소문자로 맞추는 것과 같은 이유
+  const rawIdemKey: unknown = body?.idemKey;
+  const idemKey = typeof rawIdemKey === 'string' ? rawIdemKey.toLowerCase() : rawIdemKey;
   if (typeof idemKey !== 'string' || !isReversibleKey(idemKey)) return badRequest('되돌릴 수 있는 것은 조정(adj:)·기초(opening:) 전표뿐이다');
   const note = typeof body?.note === 'string' && body.note.trim() ? body.note.trim().slice(0, 200) : '화면에서 되돌림';
   try {

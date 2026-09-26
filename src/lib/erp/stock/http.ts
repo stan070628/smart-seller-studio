@@ -9,6 +9,7 @@ import {
   type AdjustInput, type AdjustMode, type UserReason,
 } from '@/lib/erp/ledger/adjust';
 import { ImportConflictError } from '@/lib/erp/ledger/opening-import';
+import { maskPII } from '@/lib/jobs/mask';
 
 /** 한 트랜잭션. 던지면 ROLLBACK — 여러 건 조정은 전부 되거나 전부 안 된다 */
 export async function withTx<T>(fn: (c: PoolClient) => Promise<T>): Promise<T> {
@@ -44,7 +45,7 @@ export function erpError(e: unknown): NextResponse {
   // 겹친 요청이 같은 멱등키를 먼저 기록했다(잠금은 SKU 단위라 같은 요청 id를 다른 SKU에 동시에 보내면 여기로 온다)
   if (isIdemKeyConflict(inner)) return fail(409, 'conflict', '같은 요청이 이미 기록됐다 — 다시 보고 적는다', extra);
   if (inner instanceof Error && inner.message.startsWith('되돌릴 전표가 없다')) return fail(404, 'not_found', msg, extra);
-  console.error('[erp]', e);
+  console.error('[erp]', maskPII(String(e)));
   return fail(500, 'server', '서버 오류');
 }
 
@@ -56,15 +57,19 @@ function isIdemKeyConflict(e: unknown): boolean {
 
 export const badRequest = (error: string) => fail(400, 'invalid', error);
 
-const optNum = (v: unknown): number | undefined => (v === undefined || v === null || v === '' ? undefined : Number(v));
+// 숫자 칸은 엄격하게 읽는다 — Number(v)는 ''→0, [] →0, true→1로 조용히 바꿔 잘못된 값을 통과시킨다.
+// 필수 칸(skuId·value)은 숫자 타입이 아니면 NaN(검사에서 400이 된다). 선택 칸(expected·unitCost)은
+// undefined·null만 「입력 없음」이고, 그 밖의 타입은 NaN(같이 400) — ''을 0으로 읽지 않는다.
+const reqNum = (v: unknown): number => (typeof v === 'number' ? v : NaN);
+const optNum = (v: unknown): number | undefined => (v === undefined || v === null ? undefined : typeof v === 'number' ? v : NaN);
 
 /** 화면이 보낸 조정 한 건 → AdjustInput. 검사는 validateAdjustInput이 한다. fixed는 라우트가 정하는 칸(RG 반영의 위치·사유 등) */
 export function parseAdjustItem(b: Record<string, unknown>, at: string, fixed: Partial<AdjustInput> = {}): AdjustInput {
   return {
-    skuId: Number(b.skuId),
+    skuId: reqNum(b.skuId),
     location: b.location as Location,
     mode: b.mode as AdjustMode,
-    value: Number(b.value),
+    value: reqNum(b.value),
     expected: optNum(b.expected),
     reason: b.reason as UserReason,
     note: typeof b.note === 'string' && b.note.trim() !== '' ? b.note.trim() : undefined,

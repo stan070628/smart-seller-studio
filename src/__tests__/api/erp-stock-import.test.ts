@@ -72,11 +72,42 @@ describe('POST /api/erp/stock/import', () => {
     expect(mockCommit).not.toHaveBeenCalled();
   });
 
-  it('오류가 있으면 commit=true여도 적재하지 않는다', async () => {
+  it('오류가 있으면 commit=true여도 적재하지 않는다 — 422로 거절하고 본문(요약)은 그대로 준다', async () => {
     const { POST } = await import('@/app/api/erp/stock/import/route');
-    const json = await (await POST(post({ csv: CSV, countedAt: new Date().toISOString(), commit: true }))).json();
+    const res = await POST(post({ csv: CSV, countedAt: new Date().toISOString(), commit: true }));
+    expect(res.status).toBe(422);
+    const json = await res.json();
+    expect(json.success).toBe(false);
     expect(json.data.committed).toBe(0);
+    expect(json.data.errors.join('\n')).toContain('단가를 모른다: k9');
     expect(mockCommit).not.toHaveBeenCalled();
+  });
+
+  it('오류 없이 commit=false(미리보기)면 200 그대로다', async () => {
+    const { POST } = await import('@/app/api/erp/stock/import/route');
+    const res = await POST(post({ csv: CSV, countedAt: new Date().toISOString(), commit: false }));
+    expect(res.status).toBe(200);
+    expect((await res.json()).success).toBe(true);
+  });
+
+  it('CSV가 2MB를 넘으면 400 — 「너무 크다」로 안내한다', async () => {
+    const { POST } = await import('@/app/api/erp/stock/import/route');
+    const bigCsv = CSV + ' '.repeat(2_000_001);
+    const res = await POST(post({ csv: bigCsv, countedAt: new Date().toISOString(), commit: false }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toContain('실사표가 너무 크다(2MB 초과)');
+  });
+
+  it.each([
+    ['정수가 아니다', { k9: 800.5 }],
+    ['음수다', { k9: -1 }],
+    ['문자열이다', { k9: '800' }],
+    ['불리언이다', { k9: true }],
+  ])('단가 입력이 %s면 400으로 그 키를 알린다', async (_label, unitCostOverrides) => {
+    const { POST } = await import('@/app/api/erp/stock/import/route');
+    const res = await POST(post({ csv: CSV, countedAt: new Date().toISOString(), unitCostOverrides, commit: false }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toContain('k9');
   });
 
   it('단가를 입력하면 한 트랜잭션으로 적재한다', async () => {
@@ -95,10 +126,27 @@ describe('POST /api/erp/stock/import', () => {
     expect(client.query.mock.calls.map((c) => c[0])).toEqual(['BEGIN', 'COMMIT']);
   });
 
-  it('실사 시각이 24시간 넘게 지났으면 오류', async () => {
+  it('readDb가 준 기준 단위 미정 SKU를 경고로 전달한다', async () => {
+    mockReadDb.mockResolvedValueOnce({
+      skus: [
+        { id: 7, key: 'k7', name: '왜건', optionLabel: '블랙', legacyProductCostIds: ['pc-7'], baseUnitLabel: null },
+        { id: 9, key: 'k9', name: '타월', optionLabel: '', legacyProductCostIds: [], baseUnitLabel: null },
+      ],
+      links: [{ vid: '111', skuId: 7, multiplier: 1 }],
+      legacy: [{ productCostId: 'pc-7', entries: [{ receivedAt: '2026-09-01', quantity: 10, unitCost: 1000 }], soldQty: 0, voidedQty: 0 }],
+      baseUnitMissing: [{ key: 'k9', name: '타월', maxMultiplier: 2 }],
+    });
+    const { POST } = await import('@/app/api/erp/stock/import/route');
+    const json = await (await POST(post({ csv: CSV, countedAt: new Date().toISOString(), commit: false }))).json();
+    expect(json.data.warnings.some((w: string) => w.includes('기준 단위 미정') && w.includes('k9'))).toBe(true);
+  });
+
+  it('실사 시각이 24시간 넘게 지났으면 오류(422)', async () => {
     const { POST } = await import('@/app/api/erp/stock/import/route');
     const old = new Date(Date.now() - 48 * 3600_000).toISOString();
-    const json = await (await POST(post({ csv: CSV, countedAt: old, unitCostOverrides: { k9: 800 }, commit: true }))).json();
+    const res = await POST(post({ csv: CSV, countedAt: old, unitCostOverrides: { k9: 800 }, commit: true }));
+    expect(res.status).toBe(422);
+    const json = await res.json();
     expect(json.data.errors.join('\n')).toContain('24시간');
     expect(mockCommit).not.toHaveBeenCalled();
   });

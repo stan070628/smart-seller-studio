@@ -64,6 +64,8 @@ export function planOpeningImport(input: {
   overrides: Record<string, number>;
   countedAt: string;
   now: Date;
+  /** 배수 > 1인데 기준 단위가 정해지지 않은 SKU(opening-db readDb가 준다) — 경고로만 남긴다 */
+  baseUnitMissing?: { key: string; name: string; maxMultiplier: number }[];
 }): ImportPreview {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -74,6 +76,9 @@ export function planOpeningImport(input: {
   const bad = checkCountedAt(input.countedAt, input.now);
   if (bad) errors.push(bad.replace('opening-overrides.json에 ', ''));
   for (const i of input.rgIssues) warnings.push(`${i.kind} ${i.ref} — ${i.detail} (불러오지 않는다)`);
+  if (input.baseUnitMissing && input.baseUnitMissing.length > 0) {
+    warnings.push(`기준 단위 미정 SKU ${input.baseUnitMissing.length}건(${input.baseUnitMissing.map((m) => m.key).join(', ')}) — 실사 개수를 셀 수 없다`);
+  }
   for (const o of rgOutsideActive(input.rgBySku, new Set(active.keys()))) {
     warnings.push(`활성이 아닌 SKU ${o.skuId}에 RG 재고 ${o.qty}개 — 불러오지 않는다`);
   }
@@ -105,6 +110,9 @@ export function planOpeningImport(input: {
   const cost = resolveOpeningCosts(input.skus, groupSkus(input.skus), input.legacy, included, rgIncluded, input.overrides);
   const costById = new Map(cost.costs.map((c) => [c.skuId, c]));
   for (const m of cost.missing) errors.push(`재고 ${m.onHand}개인데 단가를 모른다: ${m.skuKey} — 단가를 입력한다`);
+  for (const c of cost.baseUnitCheck) {
+    errors.push(`${c.skuKey}: 기준 단위 「${c.baseUnitLabel}」인데 단가가 옛 입고 이력(${c.unitCost}원)에서 왔다 — 단가를 입력한다`);
+  }
 
   const plan: ImportPlanRow[] = [];
   for (const r of included) {

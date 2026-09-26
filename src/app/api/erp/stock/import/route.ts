@@ -19,14 +19,20 @@ export async function POST(request: NextRequest) {
   if (auth instanceof Response) return auth;
   const body = await request.json().catch(() => null);
   const csv: unknown = body?.csv;
-  if (typeof csv !== 'string' || csv.trim() === '' || csv.length > 2_000_000) return badRequest('csv(실사표 내용)가 없다');
+  if (typeof csv !== 'string' || csv.trim() === '') return badRequest('csv(실사표 내용)가 없다');
+  if (csv.length > 2_000_000) return badRequest('실사표가 너무 크다(2MB 초과)');
   if (typeof body?.countedAt !== 'string') return badRequest('countedAt(실사를 마친 시각)이 없다');
   const countedAt: string = body.countedAt;
   const fileName = (typeof body?.fileName === 'string' && body.fileName.trim() ? body.fileName.trim() : 'opening.csv').slice(0, 120);
   const overrides: Record<string, number> = {};
+  const badOverrideKeys: string[] = [];
   if (body?.unitCostOverrides && typeof body.unitCostOverrides === 'object') {
-    for (const [k, v] of Object.entries(body.unitCostOverrides as Record<string, unknown>)) overrides[k] = Number(v);
+    for (const [k, v] of Object.entries(body.unitCostOverrides as Record<string, unknown>)) {
+      if (typeof v === 'number' && Number.isFinite(v) && Number.isInteger(v) && v >= 0) overrides[k] = v;
+      else badOverrideKeys.push(k);
+    }
   }
+  if (badOverrideKeys.length > 0) return badRequest(`단가 입력이 0 이상 정수가 아니다: ${badOverrideKeys.join(', ')}`);
   let rows: CountRow[];
   try {
     rows = parseCountCsv(csv);
@@ -43,12 +49,13 @@ export async function POST(request: NextRequest) {
     const rg = rgQtyBySku(db.links, await fetchRgStock(), new Set());
     const p = planOpeningImport({
       rows, skus: db.skus, legacy: db.legacy, rgBySku: rg.bySku, rgIssues: rg.issues,
-      stockedSkuIds: stocked, overrides, countedAt, now: new Date(cutoverAt),
+      stockedSkuIds: stocked, overrides, countedAt, now: new Date(cutoverAt), baseUnitMissing: db.baseUnitMissing,
     });
     const summary: ImportSummary = {
       committed: 0, cutoverAt, totals: p.totals, errors: p.errors, warnings: p.warnings, excluded: p.excluded, costs: p.costs,
     };
-    if (body.commit !== true || p.errors.length > 0) return NextResponse.json({ success: true, data: summary });
+    if (body.commit !== true) return NextResponse.json({ success: true, data: summary });
+    if (p.errors.length > 0) return NextResponse.json({ success: false, data: summary }, { status: 422 });
     const committed = await withTx((c) => commitOpeningImport(c, p.plan, { fileName, cutoverAt }));
     return NextResponse.json({ success: true, data: { ...summary, committed } });
   } catch (e) {
