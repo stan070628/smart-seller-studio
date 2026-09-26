@@ -1,117 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/auth';
-import { getSourcingPool } from '@/lib/sourcing/db';
-import { getNaverCommerceClient } from '@/lib/listing/naver-commerce-client';
-import { resolveSaleShippingFee } from '@/lib/cost-management/sale-shipping';
-import { naverCancelledKey } from '@/lib/cost-management/cancel-sync';
+// POST /api/cost-management/naver-bulk-import — 2026-09-26 ERP 1-C2a로 폐지(410).
+// 판매는 주문 수집(/api/cron/orders-sync 15분 · 화면 「지금 수집」 = POST /api/erp/orders/sync)이 sale_records까지 기록한다.
+// 옛 구현은 RG 청크 끝 날짜를 배타로 넘겨 하루씩 잃었고(무효 1,062건), 상품별 불러오기는 무접두 키로 판매자배송을 이중 기록했다 —
+// 살려 두면 다시 쓴다. 옛 코드는 git 기록에 있다. 기초재고 이전 행 복구는 1-C2b.
+import { NextResponse } from 'next/server';
 
-const CANCELLED_STATUSES = new Set([
-  'CANCEL_REQUEST', 'CANCEL_DONE', 'RETURN_REQUEST', 'RETURN_DONE',
-  'CANCELED', 'RETURNED', 'EXCHANGED',
-]);
-
-export async function POST(request: NextRequest) {
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-
-  const KST = 9 * 60 * 60 * 1000;
-  const today = new Date(Date.now() + KST).toISOString().slice(0, 10);
-
-  const body = await request.json().catch(() => null);
-  const from = body?.from ?? new Date(Date.now() + KST - 90 * 86400000).toISOString().slice(0, 10);
-  const to = body?.to ?? today;
-
-  const pool = getSourcingPool();
-
-  const { rows: productRows } = await pool.query(
-    `SELECT id, naver_channel_product_no FROM product_costs
-     WHERE user_id = $1 AND naver_channel_product_no IS NOT NULL`,
-    [user.userId],
+export async function POST() {
+  return NextResponse.json(
+    { success: false, code: 'gone', error: '이 불러오기는 폐지됐습니다 — 판매는 15분마다 자동 수집됩니다(재고현황·원가관리의 「지금 수집」)' },
+    { status: 410 },
   );
-
-  if (productRows.length === 0) {
-    return NextResponse.json({ success: true, data: { imported: 0, skipped: 0, total: 0 } });
-  }
-
-  const channelProductNoMap = new Map<number, string>();
-  for (const row of productRows) {
-    channelProductNoMap.set(Number(row.naver_channel_product_no), row.id);
-  }
-
-  try {
-    const client = getNaverCommerceClient();
-    const result = await client.getOrders({ fromDate: from, toDate: to });
-
-    const cancelledKeys = new Set<string>();
-    const records: Array<{
-      product_cost_id: string;
-      sold_at: string;
-      quantity: number;
-      selling_price: number;
-      sale_amount: number;
-      naver_order_id: string;
-    }> = [];
-
-    for (const order of result.contents) {
-      if (CANCELLED_STATUSES.has(order.productOrderStatus) || (order.claimStatus && CANCELLED_STATUSES.has(order.claimStatus))) {
-        const k = naverCancelledKey(order, channelProductNoMap);
-        if (k) cancelledKeys.add(k);
-        continue;
-      }
-      if (!order.channelProductNo) continue;
-      const productCostId = channelProductNoMap.get(order.channelProductNo);
-      if (!productCostId) continue;
-      if (order.quantity <= 0) continue;
-      const soldAt = order.orderDate?.slice(0, 10);
-      if (!soldAt) continue;
-      const unitPrice = order.quantity > 0
-        ? Math.round(order.totalPaymentAmount / order.quantity)
-        : order.totalPaymentAmount;
-      records.push({
-        product_cost_id: productCostId,
-        sold_at: soldAt,
-        quantity: order.quantity,
-        selling_price: unitPrice,
-        sale_amount: order.totalPaymentAmount,
-        naver_order_id: `naver-${order.productOrderId}`,
-      });
-    }
-
-    let imported = 0;
-    const CHUNK = 200;
-    for (let i = 0; i < records.length; i += CHUNK) {
-      const chunk = records.slice(i, i + CHUNK);
-      const values: unknown[] = [];
-      const shippingFee = resolveSaleShippingFee('naver');
-      const placeholders = chunk.map((rec, idx) => {
-        const base = idx * 8;
-        values.push(user.userId, rec.product_cost_id, rec.sold_at, rec.quantity, rec.selling_price, rec.sale_amount, rec.naver_order_id, shippingFee);
-        return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},$${base + 6},'naver',$${base + 7},$${base + 8})`;
-      });
-      const r = await pool.query(
-        `INSERT INTO sale_records
-           (user_id, product_cost_id, sold_at, quantity, selling_price, sale_amount, channel, coupang_order_item_id, shipping_fee)
-         VALUES ${placeholders.join(',')}
-         ON CONFLICT (coupang_order_item_id) DO NOTHING`,
-        values,
-      );
-      imported += r.rowCount ?? 0;
-    }
-    const skipped = records.length - imported;
-
-    let voided = 0;
-    if (cancelledKeys.size > 0) {
-      const voidRes = await pool.query(
-        `UPDATE sale_records SET voided_at = now()
-         WHERE user_id = $1 AND coupang_order_item_id = ANY($2::text[]) AND voided_at IS NULL`,
-        [user.userId, Array.from(cancelledKeys)],
-      );
-      voided = voidRes.rowCount ?? 0;
-    }
-
-    return NextResponse.json({ success: true, data: { imported, skipped, total: records.length, voided } });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : '서버 오류';
-    return NextResponse.json({ success: false, error: msg }, { status: 500 });
-  }
 }
