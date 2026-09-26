@@ -1,6 +1,7 @@
 // src/lib/erp/ledger/adjust-store.ts
 // 조정 전표 기록. 호출자가 트랜잭션을 연다 — 여러 건(실사 모드)은 한 트랜잭션이라 하나라도 실패하면 전부 되돌린다.
-// 순서: 입력 검사 → SKU 잠금 → 같은 요청 확인 → 그 위치 재고 → 규칙(adjust.ts) → FIFO 차감 또는 새 lot → (기초면) 커서.
+// 순서: 입력 검사 → SKU 잠금 → 같은 요청 확인(전표·센 기록) → 그 위치 재고 → 규칙(adjust.ts) → FIFO 차감 또는 새 lot → (기초면) 커서
+//       → (지금 개수면) 센 기록(erp.stock_counts — 차이가 0이어도 한 줄. 오늘 셀 목록이 마지막 실사를 여기서 읽는다).
 import type { Location } from './fifo';
 import { lockSku, postConsume, postLotCreate, type Db } from './store';
 import {
@@ -12,7 +13,7 @@ export interface AdjustResult {
   skuId: number;
   location: Location;
   requestId: string;
-  /** posted = 기록 · duplicate = 같은 요청이 이미 기록됨 · noop = 차이 0 */
+  /** posted = 기록 · duplicate = 같은 요청이 이미 기록됨 · noop = 차이 0(지금 개수면 센 기록만 남는다) */
   outcome: 'posted' | 'duplicate' | 'noop';
   kind: 'opening' | 'adjust' | null;
   /** 원장 증감(+ 늘림 / − 줄임) */
@@ -60,17 +61,35 @@ export async function legacyUnitCost(db: Db, skuId: number): Promise<number | nu
   return Number(r.unit_cost);
 }
 
+const NONE = { kind: null, qty: 0, idemKey: null, unitCost: null, costSource: null } as const;
+
+/** 센 기록 한 줄(erp.stock_counts). 지금 개수 방식만 부른다 — ±수량은 센 개수가 아니다. 호출자가 SKU를 잠갔다 */
+export async function recordCount(
+  db: Db,
+  c: { skuId: number; location: Location; countedQty: number; ledgerQty: number; idemKey: string | null; requestId: string; countedAt: string },
+): Promise<void> {
+  await db.query(
+    `insert into erp.stock_counts (sku_id, location, counted_qty, ledger_qty, adjustment_idem_key, request_id, counted_at)
+     values ($1, $2, $3, $4, $5, $6, $7)`,
+    [c.skuId, c.location, c.countedQty, c.ledgerQty, c.idemKey, c.requestId, c.countedAt],
+  );
+}
+
 export async function applyAdjustment(db: Db, p: AdjustInput): Promise<AdjustResult> {
   validateAdjustInput(p);
   const base = { skuId: p.skuId, location: p.location, requestId: p.requestId };
-  const none = { kind: null, qty: 0, idemKey: null, unitCost: null, costSource: null };
   await lockSku(db, p.skuId);
 
-  // 같은 요청 id의 재전송만 duplicate다. 다른 SKU·위치에 쓰인 id면 조용히 삼키지 않고 거부한다
-  const dup = await db.query(`select sku_id, location from erp.stock_ledger where ref_type = 'adjust' and ref_id = $1 limit 1`, [p.requestId]);
-  if (dup.rows.length > 0) {
+  // 같은 요청 id의 재전송만 duplicate다. 다른 SKU·위치에 쓰인 id면 조용히 삼키지 않고 거부한다.
+  // 차이 0인 지금 개수는 원장에 아무것도 쓰지 않으므로 센 기록도 함께 본다 — 재전송이 센 기록을 두 줄 만들지 않게
+  for (const sql of [
+    `select sku_id, location from erp.stock_ledger where ref_type = 'adjust' and ref_id = $1 limit 1`,
+    `select sku_id, location from erp.stock_counts where request_id = $1 limit 1`,
+  ]) {
+    const dup = await db.query(sql, [p.requestId]);
+    if (dup.rows.length === 0) continue;
     const d = dup.rows[0];
-    if (Number(d.sku_id) === p.skuId && d.location === p.location) return { ...base, outcome: 'duplicate', ...none };
+    if (Number(d.sku_id) === p.skuId && d.location === p.location) return { ...base, outcome: 'duplicate', ...NONE };
     throw new AdjustInputError('요청 id가 다른 조정에 이미 쓰였다');
   }
 
@@ -78,10 +97,21 @@ export async function applyAdjustment(db: Db, p: AdjustInput): Promise<AdjustRes
     `select coalesce(sum(qty), 0)::int as qty, count(*)::int as n from erp.stock_ledger where sku_id = $1 and location = $2`,
     [p.skuId, p.location],
   );
-  const step = planAdjustment({
-    mode: p.mode, value: p.value, expected: p.expected, onHand: Number(rows[0].qty), locationEmpty: Number(rows[0].n) === 0,
-  });
-  if (step.diff === 0) return { ...base, outcome: 'noop', ...none };
+  const onHand = Number(rows[0].qty);
+  const step = planAdjustment({ mode: p.mode, value: p.value, expected: p.expected, onHand, locationEmpty: Number(rows[0].n) === 0 });
+  const out = await postStep(db, p, step);
+  if (p.mode === 'count') {
+    await recordCount(db, {
+      skuId: p.skuId, location: p.location, countedQty: p.value, ledgerQty: onHand, idemKey: out.idemKey, requestId: p.requestId, countedAt: p.occurredAt,
+    });
+  }
+  return out;
+}
+
+/** 규칙이 정한 한 걸음을 원장에 쓴다: 차이 0 → 기록 없음 · 음수 → FIFO 차감 · 양수 → 새 lot(단가: 입력 → 최근 lot → 옛 입고) */
+async function postStep(db: Db, p: AdjustInput, step: ReturnType<typeof planAdjustment>): Promise<AdjustResult> {
+  const base = { skuId: p.skuId, location: p.location, requestId: p.requestId };
+  if (step.diff === 0) return { ...base, outcome: 'noop', ...NONE };
 
   const ref = { refType: 'adjust', refId: p.requestId, note: p.note };
   if (step.diff < 0) {

@@ -299,6 +299,15 @@ describe('erpError', () => {
     expect(erpError(new AdjustItemError(0, 7, 'self', e)).status).toBe(409);
   });
 
+  it('센 기록 요청 id unique 위반(23505)도 409 — 겹친 요청이 먼저 셌다', async () => {
+    const e = Object.assign(new Error('duplicate key value violates unique constraint "stock_counts_request_id_key"'), {
+      code: '23505', constraint: 'stock_counts_request_id_key',
+    });
+    const res = erpError(e);
+    expect(res.status).toBe(409);
+    expect((await res.json()).code).toBe('conflict');
+  });
+
   it('다른 unique 위반은 500', () => {
     const e = Object.assign(new Error('dup'), { code: '23505', constraint: 'skus_key_key' });
     expect(erpError(e).status).toBe(500);

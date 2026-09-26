@@ -49,10 +49,11 @@ export function erpError(e: unknown): NextResponse {
   return fail(500, 'server', '서버 오류');
 }
 
-/** Postgres unique 위반(23505) 중 erp.stock_ledger.idem_key */
+/** Postgres unique 위반(23505) 중 erp.stock_ledger.idem_key · erp.stock_counts.request_id(겹친 같은 요청이 먼저 셌다) */
 function isIdemKeyConflict(e: unknown): boolean {
   const pg = e as { code?: unknown; constraint?: unknown } | null;
-  return !!pg && pg.code === '23505' && typeof pg.constraint === 'string' && pg.constraint.includes('idem_key');
+  return !!pg && pg.code === '23505' && typeof pg.constraint === 'string'
+    && (pg.constraint.includes('idem_key') || pg.constraint === 'stock_counts_request_id_key');
 }
 
 export const badRequest = (error: string) => fail(400, 'invalid', error);

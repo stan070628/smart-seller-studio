@@ -11,6 +11,8 @@ const AT = '2026-09-27T10:00:00+09:00';
 function fakeDb(o: {
   /** 같은 요청 id로 이미 기록된 전표의 SKU·위치 */
   dup?: { sku_id: number; location: string };
+  /** 같은 요청 id로 이미 남은 센 기록의 SKU·위치(차이 0 실사는 전표 없이 이것만 남는다) */
+  countDup?: { sku_id: number; location: string };
   /** 멱등키가 이미 있다(postLotCreate·postConsume가 posted:false) */
   idemTaken?: boolean;
   onHand?: { qty: number; n: number };
@@ -26,6 +28,8 @@ function fakeDb(o: {
       calls.push({ sql, params });
       if (sql.startsWith('select pg_advisory_xact_lock')) return { rows: [], rowCount: 1 };
       if (sql.startsWith('select sku_id, location from erp.stock_ledger where ref_type')) return { rows: o.dup ? [o.dup] : [], rowCount: o.dup ? 1 : 0 };
+      if (sql.startsWith('select sku_id, location from erp.stock_counts')) return { rows: o.countDup ? [o.countDup] : [], rowCount: o.countDup ? 1 : 0 };
+      if (sql.startsWith('insert into erp.stock_counts')) return { rows: [], rowCount: 1 };
       if (sql.startsWith('select coalesce(sum(qty)')) return { rows: [o.onHand ?? { qty: 0, n: 0 }], rowCount: 1 };
       if (sql.startsWith('select 1 from erp.stock_ledger where idem_key')) return { rows: o.idemTaken ? [{}] : [], rowCount: o.idemTaken ? 1 : 0 };
       if (sql.startsWith('select coalesce(l.lot_id')) return { rows: o.lots ?? [], rowCount: (o.lots ?? []).length };
@@ -44,6 +48,7 @@ const input = (o: Partial<AdjustInput> = {}): AdjustInput => ({
   skuId: 7, location: 'self', mode: 'count', value: 5, expected: 0, reason: 'count_diff', requestId: REQ, occurredAt: AT, ...o,
 });
 const inserts = (calls: { sql: string; params: unknown[] }[]) => calls.filter((c) => c.sql.startsWith('insert into erp.stock_ledger'));
+const countInserts = (calls: { sql: string; params: unknown[] }[]) => calls.filter((c) => c.sql.startsWith('insert into erp.stock_counts'));
 
 describe('applyAdjustment', () => {
   it('빈 위치의 첫 지금 개수 → 기초 전표(opening:<sku>:<위치>, 사유 opening) + ledger_cutover', async () => {
@@ -246,5 +251,60 @@ describe('ensureCutover', () => {
     expect(f.calls[0].sql.replace(/\s+/g, ' ')).toMatch(
       /on conflict \(name\) do update set cursor_at = least\(erp\.sync_cursors\.cursor_at, excluded\.cursor_at\), updated_at = now\(\)/,
     );
+  });
+});
+
+describe('센 기록(stock_counts)', () => {
+  // 넣는 칸 순서: sku_id, location, counted_qty, ledger_qty, adjustment_idem_key, request_id, counted_at
+  it('지금 개수는 차이가 0이어도 센 기록 한 줄(조정 키 null) — 원장에는 쓰지 않는다', async () => {
+    const f = fakeDb({ onHand: { qty: 5, n: 1 } });
+    const r = await applyAdjustment(f.db, input({ value: 5, expected: 5 }));
+    expect(r.outcome).toBe('noop');
+    expect(inserts(f.calls)).toHaveLength(0);
+    expect(countInserts(f.calls).map((c) => c.params)).toEqual([[7, 'self', 5, 5, null, REQ, AT]]);
+  });
+
+  it('차이가 있으면 센 기록에 그 조정의 원 멱등키(adj:<uuid>, #순번 없음)', async () => {
+    const f = fakeDb({ onHand: { qty: 10, n: 2 }, lots: [{ lot_id: 1, qty: 10, unit_cost: 700, lot_at: 1 }] });
+    await applyAdjustment(f.db, input({ value: 7, expected: 10, reason: 'damage' }));
+    expect(countInserts(f.calls).map((c) => c.params)).toEqual([[7, 'self', 7, 10, `adj:${REQ}`, REQ, AT]]);
+  });
+
+  it('빈 위치의 첫 지금 개수는 기초 키(opening:<sku>:<위치>)', async () => {
+    const f = fakeDb({ onHand: { qty: 0, n: 0 } });
+    await applyAdjustment(f.db, input({ unitCost: 700 }));
+    expect(countInserts(f.calls).map((c) => c.params)).toEqual([[7, 'self', 5, 0, 'opening:7:self', REQ, AT]]);
+  });
+
+  it('RG 대조도 지금 개수라 센 기록(위치 rg)', async () => {
+    const f = fakeDb({ onHand: { qty: 4, n: 1 } });
+    await applyAdjustment(f.db, input({ location: 'rg', reason: 'rg_reconcile', value: 4, expected: 4 }));
+    expect(countInserts(f.calls).map((c) => c.params[1])).toEqual(['rg']);
+  });
+
+  it('±수량은 센 개수가 아니다 — 센 기록을 남기지 않는다', async () => {
+    const f = fakeDb({ onHand: { qty: 2, n: 1 }, lotCost: 800 });
+    await applyAdjustment(f.db, input({ mode: 'delta', value: 3, expected: undefined, reason: 'return_in' }));
+    expect(countInserts(f.calls)).toHaveLength(0);
+  });
+
+  it('차이 0 실사의 재전송은 센 기록으로 알아본다 — duplicate, 재고를 읽지도 더 쓰지도 않는다', async () => {
+    const f = fakeDb({ countDup: { sku_id: 7, location: 'self' }, onHand: { qty: 5, n: 1 } });
+    const r = await applyAdjustment(f.db, input({ value: 5, expected: 5 }));
+    expect(r.outcome).toBe('duplicate');
+    expect(f.calls.some((c) => c.sql.startsWith('select coalesce(sum(qty)'))).toBe(false);
+    expect(countInserts(f.calls)).toHaveLength(0);
+  });
+
+  it('센 기록에 쓰인 요청 id가 다른 SKU·위치면 AdjustInputError(duplicate로 삼키지 않는다)', async () => {
+    const f = fakeDb({ countDup: { sku_id: 8, location: 'self' }, onHand: { qty: 5, n: 1 } });
+    await expect(applyAdjustment(f.db, input({ value: 5, expected: 5 }))).rejects.toBeInstanceOf(AdjustInputError);
+    expect(countInserts(f.calls)).toHaveLength(0);
+  });
+
+  it('화면 재고가 낡았으면(StaleCountError) 센 기록도 남기지 않는다', async () => {
+    const f = fakeDb({ onHand: { qty: 4, n: 1 } });
+    await expect(applyAdjustment(f.db, input({ value: 3, expected: 5 }))).rejects.toBeInstanceOf(StaleCountError);
+    expect(countInserts(f.calls)).toHaveLength(0);
   });
 });
