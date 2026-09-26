@@ -8,11 +8,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import pg from 'pg';
 import { loadEnvLocal } from './_env';
-import { getCoupangClient } from '@/lib/listing/coupang-client';
+import { fetchRgStock, readDb } from '@/lib/erp/ledger/opening-db';
 import {
   buildCountSheet, carryCounts, groupSkus, parseCountCsv, rgQtyBySku, toCsv,
-  type LegacyFacts, type OpeningSku, type RgLink, type RgStock,
 } from '@/lib/erp/ledger/opening';
+
+// 1-C1: 화면도 쓰므로 src/lib/erp/ledger/opening-db.ts로 옮겼다. opening-apply·rg-reconcile은 계속 여기서 가져간다.
+export { fetchRgStock, readDb };
 
 loadEnvLocal();
 const DATE = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
@@ -32,51 +34,6 @@ export function loadOverrides(): OpeningOverrides {
   if (!fs.existsSync(OVERRIDES_PATH)) return { ignoreRgVids: {} };
   const o = JSON.parse(fs.readFileSync(OVERRIDES_PATH, 'utf-8')) as Partial<OpeningOverrides>;
   return { ...o, ignoreRgVids: o.ignoreRgVids ?? {} };
-}
-
-export async function fetchRgStock(): Promise<RgStock[]> {
-  const client = getCoupangClient();
-  const out: RgStock[] = [];
-  let token: string | null = null;
-  do {
-    const page = await client.getRocketGrowthInventories(token ? { nextToken: token } : undefined);
-    for (const it of page.items) out.push({ vid: String(it.vendorItemId), qty: it.totalOrderableQuantity });
-    token = page.nextToken;
-  } while (token);
-  return out;
-}
-
-export async function readDb(c: pg.Client): Promise<{ skus: OpeningSku[]; links: RgLink[]; legacy: LegacyFacts[]; baseUnitMissing: { key: string; name: string; maxMultiplier: number }[] }> {
-  const skus = (await c.query(
-    `select id, key, name, option_label, base_unit_label, legacy_product_cost_ids::text[] as legacy from erp.skus where status = 'active' order by id`,
-  )).rows.map((r) => ({
-    id: Number(r.id), key: r.key, name: r.name, optionLabel: r.option_label, legacyProductCostIds: r.legacy ?? [], baseUnitLabel: r.base_unit_label ?? null,
-  }));
-  const links = (await c.query(
-    `select l.external_product_id as vid, x.sku_id, x.multiplier
-       from erp.channel_listings l join erp.listing_skus x on x.listing_id = l.id
-      where l.channel = 'coupang_rg' and l.active`,
-  )).rows.map((r) => ({ vid: String(r.vid), skuId: Number(r.sku_id), multiplier: Number(r.multiplier) }));
-  const entries = (await c.query(
-    `select product_cost_id, received_at::text as received_at, quantity::int as quantity, unit_cost from cost_entries`,
-  )).rows;
-  const sales = (await c.query(
-    `select product_cost_id,
-            coalesce(sum(quantity) filter (where voided_at is null), 0)::int as sold,
-            coalesce(sum(quantity) filter (where voided_at is not null), 0)::int as voided
-       from sale_records group by product_cost_id`,
-  )).rows;
-  const byPc = new Map<string, LegacyFacts>();
-  const get = (pc: string) => byPc.get(pc) ?? byPc.set(pc, { productCostId: pc, entries: [], soldQty: 0, voidedQty: 0 }).get(pc)!;
-  for (const e of entries) get(e.product_cost_id).entries.push({ receivedAt: e.received_at, quantity: Number(e.quantity), unitCost: Number(e.unit_cost) });
-  for (const s of sales) Object.assign(get(s.product_cost_id), { soldQty: Number(s.sold), voidedQty: Number(s.voided) });
-  const baseUnitMissing = (await c.query(
-    `select s.key, s.name, max(x.multiplier)::int as m
-       from erp.skus s join erp.listing_skus x on x.sku_id = s.id
-      where s.status = 'active' and s.base_unit_label is null
-      group by s.key, s.name having max(x.multiplier) > 1 order by s.key`,
-  )).rows.map((r) => ({ key: r.key, name: r.name, maxMultiplier: Number(r.m) }));
-  return { skus, links, legacy: [...byPc.values()], baseUnitMissing };
 }
 
 async function main(): Promise<void> {
