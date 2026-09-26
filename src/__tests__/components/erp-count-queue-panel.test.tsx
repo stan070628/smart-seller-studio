@@ -7,7 +7,7 @@ import { server } from '../mocks/server';
 
 const row = (o: Partial<StockRow>): StockRow => ({
   skuId: 1, key: 'k1', name: '왜건', option: '블랙', legacyProductCostIds: [], self: 5, rgInbound: 0, rg: 0, value: 3500,
-  hasLedger: true, lotCost: 700, legacyCost: null, costNeedsInput: false, selfValue: 3500, lastCountedAt: null, ...o,
+  hasLedger: true, hasSelfLedger: true, lotCost: 700, legacyCost: null, costNeedsInput: false, selfValue: 3500, lastCountedAt: null, ...o,
 });
 const A = row({});
 const B = row({ skuId: 2, key: 'k2', name: '매트', option: '', self: 2, selfValue: 1400, lastCountedAt: '2026-09-20T01:00:00Z' });

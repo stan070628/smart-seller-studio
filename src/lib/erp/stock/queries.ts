@@ -17,8 +17,10 @@ export interface StockListRow {
   rg: number;
   /** 원장 평가액(lot 단가 × 수량 합) */
   value: number;
-  /** 원장 전표가 하나라도 있다 */
+  /** 원장 전표가 하나라도 있다(위치 무관) */
   hasLedger: boolean;
+  /** self(집) 위치에 원장 전표가 있다 — RG 보내기(rg-ship.ts)의 건너뛰기 판정과 같은 기준 */
+  hasSelfLedger: boolean;
   /** 최근 lot 단가(위치 무관, 되돌린 lot 제외) */
   lotCost: number | null;
   /** 옛 cost_entries 최근 단가. 기준 단위가 정해진 SKU는 null(옛 입고는 다른 단위일 수 있다) */
@@ -82,6 +84,7 @@ export async function listStock(db: Db): Promise<StockListRow[]> {
             coalesce(sum(h.value) filter (where h.location = 'self'), 0)::bigint as self_value,
             (select max(c.counted_at) from erp.stock_counts c where c.sku_id = s.id and c.location = 'self') as last_counted_at,
             exists (select 1 from erp.stock_ledger x where x.sku_id = s.id) as has_ledger,
+            exists (select 1 from erp.stock_ledger x where x.sku_id = s.id and x.location = 'self') as has_self_ledger,
             (select l.unit_cost from erp.stock_ledger l
               where l.sku_id = s.id and l.lot_id is null
                 and not exists (select 1 from erp.stock_ledger r where r.reverses_id = l.id)
@@ -102,7 +105,7 @@ export async function listStock(db: Db): Promise<StockListRow[]> {
     return {
       skuId: Number(r.id), key: r.key, name: r.name, option: r.option_label ?? '', legacyProductCostIds: r.legacy ?? [],
       self: Number(r.self), rgInbound: Number(r.rg_inbound), rg: Number(r.rg), value: Number(r.value),
-      hasLedger: r.has_ledger === true, lotCost, legacyCost, costNeedsInput: lotCost === null && legacyCost === null,
+      hasLedger: r.has_ledger === true, hasSelfLedger: r.has_self_ledger === true, lotCost, legacyCost, costNeedsInput: lotCost === null && legacyCost === null,
       selfValue: Number(r.self_value), lastCountedAt: r.last_counted_at ? iso(r.last_counted_at) : null,
     };
   });

@@ -8,6 +8,8 @@ export interface SkuOption {
   option: string;
   /** 집 원장 재고 */
   self: number;
+  /** self 위치에 원장 전표가 있다 — false면 서버가 이 SKU의 이동을 건너뛴다(rg-ship.ts no_self_ledger) */
+  hasSelfLedger: boolean;
   legacyProductCostIds: string[];
 }
 

@@ -6,7 +6,7 @@ import {
 
 const row = (o: Partial<StockRow> = {}): StockRow => ({
   skuId: 1, key: 'cp:1:블랙', name: '왜건', option: '블랙', legacyProductCostIds: [], self: 3, rgInbound: 0, rg: 2, value: 5000,
-  hasLedger: true, lotCost: 1000, legacyCost: null, costNeedsInput: false, selfValue: 0, lastCountedAt: null, ...o,
+  hasLedger: true, hasSelfLedger: true, lotCost: 1000, legacyCost: null, costNeedsInput: false, selfValue: 0, lastCountedAt: null, ...o,
 });
 const recon: RgRecon = { fetchedAt: '2026-09-27T01:00:00Z', actual: new Map([[1, 4]]), issues: [], inactive: [] };
 const edit = (o: Partial<StagedEdit> = {}): StagedEdit => ({

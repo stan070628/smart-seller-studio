@@ -63,7 +63,7 @@ describe('GET /api/erp/stock', () => {
     poolRows = () => ({
       rows: [{
         id: '7', key: 'cp:1:블랙', name: '왜건', option_label: '블랙', legacy: ['pc-1'], self: 3, rg_inbound: 0, rg: 2, value: '5000', self_value: '3000',
-        has_ledger: true, lot_cost: 1000, legacy_cost: null, base_unit_label: null, last_counted_at: new Date('2026-09-20T01:00:00Z'),
+        has_ledger: true, has_self_ledger: true, lot_cost: 1000, legacy_cost: null, base_unit_label: null, last_counted_at: new Date('2026-09-20T01:00:00Z'),
       }],
       rowCount: 1,
     });
@@ -71,9 +71,23 @@ describe('GET /api/erp/stock', () => {
     const json = await (await GET(get('/api/erp/stock'))).json();
     expect(json.data).toEqual([{
       skuId: 7, key: 'cp:1:블랙', name: '왜건', option: '블랙', legacyProductCostIds: ['pc-1'],
-      self: 3, rgInbound: 0, rg: 2, value: 5000, hasLedger: true, lotCost: 1000, legacyCost: null, costNeedsInput: false,
+      self: 3, rgInbound: 0, rg: 2, value: 5000, hasLedger: true, hasSelfLedger: true, lotCost: 1000, legacyCost: null, costNeedsInput: false,
       selfValue: 3000, lastCountedAt: '2026-09-20T01:00:00.000Z',
     }]);
+  });
+
+  it('rg 위치에만 전표가 있고 self 전표는 없으면 hasLedger는 true, hasSelfLedger는 false', async () => {
+    poolRows = () => ({
+      rows: [{
+        id: '7', key: 'cp:1:블랙', name: '왜건', option_label: '블랙', legacy: [], self: 0, rg_inbound: 0, rg: 2, value: '0', self_value: '0',
+        has_ledger: true, has_self_ledger: false, lot_cost: null, legacy_cost: null, base_unit_label: null, last_counted_at: null,
+      }],
+      rowCount: 1,
+    });
+    const { GET } = await import('@/app/api/erp/stock/route');
+    const json = await (await GET(get('/api/erp/stock'))).json();
+    expect(json.data[0].hasLedger).toBe(true);
+    expect(json.data[0].hasSelfLedger).toBe(false);
   });
 
   it('기준 단위가 정해진 SKU는 옛 입고 단가를 미리 채우지 않고 단가 입력이 필요하다고 알린다', async () => {
@@ -82,8 +96,8 @@ describe('GET /api/erp/stock', () => {
       sql = q;
       return {
         rows: [
-          { id: '7', key: 'k7', name: 'a', option_label: '', legacy: ['pc-1'], self: 0, rg_inbound: 0, rg: 0, value: '0', has_ledger: false, lot_cost: null, legacy_cost: 650, base_unit_label: '개' },
-          { id: '9', key: 'k9', name: 'b', option_label: '', legacy: ['pc-2'], self: 0, rg_inbound: 0, rg: 0, value: '0', has_ledger: false, lot_cost: null, legacy_cost: 650, base_unit_label: null },
+          { id: '7', key: 'k7', name: 'a', option_label: '', legacy: ['pc-1'], self: 0, rg_inbound: 0, rg: 0, value: '0', has_ledger: false, has_self_ledger: false, lot_cost: null, legacy_cost: 650, base_unit_label: '개' },
+          { id: '9', key: 'k9', name: 'b', option_label: '', legacy: ['pc-2'], self: 0, rg_inbound: 0, rg: 0, value: '0', has_ledger: false, has_self_ledger: false, lot_cost: null, legacy_cost: 650, base_unit_label: null },
         ],
         rowCount: 2,
       };

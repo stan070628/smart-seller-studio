@@ -5,7 +5,7 @@ import type { StockRow } from '@/components/erp/stock/stock-view';
 
 const row: StockRow = {
   skuId: 1, key: 'cp:1:블랙', name: '왜건', option: '블랙', legacyProductCostIds: [], self: 10, rgInbound: 0, rg: 0, value: 7000,
-  hasLedger: true, lotCost: 700, legacyCost: null, costNeedsInput: false, selfValue: 0, lastCountedAt: null,
+  hasLedger: true, hasSelfLedger: true, lotCost: 700, legacyCost: null, costNeedsInput: false, selfValue: 0, lastCountedAt: null,
 };
 
 describe('EditCell', () => {
