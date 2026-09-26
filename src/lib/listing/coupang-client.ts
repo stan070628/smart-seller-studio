@@ -158,6 +158,16 @@ export interface CoupangApiResponse<T = unknown> {
 // 클라이언트
 // ─────────────────────────────────────────────────────────────
 
+/** 실패 응답에서 code·message만 뽑는다(최대 200자). JSON이 아니면 앞 120자 — 오류 응답에는 주문 데이터가 없다. */
+export function coupangErrorSummary(text: string): string {
+  try {
+    const j = JSON.parse(text) as { code?: unknown; message?: unknown };
+    return `code=${String(j.code ?? '')} message=${String(j.message ?? '').slice(0, 200)}`;
+  } catch {
+    return text.slice(0, 120);
+  }
+}
+
 export class CoupangClient {
   private readonly accessKey: string;
   private readonly secretKey: string;
@@ -224,7 +234,9 @@ export class CoupangClient {
       });
 
       text = await res.text();
-      console.log(`[coupang] ${method} ${pathOnly} → HTTP ${res.status} | ${text.slice(0, 500)}`);
+      // 응답 본문은 로그에 남기지 않는다 — 발주서 응답 앞부분에 주문자 이름·이메일·안심번호·수령 주소가 들어 있다.
+      // 실패일 때만 쿠팡이 돌려준 code·message를 남긴다(주문 데이터가 아니라 오류 설명이다).
+      console.log(`[coupang] ${method} ${pathOnly} → HTTP ${res.status}${res.ok ? '' : ` | ${coupangErrorSummary(text)}`}`);
 
       if (res.status !== 429 || attempt >= RETRY_DELAYS_SEC.length) break;
 
