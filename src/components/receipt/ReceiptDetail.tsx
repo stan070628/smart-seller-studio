@@ -12,7 +12,7 @@ import { useRouter } from 'next/navigation';
 import type { Badge, Progress } from '@/lib/receipt/view';
 import ReceiptLineRow, { type LineData, type ProductOption } from './ReceiptLineRow';
 import ReceiptSkuSplit from './ReceiptSkuSplit';
-import { emptyDraft, toSkuSplits, type LineSkuOptions, type SkuCandidateView, type SplitDraft } from './sku-split';
+import { blockedLines, emptyDraft, toSkuSplits, type LineSkuOptions, type SkuCandidateView, type SplitDraft } from './sku-split';
 
 interface CheckDetail {
   status: string;
@@ -61,6 +61,8 @@ export default function ReceiptDetail({ draftId }: { draftId: string }) {
   const [discardArmed, setDiscardArmed] = useState(false);
   // 1-C1: 확정 대기 줄의 재고 SKU 후보(원장 입고 분배) · 사람이 고른 분배 · SKU 검색 목록(처음 검색할 때 읽는다)
   const [skuOptions, setSkuOptions] = useState<Record<number, LineSkuOptions>>({});
+  /** 옵션 정보 상태. 'ok'가 아니면 어느 줄이 옵션을 나눠야 하는지 모르므로 확정을 막는다 */
+  const [skuOptionsStatus, setSkuOptionsStatus] = useState<'loading' | 'ok' | 'failed'>('loading');
   const [splitDrafts, setSplitDrafts] = useState<Record<number, SplitDraft>>({});
   const [allSkus, setAllSkus] = useState<SkuCandidateView[] | null>(null);
 
@@ -94,14 +96,19 @@ export default function ReceiptDetail({ draftId }: { draftId: string }) {
     }
   }, []);
 
-  /** 확정 대기 줄의 재고 SKU 후보. 실패해도 조용히 넘긴다 — 후보 하나인 줄은 서버가 알아서 넣는다 */
+  /**
+   * 확정 대기 줄의 재고 SKU 후보. 실패하면 알리고 다시 시도 버튼을 준다 — 조용히 넘기면 옵션을 나눠야 하는 줄이
+   * 안내 없이 확정돼 그 줄만 실패한다. 다시 읽는 동안에는 직전 결과를 그대로 쓴다(상태를 'loading'으로 되돌리지 않는다).
+   */
   const loadSkuOptions = useCallback(async () => {
     try {
       const res = await fetch(`/api/erp/receipts/${draftId}/sku-options`);
       const json = await res.json();
-      if (json.success) setSkuOptions(json.data as Record<number, LineSkuOptions>);
+      if (!json.success) { setSkuOptionsStatus('failed'); return; }
+      setSkuOptions(json.data as Record<number, LineSkuOptions>);
+      setSkuOptionsStatus('ok');
     } catch {
-      // 무시
+      setSkuOptionsStatus('failed');
     }
   }, [draftId]);
 
@@ -141,6 +148,15 @@ export default function ReceiptDetail({ draftId }: { draftId: string }) {
     const json = await res.json();
     if (!json.success) { setError(json.error ?? '수정 실패'); return; }
     setError(null);
+    // 상품이 바뀌면 SKU 후보가 달라진다 — 옛 상품 기준으로 나눠 둔 수량·고른 SKU를 지운다
+    if ('product_cost_id' in patch) {
+      setSplitDrafts((m) => {
+        if (!(lineNo in m)) return m;
+        const next = { ...m };
+        delete next[lineNo];
+        return next;
+      });
+    }
     // 줄을 고칠 때마다 상품 목록도 다시 읽는다 — 그 사이 새로 만든 상품이 보이도록
     await Promise.all([load(), loadProducts(), loadSkuOptions()]);
   }, [draftId, load, loadProducts, loadSkuOptions]);
@@ -193,6 +209,13 @@ export default function ReceiptDetail({ draftId }: { draftId: string }) {
       setError(e instanceof Error ? e.message : '재판독 실패');
     }
   }
+
+  // 확정 전 검사(I2). 서버도 같은 검사를 하지만, 틀린 채 보내면 그 줄만 실패해 다시 해야 한다
+  const blocked = skuOptionsStatus === 'ok' ? blockedLines(skuOptions, splitDrafts) : [];
+  const confirmBlockedReason =
+    skuOptionsStatus === 'loading' ? '옵션 정보를 불러오는 중입니다'
+      : skuOptionsStatus === 'failed' ? '옵션 정보를 불러온 뒤 확정할 수 있습니다'
+        : blocked.length > 0 ? `${blocked.join(', ')}번 줄 옵션 수량을 나눠 주세요` : null;
 
   if (error && !d) return <div role="alert" style={{ padding: '16px', color: '#b91c1c' }}>{error}</div>;
   if (!d) return <div style={{ padding: '16px', color: '#374151' }}>불러오는 중…</div>;
@@ -276,6 +299,20 @@ export default function ReceiptDetail({ draftId }: { draftId: string }) {
                                    marginBottom: '12px', fontSize: '13px', color: '#b91c1c' }}>{error}</div>
       )}
 
+      {skuOptionsStatus === 'failed' && (
+        <div role="alert" style={{ backgroundColor: '#fff4e5', borderRadius: '10px', padding: '12px',
+                                   marginBottom: '12px', fontSize: '13px', color: '#7c2d12',
+                                   display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+          <span style={{ fontWeight: 700 }}>옵션 정보를 불러오지 못했습니다</span>
+          <button
+            type="button"
+            onClick={() => void loadSkuOptions()}
+            style={{ height: '32px', padding: '0 12px', borderRadius: '8px', border: '1px solid #c2410c',
+                     backgroundColor: '#fff', color: '#c2410c', fontSize: '12px', fontWeight: 700 }}
+          >다시 시도</button>
+        </div>
+      )}
+
       {d.lines.map((l) => (
         <div key={l.id}>
           <ReceiptLineRow line={l} products={products} onPatch={patchLine} />
@@ -314,12 +351,17 @@ export default function ReceiptDetail({ draftId }: { draftId: string }) {
           width: '100%', maxWidth: '480px', padding: '12px 16px',
           backgroundColor: '#fff', borderTop: '1px solid #e5e7eb', boxSizing: 'border-box',
         }}>
+          {confirmBlockedReason && (
+            <div style={{ fontSize: '12px', color: '#b45309', fontWeight: 700, marginBottom: '6px', textAlign: 'center' }}>
+              {confirmBlockedReason}
+            </div>
+          )}
           <button
             onClick={() => void confirm()}
-            disabled={confirming}
+            disabled={confirming || confirmBlockedReason !== null}
             style={{
               width: '100%', height: '50px', borderRadius: '12px', border: 'none',
-              backgroundColor: confirming ? '#9ca3af' : '#1a7f37', color: '#fff',
+              backgroundColor: confirming || confirmBlockedReason !== null ? '#9ca3af' : '#1a7f37', color: '#fff',
               fontSize: '16px', fontWeight: 700,
             }}
           >

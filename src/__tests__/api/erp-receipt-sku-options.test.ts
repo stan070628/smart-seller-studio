@@ -24,6 +24,10 @@ beforeEach(() => {
           line({ line_no: 2, is_discount: true }),
           line({ line_no: 3, item_code: '333', product_cost_id: 'pc-3', entry_type: 'subdivision', quantity: '1', items_per_box: 12, subdivision_unit: 6 }),
           line({ line_no: 4, cost_entry_id: 'ce-1' }),
+          line({ line_no: 5, product_cost_id: null }),
+          line({ line_no: 6, entry_type: null }),
+          line({ line_no: 7, decision: 'skip' }),
+          line({ line_no: 8, entry_type: 'subdivision', items_per_box: null, subdivision_unit: 6 }),
         ] };
       }
       if (sql.startsWith('select p.supplier_code')) return { rows: [{ supplier_code: '111', id: '11', key: 'k11', name: 'A', option_label: '블랙' }] };
@@ -45,7 +49,7 @@ describe('GET /api/erp/receipts/[id]/sku-options', () => {
     expect((await GET(req(), ctx)).status).toBe(401);
   });
 
-  it('확정 대기 입고 줄만, 후보와 예상 수량을 준다', async () => {
+  it('🔴 확정이 처리할 줄만(상품·입고 방식이 있고, 건너뜀·할인·확정됨이 아닌 줄) 후보와 예상 수량을 준다', async () => {
     const { GET } = await import('@/app/api/erp/receipts/[id]/sku-options/route');
     const json = await (await GET(req(), ctx)).json();
     expect(Object.keys(json.data)).toEqual(['1', '3']);

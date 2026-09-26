@@ -80,9 +80,17 @@ describe('POST /api/receipts/[id]/confirm — 원장 입고', () => {
     expect(order).toEqual(['BEGIN', 'ROLLBACK']);
   });
 
-  it('sku_splits 형태가 틀리면 400', async () => {
+  it('「다른 SKU로 바꾸기」 표시(manual)를 원장 입고까지 넘긴다', async () => {
     const { POST } = await import('@/app/api/receipts/[id]/confirm/route');
-    expect((await POST(post({ sku_splits: [1, 2] }), ctx)).status).toBe(400);
+    await POST(post({ sku_splits: { 1: [{ sku_id: 99, qty: null, manual: true }] } }), ctx);
+    expect(mockPostLots.mock.calls[0][1].requested).toEqual([{ skuId: 99, qty: null, manual: true }]);
+  });
+
+  it('sku_splits 형태가 틀리면 400 — 안내는 ~습니다 체', async () => {
+    const { POST } = await import('@/app/api/receipts/[id]/confirm/route');
+    const res = await POST(post({ sku_splits: [1, 2] }), ctx);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('옵션 분배(sku_splits) 형식이 잘못됐습니다.');
     expect(mockCreate).not.toHaveBeenCalled();
   });
 });

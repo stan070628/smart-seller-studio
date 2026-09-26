@@ -24,8 +24,9 @@ interface DraftLineRecord extends ConfirmCandidate {
 /**
  * POST /api/receipts/[id]/confirm — 영수증 줄을 입고로 확정한다.
  *
- * Body: `{ line_nos?: number[], sku_splits?: { [line_no]: [{ sku_id, qty }] } }` — line_nos를 생략하면 확정 가능한 줄 전부.
+ * Body: `{ line_nos?: number[], sku_splits?: { [line_no]: [{ sku_id, qty, manual? }] } }` — line_nos를 생략하면 확정 가능한 줄 전부.
  * sku_splits = 원장 입고의 옵션(SKU) 분배(1-C1). 후보가 하나인 줄은 생략해도 서버가 전부 그 SKU로 넣는다.
+ * manual: true = 화면의 「다른 SKU로 바꾸기」로 후보 밖 SKU를 고른 것. 이 표시 없이 후보 밖 SKU를 보내면 그 줄은 실패한다.
  *
  * 확정 단위는 **줄**이다. 각 줄은 독립된 트랜잭션에서 성공/실패하고,
  * 성공하면 자기가 만든 `cost_entry_id`를 기록한다. 이미 기록된 줄은
@@ -51,7 +52,7 @@ export async function POST(
   try {
     skuSplits = parseSkuSplits(body?.sku_splits);
   } catch (e) {
-    return NextResponse.json({ success: false, error: e instanceof ReceiptSplitError ? e.message : 'sku_splits 형식 오류' }, { status: 400 });
+    return NextResponse.json({ success: false, error: e instanceof ReceiptSplitError ? e.message : '옵션 분배 형식이 잘못됐습니다.' }, { status: 400 });
   }
 
   const pool = getSourcingPool();
