@@ -44,7 +44,7 @@ export interface OrderLine {
   status: StdStatus;
   /** 리스팅을 찾는 상품 키 — 쿠팡 vendorItemId · 네이버 원상품번호 · 토스 상품 ID */
   productId: string;
-  /** 네이버 optionCode('' = 없음) · 토스 옵션명 · 쿠팡 '' */
+  /** 네이버 itemNo(옵션 조합 id, '' = 없음) · 토스 옵션명 · 쿠팡 '' */
   optionKey: string;
   /** 쿠팡 sellerProductId · 네이버 채널상품번호 · 토스 stockId — 옛 장부 연결·진단용 */
   altProductId: string | null;

@@ -18,7 +18,7 @@ export const REDACTED_OPTION = '(입력형 옵션 생략)';
 /**
  * (M2) 옵션 라벨. 구매자가 직접 적는 입력형 옵션(「이름: 값」 — 각인 문구·요청 사항)은 개인 문구일 수 있어 남기지 않는다.
  * 「:」가 있거나 50자를 넘으면 가린다. 선택형 조합 옵션도 「색상: 블루」처럼 「:」를 쓰면 같이 가려진다 — 라벨은 진단용이고
- * 리스팅 연결은 optionCode로 하므로 잃는 것이 없다.
+ * 리스팅 연결은 옵션 조합 id(itemNo)로 하므로 잃는 것이 없다.
  */
 export function optionLabel(v: string | null | undefined): string | null {
   if (!v) return null;
@@ -49,7 +49,7 @@ export function normalizeNaverItem(raw: NaverOrderRawItem): OrderLine {
     rawStatus: claimStatus ? `${po.productOrderStatus}/${claimStatus}` : po.productOrderStatus,
     status: allCanceled ? 'canceled' : naverStatus(po.productOrderStatus, po.claimType ?? null, claimStatus),
     productId: po.originalProductId ? String(po.originalProductId) : '',
-    optionKey: po.optionCode ? String(po.optionCode) : '',
+    optionKey: po.itemNo ? String(po.itemNo) : '',
     altProductId: po.productId ? String(po.productId) : null,
     productLabel: [po.productName, optionLabel(po.productOption)].filter(Boolean).join(' · '),
     qty,
