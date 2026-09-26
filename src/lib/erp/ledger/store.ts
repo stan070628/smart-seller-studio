@@ -1,9 +1,10 @@
 // src/lib/erp/ledger/store.ts
-// 원장 기록. 호출자가 트랜잭션(BEGIN … COMMIT)을 연다 — 음수 재고 검사는 COMMIT 시점에 돈다.
+// 원장 기록. 호출자가 트랜잭션(BEGIN … COMMIT)을 연다. 음수 재고 검사는 지연 제약이지만
+// 기록 함수마다 즉시 돌려(guarded) 초과 차감이 그 호출에서 던지게 한다 — 커밋까지 미루지 않는다.
 // 전표마다 SKU 단위 advisory lock을 잡아 겹친 실행이 같은 lot을 두 번 소진하지 못하게 한다.
 import type { Location, LotBalance } from './fifo';
 import {
-  planConsume, planLotCreate, planReversal, planTransfer,
+  assertIdemKey, planConsume, planLotCreate, planReversal, planTransfer,
   type ConsumeInput, type LedgerRow, type LotCreateInput, type StoredRow, type TransferInput,
 } from './plan';
 
@@ -63,7 +64,13 @@ export async function insertRows(db: Db, rows: LedgerRow[]): Promise<number[]> {
 async function guarded(db: Db, skuId: number, idemKey: string, build: () => Promise<LedgerRow[]>): Promise<PostResult> {
   await lockSku(db, skuId);
   if (await alreadyPosted(db, idemKey)) return { posted: false, ids: [] };
-  return { posted: true, ids: await insertRows(db, await build()) };
+  const ids = await insertRows(db, await build());
+  // 음수 재고 검사(지연 제약 트리거)를 여기서 끌어와 돌린다. 커밋까지 미루면 한 트랜잭션에 여러 주문을 담은 호출자가
+  // 어느 주문이 초과 차감했는지 모르고 전부를 잃는다 — 이제는 호출마다 던지므로 savepoint로 주문 단위로 잡을 수 있다.
+  // 검사 뒤 지연으로 되돌려, 호출자가 직접 쓴 전표의 검사 시점은 바꾸지 않는다.
+  await db.query('set constraints erp.stock_ledger_balance immediate');
+  await db.query('set constraints erp.stock_ledger_balance deferred');
+  return { posted: true, ids };
 }
 
 export function postLotCreate(db: Db, p: LotCreateInput): Promise<PostResult> {
@@ -80,6 +87,7 @@ export function postTransfer(db: Db, p: TransferInput): Promise<PostResult> {
 
 /** 멱등키 origIdemKey로 기록된 전표 전부(순번 붙은 것 포함)를 `rev:` 키로 상쇄한다. */
 export async function reverse(db: Db, origIdemKey: string, p: { occurredAt: string; note?: string }): Promise<PostResult> {
+  assertIdemKey(origIdemKey);
   const { rows } = await db.query(
     `select id, sku_id, location, qty, kind, lot_id, unit_cost, occurred_at, ref_type, ref_id, reverses_id, idem_key, note
        from erp.stock_ledger where idem_key = $1 or idem_key like $2 order by id`,
@@ -89,7 +97,7 @@ export async function reverse(db: Db, origIdemKey: string, p: { occurredAt: stri
   const stored: StoredRow[] = rows.map((r) => ({
     id: Number(r.id), skuId: Number(r.sku_id), location: r.location, qty: Number(r.qty), kind: r.kind,
     lotId: r.lot_id === null ? null : Number(r.lot_id), unitCost: r.unit_cost === null ? null : Number(r.unit_cost),
-    occurredAt: String(r.occurred_at), refType: r.ref_type, refId: r.ref_id,
+    occurredAt: r.occurred_at instanceof Date ? r.occurred_at.toISOString() : String(r.occurred_at), refType: r.ref_type, refId: r.ref_id,
     reversesId: r.reverses_id === null ? null : Number(r.reverses_id), idemKey: r.idem_key, note: r.note,
   }));
   return guarded(db, stored[0].skuId, `rev:${origIdemKey}`, async () =>

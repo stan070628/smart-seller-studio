@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planLotCreate, planConsume, planTransfer, planReversal, type StoredRow } from '@/lib/erp/ledger/plan';
+import { assertIdemKey, planLotCreate, planConsume, planTransfer, planReversal, type StoredRow } from '@/lib/erp/ledger/plan';
 import type { LotBalance } from '@/lib/erp/ledger/fifo';
 
 const AT = '2026-09-26T01:00:00.000Z';
@@ -63,5 +63,21 @@ describe('planReversal', () => {
 
   it('역전표는 되돌리지 않는다', () => {
     expect(() => planReversal({ ...base, kind: 'reversal', reversesId: 1 }, { occurredAt: AT, idemKey: 'x' })).toThrow(RangeError);
+  });
+});
+
+describe('assertIdemKey', () => {
+  it.each(['sale:A#1', 'rev:x', ''])('%j는 RangeError', (k) => {
+    expect(() => assertIdemKey(k)).toThrow(RangeError);
+  });
+
+  it('버전 키는 받는다', () => {
+    expect(() => assertIdemKey('sale:A@2')).not.toThrow();
+  });
+
+  it('계획 함수 셋이 모두 검사한다', () => {
+    expect(() => planLotCreate({ skuId: 1, location: 'self', qty: 1, unitCost: 1, kind: 'receipt', occurredAt: AT, idemKey: 'r#1' })).toThrow(RangeError);
+    expect(() => planConsume({ skuId: 1, location: 'self', qty: 1, kind: 'sale', occurredAt: AT, idemKey: 'rev:s' }, lots)).toThrow(RangeError);
+    expect(() => planTransfer({ skuId: 1, from: 'self', to: 'rg', qty: 1, occurredAt: AT, idemKey: 't#0' }, lots)).toThrow(RangeError);
   });
 });

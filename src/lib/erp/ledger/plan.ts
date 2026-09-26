@@ -59,9 +59,15 @@ export interface TransferInput extends RefInput {
   idemKey: string;
 }
 
+/** 호출자 멱등키. '#'는 전표 순번 구분자, 'rev:'는 역전표 접두라 쓸 수 없다 — 쓰면 다른 전표와 키가 겹쳐 조용히 누락된다. */
+export function assertIdemKey(k: string): void {
+  if (!k || k.includes('#') || k.startsWith('rev:')) throw new RangeError(`멱등키에 '#'·'rev:' 접두는 쓸 수 없다: ${k}`);
+}
+
 const refOf = (p: RefInput) => ({ refType: p.refType ?? null, refId: p.refId ?? null, note: p.note ?? null });
 
 export function planLotCreate(p: LotCreateInput): LedgerRow[] {
+  assertIdemKey(p.idemKey);
   assertQty(p.qty);
   if (!Number.isInteger(p.unitCost) || p.unitCost < 0) throw new RangeError(`단가는 0 이상의 정수여야 한다: ${p.unitCost}`);
   return [{
@@ -72,6 +78,7 @@ export function planLotCreate(p: LotCreateInput): LedgerRow[] {
 
 /** FIFO로 lot을 골라 lot마다 음수 전표 하나. 멱등키는 `${idemKey}#${순번}` */
 export function planConsume(p: ConsumeInput, lots: LotBalance[]): LedgerRow[] {
+  assertIdemKey(p.idemKey);
   return allocateFifo(lots, p.qty).map((t, i) => ({
     skuId: p.skuId, location: p.location, qty: -t.qty, kind: p.kind, lotId: t.lotId, unitCost: null,
     occurredAt: p.occurredAt, ...refOf(p), reversesId: null, idemKey: `${p.idemKey}#${i}`,
@@ -80,6 +87,7 @@ export function planConsume(p: ConsumeInput, lots: LotBalance[]): LedgerRow[] {
 
 /** 출발지 lot을 FIFO로 골라 lot마다 (출발지 −, 도착지 +) 한 쌍. lot 번호와 단가는 그대로 따라간다. */
 export function planTransfer(p: TransferInput, fromLots: LotBalance[]): LedgerRow[] {
+  assertIdemKey(p.idemKey);
   if (p.from === p.to) throw new RangeError(`출발지와 도착지가 같다: ${p.from}`);
   return allocateFifo(fromLots, p.qty).flatMap((t, i) => {
     const common = { skuId: p.skuId, kind: 'transfer' as const, lotId: t.lotId, unitCost: null, occurredAt: p.occurredAt, ...refOf(p), reversesId: null };

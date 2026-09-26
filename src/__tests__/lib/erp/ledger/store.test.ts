@@ -15,6 +15,7 @@ function fakeDb(opts: { posted?: boolean; lots?: { lot_id: number; qty: number; 
       if (sql.startsWith('select coalesce(l.lot_id')) return { rows: opts.lots ?? [], rowCount: (opts.lots ?? []).length };
       if (sql.startsWith('select id, sku_id')) return { rows: opts.stored ?? [], rowCount: (opts.stored ?? []).length };
       if (sql.startsWith('insert into erp.stock_ledger')) return { rows: [{ id: nextId++ }], rowCount: 1 };
+      if (sql.startsWith('set constraints')) return { rows: [], rowCount: null };
       throw new Error(`예상 못 한 SQL: ${sql.slice(0, 60)}`);
     },
   };
@@ -40,6 +41,18 @@ describe('store', () => {
     const r = await postLotCreate(f.db, { skuId: 7, location: 'self', qty: 3, unitCost: 900, kind: 'opening', occurredAt: AT, idemKey: 'k' });
     expect(r).toEqual({ posted: false, ids: [] });
     expect(f.calls.some((c) => c.sql.startsWith('insert'))).toBe(false);
+    expect(f.calls.some((c) => c.sql.startsWith('set constraints'))).toBe(false);
+  });
+
+  it('기록 직후 음수 검사를 즉시 돌리고 다시 지연으로 돌려놓는다', async () => {
+    f = fakeDb({ lots: [{ lot_id: 10, qty: 5, unit_cost: 1000, lot_at: 1000 }] });
+    await postConsume(f.db, { skuId: 7, location: 'self', qty: 2, kind: 'sale', occurredAt: AT, idemKey: 'sale:Y' });
+    const sqls = f.calls.map((c) => c.sql);
+    const lastInsert = sqls.map((q) => q.startsWith('insert')).lastIndexOf(true);
+    expect(sqls.slice(lastInsert + 1)).toEqual([
+      'set constraints erp.stock_ledger_balance immediate',
+      'set constraints erp.stock_ledger_balance deferred',
+    ]);
   });
 
   it('멱등키의 LIKE 특수문자를 이스케이프한다', async () => {
@@ -75,6 +88,18 @@ describe('store', () => {
       [2, 'reversal', 10, 55, 'rev:sale:X#0'],
       [1, 'reversal', 20, 56, 'rev:sale:X#1'],
     ]);
+  });
+
+  it('reverse는 Date occurred_at을 ISO 문자열로 옮긴다', async () => {
+    f = fakeDb({ stored: [
+      { id: 55, sku_id: 7, location: 'self', qty: -2, kind: 'sale', lot_id: 10, unit_cost: null, occurred_at: new Date(AT), ref_type: null, ref_id: null, reverses_id: null, idem_key: 'sale:Z#0', note: null },
+    ] });
+    await expect(reverse(f.db, 'sale:Z', { occurredAt: AT })).resolves.toMatchObject({ posted: true });
+  });
+
+  it.each(['sale:X#0', 'rev:sale:X'])('reverse는 멱등키 %s를 조회 전에 거부한다', async (k) => {
+    await expect(reverse(f.db, k, { occurredAt: AT })).rejects.toThrow(RangeError);
+    expect(f.calls).toEqual([]);
   });
 
   it('reverse할 전표가 없으면 던진다', async () => {
