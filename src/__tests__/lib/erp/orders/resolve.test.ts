@@ -37,7 +37,7 @@ describe('resolveLine', () => {
     expect(resolveLine(line({ channel: 'coupang_rg' }), new ListingIndex([L({})])).reason).toBe('no_listing');
   });
 
-  it('네이버: (원상품번호, optionCode) → 없으면 그 상품의 옵션 없는(\'\') 리스팅 → 아니면 option_unmatched', () => {
+  it('네이버: (원상품번호, itemNo) → 없으면 그 상품의 옵션 없는(\'\') 리스팅 → 아니면 option_unmatched', () => {
     const idx = new ListingIndex([
       L({ listingId: 10, channel: 'naver', productId: '500', optionKey: '111', skus: [{ skuId: 1, multiplier: 1 }] }),
       L({ listingId: 11, channel: 'naver', productId: '500', optionKey: '112', skus: [{ skuId: 2, multiplier: 1 }] }),

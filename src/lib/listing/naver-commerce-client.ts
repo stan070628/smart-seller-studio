@@ -81,8 +81,11 @@ export interface NaverOrderRawItem {
     productId?: string;
     /** 원상품번호(originProductNo) — ERP 리스팅의 external_product_id */
     originalProductId?: string;
-    /** 옵션 조합 id — ERP 리스팅의 external_option_key(없으면 단일상품) */
-    optionCode?: string;
+    /**
+     * 옵션 조합 id — ERP 리스팅의 external_option_key(= optionCombinations[].id).
+     * 🔴 칸 이름은 itemNo다. optionCode라는 칸은 응답에 없다(2026-09-27 운영 실측 — 설계 때 추정한 이름이라 9월 8건이 전부 미귀속됐다)
+     */
+    itemNo?: string;
     claimType?: string;
     claimStatus?: string;
     quantity: number;
@@ -124,8 +127,8 @@ export interface NaverOrder {
   channelProductNo: number | null;
   /** 원상품번호 — 2026-09-26까지 버려지던 칸(ERP 1-C2a에서 살림) */
   originalProductId?: string | null;
-  /** 옵션 조합 id */
-  optionCode?: string | null;
+  /** 옵션 조합 id(상품주문의 itemNo) */
+  itemNo?: string | null;
   quantity: number;
   totalPaymentAmount: number;
   deliveryFeeAmount: number;
@@ -152,7 +155,7 @@ function normalizeNaverOrder(raw: NaverOrderRawItem): NaverOrder {
     productName: productOrder.productName,
     channelProductNo: productOrder.productId ? Number(productOrder.productId) || null : null,
     originalProductId: productOrder.originalProductId ?? null,
-    optionCode: productOrder.optionCode ?? null,
+    itemNo: productOrder.itemNo ?? null,
     quantity: productOrder.quantity,
     totalPaymentAmount: productOrder.totalPaymentAmount,
     deliveryFeeAmount: productOrder.deliveryFeeAmount ?? 0,

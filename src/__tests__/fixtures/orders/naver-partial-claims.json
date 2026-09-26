@@ -5,7 +5,7 @@
       "order": { "orderId": "2026092712340011", "orderDate": "2026-09-27T09:05:00.0+09:00", "paymentDate": "2026-09-27T09:06:00.0+09:00",
                  "ordererName": "테스트구매자", "ordererTel": "010-0000-0000" },
       "productOrder": { "productOrderId": "2026092700000011", "productName": "쿨매트", "productId": "8800000001", "originalProductId": "8700000001",
-                        "optionCode": "12345", "productOption": "블루 / S", "quantity": 3, "initialQuantity": 3, "remainQuantity": 1,
+                        "itemNo": "12345", "productOption": "블루 / S", "quantity": 3, "initialQuantity": 3, "remainQuantity": 1,
                         "unitPrice": 10000, "totalPaymentAmount": 30000, "productOrderStatus": "PAYED",
                         "shippingAddress": { "name": "테스트수령인", "tel1": "010-0000-0000", "baseAddress": "가상시 가상구 1", "detailedAddress": "101호", "zipCode": "00000" } },
       "delivery": null, "claim": null
@@ -22,7 +22,7 @@
       "order": { "orderId": "2026092712340013", "orderDate": "2026-09-27T11:00:00.0+09:00", "paymentDate": "2026-09-27T11:00:30.0+09:00",
                  "ordererName": "테스트구매자", "ordererTel": "010-0000-0000" },
       "productOrder": { "productOrderId": "2026092700000013", "productName": "각인 텀블러", "productId": "8800000004", "originalProductId": "8700000004",
-                        "optionCode": "900", "productOption": "각인 문구: 테스트구매자 사랑해", "quantity": 1, "totalPaymentAmount": 15000, "productOrderStatus": "PAYED",
+                        "itemNo": "900", "productOption": "각인 문구: 테스트구매자 사랑해", "quantity": 1, "totalPaymentAmount": 15000, "productOrderStatus": "PAYED",
                         "shippingAddress": { "name": "테스트수령인", "tel1": "010-0000-0000", "baseAddress": "가상시 가상구 1", "detailedAddress": "101호", "zipCode": "00000" } },
       "delivery": null, "claim": null
     }
