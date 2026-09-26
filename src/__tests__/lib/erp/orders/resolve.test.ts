@@ -94,4 +94,21 @@ describe('resolveLine', () => {
     expect(normalizeOption('블랙 / 105(L)')).toBe('블랙/105(L)');
     expect(normalizeOption('')).toBe('');
   });
+
+  it('토스 주문은 옵션을 쉼표로 잇는다 — 리스팅의 「 / 」와 같은 옵션으로 본다(2026-09-27 운영 실측 「10개, 옐로우」)', () => {
+    expect(normalizeOption('10개, 옐로우')).toBe(normalizeOption('10개 / 옐로우'));
+    // 옵션 값 안의 쉼표(보태니컬 비누)도 양쪽을 똑같이 펼치므로 같다
+    expect(normalizeOption('4개, 고트밀크, 피치스 앤 크림, 200g')).toBe(normalizeOption('4개 / 고트밀크, 피치스 앤 크림 / 200g'));
+    expect(normalizeOption('10개, 블루')).not.toBe(normalizeOption('10개 / 옐로우'));
+  });
+
+  it('토스: 쉼표 옵션 주문이 슬래시 리스팅에 연결된다', () => {
+    const idx = new ListingIndex([
+      L({ listingId: 1, channel: 'toss', productId: '698610759', optionKey: '10개 / 블루', skus: [{ skuId: 1, multiplier: 1 }] }),
+      L({ listingId: 2, channel: 'toss', productId: '698610759', optionKey: '10개 / 옐로우', skus: [{ skuId: 2, multiplier: 1 }] }),
+    ]);
+    const r = resolveLine(line({ channel: 'toss', productId: '698610759', optionKey: '10개, 옐로우', qty: 1 }), idx);
+    expect(r.attribution).toBe('mapped');
+    expect(r.listingId).toBe(2);
+  });
 });
