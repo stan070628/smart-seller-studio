@@ -1,0 +1,62 @@
+{
+  "_note": "쿠팡 발주서 조회(v4 ordersheets) 녹화 형식(CoupangOrder 타입). 구매자 칸은 가짜 값 — 어댑터가 버려야 한다",
+  "pages": {
+    "ACCEPT|": {
+      "items": [
+        {
+          "shipmentBoxId": 6200000001, "orderId": 31000000001,
+          "orderedAt": "2026-09-27T10:15:00", "paidAt": "2026-09-27T10:15:30", "status": "ACCEPT",
+          "shippingPrice": 0, "remoteArea": false, "parcelPrintMessage": "문 앞에 두세요", "splitShipping": false,
+          "orderer": { "name": "테스트구매자", "email": "fake@example.com", "safeNumber": "010-0000-0000" },
+          "receiver": { "name": "테스트수령인", "safeNumber": "010-0000-0000", "addr1": "가상시 가상구 1", "addr2": "101호", "postCode": "00000" },
+          "orderItems": [
+            { "vendorItemPackageName": "", "productId": 1, "vendorItemId": 70000000001, "vendorItemName": "왜건 블랙", "sellerProductId": 16000000001,
+              "sellerProductName": "접이식 왜건", "sellerProductItemName": "블랙", "shippingCount": 2, "salesPrice": 15900, "orderPrice": 31800,
+              "discountPrice": 0, "cancelCount": 0, "estimatedShippingDate": "2026-09-28", "canceled": false },
+            { "vendorItemPackageName": "", "productId": 1, "vendorItemId": 70000000002, "vendorItemName": "왜건 그레이", "sellerProductId": 16000000001,
+              "sellerProductName": "접이식 왜건", "sellerProductItemName": "그레이", "shippingCount": 1, "salesPrice": 9900, "orderPrice": 9900,
+              "discountPrice": 0, "cancelCount": 1, "estimatedShippingDate": "2026-09-28", "canceled": true }
+          ],
+          "deliveryCompanyName": "", "invoiceNumber": "", "inTrasitDateTime": "", "deliveredDate": ""
+        }
+      ],
+      "nextToken": "t2"
+    },
+    "ACCEPT|t2": {
+      "items": [
+        {
+          "shipmentBoxId": 6200000002, "orderId": 31000000002,
+          "orderedAt": "2026-09-27T11:00:00", "paidAt": "2026-09-27T11:00:10", "status": "ACCEPT",
+          "shippingPrice": 0, "remoteArea": false, "parcelPrintMessage": "", "splitShipping": false,
+          "orderer": { "name": "테스트구매자", "email": "fake@example.com", "safeNumber": "010-0000-0000" },
+          "receiver": { "name": "테스트수령인", "safeNumber": "010-0000-0000", "addr1": "가상시 가상구 1", "addr2": "101호", "postCode": "00000" },
+          "orderItems": [
+            { "vendorItemPackageName": "", "productId": 1, "vendorItemId": 70000000001, "vendorItemName": "왜건 블랙", "sellerProductId": 16000000001,
+              "sellerProductName": "접이식 왜건", "sellerProductItemName": "블랙", "shippingCount": 3, "salesPrice": 15900, "orderPrice": 47700,
+              "discountPrice": 0, "cancelCount": 1, "estimatedShippingDate": "2026-09-28", "canceled": false }
+          ],
+          "deliveryCompanyName": "", "invoiceNumber": "", "inTrasitDateTime": "", "deliveredDate": ""
+        }
+      ],
+      "nextToken": null
+    },
+    "FINAL_DELIVERY|": {
+      "items": [
+        {
+          "shipmentBoxId": 6200000003, "orderId": 31000000003,
+          "orderedAt": "2026-09-26T21:00:00", "paidAt": null, "status": "FINAL_DELIVERY",
+          "shippingPrice": 0, "remoteArea": false, "parcelPrintMessage": "", "splitShipping": false,
+          "orderer": { "name": "테스트구매자", "email": "fake@example.com", "safeNumber": "010-0000-0000" },
+          "receiver": { "name": "테스트수령인", "safeNumber": "010-0000-0000", "addr1": "가상시 가상구 1", "addr2": "101호", "postCode": "00000" },
+          "orderItems": [
+            { "vendorItemPackageName": "", "productId": 2, "vendorItemId": 70000000003, "vendorItemName": "쿨매트", "sellerProductId": 16000000002,
+              "sellerProductName": "쿨매트", "sellerProductItemName": "", "shippingCount": 1, "salesPrice": 12000, "orderPrice": 12000,
+              "discountPrice": 0, "cancelCount": 0, "estimatedShippingDate": "2026-09-27", "canceled": false }
+          ],
+          "deliveryCompanyName": "CJ대한통운", "invoiceNumber": "000000000000", "inTrasitDateTime": "2026-09-27T09:00:00", "deliveredDate": "2026-09-27T18:00:00"
+        }
+      ],
+      "nextToken": null
+    }
+  }
+}

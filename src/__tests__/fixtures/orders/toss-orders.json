@@ -1,0 +1,30 @@
+{
+  "_note": "토스 주문 v2(orders/v2) success 모양(GetOrderHistoriesCursorResponse). 구매자 칸은 가짜 값 — 어댑터가 버려야 한다",
+  "pages": {
+    "": {
+      "results": [
+        { "orderId": 5100000001, "orderProductId": 9100000001, "productId": 7700000001, "stockId": 6600000001, "orderedAt": "2026-09-27T10:00:00",
+          "ordererName": "테스트구매자", "ordererPhone": "010-0000-0000", "receiverName": "테스트수령인", "receiverPhone": "010-0000-0000",
+          "address": "가상시 가상구 1", "detailAddress": "101호", "zipCode": "00000", "shippingNote": "문 앞에 두세요",
+          "productName": "극세사 타월", "optionName": "그레이 / 10매", "quantity": 2, "price": 25800, "originPrice": 30000,
+          "deliveryCompanyCode": "", "shippingTrackingNumber": "", "deliveryFee": 0, "orderProductStatus": "PAID", "canceledAt": null, "confirmedAt": null },
+        { "orderId": 5100000002, "orderProductId": 9100000002, "productId": 7700000002, "stockId": 6600000002, "orderedAt": "2026-09-27T11:00:00",
+          "ordererName": "테스트구매자", "ordererPhone": "010-0000-0000", "receiverName": "테스트수령인", "receiverPhone": "010-0000-0000",
+          "address": "가상시 가상구 1", "detailAddress": "101호", "zipCode": "00000", "shippingNote": "",
+          "productName": "쿨매트", "optionName": "블루 / S", "quantity": 1, "price": 12900, "originPrice": 12900,
+          "deliveryCompanyCode": "", "shippingTrackingNumber": "", "deliveryFee": 0, "orderProductStatus": "CANCELED_PAYMENT", "canceledAt": "2026-09-27T11:30:00", "confirmedAt": null }
+      ],
+      "nextCursor": "c2"
+    },
+    "c2": {
+      "results": [
+        { "orderId": 5100000003, "orderProductId": 9100000003, "productId": 7700000001, "stockId": 6600000003, "orderedAt": "2026-09-27T12:00:00",
+          "ordererName": "테스트구매자", "ordererPhone": "010-0000-0000", "receiverName": "테스트수령인", "receiverPhone": "010-0000-0000",
+          "address": "가상시 가상구 1", "detailAddress": "101호", "zipCode": "00000", "shippingNote": "",
+          "productName": "극세사 타월", "optionName": "화이트 / 10매", "quantity": 1, "price": 12900, "originPrice": 15000,
+          "deliveryCompanyCode": "", "shippingTrackingNumber": "", "deliveryFee": 0, "orderProductStatus": "BEFORE_PAYMENT", "canceledAt": null, "confirmedAt": null }
+      ],
+      "nextCursor": null
+    }
+  }
+}
