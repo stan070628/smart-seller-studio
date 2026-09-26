@@ -8436,7 +8436,9 @@
         "optionLabel": "옐로우",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "68e435ba-b4ec-4460-91c5-c778fb329857"
+        ]
       },
       {
         "key": "cp:16195687836:YELLOW",
@@ -8444,7 +8446,9 @@
         "optionLabel": "YELLOW",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "017ffadb-6685-4855-ad53-687e354b521d"
+        ]
       },
       {
         "key": "cp:16322472945:블랙 270",
@@ -8508,7 +8512,9 @@
         "optionLabel": "핑크 체크 / L",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "2af9c5ea-9e01-4358-b925-a1ee722e03e6"
+        ]
       },
       {
         "key": "cp:16285108632:핑크 체크 / M",
@@ -8516,7 +8522,9 @@
         "optionLabel": "핑크 체크 / M",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "2af9c5ea-9e01-4358-b925-a1ee722e03e6"
+        ]
       },
       {
         "key": "cp:16285108632:핑크 체크 / S",
@@ -8524,7 +8532,9 @@
         "optionLabel": "핑크 체크 / S",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "2af9c5ea-9e01-4358-b925-a1ee722e03e6"
+        ]
       },
       {
         "key": "cp:16294829666:40x60 라이트블루",
@@ -8532,7 +8542,9 @@
         "optionLabel": "40x60 라이트블루",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "a2405536-b6bf-4bc1-8d8b-057fd75751b9"
+        ]
       },
       {
         "key": "cp:16269631748:4.5g",
@@ -8540,7 +8552,9 @@
         "optionLabel": "4.5g",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "f6bb0d38-c9cf-468b-b5e1-2e1f86245d6f"
+        ]
       },
       {
         "key": "cp:16273945706:핑크",
@@ -8586,7 +8600,9 @@
         "optionLabel": "330ml",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "db71a5c5-7a94-4acd-b813-7b26abadf376"
+        ]
       },
       {
         "key": "cp:16246444021:와이드뒤집개+국자+스패츌라+알뜰주걱+잼스푼 / 혼합색상",
@@ -8594,7 +8610,9 @@
         "optionLabel": "와이드뒤집개+국자+스패츌라+알뜰주걱+잼스푼 / 혼합색상",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "9b2cf3f2-d210-4f7e-9da0-9e721312dfa7"
+        ]
       },
       {
         "key": "cp:16294850713:450ml",
@@ -8666,7 +8684,9 @@
         "optionLabel": "FREE 블랙",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "8fd40c72-320e-466a-bf34-c8ccf579e1a4"
+        ]
       },
       {
         "key": "cp:16241762355:40g / 화이트머스크&엠버향 + 토마토&리프향",
@@ -8674,7 +8694,9 @@
         "optionLabel": "40g / 화이트머스크&엠버향 + 토마토&리프향",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "9536ec7d-4d48-4d5b-ab25-5ba5981303b1"
+        ]
       },
       {
         "key": "cp:16209648179:85 8매",
@@ -8770,7 +8792,9 @@
         "optionLabel": "아이리스 AC 공기순환기 PCF-SC15T-CT",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "4432006a-c587-4df7-9fb9-3a248a2b968c"
+        ]
       },
       {
         "key": "cp:16239531938:혼합색상 / 10개입",
@@ -8778,7 +8802,9 @@
         "optionLabel": "혼합색상 / 10개입",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "bf2fb049-3ff9-49fa-a83f-668aec273b1b"
+        ]
       },
       {
         "key": "cp:16221865937:90정",
@@ -8786,7 +8812,9 @@
         "optionLabel": "90정",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "7fc28f84-9959-49be-a31d-5daa4222076a"
+        ]
       },
       {
         "key": "cp:16268079070:2개입",
@@ -8804,7 +8832,9 @@
         "optionLabel": "블랙 M",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "1e530952-1635-4d4e-a60a-c64b04fc86bf"
+        ]
       },
       {
         "key": "cp:16184333435:블랙 L",
@@ -8812,7 +8842,9 @@
         "optionLabel": "블랙 L",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "1e530952-1635-4d4e-a60a-c64b04fc86bf"
+        ]
       },
       {
         "key": "cp:16184333435:블랙 XL",
@@ -8820,7 +8852,9 @@
         "optionLabel": "블랙 XL",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "1e530952-1635-4d4e-a60a-c64b04fc86bf"
+        ]
       },
       {
         "key": "cp:16184333435:화이트 M",
@@ -8828,7 +8862,9 @@
         "optionLabel": "화이트 M",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "1e530952-1635-4d4e-a60a-c64b04fc86bf"
+        ]
       },
       {
         "key": "cp:16184333435:화이트 L",
@@ -8836,7 +8872,9 @@
         "optionLabel": "화이트 L",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "1e530952-1635-4d4e-a60a-c64b04fc86bf"
+        ]
       },
       {
         "key": "cp:16184333435:화이트 XL",
@@ -8844,7 +8882,9 @@
         "optionLabel": "화이트 XL",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "1e530952-1635-4d4e-a60a-c64b04fc86bf"
+        ]
       },
       {
         "key": "cp:16184333435:다크스톤 M",
@@ -8852,7 +8892,9 @@
         "optionLabel": "다크스톤 M",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "1e530952-1635-4d4e-a60a-c64b04fc86bf"
+        ]
       },
       {
         "key": "cp:16184333435:다크스톤 L",
@@ -8860,7 +8902,9 @@
         "optionLabel": "다크스톤 L",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "1e530952-1635-4d4e-a60a-c64b04fc86bf"
+        ]
       },
       {
         "key": "cp:16184333435:다크스톤 XL",
@@ -8868,7 +8912,9 @@
         "optionLabel": "다크스톤 XL",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "1e530952-1635-4d4e-a60a-c64b04fc86bf"
+        ]
       },
       {
         "key": "cp:16166471789:M(100) 네이비",
@@ -8876,7 +8922,9 @@
         "optionLabel": "M(100) 네이비",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "87cadcf4-a14c-41a2-8511-6df9b3e9ab4d"
+        ]
       },
       {
         "key": "cp:16166471789:L(105) 네이비",
@@ -8884,7 +8932,9 @@
         "optionLabel": "L(105) 네이비",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "87cadcf4-a14c-41a2-8511-6df9b3e9ab4d"
+        ]
       },
       {
         "key": "cp:16166471789:M(100) 카키",
@@ -8892,7 +8942,9 @@
         "optionLabel": "M(100) 카키",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "87cadcf4-a14c-41a2-8511-6df9b3e9ab4d"
+        ]
       },
       {
         "key": "cp:16166471789:M(100) 베이지",
@@ -8900,7 +8952,9 @@
         "optionLabel": "M(100) 베이지",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "87cadcf4-a14c-41a2-8511-6df9b3e9ab4d"
+        ]
       },
       {
         "key": "cp:16166471789:L(105) 베이지",
@@ -8908,7 +8962,9 @@
         "optionLabel": "L(105) 베이지",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "87cadcf4-a14c-41a2-8511-6df9b3e9ab4d"
+        ]
       },
       {
         "key": "cp:16209771030:그린 M",
@@ -9024,7 +9080,9 @@
         "optionLabel": "치킨말이고구마 / 1kg",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "2b50848d-e99e-4491-823c-f6776ec26b7c"
+        ]
       },
       {
         "key": "cp:16277816341:60정",
@@ -9073,7 +9131,8 @@
         "baseUnitLabel": null,
         "status": "active",
         "legacyProductCostIds": [
-          "9019614a-1ea4-4901-b3a6-1d394bc5473e"
+          "9019614a-1ea4-4901-b3a6-1d394bc5473e",
+          "b1a7db86-e65e-4d3c-a816-10b334c1dd78"
         ]
       },
       {
@@ -9314,6 +9373,7 @@
         "baseUnitLabel": null,
         "status": "active",
         "legacyProductCostIds": [
+          "4371bf54-b025-4519-82cd-83e179a6e547",
           "e32e9e60-d3c3-404b-b923-0e3018fa9ced"
         ]
       },
@@ -9353,7 +9413,9 @@
         "optionLabel": "L(105) 화이트",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "9a31c462-0290-44f1-9c04-2ba792b57a49"
+        ]
       },
       {
         "key": "cp:16330892121:XL(110) 화이트",
@@ -9361,7 +9423,9 @@
         "optionLabel": "XL(110) 화이트",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "9a31c462-0290-44f1-9c04-2ba792b57a49"
+        ]
       },
       {
         "key": "cp:16330892121:L(105) 블루",
@@ -9369,7 +9433,9 @@
         "optionLabel": "L(105) 블루",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "9a31c462-0290-44f1-9c04-2ba792b57a49"
+        ]
       },
       {
         "key": "cp:16335592821:95ml / 95g",
@@ -9378,7 +9444,8 @@
         "baseUnitLabel": null,
         "status": "active",
         "legacyProductCostIds": [
-          "1c09290a-171a-43bd-b052-0d04be19fd46"
+          "1c09290a-171a-43bd-b052-0d04be19fd46",
+          "23e30377-d672-4deb-a6ba-be5e46a937b6"
         ]
       },
       {
@@ -9655,7 +9722,9 @@
         "optionLabel": "1010g",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "bd939391-57df-4a58-a773-957fcb0deb4b"
+        ]
       },
       {
         "key": "cp:16346825120:화이트+그레이스트라이프 160",
@@ -9749,7 +9818,9 @@
         "optionLabel": "12ml / 12g",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "b2fb5b55-e45c-4460-9d06-99b87099f660"
+        ]
       },
       {
         "key": "cp:16346154533:90정",
@@ -9767,7 +9838,9 @@
         "optionLabel": "블랙 / S",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "ae032c06-a639-40b6-ab7c-761a36266da2"
+        ]
       },
       {
         "key": "cp:16364312688:블랙 / M",
@@ -9775,7 +9848,9 @@
         "optionLabel": "블랙 / M",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "ae032c06-a639-40b6-ab7c-761a36266da2"
+        ]
       },
       {
         "key": "cp:16364312688:블랙 / L",
@@ -9783,7 +9858,9 @@
         "optionLabel": "블랙 / L",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "ae032c06-a639-40b6-ab7c-761a36266da2"
+        ]
       },
       {
         "key": "cp:16364312688:그레이 / S",
@@ -9791,7 +9868,9 @@
         "optionLabel": "그레이 / S",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "ae032c06-a639-40b6-ab7c-761a36266da2"
+        ]
       },
       {
         "key": "cp:16364312688:그레이 / M",
@@ -9799,7 +9878,9 @@
         "optionLabel": "그레이 / M",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "ae032c06-a639-40b6-ab7c-761a36266da2"
+        ]
       },
       {
         "key": "cp:16364312688:그레이 / L",
@@ -9807,7 +9888,9 @@
         "optionLabel": "그레이 / L",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "ae032c06-a639-40b6-ab7c-761a36266da2"
+        ]
       },
       {
         "key": "cp:16364312688:브라운 / S",
@@ -9815,7 +9898,9 @@
         "optionLabel": "브라운 / S",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "ae032c06-a639-40b6-ab7c-761a36266da2"
+        ]
       },
       {
         "key": "cp:16364312688:브라운 / M",
@@ -9823,7 +9908,9 @@
         "optionLabel": "브라운 / M",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "ae032c06-a639-40b6-ab7c-761a36266da2"
+        ]
       },
       {
         "key": "cp:16364312688:브라운 / L",
@@ -9831,7 +9918,9 @@
         "optionLabel": "브라운 / L",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "ae032c06-a639-40b6-ab7c-761a36266da2"
+        ]
       },
       {
         "key": "cp:16368019403:260g",
@@ -9839,7 +9928,9 @@
         "optionLabel": "260g",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "175b7b76-86aa-4d5c-b729-4533427a43b4"
+        ]
       },
       {
         "key": "cp:16370591465:750ml",
@@ -9847,7 +9938,9 @@
         "optionLabel": "750ml",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "4de1c01f-c43e-4653-abe9-21ebbd8bd9fa"
+        ]
       },
       {
         "key": "cp:16375917672:155 (키 155cm 전후)",
@@ -9855,7 +9948,9 @@
         "optionLabel": "155 (키 155cm 전후)",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "d731da6c-7150-4c03-b691-fc9594f2c67b"
+        ]
       },
       {
         "key": "cp:16375917672:165 (키 160cm 이상)",
@@ -9863,7 +9958,9 @@
         "optionLabel": "165 (키 160cm 이상)",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "d731da6c-7150-4c03-b691-fc9594f2c67b"
+        ]
       },
       {
         "key": "cp:16375917672:아이보리 165 (키 160cm 이상)",
@@ -9871,7 +9968,9 @@
         "optionLabel": "아이보리 165 (키 160cm 이상)",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "d731da6c-7150-4c03-b691-fc9594f2c67b"
+        ]
       },
       {
         "key": "cp:16390389215:34ml",
@@ -9879,7 +9978,9 @@
         "optionLabel": "34ml",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "52266cb7-dfbc-4cd4-a170-7c12a94fb202"
+        ]
       },
       {
         "key": "cp:16376323038:330ml",
@@ -9887,7 +9988,9 @@
         "optionLabel": "330ml",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "e7c57faa-ab30-4076-bdae-fd4bf28831cc"
+        ]
       },
       {
         "key": "cp:16350383334:단일상품",
@@ -9895,7 +9998,9 @@
         "optionLabel": "단일상품",
         "baseUnitLabel": null,
         "status": "active",
-        "legacyProductCostIds": []
+        "legacyProductCostIds": [
+          "dacc2fae-310c-446f-b905-88cd0228490b"
+        ]
       },
       {
         "key": "cp:16368156484:330ml",
@@ -16855,6 +16960,36 @@
         "kind": "legacy_spans_skus",
         "ref": "1f546000-4663-4cdb-a39d-d2301e979d53",
         "detail": "SKU cp:16166599481:M 네이비/그레이/블랙, cp:16166599481:L 네이비/그레이/블랙에 걸친다 — 입고 lot을 옵션별로 나눌 수 없어 기초 재고는 실사로 잡는다"
+      },
+      {
+        "kind": "legacy_spans_skus",
+        "ref": "2af9c5ea-9e01-4358-b925-a1ee722e03e6",
+        "detail": "SKU cp:16285108632:핑크 체크 / L, cp:16285108632:핑크 체크 / M, cp:16285108632:핑크 체크 / S에 걸친다 — 입고 lot을 옵션별로 나눌 수 없어 기초 재고는 실사로 잡는다"
+      },
+      {
+        "kind": "legacy_spans_skus",
+        "ref": "1e530952-1635-4d4e-a60a-c64b04fc86bf",
+        "detail": "SKU cp:16184333435:블랙 M, cp:16184333435:블랙 L, cp:16184333435:블랙 XL, cp:16184333435:화이트 M, cp:16184333435:화이트 L, cp:16184333435:화이트 XL, cp:16184333435:다크스톤 M, cp:16184333435:다크스톤 L, cp:16184333435:다크스톤 XL에 걸친다 — 입고 lot을 옵션별로 나눌 수 없어 기초 재고는 실사로 잡는다"
+      },
+      {
+        "kind": "legacy_spans_skus",
+        "ref": "87cadcf4-a14c-41a2-8511-6df9b3e9ab4d",
+        "detail": "SKU cp:16166471789:M(100) 네이비, cp:16166471789:L(105) 네이비, cp:16166471789:M(100) 카키, cp:16166471789:M(100) 베이지, cp:16166471789:L(105) 베이지에 걸친다 — 입고 lot을 옵션별로 나눌 수 없어 기초 재고는 실사로 잡는다"
+      },
+      {
+        "kind": "legacy_spans_skus",
+        "ref": "9a31c462-0290-44f1-9c04-2ba792b57a49",
+        "detail": "SKU cp:16330892121:L(105) 화이트, cp:16330892121:XL(110) 화이트, cp:16330892121:L(105) 블루에 걸친다 — 입고 lot을 옵션별로 나눌 수 없어 기초 재고는 실사로 잡는다"
+      },
+      {
+        "kind": "legacy_spans_skus",
+        "ref": "ae032c06-a639-40b6-ab7c-761a36266da2",
+        "detail": "SKU cp:16364312688:블랙 / S, cp:16364312688:블랙 / M, cp:16364312688:블랙 / L, cp:16364312688:그레이 / S, cp:16364312688:그레이 / M, cp:16364312688:그레이 / L, cp:16364312688:브라운 / S, cp:16364312688:브라운 / M, cp:16364312688:브라운 / L에 걸친다 — 입고 lot을 옵션별로 나눌 수 없어 기초 재고는 실사로 잡는다"
+      },
+      {
+        "kind": "legacy_spans_skus",
+        "ref": "d731da6c-7150-4c03-b691-fc9594f2c67b",
+        "detail": "SKU cp:16375917672:155 (키 155cm 전후), cp:16375917672:165 (키 160cm 이상), cp:16375917672:아이보리 165 (키 160cm 이상)에 걸친다 — 입고 lot을 옵션별로 나눌 수 없어 기초 재고는 실사로 잡는다"
       },
       {
         "kind": "sale_attribution_mismatch",
