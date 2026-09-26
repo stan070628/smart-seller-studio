@@ -634,7 +634,7 @@ await c.end();
 ```bash
 npx vercel env pull /tmp/ssv.env --environment=production
 grep -c -E '^(APP_URL|CRON_SECRET)=' /tmp/ssv.env   # Expected: 2
-node scripts/ops/set-cron-secrets.mjs /tmp/ssv.env
+node scripts/ops/set-cron-secrets.mjs /tmp/ssv.env https://smartsellerstudio.vercel.app
 rm /tmp/ssv.env
 ```
 Expected: `✅ vault.app_url (…자)` / `✅ vault.cron_secret (…자)`. `APP_URL`이 없으면 멈추고 사용자에게 운영 URL을 묻는다(GitHub secret `APP_URL`과 같은 값).
@@ -665,6 +665,8 @@ select cron.schedule(
   $job$
 );
 ```
+
+- [ ] **Step 3b: GitHub 예약 먼저 끄기** — `gh workflow disable stock-sync.yml` (main의 워크플로 파일은 병합 전까지 예약이 살아 있어 pg_cron과 이중 호출된다). 병합 후 수동 실행이 필요하면 `gh workflow enable`.
 
 - [ ] **Step 4: 🔴 사용자 승인 후 적용** — 「지금부터 운영 품절 동기화를 pg_cron이 호출한다. GitHub 예약은 끈다」를 알리고 승인받는다.
 
@@ -722,6 +724,12 @@ console.table(r);await c.end()})()"
 ```
 Expected: 8행 전후, `status` 전부 `ok`, `gap_h`가 모두 **2.9~3.1**. 하나라도 어긋나면 `select * from net._http_response order by id desc limit 5`로 응답 코드를 보고 원인을 찾는다.
 
+```sql
+select status, return_message from cron.job_run_details order by start_time desc limit 3;
+select status_code from net._http_response order by created desc limit 3;
+```
+401은 job_runs에 남지 않으므로 job_runs 공백 = 실패로 본다.
+
 - [ ] **Step 2: 결과를 사용자에게 보고** — 이전(5~6시간)과 이후 간격을 표로.
 
 ---
@@ -732,6 +740,8 @@ Expected: 8행 전후, `status` 전부 `ok`, `gap_h`가 모두 **2.9~3.1**. 하�
 - Create: `scripts/ops/investcock-tables.txt`
 - Create: `scripts/ops/investcock-dump.sh`
 - Create: `scripts/ops/compare-rowcounts.mjs`
+
+2026-09-25 읽기 전용 점검: 사용자 정의 타입·함수 기본값·트리거·뷰 의존·외부 FK 0건, nextval 23개 전부 소유 시퀀스, RLS 50/50 on·정책 0.
 
 - [ ] **Step 1: 테이블 목록 (투자콕 `backend/models.py`의 `__tablename__` 50개, 2026-09-25 추출)**
 
@@ -807,7 +817,7 @@ Expected: `done` 한 줄만(경고 없음). 경고가 나오면 멈추고 사용
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 DB_URL=$(grep -E '^SUPABASE_DB_URL=' .env.local | cut -d= -f2- | sed -E "s/^[\"']|[\"']$//g")
-OUT_DIR=/Volumes/Mac_SSD/backups/investcock
+OUT_DIR=/Volumes/Mac_SSD/backup/investcock
 mkdir -p "$OUT_DIR"
 OUT="$OUT_DIR/investcock-$(date +%Y%m%d-%H%M).sql"
 ARGS=()
@@ -875,12 +885,14 @@ console.log((await c.query('select job_name,max(started_at) from job_run_log gro
 - [ ] **Step 2: 덤프**
 
 Run: `bash scripts/ops/investcock-dump.sh`
-Expected: `/Volumes/Mac_SSD/backups/investcock/investcock-YYYYMMDD-HHMM.sql (약 5M)`. SSD가 없으면 멈춘다.
+Expected: `/Volumes/Mac_SSD/backup/investcock/investcock-YYYYMMDD-HHMM.sql (약 5M)`. SSD가 없으면 멈춘다.
+
+복원은 반드시 `psql -f`로 한다 — 덤프의 `\restrict` 메타명령 때문에 대시보드 SQL 편집기에 붙여넣으면 실패한다.
 
 - [ ] **Step 3: 새 DB에 복원**
 
 ```bash
-DUMP=$(ls -t /Volumes/Mac_SSD/backups/investcock/*.sql | head -1)
+DUMP=$(ls -t /Volumes/Mac_SSD/backup/investcock/*.sql | head -1)
 NEW=$(grep -E '^INVESTCOCK_DB_URL=' .env.local | cut -d= -f2- | sed -E "s/^[\"']|[\"']$//g")
 psql "$NEW" -v ON_ERROR_STOP=1 -f "$DUMP" 2>&1 | tail -5
 ```
@@ -889,7 +901,9 @@ Expected: 오류 없이 종료. 확장 누락(`uuid-ossp`·`pgcrypto` 등) 오�
 - [ ] **Step 4: 행 수 대조**
 
 Run: `node scripts/ops/compare-rowcounts.mjs INVESTCOCK_DB_URL`
-Expected: `50/50 일치`, exit 0. 다르면(덤프 뒤 투자콕이 기록함) Step 2부터 다시.
+Expected: `50/50 일치`, exit 0. 다르면(덤프 뒤 투자콕이 기록함) Step 2부터 다시. 로그 표(job_run_log·ic_llm_call_logs·watch_alerts)는 덤프 이후 투자콕이 계속 쓰면 불일치가 난다 — 불일치가 이 표들뿐이고 원본이 더 많으면 Step 5 교체 직후 다시 덤프·복원한다.
+
+- [ ] **Step 4b: 새 프로젝트 공개 API 차단 확인** — 50개 표 전부 `relrowsecurity=true`인지 확인(원본은 전부 RLS on·정책 0이라 anon 차단 상태). 하나라도 false면 `revoke all on all tables in schema public from anon, authenticated;` 실행.
 
 - [ ] **Step 5: 🔴 사용자 작업 — 투자콕 접속 정보 교체** (비밀값이라 사용자가 직접 한다)
   1. Render → `investcock-api` → Environment → `DATABASE_URL`을 새 프로젝트 연결 문자열로 교체 → 저장(재배포됨).
@@ -911,7 +925,7 @@ Expected: `INVESTCOCK_DB_URL` 쪽 `job_run_log` 최신 시각이 교체 이후�
 ```sql
 -- scripts/ops/investcock-drop.sql
 -- 투자콕 50개 테이블을 셀러 DB에서 지운다. Task 10 Step 6 확인 뒤에만 실행한다.
--- 덤프: /Volumes/Mac_SSD/backups/investcock/ (복원 검증은 새 프로젝트 50/50 일치로 끝났다)
+-- 덤프: /Volumes/Mac_SSD/backup/investcock/ (복원 검증은 새 프로젝트 50/50 일치로 끝났다)
 begin;
 drop table if exists
   public.users, public.api_keys, public.portfolios, public.holdings, public.rebalance_logs,

@@ -1,0 +1,56 @@
+/**
+ * 쿠팡 옵션(item)에서 「실물 옵션」과 「수량」을 가른다.
+ *
+ * 다슈 1개/2개/3개, 퓨어틴 6팩/12팩처럼 수량만 다른 옵션은 재고가 같은 물건이라 SKU 하나로 묶고
+ * 리스팅에 배수를 둔다. 반면 `2개입`·`750ml`·`45g`은 물건 자체의 내용이라 옵션에 남긴다.
+ *
+ * 쿠팡 item attribute에는 `exposed`('EXPOSED'=구매옵션, 'NONE'=검색옵션)가 붙는다. 검색옵션은
+ * 구매자가 고르는 실물 옵션이 아니라 검색 노출용 메타데이터라 SKU 키에 섞이면 키가 불안정해진다
+ * — 옵션 조합·수량 판정 양쪽에서 `exposed === 'NONE'`인 속성은 통째로 제외한다(필드가 없으면 포함).
+ * GTIN·품번 정규식(NON_OPTION_ATTR)은 exposed가 없는 옛 데이터를 위한 이중 안전장치로 유지한다.
+ */
+export interface ItemAttribute {
+  attributeTypeName: string;
+  attributeValueName: string;
+  exposed?: string;
+}
+
+export interface OptionKey {
+  option: string;
+  quantity: number;
+}
+
+const QTY_ATTR = /수량/;
+// 바코드·품번류 속성은 실물 옵션과 무관하게 일부 item에만 채워져 같은 물건을 다른 SKU로 가른다 — 옵션 조합에서 제외
+const NON_OPTION_ATTR = /Global Trade Item Number|Manufacturer Part Number|GTIN|EAN|바코드|모델명|모델 ?번호|품번/i;
+// `N개`(뒤에 `입`이 없는 것)·`N팩` 토큰. 여러 개면 마지막 것이 수량이다 — `1개 2개입`은 1개가 수량, 2개입은 내용물
+const QTY_TOKEN = /(^|\s)(\d+)\s*(개(?!입)|팩)(?=\s|$)/g;
+
+const tidy = (s: string) => s.replace(/\s+/g, ' ').trim();
+/** 수량을 떼고 남은 구분자(`/`·`,`·`·`)를 양끝에서 걷어낸다 — `네이비 / L / 1개` → `네이비 / L` */
+const trimSep = (s: string) => tidy(s).replace(/^[\s/,·]+|(\s+[xX×*+])?[\s/,·]*$/g, '');
+const firstInt = (s: string) => {
+  const m = s.match(/\d+/);
+  return m ? Number(m[0]) : 1;
+};
+
+export function optionKeyOf(item: { itemName: string; attributes?: ItemAttribute[] }): OptionKey {
+  const attrs = (item.attributes ?? []).filter((a) => a.exposed !== 'NONE');
+  const qtyAttr = attrs.find((a) => a.attributeTypeName.trim() === '수량') ?? attrs.find((a) => QTY_ATTR.test(a.attributeTypeName));
+  if (qtyAttr) {
+    const option = attrs
+      .filter((a) => a !== qtyAttr && !NON_OPTION_ATTR.test(a.attributeTypeName))
+      .map((a) => tidy(a.attributeValueName))
+      .filter(Boolean)
+      .join(' / ');
+    return { option, quantity: firstInt(qtyAttr.attributeValueName) };
+  }
+
+  const name = tidy(item.itemName ?? '');
+  const tokens = [...name.matchAll(QTY_TOKEN)];
+  const last = tokens.at(-1);
+  if (!last) return { option: name, quantity: 1 };
+  const start = last.index! + last[1].length;
+  const option = trimSep(name.slice(0, start) + name.slice(start + last[0].length - last[1].length));
+  return { option, quantity: Number(last[2]) };
+}
