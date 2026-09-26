@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  BACKFILL_MAX_DAYS, BackfillError, addDays, backfillStart, dayChunks, hourChunks, isoFromChannel, kstDay, kstDayStart, kstIso, parseBackfillDay, windowFor,
+  BACKFILL_MAX_DAYS, BackfillError, addDays, backfillEnd, backfillStart, dayChunks, hourChunks, isoFromChannel, kstDay, kstDayStart, kstIso, parseBackfillDay, windowFor,
 } from '@/lib/erp/orders/window';
 
 const CUT = '2026-09-26T11:07:04.989Z';
@@ -82,5 +82,20 @@ describe('과거 보충(backfill) 시작일', () => {
     // 62일 경계: 07-27 KST 0시 = 07-26 15:00Z ≥ 컷 − 62일(07-26 11:07Z) · 07-26은 넘는다
     expect(backfillStart('2026-07-27', CUT).toISOString()).toBe('2026-07-26T15:00:00.000Z');
     expect(() => backfillStart('2026-07-26', CUT)).toThrow(/62일/);
+  });
+});
+
+describe('과거 보충(backfill) 끝날', () => {
+  const NOW = new Date('2026-09-27T00:00:00.000Z');
+  const start = new Date('2026-08-31T15:00:00.000Z'); // 9/1 KST 0시
+  it('없으면 지금 · 있으면 그날을 포함(다음 날 KST 0시) · 지금을 넘지 않는다', () => {
+    expect(backfillEnd(undefined, start, NOW)).toEqual(NOW);
+    expect(backfillEnd('2026-09-07', start, NOW).toISOString()).toBe('2026-09-07T15:00:00.000Z');
+    expect(backfillEnd('2026-09-01', start, NOW).toISOString()).toBe('2026-09-01T15:00:00.000Z');
+    expect(backfillEnd('2026-09-30', start, NOW)).toEqual(NOW);
+  });
+  it('시작일보다 앞이거나 형식이 틀리면 BackfillError', () => {
+    expect(() => backfillEnd('2026-08-31', start, NOW)).toThrow(BackfillError);
+    expect(() => backfillEnd('2026/09/07', start, NOW)).toThrow(BackfillError);
   });
 });
