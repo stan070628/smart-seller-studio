@@ -35,9 +35,11 @@ export interface Resolution {
 }
 
 /** 토스 옵션명 비교용: '/'로 나눈 칸마다 「이름:」 접두와 공백을 뗀다. '색상: 블랙 / 사이즈: L' → '블랙/L' */
+// 토스 주문은 옵션을 「, 」로 잇고 리스팅은 「 / 」로 잇는다(2026-09-27 운영 실측) — 둘 다 구분자로 본다.
+// 값 안의 쉼표(보태니컬 비누 향 목록)도 양쪽이 똑같이 펼쳐지므로 비교 결과는 같다.
 export function normalizeOption(s: string): string {
   return s
-    .split('/')
+    .split(/[/,，]/)
     .map((seg) => seg.replace(/^[^:：]*[:：]/, '').replace(/\s+/g, ''))
     .filter((x) => x !== '')
     .join('/');
