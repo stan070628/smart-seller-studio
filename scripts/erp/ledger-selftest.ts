@@ -3,6 +3,15 @@
 // 운영 DB에서 원장 트리거·제약·뷰가 설계대로 동작하는지 시험한다. 대부분은 한 트랜잭션 안에서 하고 끝에 ROLLBACK한다.
 // 예외: 동시성 시험(concurrency)은 두 접속이 서로의 커밋을 봐야 하므로 임시 SKU·lot을 커밋했다가 곧바로 지운다
 // (원장은 삭제를 막으므로 한 트랜잭션 안에서만 guard 트리거를 끄고 지운다 — ALTER TABLE도 트랜잭션이라 밖에서는 보이지 않는다).
+// 임시 SKU는 전부 status='archived'로 만든다 — 중간에 죽어 흔적이 남아도 활성 SKU가 아니므로 opening-apply(「실사표에 없는 활성 SKU」)를 막지 않는다.
+// 🔴 기초재고(kind='opening')가 적재된 뒤에는 돌지 않는다 — 운영 원장에 임시 전표를 커밋하는 시험이 있기 때문이다.
+// 흔적이 남았을 때 손으로 지우는 SQL(한 트랜잭션으로):
+//   begin;
+//   alter table erp.stock_ledger disable trigger stock_ledger_guard;
+//   delete from erp.stock_ledger where sku_id in (select id from erp.skus where key like 'selftest%');
+//   alter table erp.stock_ledger enable trigger stock_ledger_guard;
+//   delete from erp.skus where key like 'selftest%';
+//   commit;
 import pg from 'pg';
 import { loadEnvLocal } from './_env';
 import { postConsume, postLotCreate, postTransfer, reverse } from '@/lib/erp/ledger/store';
@@ -26,10 +35,17 @@ async function expectError(c: pg.Client, name: string, fn: () => Promise<unknown
 (async () => {
   const c = new pg.Client({ connectionString: process.env.SUPABASE_DB_URL, ssl: { rejectUnauthorized: false } });
   await c.connect();
+  const opening = Number((await c.query(`select count(*) from erp.stock_ledger where kind = 'opening'`)).rows[0].count);
+  if (opening > 0) {
+    await c.end();
+    console.error(`❌ 기초 전표가 ${opening}건 있다 — 기초재고 적재 뒤에는 자가시험을 돌리지 않는다(운영 원장에 임시 전표를 커밋한다)`);
+    process.exitCode = 1;
+    return;
+  }
   try {
     await c.query('BEGIN');
     const sku = Number((await c.query(
-      `insert into erp.skus (key, name, origin) values ($1, '자가시험', 'manual') returning id`, [`selftest:${Date.now()}`],
+      `insert into erp.skus (key, name, origin, status) values ($1, '자가시험', 'manual', 'archived') returning id`, [`selftest:${Date.now()}`],
     )).rows[0].id);
     const onHand = async (loc: string) =>
       (await c.query('select qty, value from erp.stock_on_hand where sku_id = $1 and location = $2', [sku, loc])).rows[0] ?? { qty: 0, value: 0 };
@@ -63,7 +79,7 @@ async function expectError(c: pg.Client, name: string, fn: () => Promise<unknown
       await c.query('set constraints all immediate');
     }, /음수가 된다/);
 
-    const other = Number((await c.query(`insert into erp.skus (key, name, origin) values ($1, '자가시험2', 'manual') returning id`, [`selftest2:${Date.now()}`])).rows[0].id);
+    const other = Number((await c.query(`insert into erp.skus (key, name, origin, status) values ($1, '자가시험2', 'manual', 'archived') returning id`, [`selftest2:${Date.now()}`])).rows[0].id);
     await expectError(c, '다른 SKU의 lot 참조 금지', () => c.query(
       `insert into erp.stock_ledger (sku_id, location, qty, kind, lot_id, occurred_at, idem_key) values ($1, 'self', 1, 'return', $2, now(), $3)`,
       [other, lot1, `st:${sku}:cross`],
@@ -123,7 +139,7 @@ async function concurrency(): Promise<void> {
   try {
     await a.query('BEGIN');
     sku = Number((await a.query(
-      `insert into erp.skus (key, name, origin) values ($1, '자가시험-동시성', 'manual') returning id`, [`selftest:conc:${Date.now()}`],
+      `insert into erp.skus (key, name, origin, status) values ($1, '자가시험-동시성', 'manual', 'archived') returning id`, [`selftest:conc:${Date.now()}`],
     )).rows[0].id);
     const lot = await postLotCreate(a, { skuId: sku, location: 'self', qty: 1, unitCost: 100, kind: 'receipt', occurredAt: '2026-01-01T00:00:00Z', idemKey: `st:${sku}:conc-lot` });
     await a.query('COMMIT');

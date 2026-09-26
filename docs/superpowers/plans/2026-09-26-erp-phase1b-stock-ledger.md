@@ -8,6 +8,8 @@
 
 **Tech Stack:** Postgres 17(Supabase) · `pg` · TypeScript · vitest · tsx 스크립트
 
+> **상태 2026-09-26:** Task 1–11 Step 3 완료 · Task 11 Step 4(기초재고 적재) 사용자 결정으로 보류 · 원장 비어 있음
+
 ---
 
 ## 사전 정보 (실행자는 반드시 읽는다)
@@ -1669,7 +1671,11 @@ git commit -m "docs(erp): 기초재고 실사 결과와 기준 단위(사용자 
 - 대기 중 질문 ② 승인 목록에 없는 RG 재고 4건(합계 8개): `95812283106` 1개(마스터버니 얼음주머니 옵션 — 7월 판매 이력) · `95932746388` 1개 · `95833506834` 3개 · `95693450298` 3개(뒤 셋은 DB에 흔적 없음, 쿠팡 RG 승인 상품 102개에도 없음). 원장 제외(`opening-overrides.json`의 `ignoreRgVids`) 또는 SKU 생성 중 택일
 - 대기 중 ③ `unit_cost` 빈칸 5건: 쿨매트 핑크 · 쿨매트 블루 구름(베개형) S · 105(L) 블랙 · 화이트+그레이스트라이프 150 · 니트 건조대 2단
 
-- 🔴 **2026-09-26 사용자 결정 — 기초재고 적재(Task 11 Step 4)는 보류한다.** 「일단 프로그램만 만들면 재고는 프로그램 완성 이후에 수정하겠다.」 원장은 비어 있는 채로 1-B를 닫는다. 남은 입력: 단가 빈칸 6건(위키 제안 5건 + 마크곤잘레스 미상) · 퓨어틴 초코 실사 11의 단위(병/팩 — 입고 기록상 66병은 불가능) · 승인 목록 밖 RG 재고 4건 처리. 퓨어틴 초코 단가는 21,658이 아니라 **팩당 12,995**가 맞다(09-24 박스 단위 입고와 소분 입고가 같은 매입의 중복으로 보인다 — 옛 `cost_entries` 정리 대상). ⚠️ **1-C는 판매 차감 전에 기초재고가 있어야 한다** — 기초재고 없이 차감하면 재고 부족으로 거부된다. 1-C 착수 전 또는 1-C 안에서 사용자 재고 수정 → `opening-collect`(RG 값 재조회) → `opening-apply --apply` → `rg-reconcile` 순서를 먼저 밟는다.
+- 🔴 **2026-09-26 사용자 결정 — 기초재고 적재(Task 11 Step 4)는 보류한다.** 「일단 프로그램만 만들면 재고는 프로그램 완성 이후에 수정하겠다.」 원장은 비어 있는 채로 1-B를 닫는다. 남은 입력: 단가 빈칸 6건(위키 제안 5건 + 마크곤잘레스 미상) · 퓨어틴 초코 실사 11의 단위(병/팩 — 입고 기록상 66병은 불가능) · 승인 목록 밖 RG 재고 4건 처리. 퓨어틴 초코 단가는 21,658이 아니라 **팩당 12,995**가 맞다(09-24 박스 단위 입고와 소분 입고가 같은 매입의 중복으로 보인다 — 옛 `cost_entries` 정리 대상). ⚠️ **1-C는 판매 차감 전에 기초재고가 있어야 한다** — 기초재고 없이 차감하면 재고 부족으로 거부된다. 1-C 착수 전 또는 1-C 안에서 아래 순서를 먼저 밟는다(최종 리뷰 반영 2026-09-26):
+  1. **사용자 재고 수정** — 기존 `docs/erp/opening-count-2026-09-26.csv`를 고치거나, 새로 뽑으려면 `opening-collect.ts --carry=docs/erp/opening-count-2026-09-26.csv`(사람이 채운 self_count·rg_inbound·unit_cost·note를 sku_id로 옮긴다 · 같은 날짜 파일이 있으면 `--force` 없이는 쓰지 않는다).
+  2. `docs/erp/opening-overrides.json`에 **`countedAt`**(실사를 마친 시각, 오프셋 있는 ISO)을 적는다 — 적재 시점에 24시간 넘게 지났으면 거부된다. 🔴 **퓨어틴 초코(`cp:16368156484:330ml`)는 `unitCost`에 `12995`를 넣는다**(옛 이력 재계산은 박스 단위 중복 입고 때문에 틀린다). 승인 목록 밖 RG vid는 `ignoreRgVids`로.
+  3. `opening-apply.ts <csv>` 점검(경로 필수) — 단가 차이표·「기준 단위 확인 필요」 목록을 사용자에게 보인다.
+  4. 사용자 승인 → `opening-apply.ts <csv> --apply` → `opening-apply.ts --verify`.
 
 ### Task 11: 기초재고 적재와 RG 대조
 
@@ -1852,12 +1858,13 @@ main().catch((e) => {
 
 - [ ] **Step 3: 점검 모드**
 
-Run: `npx tsc --noEmit && npx --no-install tsx scripts/erp/opening-apply.ts`
-Expected: `… 기초 전표 N건 …` 과 `(점검만 — 적재하려면 --apply)`. `적재할 수 없다`가 나오면 원인을 컨트롤러에게 보고한다(실사표 빈칸·매핑 이슈는 사용자 몫).
+Run: `npx tsc --noEmit && npx --no-install tsx scripts/erp/opening-apply.ts docs/erp/opening-count-<날짜>.csv`
+Expected: `… 기초 전표 N건 …`, `실사 시각 … · 기준 시각 …`, `(점검만 — 적재하려면 --apply)`.
+> **최종 리뷰 반영(2026-09-26):** 실사표 경로는 필수 인자다(최신 파일을 짐작하지 않는다). `opening-overrides.json`의 `countedAt`이 없거나 24시간을 넘으면 멈춘다. 단가는 `overrides.unitCost` > 옛 입고 이력(실사 보유 수량으로 재계산) > CSV `unit_cost`(이력 없을 때만). 보관 SKU에 잡힌 RG 재고·중복 sku_id 행은 오류다. 순서: 사용자 재고 수정(기존 CSV 또는 `--carry`로 새로 뽑은 CSV) → `opening-apply <csv>` 점검 → 승인 → `--apply` → `--verify`. `적재할 수 없다`가 나오면 원인을 컨트롤러에게 보고한다(실사표 빈칸·매핑 이슈는 사용자 몫).
 
 - [ ] **Step 4: 🔴 컨트롤러가 사용자에게 합계(수량·평가액)를 보여주고 승인을 받은 뒤** 적재와 대조:
 
-Run: `npx --no-install tsx scripts/erp/opening-apply.ts --apply && npx --no-install tsx scripts/erp/opening-apply.ts --verify`
+Run: `npx --no-install tsx scripts/erp/opening-apply.ts docs/erp/opening-count-<날짜>.csv --apply && npx --no-install tsx scripts/erp/opening-apply.ts --verify`
 Expected: `✅ 기초재고 적재`, 이어서 `✅ 원장 RG = 쿠팡 RG 실재고`.
 적재와 대조 사이에 RG 판매가 나면 그 SKU만 −1 수준으로 어긋난다 — 그 경우 대조를 한 번 더 돌려 차이가 판매로 설명되는지 본다(판매 차감은 1-C가 기초재고 시각부터 소급한다).
 

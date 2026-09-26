@@ -1,6 +1,8 @@
 // scripts/erp/opening-collect.ts
-// 사용법: npx --no-install tsx scripts/erp/opening-collect.ts
+// 사용법: npx --no-install tsx scripts/erp/opening-collect.ts [--carry=<이전 실사표 CSV>] [--force]
 // DB(읽기 전용)와 쿠팡 RG 재고 API(GET)로 기초재고 실사표(CSV)와 점검 보고서(MD)를 docs/erp/에 쓴다.
+// 🔴 같은 날짜의 opening-count-<날짜>.csv가 이미 있으면 쓰지 않는다(사람이 채운 실사를 덮어쓰지 않게) — 덮어쓰려면 --force.
+// --carry=<CSV>: 이전 실사표의 self_count·rg_inbound·unit_cost·note를 sku_id로 새 실사표에 옮긴다(새 SKU는 미리 채운 값 그대로).
 // 구매자 정보는 읽지 않는다 — sale_records에서는 product_cost별 수량 합계만.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -8,23 +10,28 @@ import pg from 'pg';
 import { loadEnvLocal } from './_env';
 import { getCoupangClient } from '@/lib/listing/coupang-client';
 import {
-  buildCountSheet, groupSkus, rgQtyBySku, toCsv,
+  buildCountSheet, carryCounts, groupSkus, parseCountCsv, rgQtyBySku, toCsv,
   type LegacyFacts, type OpeningSku, type RgLink, type RgStock,
 } from '@/lib/erp/ledger/opening';
 
 loadEnvLocal();
 const DATE = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 const OUT = path.join(__dirname, '..', '..', 'docs', 'erp');
-const OVERRIDES = path.join(OUT, 'opening-overrides.json');
+export const OVERRIDES_PATH = path.join(OUT, 'opening-overrides.json');
 
 export interface OpeningOverrides {
   /** 원장에 넣지 않을 RG vendorItemId → 사유(예: 승인 해제된 옵션의 잔여 재고) */
   ignoreRgVids: Record<string, string>;
+  /** 실사를 마친 시각(오프셋 있는 ISO). 적재 때 24시간 이내여야 한다 — opening-apply가 요구한다 */
+  countedAt?: string;
+  /** SKU 키 → 적재 단가(원). 옛 입고 이력으로 다시 계산한 값·CSV 값보다 우선한다 */
+  unitCost?: Record<string, number>;
 }
 
 export function loadOverrides(): OpeningOverrides {
-  if (!fs.existsSync(OVERRIDES)) return { ignoreRgVids: {} };
-  return JSON.parse(fs.readFileSync(OVERRIDES, 'utf-8')) as OpeningOverrides;
+  if (!fs.existsSync(OVERRIDES_PATH)) return { ignoreRgVids: {} };
+  const o = JSON.parse(fs.readFileSync(OVERRIDES_PATH, 'utf-8')) as Partial<OpeningOverrides>;
+  return { ...o, ignoreRgVids: o.ignoreRgVids ?? {} };
 }
 
 export async function fetchRgStock(): Promise<RgStock[]> {
@@ -41,8 +48,10 @@ export async function fetchRgStock(): Promise<RgStock[]> {
 
 export async function readDb(c: pg.Client): Promise<{ skus: OpeningSku[]; links: RgLink[]; legacy: LegacyFacts[]; baseUnitMissing: { key: string; name: string; maxMultiplier: number }[] }> {
   const skus = (await c.query(
-    `select id, key, name, option_label, legacy_product_cost_ids::text[] as legacy from erp.skus where status = 'active' order by id`,
-  )).rows.map((r) => ({ id: Number(r.id), key: r.key, name: r.name, optionLabel: r.option_label, legacyProductCostIds: r.legacy ?? [] }));
+    `select id, key, name, option_label, base_unit_label, legacy_product_cost_ids::text[] as legacy from erp.skus where status = 'active' order by id`,
+  )).rows.map((r) => ({
+    id: Number(r.id), key: r.key, name: r.name, optionLabel: r.option_label, legacyProductCostIds: r.legacy ?? [], baseUnitLabel: r.base_unit_label ?? null,
+  }));
   const links = (await c.query(
     `select l.external_product_id as vid, x.sku_id, x.multiplier
        from erp.channel_listings l join erp.listing_skus x on x.listing_id = l.id
@@ -71,6 +80,18 @@ export async function readDb(c: pg.Client): Promise<{ skus: OpeningSku[]; links:
 }
 
 async function main(): Promise<void> {
+  const force = process.argv.includes('--force');
+  const carryArg = process.argv.find((a) => a.startsWith('--carry='));
+  const carryPath = carryArg ? path.resolve(carryArg.slice('--carry='.length)) : null;
+  const csvPath = path.join(OUT, `opening-count-${DATE}.csv`);
+  if (fs.existsSync(csvPath) && !force) {
+    throw new Error(
+      `opening-count-${DATE}.csv가 이미 있다 — 사람이 채운 실사를 덮어쓰지 않으려고 멈춘다.\n` +
+      '  기존 실사를 살려 새로 뽑으려면: --carry=<기존 CSV> --force · 그냥 덮어쓰려면: --force',
+    );
+  }
+  // 이전 실사표는 DB·API를 읽기 전에 먼저 읽는다 — 잘못된 파일이면 일찍 멈춘다(덮어쓸 대상과 같은 파일일 수도 있다)
+  const prev = carryPath ? parseCountCsv(fs.readFileSync(carryPath, 'utf-8')) : null;
   const c = new pg.Client({ connectionString: process.env.SUPABASE_DB_URL, ssl: { rejectUnauthorized: false } });
   await c.connect();
   let db: Awaited<ReturnType<typeof readDb>>;
@@ -87,14 +108,22 @@ async function main(): Promise<void> {
   const sheet = buildCountSheet(db.skus, groupSkus(db.skus), rg.bySku, db.legacy);
   const issues = [...rg.issues, ...sheet.issues];
 
-  fs.writeFileSync(path.join(OUT, `opening-count-${DATE}.csv`), toCsv(sheet.rows));
+  let rows = sheet.rows;
+  if (prev) {
+    const carried = carryCounts(sheet.rows, prev);
+    rows = carried.rows;
+    console.log(`옮김 ${carried.carried}행 · 새 행 ${carried.added.length}(미리 채운 값) · 빠진 행 ${carried.dropped.length}`);
+    for (const d of carried.dropped) console.log(`  빠짐: ${d.skuKey} (self_count ${d.selfCount ?? '빈칸'} · rg_inbound ${d.rgInbound})`);
+    for (const a of carried.added) console.log(`  새 행: ${a.skuKey}`);
+  }
+  fs.writeFileSync(csvPath, toCsv(rows));
 
-  const sum = (f: (r: (typeof sheet.rows)[number]) => number) => sheet.rows.reduce((s, r) => s + f(r), 0);
+  const sum = (f: (r: (typeof rows)[number]) => number) => rows.reduce((s, r) => s + f(r), 0);
   const md = [
     `# 기초재고 실사표 점검 ${DATE}`,
     '',
     `- 활성 SKU ${db.skus.length} · RG 재고 응답 ${stock.length}건(수량>0 ${stock.filter((s) => s.qty > 0).length})`,
-    `- RG 실재고 합계 ${sum((r) => r.rgActual)} · 자체보관 미리 채운 합계 ${sum((r) => r.selfCount ?? 0)} · **빈칸(옵션별 실사 필요) ${sheet.rows.filter((r) => r.selfCount === null).length}행**`,
+    `- RG 실재고 합계 ${sum((r) => r.rgActual)} · 자체보관${prev ? '(옮긴 실사 포함)' : ' 미리 채운'} 합계 ${sum((r) => r.selfCount ?? 0)} · **빈칸(옵션별 실사 필요) ${rows.filter((r) => r.selfCount === null).length}행**`,
     '',
     '## 채우는 법',
     '',
@@ -122,7 +151,7 @@ async function main(): Promise<void> {
     '',
   ].join('\n');
   fs.writeFileSync(path.join(OUT, `opening-review-${DATE}.md`), md);
-  console.log(`✅ opening-count-${DATE}.csv · opening-review-${DATE}.md — 이슈 ${issues.length}건 · 빈칸 ${sheet.rows.filter((r) => r.selfCount === null).length}행`);
+  console.log(`✅ opening-count-${DATE}.csv · opening-review-${DATE}.md — 이슈 ${issues.length}건 · 빈칸 ${rows.filter((r) => r.selfCount === null).length}행`);
 }
 
 if (require.main === module) {

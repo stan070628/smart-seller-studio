@@ -8,6 +8,8 @@ export interface OpeningSku {
   name: string;
   optionLabel: string;
   legacyProductCostIds: string[];
+  /** 배수 1이 뜻하는 단위(예: '6개입 1팩'). 정해졌으면 옛 cost_entries 단위와 다를 수 있다 */
+  baseUnitLabel?: string | null;
 }
 
 /** RG 리스팅(vendorItemId) ↔ SKU 연결 한 줄. multiplier = 리스팅 1개가 뜻하는 SKU 기준 단위 수 */
@@ -188,7 +190,8 @@ export function buildCountSheet(
 const COLUMNS = ['sku_id', 'sku_key', 'name', 'option', 'group', 'rg_actual', 'self_estimate', 'self_count', 'rg_inbound', 'unit_cost', 'note'] as const;
 
 const cell = (v: string | number | null) => {
-  const s = v === null ? '' : String(v);
+  // 값 안의 줄바꿈은 공백으로 — 줄 단위로 읽는 parseCountCsv와 한 행 = 한 줄을 지킨다
+  const s = v === null ? '' : String(v).replace(/[\r\n]/g, ' ');
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
@@ -231,7 +234,7 @@ export function parseCountCsv(text: string): CountRow[] {
     if (!/^-?\d+$/.test(t)) throw new Error(`${line}행 ${col} 값 '${t}'은 정수가 아니다`);
     return Number(t);
   };
-  return lines.slice(1).map((l, i) => {
+  const rows = lines.slice(1).map((l, i) => {
     const c = splitCsvLine(l);
     const n = i + 2;
     return {
@@ -245,6 +248,12 @@ export function parseCountCsv(text: string): CountRow[] {
       note: c[10] ?? '',
     };
   });
+  const seen = new Set<number>();
+  for (const r of rows) {
+    if (seen.has(r.skuId)) throw new Error(`실사표에 sku_id ${r.skuId}(${r.skuKey}) 행이 중복된다`);
+    seen.add(r.skuId);
+  }
+  return rows;
 }
 
 /** 원장 RG와 실재고가 다른 SKU만. 순서는 SKU id 순. */
@@ -254,4 +263,104 @@ export function reconcileRg(ledger: Map<number, number>, actual: Map<number, num
     .map((skuId) => ({ skuId, ledger: ledger.get(skuId) ?? 0, actual: actual.get(skuId) ?? 0 }))
     .filter((r) => r.ledger !== r.actual)
     .map((r) => ({ ...r, diff: r.actual - r.ledger }));
+}
+
+/**
+ * 새로 뽑은 실사표(fresh)에 사람이 채운 이전 실사표(prev)의 값을 sku_id로 옮긴다.
+ * 옮기는 칸: self_count · rg_inbound · unit_cost · note. rg_actual·self_estimate는 새 값을 둔다.
+ * prev에 없는 새 행은 미리 채운 값 그대로(added), fresh에 없는 prev 행은 dropped로 돌려준다.
+ */
+export function carryCounts(fresh: CountRow[], prev: CountRow[]): { rows: CountRow[]; carried: number; added: CountRow[]; dropped: CountRow[] } {
+  const prevById = new Map(prev.map((r) => [r.skuId, r]));
+  const freshIds = new Set(fresh.map((r) => r.skuId));
+  const added: CountRow[] = [];
+  let carried = 0;
+  const rows = fresh.map((f) => {
+    const p = prevById.get(f.skuId);
+    if (!p) {
+      added.push(f);
+      return { ...f };
+    }
+    carried++;
+    return { ...f, selfCount: p.selfCount, rgInbound: p.rgInbound, unitCost: p.unitCost, note: p.note };
+  });
+  return { rows, carried, added, dropped: prev.filter((p) => !freshIds.has(p.skuId)) };
+}
+
+/** 실사 시각 검사. 적재 시점에 실사가 24시간 이내여야 한다. 문제 없으면 null, 있으면 사유 */
+export function checkCountedAt(countedAt: string | undefined, now: Date): string | null {
+  if (!countedAt) return 'opening-overrides.json에 countedAt(실사를 마친 시각, 오프셋 있는 ISO — 예: 2026-09-27T09:30:00+09:00)이 없다';
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/.test(countedAt)) {
+    return `countedAt '${countedAt}'은 오프셋(Z 또는 +09:00) 있는 ISO 시각이 아니다`;
+  }
+  const t = Date.parse(countedAt);
+  if (Number.isNaN(t)) return `countedAt '${countedAt}'을 시각으로 읽을 수 없다`;
+  if (t > now.getTime() + 5 * 60_000) return `countedAt ${countedAt}이 미래다`;
+  if (now.getTime() - t > 24 * 3600_000) return `countedAt ${countedAt}이 24시간 넘게 지났다 — 실사를 다시 확인하고 countedAt을 고친다(실사 이후 판매·입고가 기초재고에서 빠진다)`;
+  return null;
+}
+
+/** RG 재고가 활성 SKU가 아닌(보관된) SKU에 잡힌 것. SKU id 순 */
+export function rgOutsideActive(bySku: Map<number, number>, activeIds: Set<number>): { skuId: number; qty: number }[] {
+  return [...bySku].filter(([id, q]) => q !== 0 && !activeIds.has(id)).sort((a, b) => a[0] - b[0]).map(([skuId, qty]) => ({ skuId, qty }));
+}
+
+export type CostSource = 'override' | 'history' | 'csv' | 'none';
+
+export interface ResolvedCost {
+  skuId: number;
+  skuKey: string;
+  /** 실사 보유 수량 = self_count + rg_inbound + 지금 RG */
+  onHand: number;
+  unitCost: number | null;
+  source: CostSource;
+  csvCost: number | null;
+  baseUnitLabel: string | null;
+}
+
+/**
+ * 적재 단가를 정한다. 우선순위: 덮어쓰기(opening-overrides unitCost, SKU 키) > 옛 입고 이력(그룹의 실사 보유 수량으로 다시 계산) > CSV unit_cost(이력이 없을 때만).
+ * changed = 재고가 있고 CSV 단가와 쓸 단가가 다른 SKU · baseUnitCheck = 기준 단위가 정해졌는데 단가가 이력에서 온 SKU(옛 cost_entries 단위가 다를 수 있다) · missing = 재고가 있는데 단가가 없는 SKU.
+ */
+export function resolveOpeningCosts(
+  skus: OpeningSku[],
+  groups: SkuGroup[],
+  legacy: LegacyFacts[],
+  rows: CountRow[],
+  rgNow: Map<number, number>,
+  overrides: Record<string, number>,
+): { costs: ResolvedCost[]; changed: ResolvedCost[]; baseUnitCheck: ResolvedCost[]; missing: ResolvedCost[] } {
+  const skuById = new Map(skus.map((s) => [s.id, s]));
+  const rowById = new Map(rows.map((r) => [r.skuId, r]));
+  const facts = new Map(legacy.map((f) => [f.productCostId, f]));
+  const onHandOf = (id: number) => {
+    const r = rowById.get(id);
+    return (r?.selfCount ?? 0) + (r?.rgInbound ?? 0) + (rgNow.get(id) ?? 0);
+  };
+  const costs: ResolvedCost[] = [];
+  for (const g of groups) {
+    const entries = g.productCostIds.flatMap((pc) => facts.get(pc)?.entries ?? []);
+    const groupOnHand = g.skuIds.reduce((s, id) => s + onHandOf(id), 0);
+    const history = openingUnitCost(entries, groupOnHand).unitCost;
+    for (const id of g.skuIds) {
+      const s = skuById.get(id)!;
+      const r = rowById.get(id);
+      const csvCost = r?.unitCost ?? null;
+      const ov = overrides[s.key];
+      const [unitCost, source]: [number | null, CostSource] =
+        ov !== undefined ? [ov, 'override']
+          : history !== null ? [history, 'history']
+            : entries.length === 0 && csvCost !== null ? [csvCost, 'csv']
+              : [null, 'none'];
+      costs.push({ skuId: id, skuKey: s.key, onHand: onHandOf(id), unitCost, source, csvCost, baseUnitLabel: s.baseUnitLabel ?? null });
+    }
+  }
+  costs.sort((a, b) => a.skuId - b.skuId);
+  const stocked = costs.filter((c) => c.onHand > 0);
+  return {
+    costs,
+    changed: stocked.filter((c) => c.csvCost !== c.unitCost),
+    baseUnitCheck: stocked.filter((c) => c.source === 'history' && c.baseUnitLabel !== null),
+    missing: stocked.filter((c) => c.unitCost === null),
+  };
 }

@@ -4,7 +4,7 @@
 import pg from 'pg';
 import { loadEnvLocal } from './_env';
 import { fetchRgStock, loadOverrides } from './opening-collect';
-import { reconcileRg, rgQtyBySku } from '@/lib/erp/ledger/opening';
+import { reconcileRg, rgOutsideActive, rgQtyBySku } from '@/lib/erp/ledger/opening';
 
 loadEnvLocal();
 
@@ -14,6 +14,7 @@ export async function runReconcile(): Promise<number> {
   let ledger: Map<number, number>;
   let links: { vid: string; skuId: number; multiplier: number }[];
   let keys: Map<number, string>;
+  let activeIds: Set<number>;
   let cutover: string | null;
   try {
     await c.query('BEGIN READ ONLY');
@@ -23,7 +24,9 @@ export async function runReconcile(): Promise<number> {
          from erp.channel_listings l join erp.listing_skus x on x.listing_id = l.id
         where l.channel = 'coupang_rg' and l.active`,
     )).rows.map((r) => ({ vid: String(r.vid), skuId: Number(r.sku_id), multiplier: Number(r.multiplier) }));
-    keys = new Map((await c.query(`select id, key from erp.skus`)).rows.map((r) => [Number(r.id), r.key]));
+    const all = (await c.query(`select id, key, status from erp.skus`)).rows;
+    keys = new Map(all.map((r) => [Number(r.id), r.key]));
+    activeIds = new Set(all.filter((r) => r.status === 'active').map((r) => Number(r.id)));
     cutover = (await c.query(`select cursor_at::text from erp.sync_cursors where name = 'ledger_cutover'`)).rows[0]?.cursor_at ?? null;
     await c.query('COMMIT');
   } finally {
@@ -31,10 +34,12 @@ export async function runReconcile(): Promise<number> {
   }
   const rg = rgQtyBySku(links, await fetchRgStock(), new Set(Object.keys(loadOverrides().ignoreRgVids)));
   const diff = reconcileRg(ledger, rg.bySku);
-  console.log(`기초재고 시각: ${cutover ?? '없음'} · 원장 RG SKU ${ledger.size} · 실재고 SKU ${rg.bySku.size} · 불일치 ${diff.length} · 매핑 이슈 ${rg.issues.length}`);
+  const inactive = rgOutsideActive(rg.bySku, activeIds);
+  console.log(`기초재고 시각: ${cutover ?? '없음'} · 원장 RG SKU ${ledger.size} · 실재고 SKU ${rg.bySku.size} · 불일치 ${diff.length} · 매핑 이슈 ${rg.issues.length} · 보관 SKU RG ${inactive.length}`);
   if (diff.length > 0) console.table(diff.map((d) => ({ SKU: keys.get(d.skuId) ?? d.skuId, 원장: d.ledger, 실재고: d.actual, 차이: d.diff })));
   for (const i of rg.issues) console.log(`  ⚠️ ${i.kind} ${i.ref} — ${i.detail}`);
-  return diff.length + rg.issues.length;
+  for (const o of inactive) console.log(`  ⚠️ rg_on_archived_sku ${keys.get(o.skuId) ?? o.skuId} — 보관된 SKU에 RG 재고 ${o.qty}개`);
+  return diff.length + rg.issues.length + inactive.length;
 }
 
 if (require.main === module) {
