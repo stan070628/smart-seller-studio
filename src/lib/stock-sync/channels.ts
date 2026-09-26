@@ -3,6 +3,9 @@
  */
 import { proxyFetch } from '@/lib/proxy-fetch';
 import { getNaverCommerceClient } from '@/lib/listing/naver-commerce-client';
+import { getTossToken } from '@/lib/listing/toss-shopping-client';
+
+export { getTossToken };
 
 // ─── 네이버 ────────────────────────────────────────────────
 // 재고 전용 API가 없다 — 원상품 전체를 GET해 stockQuantity만 고쳐 전체 PUT한다.
@@ -59,23 +62,6 @@ export async function saveNaverStocks(p: NaverProduct, updates: Map<string, numb
 // 옵션 재고 전용 API가 있다: 0이면 품절, 품절 상태에서 1 이상이면 품절 취소 (공식 문서 「상품 옵션 정상 재고 수량 변경」).
 
 const TOSS_HOST = 'https://shopping-fep.toss.im';
-
-export async function getTossToken(): Promise<string> {
-  const res = await proxyFetch('https://oauth2.cert.toss.im/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'client_credentials',
-      client_id: process.env.TOSS_SHOPPING_ACCESS_KEY ?? '',
-      client_secret: process.env.TOSS_SHOPPING_SECRET_KEY ?? '',
-      scope: 'toss-shopping-fep:write',
-    }).toString(),
-    signal: AbortSignal.timeout(10_000),
-  });
-  const j: any = await res.json().catch(() => ({}));
-  if (!j.access_token) throw new Error(`토스 토큰 발급 실패 (${res.status})`);
-  return j.access_token;
-}
 
 export interface TossProduct {
   productId: number;

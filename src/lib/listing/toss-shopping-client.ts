@@ -1,7 +1,7 @@
 /**
  * 토스쇼핑 Open API 클라이언트
  *
- * 인증: Bearer JWT (TOSS_SHOPPING_ACCESS_TOKEN)
+ * 인증: OAuth2 client_credentials — TOSS_SHOPPING_ACCESS_KEY·SECRET_KEY로 토큰(1시간 만료)을 받아 Bearer로 쓴다
  * 문서: https://shopping-docs.toss.im/dev/api-2/order
  */
 import { proxyFetch } from '@/lib/proxy-fetch';
@@ -51,15 +51,35 @@ interface TossOrderListSuccess {
   nextCursor?: string;
 }
 
-export class TossShoppingClient {
-  private readonly accessToken: string;
-
-  constructor() {
-    this.accessToken = process.env.TOSS_SHOPPING_ACCESS_TOKEN ?? '';
-    if (!this.accessToken) {
-      throw new Error('[토스쇼핑] TOSS_SHOPPING_ACCESS_TOKEN 환경변수가 필요합니다.');
-    }
+/**
+ * 토큰 발급. 🔴 옛 클라이언트는 존재하지 않는 TOSS_SHOPPING_ACCESS_TOKEN을 읽어 운영에서 한 번도 돌지 못했다
+ * (2026-09-27 주문 수집 시험 실행에서 발견). 키는 IP 화이트리스트와 묶여 있어 발급도 프록시로 부른다.
+ */
+export async function getTossToken(): Promise<string> {
+  const clientId = process.env.TOSS_SHOPPING_ACCESS_KEY ?? '';
+  const clientSecret = process.env.TOSS_SHOPPING_SECRET_KEY ?? '';
+  if (!clientId || !clientSecret) {
+    throw new Error('[토스쇼핑] TOSS_SHOPPING_ACCESS_KEY·TOSS_SHOPPING_SECRET_KEY 환경변수가 필요합니다.');
   }
+  const res = await proxyFetch('https://oauth2.cert.toss.im/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: clientId,
+      client_secret: clientSecret,
+      scope: 'toss-shopping-fep:write',
+    }).toString(),
+    signal: AbortSignal.timeout(10_000),
+  });
+  const j = (await res.json().catch(() => ({}))) as { access_token?: string };
+  if (!j.access_token) throw new Error(`토스 토큰 발급 실패 (${res.status})`);
+  return j.access_token;
+}
+
+export class TossShoppingClient {
+  /** 인스턴스는 수집 한 번 동안만 쓰이므로(1시간 만료보다 짧다) 첫 요청에서 한 번 받는다 */
+  private accessToken: Promise<string> | null = null;
 
   private async request<T>(
     path: string,
@@ -68,9 +88,11 @@ export class TossShoppingClient {
     const url = new URL(`${API_HOST}${path}`);
     Object.entries(params).forEach(([k, v]) => { if (v) url.searchParams.set(k, v); });
 
+    this.accessToken ??= getTossToken();
+    const token = await this.accessToken.catch((e) => { this.accessToken = null; throw e; });
     const res = await proxyFetch(url.toString(), {
       headers: {
-        'Authorization': `Bearer ${this.accessToken}`,
+        'Authorization': `Bearer ${token}`,
       },
       signal: AbortSignal.timeout(30_000),
     });
