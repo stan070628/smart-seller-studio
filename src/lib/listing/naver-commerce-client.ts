@@ -183,8 +183,9 @@ export function naverErrorSummary(text: string): string {
   try {
     const j = JSON.parse(text) as { code?: unknown; message?: unknown; error?: unknown; invalidInputs?: { name?: string; message?: string }[] };
     const msg = String(j.message ?? j.error ?? '').slice(0, 300);
+    // M4 — 500자에서 자르면 registerProduct 재시도가 찾는 칸 이름이 뒤쪽 항목에서 잘려나갔다. 2000자로 올린다
     const details = Array.isArray(j.invalidInputs)
-      ? j.invalidInputs.map((i) => `${String(i?.name ?? '')}: ${String(i?.message ?? '')}`).join(', ').slice(0, 500)
+      ? j.invalidInputs.map((i) => `${String(i?.name ?? '')}: ${String(i?.message ?? '')}`).join(', ').slice(0, 2000)
       : '';
     return `${msg}${j.code !== undefined ? ` (code=${String(j.code)})` : ''}${details ? ` [${details}]` : ''}`;
   } catch {

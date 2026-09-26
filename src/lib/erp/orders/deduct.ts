@@ -205,6 +205,14 @@ export async function previewBackfill(db: Db): Promise<BackfillPreview> {
   };
 }
 
+/**
+ * 주문 수집 트랜잭션 잠금 네임스페이스(collect.ts LOCK_NS와 같은 값) · 채널 정수(collect.ts CHANNEL_LOCK와 같은 값,
+ * coupang_wing·coupang_rg·naver·toss = 1·2·3·4). collect.ts를 그대로 import하면 순환(collect.ts → deduct.ts)이
+ * 생기므로 값만 중복해 둔다 — 바뀌면 두 곳 다 바꾼다.
+ */
+const DEDUCT_LOCK_NS = 7102;
+const CHANNEL_LOCK_INTS = [1, 2, 3, 4] as const;
+
 export class DeductSwitchError extends Error {
   constructor(public readonly code: 'already' | 'stale', message: string) {
     super(message);
@@ -222,6 +230,11 @@ export async function enableDeduction(
 ): Promise<{ preview: BackfillPreview; summary: DeductSummary }> {
   const setting = await readDeductSetting(db, true);
   if (setting.enabled) throw new DeductSwitchError('already', `이미 켜져 있다(${setting.enabledAt ?? '시각 모름'})`);
+  // 수집 트랜잭션(collect.ts)이 채널마다 잡는 잠금과 같은 것을 오름차순으로 먼저 잡는다 — 소급 중에 그 채널의
+  // 수집이 끼어들어 같은 라인을 동시에 건드리지 않는다
+  for (const n of [...CHANNEL_LOCK_INTS].sort((a, b) => a - b)) {
+    await db.query('select pg_advisory_xact_lock($1::int, $2::int)', [DEDUCT_LOCK_NS, n]);
+  }
   const preview = await previewBackfill(db);
   if (preview.lines !== p.expectedLines) {
     throw new DeductSwitchError('stale', `소급할 라인이 바뀌었다 — 화면 ${p.expectedLines}건, 지금 ${preview.lines}건. 창을 다시 연다`);

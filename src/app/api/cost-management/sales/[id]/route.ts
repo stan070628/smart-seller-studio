@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { getCurrentUser } from '@/lib/auth';
 
-const ALLOWED_CHANNELS = ['manual', 'coupang', 'rocket_growth', 'naver'];
+const ALLOWED_CHANNELS = ['manual', 'coupang', 'rocket_growth', 'naver', 'toss'];
 
 // PATCH /api/cost-management/sales/[id]
 // 특정 판매 내역의 날짜·수량·판매가·배송비·쿠폰할인·채널을 부분 수정한다 (COALESCE 방식).

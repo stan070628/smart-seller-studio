@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { getCurrentUser } from '@/lib/auth';
 
-const ALLOWED_SALE_CHANNELS = ['manual', 'coupang', 'rocket_growth', 'naver'];
+const ALLOWED_SALE_CHANNELS = ['manual', 'coupang', 'rocket_growth', 'naver', 'toss'];
 
 // GET /api/cost-management/products/[id]/sales
 // 특정 상품에 대한 판매 내역 목록을 반환한다.

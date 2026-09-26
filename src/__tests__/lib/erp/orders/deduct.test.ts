@@ -30,6 +30,7 @@ const db: Db = {
     calls.push({ sql, params });
     order.push(sql.split(' ').slice(0, 2).join(' '));
     if (sql.startsWith('select l.id, l.channel')) return { rows: lines, rowCount: lines.length };
+    if (sql.startsWith('select pg_advisory_xact_lock')) return { rows: [], rowCount: null };
     if (/^(savepoint|release savepoint|rollback to savepoint)/.test(sql)) return { rows: [], rowCount: null };
     if (sql.startsWith('update erp.order_lines set deduction_state')) return { rows: [], rowCount: 1 };
     if (sql.startsWith('select sku_id, location, qty from erp.stock_on_hand')) return { rows: onHand, rowCount: onHand.length };
@@ -185,5 +186,16 @@ describe('enableDeduction', () => {
     expect(r.summary.posted).toBe(1);
     const sel = calls.filter((c) => c.sql.startsWith('select l.id, l.channel'));
     expect(sel[sel.length - 1].params).toEqual([[], null, true]);
+  });
+
+  it('previewBackfill 전에 4개 채널 잠금(7102, 1~4)을 오름차순으로 먼저 잡는다 — 수집 트랜잭션과 순서를 맞춘다(M3)', async () => {
+    m.readDeductSetting.mockResolvedValue({ enabled: false, enabledAt: null, by: null });
+    await enableDeduction(db, { expectedLines: 1, by: 'u-1', at: AT });
+    const locks = calls.filter((c) => c.sql.startsWith('select pg_advisory_xact_lock'));
+    expect(locks.map((c) => c.params)).toEqual([[7102, 1], [7102, 2], [7102, 3], [7102, 4]]);
+    // previewBackfill(라인 select)보다 먼저 잡힌다
+    const firstSelectIdx = calls.findIndex((c) => c.sql.startsWith('select l.id, l.channel'));
+    const lastLockIdx = calls.findIndex((c) => c.sql.startsWith('select pg_advisory_xact_lock')) + locks.length - 1;
+    expect(lastLockIdx).toBeLessThan(firstSelectIdx);
   });
 });
