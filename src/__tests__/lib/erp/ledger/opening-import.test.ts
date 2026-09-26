@@ -35,6 +35,13 @@ describe('planOpeningImport', () => {
       { skuId: 7, key: 'k7', location: 'rg', qty: 2, unitCost: 1000 },
     ]);
     expect(p.totals).toEqual({ self: 3, rgInbound: 1, rg: 2, value: 6000, entries: 3 });
+    expect(p.selfCounts).toEqual([{ skuId: 7, qty: 3 }]);
+  });
+
+  it('집 0개로 센 행도 센 개수로 남긴다(전표는 없다) · 빈칸·전표 있는 SKU는 남기지 않는다', () => {
+    expect(planOpeningImport({ ...base, rows: [row({ selfCount: 0 })] }).selfCounts).toEqual([{ skuId: 7, qty: 0 }]);
+    expect(planOpeningImport({ ...base, rows: [row({ selfCount: null })] }).selfCounts).toEqual([]);
+    expect(planOpeningImport({ ...base, rows: [row({ selfCount: 3 })], stockedSkuIds: new Set([7]) }).selfCounts).toEqual([]);
   });
 
   it('원장에 전표가 있는 SKU는 빼고 조정으로 안내한다', () => {
@@ -126,6 +133,7 @@ function fakeDb(counts: Record<number, number> = {}) {
       if (sql.startsWith('insert into erp.stock_ledger')) return { rows: [{ id: nextId++ }], rowCount: 1 };
       if (sql.startsWith('set constraints')) return { rows: [], rowCount: null };
       if (sql.startsWith('insert into erp.sync_cursors')) return { rows: [], rowCount: 1 };
+      if (sql.startsWith('insert into erp.stock_counts')) return { rows: [], rowCount: 1 };
       throw new Error(`예상 못 한 SQL: ${sql.slice(0, 60)}`);
     },
   };
@@ -134,6 +142,8 @@ function fakeDb(counts: Record<number, number> = {}) {
 
 describe('commitOpeningImport', () => {
   const AT = '2026-09-27T01:00:00.000Z';
+  const COUNTED = '2026-09-27T09:30:00+09:00';
+  const opts = { fileName: 'count.csv', cutoverAt: AT, countedAt: COUNTED, selfCounts: [] as { skuId: number; qty: number }[] };
   const plan = [
     { skuId: 9, key: 'k9', location: 'self' as const, qty: 2, unitCost: 500 },
     { skuId: 7, key: 'k7', location: 'self' as const, qty: 3, unitCost: 1000 },
@@ -142,7 +152,7 @@ describe('commitOpeningImport', () => {
 
   it('전역 잠금 → SKU 오름차순 잠금·빈 원장 재확인 → 기초 전표 → 커서', async () => {
     const f = fakeDb();
-    expect(await commitOpeningImport(f.db, plan, { fileName: 'count.csv', cutoverAt: AT })).toBe(3);
+    expect(await commitOpeningImport(f.db, plan, opts)).toBe(3);
     expect(f.calls[0].params).toEqual([7102]);
     const locks = f.calls.filter((c) => c.sql.startsWith('select pg_advisory_xact_lock($1::int')).map((c) => c.params[1]);
     expect(locks.slice(0, 2)).toEqual([7, 9]);
@@ -160,7 +170,30 @@ describe('commitOpeningImport', () => {
 
   it('미리보기 뒤 그 사이 전표가 생긴 SKU가 있으면 ImportConflictError(아무것도 쓰지 않는다)', async () => {
     const f = fakeDb({ 9: 1 });
-    await expect(commitOpeningImport(f.db, plan, { fileName: 'count.csv', cutoverAt: AT })).rejects.toBeInstanceOf(ImportConflictError);
+    await expect(commitOpeningImport(f.db, plan, opts)).rejects.toBeInstanceOf(ImportConflictError);
+    expect(f.calls.some((c) => c.sql.startsWith('insert'))).toBe(false);
+  });
+
+  it('집 센 개수마다 센 기록 — 0개도(조정 키 null), 전표를 쓴 집은 기초 키 · 0개로 센 SKU도 잠그고 빈 원장을 확인한다', async () => {
+    const f = fakeDb();
+    await commitOpeningImport(f.db, plan, { ...opts, selfCounts: [{ skuId: 9, qty: 2 }, { skuId: 7, qty: 3 }, { skuId: 5, qty: 0 }] });
+    const locks = f.calls.filter((c) => c.sql.startsWith('select pg_advisory_xact_lock($1::int')).map((c) => c.params[1]);
+    expect(locks.slice(0, 3)).toEqual([5, 7, 9]);
+    const counts = f.calls.filter((c) => c.sql.startsWith('insert into erp.stock_counts'));
+    // [sku_id, location, counted_qty, ledger_qty, adjustment_idem_key, counted_at]
+    expect(counts.map((c) => [c.params[0], c.params[1], c.params[2], c.params[3], c.params[4], c.params[6]])).toEqual([
+      [5, 'self', 0, 0, null, COUNTED],
+      [7, 'self', 3, 0, 'opening:7:self', COUNTED],
+      [9, 'self', 2, 0, 'opening:9:self', COUNTED],
+    ]);
+    // 요청 id는 줄마다 새 uuid
+    expect(new Set(counts.map((c) => c.params[5])).size).toBe(3);
+    expect(String(counts[0].params[5])).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it('0개로 센 SKU에 미리보기 뒤 전표가 생겼어도 ImportConflictError', async () => {
+    const f = fakeDb({ 5: 1 });
+    await expect(commitOpeningImport(f.db, plan, { ...opts, selfCounts: [{ skuId: 5, qty: 0 }] })).rejects.toBeInstanceOf(ImportConflictError);
     expect(f.calls.some((c) => c.sql.startsWith('insert'))).toBe(false);
   });
 });

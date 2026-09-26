@@ -112,7 +112,8 @@ describe('POST /api/erp/stock/import', () => {
 
   it('단가를 입력하면 한 트랜잭션으로 적재한다', async () => {
     const { POST } = await import('@/app/api/erp/stock/import/route');
-    const json = await (await POST(post({ csv: CSV, fileName: 'count.csv', countedAt: new Date().toISOString(), unitCostOverrides: { k9: 800 }, commit: true }))).json();
+    const countedAt = new Date().toISOString();
+    const json = await (await POST(post({ csv: CSV, fileName: 'count.csv', countedAt, unitCostOverrides: { k9: 800 }, commit: true }))).json();
     expect(json.data.errors).toEqual([]);
     expect(json.data.committed).toBe(3);
     const [db, plan, opts] = mockCommit.mock.calls[0];
@@ -122,7 +123,8 @@ describe('POST /api/erp/stock/import', () => {
       { skuId: 7, key: 'k7', location: 'rg', qty: 2, unitCost: 1000 },
       { skuId: 9, key: 'k9', location: 'self', qty: 1, unitCost: 800 },
     ]);
-    expect(opts).toEqual({ fileName: 'count.csv', cutoverAt: json.data.cutoverAt });
+    expect(opts).toEqual({ fileName: 'count.csv', cutoverAt: json.data.cutoverAt, countedAt, selfCounts: [{ skuId: 7, qty: 3 }, { skuId: 9, qty: 1 }] });
+    expect(json.data.selfCounts).toBeUndefined(); // 적재용 내부 값 — 응답에 싣지 않는다
     expect(client.query.mock.calls.map((c) => c[0])).toEqual(['BEGIN', 'COMMIT']);
   });
 

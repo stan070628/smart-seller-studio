@@ -8,8 +8,9 @@ import {
   checkCountedAt, groupSkus, resolveOpeningCosts, rgOutsideActive,
   type CountRow, type LegacyFacts, type OpeningIssue, type OpeningSku, type ResolvedCost,
 } from './opening';
+import { randomUUID } from 'node:crypto';
 import { lockSku, postLotCreate, type Db } from './store';
-import { ensureCutover } from './adjust-store';
+import { ensureCutover, recordCount } from './adjust-store';
 import { openingIdemKey } from './adjust';
 
 /** 기초재고 적재 전역 잠금 — 1-B scripts/erp/opening-apply.ts와 같은 값(겹친 실행이 서로를 기다린다) */
@@ -39,10 +40,12 @@ export interface ImportPreview {
   /** 보유 수량이 있는 SKU의 적재 단가와 출처(화면이 단가 입력 칸을 그린다) */
   costs: ResolvedCost[];
   totals: ImportTotals;
+  /** 불러올 SKU의 집 센 개수(0 포함) — 적재 때 센 기록(erp.stock_counts)으로 남긴다. 응답에는 싣지 않는다 */
+  selfCounts: { skuId: number; qty: number }[];
 }
 
 /** /api/erp/stock/import 응답 */
-export interface ImportSummary extends Omit<ImportPreview, 'plan'> {
+export interface ImportSummary extends Omit<ImportPreview, 'plan' | 'selfCounts'> {
   committed: number;
   cutoverAt: string;
 }
@@ -126,15 +129,21 @@ export function planOpeningImport(input: {
   const sum = (loc: Location) => plan.filter((p) => p.location === loc).reduce((s, p) => s + p.qty, 0);
   return {
     plan, errors, warnings, excluded,
+    selfCounts: included.map((r) => ({ skuId: r.skuId, qty: r.selfCount ?? 0 })),
     costs: cost.costs.filter((c) => c.onHand > 0),
     totals: { self: sum('self'), rgInbound: sum('rg_inbound'), rg: sum('rg'), value: plan.reduce((s, p) => s + p.qty * p.unitCost, 0), entries: plan.length },
   };
 }
 
-/** 호출자 트랜잭션 안에서 기초 전표를 쓴다. 전역 잠금 → SKU 오름차순 잠금·빈 원장 재확인 → 전표 → 커서 */
-export async function commitOpeningImport(db: Db, plan: ImportPlanRow[], p: { fileName: string; cutoverAt: string }): Promise<number> {
+/** 호출자 트랜잭션 안에서 기초 전표를 쓴다. 전역 잠금 → SKU 오름차순 잠금·빈 원장 재확인 → 전표 → 집 센 기록 → 커서.
+ *  집 0개로 센 SKU는 전표가 없지만 센 기록은 남긴다 — 그 SKU도 잠그고 빈 원장을 다시 확인한다 */
+export async function commitOpeningImport(
+  db: Db,
+  plan: ImportPlanRow[],
+  p: { fileName: string; cutoverAt: string; countedAt: string; selfCounts: { skuId: number; qty: number }[] },
+): Promise<number> {
   await db.query('select pg_advisory_xact_lock($1::bigint)', [OPENING_LOCK]);
-  const ids = [...new Set(plan.map((r) => r.skuId))].sort((a, b) => a - b);
+  const ids = [...new Set([...plan.map((r) => r.skuId), ...p.selfCounts.map((c) => c.skuId)])].sort((a, b) => a - b);
   for (const id of ids) {
     await lockSku(db, id);
     const { rows } = await db.query('select count(*)::int as n from erp.stock_ledger where sku_id = $1', [id]);
@@ -147,6 +156,15 @@ export async function commitOpeningImport(db: Db, plan: ImportPlanRow[], p: { fi
       occurredAt: p.cutoverAt, idemKey: openingIdemKey(r.skuId, r.location), refType: 'opening', refId: p.fileName,
     });
     if (res.posted) n++;
+  }
+  // 센 시각 = 실사를 마친 시각(기초 전표 시각 cutoverAt과 다르다). 빈 원장을 확인했으니 원장 재고는 0
+  const selfPosted = new Set(plan.filter((r) => r.location === 'self').map((r) => r.skuId));
+  for (const c of [...p.selfCounts].sort((a, b) => a.skuId - b.skuId)) {
+    await recordCount(db, {
+      skuId: c.skuId, location: 'self', countedQty: c.qty, ledgerQty: 0,
+      idemKey: selfPosted.has(c.skuId) ? openingIdemKey(c.skuId, 'self') : null,
+      requestId: randomUUID(), countedAt: p.countedAt,
+    });
   }
   if (n > 0) await ensureCutover(db, p.cutoverAt);
   return n;

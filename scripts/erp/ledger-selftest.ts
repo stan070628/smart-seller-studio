@@ -10,6 +10,7 @@
 //   begin;
 //   alter table erp.stock_ledger disable trigger stock_ledger_guard;
 //   delete from erp.stock_ledger where sku_id in (select id from erp.skus where key like 'selftest%');
+//   delete from erp.stock_counts where sku_id in (select id from erp.skus where key like 'selftest%');
 //   alter table erp.stock_ledger enable trigger stock_ledger_guard;
 //   delete from erp.skus where key like 'selftest%';
 //   commit;
@@ -145,6 +146,21 @@ async function expectError(c: pg.Client, name: string, fn: () => Promise<unknown
 
     const again2 = await applyAdjustment(c, { skuId: adj, location: 'self', mode: 'count', value: 3, expected: 5, reason: 'damage', requestId: req2, occurredAt: '2026-02-02T09:00:00+09:00' });
     check('같은 요청 재전송은 duplicate(기록 없음)', again2.outcome === 'duplicate');
+
+    // 센 기록(116): 지금 개수는 차이가 0이어도 한 줄 · 그 재전송은 센 기록으로 duplicate
+    const reqSame = randomUUID();
+    const same = { skuId: adj, location: 'self' as const, mode: 'count' as const, value: 3, expected: 3, reason: 'count_diff' as const, requestId: reqSame, occurredAt: '2026-02-02T10:00:00+09:00' };
+    const oSame = await applyAdjustment(c, { ...same });
+    const againSame = await applyAdjustment(c, { ...same });
+    const counts = (await c.query(
+      'select counted_qty, ledger_qty, adjustment_idem_key from erp.stock_counts where sku_id = $1 order by id', [adj],
+    )).rows;
+    check('지금 개수마다 센 기록 한 줄 — 기초·조정 키, 차이 0은 null',
+      oSame.outcome === 'noop' && counts.length === 3
+        && counts[0].adjustment_idem_key === `opening:${adj}:self` && counts[1].adjustment_idem_key === `adj:${req2}`
+        && counts[2].adjustment_idem_key === null && counts[2].counted_qty === 3 && counts[2].ledger_qty === 3,
+      JSON.stringify(counts));
+    check('차이 0 실사의 재전송은 duplicate — 센 기록을 더 쓰지 않는다', againSame.outcome === 'duplicate' && counts.length === 3, againSame.outcome);
 
     await expectError(c, '화면 재고와 다르면 거부(StaleCountError)', () => applyAdjustment(c, {
       skuId: adj, location: 'self', mode: 'count', value: 1, expected: 5, reason: 'count_diff', requestId: randomUUID(), occurredAt: '2026-02-03T09:00:00+09:00',

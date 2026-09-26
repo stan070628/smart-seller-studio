@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     };
     if (body.commit !== true) return NextResponse.json({ success: true, data: summary });
     if (p.errors.length > 0) return NextResponse.json({ success: false, data: summary }, { status: 422 });
-    const committed = await withTx((c) => commitOpeningImport(c, p.plan, { fileName, cutoverAt }));
+    const committed = await withTx((c) => commitOpeningImport(c, p.plan, { fileName, cutoverAt, countedAt, selfCounts: p.selfCounts }));
     return NextResponse.json({ success: true, data: { ...summary, committed } });
   } catch (e) {
     return erpError(e);
