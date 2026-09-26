@@ -39,4 +39,41 @@ describe('EditCell', () => {
     render(<EditCell row={row} location="rg_inbound" countMode onSubmit={vi.fn()} onCancel={() => {}} />);
     expect(screen.getByText('담기')).toBeInTheDocument();
   });
+
+  describe('원장 전표가 없는 위치(빈 위치)', () => {
+    const emptyRow: StockRow = { ...row, hasLedger: false };
+
+    it('기초재고로 기록된다는 안내를 보이고, 사유는 서버가 정하므로 고르지 않는다', () => {
+      render(<EditCell row={emptyRow} location="self" countMode={false} onSubmit={vi.fn()} onCancel={() => {}} />);
+      expect(screen.getByText(/기초재고로 기록됩니다/)).toBeInTheDocument();
+      expect(screen.queryByLabelText('사유')).not.toBeInTheDocument();
+    });
+
+    it('±수량에서 늘리면(+) 저장할 수 있다', () => {
+      const onSubmit = vi.fn();
+      render(<EditCell row={emptyRow} location="self" countMode={false} onSubmit={onSubmit} onCancel={() => {}} />);
+      fireEvent.click(screen.getByText('±수량'));
+      fireEvent.change(screen.getByLabelText('±수량'), { target: { value: '5' } });
+      expect(screen.getByText('저장')).not.toBeDisabled();
+      fireEvent.click(screen.getByText('저장'));
+      expect(onSubmit).toHaveBeenCalled();
+    });
+
+    it('±수량에서 줄이면(−) 뺄 수 없다는 안내를 보이고 저장이 막힌다', () => {
+      const onSubmit = vi.fn();
+      render(<EditCell row={emptyRow} location="self" countMode={false} onSubmit={onSubmit} onCancel={() => {}} />);
+      fireEvent.click(screen.getByText('±수량'));
+      fireEvent.change(screen.getByLabelText('±수량'), { target: { value: '-2' } });
+      expect(screen.getByText('비어 있는 위치에서는 뺄 수 없습니다(+ 만 기초재고로 기록됩니다)')).toBeInTheDocument();
+      expect(screen.getByText('저장')).toBeDisabled();
+      fireEvent.click(screen.getByText('저장'));
+      expect(onSubmit).not.toHaveBeenCalled();
+    });
+
+    it('원장이 있는 위치는 안내를 보이지 않고 사유를 고른다', () => {
+      render(<EditCell row={row} location="self" countMode={false} onSubmit={vi.fn()} onCancel={() => {}} />);
+      expect(screen.queryByText(/기초재고로 기록됩니다/)).not.toBeInTheDocument();
+      expect(screen.getByLabelText('사유')).toBeInTheDocument();
+    });
+  });
 });

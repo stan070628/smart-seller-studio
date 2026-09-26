@@ -82,7 +82,7 @@ export default function CsvImportDialog({ onClose, onCommitted }: Props) {
       <div
         role="dialog"
         aria-label="실사표 불러오기"
-        style={{ position: 'relative', width: 760, maxWidth: 'calc(100vw - 32px)', maxHeight: '88vh', overflow: 'auto', background: E.surface, border: `1px solid ${E.line}`, color: E.ink, fontSize: 12 }}
+        style={{ position: 'relative', width: 'min(1100px, 94vw)', maxHeight: '88vh', overflow: 'auto', background: E.surface, border: `1px solid ${E.line}`, color: E.ink, fontSize: 12 }}
       >
         <div style={{ ...bandStyle, justifyContent: 'space-between' }}>
           <span>실사표 불러오기 — 기초재고</span>
@@ -135,7 +135,14 @@ export default function CsvImportDialog({ onClose, onCommitted }: Props) {
               </details>
             )}
             {preview.costs.length > 0 && (
-              <table style={{ borderCollapse: 'collapse', width: '100%', marginBottom: 8 }}>
+              <table style={{ borderCollapse: 'collapse', width: '100%', tableLayout: 'fixed', marginBottom: 8 }}>
+                <colgroup>
+                  <col style={{ width: '22%' }} />
+                  <col style={{ width: '12%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '32%' }} />
+                  <col style={{ width: '20%' }} />
+                </colgroup>
                 <thead>
                   <tr>{['SKU', '보유', '적재 단가', '출처', '단가 입력'].map((h) => <th key={h} style={thStyle}>{h}</th>)}</tr>
                 </thead>
@@ -147,10 +154,10 @@ export default function CsvImportDialog({ onClose, onCommitted }: Props) {
                     const needsOverride = c.unitCost === null || baseUnitBlocked;
                     return (
                       <tr key={c.skuId} style={{ background: needsOverride ? E.accentSoft : undefined }}>
-                        <td style={{ ...numTdStyle, textAlign: 'left', fontFamily: 'inherit' }}>{c.skuKey}</td>
+                        <td style={{ ...numTdStyle, textAlign: 'left', fontFamily: 'inherit', whiteSpace: 'normal', wordBreak: 'break-all' }}>{c.skuKey}</td>
                         <td style={numTdStyle}>{won(c.onHand)}</td>
                         <td style={numTdStyle}>{c.unitCost === null ? '—' : won(c.unitCost)}</td>
-                        <td style={{ ...numTdStyle, fontFamily: 'inherit' }}>
+                        <td style={{ ...numTdStyle, fontFamily: 'inherit', textAlign: 'left', whiteSpace: 'normal' }}>
                           {SOURCE_LABEL[c.source] ?? c.source}{baseUnitBlocked ? ` · 기준 단위 「${c.baseUnitLabel}」 확인 필요` : ''}
                         </td>
                         <td style={numTdStyle}>
@@ -160,7 +167,7 @@ export default function CsvImportDialog({ onClose, onCommitted }: Props) {
                             value={costInput[c.skuKey] ?? ''}
                             placeholder={c.unitCost === null ? '필수' : baseUnitBlocked ? '필수(단위 확인)' : '바꿀 때만'}
                             onChange={(e) => { setCostInput((m) => ({ ...m, [c.skuKey]: e.target.value })); touch(); }}
-                            style={{ ...inputStyle, width: 90, textAlign: 'right', fontFamily: E.mono, borderColor: needsOverride ? E.loss : E.line }}
+                            style={{ ...inputStyle, width: '100%', boxSizing: 'border-box', textAlign: 'right', fontFamily: E.mono, borderColor: needsOverride ? E.loss : E.line }}
                           />
                         </td>
                       </tr>

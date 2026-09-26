@@ -24,6 +24,9 @@ interface Props {
 export default function EditCell({ row, location, staged, countMode, onSubmit, onCancel }: Props) {
   const onHand = onHandAt(row, location);
   const initialCost = staged?.unitCost ?? defaultCost(row);
+  // row.hasLedger는 SKU 전체 기준이라 그 위치가 정확히 비어 있는지 화면은 모른다 — 서버(adjust-store)가
+  // (SKU·위치) 단위로 다시 확인한다. 여기서는 근사치로 안내와 ±수량 규칙만 보여준다.
+  const locationEmpty = !row.hasLedger;
   const [mode, setMode] = useState<'count' | 'delta'>(staged?.mode ?? 'count');
   const [raw, setRaw] = useState(staged ? String(staged.value) : String(onHand));
   const [reason, setReason] = useState<UserReason>(staged?.reason ?? 'count_diff');
@@ -36,7 +39,9 @@ export default function EditCell({ row, location, staged, countMode, onSubmit, o
   const diff = valid ? editDiff({ mode, value: value as number, expected: onHand }) : 0;
   const cost = /^\d+$/.test(costRaw.trim()) ? Number(costRaw.trim()) : null;
   const needsCost = diff > 0 && cost === null;
-  const canSubmit = valid && diff !== 0 && !needsCost;
+  // 빈 위치의 ±수량은 늘리기(+)만 된다 — 줄이면(−) 뺄 재고가 없다(서버 400과 같은 규칙)
+  const emptyDeltaBlocked = locationEmpty && mode === 'delta' && value !== null && value < 0;
+  const canSubmit = valid && diff !== 0 && !needsCost && !emptyDeltaBlocked;
 
   function switchMode(m: 'count' | 'delta') {
     setMode(m);
@@ -66,6 +71,12 @@ export default function EditCell({ row, location, staged, countMode, onSubmit, o
       <div style={{ fontSize: 11, color: E.inkSub, marginBottom: 6 }}>
         {LOC_LABEL[location]} · 원장 {won(onHand)}개
       </div>
+      {locationEmpty && (
+        <div style={{ fontSize: 11, color: E.inkSub, background: E.chrome2, border: `1px solid ${E.lineSoft}`, padding: '4px 6px', marginBottom: 6 }}>
+          원장 전표가 없는 위치입니다 — {mode === 'count' ? '이번 「지금 개수」가' : '늘리면(+)'} 기초재고로 기록됩니다
+          {mode === 'delta' ? ' · 줄이기(−)는 할 수 없습니다' : ''}.
+        </div>
+      )}
       <div style={{ ...segStyle, marginBottom: 6 }}>
         {(['count', 'delta'] as const).map((m) => (
           <button
@@ -86,19 +97,23 @@ export default function EditCell({ row, location, staged, countMode, onSubmit, o
         onChange={(e) => setRaw(e.target.value)}
         style={{ ...inputStyle, width: '100%', fontFamily: E.mono }}
       />
-      <div style={{ fontSize: 11, margin: '4px 0 6px', color: diff > 0 ? E.profit : diff < 0 ? E.loss : E.inkMute }}>
-        {valid
-          ? diff === 0 ? '차이 없음' : `${won(onHand)} → ${won(onHand + diff)} (${diff > 0 ? '+' : ''}${won(diff)})`
-          : mode === 'count' ? '0 이상 정수' : '0이 아닌 정수(예: -2)'}
+      <div style={{ fontSize: 11, margin: '4px 0 6px', color: emptyDeltaBlocked ? E.loss : diff > 0 ? E.profit : diff < 0 ? E.loss : E.inkMute }}>
+        {emptyDeltaBlocked
+          ? '비어 있는 위치에서는 뺄 수 없습니다(+ 만 기초재고로 기록됩니다)'
+          : valid
+            ? diff === 0 ? '차이 없음' : `${won(onHand)} → ${won(onHand + diff)} (${diff > 0 ? '+' : ''}${won(diff)})`
+            : mode === 'count' ? '0 이상 정수' : '0이 아닌 정수(예: -2)'}
       </div>
-      <select
-        aria-label="사유"
-        value={reason}
-        onChange={(e) => setReason(e.target.value as UserReason)}
-        style={{ ...inputStyle, width: '100%', marginBottom: 6 }}
-      >
-        {USER_REASONS.map((r) => <option key={r} value={r}>{REASON_LABEL[r]}</option>)}
-      </select>
+      {!locationEmpty && (
+        <select
+          aria-label="사유"
+          value={reason}
+          onChange={(e) => setReason(e.target.value as UserReason)}
+          style={{ ...inputStyle, width: '100%', marginBottom: 6 }}
+        >
+          {USER_REASONS.map((r) => <option key={r} value={r}>{REASON_LABEL[r]}</option>)}
+        </select>
+      )}
       {diff > 0 && (
         <label style={{ display: 'block', fontSize: 11, color: E.inkSub, marginBottom: 6 }}>
           늘어난 재고 단가(원){row.costNeedsInput ? ' — 최근 lot·옛 입고 단가가 없어 필수' : ''}
