@@ -6,6 +6,10 @@
 export const STALE_DAYS = 7;
 
 export interface Inflow {
+  /** 원장 줄 id — 역전표 짝 맞춤용(없으면 짝을 찾지 않는다) */
+  id?: number;
+  /** 역전표면 되돌린 원 줄 id */
+  reversesId?: number | null;
   /** rg_inbound 원장 줄 수량(+ 들어옴 / − 나감) */
   qty: number;
   occurredAt: string;
@@ -29,10 +33,18 @@ export type RgAlert =
   | { kind: 'unsent_increase'; skuId: number; qty: number }
   | { kind: 'decrease'; skuId: number; qty: number }
   | { kind: 'inbound_stale'; skuId: number; since: string; days: number }
-  | { kind: 'unmapped_vid'; vid: string; qty: number };
+  | { kind: 'unmapped_vid'; vid: string; qty: number }
+  /** 실행기가 더한다: 비활성 SKU에 RG 재고 · 잠금 뒤 전표가 실패한 SKU */
+  | { kind: 'inactive_sku'; skuId: number; qty: number }
+  | { kind: 'move_failed'; skuId: number; error: string };
 
-/** 입고중에 남은 가장 오래된 발송 시각 — 들어온 줄을 오래된 순으로 쌓고 나간 합계(+ extraOut)만큼 앞에서 지운다 */
-export function oldestWaiting(rows: Inflow[], extraOut = 0): string | null {
+/**
+ * 입고중에 남은 가장 오래된 발송 시각 — 역전표와 그것이 되돌린 원 줄을 짝으로 뺀 뒤, 들어온 줄을 오래된 순으로 쌓고
+ * 나간 합계(+ extraOut)만큼 앞에서 지운다. 짝 없이 빼면 나중 발송을 되돌린 역전표가 앞 발송을 지운 것처럼 보인다.
+ */
+export function oldestWaiting(all: Inflow[], extraOut = 0): string | null {
+  const reversed = new Set(all.filter((r) => r.reversesId != null).map((r) => r.reversesId as number));
+  const rows = all.filter((r) => r.reversesId == null && !(r.id !== undefined && reversed.has(r.id)));
   const ins = rows.filter((r) => r.qty > 0).sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
   let out = rows.filter((r) => r.qty < 0).reduce((s, r) => s - r.qty, 0) + extraOut;
   for (const r of ins) {
@@ -83,5 +95,7 @@ export function alertText(a: RgAlert, name: (skuId: number) => string): string {
     case 'decrease': return `${name(a.skuId)} RG가 원장보다 ${a.qty}개 적다(2회 연속 — 분실·파손 의심)`;
     case 'inbound_stale': return `${name(a.skuId)} 입고중 ${a.days}일째(${a.since.slice(0, 10)} 발송분)`;
     case 'unmapped_vid': return `연결 안 된 RG 번호 ${a.vid} 재고 ${a.qty}개`;
+    case 'inactive_sku': return `비활성 SKU ${name(a.skuId)} RG 재고 ${a.qty}개`;
+    case 'move_failed': return `${name(a.skuId)} 자동 이동 실패: ${a.error}`;
   }
 }

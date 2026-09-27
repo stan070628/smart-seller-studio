@@ -25,13 +25,20 @@ export async function GET(request: NextRequest) {
       const r = await runRgAuto({ now: new Date(), forceDry });
       return {
         value: r,
-        counts: { skipped: r.skipped ? 1 : 0, auto_move: r.autoMove ? 1 : 0, skus: r.skus, moves: r.moves.length, moved_qty: r.autoMove ? r.moves.reduce((a, m) => a + m.qty, 0) : 0, alerts: r.alerts.length },
+        counts: {
+          skipped: r.skipped ? 1 : 0, auto_move: r.autoMove ? 1 : 0, skus: r.skus, moves: r.moves.length,
+          moved_qty: r.moved.reduce((a, m) => a + m.qty, 0), failed: r.failed, alerts: r.alerts.length, new_alerts: r.newAlerts.length,
+        },
       };
     }, { trigger: forceDry ? 'manual' : 'cron' });
+    // 중복 방지: 직전 실행에 없던 알림만(감소는 늘) · 머리줄은 옮길 예정(SKU:수량)이 바뀌었을 때만
     const chatId = process.env.JOB_ALERT_TELEGRAM_CHAT_ID ?? '';
-    if (chatId && !s.skipped && (s.moves.length > 0 || s.alerts.length > 0)) {
-      const head = s.autoMove ? `✅ RG 입고 완료 자동 ${s.moves.length}건` : `🟡 RG 대조 — 옮길 예정 ${s.moves.length}건(자동 이동 꺼짐)`;
-      const text = [head, ...s.alerts.map((a) => `· ${a}`)].join('\n');
+    const moveCount = s.autoMove ? s.moved.length : s.moves.length;
+    const head = s.movesChanged && moveCount > 0
+      ? (s.autoMove ? `✅ RG 입고 완료 자동 ${s.moved.length}건${s.failed > 0 ? ` · 실패 ${s.failed}건` : ''}` : `🟡 RG 대조 — 옮길 예정 ${s.moves.length}건(자동 이동 꺼짐)`)
+      : null;
+    if (chatId && !s.skipped && (head || s.newAlerts.length > 0)) {
+      const text = [head ?? '🟡 RG 대조 — 새 알림', ...s.newAlerts.map((a) => `· ${a}`)].join('\n');
       await sendTelegramMessage(chatId, text).catch((e) => console.error('[rg-reconcile] 텔레그램 실패:', e));
     }
     return NextResponse.json({ success: true, data: s });

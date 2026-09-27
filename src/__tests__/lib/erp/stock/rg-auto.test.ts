@@ -1,6 +1,6 @@
 // src/__tests__/lib/erp/stock/rg-auto.test.ts
 import { describe, it, expect } from 'vitest';
-import { STALE_DAYS, oldestWaiting, planRgAuto, type RgAutoRow } from '@/lib/erp/stock/rg-auto';
+import { STALE_DAYS, alertText, oldestWaiting, planRgAuto, type RgAutoRow } from '@/lib/erp/stock/rg-auto';
 
 const NOW = new Date('2026-10-05T00:30:00.000Z');
 const row = (o: Partial<RgAutoRow>): RgAutoRow => ({ skuId: 72, ledger: 100, actual: 100, inbound: 0, prevDiff: null, inflows: [], ...o });
@@ -13,6 +13,30 @@ describe('oldestWaiting — 입고중에 남은 가장 오래된 발송(먼저 �
     expect(oldestWaiting(rows)).toBe('2026-09-28T01:00:00Z');
     expect(oldestWaiting(rows, 3)).toBeNull();
     expect(oldestWaiting([])).toBeNull();
+  });
+
+  it('역전표는 되돌린 원 줄과 짝으로 빼고 나머지로 FIFO — 나중 발송을 되돌려도 앞 발송이 남는다', () => {
+    // 9/25 발송(id 2)을 역전표(id 3)로 되돌렸다 → 9/20 발송분이 그대로 남아 있다(짝 없이 빼면 9/20이 빠진 것처럼 보인다)
+    expect(oldestWaiting([
+      { id: 1, reversesId: null, qty: 5, occurredAt: '2026-09-20T01:00:00Z' },
+      { id: 2, reversesId: null, qty: 10, occurredAt: '2026-09-25T01:00:00Z' },
+      { id: 3, reversesId: 2, qty: -10, occurredAt: '2026-09-26T01:00:00Z' },
+    ])).toBe('2026-09-20T01:00:00Z');
+    // 나간 줄(입고 완료 이동)을 되돌리면 그 이동은 없던 일이다
+    expect(oldestWaiting([
+      { id: 1, reversesId: null, qty: 5, occurredAt: '2026-09-20T01:00:00Z' },
+      { id: 2, reversesId: null, qty: 5, occurredAt: '2026-09-28T01:00:00Z' },
+      { id: 3, reversesId: null, qty: -5, occurredAt: '2026-09-29T01:00:00Z' },
+      { id: 4, reversesId: 3, qty: 5, occurredAt: '2026-09-30T01:00:00Z' },
+    ])).toBe('2026-09-20T01:00:00Z');
+  });
+});
+
+describe('alertText — 실행기가 더하는 알림', () => {
+  it('비활성 SKU RG 재고 · 자동 이동 실패', () => {
+    const name = () => '수건';
+    expect(alertText({ kind: 'inactive_sku', skuId: 90, qty: 3 }, name)).toBe('비활성 SKU 수건 RG 재고 3개');
+    expect(alertText({ kind: 'move_failed', skuId: 90, error: '입고중 부족' }, name)).toBe('수건 자동 이동 실패: 입고중 부족');
   });
 });
 
