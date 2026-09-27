@@ -49,7 +49,8 @@ export async function unattributedGroups(db: Db): Promise<UnattributedGroup[]> {
        from erp.order_lines
       where attribution = 'unattributed' and status not in ('canceled', 'unpaid')
       group by channel, product_id, option_key
-      order by max(paid_at) desc nulls last`,
+      order by max(paid_at) desc nulls last
+      limit 200`,
   );
   return rows.map((r) => ({
     channel: r.channel as OrderChannel, productId: String(r.product_id), optionKey: String(r.option_key ?? ''), label: String(r.label ?? ''),

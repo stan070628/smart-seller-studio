@@ -18,6 +18,8 @@ describe('unattributedGroups', () => {
     }]);
     expect(seen).toContain("attribution = 'unattributed'");
     expect(seen).toContain("status not in ('canceled', 'unpaid')");
+    // (리뷰 A5~A7 #7) 대기열이 무한정 커지지 않게 묶음 수를 제한한다
+    expect(seen).toContain('limit 200');
   });
 });
 

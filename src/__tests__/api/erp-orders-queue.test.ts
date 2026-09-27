@@ -65,7 +65,17 @@ describe('/api/erp/orders 대기열', () => {
     expect((await POST(post('/api/erp/orders/link', { mode: 'x' }))).status).toBe(400);
   });
 
-  it('POST unlink — listing/line', async () => {
+  it('(리뷰 A5~A7 #3) skuId 등이 숫자가 아니면 400 — Number(true)===1로 새지 않는다', async () => {
+    const { POST } = await import('@/app/api/erp/orders/link/route');
+    const listing = await POST(post('/api/erp/orders/link', { mode: 'listing', channel: 'coupang_rg', productId: '9', optionKey: '', skuId: true, multiplier: 1, label: 'x' }));
+    expect(listing.status).toBe(400);
+    expect(m.linkListing).not.toHaveBeenCalled();
+    const line = await POST(post('/api/erp/orders/link', { mode: 'line', lineIds: [55, true], skuId: 73 }));
+    expect(line.status).toBe(400);
+    expect(m.linkLines).not.toHaveBeenCalled();
+  });
+
+  it('POST unlink — listing/line, 숫자 문자열도 받는다', async () => {
     m.unlinkListing.mockResolvedValue({ changed: [] });
     m.unlinkLine.mockResolvedValue({ changed: [] });
     const { POST } = await import('@/app/api/erp/orders/unlink/route');
@@ -73,5 +83,12 @@ describe('/api/erp/orders 대기열', () => {
     await POST(post('/api/erp/orders/unlink', { mode: 'line', lineId: 55 }));
     expect(m.unlinkListing).toHaveBeenCalledWith(client, 1801, expect.any(String));
     expect(m.unlinkLine).toHaveBeenCalledWith(client, 55, expect.any(String));
+
+    const strRes = await POST(post('/api/erp/orders/unlink', { mode: 'listing', listingId: '1801' }));
+    expect(strRes.status).toBe(200);
+    expect(m.unlinkListing).toHaveBeenLastCalledWith(client, 1801, expect.any(String));
+
+    const badRes = await POST(post('/api/erp/orders/unlink', { mode: 'listing', listingId: true }));
+    expect(badRes.status).toBe(400);
   });
 });
