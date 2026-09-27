@@ -35,24 +35,31 @@ export function mergePages(pages: ExtractedNaverPage[]): MergeResult {
   const firstSort = pages.findIndex((p) => p.sort_bar_seen);
   const used = firstSort < 0 ? pages : pages.slice(firstSort);
 
-  // seen은 "이전 페이지까지" 나온 키만 담는다 — 조각 겹침으로 생긴 중복을 걸러낸다.
-  // 같은 페이지 안의 중복 키는 다른 상품(말줄임으로 제목이 같게 잘림)이므로 걸러내지 않고
-  // dedup_key에 #2, #3…을 붙여 별도 줄로 남긴다(scan_id, dedup_key) 유니크 인덱스 대응).
-  const seen = new Set<string>();
+  // priorCount는 "이전 조각까지" 그 키가 몇 번 나왔는지(버려진 것 포함) 누적한다.
+  // 다음 조각에서 같은 키가 그 횟수만큼 나오면 겹침 사본으로 보고 그만큼만 버리고,
+  // 그보다 더 나오면 실제로 다른 상품(같은 정규화 키로 우연히 겹침)이므로 남긴다.
+  // usedSuffix는 그 키에 지금까지 부여한 접미사 중 가장 큰 값 — #2, #3…을 이어 붙인다
+  // (scan_id, dedup_key) 유니크 인덱스 대응).
+  const priorCount = new Map<string, number>();
+  const usedSuffix = new Map<string, number>();
   const listings: MergedListing[] = [];
   for (const p of used) {
     const ordered = [...p.products].sort((a, b) => a.row - b.row || a.col - b.col);
     const pageCount = new Map<string, number>();
     for (const c of ordered) {
       const key = dedupKey(c);
-      if (seen.has(key)) continue;
-      const n = (pageCount.get(key) ?? 0) + 1;
-      pageCount.set(key, n);
-      const dedup_key = n === 1 ? key : `${key}#${n}`;
+      const overlap = priorCount.get(key) ?? 0;
+      const occurrence = (pageCount.get(key) ?? 0) + 1;
+      pageCount.set(key, occurrence);
+      if (occurrence <= overlap) continue; // 이전 조각과 겹치는 사본
+
+      const suffix = (usedSuffix.get(key) ?? 0) + 1;
+      usedSuffix.set(key, suffix);
+      const dedup_key = suffix === 1 ? key : `${key}#${suffix}`;
       const { row: _row, col: _col, ...rest } = c;
       listings.push({ ...rest, rank: listings.length + 1, dedup_key, number_check: checkListingNumbers(c) });
     }
-    for (const key of pageCount.keys()) seen.add(key);
+    for (const [key, n] of pageCount) priorCount.set(key, (priorCount.get(key) ?? 0) + n);
   }
 
   return {

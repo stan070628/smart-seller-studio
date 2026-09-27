@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 /**
  * multipart 업로드 검사. 브라우저가 이미 JPEG 조각으로 만들어 보내므로
  * 여기는 백스톱이다 — Vercel은 4.5MB 넘는 본문을 함수에 넘기지 않는다(receipt/downscale.ts).
@@ -12,3 +14,12 @@ export function validateFiles(files: File[]): string | null {
   if (files.reduce((n, f) => n + f.size, 0) > MAX_TOTAL_BYTES) return '합계 용량이 너무 큽니다. 나눠서 올려 주세요.';
   return null;
 }
+
+/**
+ * 1688 업체 URL 검사. http/https만 받는다 — 업로드 폼과 PATCH가 함께 쓴다.
+ * javascript:·data: 같은 스킴이 그대로 저장·렌더되는 것을 막는다.
+ */
+export const OFFER_URL_SCHEMA = z
+  .string()
+  .url()
+  .refine((u) => /^https?:\/\//.test(u), 'http/https URL만 허용됩니다.');

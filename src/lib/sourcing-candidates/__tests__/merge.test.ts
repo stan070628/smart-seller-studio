@@ -74,4 +74,14 @@ describe('mergePages', () => {
     expect(r.listings).toHaveLength(2);
     expect(r.listings.map((l) => l.dedup_key)).toEqual([dedupKey(card(same)), `${dedupKey(card(same))}#2`]);
   });
+
+  it('다음 조각에 같은 키가 이전 조각보다 더 많이 나오면, 겹친 만큼만 버리고 나머지는 남긴다', () => {
+    // page1에 K 1개, page2에 K가 2개(첫 번째는 겹침 사본, 두 번째는 실제 다른 상품).
+    const k = { seller: '판매자', title: '상품', price: 10000 };
+    const r = mergePages([
+      page({ products: [card({ row: 0, col: 0, ...k })] }),
+      page({ products: [card({ row: 0, col: 0, ...k }), card({ row: 0, col: 1, ...k })] }),
+    ]);
+    expect(r.listings.map((l) => l.dedup_key)).toEqual([dedupKey(card(k)), `${dedupKey(card(k))}#2`]);
+  });
 });

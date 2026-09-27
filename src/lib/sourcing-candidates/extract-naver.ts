@@ -58,17 +58,22 @@ export function naverJsonSchema(): Record<string, unknown> {
  */
 export async function extractNaverPage(image: Buffer): Promise<ExtractedNaverPage> {
   const client = getAnthropicClient();
-  const response = await client.messages.create({
-    model: 'claude-opus-5',
-    max_tokens: 16000,
-    output_config: { effort: 'high', format: { type: 'json_schema', schema: naverJsonSchema() } },
-    messages: [{
-      role: 'user',
-      content: [
-        { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: image.toString('base64') } },
-        { type: 'text', text: NAVER_PROMPT },
-      ],
-    }],
-  });
+  const response = await client.messages.create(
+    {
+      model: 'claude-opus-5',
+      max_tokens: 16000,
+      output_config: { effort: 'high', format: { type: 'json_schema', schema: naverJsonSchema() } },
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: image.toString('base64') } },
+          { type: 'text', text: NAVER_PROMPT },
+        ],
+      }],
+    },
+    // 함수 제한(maxDuration=300)에 걸려 죽기 전에 이 호출이 먼저 깔끔하게 실패해야
+    // allSettled·fail()이 오류로 잡는다. 재시도는 라우트가 조각 단위로 다시 하므로 여기선 1회만.
+    { timeout: 240_000, maxRetries: 1 },
+  );
   return NAVER_PAGE_SCHEMA.parse(readStructuredText(response)) as ExtractedNaverPage;
 }

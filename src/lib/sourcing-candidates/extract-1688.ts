@@ -43,20 +43,25 @@ export async function extract1688(
   target: { title: string; price: number },
 ): Promise<Extracted1688> {
   const client = getAnthropicClient();
-  const response = await client.messages.create({
-    model: 'claude-opus-5',
-    max_tokens: 16000,
-    output_config: { effort: 'high', format: { type: 'json_schema', schema: offerJsonSchema() } },
-    messages: [{
-      role: 'user',
-      content: [
-        ...images.map((img) => ({
-          type: 'image' as const,
-          source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data: img.toString('base64') },
-        })),
-        { type: 'text' as const, text: offerPrompt(target) },
-      ],
-    }],
-  });
+  const response = await client.messages.create(
+    {
+      model: 'claude-opus-5',
+      max_tokens: 16000,
+      output_config: { effort: 'high', format: { type: 'json_schema', schema: offerJsonSchema() } },
+      messages: [{
+        role: 'user',
+        content: [
+          ...images.map((img) => ({
+            type: 'image' as const,
+            source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data: img.toString('base64') },
+          })),
+          { type: 'text' as const, text: offerPrompt(target) },
+        ],
+      }],
+    },
+    // 함수 제한(maxDuration=300)에 걸려 죽기 전에 이 호출이 먼저 깔끔하게 실패해야
+    // parseOffer의 catch·fail()이 오류로 잡는다. 재시도는 업체 재판독 라우트가 맡으므로 여기선 1회만.
+    { timeout: 240_000, maxRetries: 1 },
+  );
   return OFFER_SCHEMA.parse(readStructuredText(response)) as Extracted1688;
 }
