@@ -4,6 +4,7 @@
 // 재고보다 많이 팔 수 없다: 원장 집 재고 − 차감 대기(스위치 꺼짐 동안 쌓인 판매)보다 많으면 거부한다 — 장부 부족을 판매로 덮지 않는다.
 // 같은 요청 id(uuid = 줄 키)를 두 번 보내도 한 번만 쓴다.
 // KarrotInput.note는 지금 저장하지 않는다 — 줄에 칸이 없고 개인 문구일 수 있어 product_label·옛 장부에 붙이지 않는다. 검사만 하고 버린다.
+import { NextResponse } from 'next/server';
 import { lockSku, type Db } from '@/lib/erp/ledger/store';
 import type { DeductSummary } from './collect';
 import { runDeductions } from './deduct';
@@ -130,4 +131,11 @@ export async function recentKarrot(db: Db, limit: number): Promise<KarrotSaleRow
     lineId: Number(r.id), skuId: Number(r.sku_id), label: String(r.product_label), qty: Number(r.order_qty), amount: Number(r.amount),
     soldAt: (r.paid_at instanceof Date ? r.paid_at : new Date(String(r.paid_at))).toISOString(), status: String(r.status), deductionState: String(r.deduction_state),
   }));
+}
+
+/** KarrotError → HTTP(stock = 409 · not_found = 404 · 나머지 400). 그 밖은 null */
+export function karrotErrorResponse(e: unknown): NextResponse | null {
+  if (!(e instanceof KarrotError)) return null;
+  const status = e.code === 'stock' ? 409 : e.code === 'not_found' ? 404 : 400;
+  return NextResponse.json({ success: false, code: e.code, error: e.message }, { status });
 }
