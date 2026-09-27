@@ -31,8 +31,13 @@ function Row({ r, onPatch }: { r: ListingView; onPatch: Props['onPatch'] }) {
     setPrice(String(r.effective_price));
     setEditing(true);
   };
+  /** 입력칸을 비우면 사람이 고친 값을 지운다 — AI 판매가로 되돌아간다 */
   const commitPrice = () => {
     setEditing(false);
+    if (price.trim() === '') {
+      if (r.price_override !== null) void onPatch(r.id, { price_override: null });
+      return;
+    }
     const n = Number(price.replace(/[^\d]/g, ''));
     if (n > 0 && n !== r.effective_price) void onPatch(r.id, { price_override: n });
   };
@@ -107,7 +112,8 @@ export default function ListingTable({ rows, onPatch }: Props) {
       {excluded.length > 0 && (
         <div>
           <button className="text-sm text-gray-400 underline" onClick={() => setShowExcluded((v) => !v)}>
-            자동 제외 {excluded.length}건 {showExcluded ? '접기' : '펼치기'} (하한선 {won(excluded[0].floor)} 미만)
+            자동 제외 {excluded.length}건 {showExcluded ? '접기' : '펼치기'}
+            {' '}(하한선 {won(excluded[0].floor)} 미만{excluded.some((r) => r.excluded_override === true) ? '·수동 제외 포함' : ''})
           </button>
           {showExcluded && (
             <table className="mt-1 w-full text-sm">{head}<tbody>{excluded.map((r) => <Row key={r.id} r={r} onPatch={onPatch} />)}</tbody></table>

@@ -7,7 +7,7 @@ import { getSupabaseServerClient, STORAGE_BUCKET } from '@/lib/supabase/server';
 
 const PatchSchema = z.object({
   url: OFFER_URL_SCHEMA.nullable().optional(),
-  cny_override: z.number().positive().nullable().optional(),
+  cny_override: z.number().positive().max(99999999).nullable().optional(),
   adopted: z.boolean().optional(),
 }).strict();
 

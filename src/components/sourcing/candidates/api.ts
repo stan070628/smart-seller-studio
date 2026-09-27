@@ -35,9 +35,9 @@ export interface ScanSummary {
 export const api = {
   listScans: () => call<ScanSummary[]>('/api/sourcing-candidates/scans'),
   uploadScan: (files: File[]) => call<{ id: string }>('/api/sourcing-candidates/scans', { method: 'POST', body: form(files) }),
-  /** 이제 조각 하나만 실패해도 스캔 전체가 실패한다 — 성공 시 partial_error는 기대하지 않는다(타입엔 남겨두되 의존하지 않는다) */
+  /** 조각 하나만 실패해도 스캔 전체가 실패한다 — 성공 응답엔 partial_error가 없다 */
   parseScan: (id: string) =>
-    call<{ listing_count: number; partial_error?: string | null }>(`/api/sourcing-candidates/scans/${id}/parse`, { method: 'POST' }),
+    call<{ listing_count: number }>(`/api/sourcing-candidates/scans/${id}/parse`, { method: 'POST' }),
   listings: (q: { scan?: string; starred?: boolean }) =>
     call<ListingView[]>(`/api/sourcing-candidates/listings?${q.scan ? `scan=${q.scan}` : 'starred=1'}`),
   patchListing: (id: string, data: Record<string, unknown>) => call<void>(`/api/sourcing-candidates/listings/${id}`, json(data)),

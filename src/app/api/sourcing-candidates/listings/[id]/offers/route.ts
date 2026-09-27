@@ -23,7 +23,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { id: listingId } = await params;
   const pool = getSourcingPool();
 
-  const { rowCount } = await pool.query(`SELECT 1 FROM sourcing_listings WHERE id = $1 AND user_id = $2`, [listingId, user.userId]);
+  let rowCount: number | null;
+  try {
+    ({ rowCount } = await pool.query(`SELECT 1 FROM sourcing_listings WHERE id = $1 AND user_id = $2`, [listingId, user.userId]));
+  } catch (err) {
+    if ((err as { code?: string }).code === '22P02') {
+      return NextResponse.json({ success: false, error: '잘못된 id입니다.' }, { status: 400 });
+    }
+    return NextResponse.json({ success: false, error: err instanceof Error ? err.message : '서버 오류' }, { status: 500 });
+  }
   if (!rowCount) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
 
   let formData: FormData;

@@ -78,7 +78,9 @@ export function mergePages(pages: ExtractedNaverPage[]): MergeResult {
   const listings: MergedListing[] = [];
   let prevPage: ExtractedListing[] | null = null;
   for (const p of used) {
-    const ordered = [...p.products].sort((a, b) => a.row - b.row || a.col - b.col);
+    // price <= 0인 카드는 판독 오류다 — sourcing_listings.price는 DB CHECK(price > 0)라
+    // 그대로 넘기면 저장 자체가 실패한다. 겹침 비교·순위 계산 어느 쪽에도 넣지 않는다.
+    const ordered = [...p.products].filter((c) => c.price > 0).sort((a, b) => a.row - b.row || a.col - b.col);
     // 앞 조각 카드 하나는 겹침 사본을 최대 하나만 흡수한다(같은 카드가 두 번 겹쳐 찍히진 않는다)
     const claimedPrev = new Set<number>();
     const droppedCur = new Set<number>(); // 이번 조각에서 겹침 사본으로 판정해 버린 카드의 인덱스
@@ -128,8 +130,19 @@ export function mergePages(pages: ExtractedNaverPage[]): MergeResult {
       const suffix = (usedSuffix.get(key) ?? 0) + 1;
       usedSuffix.set(key, suffix);
       const dedup_key = suffix === 1 ? key : `${key}#${suffix}`;
-      const { row: _row, col: _col, ...rest } = c;
-      listings.push({ ...rest, rank: listings.length + 1, dedup_key, number_check: checkListingNumbers(c) });
+      listings.push({
+        title: c.title,
+        seller: c.seller,
+        price: c.price,
+        list_price: c.list_price,
+        discount_pct: c.discount_pct,
+        review_count: c.review_count,
+        rating: c.rating,
+        badges: c.badges,
+        rank: listings.length + 1,
+        dedup_key,
+        number_check: checkListingNumbers(c),
+      });
     });
     prevPage = ordered;
   }

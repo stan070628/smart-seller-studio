@@ -68,6 +68,15 @@ describe('mergePages', () => {
     expect(r.listings[0].number_check).toMatch(/할인율/);
   });
 
+  it('price가 0 이하인 카드는 버린다 — sourcing_listings.price는 DB CHECK(price > 0)', () => {
+    const r = mergePages([page({ products: [
+      card({ row: 0, col: 0, title: '오독', price: 0 }),
+      card({ row: 0, col: 1, title: '음수', price: -100 }),
+      card({ row: 0, col: 2, title: '정상', price: 9900 }),
+    ] })]);
+    expect(r.listings.map((l) => l.title)).toEqual(['정상']);
+  });
+
   it('같은 페이지 안에서 키가 겹치면 서로 다른 상품으로 보고 #2를 붙인다', () => {
     const same = { seller: '판매자', title: '상품', price: 10000 };
     const r = mergePages([

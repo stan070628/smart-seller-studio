@@ -8,7 +8,7 @@ const PatchSchema = z.object({
   excluded_override: z.boolean().nullable().optional(),
   memo: z.string().max(1000).nullable().optional(),
   size: z.enum(['xsmall', 'small', 'medium']).optional(),
-  price_override: z.number().int().positive().nullable().optional(),
+  price_override: z.number().int().positive().max(2147483647).nullable().optional(),
   title: z.string().min(1).optional(),
   review_count: z.number().int().nonnegative().max(2147483647).nullable().optional(),
   recent6m_review_count: z.number().int().nonnegative().max(2147483647).nullable().optional(),

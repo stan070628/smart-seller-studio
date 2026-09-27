@@ -109,8 +109,6 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const merged = mergePages(naverPages);
-  // 조각 하나라도 실패하면 위에서 이미 502로 반환했으므로 여기 도달했다는 것은 전부 성공했다는 뜻이다
-  const partialError = null;
 
   const client = await pool.connect();
   try {
@@ -130,8 +128,8 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     // parsing일 때만 반영한다 — 0행이면 그사이 다른 실행(재시도)이 먼저 끝난 것이다.
     const { rowCount: updated } = await client.query(
       `UPDATE sourcing_scans SET parse_status = 'parsed', category_path = $2, sort_label = $3,
-         parse_error = $4, updated_at = now() WHERE id = $1 AND parse_status = 'parsing'`,
-      [id, merged.category_path, merged.sort_label, partialError],
+         parse_error = NULL, updated_at = now() WHERE id = $1 AND parse_status = 'parsing'`,
+      [id, merged.category_path, merged.sort_label],
     );
     if (!updated) {
       await client.query('ROLLBACK');
@@ -150,6 +148,6 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 
   return NextResponse.json({
     success: true,
-    data: { id, listing_count: merged.listings.length, category_path: merged.category_path, sort_label: merged.sort_label, partial_error: partialError },
+    data: { id, listing_count: merged.listings.length, category_path: merged.category_path, sort_label: merged.sort_label },
   });
 }
