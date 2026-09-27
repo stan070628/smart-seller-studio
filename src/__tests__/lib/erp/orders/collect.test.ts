@@ -202,6 +202,21 @@ describe('collectChannel', () => {
     const written = m.upsertOrderLines.mock.calls[0][1][0];
     expect(written.resolution).toMatchObject({ attribution: 'mapped', alloc: [{ skuId: 42, qty: 2 }] });
   });
+
+  it('(1-C2b) 실제 실행에서는 리스팅·사람이 정한 SKU 조회가 채널 잠금 뒤에 있다 — link.ts가 잠금 사이에 끼어들 수 있어서다', async () => {
+    m.loadListingIndex.mockImplementation(async () => {
+      seq.push('LOAD_LISTINGS');
+      return new ListingIndex([
+        { listingId: 5, channel: 'coupang_rg', productId: '80000000001', optionKey: '', linkMode: 'single', skus: [{ skuId: 7, multiplier: 1 }] },
+      ]);
+    });
+    m.loadManualSkus.mockImplementation(async () => { seq.push('LOAD_MANUAL'); return new Map(); });
+    await collectChannel(pool, adapter(), { now: NOW, dryRun: false, deduct });
+    const lockIdx = seq.findIndex((s) => s.startsWith('select pg_advisory_xact_lock'));
+    expect(lockIdx).toBeGreaterThanOrEqual(0);
+    expect(seq.indexOf('LOAD_LISTINGS')).toBeGreaterThan(lockIdx);
+    expect(seq.indexOf('LOAD_MANUAL')).toBeGreaterThan(lockIdx);
+  });
 });
 
 describe('collectOrders · reportCounts', () => {

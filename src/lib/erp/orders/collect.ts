@@ -1,8 +1,11 @@
 // src/lib/erp/orders/collect.ts
 // 채널 수집 한 번(설계 해석 #15·#24). 순서: 커서 행 보장 → 채널 임대(lease — autocommit, 못 잡으면 busy·실패 보고) → 구간(window.ts)
-//   → 채널 호출(트랜잭션 밖 — 수십 초) → 리스팅 연결·옛 장부 대상
-//   → 한 트랜잭션[pg_advisory_xact_lock(7102, 채널) → upsert → 사라진 라인(두 번 연속) → unknown 재판정(#23) → 옛 장부 → 차감 → 커서]
-//   → 임대 반납(주인일 때만).
+//   → 채널 호출(트랜잭션 밖 — 수십 초)
+//   → 한 트랜잭션[pg_advisory_xact_lock(7102, 채널) → 리스팅 연결·사람이 정한 SKU(manual_sku_id)·옛 장부 대상 판정(resolveFetched) → upsert
+//     → 사라진 라인(두 번 연속) → unknown 재판정(#23) → 옛 장부 → 차감 → 커서] → 임대 반납(주인일 때만).
+// (1-C2b ①) 판정을 잠금 뒤로 미룬다 — 사람의 링크(link.ts, 같은 채널 잠금)가 잠금을 잡고 commit하는 사이에 끼어들면,
+//   잠금 전에 읽은 리스팅·manual_sku_id로 upsert해 사람이 갓 정한 연결을 덮어쓰게 된다. dryRun은 잠글 것도 커밋할 것도
+//   없으니 트랜잭션 밖에서 그대로 판정한다.
 // 세션 advisory lock은 쓰지 않는다 — Supavisor 트랜잭션 풀러에서는 문장마다 다른 백엔드에 붙어 잠금·해제가 어긋난다.
 // 과거 보충(backfillFrom — 결정 5 · 설계 해석 #25): 구간 시작만 그날 KST 0시로 바꾼다(끝 = 지금). 사라짐 판정은 통째로 끄고(absent_since도 안 적는다)
 //   커서는 움직이지 않는다. 임대·트랜잭션 잠금·upsert·옛 장부·unknown 재판정·차감은 그대로 — 차감은 진짜 기초 시각으로 판정하므로 기초 이전 라인은 none(pre_cutover).
@@ -23,7 +26,7 @@ import {
   advanceCursor, ensureCursorRow, loadLegacyIndex, loadListingIndex, loadManualSkus, markAbsentCanceled, readCursor, readCutover, readDeductSetting,
   reevaluateUnknownLines, releaseLease, takeLease, upsertOrderLines, type AbsenceRefusal, type AbsenceResult, type ResolvedLine,
 } from './store';
-import type { OrderAdapter, OrderChannel, RejectedLine } from './types';
+import type { OrderAdapter, OrderChannel, OrderLine, RejectedLine } from './types';
 import { backfillEnd, backfillStart, windowFor } from './window';
 
 /** 주문 수집 트랜잭션 잠금 네임스페이스(원장 SKU 잠금 7101과 겹치지 않는다) */
@@ -96,6 +99,28 @@ const errText = (e: unknown) => maskPII(e instanceof Error ? e.message : String(
 
 const NO_ABSENCE: AbsenceResult = { ids: [], legacyKeys: [], marked: 0, absent: 0, refused: null };
 
+/**
+ * 리스팅 연결 · 사람이 정한 SKU(manual_sku_id) · 옛 장부 대상을 판정한다. dryRun은 트랜잭션·잠금 밖에서 이 함수를 부르고,
+ * 실제 수집은 채널 잠금(pg_advisory_xact_lock)을 잡은 뒤에 부른다 — 사람의 링크(link.ts, 같은 잠금)가 잠금 사이에
+ * 끼어들어 커밋하면, 잠금 전에 읽은 판정으로 upsert해 사람이 갓 정한 연결을 덮어쓰게 된다.
+ */
+async function resolveFetched(
+  c: Db, ch: OrderChannel, lines: OrderLine[], bfStart: Date | null, bfEnd: Date | null,
+): Promise<{ resolved: ResolvedLine[]; backfillSkipped: number }> {
+  const listings = await loadListingIndex(c);
+  const legacyIdx = await loadLegacyIndex(c);
+  const manual = await loadManualSkus(c, ch, lines.map((l) => l.externalLineId));
+  // 보충 구간 밖(시작 전 · 끝 뒤)에 주문된 라인은 쓰지 않고 센다 — 끝 뒤 라인은 다음 조각이나 보통 수집이 받는다
+  const kept = bfStart && bfEnd
+    ? lines.filter((l) => { const t = Date.parse(l.orderedAt); return t >= bfStart.getTime() && t < bfEnd.getTime(); })
+    : lines;
+  const resolved: ResolvedLine[] = kept.map((l) => {
+    const resolution = applyManualSku(l, resolveLine(l, listings), manual.get(l.externalLineId) ?? null);
+    return { ...l, resolution, legacyKey: legacyKeyOf(l), legacy: pickLegacy(l, resolution, legacyIdx) };
+  });
+  return { resolved, backfillSkipped: lines.length - kept.length };
+}
+
 export async function collectChannel(
   pool: Connectable,
   adapter: OrderAdapter,
@@ -134,27 +159,26 @@ export async function collectChannel(
     report.rejected = res.rejected.length;
     report.rejectedLines = res.rejected.slice(0, REJECTED_SAMPLE);
 
-    const listings = await loadListingIndex(c);
-    const legacyIdx = await loadLegacyIndex(c);
-    const manual = await loadManualSkus(c, ch);
-    // 보충 구간 밖(시작 전 · 끝 뒤)에 주문된 라인은 쓰지 않고 센다 — 끝 뒤 라인은 다음 조각이나 보통 수집이 받는다
-    const kept = bfStart && bfEnd
-      ? res.lines.filter((l) => { const t = Date.parse(l.orderedAt); return t >= bfStart.getTime() && t < bfEnd.getTime(); })
-      : res.lines;
-    report.backfillSkipped = res.lines.length - kept.length;
-    const resolved: ResolvedLine[] = kept.map((l) => {
-      const resolution = applyManualSku(l, resolveLine(l, listings), manual.get(l.externalLineId) ?? null);
-      return { ...l, resolution, legacyKey: legacyKeyOf(l), legacy: pickLegacy(l, resolution, legacyIdx) };
-    });
-    report.fetched = resolved.length;
-    report.unattributed = resolved.filter((r) => r.resolution.attribution === 'unattributed').length;
-    report.unknownStatus = resolved.filter((r) => r.status === 'unknown').length;
-    if (opts.dryRun) return { ...report, ok: true };
+    if (opts.dryRun) {
+      // 읽기만 — 잠글 것도 커밋할 것도 없으니 트랜잭션 밖에서 바로 판정한다
+      const { resolved, backfillSkipped } = await resolveFetched(c, ch, res.lines, bfStart, bfEnd);
+      report.backfillSkipped = backfillSkipped;
+      report.fetched = resolved.length;
+      report.unattributed = resolved.filter((r) => r.resolution.attribution === 'unattributed').length;
+      report.unknownStatus = resolved.filter((r) => r.status === 'unknown').length;
+      return { ...report, ok: true };
+    }
 
     await c.query('BEGIN');
     try {
       // 임대가 만료돼 다른 실행이 들어와도 쓰기는 채널마다 한 줄로 선다(트랜잭션 잠금 — 풀러에서도 안전)
       await c.query('select pg_advisory_xact_lock($1::int, $2::int)', [LOCK_NS, CHANNEL_LOCK[ch]]);
+      // 리스팅·사람이 정한 SKU 판정은 잠금을 잡은 뒤에 한다(위 resolveFetched 주석) — link.ts가 잠금 사이에 끼어드는 창을 없앤다
+      const { resolved, backfillSkipped } = await resolveFetched(c, ch, res.lines, bfStart, bfEnd);
+      report.backfillSkipped = backfillSkipped;
+      report.fetched = resolved.length;
+      report.unattributed = resolved.filter((r) => r.resolution.attribution === 'unattributed').length;
+      report.unknownStatus = resolved.filter((r) => r.status === 'unknown').length;
       const up = await upsertOrderLines(c, resolved);
       // 과거 보충은 사라짐 판정을 하지 않는다 — 긴 옛 구간의 누락을 취소로 읽으면 멀쩡한 판매가 무효가 된다
       const absent = !backfill && res.absenceMeansCancel && res.cover

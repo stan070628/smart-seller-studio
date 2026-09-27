@@ -58,11 +58,16 @@ export async function loadLegacyIndex(db: Db): Promise<LegacyIndex> {
   return idx;
 }
 
-/** (1-C2b ①) 사람이 정한 SKU — external_line_id → sku_id. 수집 판정이 이 값을 먼저 본다(applyManualSku) */
-export async function loadManualSkus(db: Db, ch: OrderChannel): Promise<Map<string, number>> {
+/**
+ * (1-C2b ①) 사람이 정한 SKU — external_line_id → sku_id. 수집 판정이 이 값을 먼저 본다(applyManualSku).
+ * externalLineIds로 이번에 받은 라인만 좁힌다 — 채널 전체를 긁지 않는다. 비어 있으면 조회하지 않는다.
+ */
+export async function loadManualSkus(db: Db, ch: OrderChannel, externalLineIds: string[]): Promise<Map<string, number>> {
+  if (externalLineIds.length === 0) return new Map();
   const { rows } = await db.query(
-    `select external_line_id, manual_sku_id from erp.order_lines where channel = $1 and manual_sku_id is not null`,
-    [ch],
+    `select external_line_id, manual_sku_id from erp.order_lines
+      where channel = $1 and manual_sku_id is not null and external_line_id = any($2::text[])`,
+    [ch, externalLineIds],
   );
   return new Map(rows.map((r) => [String(r.external_line_id), Number(r.manual_sku_id)]));
 }

@@ -22,25 +22,30 @@ const iso = (v: unknown): string | null => (v === null || v === undefined ? null
 const nOrNull = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
 const sameAlloc = (a: AllocItem[], b: AllocItem[]) => JSON.stringify(a) === JSON.stringify(b);
 
-export async function relinkLines(db: Db, lineIds: number[], at: string): Promise<RelinkResult> {
+export async function relinkLines(db: Db, channel: OrderChannel, lineIds: number[], at: string): Promise<RelinkResult> {
   if (lineIds.length === 0) return { checked: 0, changed: [], legacy: null, deduct: null };
   const { rows } = await db.query(
     `select l.id, l.channel, o.external_order_id, l.external_line_id, l.ordered_at, l.paid_at, l.raw_status, l.status,
             l.product_id, l.option_key, l.alt_product_id, l.product_label, l.order_qty, l.unit_price, l.amount, l.manual_sku_id,
             l.listing_id, l.alloc, l.attribution, l.unattributed_reason, l.legacy_key, l.legacy_product_cost_id::text as legacy_product_cost_id, l.legacy_qty
        from erp.order_lines l join erp.orders o on o.id = l.order_id
-      where l.id = any($1::bigint[])
+      where l.id = any($1::bigint[]) and l.channel = $2
       order by l.id`,
-    [lineIds],
+    [lineIds, channel],
   );
+  // 채널 조건으로 걸러져 빠진 줄이 있다 — 다른 채널의 줄이거나 존재하지 않는 id다. 호출자가 잘못된 채널로 잠금을 잡았을 수 있어
+  // 조용히 건너뛰지 않고 던진다(호출자가 채널 잠금 7102를 이 채널로 잡았다고 가정하고 쓰기 때문이다).
+  if (rows.length !== new Set(lineIds).size) throw new RangeError('relink: 채널이 다르거나 없는 줄이 있다');
   const listings = await loadListingIndex(db);
   const legacyIdx = await loadLegacyIndex(db);
   const changed: number[] = [];
   const keys: string[] = [];
   for (const r of rows) {
+    const orderedAt = iso(r.ordered_at);
+    if (orderedAt === null) throw new Error('relink: ordered_at은 not null이다 — 없으면 데이터 오류');
     const line: OrderLine = {
       channel: r.channel as OrderChannel, externalOrderId: String(r.external_order_id), externalLineId: String(r.external_line_id),
-      orderedAt: iso(r.ordered_at) as string, paidAt: iso(r.paid_at), rawStatus: String(r.raw_status), status: r.status as StdStatus,
+      orderedAt, paidAt: iso(r.paid_at), rawStatus: String(r.raw_status), status: r.status as StdStatus,
       productId: String(r.product_id ?? ''), optionKey: String(r.option_key ?? ''), altProductId: r.alt_product_id ?? null,
       productLabel: String(r.product_label ?? ''), qty: Number(r.order_qty), unitPrice: Number(r.unit_price), amount: Number(r.amount),
     };

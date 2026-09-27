@@ -336,14 +336,20 @@ describe('syncLegacySales', () => {
 });
 
 describe('loadManualSkus', () => {
-  it('그 채널의 manual_sku_id가 있는 줄만 external_line_id → sku', async () => {
+  it('그 채널의 manual_sku_id가 있는 줄 중 넘긴 라인 키만 external_line_id → sku', async () => {
     const f = fakeDb((sql, params) => {
       if (sql.includes('manual_sku_id is not null')) {
-        expect(params).toEqual(['toss']);
+        expect(params).toEqual(['toss', ['318224910', '318224911']]);
         return { rows: [{ external_line_id: '318224910', manual_sku_id: '73' }] };
       }
       return undefined;
     });
-    expect(await loadManualSkus(f.db, 'toss')).toEqual(new Map([['318224910', 73]]));
+    expect(await loadManualSkus(f.db, 'toss', ['318224910', '318224911'])).toEqual(new Map([['318224910', 73]]));
+  });
+
+  it('라인 키가 비었으면 조회하지 않는다', async () => {
+    const f = fakeDb(() => undefined);
+    expect(await loadManualSkus(f.db, 'toss', [])).toEqual(new Map());
+    expect(f.calls).toHaveLength(0);
   });
 });

@@ -142,4 +142,12 @@ describe('applyManualSku — 사람이 정한 SKU가 판정을 이긴다', () =>
     const r = base({ attribution: 'mapped', reason: null, alloc: [{ skuId: 7, qty: 1 }] });
     expect(applyManualSku(line({ qty: 1 }), r, 8).alloc).toEqual([{ skuId: 8, qty: 2 }]);
   });
+
+  it('묶음(bundle) 판정이어도 사람이 정한 SKU 하나로 접힌다 — 여러 SKU 중 사람이 고른 하나만 판다는 뜻이다(link.ts가 묶음 연결 자체는 따로 막는다)', () => {
+    const r = base({ attribution: 'mapped', reason: null, alloc: [{ skuId: 7, qty: 1 }, { skuId: 8, qty: 2 }] });
+    expect(applyManualSku(line({ qty: 1 }), r, 8)).toEqual({
+      listingId: 3, attribution: 'mapped', reason: null, alloc: [{ skuId: 8, qty: 2 }],
+      listingSkus: [{ skuId: 7, multiplier: 1 }, { skuId: 8, multiplier: 2 }],
+    });
+  });
 });
