@@ -35,7 +35,7 @@
 | `…/storage-path.ts` | Storage 경로 |
 | `…/extract-naver.ts` · `…/extract-1688.ts` | Claude 판독 |
 | `…/parse-offer.ts` | 1688 업체 판독·저장 (라우트 2곳 공용) |
-| `supabase/migrations/120_sourcing_candidates.sql` | 테이블 3개 |
+| `supabase/migrations/125_sourcing_candidates.sql` | 테이블 3개 |
 | `src/app/api/sourcing-candidates/**` | 라우트 6개 |
 | `src/components/sourcing/candidates/*.tsx` | 화면 |
 | `src/app/sourcing/candidates/page.tsx` · `print/page.tsx` | 페이지 |
@@ -1249,7 +1249,7 @@ git commit -m "feat(sourcing-candidates): 브라우저에서 캡처 빈칸 자�
 ### Task 10: 마이그레이션
 
 **Files:**
-- Create: `supabase/migrations/120_sourcing_candidates.sql`
+- Create: `supabase/migrations/125_sourcing_candidates.sql`
 
 - [ ] **Step 1: SQL 작성**
 
@@ -1354,7 +1354,7 @@ Expected: `[ 'sourcing_listings', 'sourcing_offers', 'sourcing_scans' ]`
 - [ ] **Step 3: Commit**
 
 ```bash
-git add supabase/migrations/120_sourcing_candidates.sql
+git add supabase/migrations/125_sourcing_candidates.sql
 git commit -m "feat(db): 소싱 후보 수집기 테이블 3개"
 ```
 
@@ -2822,7 +2822,7 @@ gh pr create --title "feat: 소싱 후보 수집기 (/sourcing/candidates)" --bo
 - 제출 목록 인쇄 (`/sourcing/candidates/print`)
 
 ## 마이그레이션
-- `supabase/migrations/120_sourcing_candidates.sql` — SQL Editor 수동 적용 완료
+- `supabase/migrations/125_sourcing_candidates.sql` — SQL Editor 수동 적용 완료
 
 ## 수동 E2E
 (Task 17 표 결과)
