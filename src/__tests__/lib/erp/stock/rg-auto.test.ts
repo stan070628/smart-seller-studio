@@ -1,6 +1,6 @@
 // src/__tests__/lib/erp/stock/rg-auto.test.ts
 import { describe, it, expect } from 'vitest';
-import { STALE_DAYS, alertText, oldestWaiting, planRgAuto, type RgAutoRow } from '@/lib/erp/stock/rg-auto';
+import { STALE_DAYS, alertKey, alertText, oldestWaiting, planRgAuto, stripAlertKeys, type RgAutoRow } from '@/lib/erp/stock/rg-auto';
 
 const NOW = new Date('2026-10-05T00:30:00.000Z');
 const row = (o: Partial<RgAutoRow>): RgAutoRow => ({ skuId: 72, ledger: 100, actual: 100, inbound: 0, prevDiff: null, inflows: [], ...o });
@@ -37,6 +37,24 @@ describe('alertText — 실행기가 더하는 알림', () => {
     const name = () => '수건';
     expect(alertText({ kind: 'inactive_sku', skuId: 90, qty: 3 }, name)).toBe('비활성 SKU 수건 RG 재고 3개');
     expect(alertText({ kind: 'move_failed', skuId: 90, error: '입고중 부족' }, name)).toBe('수건 자동 이동 실패: 입고중 부족');
+  });
+});
+
+describe('alertKey · stripAlertKeys — 텔레그램 중복 방지는 문구가 아니라 고정 키로', () => {
+  it('종류별 고정 키(입고중 초과는 발송 시각까지 — 날짜 수가 늘어도 같은 키)', () => {
+    expect(alertKey({ kind: 'unsent_increase', skuId: 72, qty: 3 })).toBe('unsent_increase:72');
+    expect(alertKey({ kind: 'decrease', skuId: 72, qty: 2 })).toBe('decrease:72');
+    expect(alertKey({ kind: 'inbound_stale', skuId: 72, since: '2026-09-20T00:00:00.000Z', days: 15 }))
+      .toBe(alertKey({ kind: 'inbound_stale', skuId: 72, since: '2026-09-20T00:00:00.000Z', days: 16 }));
+    expect(alertKey({ kind: 'unmapped_vid', vid: '959', qty: 2 })).toBe('unmapped_vid:959');
+    expect(alertKey({ kind: 'inactive_sku', skuId: 90, qty: 3 })).toBe('inactive_sku:90');
+    expect(alertKey({ kind: 'move_failed', skuId: 90, error: 'x' })).toBe('move_failed:90');
+  });
+
+  it('기록의 「키|문구」 앞머리를 떼어 보인다(키 없는 문구·문구 속 |는 그대로)', () => {
+    expect(stripAlertKeys('unsent_increase:72|A 많다 / move_failed:72|A 자동 이동 실패: x|y')).toBe('A 많다 / A 자동 이동 실패: x|y');
+    expect(stripAlertKeys('그냥 문구')).toBe('그냥 문구');
+    expect(stripAlertKeys(null)).toBeNull();
   });
 });
 

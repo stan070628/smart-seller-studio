@@ -4,7 +4,7 @@
 /** (1-C2b ④) 마지막 RG 자동 대조 — 옮김·옮길 예정·확인 필요. 사람의 「반영」은 재고 표의 RG 대조로 그대로 한다 */
 import { useEffect, useState } from 'react';
 import { E } from '@/lib/design-tokens';
-import type { RgAutoLast } from '@/lib/erp/stock/rg-auto';
+import { stripAlertKeys, type RgAutoLast } from '@/lib/erp/stock/rg-auto';
 import { fetchRgAuto } from './api';
 import { fmtKst } from './stock-view';
 
@@ -27,7 +27,7 @@ export default function RgAutoPanel() {
           {r.label} — 원장 {r.ledger} · 실재고 {r.actual} · 입고중 {r.inbound}
           {r.moved > 0 && <span style={{ color: E.profit }}> · 자동 이동 {r.moved}</span>}
           {r.moved === 0 && r.planned > 0 && <span style={{ color: E.warn }}> · 옮길 예정 {r.planned}</span>}
-          {r.alert && <span style={{ color: E.loss }}> · {r.alert}</span>}
+          {r.alert && <span style={{ color: E.loss }}> · {stripAlertKeys(r.alert)}</span>}
         </div>
       ))}
     </div>

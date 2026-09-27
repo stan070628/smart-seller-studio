@@ -4,7 +4,8 @@
 //   잠금 → 잠금 뒤 원장 RG·입고중을 다시 읽어 min(실재고 − 원장, 입고중)으로 재계산 → SKU별 savepoint 안에서 입고중 → RG 전표
 //   (한 SKU 실패는 그 SKU만 되돌리고 알림) → 기록(rg_recon_snapshots — moved는 실제로 옮긴 수량)].
 // 「2회 연속 감소」의 직전 차이는 20시간보다 앞선 기록만 본다(몇 분 간격 수동·dry 실행이 연속으로 잡히지 않게).
-// 텔레그램 중복 방지용으로 직전 실행(이번 시각보다 앞선 마지막 run)과 비교해 newAlerts·movesChanged를 돌려준다 — 감소 알림은 늘 새 알림.
+// 텔레그램 중복 방지용으로 직전 실행(이번 시각보다 앞선 마지막 run)과 고정 키(alertKey — 기록에 「키|문구」)로 비교해 newAlerts·movesChanged를
+// 돌려준다 — 감소 알림은 늘 새 알림.
 // 자동 이동 스위치(erp.settings rg_auto_arrive_enabled)가 꺼져 있거나 forceDry면 「옮길 예정」만 기록한다.
 // RG 수집이 busy(15분 주문 수집 orders-sync가 임대를 잡고 있다 — 길어진 실행과 겹칠 때)면 30초 간격으로 4번까지 다시 부른다 — 그래도 못 하면 던진다.
 import { randomUUID } from 'node:crypto';
@@ -16,7 +17,7 @@ import { lockSku, postTransfer } from '@/lib/erp/ledger/store';
 import { rgQtyBySku, type RgStock } from '@/lib/erp/ledger/opening';
 import { fetchRgStock, readRgLinks } from '@/lib/erp/ledger/opening-db';
 import { activeSkuIds, rgLedgerBySku } from '@/lib/erp/stock/queries';
-import { alertText, planRgAuto, type Inflow, type RgAlert } from './rg-auto';
+import { ALERT_SEP, alertKey, alertText, keyOfStored, planRgAuto, type Inflow, type RgAlert } from './rg-auto';
 
 export interface RgAutoDeps {
   pool: Connectable;
@@ -163,9 +164,9 @@ export async function runRgAuto(p: { now: Date; forceDry: boolean; deps?: RgAuto
       const alertOf = new Map<string, string[]>();
       for (const a of alerts) {
         const k = a.kind === 'unmapped_vid' ? `v:${a.vid}` : `s:${a.skuId}`;
-        alertOf.set(k, [...(alertOf.get(k) ?? []), alertText(a, name)]);
+        alertOf.set(k, [...(alertOf.get(k) ?? []), `${alertKey(a)}|${alertText(a, name)}`]);
       }
-      const joined = (k: string) => (alertOf.get(k) ?? []).join(' / ') || null;
+      const joined = (k: string) => (alertOf.get(k) ?? []).join(ALERT_SEP) || null;
       for (const skuId of [...skuIds, ...inactive]) {
         await c.query(SNAP_SQL, [runId, at, skuId, null, ledger.get(skuId) ?? 0, actual.bySku.get(skuId) ?? 0, inbound.get(skuId) ?? 0,
           moveOf.get(skuId) ?? 0, movedOf.get(skuId) ?? 0, joined(`s:${skuId}`)]);
@@ -180,8 +181,9 @@ export async function runRgAuto(p: { now: Date; forceDry: boolean; deps?: RgAuto
     }
 
     const texts = alerts.map((a) => alertText(a, name));
-    const seen = new Set(lastRun.flatMap((r) => (r.alert ? String(r.alert).split(' / ') : [])));
-    const newAlerts = texts.filter((t, i) => alerts[i].kind === 'decrease' || !seen.has(t));
+    // 직전 실행의 고정 키(「키|문구」 앞머리) — 문구가 아니라 키로 비교해 날짜 수·수량만 바뀐 같은 사안은 다시 보내지 않는다
+    const seen = new Set(lastRun.flatMap((r) => (r.alert ? String(r.alert).split(ALERT_SEP).map(keyOfStored) : [])));
+    const newAlerts = texts.filter((_, i) => alerts[i].kind === 'decrease' || !seen.has(alertKey(alerts[i])));
     const prevMoves = lastRun.filter((r) => r.sku_id != null && Number(r.planned_move) > 0).map((r) => ({ skuId: Number(r.sku_id), qty: Number(r.planned_move) }));
     return {
       skipped: null, autoMove, runId, skus: skuIds.length, moves: plan.moves,

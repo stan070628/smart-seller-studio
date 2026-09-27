@@ -71,4 +71,15 @@ describe('GET /api/cron/rg-reconcile', () => {
     expect(m.send.mock.calls[0][1]).toContain('실패 1건');
     expect(m.withJobRun).toHaveBeenCalled();
   });
+
+  it('자동 이동으로 실제로 옮겼으면 옮길 예정이 직전과 같아도(movesChanged false) 늘 보낸다', async () => {
+    m.runRgAuto.mockResolvedValue({
+      skipped: null, autoMove: true, runId: 'r', skus: 17, moves: [{ skuId: 72, qty: 5 }], moved: [{ skuId: 72, qty: 5 }], failed: 0,
+      alerts: [], newAlerts: [], movesChanged: false,
+    });
+    const { GET } = await import('@/app/api/cron/rg-reconcile/route');
+    await GET(cron());
+    expect(m.send).toHaveBeenCalledTimes(1);
+    expect(m.send.mock.calls[0][1]).toContain('RG 입고 완료 자동 1건');
+  });
 });

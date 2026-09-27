@@ -89,6 +89,33 @@ export interface RgAutoLast {
   rows: { skuId: number | null; vid: string | null; label: string; ledger: number; actual: number; inbound: number; planned: number; moved: number; alert: string | null }[];
 }
 
+/**
+ * 텔레그램 중복 방지용 고정 키 — 문구(수량·날짜 수)가 바뀌어도 같은 사안이면 같은 키. 기록(rg_recon_snapshots.alert)에는
+ * 「키|문구」로 적고(' / '로 여럿), 화면·API는 stripAlertKeys로 앞머리를 떼어 보인다. 감소는 키와 무관하게 늘 보낸다.
+ */
+export function alertKey(a: RgAlert): string {
+  switch (a.kind) {
+    case 'inbound_stale': return `inbound_stale:${a.skuId}:${a.since}`;
+    case 'unmapped_vid': return `unmapped_vid:${a.vid}`;
+    default: return `${a.kind}:${a.skuId}`;
+  }
+}
+
+const KEY_PREFIX = /^(?:unsent_increase|decrease|inbound_stale|unmapped_vid|inactive_sku|move_failed):[^|]*\|/;
+export const ALERT_SEP = ' / ';
+
+/** 기록의 「키|문구」 → 키(키가 없는 옛 문구는 null) */
+export function keyOfStored(part: string): string | null {
+  const m = KEY_PREFIX.exec(part);
+  return m ? m[0].slice(0, -1) : null;
+}
+
+/** 기록 alert에서 「키|」 앞머리를 뗀다(여러 개면 각각) */
+export function stripAlertKeys(alert: string | null): string | null {
+  if (alert === null) return null;
+  return alert.split(ALERT_SEP).map((x) => x.replace(KEY_PREFIX, '')).join(ALERT_SEP);
+}
+
 export function alertText(a: RgAlert, name: (skuId: number) => string): string {
   switch (a.kind) {
     case 'unsent_increase': return `${name(a.skuId)} RG가 원장보다 ${a.qty}개 많다(보낸 기록 없음)`;

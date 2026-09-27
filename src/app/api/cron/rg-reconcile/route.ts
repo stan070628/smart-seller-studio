@@ -31,12 +31,12 @@ export async function GET(request: NextRequest) {
         },
       };
     }, { trigger: forceDry ? 'manual' : 'cron' });
-    // 중복 방지: 직전 실행에 없던 알림만(감소는 늘) · 머리줄은 옮길 예정(SKU:수량)이 바뀌었을 때만
+    // 중복 방지: 직전 실행에 없던 알림만(고정 키 비교 · 감소는 늘). 머리줄 — 자동 이동으로 실제로 옮겼으면 늘,
+    // 자동 이동이 꺼져 있으면 옮길 예정(SKU:수량)이 직전과 달라졌을 때만
     const chatId = process.env.JOB_ALERT_TELEGRAM_CHAT_ID ?? '';
-    const moveCount = s.autoMove ? s.moved.length : s.moves.length;
-    const head = s.movesChanged && moveCount > 0
-      ? (s.autoMove ? `✅ RG 입고 완료 자동 ${s.moved.length}건${s.failed > 0 ? ` · 실패 ${s.failed}건` : ''}` : `🟡 RG 대조 — 옮길 예정 ${s.moves.length}건(자동 이동 꺼짐)`)
-      : null;
+    const head = s.autoMove
+      ? (s.moved.length > 0 ? `✅ RG 입고 완료 자동 ${s.moved.length}건${s.failed > 0 ? ` · 실패 ${s.failed}건` : ''}` : null)
+      : (s.movesChanged && s.moves.length > 0 ? `🟡 RG 대조 — 옮길 예정 ${s.moves.length}건(자동 이동 꺼짐)` : null);
     if (chatId && !s.skipped && (head || s.newAlerts.length > 0)) {
       const text = [head ?? '🟡 RG 대조 — 새 알림', ...s.newAlerts.map((a) => `· ${a}`)].join('\n');
       await sendTelegramMessage(chatId, text).catch((e) => console.error('[rg-reconcile] 텔레그램 실패:', e));

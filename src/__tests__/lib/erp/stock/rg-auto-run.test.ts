@@ -12,6 +12,8 @@ import { runRgAuto } from '@/lib/erp/stock/rg-auto-run';
 const NOW = new Date('2026-10-05T00:30:00.000Z');
 const INC72 = '극세사 타월 · 블루 RG가 원장보다 3개 많다(보낸 기록 없음)';
 const UNMAPPED = '연결 안 된 RG 번호 95999999999 재고 2개';
+const K_INC72 = `unsent_increase:72|${INC72}`;
+const K_UNMAPPED = `unmapped_vid:95999999999|${UNMAPPED}`;
 
 interface Sku { id: number; name: string; option: string | null; vid: string; ledger: number; inbound: number; active?: boolean }
 const S72: Sku = { id: 72, name: '극세사 타월', option: '블루', vid: '95401822934', ledger: 100, inbound: 5 };
@@ -89,8 +91,8 @@ describe('runRgAuto', () => {
     expect(r.alerts).toEqual([INC72, UNMAPPED]);
     expect(m.postTransfer).not.toHaveBeenCalled();
     expect(snapsOf()).toEqual([
-      [72, null, 100, 108, 5, 5, 0, INC72],
-      [null, '95999999999', 0, 2, 0, 0, 0, UNMAPPED],
+      [72, null, 100, 108, 5, 5, 0, K_INC72],
+      [null, '95999999999', 0, 2, 0, 0, 0, K_UNMAPPED],
     ]);
   });
 
@@ -148,7 +150,7 @@ describe('runRgAuto', () => {
     expect(r.failed).toBe(1);
     expect(r.alerts).toContain('극세사 타월 · 블루 자동 이동 실패: 입고중 부족');
     expect(snapsOf()).toEqual([
-      [72, null, 100, 108, 5, 5, 0, `${INC72} / 극세사 타월 · 블루 자동 이동 실패: 입고중 부족`],
+      [72, null, 100, 108, 5, 5, 0, `${K_INC72} / move_failed:72|극세사 타월 · 블루 자동 이동 실패: 입고중 부족`],
       [80, null, 10, 14, 4, 4, 4, null],
     ]);
   });
@@ -158,7 +160,7 @@ describe('runRgAuto', () => {
     const r = await runRgAuto({ now: NOW, forceDry: false, deps: deps(c, [{ vid: '95401822934', qty: 108 }, { vid: '95400000080', qty: 3 }]) });
     expect(r.alerts).toContain('비활성 SKU 수건 RG 재고 3개');
     expect(m.postTransfer).toHaveBeenCalledTimes(1);
-    expect(snapsOf()).toContainEqual([80, null, 10, 3, 4, 0, 0, '비활성 SKU 수건 RG 재고 3개']);
+    expect(snapsOf()).toContainEqual([80, null, 10, 3, 4, 0, 0, 'inactive_sku:80|비활성 SKU 수건 RG 재고 3개']);
   });
 
   it('직전 차이(2회 연속 감소 판정)는 20시간보다 앞선 기록에서만 읽는다', async () => {
@@ -183,8 +185,8 @@ describe('runRgAuto', () => {
 
   it('텔레그램 중복 방지 — 직전 실행과 같은 알림·같은 옮길 예정이면 newAlerts 비고 movesChanged false', async () => {
     const prevRun = [
-      { sku_id: '72', vid: null, planned_move: 5, alert: INC72 },
-      { sku_id: null, vid: '95999999999', planned_move: 0, alert: UNMAPPED },
+      { sku_id: '72', vid: null, planned_move: 5, alert: K_INC72 },
+      { sku_id: null, vid: '95999999999', planned_move: 0, alert: K_UNMAPPED },
     ];
     const r = await runRgAuto({ now: NOW, forceDry: false, deps: deps(client({ deduct: true, auto: false, prevRun })) });
     expect(r.newAlerts).toEqual([]);
@@ -195,7 +197,7 @@ describe('runRgAuto', () => {
 
   it('텔레그램 중복 방지 — 새 알림만 · 옮길 예정 수량이 바뀌면 movesChanged · 감소는 늘 보낸다', async () => {
     const DEC = '극세사 타월 · 블루 RG가 원장보다 2개 적다(2회 연속 — 분실·파손 의심)';
-    const prevRun = [{ sku_id: '72', vid: null, planned_move: 4, alert: DEC }];
+    const prevRun = [{ sku_id: '72', vid: null, planned_move: 4, alert: `decrease:72|${DEC}` }];
     const c = client({ deduct: true, auto: false, prevRun, prevDiff: [{ sku_id: '72', diff: -1 }] });
     const r = await runRgAuto({ now: NOW, forceDry: false, deps: deps(c, [{ vid: '95401822934', qty: 98 }, { vid: '95999999999', qty: 2 }]) });
     expect(r.alerts).toEqual([DEC, UNMAPPED]);
@@ -226,5 +228,15 @@ describe('runRgAuto', () => {
     d2.collectRg.mockResolvedValue({ ok: false, error: 'busy', busy: true });
     await expect(runRgAuto({ now: NOW, forceDry: false, deps: d2 })).rejects.toThrow(/RG 주문 수집/);
     expect(d2.collectRg).toHaveBeenCalledTimes(5);
+  });
+
+  it('텔레그램 중복 방지는 고정 키로 — 입고중 초과 날짜 수가 늘어도(같은 발송분) 다시 보내지 않는다 · 수량이 바뀐 증가도 같은 키', async () => {
+    const flows = [{ id: '1', reverses_id: null, sku_id: '72', qty: 5, occurred_at: new Date('2026-09-20T00:00:00Z') }];
+    const prevRun = [{ sku_id: '72', vid: null, planned_move: 0,
+      alert: 'inbound_stale:72:2026-09-20T00:00:00.000Z|극세사 타월 · 블루 입고중 14일째(2026-09-20 발송분) / unsent_increase:72|극세사 타월 · 블루 RG가 원장보다 1개 많다(보낸 기록 없음)' }];
+    const c = client({ deduct: true, auto: false, flows, prevRun });
+    const r = await runRgAuto({ now: NOW, forceDry: false, deps: deps(c, [{ vid: '95401822934', qty: 100 }]) });
+    expect(r.alerts).toEqual(['극세사 타월 · 블루 입고중 15일째(2026-09-20 발송분)']);
+    expect(r.newAlerts).toEqual([]);
   });
 });

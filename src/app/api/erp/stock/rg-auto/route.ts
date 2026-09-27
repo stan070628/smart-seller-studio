@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/supabase/auth';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { erpError } from '@/lib/erp/stock/http';
-import type { RgAutoLast } from '@/lib/erp/stock/rg-auto';
+import { stripAlertKeys, type RgAutoLast } from '@/lib/erp/stock/rg-auto';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
       runAt: rows[0] ? new Date(rows[0].run_at).toISOString() : null,
       rows: rows.map((r) => ({
         skuId: r.sku_id === null ? null : Number(r.sku_id), vid: r.vid ?? null, label: String(r.label), ledger: Number(r.ledger), actual: Number(r.actual),
-        inbound: Number(r.inbound), planned: Number(r.planned_move), moved: Number(r.moved), alert: r.alert ?? null,
+        inbound: Number(r.inbound), planned: Number(r.planned_move), moved: Number(r.moved), alert: stripAlertKeys(r.alert ?? null),
       })),
     };
     return NextResponse.json({ success: true, data });
