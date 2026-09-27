@@ -16,6 +16,9 @@ export const LECTURE_FEE_RATE = 0.1;
 export const LECTURE_COST_RATIO_PASS = 0.3;
 export const LECTURE_COST_RATIO_BEST = 0.1;
 
+/** 강의는 1688 누적을 6개월로 보고 나눈다. 집계 기간 미확인 */
+export const LECTURE_CUMULATIVE_DAYS = 180;
+
 export interface LectureJudgement {
   landed: number;
   costRatio: number;
@@ -37,7 +40,7 @@ export function judgeLecture(cny: number, price: number): LectureJudgement | nul
   };
 }
 
-/** 1688 누적 판매량 → 일 판매량. 강의는 6개월 누적으로 보고 180으로 나눈다(기간 미확인) */
+/** 1688 누적 판매량 → 일 판매량 */
 export function dailySalesFromCumulative(sold: number): number {
-  return sold / 180;
+  return sold / LECTURE_CUMULATIVE_DAYS;
 }

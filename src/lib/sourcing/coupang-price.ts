@@ -104,9 +104,14 @@ const PRICE_LINKED_RATE = COMMISSION_RATE + SALES_VAT_RATE;
  *
  * 원가가 낮을수록 ②가, 높을수록 ①이 지배한다.
  */
+/** 마진율 조건(①)만 만족하는 판매가 — 올림 전 원값. breakEvenPrice·minViablePrice가 공유한다 */
+function priceForTargetRate(effectiveCost: number, size: LogisticsSize): number {
+  return (effectiveCost + LOGISTICS_FEE[size]) / (1 - PRICE_LINKED_RATE - TARGET_MARGIN_RATE);
+}
+
 export function breakEvenPrice(effectiveCost: number, size: LogisticsSize): number {
   const logi = LOGISTICS_FEE[size];
-  const byRate = (effectiveCost + logi) / (1 - PRICE_LINKED_RATE - TARGET_MARGIN_RATE);
+  const byRate = priceForTargetRate(effectiveCost, size);
   // logi * (1 + MARGIN_TO_LOGISTICS): 물류비 자체를 회수(logi)하고,
   // 그 위에 물류비의 MARGIN_TO_LOGISTICS배를 마진으로 더 얹는다.
   const byAmount = (effectiveCost + logi * (1 + MARGIN_TO_LOGISTICS)) / (1 - PRICE_LINKED_RATE);
@@ -139,7 +144,7 @@ export function marginOf(
  * ② 조건은 채택한 1688 원가로 marginVerdict가 판정한다.
  */
 export function minViablePrice(effectiveCost: number, size: LogisticsSize): number {
-  return Math.ceil((effectiveCost + LOGISTICS_FEE[size]) / (1 - PRICE_LINKED_RATE - TARGET_MARGIN_RATE));
+  return Math.ceil(priceForTargetRate(effectiveCost, size));
 }
 
 export interface MarginVerdict {
@@ -152,16 +157,25 @@ export interface MarginVerdict {
   pass: boolean;
 }
 
-/** breakEvenPrice가 역산하는 두 조건을 정방향으로 판정한다 */
+/**
+ * breakEvenPrice가 역산하는 두 조건을 정방향으로 판정한다.
+ *
+ * passRate·passAmount는 반올림 전 마진(raw)으로 판정한다 — breakEvenPrice·minViablePrice는
+ * Math.ceil(반올림 전 공식)으로 하한가를 구하는데, 그 값을 marginOf의 반올림된 마진으로
+ * 다시 판정하면 반올림 오차 때문에 방금 하한선이 보장한 가격이 도로 불통과로 나올 수
+ * 있다(원가·사이즈 조합의 약 13~18%에서 실측). 화면에 보여줄 `margin`·`marginRate`는
+ * 종전대로 반올림된 marginOf 값을 쓴다 — 판정과 표시값을 분리한다.
+ */
 export function marginVerdict(
   sellingPrice: number,
   effectiveCost: number,
   size: LogisticsSize,
 ): MarginVerdict {
+  const raw = sellingPrice * (1 - PRICE_LINKED_RATE) - LOGISTICS_FEE[size] - effectiveCost;
   const margin = marginOf(sellingPrice, effectiveCost, size);
   const marginRate = sellingPrice > 0 ? margin / sellingPrice : 0;
-  const passRate = marginRate >= TARGET_MARGIN_RATE;
-  const passAmount = margin >= LOGISTICS_FEE[size] * MARGIN_TO_LOGISTICS;
+  const passRate = sellingPrice > 0 && raw / sellingPrice >= TARGET_MARGIN_RATE;
+  const passAmount = raw >= LOGISTICS_FEE[size] * MARGIN_TO_LOGISTICS;
   return { margin, marginRate, passRate, passAmount, pass: passRate && passAmount };
 }
 

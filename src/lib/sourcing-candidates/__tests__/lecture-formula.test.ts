@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { judgeLecture } from '@/lib/sourcing/lecture-formula';
+import { judgeLecture, dailySalesFromCumulative } from '@/lib/sourcing/lecture-formula';
 
 describe('judgeLecture', () => {
   it('핸들 토시 #3: ¥9.20·14,390원 → 원가율 18.8%, 30% 통과·10% 미달', () => {
@@ -22,5 +22,11 @@ describe('judgeLecture', () => {
   it('0 이하 입력은 null', () => {
     expect(judgeLecture(0, 10000)).toBeNull();
     expect(judgeLecture(5, 0)).toBeNull();
+  });
+});
+
+describe('dailySalesFromCumulative', () => {
+  it('7,088건 누적 → 일 39.38건 (180일 기준)', () => {
+    expect(dailySalesFromCumulative(7088)).toBeCloseTo(39.38, 2);
   });
 });
