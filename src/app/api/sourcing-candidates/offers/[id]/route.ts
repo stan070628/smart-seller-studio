@@ -7,12 +7,13 @@ import { OFFER_URL_SCHEMA } from '@/lib/sourcing-candidates/upload';
 const PatchSchema = z.object({
   url: OFFER_URL_SCHEMA.nullable().optional(),
   cny_override: z.number().positive().nullable().optional(),
-  adopted: z.literal(true).optional(),
+  adopted: z.boolean().optional(),
 }).strict();
 
 /**
  * PATCH /api/sourcing-candidates/offers/[id]
  * adopted: true면 같은 후보의 다른 업체 채택을 풀고 이것을 채택한다(후보당 하나 — 부분 유니크 인덱스).
+ * adopted: false면 채택 취소 — 이것만 푼다("채택 취소").
  */
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -36,9 +37,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       await client.query('ROLLBACK');
       return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
     }
-    if (adopted) {
+    if (adopted === true) {
       await client.query(`UPDATE sourcing_offers SET adopted = false, updated_at = now() WHERE listing_id = $1 AND adopted`, [rows[0].listing_id]);
       await client.query(`UPDATE sourcing_offers SET adopted = true, updated_at = now() WHERE id = $1`, [id]);
+    } else if (adopted === false) {
+      await client.query(`UPDATE sourcing_offers SET adopted = false, updated_at = now() WHERE id = $1`, [id]);
     }
     const entries = Object.entries(fields);
     if (entries.length) {

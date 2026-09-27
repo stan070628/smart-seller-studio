@@ -117,11 +117,20 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
           l.review_count, l.rating, l.badges, l.dedup_key, l.number_check],
       );
     }
-    await client.query(
+    // 회수된 뒤 뒤늦게 끝난 옛 실행이 최신 시도의 결과를 덮어쓰거나 중복 삽입하지 못하도록
+    // parsing일 때만 반영한다 — 0행이면 그사이 다른 실행(재시도)이 먼저 끝난 것이다.
+    const { rowCount: updated } = await client.query(
       `UPDATE sourcing_scans SET parse_status = 'parsed', category_path = $2, sort_label = $3,
-         parse_error = $4, updated_at = now() WHERE id = $1`,
+         parse_error = $4, updated_at = now() WHERE id = $1 AND parse_status = 'parsing'`,
       [id, merged.category_path, merged.sort_label, partialError],
     );
+    if (!updated) {
+      await client.query('ROLLBACK');
+      return NextResponse.json(
+        { success: false, error: '다른 판독이 먼저 끝났습니다. 새로고침해 주세요.' },
+        { status: 409 },
+      );
+    }
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK');
