@@ -26,7 +26,7 @@ export default function UnattributedDialog({ onClose, onChanged }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [sku, setSku] = useState<StockListRow | null>(null);
-  const [mult, setMult] = useState(1);
+  const [multRaw, setMultRaw] = useState('1');
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -42,17 +42,21 @@ export default function UnattributedDialog({ onClose, onChanged }: Props) {
     setBusy(false);
     if (!ok) { toast.error(msg); return; }
     toast.success(msg);
-    setOpen(null); setSku(null); setMult(1);
+    setOpen(null); setSku(null); setMultRaw('1');
     await load();
     onChanged();
   }
   async function link(g: UnattributedGroup, mode: 'listing' | 'line') {
     if (!sku) return;
     setBusy(true);
-    const r = mode === 'listing'
-      ? await postLinkListing({ channel: g.channel, productId: g.productId, optionKey: g.optionKey, skuId: sku.skuId, multiplier: mult, label: g.label })
-      : await postLinkLines(g.lineIds, sku.skuId);
-    await done(r.ok, r.ok ? `연결했습니다 — ${g.lines}줄` : r.error);
+    const multiplier = Math.max(1, Math.min(100, parseInt(multRaw, 10) || 1));
+    if (mode === 'listing') {
+      const r = await postLinkListing({ channel: g.channel, productId: g.productId, optionKey: g.optionKey, skuId: sku.skuId, multiplier, label: g.label });
+      await done(r.ok, r.ok ? `연결했습니다 — ${r.data.relinked.changed.length}줄 반영` : r.error);
+    } else {
+      const r = await postLinkLines(g.lineIds, sku.skuId);
+      await done(r.ok, r.ok ? `연결했습니다 — ${r.data.changed.length}줄 반영` : r.error);
+    }
   }
   async function unlink(b: { mode: 'listing'; listingId: number } | { mode: 'line'; lineId: number }) {
     setBusy(true);
@@ -84,19 +88,25 @@ export default function UnattributedDialog({ onClose, onChanged }: Props) {
                     <td style={td}>{g.reasons.map((r) => REASON[r] ?? r).join(', ')}</td>
                     <td style={td}>{won(g.lines)}줄 · {won(g.qty)}개</td>
                     <td style={td}>{g.firstPaidAt ? fmtKst(g.firstPaidAt) : '—'}{g.lastPaidAt && g.lastPaidAt !== g.firstPaidAt ? ` ~ ${fmtKst(g.lastPaidAt)}` : ''}</td>
-                    <td style={td}><button type="button" onClick={() => { setOpen(open === keyOf(g) ? null : keyOf(g)); setSku(null); setMult(1); }} style={btnStyle}>연결…</button></td>
+                    <td style={td}><button type="button" onClick={() => { setOpen(open === keyOf(g) ? null : keyOf(g)); setSku(null); setMultRaw('1'); }} style={btnStyle}>연결…</button></td>
                   </tr>
-                  {open === keyOf(g) && (
-                    <tr><td colSpan={7} style={{ ...td, background: E.ground }}>
-                      <SkuPicker value={sku} onChange={setSku} />
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
-                        <label>배수 <input type="number" min={1} max={100} value={mult} onChange={(e) => setMult(Math.max(1, Math.min(100, Number(e.target.value) || 1)))} style={{ width: 48 }} /></label>
-                        <button type="button" disabled={!sku || busy} onClick={() => void link(g, 'listing')} style={primaryBtnStyle}>리스팅으로 연결(앞으로도)</button>
-                        <button type="button" disabled={!sku || busy} onClick={() => void link(g, 'line')} style={btnStyle}>이 {g.lines}줄만 연결</button>
-                        <span style={{ color: E.inkSub }}>배수 = 주문 1개가 SKU 몇 개인가(묶음 상품). 「이 줄만」은 배수를 쓰지 않는다</span>
-                      </div>
-                    </td></tr>
-                  )}
+                  {open === keyOf(g) && (() => {
+                    const overCap = g.lineIds.length > 200;
+                    const noProduct = g.productId === '';
+                    return (
+                      <tr><td colSpan={7} style={{ ...td, background: E.ground }}>
+                        <SkuPicker value={sku} onChange={setSku} />
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
+                          <label>배수 <input type="number" min={1} max={100} value={multRaw} onChange={(e) => setMultRaw(e.target.value)} style={{ width: 48 }} /></label>
+                          <button type="button" disabled={!sku || busy || noProduct} title={noProduct ? '상품번호가 없는 주문은 「이 줄만 연결」' : undefined} onClick={() => void link(g, 'listing')} style={primaryBtnStyle}>리스팅으로 연결(앞으로도)</button>
+                          <button type="button" disabled={!sku || busy || overCap} title={overCap ? '200줄 넘는 묶음은 리스팅으로 연결' : undefined} onClick={() => void link(g, 'line')} style={btnStyle}>이 {g.lines}줄만 연결</button>
+                          <span style={{ color: E.inkSub }}>배수 = 주문 1개가 SKU 몇 개인가(묶음 상품). 「이 줄만」은 배수를 쓰지 않는다</span>
+                          {noProduct && <span style={{ color: E.warn }}>상품번호가 없는 주문은 「이 줄만 연결」</span>}
+                          {overCap && <span style={{ color: E.warn }}>200줄 넘는 묶음은 리스팅으로 연결</span>}
+                        </div>
+                      </td></tr>
+                    );
+                  })()}
                 </React.Fragment>
               ))}
             </tbody>
