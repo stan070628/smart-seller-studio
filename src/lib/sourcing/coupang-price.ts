@@ -95,6 +95,11 @@ export const DEFAULT_ORDER_QTY = 30;
  */
 const PRICE_LINKED_RATE = COMMISSION_RATE + SALES_VAT_RATE;
 
+/** 마진율 조건(①)만 만족하는 판매가 — 올림 전 원값. breakEvenPrice·minViablePrice가 공유한다 */
+function priceForTargetRate(effectiveCost: number, size: LogisticsSize): number {
+  return (effectiveCost + LOGISTICS_FEE[size]) / (1 - PRICE_LINKED_RATE - TARGET_MARGIN_RATE);
+}
+
 /**
  * 진입 가능한 최소 판매가(원).
  *
@@ -104,11 +109,6 @@ const PRICE_LINKED_RATE = COMMISSION_RATE + SALES_VAT_RATE;
  *
  * 원가가 낮을수록 ②가, 높을수록 ①이 지배한다.
  */
-/** 마진율 조건(①)만 만족하는 판매가 — 올림 전 원값. breakEvenPrice·minViablePrice가 공유한다 */
-function priceForTargetRate(effectiveCost: number, size: LogisticsSize): number {
-  return (effectiveCost + LOGISTICS_FEE[size]) / (1 - PRICE_LINKED_RATE - TARGET_MARGIN_RATE);
-}
-
 export function breakEvenPrice(effectiveCost: number, size: LogisticsSize): number {
   const logi = LOGISTICS_FEE[size];
   const byRate = priceForTargetRate(effectiveCost, size);
