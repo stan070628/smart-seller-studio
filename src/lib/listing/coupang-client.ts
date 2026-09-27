@@ -1037,6 +1037,23 @@ export class CoupangClient {
   // ─── fms 주문별 즉시할인쿠폰 조회 ──────────────────────────
 
   /**
+   * (1-C2b ②) 주문번호에 적용된 즉시할인 쿠폰 목록(fms). 판매자배송·RG 모두. 다운로드쿠폰은 나오지 않는다.
+   * 🔴 실패하면 던진다 — 「할인 0원」과 「조회 실패」를 갈라야 다음 수집이 다시 조회한다(getOrderImmediateDiscount는 0으로 삼킨다).
+   * 응답 본문은 로그에 싣지 않는다.
+   */
+  async getOrderCoupons(orderId: string): Promise<Array<Record<string, unknown>>> {
+    const url = `/v2/providers/fms/apis/api/v2/vendors/${this.vendorId}/${orderId}/coupons`;
+    await sleep(API_DELAY);
+    const res = await this.request<unknown>('GET', url);
+    const data = res.data as unknown;
+    if (Array.isArray(data)) return data as Array<Record<string, unknown>>;
+    if (data && typeof data === 'object' && Array.isArray((data as { content?: unknown }).content)) return (data as { content: Array<Record<string, unknown>> }).content;
+    const top = res as unknown as { content?: unknown };
+    if (Array.isArray(top.content)) return top.content as Array<Record<string, unknown>>;
+    return [];
+  }
+
+  /**
    * 주문번호로 적용된 즉시할인쿠폰 목록 조회 (fms API)
    * Wing/RG 모두 지원. 다운로드쿠폰은 미반환.
    * @returns PRICE 타입 쿠폰의 discount 합계 (원)
