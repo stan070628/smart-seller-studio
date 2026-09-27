@@ -1,0 +1,81 @@
+// src/lib/erp/stock/rg-auto.ts
+// (1-C2b ④) 매일 RG 대조의 판정(순수). 설계 결정 2: 입고 완료만 자동 — RG 실재고가 원장보다 많고 그 SKU에 입고중(rg_inbound)이 있으면
+// min(차이, 입고중)만큼 입고중 → RG. 그 밖은 알림만: 보낸 기록 없는 증가 · 2회 연속 감소(분실·파손 의심) · 입고중 7일 초과 · 연결 안 된 RG 번호.
+// 전제: 판매 차감이 켜져 있다(꺼져 있으면 판매분이 차이로 보인다 — 실행기가 막는다).
+
+export const STALE_DAYS = 7;
+
+export interface Inflow {
+  /** rg_inbound 원장 줄 수량(+ 들어옴 / − 나감) */
+  qty: number;
+  occurredAt: string;
+}
+
+export interface RgAutoRow {
+  skuId: number;
+  /** 원장 RG */
+  ledger: number;
+  /** 쿠팡 RG 판매가능 재고(배수 환산) */
+  actual: number;
+  /** 원장 입고중 */
+  inbound: number;
+  /** 직전 실행의 actual − ledger. 기록 없으면 null */
+  prevDiff: number | null;
+  /** 이 SKU의 rg_inbound 원장 줄(시각순) */
+  inflows: Inflow[];
+}
+
+export type RgAlert =
+  | { kind: 'unsent_increase'; skuId: number; qty: number }
+  | { kind: 'decrease'; skuId: number; qty: number }
+  | { kind: 'inbound_stale'; skuId: number; since: string; days: number }
+  | { kind: 'unmapped_vid'; vid: string; qty: number };
+
+/** 입고중에 남은 가장 오래된 발송 시각 — 들어온 줄을 오래된 순으로 쌓고 나간 합계(+ extraOut)만큼 앞에서 지운다 */
+export function oldestWaiting(rows: Inflow[], extraOut = 0): string | null {
+  const ins = rows.filter((r) => r.qty > 0).sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
+  let out = rows.filter((r) => r.qty < 0).reduce((s, r) => s - r.qty, 0) + extraOut;
+  for (const r of ins) {
+    if (out >= r.qty) { out -= r.qty; continue; }
+    return r.occurredAt;
+  }
+  return null;
+}
+
+export function planRgAuto(
+  rows: RgAutoRow[],
+  unmapped: { vid: string; qty: number }[],
+  now: Date,
+): { moves: { skuId: number; qty: number }[]; alerts: RgAlert[] } {
+  const moves: { skuId: number; qty: number }[] = [];
+  const alerts: RgAlert[] = [];
+  for (const r of [...rows].sort((a, b) => a.skuId - b.skuId)) {
+    const d = r.actual - r.ledger;
+    let move = 0;
+    if (d > 0) {
+      move = Math.min(d, Math.max(0, r.inbound));
+      if (move > 0) moves.push({ skuId: r.skuId, qty: move });
+      if (d - move > 0) alerts.push({ kind: 'unsent_increase', skuId: r.skuId, qty: d - move });
+    } else if (d < 0 && r.prevDiff !== null && r.prevDiff < 0) {
+      alerts.push({ kind: 'decrease', skuId: r.skuId, qty: -d });
+    }
+    if (r.inbound - move > 0) {
+      const since = oldestWaiting(r.inflows, move);
+      if (since) {
+        const days = Math.floor((now.getTime() - Date.parse(since)) / 86_400_000);
+        if (days > STALE_DAYS) alerts.push({ kind: 'inbound_stale', skuId: r.skuId, since, days });
+      }
+    }
+  }
+  for (const u of unmapped) if (u.qty > 0) alerts.push({ kind: 'unmapped_vid', vid: u.vid, qty: u.qty });
+  return { moves, alerts };
+}
+
+export function alertText(a: RgAlert, name: (skuId: number) => string): string {
+  switch (a.kind) {
+    case 'unsent_increase': return `${name(a.skuId)} RG가 원장보다 ${a.qty}개 많다(보낸 기록 없음)`;
+    case 'decrease': return `${name(a.skuId)} RG가 원장보다 ${a.qty}개 적다(2회 연속 — 분실·파손 의심)`;
+    case 'inbound_stale': return `${name(a.skuId)} 입고중 ${a.days}일째(${a.since.slice(0, 10)} 발송분)`;
+    case 'unmapped_vid': return `연결 안 된 RG 번호 ${a.vid} 재고 ${a.qty}개`;
+  }
+}
