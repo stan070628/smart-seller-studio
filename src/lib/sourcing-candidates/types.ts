@@ -66,6 +66,8 @@ export interface ListingRow {
   /** 네이버 상세 페이지 별점 옆 ⓘ에서 사람이 직접 옮겨 적는다 — ⭐ 후보에만 있다 */
   recent6m_review_count: number | null;
   recent6m_rating: number | null;
+  /** 네이버 상품 페이지 정확한 주소. 캡처엔 안 찍히므로 사람이 직접 입력한다 — ⭐ 후보에만 있다 */
+  naver_url: string | null;
 }
 
 /** DB 행 (sourcing_offers) */

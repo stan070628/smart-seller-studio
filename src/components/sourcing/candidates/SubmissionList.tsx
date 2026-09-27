@@ -2,12 +2,31 @@
 
 import { useEffect, useState } from 'react';
 import { api } from '@/components/sourcing/candidates/api';
+import { listingHref } from '@/lib/sourcing-candidates/naver-link';
 import type { ListingView } from '@/lib/sourcing-candidates/view';
 
 const won = (n: number) => `${Math.round(n).toLocaleString('ko-KR')}원`;
 const pct = (r: number) => `${(r * 100).toFixed(1)}%`;
 const VERDICT = { same: '같음', diff: '차이', different: '다름' } as const;
 const isHttpUrl = (u: string) => /^https?:\/\//i.test(u);
+
+/**
+ * 네이버 상품 링크. naver_url이 있으면 정확한 상품 페이지("상품"), 없으면 검색
+ * 링크("검색")로 대신한다 — 화면에서만 구분한다. 인쇄에서는 검색 링크를 주소로
+ * 들고 다니면 오히려 헷갈리므로 정확한 주소가 없을 땐 "주소 없음"이라고만 적는다.
+ */
+function NaverCell({ l }: { l: ListingView }) {
+  return (
+    <>
+      <span className="print:hidden">
+        <a href={listingHref(l)} target="_blank" rel="noopener noreferrer" className="underline">
+          {l.naver_url ? '상품' : '검색'}
+        </a>
+      </span>
+      <span className="hidden print:inline break-all">{l.naver_url ?? '주소 없음'}</span>
+    </>
+  );
+}
 
 /** "2,793건 (23%) · 4.88" 형태. 누적 대비 최근 비중이 100%를 넘으면 ⚠로 표시한다 */
 function Recent6mCell({ l }: { l: ListingView }) {
@@ -49,7 +68,7 @@ export default function SubmissionList() {
       </p>
       <table className="w-full border border-white/15 text-xs print:border-gray-400">
         <thead className="bg-white/5 print:bg-gray-50"><tr>
-          {['#', '상품', '카테고리', '판매가', '리뷰', '최근 6개월', '1688', '위안', '강의 원가율', '실측 마진', '같은 물건', '메모'].map((h) =>
+          {['#', '상품', '네이버', '카테고리', '판매가', '리뷰', '최근 6개월', '1688', '위안', '강의 원가율', '실측 마진', '같은 물건', '메모'].map((h) =>
             <th key={h} className="border border-white/15 px-1 py-1 text-left print:border-gray-300">{h}</th>)}
         </tr></thead>
         <tbody>
@@ -61,6 +80,7 @@ export default function SubmissionList() {
                 <td className="border border-white/15 px-1 print:border-gray-300">
                   {l.title}<div className="text-gray-400 print:text-gray-600">{l.seller}</div>
                 </td>
+                <td className="border border-white/15 px-1 print:border-gray-300"><NaverCell l={l} /></td>
                 <td className="border border-white/15 px-1 print:border-gray-300">{l.category_path ?? '—'}</td>
                 <td className="border border-white/15 px-1 text-right print:border-gray-300">{won(l.effective_price)}</td>
                 <td className="border border-white/15 px-1 text-right print:border-gray-300">{l.review_count?.toLocaleString('ko-KR') ?? '—'}</td>

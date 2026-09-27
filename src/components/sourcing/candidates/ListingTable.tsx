@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import type { ListingView } from '@/lib/sourcing-candidates/view';
 import type { FilterFlag } from '@/lib/sourcing-candidates/filters';
+import { listingHref } from '@/lib/sourcing-candidates/naver-link';
 
 const FLAG_LABEL: Record<FilterFlag, { text: string; cls: string }> = {
   below_floor: { text: '하한선 미만', cls: 'bg-red-100 text-red-700' },
@@ -56,7 +57,11 @@ function Row({ r, onPatch }: { r: ListingView; onPatch: Props['onPatch'] }) {
           className={r.starred ? 'text-yellow-400' : 'text-white/25 hover:text-yellow-400/70'}>★</button>
       </td>
       <td className="max-w-md px-2 py-1">
-        <div className="truncate" title={r.title}>{r.title}</div>
+        <a href={listingHref(r)} target="_blank" rel="noopener noreferrer"
+          title={r.naver_url ? '상품 페이지 (새 탭)' : '네이버에서 검색 (새 탭)'}
+          className="block truncate hover:underline">
+          {r.title}{!r.naver_url && <span className="text-white/40"> 🔍</span>}
+        </a>
         <div className="text-xs text-gray-400">{r.seller}{r.badges.length ? ` · ${r.badges.join('·')}` : ''}</div>
       </td>
       <td className="px-2 py-1 text-right">

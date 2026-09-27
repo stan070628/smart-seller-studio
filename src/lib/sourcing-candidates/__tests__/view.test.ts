@@ -6,7 +6,7 @@ const listing: ListingRow = {
   id: 'l1', scan_id: 's1', rank: 1, title: '가죽 핸들 토시', seller: '체니모', price: 14390,
   list_price: null, discount_pct: null, review_count: 812, rating: 4.8, badges: [], number_check: null,
   starred: true, excluded_override: null, memo: null, size: 'small', price_override: null, category_path: null,
-  recent6m_review_count: null, recent6m_rating: null,
+  recent6m_review_count: null, recent6m_rating: null, naver_url: null,
 };
 function offer(over: Partial<OfferRow>): OfferRow {
   return {

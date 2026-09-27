@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import ScanUploader from '@/components/sourcing/candidates/ScanUploader';
 import { api } from '@/components/sourcing/candidates/api';
+import { listingHref } from '@/lib/sourcing-candidates/naver-link';
 import type { ListingView, OfferView } from '@/lib/sourcing-candidates/view';
 
 const won = (n: number) => `${Math.round(n).toLocaleString('ko-KR')}원`;
@@ -227,6 +228,7 @@ function Recent6mFields({ l, run, onChanged }: { l: ListingView; run: RunFn; onC
 export default function CandidateCard({ l, onChanged }: { l: ListingView; onChanged: () => Promise<void> }) {
   const [url, setUrl] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [naverUrl, setNaverUrl] = useState(l.naver_url ?? '');
 
   /** 저장·재시도·크기 변경을 한 통로로 모아 실패를 조용히 삼키지 않는다 */
   const run: RunFn = async (fn) => {
@@ -238,12 +240,34 @@ export default function CandidateCard({ l, onChanged }: { l: ListingView; onChan
     }
   };
 
+  /**
+   * 네이버 상품 URL — 캡처엔 찍히지 않아 사람이 직접 입력한다. 입력칸이 완전히
+   * 비어야 "지운다"다(검색 링크로 대체), http/https로 시작하지 않으면 에러.
+   */
+  const commitNaverUrl = () => run(async () => {
+    if (naverUrl.trim() === '') {
+      if (l.naver_url === null) return;
+      await api.patchListing(l.id, { naver_url: null });
+      await onChanged();
+      return;
+    }
+    const trimmed = naverUrl.trim();
+    if (!/^https?:\/\//i.test(trimmed)) throw new Error('네이버 주소는 http로 시작해야 합니다.');
+    if (trimmed === l.naver_url) return;
+    await api.patchListing(l.id, { naver_url: trimmed });
+    await onChanged();
+  });
+
   return (
     <div className="rounded-lg border border-white/15 p-3">
       {error && <div className="mb-2 text-sm text-red-400">{error}</div>}
       <div className="flex items-start justify-between gap-2">
         <div>
-          <div className="font-medium">{l.title}</div>
+          <a href={listingHref(l)} target="_blank" rel="noopener noreferrer"
+            title={l.naver_url ? '상품 페이지 (새 탭)' : '네이버에서 검색 (새 탭)'}
+            className="font-medium hover:underline">
+            {l.title}{!l.naver_url && <span className="text-white/40"> 🔍</span>}
+          </a>
           <div className="text-xs text-gray-400">
             {l.category_path ?? '카테고리 미상'} · {l.seller} · {l.effective_price.toLocaleString('ko-KR')}원 · 리뷰 {l.review_count?.toLocaleString('ko-KR') ?? '—'}
           </div>
@@ -257,6 +281,14 @@ export default function CandidateCard({ l, onChanged }: { l: ListingView; onChan
       </div>
 
       <Recent6mFields l={l} run={run} onChanged={onChanged} />
+      <div className="mt-1 flex items-center gap-2 text-xs text-gray-400">
+        <label className="flex min-w-0 flex-1 items-center gap-1">
+          네이버 URL
+          <input value={naverUrl} onChange={(e) => setNaverUrl(e.target.value)} onBlur={() => void commitNaverUrl()}
+            placeholder="https://... (비우면 검색 링크로 대체)"
+            className="min-w-0 flex-1 border border-white/15 bg-transparent px-1 text-white" />
+        </label>
+      </div>
 
       {l.offers.length > 0 && (
         <table className="mt-2 w-full text-sm">

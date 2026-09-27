@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getCurrentUser } from '@/lib/auth';
 import { getSourcingPool } from '@/lib/sourcing/db';
+import { NAVER_URL_SCHEMA } from '@/lib/sourcing-candidates/upload';
 
 const PatchSchema = z.object({
   starred: z.boolean().optional(),
@@ -13,6 +14,7 @@ const PatchSchema = z.object({
   review_count: z.number().int().nonnegative().max(2147483647).nullable().optional(),
   recent6m_review_count: z.number().int().nonnegative().max(2147483647).nullable().optional(),
   recent6m_rating: z.number().min(0).max(5).nullable().optional(),
+  naver_url: NAVER_URL_SCHEMA.nullable().optional(),
 }).strict();
 
 /** PATCH /api/sourcing-candidates/listings/[id] — 사람이 고친 값. AI 값보다 우선한다 */

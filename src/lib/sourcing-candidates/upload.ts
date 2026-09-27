@@ -23,3 +23,14 @@ export const OFFER_URL_SCHEMA = z
   .string()
   .url()
   .refine((u) => /^https?:\/\//.test(u), 'http/https URL만 허용됩니다.');
+
+/**
+ * 네이버 상품 URL 검사. OFFER_URL_SCHEMA와 같은 이유(javascript:·data: 스킴 차단)로
+ * http/https만 받고, 캡처가 아니라 사람이 손으로 옮겨 적는 값이라 길이도 제한한다.
+ * DB의 CHECK(naver_url ~ '^https?://')와 같은 조건을 응답 이전에 걸러준다.
+ */
+export const NAVER_URL_SCHEMA = z
+  .string()
+  .url()
+  .max(2000)
+  .refine((u) => /^https?:\/\//i.test(u), '네이버 주소는 http로 시작해야 합니다.');
