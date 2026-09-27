@@ -131,6 +131,41 @@ export function marginOf(
 }
 
 /**
+ * 마진율 30%만 겨우 맞추는 판매가(원) — 사전 거름망용 하한.
+ *
+ * breakEvenPrice는 「물류비 × 1.5」 조건까지 넣어 원가가 낮을 때 그 조건이 지배한다
+ * (¥5 기준 14,813원). 캡처를 훑는 단계에서 그 값으로 자르면 강의 공식으로는
+ * 통과할 12~14천원대를 미리 버리게 된다. 그래서 거름망은 ① 조건만 쓰고,
+ * ② 조건은 채택한 1688 원가로 marginVerdict가 판정한다.
+ */
+export function minViablePrice(effectiveCost: number, size: LogisticsSize): number {
+  return Math.ceil((effectiveCost + LOGISTICS_FEE[size]) / (1 - PRICE_LINKED_RATE - TARGET_MARGIN_RATE));
+}
+
+export interface MarginVerdict {
+  margin: number;
+  marginRate: number;
+  /** ① 마진율 30% 이상 */
+  passRate: boolean;
+  /** ② 개당 마진 ≥ 물류비 × 1.5 */
+  passAmount: boolean;
+  pass: boolean;
+}
+
+/** breakEvenPrice가 역산하는 두 조건을 정방향으로 판정한다 */
+export function marginVerdict(
+  sellingPrice: number,
+  effectiveCost: number,
+  size: LogisticsSize,
+): MarginVerdict {
+  const margin = marginOf(sellingPrice, effectiveCost, size);
+  const marginRate = sellingPrice > 0 ? margin / sellingPrice : 0;
+  const passRate = marginRate >= TARGET_MARGIN_RATE;
+  const passAmount = margin >= LOGISTICS_FEE[size] * MARGIN_TO_LOGISTICS;
+  return { margin, marginRate, passRate, passAmount, pass: passRate && passAmount };
+}
+
+/**
  * 상품명에서 검색어 후보를 만든다.
  *
  * 도매꾹 상품명은 키워드 나열형이라 앞 4단어만 잘라 쓰면 상품 정체를 놓친다.
