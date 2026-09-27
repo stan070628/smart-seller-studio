@@ -10,7 +10,7 @@ export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
 /**
- * GET /api/cron/rg-reconcile — 매일 RG 대조(ERP 1-C2b ④). pg_cron(124)이 09:30 KST에 부른다.
+ * GET /api/cron/rg-reconcile — 매일 RG 대조(ERP 1-C2b ④). pg_cron(124)이 09:37 KST에 부른다(:30 주문 수집과 겹치지 않게).
  * 차감이 꺼져 있으면 건너뛴다. 자동 이동 스위치가 꺼져 있거나 `?dryRun=1`이면 「옮길 예정」만 기록·보고한다.
  */
 export async function GET(request: NextRequest) {

@@ -12,7 +12,7 @@ export default function RgAutoPanel() {
   const [d, setD] = useState<RgAutoLast | null>(null);
   useEffect(() => { let alive = true; void fetchRgAuto().then((r) => { if (alive && r.ok) setD(r.data); }); return () => { alive = false; }; }, []);
   if (!d) return null;
-  if (d.rows.length === 0) return <div style={{ padding: '4px 10px', fontSize: 11, color: E.inkSub }}>RG 자동 대조 — 확인할 것 없음(매일 09:30)</div>;
+  if (d.rows.length === 0) return <div style={{ padding: '4px 10px', fontSize: 11, color: E.inkSub }}>RG 자동 대조 — 확인할 것 없음(매일 09:37)</div>;
   return (
     <div style={{ padding: '6px 10px', fontSize: 11.5, color: E.ink, border: `1px solid ${E.lineSoft}`, marginBottom: 8 }}>
       <b>RG 자동 대조 {d.runAt ? fmtKst(d.runAt) : ''}</b>
