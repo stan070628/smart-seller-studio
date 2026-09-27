@@ -58,6 +58,15 @@ export async function loadLegacyIndex(db: Db): Promise<LegacyIndex> {
   return idx;
 }
 
+/** (1-C2b ①) 사람이 정한 SKU — external_line_id → sku_id. 수집 판정이 이 값을 먼저 본다(applyManualSku) */
+export async function loadManualSkus(db: Db, ch: OrderChannel): Promise<Map<string, number>> {
+  const { rows } = await db.query(
+    `select external_line_id, manual_sku_id from erp.order_lines where channel = $1 and manual_sku_id is not null`,
+    [ch],
+  );
+  return new Map(rows.map((r) => [String(r.external_line_id), Number(r.manual_sku_id)]));
+}
+
 /** 기초재고 시각 — 수집 시작점이자 차감 기준. 없으면 던진다(기초재고 전에는 주문을 수집하지 않는다) */
 export async function readCutover(db: Db): Promise<string> {
   const { rows } = await db.query(`select cursor_at from erp.sync_cursors where name = 'ledger_cutover'`);

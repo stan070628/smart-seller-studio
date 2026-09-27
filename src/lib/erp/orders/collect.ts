@@ -18,17 +18,17 @@ import { runDeductions } from './deduct';
 import { legacyKeyOf } from './keys';
 import { pickLegacy } from './legacy';
 import { syncLegacySales } from './legacy-store';
-import { resolveLine } from './resolve';
+import { applyManualSku, resolveLine } from './resolve';
 import {
-  advanceCursor, ensureCursorRow, loadLegacyIndex, loadListingIndex, markAbsentCanceled, readCursor, readCutover, readDeductSetting,
+  advanceCursor, ensureCursorRow, loadLegacyIndex, loadListingIndex, loadManualSkus, markAbsentCanceled, readCursor, readCutover, readDeductSetting,
   reevaluateUnknownLines, releaseLease, takeLease, upsertOrderLines, type AbsenceRefusal, type AbsenceResult, type ResolvedLine,
 } from './store';
 import type { OrderAdapter, OrderChannel, RejectedLine } from './types';
 import { backfillEnd, backfillStart, windowFor } from './window';
 
 /** 주문 수집 트랜잭션 잠금 네임스페이스(원장 SKU 잠금 7101과 겹치지 않는다) */
-const LOCK_NS = 7102;
-const CHANNEL_LOCK: Record<OrderChannel, number> = { coupang_wing: 1, coupang_rg: 2, naver: 3, toss: 4 };
+export const LOCK_NS = 7102;
+export const CHANNEL_LOCK: Record<OrderChannel, number> = { coupang_wing: 1, coupang_rg: 2, naver: 3, toss: 4 };
 /** 보고서에 싣는 버린 라인 표본 수 */
 const REJECTED_SAMPLE = 20;
 
@@ -136,13 +136,14 @@ export async function collectChannel(
 
     const listings = await loadListingIndex(c);
     const legacyIdx = await loadLegacyIndex(c);
+    const manual = await loadManualSkus(c, ch);
     // 보충 구간 밖(시작 전 · 끝 뒤)에 주문된 라인은 쓰지 않고 센다 — 끝 뒤 라인은 다음 조각이나 보통 수집이 받는다
     const kept = bfStart && bfEnd
       ? res.lines.filter((l) => { const t = Date.parse(l.orderedAt); return t >= bfStart.getTime() && t < bfEnd.getTime(); })
       : res.lines;
     report.backfillSkipped = res.lines.length - kept.length;
     const resolved: ResolvedLine[] = kept.map((l) => {
-      const resolution = resolveLine(l, listings);
+      const resolution = applyManualSku(l, resolveLine(l, listings), manual.get(l.externalLineId) ?? null);
       return { ...l, resolution, legacyKey: legacyKeyOf(l), legacy: pickLegacy(l, resolution, legacyIdx) };
     });
     report.fetched = resolved.length;

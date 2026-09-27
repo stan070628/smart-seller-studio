@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  advanceCursor, ensureCursorRow, markAbsentCanceled, readCutover, reevaluateUnknownLines, releaseLease, takeLease, upsertOrderLines,
+  advanceCursor, ensureCursorRow, loadManualSkus, markAbsentCanceled, readCutover, reevaluateUnknownLines, releaseLease, takeLease, upsertOrderLines,
   type ResolvedLine,
 } from '@/lib/erp/orders/store';
 import { syncLegacySales } from '@/lib/erp/orders/legacy-store';
@@ -332,5 +332,18 @@ describe('syncLegacySales', () => {
 
   it('키가 없으면 아무것도 하지 않는다', async () => {
     expect(await syncLegacySales(fakeDb(() => undefined).db, [])).toEqual({ upserted: 0, inserted: 0, voided: 0, warnings: [] });
+  });
+});
+
+describe('loadManualSkus', () => {
+  it('그 채널의 manual_sku_id가 있는 줄만 external_line_id → sku', async () => {
+    const f = fakeDb((sql, params) => {
+      if (sql.includes('manual_sku_id is not null')) {
+        expect(params).toEqual(['toss']);
+        return { rows: [{ external_line_id: '318224910', manual_sku_id: '73' }] };
+      }
+      return undefined;
+    });
+    expect(await loadManualSkus(f.db, 'toss')).toEqual(new Map([['318224910', 73]]));
   });
 });
