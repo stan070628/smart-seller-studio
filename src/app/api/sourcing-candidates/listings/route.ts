@@ -26,7 +26,8 @@ export async function GET(request: NextRequest) {
       `SELECT l.*, s.category_path
        FROM sourcing_listings l JOIN sourcing_scans s ON s.id = l.scan_id
        WHERE l.user_id = $1 AND ${scan ? 'l.scan_id = $2' : 'l.starred'}
-       ORDER BY ${scan ? 'l.rank' : 'l.updated_at DESC'}`,
+       -- updated_at으로 정렬하면 블러 저장(메모 등)마다 순서가 바뀐다 — 고정된 키로 정렬한다
+       ORDER BY ${scan ? 'l.rank' : 's.created_at DESC, l.rank'}`,
       scan ? [user.userId, scan] : [user.userId],
     );
     if (listings.length === 0) return NextResponse.json({ success: true, data: [] });

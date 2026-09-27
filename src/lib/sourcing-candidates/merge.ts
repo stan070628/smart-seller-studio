@@ -24,13 +24,16 @@ function levenshtein(a: string, b: string): number {
 }
 
 /**
- * 인접 조각 겹침으로 같은 카드가 다시 찍혔는지 판정한다(실측: 2026-09-27 컨트롤러
- * E2E — 판매자명·상품명이 한두 글자 다르게 읽히는 경우가 실제로 있었다).
- * 키가 완전히 같거나, 가격·리뷰 수(둘 다 not null)·평점이 전부 같고 정규화한
- * 판매자·상품명의 편집거리가 각각 3 이하이면 겹침 사본으로 본다.
+ * 인접 조각 겹침으로 같은 카드가 다시 찍혔는지 "퍼지"하게 판정한다(실측: 2026-09-27
+ * 컨트롤러 E2E — 판매자명·상품명이 한두 글자 다르게 읽히는 경우가 실제로 있었다).
+ * 키는 다르지만 가격·리뷰 수(둘 다 not null)·평점이 전부 같고 정규화한 판매자·
+ * 상품명의 편집거리가 각각 3 이하이면 겹침 사본으로 본다.
+ *
+ * 완전 일치는 이 함수가 아니라 dedupKey 비교로 먼저(1단계) 처리한다 — 색상·용량
+ * 변형 상품이 값은 같고 이름만 한두 글자 다를 때, 퍼지 판정을 먼저 돌리면 진짜
+ * 겹침 사본이 가져가야 할 이전 카드를 변형 상품이 가로챌 수 있기 때문이다.
  */
-function isOverlapCopy(prev: ExtractedListing, cur: ExtractedListing): boolean {
-  if (dedupKey(prev) === dedupKey(cur)) return true;
+function isFuzzyOverlap(prev: ExtractedListing, cur: ExtractedListing): boolean {
   if (prev.review_count === null || cur.review_count === null) return false;
   if (prev.price !== cur.price) return false;
   if (prev.review_count !== cur.review_count) return false;
@@ -78,27 +81,56 @@ export function mergePages(pages: ExtractedNaverPage[]): MergeResult {
     const ordered = [...p.products].sort((a, b) => a.row - b.row || a.col - b.col);
     // 앞 조각 카드 하나는 겹침 사본을 최대 하나만 흡수한다(같은 카드가 두 번 겹쳐 찍히진 않는다)
     const claimedPrev = new Set<number>();
-    for (const c of ordered) {
-      let overlap = false;
-      if (prevPage) {
-        for (let i = 0; i < prevPage.length; i++) {
-          if (claimedPrev.has(i)) continue;
-          if (isOverlapCopy(prevPage[i], c)) {
-            claimedPrev.add(i);
-            overlap = true;
+    const droppedCur = new Set<number>(); // 이번 조각에서 겹침 사본으로 판정해 버린 카드의 인덱스
+
+    // 1단계: 완전 일치만 먼저 잇는다. 퍼지 판정이 나중(2단계)에 돌아 진짜 겹침 사본이
+    // 가져가야 할 이전 카드를 색상·용량 변형 상품이 가로채는 것을 막는다.
+    let maxExactRow = -1;
+    let hadExactMatch = false;
+    ordered.forEach((c, ci) => {
+      if (!prevPage) return;
+      const key = dedupKey(c);
+      for (let pi = 0; pi < prevPage.length; pi++) {
+        if (claimedPrev.has(pi)) continue;
+        if (dedupKey(prevPage[pi]) === key) {
+          claimedPrev.add(pi);
+          droppedCur.add(ci);
+          hadExactMatch = true;
+          maxExactRow = Math.max(maxExactRow, c.row);
+          break;
+        }
+      }
+    });
+
+    // 2단계: 퍼지 판정은 "겹침이 증명된 앞쪽 구간"에만 적용한다 — 이번 조각에서 완전
+    // 일치가 나온 가장 아래 행까지만 허용하고(그 행까지는 실제로 겹침이 확인됐으므로),
+    // 완전 일치가 하나도 없었으면 첫 행(0)에만 조심스럽게 적용한다. 그 아래는 겹침이라는
+    // 증거가 없는 신상품 구간이므로 값이 같아 보여도 절대 지우지 않는다(색상 변형 보호).
+    const rowLimit = hadExactMatch ? maxExactRow : 0;
+    const prevPageForFuzzy = prevPage; // let이라 클로저 안에서 null 좁히기가 안 돼 지역 const로 다시 잡는다
+    if (prevPageForFuzzy) {
+      ordered.forEach((c, ci) => {
+        if (droppedCur.has(ci) || c.row > rowLimit) return;
+        for (let pi = 0; pi < prevPageForFuzzy.length; pi++) {
+          if (claimedPrev.has(pi)) continue;
+          if (isFuzzyOverlap(prevPageForFuzzy[pi], c)) {
+            claimedPrev.add(pi);
+            droppedCur.add(ci);
             break;
           }
         }
-      }
-      if (overlap) continue;
+      });
+    }
 
+    ordered.forEach((c, ci) => {
+      if (droppedCur.has(ci)) return;
       const key = dedupKey(c);
       const suffix = (usedSuffix.get(key) ?? 0) + 1;
       usedSuffix.set(key, suffix);
       const dedup_key = suffix === 1 ? key : `${key}#${suffix}`;
       const { row: _row, col: _col, ...rest } = c;
       listings.push({ ...rest, rank: listings.length + 1, dedup_key, number_check: checkListingNumbers(c) });
-    }
+    });
     prevPage = ordered;
   }
 

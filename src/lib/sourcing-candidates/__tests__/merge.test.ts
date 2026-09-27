@@ -91,10 +91,15 @@ describe('mergePages', () => {
     // 실측(2026-09-27 컨트롤러 E2E): 인접 조각에서 같은 카드가 판매자명·상품명을
     // 한두 글자 다르게 읽혔다. 가격·리뷰 수·평점이 모두 같고 정규화한 이름의
     // 편집거리가 3 이하이면 같은 카드로 본다.
+    //
+    // 퍼지 판정은 "같은 조각에서 완전 일치가 확인된 행"까지만 허용하므로, 같은 행에
+    // 완전히 겹치는 닻(anchor) 카드를 하나 같이 둔다 — 실제 캡처에서도 겹친 행에는
+    // 오독 없이 그대로 읽힌 카드가 같이 있었다.
     function merged2(prev: Partial<ExtractedListing>, cur: Partial<ExtractedListing>) {
+      const anchor = { seller: '앵커셀러', title: '앵커 상품', price: 9999, review_count: 1, rating: 4.0 };
       return mergePages([
-        page({ products: [card({ row: 0, col: 0, ...prev })] }),
-        page({ products: [card({ row: 0, col: 0, ...cur })] }),
+        page({ products: [card({ row: 0, col: 0, ...prev }), card({ row: 0, col: 1, ...anchor })] }),
+        page({ products: [card({ row: 0, col: 0, ...cur }), card({ row: 0, col: 1, ...anchor })] }),
       ]);
     }
 
@@ -103,7 +108,7 @@ describe('mergePages', () => {
         { seller: '오리지니크', title: '짐샌더스 테라조 컬러 커팅보드', price: 40400, review_count: 216, rating: 4.8 },
         { seller: '오리지니크', title: '짐샌더슨 테라조 컬러 커팅보드', price: 40400, review_count: 216, rating: 4.8 },
       );
-      expect(r.listings).toHaveLength(1);
+      expect(r.listings).toHaveLength(2); // 오리지니크 카드 1 + 앵커 카드 1
     });
 
     it('더샤키친 vs 더사키친(판매자명만 한 글자 차이·제목 동일)', () => {
@@ -111,7 +116,7 @@ describe('mergePages', () => {
         { seller: '더샤키친', title: '국산 업소용 도마 횟집 정육 식당 고기 영업용 칼라', price: 15500, review_count: 493, rating: 4.84 },
         { seller: '더사키친', title: '국산 업소용 도마 횟집 정육 식당 고기 영업용 칼라', price: 15500, review_count: 493, rating: 4.84 },
       );
-      expect(r.listings).toHaveLength(1);
+      expect(r.listings).toHaveLength(2);
     });
 
     it('럭키카아 vs 럭키아울(Keep Fruit)', () => {
@@ -119,7 +124,7 @@ describe('mergePages', () => {
         { seller: 'Keep Fruit', title: '럭키카아 국산 순면 복부 팥 어깨 현미 세트 찜질팩', price: 25800, review_count: 15040, rating: 4.81 },
         { seller: 'Keep Fruit', title: '럭키아울 국산 순면 복부 팥 어깨 현미 세트 찜질팩', price: 25800, review_count: 15040, rating: 4.81 },
       );
-      expect(r.listings).toHaveLength(1);
+      expect(r.listings).toHaveLength(2);
     });
 
     it('프란īcz vs 프란프란(같은 제목, list_price 오독은 무시)', () => {
@@ -127,7 +132,43 @@ describe('mergePages', () => {
         { seller: '프란īcz', title: '상품', price: 26800, review_count: 2528, rating: 4.86, list_price: 28000 },
         { seller: '프란프란', title: '상품', price: 26800, review_count: 2528, rating: 4.86, list_price: 28800 },
       );
-      expect(r.listings).toHaveLength(1);
+      expect(r.listings).toHaveLength(2);
+    });
+  });
+
+  describe('퍼지 겹침의 오탐 방지 — 색상 변형 상품을 지우지 않는다', () => {
+    it('변형 상품이 겹침 구간 밖(앞 조각의 겹침 없는 자리)에 있으면 둘 다 남긴다', () => {
+      // p-1: Q(row0, 겹침 확인용) + 블루(row5, 겹침 구간 밖의 형제 상품).
+      // p: Q'(row0, Q의 완전 겹침 사본) + 핑크(row1, 블루와 값은 같고 이름만 다름).
+      // 완전 일치는 row0에서만 확인됐으므로(maxExactRow=0), row1의 핑크는 퍼지 판정
+      // 대상이 아니다 — 블루와 값이 같아도 지우면 안 된다.
+      const q = { seller: '판매자', title: 'Q 상품', price: 5000, review_count: 3, rating: 4.2 };
+      const blue = { seller: '판매자', title: '쿠션 블루', price: 12000, review_count: 88, rating: 4.7 };
+      const pink = { seller: '판매자', title: '쿠션 핑크', price: 12000, review_count: 88, rating: 4.7 };
+      const r = mergePages([
+        page({ products: [card({ row: 0, col: 0, ...q }), card({ row: 5, col: 0, ...blue })] }),
+        page({ products: [card({ row: 0, col: 0, ...q }), card({ row: 1, col: 0, ...pink })] }),
+      ]);
+      const titles = r.listings.map((l) => l.title);
+      expect(titles).toContain(blue.title);
+      expect(titles).toContain(pink.title);
+      expect(r.listings).toHaveLength(3); // Q(중복 제거 후 1) + 블루 + 핑크
+    });
+
+    it('완전 일치 카드가 퍼지 카드보다 뒤에 나와도(열 순서) 자기 짝을 먼저 가져간다 — 퍼지가 훔치지 않는다', () => {
+      // p-1: X 1장. p: 핑크(row0,col0, X와 퍼지 매치되지만 실제로는 다른 상품) +
+      // X의 완전 사본(row0,col1). 완전 일치를 먼저 처리하지 않으면 핑크가 먼저
+      // X를 가로채, X의 완전 사본은 갈 곳이 없어 새 상품으로 잘못 남는다.
+      const x = { seller: '판매자', title: '상품 블루', price: 10000, review_count: 50, rating: 4.5 };
+      const pinkVariant = { seller: '판매자', title: '상품 핑크', price: 10000, review_count: 50, rating: 4.5 };
+      const r = mergePages([
+        page({ products: [card({ row: 0, col: 0, ...x })] }),
+        page({ products: [
+          card({ row: 0, col: 0, ...pinkVariant }),
+          card({ row: 0, col: 1, ...x }), // X의 완전 겹침 사본
+        ] }),
+      ]);
+      expect(r.listings.map((l) => l.title)).toEqual([x.title, pinkVariant.title]);
     });
   });
 

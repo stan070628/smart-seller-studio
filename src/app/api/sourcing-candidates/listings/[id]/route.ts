@@ -10,8 +10,8 @@ const PatchSchema = z.object({
   size: z.enum(['xsmall', 'small', 'medium']).optional(),
   price_override: z.number().int().positive().nullable().optional(),
   title: z.string().min(1).optional(),
-  review_count: z.number().int().nonnegative().nullable().optional(),
-  recent6m_review_count: z.number().int().nonnegative().nullable().optional(),
+  review_count: z.number().int().nonnegative().max(2147483647).nullable().optional(),
+  recent6m_review_count: z.number().int().nonnegative().max(2147483647).nullable().optional(),
   recent6m_rating: z.number().min(0).max(5).nullable().optional(),
 }).strict();
 

@@ -7,9 +7,9 @@ const MAX_ATTEMPTS = 3;
 
 /**
  * 판독 불가 사유의 종류. 호출한 라우트가 이 코드로 HTTP 상태를 정한다
- * (offers/[id]/parse: not_found·invalid_id → 404, conflict → 409, failed → 422).
+ * (offers/[id]/parse: not_found·invalid_id → 404, conflict → 409, server → 500, failed → 422).
  */
-export type ParseOfferErrorCode = 'invalid_id' | 'not_found' | 'conflict' | 'failed';
+export type ParseOfferErrorCode = 'invalid_id' | 'not_found' | 'conflict' | 'server' | 'failed';
 export interface ParseOfferError {
   code: ParseOfferErrorCode;
   message: string;
@@ -39,9 +39,10 @@ export async function parseOffer(pool: Pool, offerId: string, userId: string): P
       [offerId, userId, MAX_ATTEMPTS],
     ));
   } catch (err) {
-    // id가 uuid 형식이 아니면 이 UPDATE 자체가 던진다 — 존재하지 않는 것과 같은 취급(404)이다
+    // id가 uuid 형식이 아니면 이 UPDATE 자체가 던진다 — 존재하지 않는 것과 같은 취급(404)이다.
+    // 그 밖의 DB 오류(연결 끊김 등)는 클라이언트 탓이 아니므로 422가 아니라 500이어야 한다.
     if (isInvalidUuidError(err)) return { code: 'invalid_id', message: '잘못된 id입니다.' };
-    return { code: 'failed', message: err instanceof Error ? err.message : '서버 오류' };
+    return { code: 'server', message: err instanceof Error ? err.message : '서버 오류' };
   }
   if (rows.length === 0) {
     // 소유하지 않았거나 존재하지 않는 것과, 상태 때문에 못 받은 것을 구분해 알려준다

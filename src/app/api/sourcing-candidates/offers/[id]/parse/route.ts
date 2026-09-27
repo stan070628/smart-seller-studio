@@ -9,6 +9,7 @@ export const maxDuration = 300;
 function statusOf(code: ParseOfferErrorCode): number {
   if (code === 'not_found' || code === 'invalid_id') return 404;
   if (code === 'conflict') return 409;
+  if (code === 'server') return 500; // claim UPDATE 자체가 던진 예상 밖의 DB 오류
   return 422; // 'failed' — 그 밖의(캡처 판독 실패 등) 사유
 }
 
