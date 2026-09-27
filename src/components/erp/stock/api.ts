@@ -10,6 +10,7 @@ import type { ChannelReport, DeductSummary } from '@/lib/erp/orders/collect';
 import type { RecentLineLink, RecentListingLink, UnattributedGroup } from '@/lib/erp/orders/queue';
 import type { RelinkResult } from '@/lib/erp/orders/relink';
 import type { KarrotRecordResult, KarrotSaleRow } from '@/lib/erp/orders/karrot';
+import type { RgAutoLast } from '@/lib/erp/stock/rg-auto';
 
 export type ApiResult<T> =
   | { ok: true; data: T }
@@ -114,3 +115,5 @@ export const fetchKarrot = () => call<KarrotSaleRow[]>('/api/erp/sales/karrot');
 export const postKarrot = (b: { skuId: number; qty: number; amount: number; soldOn: string; note?: string; requestId: string }) =>
   call<Pick<KarrotRecordResult, 'lineId' | 'outcome' | 'legacyWarnings'>>('/api/erp/sales/karrot', b);
 export const postKarrotCancel = (lineId: number) => call<{ lineId: number }>('/api/erp/sales/karrot/cancel', { lineId });
+
+export const fetchRgAuto = () => call<RgAutoLast>('/api/erp/stock/rg-auto');
