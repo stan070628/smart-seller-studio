@@ -10,13 +10,22 @@ interface Props {
   onFiles: (files: File[]) => Promise<string>;
   /** 페이지 전체 붙여넣기를 받을지 (한 화면에 업로더가 여럿이면 하나만 true) */
   listenPaste?: boolean;
+  /** 조각 수 상한. prepareCaptures가 조각낸 뒤 이보다 많으면 업로드 전에 막는다 */
+  maxTiles?: number;
+  /** 상한을 넘었을 때 보여줄 문장. (실제 조각 수, 상한) */
+  tooManyTilesMessage?: (n: number, max: number) => string;
 }
+
+const defaultTooManyTilesMessage = (n: number, max: number) =>
+  `조각이 ${n}개라 한 번에 못 보냅니다 — 캡처를 나눠 올려 주세요 (최대 ${max}조각).`;
 
 /**
  * 캡처 입력. 전체 페이지 캡처는 prepareCaptures가 빈칸을 잘라 조각낸다.
  * 여러 장을 한 번에 올리면 올린 순서가 순위 순서다.
  */
-export default function ScanUploader({ label, hint, onFiles, listenPaste = false }: Props) {
+export default function ScanUploader({
+  label, hint, onFiles, listenPaste = false, maxTiles = 12, tooManyTilesMessage = defaultTooManyTilesMessage,
+}: Props) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -27,6 +36,7 @@ export default function ScanUploader({ label, hint, onFiles, listenPaste = false
     setMsg({ ok: true, text: '캡처 준비 중…' });
     try {
       const prepared = await prepareCaptures(images);
+      if (prepared.files.length > maxTiles) throw new Error(tooManyTilesMessage(prepared.files.length, maxTiles));
       if (prepared.overBudget) throw new Error('용량이 커서 한 번에 못 보냅니다. 나눠서 올려 주세요.');
       setMsg({ ok: true, text: `조각 ${prepared.files.length}개 판독 중… (1~2분 걸릴 수 있습니다)` });
       setMsg({ ok: true, text: await onFiles(prepared.files) });
@@ -35,7 +45,7 @@ export default function ScanUploader({ label, hint, onFiles, listenPaste = false
     } finally {
       setBusy(false);
     }
-  }, [busy, onFiles]);
+  }, [busy, onFiles, maxTiles, tooManyTilesMessage]);
 
   useEffect(() => {
     if (!listenPaste) return;

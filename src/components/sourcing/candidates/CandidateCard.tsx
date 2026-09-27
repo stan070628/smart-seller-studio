@@ -269,6 +269,9 @@ export default function CandidateCard({ l, onChanged }: { l: ListingView; onChan
 
       <div className="mt-2 grid gap-2 md:grid-cols-[1fr_auto]">
         <ScanUploader label="1688 캡처 추가 (업체 1곳)" hint="가격·판매량 화면을 한 번에 올리면 한 업체로 묶입니다"
+          maxTiles={4}
+          tooManyTilesMessage={(n) =>
+            `1688 캡처가 너무 길어 조각이 ${n}개입니다 — 가격·판매량이 보이는 윗부분만 잘라 올려 주세요 (최대 4조각).`}
           onFiles={async (files) => {
             const r = await api.addOffer(l.id, files, url);
             setUrl('');

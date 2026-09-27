@@ -34,7 +34,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
   const files = formData.getAll('files').filter((f): f is File => f instanceof File);
   if (files.length > MAX_OFFER_FILES) {
-    return NextResponse.json({ success: false, error: '업체 한 곳은 캡처 4장까지입니다.' }, { status: 400 });
+    return NextResponse.json({ success: false, error: `업체 한 곳은 캡처 ${MAX_OFFER_FILES}조각까지입니다.` }, { status: 400 });
   }
   const invalid = validateFiles(files);
   if (invalid) return NextResponse.json({ success: false, error: invalid }, { status: 400 });
