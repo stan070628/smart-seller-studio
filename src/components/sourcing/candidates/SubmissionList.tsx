@@ -1,0 +1,61 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { api } from '@/components/sourcing/candidates/api';
+import type { ListingView } from '@/lib/sourcing-candidates/view';
+
+const won = (n: number) => `${Math.round(n).toLocaleString('ko-KR')}원`;
+const pct = (r: number) => `${(r * 100).toFixed(1)}%`;
+const VERDICT = { same: '같음', diff: '차이', different: '다름' } as const;
+
+/** 강사 상담에 들고 갈 표. 채택까지 끝난 ⭐ 후보만 싣는다 */
+export default function SubmissionList() {
+  const [rows, setRows] = useState<ListingView[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    api.listings({ starred: true })
+      .then((all) => setRows(all.filter((l) => l.adopted)))
+      .catch((e) => setError(e instanceof Error ? e.message : '불러오기 실패'));
+  }, []);
+
+  if (error) return <div className="p-6 text-red-600">{error}</div>;
+  if (!rows) return <div className="p-6">불러오는 중…</div>;
+
+  return (
+    <main className="mx-auto max-w-6xl space-y-3 p-6">
+      <div className="flex items-end justify-between print:hidden">
+        <h1 className="text-xl font-bold">소싱 후보 제출 목록 ({rows.length}개)</h1>
+        <button onClick={() => window.print()} className="rounded bg-gray-900 px-3 py-2 text-sm text-white">인쇄</button>
+      </div>
+      <p className="text-xs text-gray-500">
+        강의 공식: 위안×210×1.4 ÷ 판매가 ≤ 30% · 실측 공식: 로켓그로스 물류비 포함, ⓐ마진율 ≥ 30% ⓑ마진 ≥ 물류비×1.5
+      </p>
+      <table className="w-full border text-xs">
+        <thead className="bg-gray-50"><tr>
+          {['#', '상품', '카테고리', '판매가', '리뷰', '1688', '위안', '강의 원가율', '실측 마진', '같은 물건', '메모'].map((h) =>
+            <th key={h} className="border px-1 py-1 text-left">{h}</th>)}
+        </tr></thead>
+        <tbody>
+          {rows.map((l, i) => {
+            const o = l.adopted!;
+            return (
+              <tr key={l.id}>
+                <td className="border px-1">{i + 1}</td>
+                <td className="border px-1">{l.title}<div className="text-gray-500">{l.seller}</div></td>
+                <td className="border px-1">{l.category_path ?? '—'}</td>
+                <td className="border px-1 text-right">{won(l.effective_price)}</td>
+                <td className="border px-1 text-right">{l.review_count?.toLocaleString('ko-KR') ?? '—'}</td>
+                <td className="border px-1">{o.url ? <a href={o.url} className="underline">링크</a> : '링크 없음'}</td>
+                <td className="border px-1 text-right">{o.cny === null ? '—' : `¥${o.cny}`}</td>
+                <td className="border px-1">{o.lecture ? `${pct(o.lecture.costRatio)} ${o.lecture.pass ? '통과' : '탈락'}` : '—'}</td>
+                <td className="border px-1">{o.real ? `${won(o.real.margin)} · ${pct(o.real.marginRate)} ${o.real.pass ? '통과' : '탈락'}` : '—'}</td>
+                <td className="border px-1">{o.match_verdict ? VERDICT[o.match_verdict] : '—'}</td>
+                <td className="border px-1">{l.memo ?? ''}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </main>
+  );
+}
