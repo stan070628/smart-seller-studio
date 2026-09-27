@@ -47,4 +47,5 @@ export const api = {
     }),
   patchOffer: (id: string, data: Record<string, unknown>) => call<void>(`/api/sourcing-candidates/offers/${id}`, json(data)),
   reparseOffer: (id: string) => call<void>(`/api/sourcing-candidates/offers/${id}/parse`, { method: 'POST' }),
+  deleteOffer: (id: string) => call<void>(`/api/sourcing-candidates/offers/${id}`, { method: 'DELETE' }),
 };

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ScanUploader from '@/components/sourcing/candidates/ScanUploader';
 import { api } from '@/components/sourcing/candidates/api';
 import type { ListingView, OfferView } from '@/lib/sourcing-candidates/view';
@@ -72,6 +72,26 @@ function OfferRowView({ o, onChanged, run }: { o: OfferView; onChanged: () => Pr
     ? '판독 실패라 채택할 수 없습니다'
     : o.cny === null ? '위안 원가가 없어 채택할 수 없습니다' : undefined;
 
+  /**
+   * 업체 삭제 — window.confirm은 쓰지 않는다(브라우저 자동화가 대화상자를 닫을 수 없다).
+   * 첫 클릭은 "정말 삭제?"로 4초간 바뀌고, 그 사이 다시 누르면 실제로 지운다.
+   * 채택된 업체도 지울 수 있다 — 후보는 그냥 미채택으로 돌아간다.
+   */
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current); }, []);
+
+  const handleDeleteClick = () => {
+    if (!confirmingDelete) {
+      setConfirmingDelete(true);
+      confirmTimerRef.current = setTimeout(() => setConfirmingDelete(false), 4000);
+      return;
+    }
+    if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+    setConfirmingDelete(false);
+    void run(async () => { await api.deleteOffer(o.id); await onChanged(); });
+  };
+
   return (
     <tr className={`border-t border-white/10 align-top ${o.adopted ? 'bg-green-500/10' : ''}`}>
       <td className="px-2 py-1 text-xs">
@@ -127,6 +147,12 @@ function OfferRowView({ o, onChanged, run }: { o: OfferView; onChanged: () => Pr
                 void save({ adopted: true });
               }}>채택</button>
           )}
+        </div>
+        <div className="mt-1">
+          <button type="button" onClick={handleDeleteClick}
+            className={confirmingDelete ? 'underline text-red-400' : 'underline text-white/40 hover:text-red-400'}>
+            {confirmingDelete ? '정말 삭제?' : '삭제'}
+          </button>
         </div>
       </td>
     </tr>
