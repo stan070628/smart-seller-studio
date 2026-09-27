@@ -94,9 +94,9 @@ export default function KarrotSaleForm({ variant, onSaved }: Props) {
           <>
             <div style={label}>수량</div>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-              <button type="button" aria-label="하나 빼기" onClick={() => edited(setQty)(Math.max(1, qty - 1))} style={round}>−</button>
+              <button type="button" aria-label="하나 빼기" onClick={() => { setQty((q) => Math.max(1, q - 1)); setRequestId(uuidv4()); }} style={round}>−</button>
               <span style={{ fontSize: 22, fontWeight: 700, minWidth: 32, textAlign: 'center', color: '#111827' }}>{qty}</span>
-              <button type="button" aria-label="하나 더하기" onClick={() => edited(setQty)(qty + 1)} style={round}>+</button>
+              <button type="button" aria-label="하나 더하기" onClick={() => { setQty((q) => q + 1); setRequestId(uuidv4()); }} style={round}>+</button>
               <span style={{ color: '#6b7280', fontSize: 12 }}>집 재고(원장) {won(sku.self)} — 차감 대기분은 저장할 때 서버가 뺀다</span>
             </div>
             <div style={label}>받은 돈(원, 합계)</div>
