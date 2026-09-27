@@ -86,6 +86,13 @@ export interface NaverOrderRawItem {
      * 🔴 칸 이름은 itemNo다. optionCode라는 칸은 응답에 없다(2026-09-27 운영 실측 — 설계 때 추정한 이름이라 9월 8건이 전부 미귀속됐다)
      */
     itemNo?: string;
+    /** 상품금액(할인 전, 처음 수량 기준) — 1-C2b ② 실측. totalPaymentAmount는 할인 후 결제액이다 */
+    totalProductAmount?: number;
+    /** 부분 취소·반품 뒤 남은 상품금액(할인 전) */
+    remainProductAmount?: number;
+    /** 판매자 부담 할인(원, 줄 합계) — 부분 취소 뒤 남은 몫은 remain*(1-C2b ② 실측) */
+    sellerBurdenDiscountAmount?: number;
+    remainSellerBurdenDiscountAmount?: number;
     claimType?: string;
     claimStatus?: string;
     quantity: number;

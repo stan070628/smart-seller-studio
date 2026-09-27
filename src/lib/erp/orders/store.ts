@@ -168,15 +168,24 @@ const LINE_CMP_OLD = `erp.order_lines.order_id, erp.order_lines.listing_id, erp.
            erp.order_lines.unit_price, erp.order_lines.amount, erp.order_lines.status, erp.order_lines.raw_status, erp.order_lines.paid_at,
            erp.order_lines.product_id, erp.order_lines.option_key, erp.order_lines.alt_product_id, erp.order_lines.product_label,
            erp.order_lines.legacy_key, erp.order_lines.legacy_product_cost_id, erp.order_lines.legacy_qty,
-           erp.order_lines.status_unmapped, erp.order_lines.absent_since`;
+           erp.order_lines.status_unmapped, erp.order_lines.absent_since, erp.order_lines.discount_amount, erp.order_lines.discount_source`;
 const LINE_STATUS = `case when excluded.status = 'unknown' then erp.order_lines.status else excluded.status end`;
 const LINE_PAID = `coalesce(excluded.paid_at, erp.order_lines.paid_at)`;
+/** (1-C2b ②) 할인 — 어댑터가 알 때($27)만 새 값, 모르면 저장된 값(쿠팡은 discounts.ts가 따로 채운다) */
+/**
+ * (리뷰) 수량·금액이 바뀌었다 — 어댑터가 할인을 모르면(쿠팡) 확인 시각·시도 횟수를 비우고 할인 0·출처 null로 되돌려
+ * discounts.ts가 다시 조회하게 한다. 수량·금액이 이미 달라 어차피 쓰는 행이라 M3 비교가 헛돌지 않는다.
+ */
+const LINE_QTY_AMOUNT_CHANGED = `(erp.order_lines.order_qty is distinct from excluded.order_qty or erp.order_lines.amount is distinct from excluded.amount)`;
+const LINE_DISC_AMOUNT = `case when $27::boolean then excluded.discount_amount when ${LINE_QTY_AMOUNT_CHANGED} then 0 else erp.order_lines.discount_amount end`;
+const LINE_DISC_SOURCE = `case when $27::boolean then excluded.discount_source when ${LINE_QTY_AMOUNT_CHANGED} then null else erp.order_lines.discount_source end`;
 const LINE_CMP_NEW = `excluded.order_id, excluded.listing_id, excluded.sku_id, excluded.alloc,
            excluded.attribution, excluded.unattributed_reason, excluded.order_qty, excluded.sku_qty,
            excluded.unit_price, excluded.amount, ${LINE_STATUS}, excluded.raw_status, ${LINE_PAID},
            excluded.product_id, excluded.option_key, excluded.alt_product_id, excluded.product_label,
            excluded.legacy_key, excluded.legacy_product_cost_id, excluded.legacy_qty,
-           excluded.status_unmapped, null::timestamptz`;
+           excluded.status_unmapped, null::timestamptz,
+           ${LINE_DISC_AMOUNT}, ${LINE_DISC_SOURCE}`;
 
 /**
  * 주문·라인 upsert. 반환 ids는 넘긴 라인 순서 그대로.
@@ -213,8 +222,9 @@ export async function upsertOrderLines(db: Db, lines: ResolvedLine[]): Promise<U
       const { rows } = await db.query(
         `insert into erp.order_lines (order_id, channel, external_line_id, listing_id, sku_id, alloc, attribution, unattributed_reason,
            order_qty, sku_qty, unit_price, amount, status, raw_status, ordered_at, paid_at, product_id, option_key, alt_product_id,
-           product_label, legacy_key, legacy_product_cost_id, legacy_qty, status_unmapped)
-         values ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22::uuid, $23, $24)
+           product_label, legacy_key, legacy_product_cost_id, legacy_qty, status_unmapped, discount_amount, discount_source, discount_checked_at)
+         values ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22::uuid, $23, $24,
+                 $25, $26, case when $27::boolean then now() else null end)
          on conflict (channel, external_line_id) do update set
            order_id = excluded.order_id, listing_id = excluded.listing_id, sku_id = excluded.sku_id, alloc = excluded.alloc,
            attribution = excluded.attribution, unattributed_reason = excluded.unattributed_reason,
@@ -224,7 +234,13 @@ export async function upsertOrderLines(db: Db, lines: ResolvedLine[]): Promise<U
            product_id = excluded.product_id, option_key = excluded.option_key, alt_product_id = excluded.alt_product_id,
            product_label = excluded.product_label, legacy_key = excluded.legacy_key,
            legacy_product_cost_id = excluded.legacy_product_cost_id, legacy_qty = excluded.legacy_qty,
-           status_unmapped = excluded.status_unmapped, absent_since = null, updated_at = now()
+           status_unmapped = excluded.status_unmapped,
+           discount_amount = ${LINE_DISC_AMOUNT},
+           discount_source = ${LINE_DISC_SOURCE},
+           discount_checked_at = case when $27::boolean then coalesce(erp.order_lines.discount_checked_at, now())
+             when ${LINE_QTY_AMOUNT_CHANGED} then null else erp.order_lines.discount_checked_at end,
+           discount_attempts = case when not $27::boolean and ${LINE_QTY_AMOUNT_CHANGED} then 0 else erp.order_lines.discount_attempts end,
+           absent_since = null, updated_at = now()
          where (${LINE_CMP_OLD}) is distinct from (${LINE_CMP_NEW})
          returning id, (xmax = 0) as inserted`,
         [
@@ -232,6 +248,7 @@ export async function upsertOrderLines(db: Db, lines: ResolvedLine[]): Promise<U
           l.resolution.attribution, l.resolution.reason, l.qty, alloc.reduce((s, a) => s + a.qty, 0), l.unitPrice, l.amount,
           l.status, l.rawStatus, l.orderedAt, l.paidAt, l.productId, l.optionKey, l.altProductId, l.productLabel,
           l.legacyKey, l.legacy?.productCostId ?? null, l.legacy?.qty ?? null, l.status === 'unknown',
+          l.discount?.amount ?? 0, l.discount?.source ?? null, l.discount !== undefined,
         ],
       );
       if (rows.length === 0) {

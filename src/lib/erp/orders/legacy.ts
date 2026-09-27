@@ -67,6 +67,8 @@ export interface LegacyLine {
   paidAt: string | null;
   orderedAt: string;
   productCostId: string | null;
+  /** (1-C2b ②) 판매자 부담 할인 합계(원). null = 아직 모른다(미확인 · 쿠팡 조회 실패로 닫힘) */
+  discount: number | null;
 }
 
 export interface LegacyRow {
@@ -80,6 +82,8 @@ export interface LegacyRow {
   sellingPrice: number;
   saleAmount: number;
   shippingSource: ShippingSource;
+  /** sale_records.coupon_discount. null = 할인을 모르는 줄이 있다 → 기존 값 유지(사람이 적었을 수 있다) */
+  couponDiscount: number | null;
 }
 
 export interface LegacyWarning {
@@ -128,6 +132,8 @@ export function planLegacy(lines: LegacyLine[]): { upsert: LegacyRow[]; voidKeys
       sellingPrice: orderQty > 0 ? Math.round(saleAmount / orderQty) : 0,
       saleAmount,
       shippingSource: SHIPPING_SOURCE[first.channel],
+      // (1-C2b ②) 판매 금액은 할인 전 그대로 — 정산이 sale_amount − coupon_discount를 계산한다
+      couponDiscount: live.every((l) => l.discount !== null) ? live.reduce((s, l) => s + (l.discount ?? 0), 0) : null,
     });
   }
   return { upsert, voidKeys, warnings };

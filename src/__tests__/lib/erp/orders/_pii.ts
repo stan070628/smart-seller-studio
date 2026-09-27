@@ -9,8 +9,15 @@ export const LINE_KEYS = [
   'productId', 'productLabel', 'qty', 'rawStatus', 'status', 'unitPrice',
 ].sort();
 
+/** (1-C2b ②) 어댑터가 할인을 알 때만 붙는 칸(네이버) — 모양도 고정한다 */
+const OPTIONAL_KEYS = ['discount'];
+
 export function expectNoPII(lines: object[]): void {
   const s = JSON.stringify(lines);
   for (const p of FAKE_PII) expect(s).not.toContain(p);
-  for (const l of lines) expect(Object.keys(l).sort()).toEqual(LINE_KEYS);
+  for (const l of lines) {
+    expect(Object.keys(l).filter((k) => !OPTIONAL_KEYS.includes(k)).sort()).toEqual(LINE_KEYS);
+    const d = (l as { discount?: object }).discount;
+    if (d !== undefined) expect(Object.keys(d).sort()).toEqual(['amount', 'source']);
+  }
 }

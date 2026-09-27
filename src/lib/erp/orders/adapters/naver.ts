@@ -25,11 +25,20 @@ export function optionLabel(v: string | null | undefined): string | null {
   return v.includes(':') || v.length > 50 ? REDACTED_OPTION : v;
 }
 
+/** (1-C2b ②) 판매자 부담 할인 — 남은 몫(remain*)이 있으면 그것(부분 취소 반영), 없으면 전체. 칸이 없으면 0 */
+export function naverSellerDiscount(po: { sellerBurdenDiscountAmount?: number; remainSellerBurdenDiscountAmount?: number }): number {
+  const v = po.remainSellerBurdenDiscountAmount ?? po.sellerBurdenDiscountAmount ?? 0;
+  return Number.isFinite(Number(v)) && Number(v) > 0 ? Math.round(Number(v)) : 0;
+}
+
+const num = (v: unknown): number | null => (v === undefined || v === null || !Number.isFinite(Number(v)) ? null : Number(v));
+
 /**
  * 상품주문 한 건 → 라인. 형식이 잘못되면 LineRejectError(어댑터가 rejected로 옮긴다 — I5).
  * (I4) 부분 취소: 수량 = remainQuantity ?? quantity. remainQuantity = 0이면 상품주문 상태와 상관없이 취소(수량 칸은 > 0이라 처음 수량을 둔다).
- * 금액 = totalPaymentAmount × 남은 수량 ÷ initialQuantity(initialQuantity > 0이고 남은 수량이 있을 때). totalPaymentAmount가 처음 수량 기준이라고 보고
- * 비례로 나눈다 — 실측 전(설계 해석 #24). 게이트 ①에서 부분 취소 건의 금액을 한 번 본다.
+ * (1-C2b ②) 금액 = 할인 전 상품금액 — 남은 상품금액(remainProductAmount), 전부 취소면 처음 상품금액(totalProductAmount).
+ * totalPaymentAmount는 판매자 부담 할인 뒤 결제액이라 쓰지 않는다(2026-09-27 실측: 60,000 → 결제 45,000, 판매자 부담 15,000).
+ * 할인은 discount에 따로(naverSellerDiscount). 상품금액 칸이 없는 응답만 옛 방식(totalPaymentAmount × 남은/처음 수량)으로 되돌아간다.
  */
 export function normalizeNaverItem(raw: NaverOrderRawItem): OrderLine {
   const { order, productOrder: po } = raw;
@@ -38,8 +47,15 @@ export function normalizeNaverItem(raw: NaverOrderRawItem): OrderLine {
   const initial = Number(po.initialQuantity ?? po.quantity);
   const allCanceled = remain === 0;
   const qty = allCanceled ? assertQty(po.initialQuantity ?? po.quantity, '처음 수량') : assertQty(remain ?? po.quantity, '수량');
-  const total = Number(po.totalPaymentAmount) || 0;
-  const amount = !allCanceled && remain !== null && initial > 0 ? Math.round((total * qty) / initial) : total;
+  const totalProduct = num(po.totalProductAmount);
+  const remainProduct = num(po.remainProductAmount);
+  const pay = Number(po.totalPaymentAmount) || 0;
+  const amount = allCanceled
+    ? (totalProduct ?? pay)
+    : (remainProduct ?? (() => {
+        const total = totalProduct ?? pay;
+        return remain !== null && initial > 0 ? Math.round((total * qty) / initial) : total;
+      })());
   return {
     channel: 'naver',
     externalOrderId: assertExternalId(String(order.orderId), '주문번호'),
@@ -55,6 +71,9 @@ export function normalizeNaverItem(raw: NaverOrderRawItem): OrderLine {
     qty,
     unitPrice: po.unitPrice ?? (qty > 0 ? Math.round(amount / qty) : 0),
     amount,
+    // 할인 칸이 둘 다 없으면 모른다(undefined) — upsert가 저장된 값을 지킨다
+    ...(po.sellerBurdenDiscountAmount === undefined && po.remainSellerBurdenDiscountAmount === undefined
+      ? {} : { discount: { amount: naverSellerDiscount(po), source: 'naver_seller' } }),
   };
 }
 

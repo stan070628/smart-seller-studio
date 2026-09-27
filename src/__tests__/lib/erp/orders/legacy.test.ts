@@ -62,17 +62,24 @@ describe('pickLegacy', () => {
 
 const L = (o: Partial<LegacyLine>): LegacyLine => ({
   legacyKey: 'wing-1-70', channel: 'coupang_wing', status: 'paid', orderQty: 1, legacyQty: 2, amount: 1000,
-  paidAt: '2026-09-26T16:00:00.000Z', orderedAt: '2026-09-26T16:00:00.000Z', productCostId: PC_A, ...o,
+  paidAt: '2026-09-26T16:00:00.000Z', orderedAt: '2026-09-26T16:00:00.000Z', productCostId: PC_A, discount: null, ...o,
 });
 
 describe('planLegacy', () => {
   it('같은 키(분리배송 박스)는 합산, 판매일 = 결제 KST 날짜, 단가 = 금액 ÷ 주문 수량', () => {
     const p = planLegacy([L({}), L({ orderQty: 2, legacyQty: 4, amount: 2000 })]);
     expect(p).toEqual({
-      upsert: [{ key: 'wing-1-70', productCostId: PC_A, channel: 'coupang', soldAt: '2026-09-27', quantity: 6, sellingPrice: 1000, saleAmount: 3000, shippingSource: 'wing' }],
+      upsert: [{ key: 'wing-1-70', productCostId: PC_A, channel: 'coupang', soldAt: '2026-09-27', quantity: 6, sellingPrice: 1000, saleAmount: 3000, shippingSource: 'wing', couponDiscount: null }],
       voidKeys: [],
       warnings: [],
     });
+  });
+
+  it('(1-C2b ②) 살아 있는 줄이 모두 할인을 알면 합계, 하나라도 모르면 null(기존 값 유지)', () => {
+    expect(planLegacy([L({ discount: 840 }), L({ discount: 0 })]).upsert[0].couponDiscount).toBe(840);
+    expect(planLegacy([L({ discount: 840 }), L({ discount: null })]).upsert[0].couponDiscount).toBeNull();
+    // 취소 줄의 할인은 세지 않는다
+    expect(planLegacy([L({ discount: 500 }), L({ status: 'canceled', discount: 300 })]).upsert[0].couponDiscount).toBe(500);
   });
 
   it('살아 있는 라인이 없고 무효 라인이 있으면 무효화, unknown만 있으면 건드리지 않는다', () => {

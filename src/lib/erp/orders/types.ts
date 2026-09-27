@@ -53,7 +53,13 @@ export interface OrderLine {
   /** 채널 판매 단위 수량(> 0) */
   qty: number;
   unitPrice: number;
+  /** 할인 전 금액(판매가 × 수량). 판매자 부담 할인은 discount에 따로 — 실매출 = amount − discount.amount */
   amount: number;
+  /**
+   * (1-C2b ②) 판매자 부담 즉시할인(줄 합계, 원). 어댑터가 응답에서 알 수 있을 때만(네이버).
+   * 미지정 = 모른다 → upsert가 저장된 값을 지킨다(쿠팡은 수집 뒤 discounts.ts가 따로 조회해 채운다).
+   */
+  discount?: { amount: number; source: string };
 }
 
 export interface FetchWindow {

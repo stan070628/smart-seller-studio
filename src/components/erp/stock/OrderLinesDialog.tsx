@@ -63,7 +63,7 @@ export default function OrderLinesDialog({ channel, label, date, onClose }: Prop
         {items && items.length > 0 && (
           <table style={{ borderCollapse: 'collapse', width: '100%' }}>
             <thead>
-              <tr>{['주문 시각', '주문번호', '상품', '수량', 'SKU', '금액', '채널 상태', '연결', '차감'].map((h) => <th key={h} style={thStyle}>{h}</th>)}</tr>
+              <tr>{['주문 시각', '주문번호', '상품', '수량', 'SKU', '금액', '할인', '채널 상태', '연결', '차감'].map((h) => <th key={h} style={thStyle}>{h}</th>)}</tr>
             </thead>
             <tbody>
               {items.map((l) => {
@@ -76,6 +76,7 @@ export default function OrderLinesDialog({ channel, label, date, onClose }: Prop
                     <td style={{ ...numTdStyle, fontSize: 11.5 }}>{won(l.orderQty)}</td>
                     <td style={{ ...td, whiteSpace: 'normal', maxWidth: 220 }}>{l.skuLabels || '—'}</td>
                     <td style={{ ...numTdStyle, fontSize: 11.5 }}>{won(l.amount)}</td>
+                    <td style={{ ...numTdStyle, fontSize: 11.5 }}>{!l.discountKnown ? '확인 전' : l.discountAmount > 0 ? won(l.discountAmount) : '—'}</td>
                     <td style={td}>{l.rawStatus}</td>
                     <td style={td}>{l.attribution === 'mapped' ? '연결' : REASON[l.unattributedReason ?? ''] ?? '미귀속'}</td>
                     <td style={{ ...td, whiteSpace: 'normal', maxWidth: 220 }}>
