@@ -145,10 +145,8 @@ describe('네이버 어댑터', () => {
     });
     expect(r.lines[1].rawStatus).toBe('CANCELED/CANCEL_DONE');
     // (1-C2b ②) 금액은 상품금액(할인 전 — remainProductAmount 25800, 결제액 totalPaymentAmount 24800이 아니다) ·
-    // 판매자 부담 할인 — 픽스처 첫 줄 remainSellerBurdenDiscountAmount 1000 · 나머지 줄은 칸 없음 → 0
-    expect(r.lines.map((l) => l.discount)).toEqual([
-      { amount: 1000, source: 'naver_seller' }, { amount: 0, source: 'naver_seller' }, { amount: 0, source: 'naver_seller' },
-    ]);
+    // 판매자 부담 할인 — 픽스처 첫 줄 remainSellerBurdenDiscountAmount 1000 · 나머지 줄은 할인 칸이 없다 → 모름(undefined, 저장된 값 유지)
+    expect(r.lines.map((l) => l.discount)).toEqual([{ amount: 1000, source: 'naver_seller' }, undefined, undefined]);
     expect(r.cover).toBeNull();
     expect(r.absenceMeansCancel).toBe(false);
     expect(r.rejected).toEqual([]);
@@ -160,6 +158,10 @@ describe('네이버 어댑터', () => {
     // 결제 27000(= 30000 − 판매자 부담 3000)을 비례로 나눈 9000이 아니라 남은 상품금액 10000 · 할인은 남은 몫 1000
     expect([partial.qty, partial.amount, partial.unitPrice, partial.status]).toEqual([1, 10000, 10000, 'paid']);
     expect(partial.discount).toEqual({ amount: 1000, source: 'naver_seller' });
+    // (리뷰) 할인 칸이 하나라도 있으면 안다 — remain만 0이어도 0원으로 확정
+    const zero = normalizeNaverItem({ ...(nvPartialFx.data as unknown as NaverOrderRawItem[])[0],
+      productOrder: { ...(nvPartialFx.data as unknown as NaverOrderRawItem[])[0].productOrder, sellerBurdenDiscountAmount: undefined, remainSellerBurdenDiscountAmount: 0 } });
+    expect(zero.discount).toEqual({ amount: 0, source: 'naver_seller' });
     // 남은 수량 0: 상품주문 상태가 PAYED여도 취소. DB 수량 칸은 > 0이라 처음 수량을, 금액은 처음 상품금액(totalProductAmount)을 남긴다(취소라 쓰이지 않는다)
     expect([allGone.qty, allGone.amount, allGone.status]).toEqual([2, 19800, 'canceled']);
     expectNoPII([partial, allGone]);

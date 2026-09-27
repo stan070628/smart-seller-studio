@@ -174,6 +174,8 @@ const LINE_PAID = `coalesce(excluded.paid_at, erp.order_lines.paid_at)`;
 /** (1-C2b ②) 할인 — 어댑터가 알 때($27)만 새 값, 모르면 저장된 값(쿠팡은 discounts.ts가 따로 채운다) */
 const LINE_DISC_AMOUNT = `case when $27::boolean then excluded.discount_amount else erp.order_lines.discount_amount end`;
 const LINE_DISC_SOURCE = `case when $27::boolean then excluded.discount_source else erp.order_lines.discount_source end`;
+/** (리뷰) 수량·금액이 바뀌었다 — 어댑터가 할인을 모르면(쿠팡) 확인 시각·시도 횟수를 비워 discounts.ts가 다시 조회하게 한다 */
+const LINE_QTY_AMOUNT_CHANGED = `(erp.order_lines.order_qty is distinct from excluded.order_qty or erp.order_lines.amount is distinct from excluded.amount)`;
 const LINE_CMP_NEW = `excluded.order_id, excluded.listing_id, excluded.sku_id, excluded.alloc,
            excluded.attribution, excluded.unattributed_reason, excluded.order_qty, excluded.sku_qty,
            excluded.unit_price, excluded.amount, ${LINE_STATUS}, excluded.raw_status, ${LINE_PAID},
@@ -232,7 +234,9 @@ export async function upsertOrderLines(db: Db, lines: ResolvedLine[]): Promise<U
            status_unmapped = excluded.status_unmapped,
            discount_amount = ${LINE_DISC_AMOUNT},
            discount_source = ${LINE_DISC_SOURCE},
-           discount_checked_at = case when $27::boolean then coalesce(erp.order_lines.discount_checked_at, now()) else erp.order_lines.discount_checked_at end,
+           discount_checked_at = case when $27::boolean then coalesce(erp.order_lines.discount_checked_at, now())
+             when ${LINE_QTY_AMOUNT_CHANGED} then null else erp.order_lines.discount_checked_at end,
+           discount_attempts = case when not $27::boolean and ${LINE_QTY_AMOUNT_CHANGED} then 0 else erp.order_lines.discount_attempts end,
            absent_since = null, updated_at = now()
          where (${LINE_CMP_OLD}) is distinct from (${LINE_CMP_NEW})
          returning id, (xmax = 0) as inserted`,

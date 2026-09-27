@@ -45,11 +45,13 @@ export async function runOrdersSync(p: {
       counts.busy_all = r.length > 0 && active.length === 0 ? 1 : 0;
       counts.backfill = p.backfillFrom !== undefined ? 1 : 0;
       counts.dry_run = p.dryRun ? 1 : 0;
-      // (1-C2b ②) 쿠팡 즉시할인 — 주문마다 한 번. 실행당 주문 60건까지(나머지는 다음 15분). 실패해도 수집 결과는 그대로 남긴다
+      // (1-C2b ②) 쿠팡 즉시할인 — 주문마다 한 번. 실행당 주문 60건 · 90초까지(나머지는 다음 15분). 실패해도 수집 결과는 그대로 남긴다
       if (!p.dryRun && p.channels.some((c) => c === 'coupang_wing' || c === 'coupang_rg')) {
         try {
           const cp = getCoupangClient();
-          const d = await enrichCoupangDiscounts(getSourcingPool(), (orderId) => cp.getOrderCoupons(orderId), { limitOrders: 60 });
+          const d = await enrichCoupangDiscounts(getSourcingPool(), (orderId) => cp.getOrderCoupons(orderId), {
+            limitOrders: 60, deadline: Date.now() + 90_000,
+          });
           Object.assign(counts, {
             discount_orders: d.orders, discount_checked: d.checked, discount_errors: d.errors,
             discount_errors_closed: d.errorsClosed, discount_rate: d.rate,

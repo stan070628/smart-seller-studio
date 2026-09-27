@@ -64,6 +64,10 @@ describe('upsertOrderLines', () => {
     // (1-C2b ②) 할인: 어댑터가 모르면(discount 미지정) 기존 값 유지 — [24]금액 [25]출처 [26]알았는가
     expect([lines[0].params[24], lines[0].params[25], lines[0].params[26]]).toEqual([0, null, false]);
     expect(lines[0].sql).toContain('discount_amount = case when $27::boolean then excluded.discount_amount else erp.order_lines.discount_amount end');
+    // (리뷰) 어댑터가 할인을 모르는데(쿠팡) 수량·금액이 바뀌면 다시 조회하게 확인 시각·시도 횟수를 비운다(할인 값은 다시 조회할 때까지 유지)
+    const changed = '(erp.order_lines.order_qty is distinct from excluded.order_qty or erp.order_lines.amount is distinct from excluded.amount)';
+    expect(lines[0].sql).toContain(`when ${changed} then null else erp.order_lines.discount_checked_at end`);
+    expect(lines[0].sql).toContain(`discount_attempts = case when not $27::boolean and ${changed} then 0 else erp.order_lines.discount_attempts end`);
     // 구매자 칸은 SQL에도 파라미터에도 없다
     expect(JSON.stringify(f.calls)).not.toMatch(/orderer|receiver|address|phone|tel/i);
   });
@@ -319,6 +323,27 @@ describe('syncLegacySales', () => {
     expect(ins.map((c) => c.params[4])).toEqual([31800, 12900]);
     const voids = f.calls.filter((c) => c.sql.startsWith('update sale_records set voided_at'));
     expect(voids.map((c) => c.params[0])).toEqual(['1-70', ['naver-5']]);
+  });
+
+  it('(리뷰) 판매자배송 할인은 옛 장부에 싣지 않는다(orderPrice 쿠폰 전/후 실측 전) · 율 쿠폰으로 닫힌 줄은 할인 모름 · RG 확인된 할인은 싣는다', async () => {
+    const at = new Date('2026-09-27T02:00:00Z');
+    const base = { status: 'paid', order_qty: 2, legacy_qty: 2, amount: 28200, paid_at: at, ordered_at: at, pc: PC, discount_checked_at: at };
+    const f = fakeDb((sql, params) => {
+      if (sql.startsWith('select legacy_key')) {
+        return { rows: [
+          { ...base, legacy_key: 'wing-1-70', channel: 'coupang_wing', discount_amount: 3300, discount_source: 'coupang_fms' },
+          { ...base, legacy_key: 'rg-2-80', channel: 'coupang_rg', discount_amount: 3300, discount_source: 'coupang_fms' },
+          { ...base, legacy_key: 'rg-3-80', channel: 'coupang_rg', discount_amount: 0, discount_source: 'coupang_fms_rate' },
+        ] };
+      }
+      if (sql.startsWith('insert into sale_records')) return { rows: [{ id: `sr-${params[6]}`, inserted: true, still_voided: false }] };
+      if (sql.startsWith('update erp.order_lines set legacy_sale_id')) return { rows: [] };
+      if (sql.startsWith('update sale_records set voided_at')) return { rows: [], rowCount: 0 };
+      return undefined;
+    });
+    await syncLegacySales(f.db, ['wing-1-70', 'rg-2-80', 'rg-3-80']);
+    const ins = f.calls.filter((c) => c.sql.startsWith('insert into sale_records'));
+    expect(ins.map((c) => [c.params[6], c.params[8]])).toEqual([['wing-1-70', null], ['rg-2-80', 3300], ['rg-3-80', null]]);
   });
 
   it('팔림인데 옛 상품을 못 고르면(product_cost_id null) 경고를 돌려주고 아무것도 쓰지 않는다', async () => {

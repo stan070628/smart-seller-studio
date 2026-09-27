@@ -71,7 +71,9 @@ export function normalizeNaverItem(raw: NaverOrderRawItem): OrderLine {
     qty,
     unitPrice: po.unitPrice ?? (qty > 0 ? Math.round(amount / qty) : 0),
     amount,
-    discount: { amount: naverSellerDiscount(po), source: 'naver_seller' },
+    // 할인 칸이 둘 다 없으면 모른다(undefined) — upsert가 저장된 값을 지킨다
+    ...(po.sellerBurdenDiscountAmount === undefined && po.remainSellerBurdenDiscountAmount === undefined
+      ? {} : { discount: { amount: naverSellerDiscount(po), source: 'naver_seller' } }),
   };
 }
 

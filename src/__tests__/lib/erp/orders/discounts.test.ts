@@ -4,16 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const m = vi.hoisted(() => ({ syncLegacySales: vi.fn() }));
 vi.mock('@/lib/erp/orders/legacy-store', () => ({ syncLegacySales: m.syncLegacySales }));
 
-import { couponByItem, couponTotal, enrichCoupangDiscounts, lineDiscounts, splitDiscount } from '@/lib/erp/orders/discounts';
-
-describe('couponTotal', () => {
-  it('PRICE · APPLIED만 더한다 · RATE가 있으면 rate=true', () => {
-    expect(couponTotal([{ type: 'PRICE', discount: 840, status: 'APPLIED' }, { type: 'PRICE', discount: 500, status: 'CANCELED' }]))
-      .toEqual({ total: 840, rate: false });
-    expect(couponTotal([{ type: 'RATE', discount: -1, status: 'APPLIED' }])).toEqual({ total: 0, rate: true });
-    expect(couponTotal([])).toEqual({ total: 0, rate: false });
-  });
-});
+import { couponByItem, enrichCoupangDiscounts, lineDiscounts, splitDiscount } from '@/lib/erp/orders/discounts';
 
 describe('couponByItem', () => {
   it('(B1 실측) vendorItemId가 있으면 품목별로, 없으면 품목 없음(unassigned)으로 모은다 · PRICE · APPLIED만', () => {
@@ -121,10 +112,76 @@ describe('enrichCoupangDiscounts', () => {
     expect(calls.at(-1)?.sql).toBe('COMMIT');
   });
 
-  it('RATE 쿠폰이 섞인 주문은 기록하지 않고 센다(사람이 본다)', async () => {
-    const r = await enrichCoupangDiscounts(pool, async () => [{ type: 'RATE', discount: -1, status: 'APPLIED' }], { limitOrders: 60 });
-    expect(r).toMatchObject({ checked: 0, rate: 3 });
-    expect(calls.some((c) => c.sql.startsWith('update erp.order_lines'))).toBe(false);
-    expect(calls.some((c) => c.sql === 'BEGIN')).toBe(false);
+});
+
+/** 줄 상태를 기억하는 가짜 DB — 조회 대상 = 확인 전 줄. 할인 기록·율 쿠폰 닫기가 확인 시각을 채운다 */
+function statefulPool(n: number) {
+  const lines = Array.from({ length: n }, (_, i) => ({
+    id: String(i + 1), order_pk: String(100 + i), channel: 'coupang_rg', external_order_id: String(9000 + i), amount: 10000,
+    product_id: '80', order_qty: 1, legacy_key: `rg-${9000 + i}-80`, checked: false,
+  }));
+  const calls: { sql: string; params: unknown[] }[] = [];
+  const client = {
+    query: vi.fn(async (sql: string, params: unknown[] = []) => {
+      calls.push({ sql, params });
+      if (sql.startsWith('with todo')) return { rows: lines.filter((l) => !l.checked), rowCount: 0 };
+      if (sql.startsWith('update erp.order_lines set discount_amount')) {
+        const l = lines.find((x) => x.id === String(params[0]) && !x.checked);
+        if (l) l.checked = true;
+        return { rows: [], rowCount: l ? 1 : 0 };
+      }
+      if (sql.startsWith("update erp.order_lines set discount_source = 'coupang_fms_rate'")) {
+        const ids = (params[0] as number[]).map(String);
+        const hit = lines.filter((x) => ids.includes(x.id) && !x.checked);
+        for (const l of hit) l.checked = true;
+        return { rows: hit.map((l) => ({ id: l.id })), rowCount: hit.length };
+      }
+      return { rows: [], rowCount: 0 };
+    }),
+    release: vi.fn(),
+  };
+  return { pool: { connect: vi.fn(async () => client as never) }, calls, lines };
+}
+
+describe('enrichCoupangDiscounts — (리뷰) 율 쿠폰 닫기 · 시간 예산 · 조각 커밋', () => {
+  beforeEach(() => { vi.clearAllMocks(); m.syncLegacySales.mockResolvedValue({ upserted: 0, inserted: 0, voided: 0, warnings: [] }); });
+
+  it('RATE 쿠폰 주문은 coupang_fms_rate로 닫고(할인 0 · 확인 시각) 닫은 것만 센다 — 다음 실행은 다시 조회하지 않는다', async () => {
+    const s = statefulPool(2);
+    const fetch = vi.fn(async () => [{ type: 'RATE', discount: -1, status: 'APPLIED' }]);
+    const r = await enrichCoupangDiscounts(s.pool, fetch, { limitOrders: 60 });
+    expect(r).toMatchObject({ orders: 2, checked: 0, rate: 2 });
+    const close = s.calls.filter((c) => c.sql.startsWith("update erp.order_lines set discount_source = 'coupang_fms_rate'"));
+    expect(close.map((c) => c.params)).toEqual([[[1]], [[2]]]);
+    expect(close[0].sql).toContain('discount_checked_at = now()');
+    expect(close[0].sql).toContain('discount_amount = 0');
+    expect(close[0].sql).toContain('discount_checked_at is null');
+    expect(s.calls.some((c) => c.sql.startsWith('update erp.order_lines set discount_amount'))).toBe(false);
+    // 조회 대상은 확인 전 줄만 — 닫힌 율 쿠폰 주문은 다시 오지 않는다(알림도 한 번)
+    expect(s.calls.find((c) => c.sql.startsWith('with todo'))?.sql).toContain('discount_checked_at is null');
+    fetch.mockClear();
+    const again = await enrichCoupangDiscounts(s.pool, fetch, { limitOrders: 60 });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(again).toMatchObject({ orders: 0, rate: 0 });
+  });
+
+  it('시간 예산(deadline)을 넘기면 새 주문을 조회하지 않는다 — 이미 받은 주문은 기록한다', async () => {
+    const s = statefulPool(3);
+    let t = 0;
+    const fetch = vi.fn(async () => { t = 2000; return []; });
+    const r = await enrichCoupangDiscounts(s.pool, fetch, { limitOrders: 60, deadline: 1000, now: () => t });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(r).toMatchObject({ orders: 1, checked: 1 });
+    expect(s.calls.filter((c) => c.sql === 'COMMIT')).toHaveLength(1);
+  });
+
+  it('주문 20건씩 조각마다 한 트랜잭션(잠금 → 기록 → 옛 장부 → 커밋) — 끊겨도 한 조각만 잃는다', async () => {
+    const s = statefulPool(45);
+    const r = await enrichCoupangDiscounts(s.pool, async () => [], { limitOrders: 60 });
+    expect(r).toMatchObject({ orders: 45, checked: 45 });
+    const tx = s.calls.filter((c) => c.sql === 'BEGIN' || c.sql === 'COMMIT').map((c) => c.sql);
+    expect(tx).toEqual(['BEGIN', 'COMMIT', 'BEGIN', 'COMMIT', 'BEGIN', 'COMMIT']);
+    expect(s.calls.filter((c) => c.sql.startsWith('select pg_advisory_xact_lock'))).toHaveLength(3);
+    expect(m.syncLegacySales.mock.calls.map((c) => (c[1] as string[]).length)).toEqual([20, 20, 5]);
   });
 });

@@ -1,13 +1,17 @@
 // src/lib/erp/orders/discounts.ts
 // (1-C2b ②) 쿠팡(판매자배송·RG) 즉시할인 쿠폰을 주문마다 한 번 조회해 줄에 적는다. 네이버는 어댑터가 응답에서 바로 적는다.
 // 순서: 할인을 모르는 줄(discount_checked_at is null · 시도 3회 미만 · 미결제·취소 제외)을 최근 결제순으로 주문 limitOrders개까지
-//   → 주문마다 조회(트랜잭션 밖 — 주문당 수백 ms) → 한 트랜잭션[채널 잠금 7102 오름차순 → 줄 기록 · 실패 시도 횟수 → 옛 장부 coupon_discount].
+//   → 주문 CHUNK(20)건씩: 주문마다 조회(트랜잭션 밖 — 주문당 수백 ms) → 한 트랜잭션[채널 잠금 7102 오름차순 → 줄 기록 · 율 쿠폰 닫기 ·
+//   실패 시도 횟수 → 옛 장부 coupon_discount] → 커밋. 함수가 중간에 끊겨도 한 조각만 잃는다.
+//   시간 예산(deadline, epoch ms)을 넘기면 새 주문을 조회하지 않는다 — 나머지는 다음 수집.
 // 배분(2026-09-27 B1 실측): 쿠폰 항목에 vendorItemId가 있으면 그 품목 줄(product_id)에 붙인다. 금액은 개당이다
 //   (수량 2 주문도 discount 1650 한 항목 · Wing 최종구매가 12,450 = 14,100 − 1,650) → 줄 할인 = Σ(그 품목 항목) × 줄 수량.
 //   vendorItemId가 없는 항목만 주문 줄 금액 비율로 나눈다(splitDiscount).
 // 조회 실패한 주문은 discount_attempts + 1(다음 수집에서 다시). 3회째 실패면 discount_source = 'coupang_fms_error'로 닫는다 —
 //   B1 실측에서 재시도해도 계속 500인 주문이 있었다. 닫힌 줄은 할인 모름(legacy-store가 coupon_discount를 건드리지 않는다).
-// RATE(율) 쿠폰은 금액을 몰라 기록하지 않고 센다 — 사람이 본다.
+// RATE(율) 쿠폰은 금액을 몰라 discount_source = 'coupang_fms_rate'(할인 0 · 확인 시각)로 닫고 센다 — 사람이 본다.
+//   닫지 않으면 15분마다 다시 조회·알림한다. 닫힌 줄은 할인 모름(legacy-store가 coupon_discount를 건드리지 않는다).
+import type { PoolClient } from 'pg';
 import type { Connectable } from './collect';
 import { CHANNEL_LOCK, LOCK_NS } from './collect';
 import { syncLegacySales } from './legacy-store';
@@ -17,19 +21,10 @@ export type CouponEntry = Record<string, unknown>;
 
 /** 조회 실패가 이 횟수에 이르면 줄을 coupang_fms_error로 닫는다(마이그레이션 121 부분 색인과 같은 값) */
 export const MAX_DISCOUNT_ATTEMPTS = 3;
+/** 한 트랜잭션에 묶는 주문 수 */
+export const DISCOUNT_CHUNK = 20;
 
 const isAppliedPrice = (e: CouponEntry): boolean => e.status === 'APPLIED' && e.type === 'PRICE' && Number(e.discount) > 0;
-
-export function couponTotal(entries: CouponEntry[]): { total: number; rate: boolean } {
-  let total = 0;
-  let rate = false;
-  for (const e of entries) {
-    if (e.status !== 'APPLIED') continue;
-    if (e.type === 'RATE') { rate = true; continue; }
-    if (isAppliedPrice(e)) total += Math.round(Number(e.discount));
-  }
-  return { total, rate };
-}
 
 export interface CouponByItem {
   /** vendorItemId → 개당 할인 합계(원) */
@@ -87,6 +82,7 @@ export function lineDiscounts(c: CouponByItem, lines: DiscountLine[]): Map<numbe
 }
 
 export interface EnrichResult {
+  /** 조회한 주문(시간 예산으로 멈추면 대상보다 적다) */
   orders: number;
   /** 할인을 기록한 줄 */
   checked: number;
@@ -96,7 +92,7 @@ export interface EnrichResult {
   errors: number;
   /** 그중 3회째 실패로 coupang_fms_error로 닫은 주문 */
   errorsClosed: number;
-  /** RATE 쿠폰이라 기록하지 않은 주문 */
+  /** RATE 쿠폰이라 coupang_fms_rate로 닫은 주문(이번에 닫은 것만 — 알림이 한 번) */
   rate: number;
 }
 
@@ -107,8 +103,9 @@ interface TodoLine extends DiscountLine {
 export async function enrichCoupangDiscounts(
   pool: Connectable,
   fetchCoupons: (orderId: string) => Promise<CouponEntry[]>,
-  opts: { limitOrders: number },
+  opts: { limitOrders: number; /** epoch ms — 넘기면 새 주문을 조회하지 않는다 */ deadline?: number; now?: () => number },
 ): Promise<EnrichResult> {
+  const now = opts.now ?? Date.now;
   const c = await pool.connect();
   try {
     const { rows } = await c.query(
@@ -123,7 +120,7 @@ export async function enrichCoupangDiscounts(
         order by t.p desc nulls last, o.id, l.id`,
       [opts.limitOrders],
     );
-    const byOrder = new Map<string, { orderId: string; channel: OrderChannel; lines: TodoLine[] }>();
+    const byOrder = new Map<string, OrderGroup>();
     for (const r of rows) {
       const k = String(r.order_pk);
       const g = byOrder.get(k) ?? { orderId: String(r.external_order_id), channel: r.channel as OrderChannel, lines: [] };
@@ -133,62 +130,94 @@ export async function enrichCoupangDiscounts(
       });
       byOrder.set(k, g);
     }
-    const out: EnrichResult = { orders: byOrder.size, checked: 0, discounted: 0, errors: 0, errorsClosed: 0, rate: 0 };
-    const writes: { channel: OrderChannel; id: number; amount: number; key: string | null }[] = [];
-    const failed: { channel: OrderChannel; ids: number[] }[] = [];
-    for (const g of byOrder.values()) {
-      let entries: CouponEntry[];
-      try {
-        entries = await fetchCoupons(g.orderId);
-      } catch {
-        out.errors++;
-        failed.push({ channel: g.channel, ids: g.lines.map((l) => l.id) });
-        continue;
+    const out: EnrichResult = { orders: 0, checked: 0, discounted: 0, errors: 0, errorsClosed: 0, rate: 0 };
+    const groups = [...byOrder.values()];
+    let stopped = false;
+    for (let i = 0; i < groups.length && !stopped; i += DISCOUNT_CHUNK) {
+      const chunk: ChunkWork = { writes: [], rated: [], failed: [] };
+      for (const g of groups.slice(i, i + DISCOUNT_CHUNK)) {
+        if (opts.deadline !== undefined && now() > opts.deadline) { stopped = true; break; }
+        out.orders++;
+        let entries: CouponEntry[];
+        try {
+          entries = await fetchCoupons(g.orderId);
+        } catch {
+          out.errors++;
+          chunk.failed.push({ channel: g.channel, ids: g.lines.map((l) => l.id) });
+          continue;
+        }
+        const coupons = couponByItem(entries);
+        if (coupons.rate) { chunk.rated.push({ channel: g.channel, ids: g.lines.map((l) => l.id) }); continue; }
+        const disc = lineDiscounts(coupons, g.lines);
+        for (const l of g.lines) chunk.writes.push({ channel: g.channel, id: l.id, amount: disc.get(l.id) ?? 0, key: l.key });
       }
-      const coupons = couponByItem(entries);
-      if (coupons.rate) { out.rate++; continue; }
-      const disc = lineDiscounts(coupons, g.lines);
-      for (const l of g.lines) writes.push({ channel: g.channel, id: l.id, amount: disc.get(l.id) ?? 0, key: l.key });
-    }
-    if (writes.length === 0 && failed.length === 0) return out;
-    await c.query('BEGIN');
-    try {
-      const channels = new Set([...writes.map((w) => w.channel), ...failed.map((f) => f.channel)]);
-      for (const ch of [...channels].sort((a, b) => CHANNEL_LOCK[a] - CHANNEL_LOCK[b])) {
-        await c.query('select pg_advisory_xact_lock($1::int, $2::int)', [LOCK_NS, CHANNEL_LOCK[ch]]);
-      }
-      for (const w of writes) {
-        const res = await c.query(
-          `update erp.order_lines set discount_amount = $2, discount_source = 'coupang_fms', discount_checked_at = now(), updated_at = now()
-            where id = $1 and discount_checked_at is null`,
-          [w.id, w.amount],
-        );
-        if ((res.rowCount ?? 0) > 0) { out.checked++; if (w.amount > 0) out.discounted++; }
-      }
-      for (const f of failed) {
-        // 시도 횟수 + 1 — 3회째면 할인 모름으로 닫는다(discount_amount 0 · 출처 coupang_fms_error). 잠금 사이에 확인된 줄은 건드리지 않는다
-        const { rows: att } = await c.query(
-          `update erp.order_lines set discount_attempts = discount_attempts + 1,
-                  discount_checked_at = case when discount_attempts + 1 >= ${MAX_DISCOUNT_ATTEMPTS} then now() else null end,
-                  discount_source = case when discount_attempts + 1 >= ${MAX_DISCOUNT_ATTEMPTS} then 'coupang_fms_error' else discount_source end,
-                  discount_amount = case when discount_attempts + 1 >= ${MAX_DISCOUNT_ATTEMPTS} then 0 else discount_amount end,
-                  updated_at = now()
-            where id = any($1::bigint[]) and discount_checked_at is null
-            returning id, (discount_checked_at is not null) as closed`,
-          [f.ids],
-        );
-        if (att.some((r) => r.closed === true)) out.errorsClosed++;
-      }
-      const keys = [...new Set(writes.map((w) => w.key).filter((k): k is string => k !== null))];
-      // 실패·닫힘 줄은 할인 모름 그대로라 옛 장부를 다시 계산할 것이 없다
-      if (keys.length > 0) await syncLegacySales(c, keys);
-      await c.query('COMMIT');
-    } catch (e) {
-      await c.query('ROLLBACK').catch(() => {});
-      throw e;
+      await commitChunk(c, chunk, out);
     }
     return out;
   } finally {
     c.release();
+  }
+}
+
+interface OrderGroup {
+  orderId: string;
+  channel: OrderChannel;
+  lines: TodoLine[];
+}
+
+interface ChunkWork {
+  writes: { channel: OrderChannel; id: number; amount: number; key: string | null }[];
+  /** RATE 쿠폰 주문의 줄 — coupang_fms_rate로 닫는다 */
+  rated: { channel: OrderChannel; ids: number[] }[];
+  failed: { channel: OrderChannel; ids: number[] }[];
+}
+
+/** 한 조각을 한 트랜잭션에: 채널 잠금 → 줄 기록 → 율 쿠폰 닫기 → 실패 시도 횟수 → 옛 장부 → 커밋 */
+async function commitChunk(c: PoolClient, w: ChunkWork, out: EnrichResult): Promise<void> {
+  if (w.writes.length === 0 && w.rated.length === 0 && w.failed.length === 0) return;
+  await c.query('BEGIN');
+  try {
+    const channels = new Set([...w.writes, ...w.rated, ...w.failed].map((x) => x.channel));
+    for (const ch of [...channels].sort((a, b) => CHANNEL_LOCK[a] - CHANNEL_LOCK[b])) {
+      await c.query('select pg_advisory_xact_lock($1::int, $2::int)', [LOCK_NS, CHANNEL_LOCK[ch]]);
+    }
+    for (const x of w.writes) {
+      const res = await c.query(
+        `update erp.order_lines set discount_amount = $2, discount_source = 'coupang_fms', discount_checked_at = now(), updated_at = now()
+          where id = $1 and discount_checked_at is null`,
+        [x.id, x.amount],
+      );
+      if ((res.rowCount ?? 0) > 0) { out.checked++; if (x.amount > 0) out.discounted++; }
+    }
+    for (const r of w.rated) {
+      const res = await c.query(
+        `update erp.order_lines set discount_source = 'coupang_fms_rate', discount_checked_at = now(), discount_amount = 0, updated_at = now()
+          where id = any($1::bigint[]) and discount_checked_at is null`,
+        [r.ids],
+      );
+      if ((res.rowCount ?? 0) > 0) out.rate++;
+    }
+    for (const f of w.failed) {
+      // 시도 횟수 + 1 — 3회째면 할인 모름으로 닫는다(discount_amount 0 · 출처 coupang_fms_error). 잠금 사이에 확인된 줄은 건드리지 않는다.
+      // 겹친 실행이 같은 주문을 동시에 실패하면 한 번에 2가 오를 수 있다 — 조금 일찍 닫힐 뿐 해롭지 않다(checked_at is null이 지킨다)
+      const { rows: att } = await c.query(
+        `update erp.order_lines set discount_attempts = discount_attempts + 1,
+                discount_checked_at = case when discount_attempts + 1 >= ${MAX_DISCOUNT_ATTEMPTS} then now() else null end,
+                discount_source = case when discount_attempts + 1 >= ${MAX_DISCOUNT_ATTEMPTS} then 'coupang_fms_error' else discount_source end,
+                discount_amount = case when discount_attempts + 1 >= ${MAX_DISCOUNT_ATTEMPTS} then 0 else discount_amount end,
+                updated_at = now()
+          where id = any($1::bigint[]) and discount_checked_at is null
+          returning id, (discount_checked_at is not null) as closed`,
+        [f.ids],
+      );
+      if (att.some((r) => r.closed === true)) out.errorsClosed++;
+    }
+    const keys = [...new Set(w.writes.map((x) => x.key).filter((k): k is string => k !== null))];
+    // 실패·닫힘(오류·율) 줄은 할인 모름 그대로라 옛 장부를 다시 계산할 것이 없다
+    if (keys.length > 0) await syncLegacySales(c, keys);
+    await c.query('COMMIT');
+  } catch (e) {
+    await c.query('ROLLBACK').catch(() => {});
+    throw e;
   }
 }

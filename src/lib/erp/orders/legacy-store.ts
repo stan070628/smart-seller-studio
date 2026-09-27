@@ -13,12 +13,15 @@ import type { OrderChannel, StdStatus } from './types';
 const iso = (v: unknown): string | null => (v === null || v === undefined ? null : v instanceof Date ? v.toISOString() : new Date(String(v)).toISOString());
 
 /**
- * (1-C2b ②) 줄의 확인된 할인. null = 모른다 — 아직 확인 전(discount_checked_at null)이거나 쿠팡 조회 3회 실패로 닫힌 줄(coupang_fms_error).
+ * (1-C2b ②) 줄의 확인된 할인. null = 모른다 — 아직 확인 전(discount_checked_at null)이거나
+ * 쿠팡 조회 3회 실패(coupang_fms_error)·율 쿠폰(coupang_fms_rate)으로 닫힌 줄.
  * 모르는 줄이 하나라도 있는 키는 옛 장부 coupon_discount를 건드리지 않는다(planLegacy).
  */
 function discountOf(r: Record<string, unknown>): number | null {
   if (r.discount_checked_at === null || r.discount_checked_at === undefined) return null;
-  if (r.discount_source === 'coupang_fms_error') return null;
+  if (r.discount_source === 'coupang_fms_error' || r.discount_source === 'coupang_fms_rate') return null;
+  // 판매자배송 orderPrice가 쿠폰 전인지 실측 전(1-C2b B1 열린 질문) — 확인되면 이 줄을 지운다
+  if (r.channel === 'coupang_wing') return null;
   return Number(r.discount_amount) || 0;
 }
 

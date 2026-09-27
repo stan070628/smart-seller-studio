@@ -60,6 +60,8 @@ export interface DayLine {
   amount: number;
   /** (1-C2b ②) 판매자 부담 즉시할인(원, 줄 합계). 0 = 없음 또는 아직 모름 */
   discountAmount: number;
+  /** 할인을 확인했는가(discount_checked_at 있음). false = 확인 전 — 0원과 가른다 */
+  discountKnown: boolean;
   attribution: 'mapped' | 'unattributed';
   unattributedReason: string | null;
   deductionState: string;
@@ -130,7 +132,8 @@ export async function ordersStatus(db: Db, now: Date): Promise<OrdersStatus> {
 export async function dayLines(db: Db, channel: OrderChannel, day: string): Promise<DayLine[]> {
   const { rows } = await db.query(
     `select l.id, o.external_order_id, l.external_line_id, l.ordered_at, l.paid_at, l.status, l.raw_status, l.product_label,
-            l.order_qty, l.sku_qty, l.amount, l.discount_amount, l.attribution, l.unattributed_reason, l.deduction_state, l.deduction_note,
+            l.order_qty, l.sku_qty, l.amount, l.discount_amount,
+            (l.discount_checked_at is not null) as discount_known, l.attribution, l.unattributed_reason, l.deduction_state, l.deduction_note,
             coalesce((select string_agg(s.name || case when s.option_label <> '' then ' · ' || s.option_label else '' end || ' ×' || (a->>'qty'), ', ' order by s.id)
                         from jsonb_array_elements(l.alloc) a join erp.skus s on s.id = (a->>'skuId')::bigint), '') as sku_labels
        from erp.order_lines l join erp.orders o on o.id = l.order_id
@@ -142,7 +145,7 @@ export async function dayLines(db: Db, channel: OrderChannel, day: string): Prom
     id: Number(r.id), externalOrderId: String(r.external_order_id), externalLineId: String(r.external_line_id),
     orderedAt: iso(r.ordered_at) as string, paidAt: iso(r.paid_at), status: r.status as StdStatus, rawStatus: String(r.raw_status),
     productLabel: String(r.product_label ?? ''), orderQty: n(r.order_qty), skuQty: n(r.sku_qty), amount: n(r.amount),
-    discountAmount: n(r.discount_amount),
+    discountAmount: n(r.discount_amount), discountKnown: r.discount_known === true,
     attribution: r.attribution, unattributedReason: r.unattributed_reason ?? null, deductionState: String(r.deduction_state),
     deductionNote: r.deduction_note ?? null, skuLabels: String(r.sku_labels ?? ''),
   }));

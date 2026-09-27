@@ -84,7 +84,12 @@ describe('runOrdersSync — (1-C2b ②) 쿠팡 쿠폰 조회', () => {
   it('쓰는 실행이고 쿠팡 채널이 있으면 수집 뒤 쿠폰을 조회해 job_runs counts에 싣는다 · dryRun·쿠팡 없는 실행은 부르지 않는다', async () => {
     m.collectOrders.mockResolvedValue([ok('coupang_rg'), ok('naver')]);
     await runOrdersSync({ channels: ['coupang_rg', 'naver'], dryRun: false, trigger: 'cron' });
-    expect(m.enrich).toHaveBeenCalledWith(expect.anything(), expect.any(Function), { limitOrders: 60 });
+    // (리뷰) 시간 예산 90초 — 크론 함수 제한 안에서 끝낸다
+    const before = Date.now();
+    expect(m.enrich).toHaveBeenCalledWith(expect.anything(), expect.any(Function), { limitOrders: 60, deadline: expect.any(Number) });
+    const deadline = (m.enrich.mock.calls[0][2] as { deadline: number }).deadline;
+    expect(deadline).toBeGreaterThan(before + 80_000);
+    expect(deadline).toBeLessThanOrEqual(before + 90_000);
     expect(finishedCounts()).toMatchObject({ discount_orders: 2, discount_checked: 3, discount_errors: 0, discount_errors_closed: 0, discount_rate: 0 });
     expect(m.sendTelegramMessage).not.toHaveBeenCalled();
     m.enrich.mockClear();

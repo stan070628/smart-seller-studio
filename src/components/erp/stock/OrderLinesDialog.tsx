@@ -76,7 +76,7 @@ export default function OrderLinesDialog({ channel, label, date, onClose }: Prop
                     <td style={{ ...numTdStyle, fontSize: 11.5 }}>{won(l.orderQty)}</td>
                     <td style={{ ...td, whiteSpace: 'normal', maxWidth: 220 }}>{l.skuLabels || '—'}</td>
                     <td style={{ ...numTdStyle, fontSize: 11.5 }}>{won(l.amount)}</td>
-                    <td style={{ ...numTdStyle, fontSize: 11.5 }}>{l.discountAmount > 0 ? won(l.discountAmount) : '—'}</td>
+                    <td style={{ ...numTdStyle, fontSize: 11.5 }}>{!l.discountKnown ? '확인 전' : l.discountAmount > 0 ? won(l.discountAmount) : '—'}</td>
                     <td style={td}>{l.rawStatus}</td>
                     <td style={td}>{l.attribution === 'mapped' ? '연결' : REASON[l.unattributedReason ?? ''] ?? '미귀속'}</td>
                     <td style={{ ...td, whiteSpace: 'normal', maxWidth: 220 }}>

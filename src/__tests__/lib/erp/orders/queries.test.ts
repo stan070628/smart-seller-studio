@@ -47,16 +47,20 @@ describe('ordersStatus', () => {
 
 describe('dayLines', () => {
   it('(1-C2b ②) 주문 줄에 할인 금액을 싣는다', async () => {
+    let sql = '';
     const db: Db = {
-      async query() {
+      async query(q: string) {
+        sql = q;
         return { rows: [{
           id: '1', external_order_id: '9001', external_line_id: '9001:95373359497', ordered_at: new Date('2026-09-27T01:00:00Z'),
           paid_at: new Date('2026-09-27T01:00:30Z'), status: 'paid', raw_status: 'ACCEPT', product_label: '쿨매트', order_qty: 2, sku_qty: 2,
-          amount: 28200, discount_amount: 840, attribution: 'mapped', unattributed_reason: null, deduction_state: 'posted', deduction_note: null, sku_labels: '쿨매트 ×2',
+          amount: 28200, discount_amount: 840, discount_known: true, attribution: 'mapped', unattributed_reason: null, deduction_state: 'posted', deduction_note: null, sku_labels: '쿨매트 ×2',
         }], rowCount: 1 };
       },
     };
     const r = await dayLines(db, 'coupang_rg', '2026-09-27');
-    expect(r[0]).toMatchObject({ id: 1, amount: 28200, discountAmount: 840 });
+    expect(r[0]).toMatchObject({ id: 1, amount: 28200, discountAmount: 840, discountKnown: true });
+    // (리뷰) 「확인 전」과 「0원」을 가른다
+    expect(sql).toContain('(l.discount_checked_at is not null) as discount_known');
   });
 });

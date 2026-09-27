@@ -19,6 +19,16 @@ describe('getOrderCoupons', () => {
     expect(await clientWith({ code: 'SUCCESS', data: [] }).getOrderCoupons('1')).toEqual([]);
   });
 
+  it('(리뷰) 모르는 응답 모양이면 던진다 — 빈 배열로 읽어 「할인 0원」으로 확정하지 않는다', async () => {
+    await expect(clientWith({ code: 'SUCCESS' }).getOrderCoupons('1')).rejects.toThrow();
+    await expect(clientWith({ code: 'SUCCESS', data: {} }).getOrderCoupons('1')).rejects.toThrow();
+    await expect(clientWith({ code: 'SUCCESS', data: null }).getOrderCoupons('1')).rejects.toThrow();
+    await expect(clientWith({ code: 'SUCCESS', data: { content: 'x' } }).getOrderCoupons('1')).rejects.toThrow();
+    // 알아본 모양의 빈 배열만 []
+    expect(await clientWith({ code: 'SUCCESS', data: { content: [] } }).getOrderCoupons('1')).toEqual([]);
+    expect(await clientWith({ code: 'SUCCESS', content: [] }).getOrderCoupons('1')).toEqual([]);
+  });
+
   it('요청이 실패하면 던진다(0으로 삼키지 않는다)', async () => {
     await expect(clientWith(new Error('HTTP 500')).getOrderCoupons('1')).rejects.toThrow('HTTP 500');
   });

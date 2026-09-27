@@ -1050,7 +1050,8 @@ export class CoupangClient {
     if (data && typeof data === 'object' && Array.isArray((data as { content?: unknown }).content)) return (data as { content: Array<Record<string, unknown>> }).content;
     const top = res as unknown as { content?: unknown };
     if (Array.isArray(top.content)) return top.content as Array<Record<string, unknown>>;
-    return [];
+    // 모르는 모양을 []로 읽으면 「할인 0원」으로 확정된다 — 던져서 다음 수집이 다시 조회하게 한다(본문은 싣지 않는다)
+    throw new Error(`[쿠팡 쿠폰] 주문 ${orderId}: 알 수 없는 응답 모양`);
   }
 
   /**
