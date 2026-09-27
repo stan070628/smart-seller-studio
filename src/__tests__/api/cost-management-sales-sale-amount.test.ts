@@ -98,4 +98,17 @@ describe('PATCH sales — sale_amount 재계산', () => {
     const params = mockQuery.mock.calls[0][1] as unknown[];
     expect(params).toContain('toss');
   });
+
+  it('channel: karrot은 허용된다(1-C2b ③ — 당근 판매 행을 고쳐 저장해도 채널이 막히지 않는다)', async () => {
+    const { PATCH } = await import('@/app/api/cost-management/sales/[id]/route');
+    const req = new NextRequest('http://localhost/api/cost-management/sales/sale-1', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channel: 'karrot' }),
+    });
+    const res = await PATCH(req, { params: Promise.resolve({ id: 'sale-1' }) });
+    expect(res.status).toBe(200);
+    const params = mockQuery.mock.calls[0][1] as unknown[];
+    expect(params).toContain('karrot');
+  });
 });

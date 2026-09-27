@@ -18,6 +18,7 @@ import {
 import StockTable from './StockTable';
 import HistoryPanel from './HistoryPanel';
 import CsvImportDialog from './CsvImportDialog';
+import KarrotSaleForm from './KarrotSaleForm';
 import CountQueuePanel from './CountQueuePanel';
 import OrdersSyncPanel from './OrdersSyncPanel';
 import { fetchRecon, fetchStock, postAdjust, postRgApply, postRgArrive } from './api';
@@ -42,6 +43,7 @@ export default function StockClient() {
   const [staged, setStaged] = useState<Map<string, StagedEdit>>(new Map());
   const [saving, setSaving] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showKarrot, setShowKarrot] = useState(false);
   const [historyKey, setHistoryKey] = useState(0);
 
   const load = useCallback(async () => {
@@ -261,6 +263,7 @@ export default function StockClient() {
           </button>
         )}
         <div style={dividerStyle} />
+        <button type="button" onClick={() => setShowKarrot(true)} style={btnStyle}>당근 판매</button>
         <button type="button" onClick={() => setShowImport(true)} style={btnStyle}><Upload size={12} /> 실사표 불러오기(CSV)</button>
         <button type="button" onClick={exportCsv} style={btnStyle}><Download size={12} /> 엑셀↓</button>
         <div style={{ flex: 1 }} />
@@ -320,6 +323,15 @@ export default function StockClient() {
 
       {showImport && (
         <CsvImportDialog onClose={() => setShowImport(false)} onCommitted={() => { setShowImport(false); void load(); }} />
+      )}
+      {showKarrot && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div onClick={() => setShowKarrot(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.35)' }} />
+          <div role="dialog" aria-label="당근 판매" style={{ position: 'relative', width: 'min(520px, 96vw)', maxHeight: '88vh', overflow: 'auto', background: '#f9fafb', color: '#111827', padding: 12 }}>
+            <KarrotSaleForm variant="pc" onSaved={() => void load()} />
+            <button type="button" onClick={() => setShowKarrot(false)} style={{ ...btnStyle, marginTop: 8 }}>닫기</button>
+          </div>
+        </div>
       )}
     </div>
   );
