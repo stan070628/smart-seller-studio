@@ -30,10 +30,12 @@ describe('dedupKey', () => {
 describe('mergePages', () => {
   it('겹친 카드는 한 번만, 순위는 먼저 나온 자리', () => {
     const dup = { seller: '들꽃잠', title: '들꽃잠 행복 눈 찜질팩 핑크, 1개', price: 25200 };
+    // B는 A와 리뷰 수를 다르게 둔다 — 값이 전부 같으면(제목 한 글자 차이) 새 퍼지 겹침
+    // 판정에 우연히 걸릴 수 있는데, 이 테스트가 보려는 것은 그 경로가 아니다.
     const r = mergePages([
       page({ sort_bar_seen: true, category_path: '건강/의료용품 > 냉온/찜질용품', sort_label: '판매 많은순',
         products: [card({ row: 0, col: 0, title: 'A' }), card({ row: 1, col: 4, ...dup })] }),
-      page({ products: [card({ row: 0, col: 0, ...dup }), card({ row: 0, col: 1, title: 'B' })] }),
+      page({ products: [card({ row: 0, col: 0, ...dup }), card({ row: 0, col: 1, title: 'B', review_count: 999 })] }),
     ]);
     expect(r.listings.map((l) => l.title)).toEqual(['A', dup.title, 'B']);
     expect(r.listings.map((l) => l.rank)).toEqual([1, 2, 3]);
@@ -83,5 +85,67 @@ describe('mergePages', () => {
       page({ products: [card({ row: 0, col: 0, ...k }), card({ row: 0, col: 1, ...k })] }),
     ]);
     expect(r.listings.map((l) => l.dedup_key)).toEqual([dedupKey(card(k)), `${dedupKey(card(k))}#2`]);
+  });
+
+  describe('조각 경계 오독 — 값은 같은데 이름이 살짝 다르게 읽힌 겹침', () => {
+    // 실측(2026-09-27 컨트롤러 E2E): 인접 조각에서 같은 카드가 판매자명·상품명을
+    // 한두 글자 다르게 읽혔다. 가격·리뷰 수·평점이 모두 같고 정규화한 이름의
+    // 편집거리가 3 이하이면 같은 카드로 본다.
+    function merged2(prev: Partial<ExtractedListing>, cur: Partial<ExtractedListing>) {
+      return mergePages([
+        page({ products: [card({ row: 0, col: 0, ...prev })] }),
+        page({ products: [card({ row: 0, col: 0, ...cur })] }),
+      ]);
+    }
+
+    it('짐샌더스 vs 짐샌더슨(같은 판매자·오리지니크)', () => {
+      const r = merged2(
+        { seller: '오리지니크', title: '짐샌더스 테라조 컬러 커팅보드', price: 40400, review_count: 216, rating: 4.8 },
+        { seller: '오리지니크', title: '짐샌더슨 테라조 컬러 커팅보드', price: 40400, review_count: 216, rating: 4.8 },
+      );
+      expect(r.listings).toHaveLength(1);
+    });
+
+    it('더샤키친 vs 더사키친(판매자명만 한 글자 차이·제목 동일)', () => {
+      const r = merged2(
+        { seller: '더샤키친', title: '국산 업소용 도마 횟집 정육 식당 고기 영업용 칼라', price: 15500, review_count: 493, rating: 4.84 },
+        { seller: '더사키친', title: '국산 업소용 도마 횟집 정육 식당 고기 영업용 칼라', price: 15500, review_count: 493, rating: 4.84 },
+      );
+      expect(r.listings).toHaveLength(1);
+    });
+
+    it('럭키카아 vs 럭키아울(Keep Fruit)', () => {
+      const r = merged2(
+        { seller: 'Keep Fruit', title: '럭키카아 국산 순면 복부 팥 어깨 현미 세트 찜질팩', price: 25800, review_count: 15040, rating: 4.81 },
+        { seller: 'Keep Fruit', title: '럭키아울 국산 순면 복부 팥 어깨 현미 세트 찜질팩', price: 25800, review_count: 15040, rating: 4.81 },
+      );
+      expect(r.listings).toHaveLength(1);
+    });
+
+    it('프란īcz vs 프란프란(같은 제목, list_price 오독은 무시)', () => {
+      const r = merged2(
+        { seller: '프란īcz', title: '상품', price: 26800, review_count: 2528, rating: 4.86, list_price: 28000 },
+        { seller: '프란프란', title: '상품', price: 26800, review_count: 2528, rating: 4.86, list_price: 28800 },
+      );
+      expect(r.listings).toHaveLength(1);
+    });
+  });
+
+  it('같은 조각 안의 비슷한 카드는 퍼지 겹침으로 합치지 않는다 — 다른 상품이다(집앤콕)', () => {
+    const r = mergePages([
+      page({ products: [
+        card({ row: 0, col: 0, seller: '집앤콕', title: '다린홈 집앤콕 찜질팩 어깨 배 복부 허리 온열찜질팩', price: 29900, review_count: 747, rating: 4.96 }),
+        card({ row: 0, col: 1, seller: '집앤콕', title: '집앤콕 찜질팩 어깨 배 복부 허리 온열찜질팩 브라운', price: 29900, review_count: 747, rating: 4.96 }),
+      ] }),
+    ]);
+    expect(r.listings).toHaveLength(2);
+  });
+
+  it('값이 같아도 인접 조각에서 제목이 크게 다르면 다른 상품으로 남긴다', () => {
+    const r = mergePages([
+      page({ products: [card({ row: 0, col: 0, seller: '판매자', title: '완전히 다른 첫 번째 상품명 텍스트', price: 19900, review_count: 100, rating: 4.5 })] }),
+      page({ products: [card({ row: 0, col: 0, seller: '판매자', title: '전혀 관계없는 두 번째 물건 이름', price: 19900, review_count: 100, rating: 4.5 })] }),
+    ]);
+    expect(r.listings).toHaveLength(2);
   });
 });

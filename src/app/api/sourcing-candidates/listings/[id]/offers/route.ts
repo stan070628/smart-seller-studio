@@ -69,6 +69,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ success: false, error: err instanceof Error ? err.message : '업로드 실패' }, { status: 500 });
   }
 
-  const parseError = await parseOffer(pool, offerId, user.userId);
-  return NextResponse.json({ success: true, data: { id: offerId, parse_error: parseError } }, { status: 201 });
+  const result = await parseOffer(pool, offerId, user.userId);
+  return NextResponse.json({ success: true, data: { id: offerId, parse_error: result?.message ?? null } }, { status: 201 });
 }

@@ -22,16 +22,25 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   const pool = getSourcingPool();
 
-  const { rows } = await pool.query(
-    `UPDATE sourcing_scans
-     SET parse_status = 'parsing', parse_attempts = parse_attempts + 1, parse_started_at = now(), updated_at = now()
-     WHERE id = $1 AND user_id = $2 AND parse_attempts < $3
-       AND (parse_status IN ('pending','failed')
-            -- 함수가 시간 초과로 죽으면 'parsing'에 묶인다. 10분 지나면 회수한다(영수증과 같은 규칙)
-            OR (parse_status = 'parsing' AND parse_started_at < now() - interval '10 minutes'))
-     RETURNING image_paths`,
-    [id, user.userId, MAX_ATTEMPTS],
-  );
+  let rows: { image_paths: string[] }[];
+  try {
+    ({ rows } = await pool.query(
+      `UPDATE sourcing_scans
+       SET parse_status = 'parsing', parse_attempts = parse_attempts + 1, parse_started_at = now(), updated_at = now()
+       WHERE id = $1 AND user_id = $2 AND parse_attempts < $3
+         AND (parse_status IN ('pending','failed')
+              -- 함수가 시간 초과로 죽으면 'parsing'에 묶인다. 10분 지나면 회수한다(영수증과 같은 규칙)
+              OR (parse_status = 'parsing' AND parse_started_at < now() - interval '10 minutes'))
+       RETURNING image_paths`,
+      [id, user.userId, MAX_ATTEMPTS],
+    ));
+  } catch (err) {
+    // id가 uuid 형식이 아니면 이 UPDATE 자체가 던진다
+    if ((err as { code?: string }).code === '22P02') {
+      return NextResponse.json({ success: false, error: '잘못된 id입니다.' }, { status: 400 });
+    }
+    return NextResponse.json({ success: false, error: err instanceof Error ? err.message : '서버 오류' }, { status: 500 });
+  }
   if (rows.length === 0) {
     // 소유하지 않았거나 존재하지 않는 것과, 상태 때문에 못 받은 것을 구분해 알려준다
     const { rows: cur } = await pool.query(
@@ -57,7 +66,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     }
     return NextResponse.json({ success: false, error: '판독할 수 없는 상태입니다.' }, { status: 409 });
   }
-  const paths = rows[0].image_paths as string[];
+  const paths = rows[0].image_paths;
 
   // 회수된 뒤 뒤늦게 끝난 옛 실행이 더 최신 결과를 덮어쓰지 못하도록 parsing일 때만 반영한다
   const fail = async (msg: string, status: number) => {

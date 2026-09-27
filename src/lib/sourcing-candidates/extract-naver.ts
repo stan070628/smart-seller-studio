@@ -71,9 +71,11 @@ export async function extractNaverPage(image: Buffer): Promise<ExtractedNaverPag
         ],
       }],
     },
-    // 함수 제한(maxDuration=300)에 걸려 죽기 전에 이 호출이 먼저 깔끔하게 실패해야
-    // allSettled·fail()이 오류로 잡는다. 재시도는 라우트가 조각 단위로 다시 하므로 여기선 1회만.
-    { timeout: 240_000, maxRetries: 1 },
+    // 실측(2026-09-27 컨트롤러 E2E): 조각당 12~47초. 타임아웃 140초·재시도 1회면
+    // 최악의 경우(140초×2회)도 280초로 함수 제한(maxDuration=300) 안에 들어온다 —
+    // 죽기 전에 이 호출이 먼저 깔끔하게 실패해야 allSettled·fail()이 오류로 잡는다.
+    // 재시도는 라우트가 조각 단위로 다시 하므로 여기선 1회만.
+    { timeout: 140_000, maxRetries: 1 },
   );
   return NAVER_PAGE_SCHEMA.parse(readStructuredText(response)) as ExtractedNaverPage;
 }
