@@ -6,7 +6,9 @@
  */
 export type FilterFlag = 'below_floor' | 'official' | 'electric' | 'strong';
 
-export const ELECTRIC_WORDS = ['전기', '온열기', '의료기기', '충전식'];
+export const ELECTRIC_WORDS = ['온열기', '의료기기', '충전식', '전동'];
+/** '전기'는 단어로 매칭하되 '정전기'는 제외한다 — 정전기 방지 장갑은 전기 제품이 아니다 */
+const ELECTRIC_WORD_REGEX = /(?<!정)전기/;
 export const STRONG_REVIEW_COUNT = 10_000;
 
 export function listingFlags(
@@ -15,8 +17,8 @@ export function listingFlags(
 ): FilterFlag[] {
   const flags: FilterFlag[] = [];
   if (l.price < floor) flags.push('below_floor');
-  if (l.badges.includes('공식')) flags.push('official');
-  if (ELECTRIC_WORDS.some((w) => l.title.includes(w))) flags.push('electric');
+  if (l.badges.some((b) => b.includes('공식'))) flags.push('official');
+  if (ELECTRIC_WORD_REGEX.test(l.title) || ELECTRIC_WORDS.some((w) => l.title.includes(w))) flags.push('electric');
   if ((l.review_count ?? 0) >= STRONG_REVIEW_COUNT) flags.push('strong');
   return flags;
 }

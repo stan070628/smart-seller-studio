@@ -26,6 +26,9 @@ describe('offerCny', () => {
   it('구간가가 없으면 null', () => {
     expect(offerCny(offer({ tiers: [] }))).toBeNull();
   });
+  it('tiers가 null이면 null', () => {
+    expect(offerCny(offer({ tiers: null }))).toBeNull();
+  });
 });
 
 describe('buildListingView', () => {

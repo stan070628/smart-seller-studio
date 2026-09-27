@@ -1,8 +1,11 @@
 import { checkListingNumbers } from '@/lib/sourcing-candidates/verify';
 import type { ExtractedListing, ExtractedNaverPage, MergedListing } from '@/lib/sourcing-candidates/types';
 
+/** 구두점(마침표·쉼표·가운뎃점·말줄임표)은 조각마다 다르게 끊겨 보이므로 위치 상관없이 없앤다 */
+const PUNCTUATION = /[.,·…]/g;
+
 function normalize(s: string): string {
-  return s.replace(/\s+/g, '').replace(/(\.\.\.|…)+$/, '').toLowerCase();
+  return s.normalize('NFC').replace(/\s+/g, '').replace(PUNCTUATION, '').toLowerCase();
 }
 
 /**
@@ -32,17 +35,24 @@ export function mergePages(pages: ExtractedNaverPage[]): MergeResult {
   const firstSort = pages.findIndex((p) => p.sort_bar_seen);
   const used = firstSort < 0 ? pages : pages.slice(firstSort);
 
+  // seen은 "이전 페이지까지" 나온 키만 담는다 — 조각 겹침으로 생긴 중복을 걸러낸다.
+  // 같은 페이지 안의 중복 키는 다른 상품(말줄임으로 제목이 같게 잘림)이므로 걸러내지 않고
+  // dedup_key에 #2, #3…을 붙여 별도 줄로 남긴다(scan_id, dedup_key) 유니크 인덱스 대응).
   const seen = new Set<string>();
   const listings: MergedListing[] = [];
   for (const p of used) {
     const ordered = [...p.products].sort((a, b) => a.row - b.row || a.col - b.col);
+    const pageCount = new Map<string, number>();
     for (const c of ordered) {
       const key = dedupKey(c);
       if (seen.has(key)) continue;
-      seen.add(key);
+      const n = (pageCount.get(key) ?? 0) + 1;
+      pageCount.set(key, n);
+      const dedup_key = n === 1 ? key : `${key}#${n}`;
       const { row: _row, col: _col, ...rest } = c;
-      listings.push({ ...rest, rank: listings.length + 1, dedup_key: key, number_check: checkListingNumbers(c) });
+      listings.push({ ...rest, rank: listings.length + 1, dedup_key, number_check: checkListingNumbers(c) });
     }
+    for (const key of pageCount.keys()) seen.add(key);
   }
 
   return {

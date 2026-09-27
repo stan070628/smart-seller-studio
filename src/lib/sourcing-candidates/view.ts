@@ -21,7 +21,8 @@ export interface ListingView extends ListingRow {
 
 /** 채택 원가 = 사람이 넣은 값, 없으면 최소 주문 구간 단가 */
 export function offerCny(o: Pick<OfferRow, 'cny_override' | 'tiers'>): number | null {
-  if (o.cny_override !== null) return o.cny_override;
+  const override = o.cny_override ?? null;
+  if (override !== null) return override;
   const tiers = o.tiers ?? [];
   if (tiers.length === 0) return null;
   return [...tiers].sort((a, b) => a.min_qty - b.min_qty)[0].cny;

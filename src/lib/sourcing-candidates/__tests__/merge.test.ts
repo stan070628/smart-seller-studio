@@ -21,6 +21,10 @@ describe('dedupKey', () => {
   it('가격이 다르면 다른 상품', () => {
     expect(dedupKey(card({ price: 25200 }))).not.toBe(dedupKey(card({ price: 25900 })));
   });
+  it('구두점(., · …)이 중간에 있어도 같은 키', () => {
+    expect(dedupKey(card({ title: '들꽃잠 행복 눈 찜질팩, 1개..' })))
+      .toBe(dedupKey(card({ title: '들꽃잠 행복 눈 찜질팩 1개…' })));
+  });
 });
 
 describe('mergePages', () => {
@@ -60,5 +64,14 @@ describe('mergePages', () => {
   it('숫자 검증 결과를 줄에 싣는다', () => {
     const r = mergePages([page({ products: [card({ price: 12200, list_price: 15200, discount_pct: 50 })] })]);
     expect(r.listings[0].number_check).toMatch(/할인율/);
+  });
+
+  it('같은 페이지 안에서 키가 겹치면 서로 다른 상품으로 보고 #2를 붙인다', () => {
+    const same = { seller: '판매자', title: '상품', price: 10000 };
+    const r = mergePages([
+      page({ products: [card({ row: 0, col: 0, ...same }), card({ row: 0, col: 1, ...same })] }),
+    ]);
+    expect(r.listings).toHaveLength(2);
+    expect(r.listings.map((l) => l.dedup_key)).toEqual([dedupKey(card(same)), `${dedupKey(card(same))}#2`]);
   });
 });

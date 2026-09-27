@@ -12,6 +12,7 @@ export const TILE_OVERLAP = 600;
 export interface TileBox { top: number; height: number }
 
 export function computeTiles(height: number): TileBox[] {
+  if (!(height > 0)) return [];
   const step = TILE_HEIGHT - TILE_OVERLAP;
   const tiles: TileBox[] = [];
   let top = 0;
