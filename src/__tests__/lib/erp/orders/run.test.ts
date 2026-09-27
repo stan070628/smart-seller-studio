@@ -84,12 +84,7 @@ describe('runOrdersSync — (1-C2b ②) 쿠팡 쿠폰 조회', () => {
   it('쓰는 실행이고 쿠팡 채널이 있으면 수집 뒤 쿠폰을 조회해 job_runs counts에 싣는다 · dryRun·쿠팡 없는 실행은 부르지 않는다', async () => {
     m.collectOrders.mockResolvedValue([ok('coupang_rg'), ok('naver')]);
     await runOrdersSync({ channels: ['coupang_rg', 'naver'], dryRun: false, trigger: 'cron' });
-    // (리뷰) 시간 예산 90초 — 크론 함수 제한 안에서 끝낸다
-    const before = Date.now();
     expect(m.enrich).toHaveBeenCalledWith(expect.anything(), expect.any(Function), { limitOrders: 60, deadline: expect.any(Number) });
-    const deadline = (m.enrich.mock.calls[0][2] as { deadline: number }).deadline;
-    expect(deadline).toBeGreaterThan(before + 80_000);
-    expect(deadline).toBeLessThanOrEqual(before + 90_000);
     expect(finishedCounts()).toMatchObject({ discount_orders: 2, discount_checked: 3, discount_errors: 0, discount_errors_closed: 0, discount_rate: 0 });
     expect(m.sendTelegramMessage).not.toHaveBeenCalled();
     m.enrich.mockClear();
@@ -98,6 +93,25 @@ describe('runOrdersSync — (1-C2b ②) 쿠팡 쿠폰 조회', () => {
     m.collectOrders.mockResolvedValue([ok('coupang_rg')]);
     await runOrdersSync({ channels: ['coupang_rg'], dryRun: true, trigger: 'manual' });
     expect(m.enrich).not.toHaveBeenCalled();
+  });
+
+  it('(리뷰) 시간 예산 = min(실행 시작 + 240초, 조회 시작 + 90초) — 수집이 길었으면 실행 시작 기준으로 줄인다', async () => {
+    let t = 1_000_000;
+    const spy = vi.spyOn(Date, 'now').mockImplementation(() => t);
+    try {
+      // 수집이 빨리 끝났다(10초) → 조회 시작 + 90초
+      m.collectOrders.mockImplementation(async () => { t += 10_000; return [ok('coupang_rg')]; });
+      await runOrdersSync({ channels: ['coupang_rg'], dryRun: false, trigger: 'cron' });
+      expect((m.enrich.mock.calls[0][2] as { deadline: number }).deadline).toBe(1_000_000 + 10_000 + 90_000);
+      // 수집이 200초 걸렸다 → 실행 시작 + 240초
+      t = 2_000_000;
+      m.collectOrders.mockImplementation(async () => { t += 200_000; return [ok('coupang_rg')]; });
+      await runOrdersSync({ channels: ['coupang_rg'], dryRun: false, trigger: 'cron' });
+      expect((m.enrich.mock.calls[1][2] as { deadline: number }).deadline).toBe(2_000_000 + 240_000);
+    } finally {
+      spy.mockRestore();
+      m.collectOrders.mockReset();
+    }
   });
 
   it('RATE 쿠폰·조회 불가로 닫은 주문이 있으면 텔레그램에 따로 알린다', async () => {

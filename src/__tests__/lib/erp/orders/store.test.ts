@@ -63,9 +63,15 @@ describe('upsertOrderLines', () => {
     expect(lines[0].sql).toMatch(/where \(erp\.order_lines\.[\s\S]*\) is distinct from \(/);
     // (1-C2b ②) 할인: 어댑터가 모르면(discount 미지정) 기존 값 유지 — [24]금액 [25]출처 [26]알았는가
     expect([lines[0].params[24], lines[0].params[25], lines[0].params[26]]).toEqual([0, null, false]);
-    expect(lines[0].sql).toContain('discount_amount = case when $27::boolean then excluded.discount_amount else erp.order_lines.discount_amount end');
-    // (리뷰) 어댑터가 할인을 모르는데(쿠팡) 수량·금액이 바뀌면 다시 조회하게 확인 시각·시도 횟수를 비운다(할인 값은 다시 조회할 때까지 유지)
+    // (리뷰) 어댑터가 할인을 모르는데(쿠팡) 수량·금액이 바뀌면 다시 조회하게 확인 시각·시도 횟수를 비우고, 재조회 전 할인은 0·출처 null
+    // (수량·금액이 이미 달라 어차피 쓰는 행이라 M3 비교가 헛돌지 않는다 — 비교 칸도 같은 식)
     const changed = '(erp.order_lines.order_qty is distinct from excluded.order_qty or erp.order_lines.amount is distinct from excluded.amount)';
+    const discAmount = `case when $27::boolean then excluded.discount_amount when ${changed} then 0 else erp.order_lines.discount_amount end`;
+    const discSource = `case when $27::boolean then excluded.discount_source when ${changed} then null else erp.order_lines.discount_source end`;
+    expect(lines[0].sql).toContain(`discount_amount = ${discAmount}`);
+    expect(lines[0].sql).toContain(`discount_source = ${discSource}`);
+    // 비교(LINE_CMP_NEW)도 같은 식을 쓴다
+    expect(lines[0].sql).toContain(`${discAmount}, ${discSource})`);
     expect(lines[0].sql).toContain(`when ${changed} then null else erp.order_lines.discount_checked_at end`);
     expect(lines[0].sql).toContain(`discount_attempts = case when not $27::boolean and ${changed} then 0 else erp.order_lines.discount_attempts end`);
     // 구매자 칸은 SQL에도 파라미터에도 없다

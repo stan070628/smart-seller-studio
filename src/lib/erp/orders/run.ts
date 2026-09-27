@@ -26,6 +26,8 @@ export async function runOrdersSync(p: {
   /** 과거 보충 끝날(그날 포함) — backfillFrom과 함께만 */
   backfillTo?: string;
 }): Promise<ChannelReport[]> {
+  // 쿠폰 조회 시간 예산은 실행 시작 기준으로도 자른다(수집이 길었으면 함수 제한 안에서 끝나게)
+  const runStart = Date.now();
   // withJobRun 밖(텔레그램 알림)에서 쿠폰 조회 결과를 읽는다
   let lastCounts: Record<string, number> = {};
   const reports = await withJobRun(
@@ -45,12 +47,12 @@ export async function runOrdersSync(p: {
       counts.busy_all = r.length > 0 && active.length === 0 ? 1 : 0;
       counts.backfill = p.backfillFrom !== undefined ? 1 : 0;
       counts.dry_run = p.dryRun ? 1 : 0;
-      // (1-C2b ②) 쿠팡 즉시할인 — 주문마다 한 번. 실행당 주문 60건 · 90초까지(나머지는 다음 15분). 실패해도 수집 결과는 그대로 남긴다
+      // (1-C2b ②) 쿠팡 즉시할인 — 주문마다 한 번. 실행당 주문 60건 · 90초(실행 시작 + 240초를 넘지 않게)까지(나머지는 다음 15분). 실패해도 수집 결과는 그대로 남긴다
       if (!p.dryRun && p.channels.some((c) => c === 'coupang_wing' || c === 'coupang_rg')) {
         try {
           const cp = getCoupangClient();
           const d = await enrichCoupangDiscounts(getSourcingPool(), (orderId) => cp.getOrderCoupons(orderId), {
-            limitOrders: 60, deadline: Date.now() + 90_000,
+            limitOrders: 60, deadline: Math.min(runStart + 240_000, Date.now() + 90_000),
           });
           Object.assign(counts, {
             discount_orders: d.orders, discount_checked: d.checked, discount_errors: d.errors,
