@@ -3,6 +3,7 @@
 // 15분 수집이 같은 줄을 동시에 upsert하지 않게. 연결 뒤 relinkLines가 재판정 → 옛 장부 → 차감(스위치를 따른다).
 // 해제는 이 화면에서 만든 것(origin 'manual' 리스팅 · manual_sku_id)만. 이미 뺀 재고는 해제만으로 되돌리지 않는다 —
 // 올바른 SKU로 다시 연결하면 차감 판정표가 역전표 + 새 차감으로 옮긴다(설계서 ①).
+import { NextResponse } from 'next/server';
 import type { Db } from '@/lib/erp/ledger/store';
 import { CHANNEL_LOCK, LOCK_NS } from './collect';
 import { relinkLines, type RelinkResult } from './relink';
@@ -88,4 +89,11 @@ export async function unlinkListing(db: Db, listingId: number, at: string): Prom
   await db.query('update erp.channel_listings set active = false where id = $1', [listingId]);
   const { rows: lines } = await db.query('select id from erp.order_lines where listing_id = $1 order by id', [listingId]);
   return relinkLines(db, ch, lines.map((r) => Number(r.id)), at);
+}
+
+/** LinkError → HTTP. 그 밖은 null(호출자가 erpError로) */
+export function linkErrorResponse(e: unknown): NextResponse | null {
+  if (!(e instanceof LinkError)) return null;
+  const status = e.code === 'exists' ? 409 : e.code === 'not_found' ? 404 : 400;
+  return NextResponse.json({ success: false, code: e.code, error: e.message }, { status });
 }
