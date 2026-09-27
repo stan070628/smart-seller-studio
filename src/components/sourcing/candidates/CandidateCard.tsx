@@ -20,16 +20,20 @@ function Judgement({ o }: { o: OfferView }) {
   );
 }
 
-function OfferRowView({ o, onChanged }: { o: OfferView; onChanged: () => Promise<void> }) {
+interface RunFn {
+  (fn: () => Promise<void>): Promise<void>;
+}
+
+function OfferRowView({ o, onChanged, run }: { o: OfferView; onChanged: () => Promise<void>; run: RunFn }) {
   const [url, setUrl] = useState(o.url ?? '');
   const [cny, setCny] = useState(o.cny_override === null ? '' : String(o.cny_override));
-  const save = async (data: Record<string, unknown>) => { await api.patchOffer(o.id, data); await onChanged(); };
+  const save = (data: Record<string, unknown>) => run(async () => { await api.patchOffer(o.id, data); await onChanged(); });
   return (
     <tr className={`border-t align-top ${o.adopted ? 'bg-green-50' : ''}`}>
       <td className="px-2 py-1 text-xs">
         {o.parse_status === 'failed' ? (
           <span className="text-red-600">판독 실패: {o.parse_error}{' '}
-            <button className="underline" onClick={async () => { await api.reparseOffer(o.id).catch(() => {}); await onChanged(); }}>재시도</button>
+            <button className="underline" onClick={() => run(async () => { await api.reparseOffer(o.id); await onChanged(); })}>재시도</button>
           </span>
         ) : (
           <>
@@ -42,15 +46,15 @@ function OfferRowView({ o, onChanged }: { o: OfferView; onChanged: () => Promise
         {(o.tiers ?? []).map((t) => <div key={t.min_qty}>{t.min_qty}+ {o.sale_unit ?? ''} ¥{t.cny}</div>)}
         {o.tier_check && <div className="text-red-600">⚠ {o.tier_check}</div>}
         <input placeholder="위안 직접" value={cny} onChange={(e) => setCny(e.target.value)}
-          onBlur={() => save({ cny_override: cny ? Number(cny) : null })} className="mt-1 w-20 border px-1" />
+          onBlur={() => void save({ cny_override: cny ? Number(cny) : null })} className="mt-1 w-20 border px-1" />
       </td>
       <td className="px-2 py-1"><Judgement o={o} /></td>
       <td className="px-2 py-1 text-xs">
         <input placeholder="1688 URL" value={url} onChange={(e) => setUrl(e.target.value)}
-          onBlur={() => url !== (o.url ?? '') && save({ url: url || null })} className="w-40 border px-1" />
+          onBlur={() => url !== (o.url ?? '') && void save({ url: url || null })} className="w-40 border px-1" />
         <div className="mt-1">
           {o.adopted ? <span className="font-medium text-green-700">채택됨</span>
-            : <button className="underline" onClick={() => save({ adopted: true })}>채택</button>}
+            : <button className="underline" onClick={() => void save({ adopted: true })}>채택</button>}
         </div>
       </td>
     </tr>
@@ -60,8 +64,21 @@ function OfferRowView({ o, onChanged }: { o: OfferView; onChanged: () => Promise
 /** ⭐ 후보 하나. 1688 캡처는 이 카드에 넣는다 — 짝은 사람이 정하고 AI는 같은 물건인지만 본다 */
 export default function CandidateCard({ l, onChanged }: { l: ListingView; onChanged: () => Promise<void> }) {
   const [url, setUrl] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  /** 저장·재시도·크기 변경을 한 통로로 모아 실패를 조용히 삼키지 않는다 */
+  const run: RunFn = async (fn) => {
+    try {
+      await fn();
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '저장 실패');
+    }
+  };
+
   return (
     <div className="rounded-lg border p-3">
+      {error && <div className="mb-2 text-sm text-red-600">{error}</div>}
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="font-medium">{l.title}</div>
@@ -69,7 +86,7 @@ export default function CandidateCard({ l, onChanged }: { l: ListingView; onChan
             {l.category_path ?? '카테고리 미상'} · {l.seller} · {l.effective_price.toLocaleString('ko-KR')}원 · 리뷰 {l.review_count?.toLocaleString('ko-KR') ?? '—'}
           </div>
         </div>
-        <select value={l.size} onChange={async (e) => { await api.patchListing(l.id, { size: e.target.value }); await onChanged(); }}
+        <select value={l.size} onChange={(e) => { const size = e.target.value; void run(async () => { await api.patchListing(l.id, { size }); await onChanged(); }); }}
           className="border text-xs">
           <option value="xsmall">극소형</option><option value="small">소형</option><option value="medium">중형</option>
         </select>
@@ -80,7 +97,7 @@ export default function CandidateCard({ l, onChanged }: { l: ListingView; onChan
           <thead className="text-left text-xs text-gray-500"><tr>
             <th className="px-2">같은 물건?</th><th className="px-2">구간가</th><th className="px-2">판정</th><th className="px-2" />
           </tr></thead>
-          <tbody>{l.offers.map((o) => <OfferRowView key={o.id} o={o} onChanged={onChanged} />)}</tbody>
+          <tbody>{l.offers.map((o) => <OfferRowView key={o.id} o={o} onChanged={onChanged} run={run} />)}</tbody>
         </table>
       )}
 

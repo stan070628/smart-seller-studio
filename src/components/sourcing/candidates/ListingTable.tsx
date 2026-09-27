@@ -25,7 +25,7 @@ function Row({ r, onPatch }: { r: ListingView; onPatch: Props['onPatch'] }) {
     <tr className={`border-t ${r.excluded ? 'text-gray-400' : ''}`}>
       <td className="px-2 py-1 text-right">{r.rank}</td>
       <td className="px-2 py-1">
-        <button aria-label="후보로 올리기" onClick={() => onPatch(r.id, { starred: !r.starred })}
+        <button aria-label="후보로 올리기" onClick={() => void onPatch(r.id, { starred: !r.starred })}
           className={r.starred ? 'text-yellow-500' : 'text-gray-300 hover:text-yellow-400'}>★</button>
       </td>
       <td className="max-w-md px-2 py-1">
@@ -35,10 +35,10 @@ function Row({ r, onPatch }: { r: ListingView; onPatch: Props['onPatch'] }) {
       <td className="px-2 py-1 text-right">
         {editing ? (
           <input autoFocus value={price} onChange={(e) => setPrice(e.target.value)} className="w-24 border px-1 text-right"
-            onBlur={async () => {
+            onBlur={() => {
               setEditing(false);
               const n = Number(price.replace(/[^\d]/g, ''));
-              if (n > 0 && n !== r.effective_price) await onPatch(r.id, { price_override: n });
+              if (n > 0 && n !== r.effective_price) void onPatch(r.id, { price_override: n });
             }} />
         ) : (
           <button onClick={() => setEditing(true)} title="클릭해서 고치기 (쿠팡 판매가로 바꿔 보세요)">
@@ -55,7 +55,7 @@ function Row({ r, onPatch }: { r: ListingView; onPatch: Props['onPatch'] }) {
         </div>
       </td>
       <td className="px-2 py-1 text-xs">
-        <button className="underline" onClick={() => onPatch(r.id, { excluded_override: !r.excluded })}>
+        <button className="underline" onClick={() => void onPatch(r.id, { excluded_override: !r.excluded })}>
           {r.excluded ? '되살리기' : '제외'}
         </button>
       </td>

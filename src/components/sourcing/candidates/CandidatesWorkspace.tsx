@@ -90,7 +90,14 @@ export default function CandidatesWorkspace() {
           <section>
             {current?.parse_error && <div className="mb-2 text-sm text-amber-700">{current.parse_error}</div>}
             {scanId
-              ? <ListingTable rows={rows} onPatch={async (id, data) => { await api.patchListing(id, data); await refresh(); }} />
+              ? <ListingTable rows={rows} onPatch={async (id, data) => {
+                  try {
+                    await api.patchListing(id, data);
+                    await refresh();
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : '저장 실패');
+                  }
+                }} />
               : <div className="text-sm text-gray-500">왼쪽에서 캡처를 올리거나 스캔을 고르세요.</div>}
           </section>
         </div>
