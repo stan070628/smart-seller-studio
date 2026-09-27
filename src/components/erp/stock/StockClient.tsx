@@ -21,6 +21,7 @@ import CsvImportDialog from './CsvImportDialog';
 import KarrotSaleForm from './KarrotSaleForm';
 import CountQueuePanel from './CountQueuePanel';
 import OrdersSyncPanel from './OrdersSyncPanel';
+import RgAutoPanel from './RgAutoPanel';
 import { fetchRecon, fetchStock, postAdjust, postRgApply, postRgArrive } from './api';
 import {
   computeKpis, defaultCost, filterGroups, filterRows, filtersActive, groupRows, parseRecon, rgArriveQty, rgDiff, stageKey, summarizeStaged,
@@ -250,6 +251,7 @@ export default function StockClient() {
       </div>
 
       <OrdersSyncPanel onChanged={() => void load()} />
+      <RgAutoPanel />
 
       <CountQueuePanel rowById={rowById} busy={saving} onSave={saveOne} />
 

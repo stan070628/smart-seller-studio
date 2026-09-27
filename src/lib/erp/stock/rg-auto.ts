@@ -71,6 +71,12 @@ export function planRgAuto(
   return { moves, alerts };
 }
 
+/** GET /api/erp/stock/rg-auto 응답 — 마지막 실행에서 옮김·옮길 예정·알림이 있는 줄만(route 파일은 핸들러만 내보내므로 여기 둔다) */
+export interface RgAutoLast {
+  runAt: string | null;
+  rows: { skuId: number | null; vid: string | null; label: string; ledger: number; actual: number; inbound: number; planned: number; moved: number; alert: string | null }[];
+}
+
 export function alertText(a: RgAlert, name: (skuId: number) => string): string {
   switch (a.kind) {
     case 'unsent_increase': return `${name(a.skuId)} RG가 원장보다 ${a.qty}개 많다(보낸 기록 없음)`;
