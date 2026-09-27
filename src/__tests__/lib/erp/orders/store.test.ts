@@ -281,9 +281,13 @@ describe('syncLegacySales', () => {
     const f = fakeDb((sql, params) => {
       if (sql.startsWith('select legacy_key')) {
         return { rows: [
-          { legacy_key: 'wing-1-70', channel: 'coupang_wing', status: 'paid', order_qty: 2, legacy_qty: 2, amount: 31800, paid_at: new Date('2026-09-27T01:15:30Z'), ordered_at: new Date('2026-09-27T01:15:00Z'), pc: PC },
-          { legacy_key: 'toss-9', channel: 'toss', status: 'paid', order_qty: 1, legacy_qty: 1, amount: 12900, paid_at: new Date('2026-09-27T01:00:00Z'), ordered_at: new Date('2026-09-27T01:00:00Z'), pc: PC },
-          { legacy_key: 'naver-5', channel: 'naver', status: 'canceled', order_qty: 1, legacy_qty: 1, amount: 9900, paid_at: null, ordered_at: new Date('2026-09-27T01:00:00Z'), pc: PC },
+          // (1-C2b ②) wing: 쿠폰 조회 3회 실패로 닫힌 줄(coupang_fms_error) = 할인 모름 · toss: 확인된 할인 700
+          { legacy_key: 'wing-1-70', channel: 'coupang_wing', status: 'paid', order_qty: 2, legacy_qty: 2, amount: 31800, paid_at: new Date('2026-09-27T01:15:30Z'), ordered_at: new Date('2026-09-27T01:15:00Z'), pc: PC,
+            discount_amount: 0, discount_source: 'coupang_fms_error', discount_checked_at: new Date('2026-09-27T02:00:00Z') },
+          { legacy_key: 'toss-9', channel: 'toss', status: 'paid', order_qty: 1, legacy_qty: 1, amount: 12900, paid_at: new Date('2026-09-27T01:00:00Z'), ordered_at: new Date('2026-09-27T01:00:00Z'), pc: PC,
+            discount_amount: 700, discount_source: 'naver_seller', discount_checked_at: new Date('2026-09-27T02:00:00Z') },
+          { legacy_key: 'naver-5', channel: 'naver', status: 'canceled', order_qty: 1, legacy_qty: 1, amount: 9900, paid_at: null, ordered_at: new Date('2026-09-27T01:00:00Z'), pc: PC,
+            discount_amount: 0, discount_source: null, discount_checked_at: null },
         ] };
       }
       if (sql.startsWith('insert into sale_records')) return { rows: [{ id: `sr-${params[6]}`, inserted: true, still_voided: false }] };
@@ -297,18 +301,22 @@ describe('syncLegacySales', () => {
     expect(r).toEqual({ upserted: 2, inserted: 2, voided: 2, warnings: [] });
     const ins = f.calls.filter((c) => c.sql.startsWith('insert into sale_records'));
     expect(ins[0].sql).toContain('from product_costs pc where pc.id = $1::uuid');
-    expect(ins[0].sql).not.toMatch(/coupon_discount|shipping_fee = excluded|product_cost_id = excluded/);
+    expect(ins[0].sql).not.toMatch(/shipping_fee = excluded|product_cost_id = excluded/);
+    // (1-C2b ②) 할인을 모르면(null) 기존 coupon_discount를 지킨다 — 사람이 적었을 수 있다
+    expect(ins[0].sql).toContain('coupon_discount = coalesce($9::int, sale_records.coupon_discount)');
     // (I6) 무효를 푸는 것은 수집기가 무효화한 행(같은 시각을 order_lines.legacy_voided_at에 남겼다)뿐이다
     expect(ins[0].sql).not.toMatch(/voided_at = null/);
     expect(ins[0].sql).toContain('x.legacy_voided_at = sale_records.voided_at');
     // 수집기가 무효화한 키는 라인에 그 시각을 남긴다
     const stamp = f.calls.find((c) => c.sql.startsWith('update erp.order_lines set legacy_voided_at'));
     expect(stamp?.params).toEqual([['naver-5']]);
-    // [0]pc [1]sold_at [2]qty [3]price [4]amount [5]channel [6]key [7]shipping_fee
-    expect(ins.map((c) => [c.params[1], c.params[2], c.params[3], c.params[5], c.params[6], c.params[7]])).toEqual([
-      ['2026-09-27', 2, 15900, 'coupang', 'wing-1-70', 3500],
-      ['2026-09-27', 1, 12900, 'toss', 'toss-9', 3500],
+    // [0]pc [1]sold_at [2]qty [3]price [4]amount [5]channel [6]key [7]shipping_fee [8]coupon
+    expect(ins.map((c) => [c.params[1], c.params[2], c.params[3], c.params[5], c.params[6], c.params[7], c.params[8]])).toEqual([
+      ['2026-09-27', 2, 15900, 'coupang', 'wing-1-70', 3500, null],
+      ['2026-09-27', 1, 12900, 'toss', 'toss-9', 3500, 700],
     ]);
+    // 판매 금액은 할인 전 그대로(정산이 sale_amount − coupon_discount를 계산한다)
+    expect(ins.map((c) => c.params[4])).toEqual([31800, 12900]);
     const voids = f.calls.filter((c) => c.sql.startsWith('update sale_records set voided_at'));
     expect(voids.map((c) => c.params[0])).toEqual(['1-70', ['naver-5']]);
   });
