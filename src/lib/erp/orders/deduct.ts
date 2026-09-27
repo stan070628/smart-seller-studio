@@ -9,7 +9,7 @@ import type { DeductSummary } from './collect';
 import { decideDeduction, type DeductInput, type DeductionState, type PostedItem } from './deduct-plan';
 import type { AllocItem } from './resolve';
 import { readCutover, readDeductSetting, writeDeductEnabled } from './store';
-import { CHANNEL_LABEL, SALE_CHANNELS, locationOf, type OrderChannel, type SaleChannel, type StdStatus } from './types';
+import { CHANNEL_LABEL, SALE_CHANNELS, locationOf, type SaleChannel, type StdStatus } from './types';
 
 interface LineRow extends DeductInput {
   id: number;
@@ -39,7 +39,7 @@ function toRow(r: Record<string, unknown>): LineRow {
 const LINE_COLS = `l.id, l.channel, l.external_line_id, o.external_order_id, l.status, l.attribution, l.alloc, l.paid_at,
             l.deduction_state, l.deduction_note, l.ledger_version, l.posted`;
 
-async function loadLines(db: Db, p: { lineIds: number[]; channel: OrderChannel | null; includeOpen: boolean }): Promise<LineRow[]> {
+async function loadLines(db: Db, p: { lineIds: number[]; channel: SaleChannel | null; includeOpen: boolean }): Promise<LineRow[]> {
   const { rows } = await db.query(
     `select ${LINE_COLS}
        from erp.order_lines l join erp.orders o on o.id = l.order_id
@@ -63,7 +63,7 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
  */
 export async function runDeductions(
   db: Db,
-  p: { enabled: boolean; cutover: string; lineIds: number[]; channel: OrderChannel | null; at: string; includeOpen?: boolean },
+  p: { enabled: boolean; cutover: string; lineIds: number[]; channel: SaleChannel | null; at: string; includeOpen?: boolean },
 ): Promise<DeductSummary> {
   const lines = await loadLines(db, { lineIds: p.lineIds, channel: p.channel, includeOpen: p.includeOpen ?? true });
   const planned = lines.map((l) => ({ l, plan: decideDeduction(l, { enabled: p.enabled, cutover: p.cutover }) }));

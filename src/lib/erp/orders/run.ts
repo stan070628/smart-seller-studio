@@ -9,12 +9,16 @@
 // busy는 겹친 실행에서 흔히 나오므로 텔레그램 알림 줄에는 싣지 않는다(counts에는 남는다 — reportCounts의 busy·<채널>_busy).
 // (1-C2b ②) 쓰는 실행에 쿠팡 채널이 있으면 수집 뒤 쿠팡 즉시할인 쿠폰을 조회한다(discounts.ts) — 결과는 counts.discount_*에 남기고,
 // RATE 쿠폰 주문·조회 불가로 닫은 주문이 있으면 같은 채팅에 알린다. 쿠폰 조회가 실패해도 수집 결과는 그대로 남긴다(discount_failed = 1).
+// (1-C2b ③) 당근은 수집 채널이 아니라 수집기의 채널별 차감이 당근 대기·부족 줄을 다시 보지 않는다 — 쓰는 실행마다 한 트랜잭션에서
+// 당근 채널만 소급 차감한다(counts.karrot_posted·karrot_short). 실패해도 수집 결과는 그대로 남긴다(karrot_failed = 1).
 import { withJobRun } from '@/lib/jobs/run-log';
 import { getCoupangClient } from '@/lib/listing/coupang-client';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { sendTelegramMessage } from '@/lib/telegram/client';
 import { collectOrders, reportAlerts, reportCounts, type ChannelReport } from './collect';
+import { runDeductions } from './deduct';
 import { enrichCoupangDiscounts } from './discounts';
+import { readCutover, readDeductSetting } from './store';
 import { CHANNEL_LABEL, type OrderChannel } from './types';
 
 export async function runOrdersSync(p: {
@@ -63,6 +67,15 @@ export async function runOrdersSync(p: {
           console.error('[orders-sync] 쿠폰 조회 실패:', e instanceof Error ? e.message : String(e));
         }
       }
+      if (!p.dryRun) {
+        try {
+          const k = await retryKarrotDeductions();
+          Object.assign(counts, { karrot_posted: k.posted, karrot_short: k.short });
+        } catch (e) {
+          counts.karrot_failed = 1;
+          console.error('[orders-sync] 당근 차감 재시도 실패:', e instanceof Error ? e.message : String(e));
+        }
+      }
       lastCounts = counts;
       return { value: r, counts };
     },
@@ -86,4 +99,23 @@ export async function runOrdersSync(p: {
     }
   }
   return reports;
+}
+
+/** 당근 대기(pending)·재고 부족(skipped_short) 줄을 다시 차감한다 — 스위치가 꺼져 있으면 판정표가 그대로 둔다 */
+async function retryKarrotDeductions() {
+  const client = await getSourcingPool().connect();
+  try {
+    await client.query('BEGIN');
+    const setting = await readDeductSetting(client);
+    const out = await runDeductions(client, {
+      enabled: setting.enabled, cutover: await readCutover(client), lineIds: [], channel: 'karrot', at: new Date().toISOString(), includeOpen: true,
+    });
+    await client.query('COMMIT');
+    return out;
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
 }

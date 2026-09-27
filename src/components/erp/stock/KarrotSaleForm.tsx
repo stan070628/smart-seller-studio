@@ -5,6 +5,8 @@
  * (1-C2b ③) 당근 판매 입력 — 휴대폰(/m/stock 「당근 판매」 탭)·PC(재고현황 「당근 판매」 창) 공용.
  * 상품 → 수량(−/+) → 받은 돈 → 날짜(기본 오늘) → 저장. 집 재고보다 많으면 서버가 409로 막는다(먼저 재고를 고친다) — 그 문구를 그대로 보인다.
  * 되돌리기는 두 번 눌러야 한다(window.confirm을 쓰지 않는다).
+ * 요청 id는 상태로 들고 있다 — 저장이 실패해도(응답 유실 포함) 다시 누르면 같은 id를 보내 서버가 duplicate로 답한다.
+ * 입력(SKU·수량·금액·날짜)을 바꾸거나 저장에 성공하면 새 id를 만든다.
  * 다크 테마 전역 스타일(body color: 밝은 회색)이 새어 들어오므로 배경·글자색을 모든 칸에 명시한다(MobileStock과 같은 이유).
  */
 import { useCallback, useEffect, useState } from 'react';
@@ -12,6 +14,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type { StockListRow } from '@/lib/erp/stock/queries';
 import type { KarrotSaleRow } from '@/lib/erp/orders/karrot';
 import { kstDate } from '@/lib/erp/stock/count-queue';
+import { addDays } from '@/lib/erp/orders/window';
 import { fetchKarrot, postKarrot, postKarrotCancel } from './api';
 import SkuPicker from './SkuPicker';
 import { fmtKst, parseWon, won } from './stock-view';
@@ -26,6 +29,8 @@ export default function KarrotSaleForm({ variant, onSaved }: Props) {
   const [soldOn, setSoldOn] = useState(today);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [legacyNote, setLegacyNote] = useState(false);
+  const [requestId, setRequestId] = useState(() => uuidv4());
   const [recent, setRecent] = useState<KarrotSaleRow[]>([]);
   const [arm, setArm] = useState<number | null>(null);
   const [canceling, setCanceling] = useState(false);
@@ -35,6 +40,9 @@ export default function KarrotSaleForm({ variant, onSaved }: Props) {
   // eslint-disable-next-line react-hooks/set-state-in-effect -- 열 때 최근 판매를 읽는다
   useEffect(() => { void load(); }, [load]);
 
+  // 입력이 바뀌면 다른 판매다 — 새 요청 id
+  const edited = <T,>(set: (v: T) => void) => (v: T) => { set(v); setRequestId(uuidv4()); };
+
   const amount = parseWon(amountRaw);
   const amountBad = amountRaw.trim() !== '' && amount === null;
   const canSave = !!sku && qty >= 1 && amount !== null && soldOn !== '' && !saving;
@@ -43,14 +51,16 @@ export default function KarrotSaleForm({ variant, onSaved }: Props) {
     if (!sku || amount === null || saving) return;
     setSaving(true);
     setMsg(null);
-    const r = await postKarrot({ skuId: sku.skuId, qty, amount, soldOn, requestId: uuidv4() });
+    setLegacyNote(false);
+    const r = await postKarrot({ skuId: sku.skuId, qty, amount, soldOn, requestId });
     setSaving(false);
     if (!r.ok) { setMsg({ ok: false, text: r.error }); return; }
     setMsg({
       ok: true,
       text: r.data.outcome === 'duplicate' ? '이미 기록된 판매입니다' : `${sku.name} ${qty}개 · ${won(amount)}원 기록했습니다`,
     });
-    setSku(null); setQty(1); setAmountRaw(''); setSoldOn(today); setPickerKey((k) => k + 1);
+    setLegacyNote(r.data.legacyWarnings.length > 0);
+    setSku(null); setQty(1); setAmountRaw(''); setSoldOn(today); setPickerKey((k) => k + 1); setRequestId(uuidv4());
     await load();
     onSaved?.();
   }
@@ -76,23 +86,24 @@ export default function KarrotSaleForm({ variant, onSaved }: Props) {
     <div style={{ color: '#111827' }}>
       <style>{`.karrot-input::placeholder { color: #9ca3af; }`}</style>
       {msg && <div role={msg.ok ? 'status' : 'alert'} style={{ ...box, backgroundColor: msg.ok ? '#e7f6ec' : '#fdecec', color: msg.ok ? '#1a7f37' : '#b91c1c', fontWeight: 700 }}>{msg.text}</div>}
+      {legacyNote && <div role="note" style={{ ...box, backgroundColor: '#fef9c3', color: '#854d0e', fontWeight: 600 }}>수익 화면에는 잡히지 않는다 — 이 SKU에 옛 원가 상품 연결이 없다</div>}
       <div style={box}>
         <div style={{ ...label, marginTop: 0 }}>상품</div>
-        <SkuPicker key={pickerKey} value={sku} onChange={setSku} variant={variant} />
+        <SkuPicker key={pickerKey} value={sku} onChange={edited(setSku)} variant={variant} />
         {sku && (
           <>
             <div style={label}>수량</div>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-              <button type="button" aria-label="하나 빼기" onClick={() => setQty((q) => Math.max(1, q - 1))} style={round}>−</button>
+              <button type="button" aria-label="하나 빼기" onClick={() => edited(setQty)(Math.max(1, qty - 1))} style={round}>−</button>
               <span style={{ fontSize: 22, fontWeight: 700, minWidth: 32, textAlign: 'center', color: '#111827' }}>{qty}</span>
-              <button type="button" aria-label="하나 더하기" onClick={() => setQty((q) => q + 1)} style={round}>+</button>
-              <span style={{ color: '#6b7280', fontSize: 12 }}>집 재고 {won(sku.self)}</span>
+              <button type="button" aria-label="하나 더하기" onClick={() => edited(setQty)(qty + 1)} style={round}>+</button>
+              <span style={{ color: '#6b7280', fontSize: 12 }}>집 재고(원장) {won(sku.self)} — 차감 대기분은 저장할 때 서버가 뺀다</span>
             </div>
             <div style={label}>받은 돈(원, 합계)</div>
-            <input className="karrot-input" aria-label="받은 돈" inputMode="numeric" value={amountRaw} onChange={(e) => setAmountRaw(e.target.value)} placeholder="예: 20000" style={field} />
+            <input className="karrot-input" aria-label="받은 돈" inputMode="numeric" value={amountRaw} onChange={(e) => edited(setAmountRaw)(e.target.value)} placeholder="예: 20000" style={field} />
             {amountBad && <div role="alert" style={{ color: '#b91c1c', fontSize: 12, marginTop: 4 }}>숫자만 적는다(예: 20000)</div>}
             <div style={label}>판매일</div>
-            <input className="karrot-input" aria-label="판매일" type="date" value={soldOn} max={today} onChange={(e) => setSoldOn(e.target.value)} style={field} />
+            <input className="karrot-input" aria-label="판매일" type="date" value={soldOn} min={addDays(today, -31)} max={today} onChange={(e) => edited(setSoldOn)(e.target.value)} style={field} />
           </>
         )}
       </div>

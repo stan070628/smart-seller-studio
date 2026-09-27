@@ -40,6 +40,7 @@ const db = (route: Route) => {
     async query(sql: string, params: unknown[] = []) {
       calls.push({ sql, params });
       if (sql.startsWith('select pg_advisory_xact_lock')) return { rows: [], rowCount: 0 };
+      if (/^(savepoint|release savepoint|rollback to savepoint) /.test(sql)) return { rows: [], rowCount: 0 };
       const rows = route(sql, params);
       if (!rows) throw new Error(`예상 못 한 SQL: ${sql.slice(0, 70)}`);
       return { rows, rowCount: rows.length };
@@ -76,7 +77,7 @@ describe('recordKarrotSale', () => {
     ]);
     expect(m.syncLegacySales).toHaveBeenCalledWith(d, [`karrot-${REQ}`]);
     expect(m.runDeductions).toHaveBeenCalledWith(d, { enabled: false, cutover: '2026-09-26T11:07:04.989Z', lineIds: [901], channel: null, at: NOW.toISOString(), includeOpen: false });
-    expect(r).toMatchObject({ lineId: 901, outcome: 'recorded' });
+    expect(r).toMatchObject({ lineId: 901, outcome: 'recorded', legacyWarnings: [] });
   });
 
   it('같은 요청 id면 아무것도 쓰지 않고 duplicate', async () => {
@@ -89,6 +90,48 @@ describe('recordKarrotSale', () => {
     const d = db(baseRoute({ onHand: 5, pending: 1 }));
     await expect(recordKarrotSale(d, { skuId: 72, qty: 5, amount: 1, soldOn: '2026-09-28', requestId: REQ }, NOW)).rejects.toMatchObject({ code: 'stock' });
     expect(calls.some((c) => c.sql.startsWith('insert'))).toBe(false);
+  });
+});
+
+describe('(1-C2b ③ 리뷰) recordKarrotSale', () => {
+  it('옛 장부 경고(옛 원가 상품 연결 없음)를 legacyWarnings로 돌려준다', async () => {
+    const w = [{ key: `karrot-${REQ}`, reason: 'sold_without_product_cost' as const }];
+    m.syncLegacySales.mockResolvedValue({ upserted: 0, inserted: 0, voided: 0, warnings: w });
+    const r = await recordKarrotSale(db(baseRoute()), { skuId: 72, qty: 1, amount: 1, soldOn: '2026-09-28', requestId: REQ }, NOW);
+    expect(r.legacyWarnings).toEqual(w);
+  });
+
+  it('다른 SKU로 같은 요청 id가 겹쳐 unique 위반(23505)이면 savepoint로 되돌리고 다시 찾아 duplicate', async () => {
+    let dupSelects = 0;
+    const base = baseRoute();
+    const d = db((sql, params) => {
+      if (sql.startsWith("select id from erp.order_lines where channel = 'karrot'")) return dupSelects++ === 0 ? [] : [{ id: '950' }];
+      if (sql.startsWith('insert into erp.order_lines')) throw Object.assign(new Error('duplicate key'), { code: '23505' });
+      return base(sql, params);
+    });
+    const r = await recordKarrotSale(d, { skuId: 72, qty: 1, amount: 1, soldOn: '2026-09-28', requestId: REQ }, NOW);
+    expect(r).toMatchObject({ lineId: 950, outcome: 'duplicate', deduct: null, legacyWarnings: [] });
+    const sqls = calls.map((c) => c.sql);
+    expect(sqls.indexOf('savepoint karrot_ins')).toBeLessThan(sqls.findIndex((q) => q.startsWith('insert into erp.orders')));
+    expect(sqls).toContain('rollback to savepoint karrot_ins');
+    expect(m.syncLegacySales).not.toHaveBeenCalled();
+    expect(m.runDeductions).not.toHaveBeenCalled();
+  });
+
+  it('23505가 아닌 오류는 그대로 던진다', async () => {
+    const base = baseRoute();
+    const d = db((sql, params) => {
+      if (sql.startsWith('insert into erp.order_lines')) throw Object.assign(new Error('boom'), { code: '23514' });
+      return base(sql, params);
+    });
+    await expect(recordKarrotSale(d, { skuId: 72, qty: 1, amount: 1, soldOn: '2026-09-28', requestId: REQ }, NOW)).rejects.toThrow('boom');
+  });
+
+  it('판매 시각이 기초 시각 이전이면(차감 안 됨) 재고 검사를 건너뛴다', async () => {
+    const d = db(baseRoute({ onHand: 0, pending: 0 }));
+    const r = await recordKarrotSale(d, { skuId: 72, qty: 3, amount: 1, soldOn: '2026-09-25', requestId: REQ }, NOW);
+    expect(r.outcome).toBe('recorded');
+    expect(calls.some((c) => c.sql.startsWith('select coalesce(sum(qty)'))).toBe(false);
   });
 });
 

@@ -9,7 +9,7 @@ import type { BackfillPreview } from '@/lib/erp/orders/deduct';
 import type { ChannelReport, DeductSummary } from '@/lib/erp/orders/collect';
 import type { RecentLineLink, RecentListingLink, UnattributedGroup } from '@/lib/erp/orders/queue';
 import type { RelinkResult } from '@/lib/erp/orders/relink';
-import type { KarrotSaleRow } from '@/lib/erp/orders/karrot';
+import type { KarrotRecordResult, KarrotSaleRow } from '@/lib/erp/orders/karrot';
 
 export type ApiResult<T> =
   | { ok: true; data: T }
@@ -112,5 +112,5 @@ export async function postImport(body: ImportBody): Promise<ApiResult<ImportSumm
 // (1-C2b ③) 당근 수동 판매
 export const fetchKarrot = () => call<KarrotSaleRow[]>('/api/erp/sales/karrot');
 export const postKarrot = (b: { skuId: number; qty: number; amount: number; soldOn: string; note?: string; requestId: string }) =>
-  call<{ lineId: number; outcome: 'recorded' | 'duplicate' }>('/api/erp/sales/karrot', b);
+  call<Pick<KarrotRecordResult, 'lineId' | 'outcome' | 'legacyWarnings'>>('/api/erp/sales/karrot', b);
 export const postKarrotCancel = (lineId: number) => call<{ lineId: number }>('/api/erp/sales/karrot/cancel', { lineId });
