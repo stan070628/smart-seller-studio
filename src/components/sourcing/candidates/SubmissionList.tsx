@@ -78,8 +78,12 @@ export default function SubmissionList() {
                   ) : '링크 없음'}
                 </td>
                 <td className="border border-white/15 px-1 text-right print:border-gray-300">{o.cny === null ? '—' : `¥${o.cny}`}</td>
-                <td className="border border-white/15 px-1 print:border-gray-300">{o.lecture ? `${pct(o.lecture.costRatio)} ${o.lecture.pass ? '통과' : '탈락'}` : '—'}</td>
-                <td className="border border-white/15 px-1 print:border-gray-300">{o.real ? `${won(o.real.margin)} · ${pct(o.real.marginRate)} ${o.real.pass ? '통과' : '탈락'}` : '—'}</td>
+                <td className="border border-white/15 px-1 print:border-gray-300">
+                  {o.lecture ? `${pct(o.lecture.costRatio)} ${o.match_verdict === 'different' ? '참고용' : (o.lecture.pass ? '통과' : '탈락')}` : '—'}
+                </td>
+                <td className="border border-white/15 px-1 print:border-gray-300">
+                  {o.real ? `${won(o.real.margin)} · ${pct(o.real.marginRate)} ${o.match_verdict === 'different' ? '참고용' : (o.real.pass ? '통과' : '탈락')}` : '—'}
+                </td>
                 <td className="border border-white/15 px-1 print:border-gray-300">{o.match_verdict ? VERDICT[o.match_verdict] : '—'}</td>
                 <td className="border border-white/15 px-1 print:border-gray-300">{l.memo ?? ''}</td>
               </tr>

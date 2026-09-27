@@ -9,10 +9,28 @@ const won = (n: number) => `${Math.round(n).toLocaleString('ko-KR')}원`;
 const pct = (r: number) => `${(r * 100).toFixed(1)}%`;
 const VERDICT = { same: '✅ 같음', diff: '⚠️ 차이', different: '❌ 다름' } as const;
 
+/**
+ * 판정 표시. match_verdict가 판정 신뢰도를 가른다 — 다른 물건이면 원가율·마진이
+ * 아무리 좋아도 그 숫자는 이 후보와 무관하다. 통과✅·최선🟢 표시를 지우고
+ * "참고용"으로 낮춰, 다른 물건인데 초록불이 켜져 보이는 일이 없게 한다.
+ */
 function Judgement({ o }: { o: OfferView }) {
   if (!o.lecture || !o.real) return <span className="text-gray-400">원가 없음</span>;
+
+  if (o.match_verdict === 'different') {
+    return (
+      <div className="space-y-0.5 text-xs">
+        <div className="text-white/50">다른 물건 — 참고용</div>
+        <div className="text-white/30 line-through decoration-white/20">강의: 원가율 {pct(o.lecture.costRatio)} (≤30%)</div>
+        <div className="text-white/30 line-through decoration-white/20">실측: 마진 {won(o.real.margin)} · {pct(o.real.marginRate)}</div>
+        {o.daily !== null && <div className="text-gray-500">일 판매 {o.daily.toFixed(1)}개 (누적÷180, 참고)</div>}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-0.5 text-xs">
+      {o.match_verdict === 'diff' && <div className="text-amber-400">⚠ 조건 다름 —</div>}
       <div>강의: 원가율 {pct(o.lecture.costRatio)} {o.lecture.best ? '🟢 최선' : o.lecture.pass ? '✅' : '❌'} (≤30%)</div>
       <div>실측: 마진 {won(o.real.margin)} · {pct(o.real.marginRate)} {o.real.passRate ? 'ⓐ✅' : 'ⓐ❌'} {o.real.passAmount ? 'ⓑ✅' : 'ⓑ❌'}</div>
       {o.daily !== null && <div className="text-gray-400">일 판매 {o.daily.toFixed(1)}개 (누적÷180, 참고)</div>}
@@ -71,6 +89,25 @@ function OfferRowView({ o, onChanged, run }: { o: OfferView; onChanged: () => Pr
       <td className="px-2 py-1 text-xs">
         {(o.tiers ?? []).map((t) => <div key={t.min_qty}>{t.min_qty}+ {o.sale_unit ?? ''} ¥{t.cny}</div>)}
         {o.tier_check && <div className="text-red-400">⚠ {o.tier_check}</div>}
+        {(o.options ?? []).length > 0 && (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {(o.options ?? []).map((opt) => opt.cny === null ? (
+              <span key={opt.name} title="가격 미상" className="rounded border border-white/10 px-1 text-white/30">
+                {opt.name}
+              </span>
+            ) : (
+              <button key={opt.name} type="button"
+                title="이 옵션가로 채택 원가를 바꿉니다"
+                onClick={() => { setCny(String(opt.cny)); void save({ cny_override: opt.cny }); }}
+                className={`rounded border px-1 ${o.cny === opt.cny
+                  ? 'border-blue-400 bg-blue-500/20 text-blue-200'
+                  : 'border-white/15 text-white/70 hover:border-white/30'}`}>
+                {opt.name} ¥{opt.cny}
+              </button>
+            ))}
+          </div>
+        )}
+        {o.sold_count !== null && <div className="mt-1 text-gray-400">판매 {o.sold_count.toLocaleString('ko-KR')}</div>}
         <input placeholder="위안 직접" value={cny} onChange={(e) => setCny(e.target.value)}
           onBlur={() => void commitCny()} className="mt-1 w-20 border border-white/15 bg-transparent px-1 text-white" />
       </td>
