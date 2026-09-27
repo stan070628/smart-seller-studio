@@ -42,7 +42,11 @@ export async function GET(request: NextRequest) {
     }
 
     const data = (listings as ListingRow[]).map((l) =>
-      buildListingView({ ...l, rating: l.rating === null ? null : Number(l.rating) }, byListing.get(l.id) ?? []),
+      buildListingView({
+        ...l,
+        rating: l.rating === null ? null : Number(l.rating),
+        recent6m_rating: l.recent6m_rating === null ? null : Number(l.recent6m_rating), // numeric → string으로 온다
+      }, byListing.get(l.id) ?? []),
     );
     return NextResponse.json({ success: true, data });
   } catch (err) {

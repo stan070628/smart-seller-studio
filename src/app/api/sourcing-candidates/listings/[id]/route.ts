@@ -11,6 +11,8 @@ const PatchSchema = z.object({
   price_override: z.number().int().positive().nullable().optional(),
   title: z.string().min(1).optional(),
   review_count: z.number().int().nonnegative().nullable().optional(),
+  recent6m_review_count: z.number().int().nonnegative().nullable().optional(),
+  recent6m_rating: z.number().min(0).max(5).nullable().optional(),
 }).strict();
 
 /** PATCH /api/sourcing-candidates/listings/[id] — 사람이 고친 값. AI 값보다 우선한다 */

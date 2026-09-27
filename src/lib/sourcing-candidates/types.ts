@@ -63,6 +63,9 @@ export interface ListingRow {
   size: LogisticsSize;
   price_override: number | null;
   category_path: string | null;
+  /** 네이버 상세 페이지 별점 옆 ⓘ에서 사람이 직접 옮겨 적는다 — ⭐ 후보에만 있다 */
+  recent6m_review_count: number | null;
+  recent6m_rating: number | null;
 }
 
 /** DB 행 (sourcing_offers) */

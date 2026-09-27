@@ -9,6 +9,20 @@ const pct = (r: number) => `${(r * 100).toFixed(1)}%`;
 const VERDICT = { same: '같음', diff: '차이', different: '다름' } as const;
 const isHttpUrl = (u: string) => /^https?:\/\//i.test(u);
 
+/** "2,793건 (23%) · 4.88" 형태. 누적 대비 최근 비중이 100%를 넘으면 ⚠로 표시한다 */
+function Recent6mCell({ l }: { l: ListingView }) {
+  if (l.recent6m_review_count === null) return <>—</>;
+  const sharePct = l.recent_share === null ? null : Math.round(l.recent_share * 100);
+  return (
+    <span className={sharePct !== null && sharePct > 100 ? 'text-red-600' : undefined}>
+      {sharePct !== null && sharePct > 100 && '⚠ '}
+      {l.recent6m_review_count.toLocaleString('ko-KR')}건
+      {sharePct !== null && ` (${sharePct}%)`}
+      {l.recent6m_rating !== null && ` · ${l.recent6m_rating}`}
+    </span>
+  );
+}
+
 /** 강사 상담에 들고 갈 표. 채택까지 끝난 ⭐ 후보만 싣는다 */
 export default function SubmissionList() {
   const [rows, setRows] = useState<ListingView[] | null>(null);
@@ -33,7 +47,7 @@ export default function SubmissionList() {
       </p>
       <table className="w-full border text-xs">
         <thead className="bg-gray-50"><tr>
-          {['#', '상품', '카테고리', '판매가', '리뷰', '1688', '위안', '강의 원가율', '실측 마진', '같은 물건', '메모'].map((h) =>
+          {['#', '상품', '카테고리', '판매가', '리뷰', '최근 6개월', '1688', '위안', '강의 원가율', '실측 마진', '같은 물건', '메모'].map((h) =>
             <th key={h} className="border px-1 py-1 text-left">{h}</th>)}
         </tr></thead>
         <tbody>
@@ -46,6 +60,7 @@ export default function SubmissionList() {
                 <td className="border px-1">{l.category_path ?? '—'}</td>
                 <td className="border px-1 text-right">{won(l.effective_price)}</td>
                 <td className="border px-1 text-right">{l.review_count?.toLocaleString('ko-KR') ?? '—'}</td>
+                <td className="border px-1"><Recent6mCell l={l} /></td>
                 <td className="border px-1">
                   {o.url ? (
                     <>

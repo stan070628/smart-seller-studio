@@ -91,6 +91,69 @@ function OfferRowView({ o, onChanged, run }: { o: OfferView; onChanged: () => Pr
   );
 }
 
+/**
+ * 최근 6개월 리뷰 — 네이버 상세 페이지 별점 옆 ⓘ에서 사람이 옮겨 적는다.
+ * 누적 리뷰는 한때 잘 팔리다 식은 상품을 강자로 오판하게 한다 — 지금 팔리는 속도를 보려는 값이다.
+ * ⭐ 후보 카드에만 있고 후보 표에는 없다(20개 안팎이라 사람이 직접 캡처를 보고 적는다).
+ */
+function Recent6mFields({ l, run, onChanged }: { l: ListingView; run: RunFn; onChanged: () => Promise<void> }) {
+  const [count, setCount] = useState(l.recent6m_review_count === null ? '' : String(l.recent6m_review_count));
+  const [rating, setRating] = useState(l.recent6m_rating === null ? '' : String(l.recent6m_rating));
+
+  const commitCount = () => run(async () => {
+    const cleaned = count.replace(/[^\d]/g, '');
+    if (cleaned === '') {
+      if (l.recent6m_review_count === null) return;
+      await api.patchListing(l.id, { recent6m_review_count: null });
+      await onChanged();
+      return;
+    }
+    const n = Number(cleaned);
+    if (!Number.isInteger(n) || n < 0) throw new Error('최근 6개월 리뷰는 0 이상 정수로 입력하세요');
+    if (n === l.recent6m_review_count) return;
+    await api.patchListing(l.id, { recent6m_review_count: n });
+    await onChanged();
+  });
+
+  const commitRating = () => run(async () => {
+    const cleaned = rating.replace(/[^\d.]/g, '');
+    if (cleaned === '') {
+      if (l.recent6m_rating === null) return;
+      await api.patchListing(l.id, { recent6m_rating: null });
+      await onChanged();
+      return;
+    }
+    const n = Number(cleaned);
+    if (Number.isNaN(n) || n < 0 || n > 5) throw new Error('6개월 별점은 0~5 사이로 입력하세요');
+    if (n === l.recent6m_rating) return;
+    await api.patchListing(l.id, { recent6m_rating: n });
+    await onChanged();
+  });
+
+  const sharePct = l.recent_share === null ? null : Math.round(l.recent_share * 100);
+
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-600">
+      <label className="flex items-center gap-1">
+        최근 6개월 리뷰
+        <input value={count} onChange={(e) => setCount(e.target.value)} onBlur={() => void commitCount()}
+          placeholder="건" className="w-16 border px-1" />
+      </label>
+      <label className="flex items-center gap-1">
+        6개월 별점
+        <input value={rating} onChange={(e) => setRating(e.target.value)} onBlur={() => void commitRating()}
+          placeholder="점" className="w-12 border px-1" />
+      </label>
+      <span className="text-gray-400">상세 페이지 별점 옆 ⓘ</span>
+      {sharePct !== null && (
+        <span className={sharePct > 100 ? 'text-red-600' : ''}>
+          {sharePct > 100 && '⚠ '}최근 비중 {sharePct}%
+        </span>
+      )}
+    </div>
+  );
+}
+
 /** ⭐ 후보 하나. 1688 캡처는 이 카드에 넣는다 — 짝은 사람이 정하고 AI는 같은 물건인지만 본다 */
 export default function CandidateCard({ l, onChanged }: { l: ListingView; onChanged: () => Promise<void> }) {
   const [url, setUrl] = useState('');
@@ -121,6 +184,8 @@ export default function CandidateCard({ l, onChanged }: { l: ListingView; onChan
           <option value="xsmall">극소형</option><option value="small">소형</option><option value="medium">중형</option>
         </select>
       </div>
+
+      <Recent6mFields l={l} run={run} onChanged={onChanged} />
 
       {l.offers.length > 0 && (
         <table className="mt-2 w-full text-sm">

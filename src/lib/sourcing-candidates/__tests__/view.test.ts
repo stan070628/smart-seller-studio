@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { buildListingView, offerCny } from '@/lib/sourcing-candidates/view';
+import { buildListingView, offerCny, recentShare } from '@/lib/sourcing-candidates/view';
 import type { ListingRow, OfferRow } from '@/lib/sourcing-candidates/types';
 
 const listing: ListingRow = {
   id: 'l1', scan_id: 's1', rank: 1, title: '가죽 핸들 토시', seller: '체니모', price: 14390,
   list_price: null, discount_pct: null, review_count: 812, rating: 4.8, badges: [], number_check: null,
   starred: true, excluded_override: null, memo: null, size: 'small', price_override: null, category_path: null,
+  recent6m_review_count: null, recent6m_rating: null,
 };
 function offer(over: Partial<OfferRow>): OfferRow {
   return {
@@ -46,5 +47,39 @@ describe('buildListingView', () => {
   });
   it('채택이 없으면 adopted는 null', () => {
     expect(buildListingView(listing, [offer({})]).adopted).toBeNull();
+  });
+  it('최근 6개월 리뷰·누적 리뷰가 있으면 recent_share를 계산한다 (도블레 도마: 2793/12066)', () => {
+    const v = buildListingView(
+      { ...listing, review_count: 12066, recent6m_review_count: 2793, recent6m_rating: 4.88 },
+      [],
+    );
+    expect(v.recent_share).toBeCloseTo(2793 / 12066, 4);
+  });
+  it('recent6m_review_count가 없으면 recent_share는 null', () => {
+    expect(buildListingView({ ...listing, recent6m_review_count: null }, []).recent_share).toBeNull();
+  });
+  it('누적 review_count가 null이면 recent_share는 null', () => {
+    expect(buildListingView({ ...listing, review_count: null, recent6m_review_count: 10 }, []).recent_share).toBeNull();
+  });
+  it('누적 review_count가 0이면 recent_share는 null', () => {
+    expect(buildListingView({ ...listing, review_count: 0, recent6m_review_count: 10 }, []).recent_share).toBeNull();
+  });
+});
+
+describe('recentShare', () => {
+  it('2793/12066 ≈ 0.2315', () => {
+    expect(recentShare(2793, 12066)).toBeCloseTo(0.2315, 4);
+  });
+  it('recent이 null이면 null', () => {
+    expect(recentShare(null, 12066)).toBeNull();
+  });
+  it('total이 null이면 null', () => {
+    expect(recentShare(2793, null)).toBeNull();
+  });
+  it('total이 0이면 null', () => {
+    expect(recentShare(2793, 0)).toBeNull();
+  });
+  it('recent이 total을 넘어도 그대로 둔다(오독 가능성은 UI가 표시)', () => {
+    expect(recentShare(15000, 12066)).toBeGreaterThan(1);
   });
 });
