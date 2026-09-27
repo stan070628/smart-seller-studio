@@ -7,6 +7,7 @@ import type { ListingView } from '@/lib/sourcing-candidates/view';
 const won = (n: number) => `${Math.round(n).toLocaleString('ko-KR')}원`;
 const pct = (r: number) => `${(r * 100).toFixed(1)}%`;
 const VERDICT = { same: '같음', diff: '차이', different: '다름' } as const;
+const isHttpUrl = (u: string) => /^https?:\/\//i.test(u);
 
 /** 강사 상담에 들고 갈 표. 채택까지 끝난 ⭐ 후보만 싣는다 */
 export default function SubmissionList() {
@@ -45,7 +46,18 @@ export default function SubmissionList() {
                 <td className="border px-1">{l.category_path ?? '—'}</td>
                 <td className="border px-1 text-right">{won(l.effective_price)}</td>
                 <td className="border px-1 text-right">{l.review_count?.toLocaleString('ko-KR') ?? '—'}</td>
-                <td className="border px-1">{o.url ? <a href={o.url} className="underline">링크</a> : '링크 없음'}</td>
+                <td className="border px-1">
+                  {o.url ? (
+                    <>
+                      <span className="print:hidden">
+                        {isHttpUrl(o.url)
+                          ? <a href={o.url} target="_blank" rel="noopener noreferrer" className="underline">링크</a>
+                          : o.url}
+                      </span>
+                      <span className="hidden print:inline break-all">{o.url}</span>
+                    </>
+                  ) : '링크 없음'}
+                </td>
                 <td className="border px-1 text-right">{o.cny === null ? '—' : `¥${o.cny}`}</td>
                 <td className="border px-1">{o.lecture ? `${pct(o.lecture.costRatio)} ${o.lecture.pass ? '통과' : '탈락'}` : '—'}</td>
                 <td className="border px-1">{o.real ? `${won(o.real.margin)} · ${pct(o.real.marginRate)} ${o.real.pass ? '통과' : '탈락'}` : '—'}</td>

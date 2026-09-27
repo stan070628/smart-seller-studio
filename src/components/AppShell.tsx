@@ -105,6 +105,7 @@ export default function AppShell({
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       {/* ── 사이드바 ── */}
       <aside
+        className="app-shell-print-hide"
         style={{
           width: 220,
           flexShrink: 0,
@@ -356,7 +357,9 @@ export default function AppShell({
         <Suspense fallback={null}>
           <TabSync />
         </Suspense>
-        <TabBar />
+        <div className="app-shell-print-hide">
+          <TabBar />
+        </div>
         {children}
       </div>
     </div>

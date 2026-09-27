@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { ListingView } from '@/lib/sourcing-candidates/view';
 import type { FilterFlag } from '@/lib/sourcing-candidates/filters';
 
@@ -21,11 +21,30 @@ interface Props {
 function Row({ r, onPatch }: { r: ListingView; onPatch: Props['onPatch'] }) {
   const [editing, setEditing] = useState(false);
   const [price, setPrice] = useState(String(r.effective_price));
+  /** Escape로 취소했을 때 곧이어 오는 blur 커밋을 건너뛰기 위한 플래그 */
+  const skipBlurRef = useRef(false);
+
+  const startEdit = () => {
+    setPrice(String(r.effective_price));
+    setEditing(true);
+  };
+  const commitPrice = () => {
+    setEditing(false);
+    const n = Number(price.replace(/[^\d]/g, ''));
+    if (n > 0 && n !== r.effective_price) void onPatch(r.id, { price_override: n });
+  };
+  const cancelPrice = () => {
+    skipBlurRef.current = true;
+    setPrice(String(r.effective_price));
+    setEditing(false);
+  };
+
   return (
     <tr className={`border-t ${r.excluded ? 'text-gray-400' : ''}`}>
       <td className="px-2 py-1 text-right">{r.rank}</td>
       <td className="px-2 py-1">
-        <button aria-label="후보로 올리기" onClick={() => void onPatch(r.id, { starred: !r.starred })}
+        <button aria-pressed={r.starred} aria-label={r.starred ? '후보에서 내리기' : '후보로 올리기'}
+          onClick={() => void onPatch(r.id, { starred: !r.starred })}
           className={r.starred ? 'text-yellow-500' : 'text-gray-300 hover:text-yellow-400'}>★</button>
       </td>
       <td className="max-w-md px-2 py-1">
@@ -36,12 +55,15 @@ function Row({ r, onPatch }: { r: ListingView; onPatch: Props['onPatch'] }) {
         {editing ? (
           <input autoFocus value={price} onChange={(e) => setPrice(e.target.value)} className="w-24 border px-1 text-right"
             onBlur={() => {
-              setEditing(false);
-              const n = Number(price.replace(/[^\d]/g, ''));
-              if (n > 0 && n !== r.effective_price) void onPatch(r.id, { price_override: n });
+              if (skipBlurRef.current) { skipBlurRef.current = false; return; }
+              commitPrice();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') e.currentTarget.blur();
+              else if (e.key === 'Escape') cancelPrice();
             }} />
         ) : (
-          <button onClick={() => setEditing(true)} title="클릭해서 고치기 (쿠팡 판매가로 바꿔 보세요)">
+          <button onClick={startEdit} title="클릭해서 고치기 (쿠팡 판매가로 바꿔 보세요)">
             {won(r.effective_price)}{r.price_override !== null && <span className="text-blue-600">*</span>}
           </button>
         )}

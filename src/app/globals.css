@@ -39,6 +39,15 @@ body {
   display: block !important;
 }
 
+/* AppShell 사이드바·탭바는 인쇄 화면에서 숨긴다.
+   AppShell이 인라인 style(display:flex 등)을 쓰므로 Tailwind print: 유틸(단순 클래스,
+   !important 없음)로는 인라인 스타일을 이길 수 없다 — 전역 !important 클래스로 처리한다. */
+@media print {
+  .app-shell-print-hide {
+    display: none !important;
+  }
+}
+
 /* 스크롤바 커스텀 (사이드바 등) */
 ::-webkit-scrollbar {
   width: 4px;

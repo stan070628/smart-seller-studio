@@ -28,12 +28,34 @@ function OfferRowView({ o, onChanged, run }: { o: OfferView; onChanged: () => Pr
   const [url, setUrl] = useState(o.url ?? '');
   const [cny, setCny] = useState(o.cny_override === null ? '' : String(o.cny_override));
   const save = (data: Record<string, unknown>) => run(async () => { await api.patchOffer(o.id, data); await onChanged(); });
+
+  /** 위안 직접입력 — 숫자가 아니면 저장하지 않고 카드 상단에 알린다. 값이 그대로면 PATCH를 건너뛴다 (I3) */
+  const commitCny = () => run(async () => {
+    const cleaned = cny.replace(/[^\d.]/g, '');
+    if (cleaned === '') {
+      if (o.cny_override === null) return;
+      await api.patchOffer(o.id, { cny_override: null });
+      await onChanged();
+      return;
+    }
+    const n = Number(cleaned);
+    if (!(n > 0)) throw new Error('위안은 숫자로 입력하세요');
+    if (n === o.cny_override) return;
+    await api.patchOffer(o.id, { cny_override: n });
+    await onChanged();
+  });
+
+  const adoptDisabled = o.cny === null || o.parse_status === 'failed';
+  const adoptTitle = o.parse_status === 'failed'
+    ? '판독 실패라 채택할 수 없습니다'
+    : o.cny === null ? '위안 원가가 없어 채택할 수 없습니다' : undefined;
+
   return (
     <tr className={`border-t align-top ${o.adopted ? 'bg-green-50' : ''}`}>
       <td className="px-2 py-1 text-xs">
         {o.parse_status === 'failed' ? (
           <span className="text-red-600">판독 실패: {o.parse_error}{' '}
-            <button className="underline" onClick={() => run(async () => { await api.reparseOffer(o.id); await onChanged(); })}>재시도</button>
+            <button className="underline" onClick={() => void run(async () => { await api.reparseOffer(o.id); await onChanged(); })}>재시도</button>
           </span>
         ) : (
           <>
@@ -46,15 +68,23 @@ function OfferRowView({ o, onChanged, run }: { o: OfferView; onChanged: () => Pr
         {(o.tiers ?? []).map((t) => <div key={t.min_qty}>{t.min_qty}+ {o.sale_unit ?? ''} ¥{t.cny}</div>)}
         {o.tier_check && <div className="text-red-600">⚠ {o.tier_check}</div>}
         <input placeholder="위안 직접" value={cny} onChange={(e) => setCny(e.target.value)}
-          onBlur={() => void save({ cny_override: cny ? Number(cny) : null })} className="mt-1 w-20 border px-1" />
+          onBlur={() => void commitCny()} className="mt-1 w-20 border px-1" />
       </td>
       <td className="px-2 py-1"><Judgement o={o} /></td>
       <td className="px-2 py-1 text-xs">
         <input placeholder="1688 URL" value={url} onChange={(e) => setUrl(e.target.value)}
           onBlur={() => url !== (o.url ?? '') && void save({ url: url || null })} className="w-40 border px-1" />
         <div className="mt-1">
-          {o.adopted ? <span className="font-medium text-green-700">채택됨</span>
-            : <button className="underline" onClick={() => void save({ adopted: true })}>채택</button>}
+          {o.adopted ? (
+            <button className="underline text-gray-600" onClick={() => void save({ adopted: false })}>채택 취소</button>
+          ) : (
+            <button className="underline disabled:cursor-not-allowed disabled:text-gray-300 disabled:no-underline"
+              disabled={adoptDisabled} title={adoptTitle}
+              onClick={() => {
+                if (o.match_verdict === 'different' && !window.confirm('AI가 다른 물건이라고 판정했습니다. 그래도 채택하시겠습니까?')) return;
+                void save({ adopted: true });
+              }}>채택</button>
+          )}
         </div>
       </td>
     </tr>
@@ -107,7 +137,8 @@ export default function CandidateCard({ l, onChanged }: { l: ListingView; onChan
             const r = await api.addOffer(l.id, files, url);
             setUrl('');
             await onChanged();
-            return r.parse_error ? `판독 실패: ${r.parse_error}` : '판독 완료';
+            if (r.parse_error) throw new Error(`판독 실패: ${r.parse_error}`);
+            return '판독 완료';
           }} />
         <input placeholder="1688 URL (선택)" value={url} onChange={(e) => setUrl(e.target.value)} className="h-9 border px-2 text-sm" />
       </div>

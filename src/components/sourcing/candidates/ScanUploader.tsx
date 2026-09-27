@@ -28,7 +28,7 @@ export default function ScanUploader({ label, hint, onFiles, listenPaste = false
     try {
       const prepared = await prepareCaptures(images);
       if (prepared.overBudget) throw new Error('용량이 커서 한 번에 못 보냅니다. 나눠서 올려 주세요.');
-      setMsg({ ok: true, text: `${prepared.files.length}조각 판독 중… (조각당 10~30초)` });
+      setMsg({ ok: true, text: `조각 ${prepared.files.length}개 판독 중… (1~2분 걸릴 수 있습니다)` });
       setMsg({ ok: true, text: await onFiles(prepared.files) });
     } catch (e) {
       setMsg({ ok: false, text: e instanceof Error ? e.message : '실패' });
