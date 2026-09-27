@@ -158,6 +158,8 @@ export async function collectChannel(
     const res = await adapter.fetch(w);
     report.rejected = res.rejected.length;
     report.rejectedLines = res.rejected.slice(0, REJECTED_SAMPLE);
+    // 잠금·연결 실패로 여기서 끝나도 보고서가 「받긴 받았다」를 남긴다 — 아래에서 판정된 수(backfill 필터 반영)로 덮어쓴다
+    report.fetched = res.lines.length;
 
     if (opts.dryRun) {
       // 읽기만 — 잠글 것도 커밋할 것도 없으니 트랜잭션 밖에서 바로 판정한다

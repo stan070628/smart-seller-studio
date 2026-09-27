@@ -187,6 +187,17 @@ describe('collectChannel', () => {
     expect(seq).not.toContain('BEGIN');
   });
 
+  it('채널을 받은 뒤 BEGIN(잠금·연결)이 실패해도 보고서에 받은 라인 수가 남는다', async () => {
+    client.query.mockImplementationOnce(async (sql: string) => {
+      seq.push(sql);
+      throw new Error('연결 끊김');
+    });
+    const r = await collectChannel(pool, adapter(), { now: NOW, dryRun: false, deduct });
+    expect(r).toMatchObject({ ok: false, error: '연결 끊김', fetched: 1 });
+    expect(seq).toContain('FETCH');
+    expect(seq).not.toContain('COMMIT');
+  });
+
   it('커서가 있으면 48시간 겹침·꼬리일수(7)로 시작한다', async () => {
     m.readCursor.mockResolvedValue('2026-10-10T00:00:00.000Z');
     const a = adapter();
