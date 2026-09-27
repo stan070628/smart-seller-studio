@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { getAnthropicClient } from '@/lib/ai/claude';
 import { toStructuredOutputSchema } from '@/lib/ai/structured-schema';
+import { readStructuredText } from '@/lib/sourcing-candidates/parse-response';
 import type { Extracted1688 } from '@/lib/sourcing-candidates/types';
 
 export const OFFER_SCHEMA = z.object({
@@ -44,7 +45,7 @@ export async function extract1688(
   const client = getAnthropicClient();
   const response = await client.messages.create({
     model: 'claude-opus-5',
-    max_tokens: 4000,
+    max_tokens: 16000,
     output_config: { effort: 'high', format: { type: 'json_schema', schema: offerJsonSchema() } },
     messages: [{
       role: 'user',
@@ -57,6 +58,5 @@ export async function extract1688(
       ],
     }],
   });
-  const text = response.content.find((b) => b.type === 'text')?.text ?? '';
-  return OFFER_SCHEMA.parse(JSON.parse(text)) as Extracted1688;
+  return OFFER_SCHEMA.parse(readStructuredText(response)) as Extracted1688;
 }

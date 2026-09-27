@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { getAnthropicClient } from '@/lib/ai/claude';
 import { toStructuredOutputSchema } from '@/lib/ai/structured-schema';
+import { readStructuredText } from '@/lib/sourcing-candidates/parse-response';
 import type { ExtractedNaverPage } from '@/lib/sourcing-candidates/types';
 
 const int = z.number().int();
@@ -43,7 +44,8 @@ export const NAVER_PROMPT = `이 이미지는 네이버 쇼핑 카테고리 상�
 - title: 상품명 줄 그대로(말줄임표 포함). seller: 상품명 위 판매자명(끝의 ">" 제외).
 - price: 굵은 판매가(원, 정수). list_price: 취소선 정가, 없으면 null. discount_pct: 판매가 앞 빨간 % 숫자, 없으면 null.
 - review_count: "리뷰 N"의 N(쉼표 제거). rating: 별점 숫자.
-- badges: 판매자명 옆 배지 중 "공식", "우수셀러", "인증", "해외"만. "슈퍼적립"·"최저가"·"품절임박"은 배지가 아니다.`;
+- badges: 판매자명 옆 배지 중 "공식", "우수셀러", "인증", "해외"만. "슈퍼적립"·"최저가"·"품절임박"은 배지가 아니다.
+- 「전체 판매자 상품 N개」가 붙은 가격비교 카드는 판매자 자리에 보이는 이름을 그대로 seller에, 표시된 가격을 price에 담는다.`;
 
 export function naverJsonSchema(): Record<string, unknown> {
   return toStructuredOutputSchema(NAVER_PAGE_SCHEMA);
@@ -68,6 +70,5 @@ export async function extractNaverPage(image: Buffer): Promise<ExtractedNaverPag
       ],
     }],
   });
-  const text = response.content.find((b) => b.type === 'text')?.text ?? '';
-  return NAVER_PAGE_SCHEMA.parse(JSON.parse(text)) as ExtractedNaverPage;
+  return NAVER_PAGE_SCHEMA.parse(readStructuredText(response)) as ExtractedNaverPage;
 }

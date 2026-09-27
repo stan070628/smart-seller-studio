@@ -1,7 +1,7 @@
 'use client';
 
-import { computeTiles, findContentEnd, TILE_HEIGHT } from '@/lib/sourcing-candidates/tile';
-import { UPLOAD_BUDGET_BYTES } from '@/lib/receipt/downscale';
+import { computeTiles, findContentEnd } from '@/lib/sourcing-candidates/tile';
+import { MAX_LONG_EDGE, UPLOAD_BUDGET_BYTES } from '@/lib/receipt/downscale';
 
 /**
  * 업로드 전 캡처 준비 (브라우저 전용).
@@ -49,7 +49,7 @@ function toJpeg(canvas: HTMLCanvasElement): Promise<Blob> {
 async function prepareOne(file: File): Promise<File[]> {
   const bitmap = await createImageBitmap(file);
   try {
-    const scale = Math.min(1, TILE_HEIGHT / bitmap.width);
+    const scale = Math.min(1, MAX_LONG_EDGE / bitmap.width);
     const width = Math.round(bitmap.width * scale);
     const height = Math.round(bitmap.height * scale);
 
