@@ -16,6 +16,7 @@ import { addDays } from '@/lib/erp/orders/window';
 import { fetchOrdersStatus, postOrdersSync } from './api';
 import OrderLinesDialog from './OrderLinesDialog';
 import DeductEnableDialog from './DeductEnableDialog';
+import UnattributedDialog from './UnattributedDialog';
 import { fmtKst, won } from './stock-view';
 
 interface Props {
@@ -35,6 +36,7 @@ export default function OrdersSyncPanel({ onChanged }: Props) {
   const [open, setOpen] = useState(true);
   const [lines, setLines] = useState<{ channel: string; label: string; date: string } | null>(null);
   const [enabling, setEnabling] = useState(false);
+  const [queueOpen, setQueueOpen] = useState(false);
 
   const load = useCallback(async () => {
     const r = await fetchOrdersStatus();
@@ -94,6 +96,11 @@ export default function OrdersSyncPanel({ onChanged }: Props) {
             : <span style={{ color: E.warn }}>기록만(판매 차감 꺼짐)</span>}
         </button>
         <span style={{ display: 'flex', gap: 6 }}>
+          {status && status.channels.some((c) => c.unattributed > 0) && (
+            <button type="button" onClick={() => setQueueOpen(true)} style={btnStyle}>
+              미연결 {won(status.channels.reduce((s, c) => s + c.unattributed, 0))}줄 연결…
+            </button>
+          )}
           <button type="button" disabled={syncing} onClick={() => void syncNow()} style={syncing ? disabledBtnStyle : btnStyle}>
             <RefreshCw size={12} /> {syncing ? '수집 중…' : '지금 수집'}
           </button>
@@ -139,6 +146,7 @@ export default function OrdersSyncPanel({ onChanged }: Props) {
           onDone={() => { setEnabling(false); void load(); onChanged(); }}
         />
       )}
+      {queueOpen && <UnattributedDialog onClose={() => setQueueOpen(false)} onChanged={() => { void load(); onChanged(); }} />}
     </div>
   );
 }
