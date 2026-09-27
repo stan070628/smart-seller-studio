@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ordersStatus } from '@/lib/erp/orders/queries';
+import { dayLines, ordersStatus } from '@/lib/erp/orders/queries';
 import type { Db } from '@/lib/erp/ledger/store';
 
 describe('ordersStatus', () => {
@@ -42,5 +42,21 @@ describe('ordersStatus', () => {
     expect(s.channels[0]).toMatchObject({ today: { orders: 0, lines: 0 }, cursorAt: null, lastError: null, lastBusy: null, lastAbsenceRefused: null, lastRejected: null });
     expect(s.channels[3]).toMatchObject({ lastError: 1, lastBusy: 0, lastAbsenceRefused: 1, lastRejected: 2 });
     expect(s.lastRun).toEqual({ startedAt: '2026-09-27T02:45:00.000Z', finishedAt: '2026-09-27T02:45:40.000Z', status: 'ok', error: null });
+  });
+});
+
+describe('dayLines', () => {
+  it('(1-C2b ②) 주문 줄에 할인 금액을 싣는다', async () => {
+    const db: Db = {
+      async query() {
+        return { rows: [{
+          id: '1', external_order_id: '9001', external_line_id: '9001:95373359497', ordered_at: new Date('2026-09-27T01:00:00Z'),
+          paid_at: new Date('2026-09-27T01:00:30Z'), status: 'paid', raw_status: 'ACCEPT', product_label: '쿨매트', order_qty: 2, sku_qty: 2,
+          amount: 28200, discount_amount: 840, attribution: 'mapped', unattributed_reason: null, deduction_state: 'posted', deduction_note: null, sku_labels: '쿨매트 ×2',
+        }], rowCount: 1 };
+      },
+    };
+    const r = await dayLines(db, 'coupang_rg', '2026-09-27');
+    expect(r[0]).toMatchObject({ id: 1, amount: 28200, discountAmount: 840 });
   });
 });
