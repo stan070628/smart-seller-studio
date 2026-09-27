@@ -165,7 +165,7 @@ describe('previewBackfill', () => {
     expect(p).toEqual({
       cutover: CUT, lines: 3, skus: 2, self: 3, rg: 3,
       firstPaidAt: '2026-09-27T01:00:00.000Z', lastPaidAt: '2026-09-27T02:00:00.000Z',
-      byChannel: { coupang_wing: 0, coupang_rg: 1, naver: 2, toss: 0 },
+      byChannel: { coupang_wing: 0, coupang_rg: 1, naver: 2, toss: 0, karrot: 0 },
       shortages: [{ skuId: 9, name: '퓨어틴', option: '', location: 'rg', need: 3, have: 1 }],
     });
   });

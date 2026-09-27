@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { assertExternalId, bareWingKey, legacyKeyOf, saleIdemKey } from '@/lib/erp/orders/keys';
+import { LEGACY_CHANNEL, SHIPPING_SOURCE, assertExternalId, bareWingKey, legacyKeyOf, saleIdemKey } from '@/lib/erp/orders/keys';
+import { CHANNEL_LABEL, locationOf } from '@/lib/erp/orders/types';
+import { resolveSaleShippingFee } from '@/lib/cost-management/sale-shipping';
 import { assertIdemKey } from '@/lib/erp/ledger/plan';
 
 describe('판매 멱등키', () => {
@@ -42,5 +44,18 @@ describe('옛 장부 키', () => {
   it('Wing 키의 무접두 짝(상품별 불러오기가 남긴 키)', () => {
     expect(bareWingKey('wing-31000000001-70000000001')).toBe('31000000001-70000000001');
     expect(bareWingKey('rg-1-2')).toBeNull();
+  });
+});
+
+describe('(1-C2b ③) 당근', () => {
+  it('옛 장부 키 karrot-<줄키> · 채널 karrot · 배송비 0 · 판매 멱등키', () => {
+    const id = '3f2b8c1e-8d4a-4b8e-9c1a-2b3c4d5e6f70';
+    expect(legacyKeyOf({ channel: 'karrot', externalOrderId: `karrot-${id}`, externalLineId: id, productId: '' })).toBe(`karrot-${id}`);
+    expect(LEGACY_CHANNEL.karrot).toBe('karrot');
+    expect(SHIPPING_SOURCE.karrot).toBe('karrot');
+    expect(resolveSaleShippingFee('karrot')).toBe(0);
+    expect(saleIdemKey('karrot', id, 72, 1)).toBe(`sale:karrot:${id}:s72`);
+    expect(locationOf('karrot')).toBe('self');
+    expect(CHANNEL_LABEL.karrot).toBe('당근');
   });
 });

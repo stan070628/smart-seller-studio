@@ -2,7 +2,7 @@
 // 외부 id 검사 · 판매 멱등키 · 옛 장부(sale_records) 키.
 import { assertIdemKey } from '@/lib/erp/ledger/plan';
 import type { ShippingSource } from '@/lib/cost-management/sale-shipping';
-import { LineRejectError, type OrderChannel, type RejectReason } from './types';
+import { LineRejectError, type RejectReason, type SaleChannel } from './types';
 
 // 라인 키는 멱등키 안에 들어간다: '#'(전표 순번)·'@'(차감 버전)·공백이 섞이면 다른 전표와 키가 겹친다. DB check와 같은 식
 const EXT_ID = /^[0-9A-Za-z_-]+(:[0-9A-Za-z_-]+)*$/;
@@ -31,7 +31,7 @@ export function safeLineKey(parts: unknown[]): string {
 export const rejectReasonOf = (e: unknown): RejectReason => (e instanceof LineRejectError ? e.reason : 'invalid');
 
 /** 판매 차감 멱등키. SKU를 붙인다 — postConsume·reverse는 SKU 하나 단위라 bundle 라인의 SKU마다 키가 달라야 한다 */
-export function saleIdemKey(channel: OrderChannel, externalLineId: string, skuId: number, version: number): string {
+export function saleIdemKey(channel: SaleChannel, externalLineId: string, skuId: number, version: number): string {
   assertExternalId(externalLineId, '라인 키');
   if (!Number.isInteger(skuId) || skuId <= 0) throw new RangeError(`skuId가 잘못됐다: ${skuId}`);
   if (!Number.isInteger(version) || version < 1) throw new RangeError(`차감 버전은 1 이상이다: ${version}`);
@@ -41,7 +41,7 @@ export function saleIdemKey(channel: OrderChannel, externalLineId: string, skuId
 }
 
 /** 옛 장부 키 — 옛 불러오기 버튼과 같은 형식이라 과거 행과 겹쳐도 두 번 세지 않는다 */
-export function legacyKeyOf(l: { channel: OrderChannel; externalOrderId: string; externalLineId: string; productId: string }): string {
+export function legacyKeyOf(l: { channel: SaleChannel; externalOrderId: string; externalLineId: string; productId: string }): string {
   switch (l.channel) {
     case 'coupang_wing':
       return `wing-${l.externalOrderId}-${l.productId}`;
@@ -51,23 +51,27 @@ export function legacyKeyOf(l: { channel: OrderChannel; externalOrderId: string;
       return `naver-${l.externalLineId}`;
     case 'toss':
       return `toss-${l.externalLineId}`;
+    case 'karrot':
+      return `karrot-${l.externalLineId}`;
   }
 }
 
 /** sale_records.channel */
-export const LEGACY_CHANNEL: Record<OrderChannel, string> = {
+export const LEGACY_CHANNEL: Record<SaleChannel, string> = {
   coupang_wing: 'coupang',
   coupang_rg: 'rocket_growth',
   naver: 'naver',
   toss: 'toss',
+  karrot: 'karrot',
 };
 
 /** sale_records.shipping_fee 산정 소스(resolveSaleShippingFee) */
-export const SHIPPING_SOURCE: Record<OrderChannel, ShippingSource> = {
+export const SHIPPING_SOURCE: Record<SaleChannel, ShippingSource> = {
   coupang_wing: 'wing',
   coupang_rg: 'rg',
   naver: 'naver',
   toss: 'toss',
+  karrot: 'karrot',
 };
 
 /** 상품별 불러오기(coupang-import)가 남긴 무접두 Wing 키 `<orderId>-<vid>` — 새 키를 쓸 때 무효화한다(판매자배송 이중 기록 제거) */

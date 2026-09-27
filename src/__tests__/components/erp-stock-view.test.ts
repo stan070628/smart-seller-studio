@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  computeKpis, defaultCost, editDiff, rgArriveQty, filterGroups, filterRows, filtersActive, groupRows, localInputToIso, summarizeStaged, toAdjustItems, toExportCsv,
+  computeKpis, defaultCost, editDiff, rgArriveQty, filterGroups, filterRows, filtersActive, groupRows, localInputToIso, parseWon, summarizeStaged, toAdjustItems, toExportCsv,
   type RgRecon, type StagedEdit, type StockRow,
 } from '@/components/erp/stock/stock-view';
 
@@ -116,5 +116,16 @@ describe('rgArriveQty (「입고 완료 m개 옮기기」)', () => {
     expect(rgArriveQty(row({ rg: 4, rgInbound: 3 }), rc(4))).toBe(0);
     expect(rgArriveQty(row({ rg: 5, rgInbound: 3 }), rc(4))).toBe(0);
     expect(rgArriveQty(row({ rg: 2, rgInbound: 3 }), null)).toBe(0);
+  });
+});
+
+describe('(1-C2b ③) parseWon — 당근 받은 돈 입력', () => {
+  it('숫자·쉼표·공백·끝의 「원」만 받고 정수 원으로 읽는다', () => {
+    expect(parseWon('20000')).toBe(20000);
+    expect(parseWon(' 20,000원 ')).toBe(20000);
+    expect(parseWon('0')).toBe(0);
+  });
+  it('비었거나 소수·음수·문자가 섞이면 null — 조용히 다른 금액으로 바꾸지 않는다', () => {
+    for (const bad of ['', '  ', '원', '1.5', '-100', '2만', 'abc', '1e5']) expect(parseWon(bad)).toBeNull();
   });
 });

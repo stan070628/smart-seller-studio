@@ -9,7 +9,7 @@ import type { DeductSummary } from './collect';
 import { decideDeduction, type DeductInput, type DeductionState, type PostedItem } from './deduct-plan';
 import type { AllocItem } from './resolve';
 import { readCutover, readDeductSetting, writeDeductEnabled } from './store';
-import { CHANNEL_LABEL, ORDER_CHANNELS, locationOf, type OrderChannel, type StdStatus } from './types';
+import { CHANNEL_LABEL, SALE_CHANNELS, locationOf, type SaleChannel, type StdStatus } from './types';
 
 interface LineRow extends DeductInput {
   id: number;
@@ -22,7 +22,7 @@ const iso = (v: unknown): string | null => (v === null || v === undefined ? null
 function toRow(r: Record<string, unknown>): LineRow {
   return {
     id: Number(r.id),
-    channel: r.channel as OrderChannel,
+    channel: r.channel as SaleChannel,
     externalLineId: String(r.external_line_id),
     externalOrderId: String(r.external_order_id ?? ''),
     status: r.status as StdStatus,
@@ -39,7 +39,7 @@ function toRow(r: Record<string, unknown>): LineRow {
 const LINE_COLS = `l.id, l.channel, l.external_line_id, o.external_order_id, l.status, l.attribution, l.alloc, l.paid_at,
             l.deduction_state, l.deduction_note, l.ledger_version, l.posted`;
 
-async function loadLines(db: Db, p: { lineIds: number[]; channel: OrderChannel | null; includeOpen: boolean }): Promise<LineRow[]> {
+async function loadLines(db: Db, p: { lineIds: number[]; channel: SaleChannel | null; includeOpen: boolean }): Promise<LineRow[]> {
   const { rows } = await db.query(
     `select ${LINE_COLS}
        from erp.order_lines l join erp.orders o on o.id = l.order_id
@@ -63,7 +63,7 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
  */
 export async function runDeductions(
   db: Db,
-  p: { enabled: boolean; cutover: string; lineIds: number[]; channel: OrderChannel | null; at: string; includeOpen?: boolean },
+  p: { enabled: boolean; cutover: string; lineIds: number[]; channel: SaleChannel | null; at: string; includeOpen?: boolean },
 ): Promise<DeductSummary> {
   const lines = await loadLines(db, { lineIds: p.lineIds, channel: p.channel, includeOpen: p.includeOpen ?? true });
   const planned = lines.map((l) => ({ l, plan: decideDeduction(l, { enabled: p.enabled, cutover: p.cutover }) }));
@@ -148,7 +148,7 @@ export interface BackfillPreview {
   rg: number;
   firstPaidAt: string | null;
   lastPaidAt: string | null;
-  byChannel: Record<OrderChannel, number>;
+  byChannel: Record<SaleChannel, number>;
   /** 원장 재고보다 많이 빼야 하는 (SKU·위치) — 켜면 그 라인들은 skipped_short로 남는다 */
   shortages: BackfillShortage[];
 }
@@ -163,7 +163,7 @@ export async function previewBackfill(db: Db): Promise<BackfillPreview> {
       where l.deduction_state in ('pending', 'skipped_short')
       order by l.paid_at nulls last, l.id`,
   );
-  const byChannel = Object.fromEntries(ORDER_CHANNELS.map((c) => [c, 0])) as Record<OrderChannel, number>;
+  const byChannel = Object.fromEntries(SALE_CHANNELS.map((c) => [c, 0])) as Record<SaleChannel, number>;
   const need = new Map<string, { skuId: number; location: 'self' | 'rg'; qty: number }>();
   const paid: string[] = [];
   let lines = 0;

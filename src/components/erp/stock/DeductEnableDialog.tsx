@@ -10,7 +10,7 @@ import { E } from '@/lib/design-tokens';
 import { toast } from '@/components/ui/toast';
 import { bandStyle, btnStyle, disabledBtnStyle, primaryBtnStyle } from '@/components/orders/erp-ui';
 import type { BackfillPreview } from '@/lib/erp/orders/deduct';
-import { CHANNEL_LABEL, ORDER_CHANNELS } from '@/lib/erp/orders/types';
+import { CHANNEL_LABEL, SALE_CHANNELS } from '@/lib/erp/orders/types';
 import { fetchDeductPreview, postDeductEnable } from './api';
 import { LOC_LABEL, fmtKst, won } from './stock-view';
 
@@ -74,7 +74,7 @@ export default function DeductEnableDialog({ onClose, onDone }: Props) {
               <span>RG −{won(preview.rg)}개</span>
             </div>
             <div style={{ color: E.inkSub }}>
-              채널: {ORDER_CHANNELS.map((c) => `${CHANNEL_LABEL[c]} ${won(preview.byChannel[c])}`).join(' · ')}
+              채널: {SALE_CHANNELS.map((c) => `${CHANNEL_LABEL[c]} ${won(preview.byChannel[c] ?? 0)}`).join(' · ')}
               {preview.firstPaidAt && ` · 결제 ${fmtKst(preview.firstPaidAt)} ~ ${fmtKst(preview.lastPaidAt ?? preview.firstPaidAt)}`}
             </div>
             <div style={{ color: E.inkSub }}>

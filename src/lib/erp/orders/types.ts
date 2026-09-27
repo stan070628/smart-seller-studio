@@ -5,15 +5,20 @@ import type { Location } from '@/lib/erp/ledger/fifo';
 export const ORDER_CHANNELS = ['coupang_wing', 'coupang_rg', 'naver', 'toss'] as const;
 export type OrderChannel = (typeof ORDER_CHANNELS)[number];
 
-export const CHANNEL_LABEL: Record<OrderChannel, string> = {
+export const isOrderChannel = (v: unknown): v is OrderChannel =>
+  typeof v === 'string' && (ORDER_CHANNELS as readonly string[]).includes(v);
+
+/** (1-C2b ③) 판매 채널 = 수집 채널 + 수동 판매(당근). 주문 줄·차감·옛 장부가 쓴다. 수집기·어댑터·수집 현황은 OrderChannel만 */
+export const SALE_CHANNELS = [...ORDER_CHANNELS, 'karrot'] as const;
+export type SaleChannel = (typeof SALE_CHANNELS)[number];
+
+export const CHANNEL_LABEL: Record<SaleChannel, string> = {
   coupang_wing: '쿠팡 판매자배송',
   coupang_rg: '쿠팡 RG',
   naver: '네이버',
   toss: '토스',
+  karrot: '당근',
 };
-
-export const isOrderChannel = (v: unknown): v is OrderChannel =>
-  typeof v === 'string' && (ORDER_CHANNELS as readonly string[]).includes(v);
 
 export const STD_STATUSES = [
   'unpaid', 'paid', 'shipping', 'delivered', 'confirmed', 'cancel_requested', 'canceled',
@@ -29,7 +34,7 @@ export const SOLD: ReadonlySet<StdStatus> = new Set<StdStatus>([
 export const VOID: ReadonlySet<StdStatus> = new Set<StdStatus>(['unpaid', 'canceled', 'returned']);
 
 /** 판매를 빼는 원장 위치: RG 주문은 RG, 나머지는 집 */
-export const locationOf = (ch: OrderChannel): Location => (ch === 'coupang_rg' ? 'rg' : 'self');
+export const locationOf = (ch: SaleChannel): Location => (ch === 'coupang_rg' ? 'rg' : 'self');
 
 export interface OrderLine {
   channel: OrderChannel;

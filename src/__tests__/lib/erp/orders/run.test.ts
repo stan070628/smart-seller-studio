@@ -6,6 +6,11 @@ const m = vi.hoisted(() => ({
   sendTelegramMessage: vi.fn(),
   query: vi.fn(),
   enrich: vi.fn(),
+  clientQuery: vi.fn(),
+  release: vi.fn(),
+  runDeductions: vi.fn(),
+  readDeductSetting: vi.fn(),
+  readCutover: vi.fn(),
 }));
 vi.mock('@/lib/erp/orders/collect', async () => {
   const actual = await vi.importActual<typeof import('@/lib/erp/orders/collect')>('@/lib/erp/orders/collect');
@@ -13,7 +18,17 @@ vi.mock('@/lib/erp/orders/collect', async () => {
 });
 vi.mock('@/lib/telegram/client', () => ({ sendTelegramMessage: m.sendTelegramMessage }));
 // withJobRun(run-log.ts)이 쓰는 erp.job_runs 기록용 — 실 DB를 건드리지 않는다
-vi.mock('@/lib/sourcing/db', () => ({ getSourcingPool: () => ({ query: m.query }) }));
+vi.mock('@/lib/sourcing/db', () => ({
+  getSourcingPool: () => ({ query: m.query, connect: async () => ({ query: m.clientQuery, release: m.release }) }),
+}));
+vi.mock('@/lib/erp/orders/deduct', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/erp/orders/deduct')>('@/lib/erp/orders/deduct');
+  return { ...actual, runDeductions: m.runDeductions };
+});
+vi.mock('@/lib/erp/orders/store', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/erp/orders/store')>('@/lib/erp/orders/store');
+  return { ...actual, readDeductSetting: m.readDeductSetting, readCutover: m.readCutover };
+});
 vi.mock('@/lib/erp/orders/discounts', () => ({ enrichCoupangDiscounts: m.enrich }));
 vi.mock('@/lib/listing/coupang-client', () => ({ getCoupangClient: () => ({ getOrderCoupons: vi.fn() }) }));
 
@@ -36,6 +51,10 @@ beforeEach(() => {
   m.query.mockImplementation(async (sql: string) => (sql.startsWith('insert') ? { rows: [{ id: '1' }] } : { rows: [] }));
   m.sendTelegramMessage.mockResolvedValue(undefined);
   m.enrich.mockResolvedValue({ orders: 2, checked: 3, discounted: 1, errors: 0, errorsClosed: 0, rate: 0 });
+  m.clientQuery.mockResolvedValue({ rows: [], rowCount: 0 });
+  m.runDeductions.mockResolvedValue({ posted: 0, reversed: 0, short: 0, pending: 0, unchanged: 0 });
+  m.readDeductSetting.mockResolvedValue({ enabled: true, enabledAt: '2026-09-27T00:00:00.000Z', by: 'u' });
+  m.readCutover.mockResolvedValue('2026-09-26T11:07:04.989Z');
 });
 
 const finishedCounts = (): Record<string, number> => {
@@ -131,6 +150,41 @@ describe('runOrdersSync — (1-C2b ②) 쿠팡 쿠폰 조회', () => {
     const reports = await runOrdersSync({ channels: ['coupang_rg'], dryRun: false, trigger: 'cron' });
     expect(reports).toHaveLength(1);
     expect(finishedCounts()).toMatchObject({ discount_failed: 1 });
+    err.mockRestore();
+  });
+});
+
+describe('runOrdersSync — (1-C2b ③ 리뷰) 당근 대기 줄 재시도', () => {
+  it('쓰는 실행이면 수집 뒤 한 트랜잭션에서 당근 채널 대기·부족 줄을 다시 차감한다', async () => {
+    m.collectOrders.mockResolvedValue([ok('naver')]);
+    m.runDeductions.mockResolvedValue({ posted: 2, reversed: 0, short: 1, pending: 0, unchanged: 0 });
+    await runOrdersSync({ channels: ['naver'], dryRun: false, trigger: 'cron' });
+    expect(m.runDeductions).toHaveBeenCalledTimes(1);
+    expect(m.runDeductions).toHaveBeenCalledWith(expect.objectContaining({ query: m.clientQuery }), {
+      enabled: true, cutover: '2026-09-26T11:07:04.989Z', lineIds: [], channel: 'karrot', at: expect.any(String), includeOpen: true,
+    });
+    const sqls = m.clientQuery.mock.calls.map((c) => String(c[0]));
+    expect(sqls[0]).toBe('BEGIN');
+    expect(sqls).toContain('COMMIT');
+    expect(m.release).toHaveBeenCalled();
+    expect(finishedCounts()).toMatchObject({ karrot_posted: 2, karrot_short: 1 });
+  });
+
+  it('dryRun이면 하지 않는다', async () => {
+    m.collectOrders.mockResolvedValue([ok('naver')]);
+    await runOrdersSync({ channels: ['naver'], dryRun: true, trigger: 'manual' });
+    expect(m.runDeductions).not.toHaveBeenCalled();
+  });
+
+  it('실패해도 실행은 성공으로 남고 karrot_failed = 1 · 되돌린다', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    m.collectOrders.mockResolvedValue([ok('naver')]);
+    m.runDeductions.mockRejectedValue(new Error('lock timeout'));
+    const reports = await runOrdersSync({ channels: ['naver'], dryRun: false, trigger: 'cron' });
+    expect(reports).toHaveLength(1);
+    expect(finishedCounts()).toMatchObject({ karrot_failed: 1 });
+    expect(m.clientQuery.mock.calls.map((c) => String(c[0]))).toContain('ROLLBACK');
+    expect(m.release).toHaveBeenCalled();
     err.mockRestore();
   });
 });

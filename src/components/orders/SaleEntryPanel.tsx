@@ -431,6 +431,7 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
                       <option value="coupang">쿠팡윙</option>
                       <option value="rocket_growth">로켓그로스</option>
                       <option value="naver">네이버</option>
+                      <option value="karrot">당근</option>
                       <option value="manual">수동</option>
                     </select>
                   </td>
@@ -473,6 +474,8 @@ export default function SaleEntryPanel({ productId, sellerProductId, vendorItemI
                       ? <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>로켓그로스</span>
                       : s.channel === 'naver'
                       ? <span style={{ background: '#f0fff8', color: '#03c75a', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>네이버</span>
+                      : s.channel === 'karrot'
+                      ? <span style={{ background: '#fff4ec', color: '#ff6f0f', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>당근</span>
                       : <span style={{ background: '#f3f4f6', color: '#6b7280', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>직접</span>}
                   </td>
                   {/* 사이즈(variant_name) 배지 */}

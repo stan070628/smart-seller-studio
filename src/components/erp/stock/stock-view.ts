@@ -222,3 +222,10 @@ export function localInputToIso(v: string): string {
 export function fmtKst(iso: string): string {
   return new Date(iso).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
 }
+
+/** (1-C2b ③) 당근 「받은 돈」 입력 → 정수 원. 숫자·쉼표·공백·끝의 「원」만 허용, 그 밖(소수·음수·「2만」)은 null — 숫자만 골라내 다른 금액으로 바꾸지 않는다 */
+export function parseWon(raw: string): number | null {
+  const s = raw.replace(/[\s,]/g, '').replace(/원$/, '');
+  if (!/^\d{1,9}$/.test(s)) return null;
+  return Number(s);
+}

@@ -5,7 +5,7 @@
 //   unknown 상태는 아무것도 바꾸지 않는다 · 뺀 라인이 팔림인데 미귀속이 되면 뺀 것을 그대로 둔다
 import type { AllocItem } from './resolve';
 import { saleIdemKey } from './keys';
-import { SOLD, type OrderChannel, type StdStatus } from './types';
+import { SOLD, type SaleChannel, type StdStatus } from './types';
 
 export type DeductionState = 'pending' | 'posted' | 'skipped_short' | 'reversed' | 'none';
 export type DeductNote = 'pre_cutover' | 'not_paid' | 'voided' | 'unattributed' | 'unknown_status';
@@ -17,7 +17,7 @@ export interface PostedItem {
 }
 
 export interface DeductInput {
-  channel: OrderChannel;
+  channel: SaleChannel;
   externalLineId: string;
   status: StdStatus;
   attribution: 'mapped' | 'unattributed';

@@ -2,12 +2,13 @@
 export const DEFAULT_PARCEL_SHIPPING_FEE = 3500;
 
 /** 배송비 산정 대상 임포트 소스 */
-export type ShippingSource = 'wing' | 'rg' | 'naver' | 'toss';
+export type ShippingSource = 'wing' | 'rg' | 'naver' | 'toss' | 'karrot';
 
 /**
  * 임포트 소스별 건당 배송비.
  * 윙·네이버·토스(판매자 택배) = 기본 택배비, RG(로켓그로스) = 0 (unit_rg_shipping_fee로 별도 반영).
+ * 당근 = 직거래, 배송비 없음 → 0.
  */
 export function resolveSaleShippingFee(source: ShippingSource): number {
-  return source === 'rg' ? 0 : DEFAULT_PARCEL_SHIPPING_FEE;
+  return source === 'rg' || source === 'karrot' ? 0 : DEFAULT_PARCEL_SHIPPING_FEE;
 }
