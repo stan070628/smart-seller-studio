@@ -6,6 +6,7 @@ const m = vi.hoisted(() => ({
   readCutover: vi.fn(), readCursor: vi.fn(), advanceCursor: vi.fn(), loadListingIndex: vi.fn(), loadLegacyIndex: vi.fn(),
   upsertOrderLines: vi.fn(), markAbsentCanceled: vi.fn(), reevaluateUnknownLines: vi.fn(), readDeductSetting: vi.fn(),
   writeDeductEnabled: vi.fn(), syncLegacySales: vi.fn(), ensureCursorRow: vi.fn(), takeLease: vi.fn(), releaseLease: vi.fn(),
+  loadManualSkus: vi.fn(),
 }));
 vi.mock('@/lib/erp/orders/store', () => ({
   readCutover: m.readCutover, readCursor: m.readCursor, advanceCursor: m.advanceCursor, loadListingIndex: m.loadListingIndex,
@@ -14,6 +15,7 @@ vi.mock('@/lib/erp/orders/store', () => ({
   // Task 5에서 collect.ts가 deduct.ts를 불러오면 필요하다
   writeDeductEnabled: m.writeDeductEnabled,
   ensureCursorRow: m.ensureCursorRow, takeLease: m.takeLease, releaseLease: m.releaseLease,
+  loadManualSkus: m.loadManualSkus,
 }));
 vi.mock('@/lib/erp/orders/legacy-store', () => ({ syncLegacySales: m.syncLegacySales }));
 
@@ -62,6 +64,7 @@ beforeEach(() => {
   m.reevaluateUnknownLines.mockResolvedValue({ ids: [], legacyKeys: [], remaining: 0 });
   m.syncLegacySales.mockResolvedValue({ upserted: 1, inserted: 1, voided: 1, warnings: [] });
   m.readDeductSetting.mockResolvedValue({ enabled: false, enabledAt: null, by: null });
+  m.loadManualSkus.mockResolvedValue(new Map());
 });
 
 describe('collectChannel', () => {
@@ -184,11 +187,46 @@ describe('collectChannel', () => {
     expect(seq).not.toContain('BEGIN');
   });
 
+  it('채널을 받은 뒤 BEGIN(잠금·연결)이 실패해도 보고서에 받은 라인 수가 남는다', async () => {
+    client.query.mockImplementationOnce(async (sql: string) => {
+      seq.push(sql);
+      throw new Error('연결 끊김');
+    });
+    const r = await collectChannel(pool, adapter(), { now: NOW, dryRun: false, deduct });
+    expect(r).toMatchObject({ ok: false, error: '연결 끊김', fetched: 1 });
+    expect(seq).toContain('FETCH');
+    expect(seq).not.toContain('COMMIT');
+  });
+
   it('커서가 있으면 48시간 겹침·꼬리일수(7)로 시작한다', async () => {
     m.readCursor.mockResolvedValue('2026-10-10T00:00:00.000Z');
     const a = adapter();
     await collectChannel(pool, a, { now: new Date('2026-10-10T00:15:00.000Z'), dryRun: true, deduct });
     expect((a.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0].from.toISOString()).toBe('2026-10-03T00:15:00.000Z');
+  });
+
+  it('(1-C2b) 사람이 정한 SKU가 있는 줄은 판정 대신 그 SKU로 upsert한다', async () => {
+    m.loadListingIndex.mockResolvedValue(new ListingIndex([]));
+    m.loadManualSkus.mockResolvedValue(new Map([[LINE.externalLineId, 42]]));
+    m.upsertOrderLines.mockResolvedValue({ ids: [1], changedIds: [1], inserted: 1, updated: 0, unchanged: 0 });
+    await collectChannel(pool, adapter(), { now: NOW, dryRun: false, deduct });
+    const written = m.upsertOrderLines.mock.calls[0][1][0];
+    expect(written.resolution).toMatchObject({ attribution: 'mapped', alloc: [{ skuId: 42, qty: 2 }] });
+  });
+
+  it('(1-C2b) 실제 실행에서는 리스팅·사람이 정한 SKU 조회가 채널 잠금 뒤에 있다 — link.ts가 잠금 사이에 끼어들 수 있어서다', async () => {
+    m.loadListingIndex.mockImplementation(async () => {
+      seq.push('LOAD_LISTINGS');
+      return new ListingIndex([
+        { listingId: 5, channel: 'coupang_rg', productId: '80000000001', optionKey: '', linkMode: 'single', skus: [{ skuId: 7, multiplier: 1 }] },
+      ]);
+    });
+    m.loadManualSkus.mockImplementation(async () => { seq.push('LOAD_MANUAL'); return new Map(); });
+    await collectChannel(pool, adapter(), { now: NOW, dryRun: false, deduct });
+    const lockIdx = seq.findIndex((s) => s.startsWith('select pg_advisory_xact_lock'));
+    expect(lockIdx).toBeGreaterThanOrEqual(0);
+    expect(seq.indexOf('LOAD_LISTINGS')).toBeGreaterThan(lockIdx);
+    expect(seq.indexOf('LOAD_MANUAL')).toBeGreaterThan(lockIdx);
   });
 });
 

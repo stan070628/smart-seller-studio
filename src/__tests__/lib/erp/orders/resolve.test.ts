@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ListingIndex, normalizeOption, resolveLine, type ListingEntry } from '@/lib/erp/orders/resolve';
+import { applyManualSku, ListingIndex, normalizeOption, resolveLine, type ListingEntry } from '@/lib/erp/orders/resolve';
 import type { OrderLine } from '@/lib/erp/orders/types';
 
 const line = (o: Partial<OrderLine>): OrderLine => ({
@@ -110,5 +110,44 @@ describe('resolveLine', () => {
     const r = resolveLine(line({ channel: 'toss', productId: '698610759', optionKey: '10개, 옐로우', qty: 1 }), idx);
     expect(r.attribution).toBe('mapped');
     expect(r.listingId).toBe(2);
+  });
+});
+
+describe('applyManualSku — 사람이 정한 SKU가 판정을 이긴다', () => {
+  const base = (o: Partial<ReturnType<typeof resolveLine>> = {}) => ({
+    listingId: 3, attribution: 'unattributed' as const, reason: 'any_of' as const, alloc: [],
+    listingSkus: [{ skuId: 7, multiplier: 1 }, { skuId: 8, multiplier: 2 }], ...o,
+  });
+
+  it('null이면 판정 그대로', () => {
+    const r = base();
+    expect(applyManualSku(line({ qty: 3 }), r, null)).toBe(r);
+  });
+
+  it('리스팅에 있는 SKU면 그 배수로 · 미귀속을 mapped로', () => {
+    expect(applyManualSku(line({ qty: 3 }), base(), 8)).toEqual({
+      listingId: 3, attribution: 'mapped', reason: null, alloc: [{ skuId: 8, qty: 6 }],
+      listingSkus: [{ skuId: 7, multiplier: 1 }, { skuId: 8, multiplier: 2 }],
+    });
+  });
+
+  it('리스팅에 없는 SKU(리스팅 없음·다른 SKU)는 배수 1', () => {
+    const r = base({ listingId: null, reason: 'no_listing', listingSkus: [] });
+    expect(applyManualSku(line({ qty: 2 }), r, 99)).toEqual({
+      listingId: null, attribution: 'mapped', reason: null, alloc: [{ skuId: 99, qty: 2 }], listingSkus: [],
+    });
+  });
+
+  it('이미 mapped여도 사람이 정한 SKU로 바꾼다', () => {
+    const r = base({ attribution: 'mapped', reason: null, alloc: [{ skuId: 7, qty: 1 }] });
+    expect(applyManualSku(line({ qty: 1 }), r, 8).alloc).toEqual([{ skuId: 8, qty: 2 }]);
+  });
+
+  it('묶음(bundle) 판정이어도 사람이 정한 SKU 하나로 접힌다 — 여러 SKU 중 사람이 고른 하나만 판다는 뜻이다(link.ts가 묶음 연결 자체는 따로 막는다)', () => {
+    const r = base({ attribution: 'mapped', reason: null, alloc: [{ skuId: 7, qty: 1 }, { skuId: 8, qty: 2 }] });
+    expect(applyManualSku(line({ qty: 1 }), r, 8)).toEqual({
+      listingId: 3, attribution: 'mapped', reason: null, alloc: [{ skuId: 8, qty: 2 }],
+      listingSkus: [{ skuId: 7, multiplier: 1 }, { skuId: 8, multiplier: 2 }],
+    });
   });
 });

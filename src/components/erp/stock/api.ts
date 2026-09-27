@@ -7,6 +7,8 @@ import type { CountQueueResponse } from '@/lib/erp/stock/count-queue';
 import type { DayLine, OrdersStatus } from '@/lib/erp/orders/queries';
 import type { BackfillPreview } from '@/lib/erp/orders/deduct';
 import type { ChannelReport, DeductSummary } from '@/lib/erp/orders/collect';
+import type { RecentLineLink, RecentListingLink, UnattributedGroup } from '@/lib/erp/orders/queue';
+import type { RelinkResult } from '@/lib/erp/orders/relink';
 
 export type ApiResult<T> =
   | { ok: true; data: T }
@@ -79,6 +81,13 @@ export const fetchDeductPreview = () => call<BackfillPreview>('/api/erp/orders/d
 export const postDeductEnable = (expectedLines: number) =>
   call<{ preview: BackfillPreview; summary: DeductSummary }>('/api/erp/orders/deduct-enable', { confirm: true, expectedLines });
 export const postOrdersSync = (channel?: string) => call<ChannelReport[]>('/api/erp/orders/sync', channel ? { channel } : {});
+
+export interface QueueData { groups: UnattributedGroup[]; recent: { listings: RecentListingLink[]; lines: RecentLineLink[] } }
+export const fetchQueue = () => call<QueueData>('/api/erp/orders/unattributed');
+export const postLinkListing = (b: { channel: string; productId: string; optionKey: string; skuId: number; multiplier: number; label: string }) =>
+  call<{ listingId: number; relinked: RelinkResult }>('/api/erp/orders/link', { mode: 'listing', ...b });
+export const postLinkLines = (lineIds: number[], skuId: number) => call<RelinkResult>('/api/erp/orders/link', { mode: 'line', lineIds, skuId });
+export const postUnlink = (b: { mode: 'listing'; listingId: number } | { mode: 'line'; lineId: number }) => call<RelinkResult>('/api/erp/orders/unlink', b);
 
 /**
  * 실사표 불러오기. `commit:true`인데 검사 오류가 있으면 서버가 422 `{ success:false, data:<오류가 담긴 요약> }`로

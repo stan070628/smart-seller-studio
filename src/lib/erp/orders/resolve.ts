@@ -100,3 +100,13 @@ export function resolveLine(l: OrderLine, idx: ListingIndex): Resolution {
   }
   return { ...base, attribution: 'mapped', reason: null, alloc: skus.map((s) => ({ skuId: s.skuId, qty: l.qty * s.multiplier })) };
 }
+
+/**
+ * (1-C2b ①) 사람이 정한 SKU(order_lines.manual_sku_id)가 있으면 판정을 덮는다. 수량 배수는 그 SKU가 찾은 리스팅에
+ * 걸려 있으면 그 배수, 아니면 1(주문 수량 그대로). null이면 판정을 그대로 돌려준다.
+ */
+export function applyManualSku(l: OrderLine, r: Resolution, manualSkuId: number | null): Resolution {
+  if (manualSkuId === null) return r;
+  const m = r.listingSkus.find((s) => s.skuId === manualSkuId)?.multiplier ?? 1;
+  return { listingId: r.listingId, attribution: 'mapped', reason: null, alloc: [{ skuId: manualSkuId, qty: l.qty * m }], listingSkus: r.listingSkus };
+}
