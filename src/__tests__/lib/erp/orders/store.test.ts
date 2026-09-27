@@ -61,8 +61,22 @@ describe('upsertOrderLines', () => {
     expect(lines[0].sql).toContain('absent_since = null');
     // (M3) 안 바뀐 라인은 쓰지 않는다
     expect(lines[0].sql).toMatch(/where \(erp\.order_lines\.[\s\S]*\) is distinct from \(/);
+    // (1-C2b ②) 할인: 어댑터가 모르면(discount 미지정) 기존 값 유지 — [24]금액 [25]출처 [26]알았는가
+    expect([lines[0].params[24], lines[0].params[25], lines[0].params[26]]).toEqual([0, null, false]);
+    expect(lines[0].sql).toContain('discount_amount = case when $27::boolean then excluded.discount_amount else erp.order_lines.discount_amount end');
     // 구매자 칸은 SQL에도 파라미터에도 없다
     expect(JSON.stringify(f.calls)).not.toMatch(/orderer|receiver|address|phone|tel/i);
+  });
+
+  it('(1-C2b ②) 어댑터가 할인을 알면 금액·출처·확인 시각을 쓴다', async () => {
+    const f = fakeDb((sql) => {
+      if (sql.startsWith('insert into erp.orders')) return { rows: [{ id: 10 }] };
+      if (sql.startsWith('insert into erp.order_lines')) return { rows: [{ id: 100, inserted: true }] };
+      return undefined;
+    });
+    await upsertOrderLines(f.db, [line({ channel: 'naver', discount: { amount: 1000, source: 'naver_seller' } })]);
+    const l = f.calls.find((c) => c.sql.startsWith('insert into erp.order_lines'));
+    expect([l?.params[24], l?.params[25], l?.params[26]]).toEqual([1000, 'naver_seller', true]);
   });
 
   it('빈 목록이면 아무것도 쓰지 않는다', async () => {

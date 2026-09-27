@@ -1,12 +1,13 @@
 {
-  "_note": "네이버 상품주문 상세 — 부분 취소(remainQuantity·initialQuantity)와 입력형 옵션. 구매자 칸은 가짜 값 — 어댑터가 버려야 한다. 설계 해석 #24",
+  "_note": "네이버 상품주문 상세 — 부분 취소(remainQuantity·initialQuantity)와 입력형 옵션. 상품금액·판매자 부담 할인 칸 이름은 2026-09-27 실측(1-C2b B1) — totalPaymentAmount는 할인 후 결제액. 구매자 칸은 가짜 값 — 어댑터가 버려야 한다. 설계 해석 #24",
   "data": [
     {
       "order": { "orderId": "2026092712340011", "orderDate": "2026-09-27T09:05:00.0+09:00", "paymentDate": "2026-09-27T09:06:00.0+09:00",
                  "ordererName": "테스트구매자", "ordererTel": "010-0000-0000" },
       "productOrder": { "productOrderId": "2026092700000011", "productName": "쿨매트", "productId": "8800000001", "originalProductId": "8700000001",
                         "itemNo": "12345", "productOption": "블루 / S", "quantity": 3, "initialQuantity": 3, "remainQuantity": 1,
-                        "unitPrice": 10000, "totalPaymentAmount": 30000, "productOrderStatus": "PAYED",
+                        "unitPrice": 10000, "totalProductAmount": 30000, "remainProductAmount": 10000, "totalPaymentAmount": 27000,
+                        "sellerBurdenDiscountAmount": 3000, "remainSellerBurdenDiscountAmount": 1000, "productOrderStatus": "PAYED",
                         "shippingAddress": { "name": "테스트수령인", "tel1": "010-0000-0000", "baseAddress": "가상시 가상구 1", "detailedAddress": "101호", "zipCode": "00000" } },
       "delivery": null, "claim": null
     },
@@ -14,7 +15,7 @@
       "order": { "orderId": "2026092712340012", "orderDate": "2026-09-27T10:00:00.0+09:00", "paymentDate": "2026-09-27T10:00:30.0+09:00",
                  "ordererName": "테스트구매자", "ordererTel": "010-0000-0000" },
       "productOrder": { "productOrderId": "2026092700000012", "productName": "파우치", "productId": "8800000002", "originalProductId": "8700000002",
-                        "quantity": 2, "initialQuantity": 2, "remainQuantity": 0, "totalPaymentAmount": 19800, "productOrderStatus": "PAYED",
+                        "quantity": 2, "initialQuantity": 2, "remainQuantity": 0, "totalProductAmount": 19800, "remainProductAmount": 0, "totalPaymentAmount": 19800, "productOrderStatus": "PAYED",
                         "shippingAddress": { "name": "테스트수령인", "tel1": "010-0000-0000", "baseAddress": "가상시 가상구 1", "detailedAddress": "101호", "zipCode": "00000" } },
       "delivery": null, "claim": null
     },
@@ -22,7 +23,7 @@
       "order": { "orderId": "2026092712340013", "orderDate": "2026-09-27T11:00:00.0+09:00", "paymentDate": "2026-09-27T11:00:30.0+09:00",
                  "ordererName": "테스트구매자", "ordererTel": "010-0000-0000" },
       "productOrder": { "productOrderId": "2026092700000013", "productName": "각인 텀블러", "productId": "8800000004", "originalProductId": "8700000004",
-                        "itemNo": "900", "productOption": "각인 문구: 테스트구매자 사랑해", "quantity": 1, "totalPaymentAmount": 15000, "productOrderStatus": "PAYED",
+                        "itemNo": "900", "productOption": "각인 문구: 테스트구매자 사랑해", "quantity": 1, "totalProductAmount": 15000, "remainProductAmount": 15000, "totalPaymentAmount": 15000, "productOrderStatus": "PAYED",
                         "shippingAddress": { "name": "테스트수령인", "tel1": "010-0000-0000", "baseAddress": "가상시 가상구 1", "detailedAddress": "101호", "zipCode": "00000" } },
       "delivery": null, "claim": null
     }
