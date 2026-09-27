@@ -46,6 +46,16 @@ body {
   .app-shell-print-hide {
     display: none !important;
   }
+  /* AppShell 루트가 height:100vh + overflow:hidden, 메인 영역이 overflow:auto라
+     인쇄가 1페이지에서 잘렸다 — 인쇄에서는 뷰포트 고정을 풀고 내용 길이대로 흐르게 한다.
+     화면 동작은 그대로 두고(미디어쿼리 안이라 print에만 적용) 인라인 스타일을 이겨야
+     하므로 여기도 !important를 쓴다. */
+  .app-shell-root,
+  .app-shell-main {
+    height: auto !important;
+    overflow: visible !important;
+    display: block !important;
+  }
 }
 
 /* 스크롤바 커스텀 (사이드바 등) */

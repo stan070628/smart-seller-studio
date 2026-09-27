@@ -66,6 +66,7 @@ export default function AppShell({
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 진입 시 미확인 알림 배지를 불러온다
     fetchUnreadCount();
     const id = setInterval(fetchUnreadCount, POLL_INTERVAL_MS);
     return () => clearInterval(id);
@@ -102,7 +103,7 @@ export default function AppShell({
   startTabCacheBridge();
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+    <div className="app-shell-root" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       {/* ── 사이드바 ── */}
       <aside
         className="app-shell-print-hide"
@@ -346,6 +347,7 @@ export default function AppShell({
 
       {/* ── 메인 영역 ── */}
       <div
+        className="app-shell-main"
         style={{
           flex: 1,
           overflow: mainOverflow,

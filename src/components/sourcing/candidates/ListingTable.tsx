@@ -25,6 +25,9 @@ function Row({ r, onPatch }: { r: ListingView; onPatch: Props['onPatch'] }) {
   const skipBlurRef = useRef(false);
 
   const startEdit = () => {
+    // Escape로 취소했을 때 input이 DOM에서 사라지며 blur가 안 붙는 브라우저가 있다 —
+    // 그러면 플래그가 true로 남아 다음 편집의 정상 커밋까지 건너뛴다. 편집을 열 때마다 초기화한다.
+    skipBlurRef.current = false;
     setPrice(String(r.effective_price));
     setEditing(true);
   };

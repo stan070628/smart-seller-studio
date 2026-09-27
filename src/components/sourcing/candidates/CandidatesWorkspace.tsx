@@ -12,6 +12,8 @@ import type { ListingView } from '@/lib/sourcing-candidates/view';
 const PARSE_RETRY_LIMIT = 3;
 /** 'parsing' 상태가 이보다 오래 머물면 응답 없음으로 보고 재시도를 다시 보여준다 */
 const PARSING_STALE_MS = 10 * 60 * 1000;
+/** 판독 중일 때 "n분 경과"·재시도 버튼이 스스로 갱신되도록 도는 주기 */
+const PARSING_POLL_MS = 30 * 1000;
 
 function minutesAgo(iso: string): number {
   return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
@@ -126,6 +128,19 @@ export default function CandidatesWorkspace() {
   }, [refresh]);
 
   const current = scans.find((s) => s.id === scanId);
+  const isParsing = parsingUpload !== null || current?.parse_status === 'parsing';
+
+  /**
+   * 판독 중엔 "n분 경과"·재시도 버튼이 시간이 지나도 저절로 갱신되지 않는다(재렌더
+   * 계기가 없다) — 30초마다 다시 불러와 스스로 최신 상태를 반영하게 한다.
+   * isParsing이 꺼지면(완료·실패로 상태가 바뀌면) effect가 정리되고 폴링도 멎는다.
+   */
+  useEffect(() => {
+    if (!isParsing) return;
+    const id = setInterval(() => { void refresh(); }, PARSING_POLL_MS);
+    return () => clearInterval(id);
+  }, [isParsing, refresh]);
+
   const adoptedCount = starred.filter((l) => l.adopted).length;
 
   return (

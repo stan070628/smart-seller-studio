@@ -29,16 +29,20 @@ function OfferRowView({ o, onChanged, run }: { o: OfferView; onChanged: () => Pr
   const [cny, setCny] = useState(o.cny_override === null ? '' : String(o.cny_override));
   const save = (data: Record<string, unknown>) => run(async () => { await api.patchOffer(o.id, data); await onChanged(); });
 
-  /** 위안 직접입력 — 숫자가 아니면 저장하지 않고 카드 상단에 알린다. 값이 그대로면 PATCH를 건너뛴다 (I3) */
+  /**
+   * 위안 직접입력 — 숫자가 아니면 저장하지 않고 카드 상단에 알린다. 값이 그대로면 PATCH를 건너뛴다 (I3)
+   * "지운다"로 볼 때는 입력칸 자체가 빈 문자열일 때뿐이다 — "abc"처럼 숫자·점을 걷어내면
+   * 빈 문자열이 되는 값을 지우기로 오인하면 오타를 조용히 null로 저장해 버린다.
+   */
   const commitCny = () => run(async () => {
-    const cleaned = cny.replace(/[^\d.]/g, '');
-    if (cleaned === '') {
+    if (cny.trim() === '') {
       if (o.cny_override === null) return;
       await api.patchOffer(o.id, { cny_override: null });
       await onChanged();
       return;
     }
-    const n = Number(cleaned);
+    const cleaned = cny.replace(/[^\d.]/g, '');
+    const n = cleaned === '' ? NaN : Number(cleaned);
     if (!(n > 0)) throw new Error('위안은 숫자로 입력하세요');
     if (n === o.cny_override) return;
     await api.patchOffer(o.id, { cny_override: n });
@@ -100,15 +104,16 @@ function Recent6mFields({ l, run, onChanged }: { l: ListingView; run: RunFn; onC
   const [count, setCount] = useState(l.recent6m_review_count === null ? '' : String(l.recent6m_review_count));
   const [rating, setRating] = useState(l.recent6m_rating === null ? '' : String(l.recent6m_rating));
 
+  /** 입력칸이 비어야 "지운다"다 — 숫자를 걷어내고 빈 문자열이 된 오타는 에러로 알린다 */
   const commitCount = () => run(async () => {
-    const cleaned = count.replace(/[^\d]/g, '');
-    if (cleaned === '') {
+    if (count.trim() === '') {
       if (l.recent6m_review_count === null) return;
       await api.patchListing(l.id, { recent6m_review_count: null });
       await onChanged();
       return;
     }
-    const n = Number(cleaned);
+    const cleaned = count.replace(/[^\d]/g, '');
+    const n = cleaned === '' ? NaN : Number(cleaned);
     if (!Number.isInteger(n) || n < 0) throw new Error('최근 6개월 리뷰는 0 이상 정수로 입력하세요');
     if (n === l.recent6m_review_count) return;
     await api.patchListing(l.id, { recent6m_review_count: n });
@@ -116,14 +121,14 @@ function Recent6mFields({ l, run, onChanged }: { l: ListingView; run: RunFn; onC
   });
 
   const commitRating = () => run(async () => {
-    const cleaned = rating.replace(/[^\d.]/g, '');
-    if (cleaned === '') {
+    if (rating.trim() === '') {
       if (l.recent6m_rating === null) return;
       await api.patchListing(l.id, { recent6m_rating: null });
       await onChanged();
       return;
     }
-    const n = Number(cleaned);
+    const cleaned = rating.replace(/[^\d.]/g, '');
+    const n = cleaned === '' ? NaN : Number(cleaned);
     if (Number.isNaN(n) || n < 0 || n > 5) throw new Error('6개월 별점은 0~5 사이로 입력하세요');
     if (n === l.recent6m_rating) return;
     await api.patchListing(l.id, { recent6m_rating: n });
