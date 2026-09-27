@@ -5514,8 +5514,19 @@ git commit -m "docs(erp): 1-C2a 게이트 ② 판매 차감 켜기 기록"
 - Task 8 완료(2026-09-27): `summarizeOrdersSync`(import-summary.ts) · `CostManagementTab.tsx`「판매 가져오기」·`SaleEntryPanel.tsx`「지금 수집」이 모두 `POST /api/erp/orders/sync`를 부르도록 교체 · 옛 라우트 4개(`rg-bulk-import`·`wing-bulk-import`·`naver-bulk-import`·`products/[id]/coupang-import`) 410 gone. 계획 원문 그대로 구현했고 한 곳만 타입을 넓혔다 — 테스트 리터럴이 `ChannelReport.legacy`(`upserted`·`inserted`·`voided`·`warnings`)를 그대로 넘기는데 `OrdersSyncReportLike.legacy`를 `{ voided: number }`로 좁게 선언하면 TS2353(초과 속성 검사)이 난다. `legacy?: { voided: number; [key: string]: unknown }`로 인덱스 시그니처를 더해 해소(런타임 동작은 동일 — `r.legacy?.voided`만 읽는다). 테스트 10종(신규 2 포함) 통과 · 전체 vitest 13 실패(기준선과 동일, 이미지 분석·키워드 발굴 등 무관한 기존 실패) · tsc 0 · eslint 새 오류 0(기존 경고 2건은 이 작업과 무관한 줄). commit bde207b5
 - Task 7 완료(2026-09-27): `queries.ts`(`ordersStatus`·`dayLines`·`dailyCounts`) · 4개 API(`status`·`lines`·`deduct-preview`·`deduct-enable`) · `OrdersSyncPanel`·`OrderLinesDialog`·`DeductEnableDialog` · `StockClient.tsx` 배치 · `orders-daily-counts.ts`. 계획 원문에서 한 곳을 넓혔다 — `ChannelStatus`에 `lastBusy`·`lastAbsenceRefused`·`lastRejected`를 더해(원문은 `lastError`만) `collect.ts`의 `reportCounts`가 이미 채널별로 담아둔 임대 못 잡음·사라짐 판정 거절·형식 오류 라인 수를 패널 「상태」 칸에 태그로 노출했다(`reportAlerts`가 이미 이 셋+모르는 상태를 사람이 볼 대상으로 정해둔 것과 화면을 맞춘 것 — 텔레그램에만 가고 화면엔 안 보이면 계정을 안 보는 사람이 놓친다). 모르는 상태(unmapped)는 원장 현재값(`unknownStatus`)으로 이미 노출 중이라 손대지 않았다. `orders-daily-counts.ts`를 읽기 전용으로 한 번 실행 확인(`BEGIN READ ONLY` → `ROLLBACK`) — `erp.order_lines`가 아직 비어 있어 0행·「수집 기록 없음」. 테스트 11종(신규, queries 1 · api 6 · 컴포넌트 4) 통과 · 전체 vitest 13 실패(기준선과 동일, `assets-tab`·`detail-maker-thumbnail-panel`은 이 작업 이전부터의 무관한 기존 실패) · tsc 0 · eslint 새 오류 0. commit b5ae10cb·441d5a0a. 화면 확인(Step 11)은 컨트롤러가 직접 한다 — 서브에이전트는 하지 않았다.
 - 자가시험(Task 5 Step 9):
-- 병합·배포(Task 9):
-- 드라이런·첫 수집(Task 9 Step 4):
-- 118·첫 크론(Task 9 Step 5):
+- 병합·배포(Task 9): PR #24 → main `64561ad6`(2026-09-26 사용자 「ok」), Vercel 운영 배포 성공. 후속 수정 PR #25 `27e3b1ec` · #26 `03dd3c70` · #27 `b5cd3b06` · #28 `1f48719c`(2026-09-27, 사용자가 직접 병합 — 권한 검사기가 컨트롤러의 병합을 막음)
+- 드라이런·첫 수집(Task 9 Step 4, 2026-09-27):
+  - 드라이런: RG 16 · Wing 2 · 네이버 0 · 미귀속 0 · window.from = 기초 시각 ✅. 🔴 **토스 실패** — `TossShoppingClient`가 존재하지 않는 `TOSS_SHOPPING_ACCESS_TOKEN`을 읽어 운영에서 한 번도 돌지 못했다 → 재고 동기화의 `getTossToken()`(client_credentials·프록시)을 클라이언트로 옮김(PR #25)
+  - 첫 실제 수집(기초 이후): RG 17 · Wing 2 · 네이버 0 · 토스 1 — 🔴 토스 1건 `option_unmatched`: 주문 옵션은 **쉼표 구분**(`10개, 옐로우`), 리스팅은 `10개 / 옐로우` → `normalizeOption`이 `,`도 구분자로(PR #26, 운영 리스팅 445건 정규화 충돌 0)
+  - 9/1 보충(Step 4b): 기준선 `sale_records` coupang 388(무효 1) · rocket_growth 3,319(무효 1,062) · naver 7 · toss 0
+    - Wing 134줄 · 옛 장부 신규 86 · 무효 변화 없음
+    - 네이버 8줄 전부 미귀속 → 🔴 **옵션 조합 id 칸은 `itemNo`다. `optionCode`는 응답에 없다**(칸 목록 실측 · itemNo 값 3건이 리스팅 external_option_key와 일치). 픽스처가 추정한 이름으로 만들어져 테스트는 통과했었다(PR #27). 재실행 후 5줄 연결, 남은 3줄 = 오타니 티(원상품 13640649319) **ERP 네이버 리스팅 없음**
+    - RG 657줄 한 번에 → **Vercel 300초 초과 504**(롤백·쓰인 것 없음 · 임대 만료로 풀림). 줄당 약 1초 → `backfillTo` 추가(PR #28) 후 5일씩 5조각: 159·133·126·109·107줄, 조각당 104~158초 · 옛 장부 신규 125
+    - 보충 후 `sale_records`: coupang 474(무효 1) · rocket_growth 3,445(무효 1,062) · naver 11 · toss 3 — **무효 증가 없음** ✅
+  - 두 번째 보통 수집: 새로 쓴 줄 = 그사이 들어온 RG 1줄뿐, 나머지 unchanged ✅
+  - 남은 미귀속(2026-09-27): RG 5줄(극세사 타월 vid 95820950723 3 · 아이더 호보백 95981032543·95996187505 각 1 — 1-C1 때 결정 대기 중인 미승인 RG vid) · 네이버 3줄(오타니 티, 리스팅 없음)
+  - 옛 장부 미기록(팔림인데 `legacy_sale_id` 없음): RG 16 · Wing 4 · 네이버 3 — 옛 원가 상품이 없는 SKU(예: 마크곤잘레스 키즈 티 SKU 136)와 미귀속. 새 ERP 원장·차감에는 영향 없음
+  - 개인정보 로그: 수집 경로 코드 전수 확인(쿠팡·네이버·토스 클라이언트는 HTTP 상태·오류 코드만). `vercel logs` CLI는 운영·2~3시간 범위에서 0줄을 돌려줘 **실제 로그 대조는 못 함**
+- 118·첫 크론(Task 9 Step 5): 2026-09-27 09:1x KST 적용(`cron.job` orders-sync `*/15`, active). 첫 자동 실행 2026-09-27 09:15:02 KST — job_runs #43 status ok · 41초 · 4채널 오류 0 · fetched 21 · inserted 0 · pg_net 성공
 - 게이트 ① 대조(Task 10): 2026-09-27 — · 2026-09-28 — · 2026-09-29 —
 - 게이트 ② 차감 켜기(Task 11):
