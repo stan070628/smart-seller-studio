@@ -49,17 +49,22 @@ export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
-  const { rows } = await getSourcingPool().query(
-    `SELECT s.id, s.category_path, s.sort_label, s.parse_status, s.parse_error, s.created_at,
-            count(l.id)::int AS listing_count,
-            count(l.id) FILTER (WHERE l.starred)::int AS starred_count
-     FROM sourcing_scans s
-     LEFT JOIN sourcing_listings l ON l.scan_id = s.id
-     WHERE s.user_id = $1
-     GROUP BY s.id
-     ORDER BY s.created_at DESC
-     LIMIT 50`,
-    [user.userId],
-  );
-  return NextResponse.json({ success: true, data: rows });
+  try {
+    const { rows } = await getSourcingPool().query(
+      `SELECT s.id, s.category_path, s.sort_label, s.parse_status, s.parse_error,
+              s.parse_attempts, s.parse_started_at, s.created_at,
+              count(l.id)::int AS listing_count,
+              count(l.id) FILTER (WHERE l.starred)::int AS starred_count
+       FROM sourcing_scans s
+       LEFT JOIN sourcing_listings l ON l.scan_id = s.id
+       WHERE s.user_id = $1
+       GROUP BY s.id
+       ORDER BY s.created_at DESC
+       LIMIT 50`,
+      [user.userId],
+    );
+    return NextResponse.json({ success: true, data: rows });
+  } catch (err) {
+    return NextResponse.json({ success: false, error: err instanceof Error ? err.message : '서버 오류' }, { status: 500 });
+  }
 }

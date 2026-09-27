@@ -3,7 +3,7 @@ import { getCurrentUser } from '@/lib/auth';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { parseOffer } from '@/lib/sourcing-candidates/parse-offer';
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 /** POST /api/sourcing-candidates/offers/[id]/parse — 실패한 업체 판독 재시도 */
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

@@ -20,28 +20,35 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'scan 또는 starred=1이 필요합니다.' }, { status: 400 });
   }
 
-  const pool = getSourcingPool();
-  const { rows: listings } = await pool.query(
-    `SELECT l.*, s.category_path
-     FROM sourcing_listings l JOIN sourcing_scans s ON s.id = l.scan_id
-     WHERE l.user_id = $1 AND ${scan ? 'l.scan_id = $2' : 'l.starred'}
-     ORDER BY ${scan ? 'l.rank' : 'l.updated_at DESC'}`,
-    scan ? [user.userId, scan] : [user.userId],
-  );
-  if (listings.length === 0) return NextResponse.json({ success: true, data: [] });
+  try {
+    const pool = getSourcingPool();
+    const { rows: listings } = await pool.query(
+      `SELECT l.*, s.category_path
+       FROM sourcing_listings l JOIN sourcing_scans s ON s.id = l.scan_id
+       WHERE l.user_id = $1 AND ${scan ? 'l.scan_id = $2' : 'l.starred'}
+       ORDER BY ${scan ? 'l.rank' : 'l.updated_at DESC'}`,
+      scan ? [user.userId, scan] : [user.userId],
+    );
+    if (listings.length === 0) return NextResponse.json({ success: true, data: [] });
 
-  const { rows: offers } = await pool.query(
-    `SELECT * FROM sourcing_offers WHERE listing_id = ANY($1) ORDER BY created_at`,
-    [listings.map((l) => l.id)],
-  );
-  const byListing = new Map<string, OfferRow[]>();
-  for (const o of offers as OfferRow[]) {
-    const cny = o.cny_override === null ? null : Number(o.cny_override); // numeric → string으로 온다
-    byListing.set(o.listing_id, [...(byListing.get(o.listing_id) ?? []), { ...o, cny_override: cny }]);
+    const { rows: offers } = await pool.query(
+      `SELECT * FROM sourcing_offers WHERE listing_id = ANY($1) ORDER BY created_at`,
+      [listings.map((l) => l.id)],
+    );
+    const byListing = new Map<string, OfferRow[]>();
+    for (const o of offers as OfferRow[]) {
+      const cny = o.cny_override === null ? null : Number(o.cny_override); // numeric → string으로 온다
+      byListing.set(o.listing_id, [...(byListing.get(o.listing_id) ?? []), { ...o, cny_override: cny }]);
+    }
+
+    const data = (listings as ListingRow[]).map((l) =>
+      buildListingView({ ...l, rating: l.rating === null ? null : Number(l.rating) }, byListing.get(l.id) ?? []),
+    );
+    return NextResponse.json({ success: true, data });
+  } catch (err) {
+    if ((err as { code?: string }).code === '22P02') {
+      return NextResponse.json({ success: false, error: '잘못된 id입니다.' }, { status: 400 });
+    }
+    return NextResponse.json({ success: false, error: err instanceof Error ? err.message : '서버 오류' }, { status: 500 });
   }
-
-  const data = (listings as ListingRow[]).map((l) =>
-    buildListingView({ ...l, rating: l.rating === null ? null : Number(l.rating) }, byListing.get(l.id) ?? []),
-  );
-  return NextResponse.json({ success: true, data });
 }

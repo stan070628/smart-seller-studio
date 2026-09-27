@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getCurrentUser } from '@/lib/auth';
 import { getSourcingPool } from '@/lib/sourcing/db';
+import { OFFER_URL_SCHEMA } from '@/lib/sourcing-candidates/upload';
 
 const PatchSchema = z.object({
-  url: z.string().url().nullable().optional(),
+  url: OFFER_URL_SCHEMA.nullable().optional(),
   cny_override: z.number().positive().nullable().optional(),
   adopted: z.literal(true).optional(),
 }).strict();

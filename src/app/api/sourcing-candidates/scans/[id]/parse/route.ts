@@ -6,15 +6,15 @@ import { extractNaverPage } from '@/lib/sourcing-candidates/extract-naver';
 import { mergePages } from '@/lib/sourcing-candidates/merge';
 import type { ExtractedNaverPage } from '@/lib/sourcing-candidates/types';
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 /** 흐릿한 캡처 하나가 비용을 계속 쓰지 않도록 (영수증과 같은 3회) */
 const MAX_ATTEMPTS = 3;
 
 /**
  * POST /api/sourcing-candidates/scans/[id]/parse
- * 조각마다 병렬 판독 → 병합 → 저장. 일부 조각만 실패하면 성공분은 저장하고
- * parse_error에 실패한 조각 번호를 남긴다.
+ * 조각마다 병렬 판독 → 병합 → 저장. 조각 하나라도 실패하면 순위가 어긋날 수 있으므로
+ * 부분 저장하지 않고 전체를 실패 처리한다 — 재시도가 전부 다시 판독한다.
  */
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -33,16 +33,36 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     [id, user.userId, MAX_ATTEMPTS],
   );
   if (rows.length === 0) {
-    return NextResponse.json(
-      { success: false, error: '판독할 수 없는 상태입니다 (이미 판독됨·진행 중·3회 실패).' },
-      { status: 409 },
+    // 소유하지 않았거나 존재하지 않는 것과, 상태 때문에 못 받은 것을 구분해 알려준다
+    const { rows: cur } = await pool.query(
+      `SELECT parse_status, parse_attempts FROM sourcing_scans WHERE id = $1 AND user_id = $2`,
+      [id, user.userId],
     );
+    if (cur.length === 0) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
+    const { parse_status, parse_attempts } = cur[0] as { parse_status: string; parse_attempts: number };
+    if (parse_status === 'parsed') {
+      return NextResponse.json({ success: false, error: '이미 판독된 스캔입니다.' }, { status: 409 });
+    }
+    if (parse_status === 'parsing') {
+      return NextResponse.json(
+        { success: false, error: '판독 중입니다 (최대 10분 뒤 다시 시도할 수 있습니다).' },
+        { status: 409 },
+      );
+    }
+    if (parse_attempts >= MAX_ATTEMPTS) {
+      return NextResponse.json(
+        { success: false, error: '3회 실패했습니다. 캡처를 다시 올려 주세요.' },
+        { status: 409 },
+      );
+    }
+    return NextResponse.json({ success: false, error: '판독할 수 없는 상태입니다.' }, { status: 409 });
   }
   const paths = rows[0].image_paths as string[];
 
+  // 회수된 뒤 뒤늦게 끝난 옛 실행이 더 최신 결과를 덮어쓰지 못하도록 parsing일 때만 반영한다
   const fail = async (msg: string, status: number) => {
     await pool.query(
-      `UPDATE sourcing_scans SET parse_status = 'failed', parse_error = $2, updated_at = now() WHERE id = $1`,
+      `UPDATE sourcing_scans SET parse_status = 'failed', parse_error = $2, updated_at = now() WHERE id = $1 AND parse_status = 'parsing'`,
       [id, msg],
     );
     return NextResponse.json({ success: false, error: msg }, { status });
@@ -62,12 +82,26 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   settled.forEach((s, i) => (s.status === 'fulfilled' ? pages.push(s.value) : failedIdx.push(i + 1)));
 
   if (pages.length === 0) return fail('모든 조각의 판독이 실패했습니다. 다시 시도해 주세요.', 502);
-  if (pages.some((p) => p.screen !== 'naver_list')) {
+  // 조각 일부만 실패하면 순위가 어긋난 채 저장될 수 있으므로 부분 저장하지 않는다 —
+  // 재시도 라우트가 전체를 다시 판독한다(시도 횟수 제한은 그대로 적용).
+  if (failedIdx.length > 0) {
+    return fail(
+      `${failedIdx.join(', ')}번째 조각 판독 실패 — 다시 시도해 주세요 (순위가 어긋나지 않도록 전부 다시 판독합니다)`,
+      502,
+    );
+  }
+
+  // 정렬 바 위 광고 블록처럼 상품이 없는 'other' 조각(빈 여백 등)은 조용히 버린다.
+  // 상품이 있는 'other' 조각(1688 등 다른 화면이 섞임)은 오류다.
+  const naverPages = pages.filter((p) => p.screen === 'naver_list');
+  const badOtherPage = pages.some((p) => p.screen === 'other' && p.products.length > 0);
+  if (naverPages.length === 0 || badOtherPage) {
     return fail('네이버 쇼핑 목록이 아닌 캡처가 섞여 있습니다. 1688 캡처는 후보 카드에 올려 주세요.', 422);
   }
 
-  const merged = mergePages(pages);
-  const partialError = failedIdx.length ? `${failedIdx.join(', ')}번째 조각 판독 실패 — 그 부분을 다시 캡처해 올려 주세요.` : null;
+  const merged = mergePages(naverPages);
+  // 조각 하나라도 실패하면 위에서 이미 502로 반환했으므로 여기 도달했다는 것은 전부 성공했다는 뜻이다
+  const partialError = null;
 
   const client = await pool.connect();
   try {

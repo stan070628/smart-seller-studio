@@ -4,10 +4,13 @@ import { getCurrentUser } from '@/lib/auth';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { uploadToStorage } from '@/lib/supabase/server';
 import { offerImagePath } from '@/lib/sourcing-candidates/storage-path';
-import { validateFiles } from '@/lib/sourcing-candidates/upload';
+import { validateFiles, OFFER_URL_SCHEMA } from '@/lib/sourcing-candidates/upload';
 import { parseOffer } from '@/lib/sourcing-candidates/parse-offer';
 
-export const maxDuration = 60;
+export const maxDuration = 300;
+
+/** 업체 한 곳은 캡처가 짧다 — 화면 전체가 아니라 가격·옵션 구간만 찍는다 */
+const MAX_OFFER_FILES = 4;
 
 /**
  * POST /api/sourcing-candidates/listings/[id]/offers — 1688 업체 1곳 추가.
@@ -30,9 +33,24 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ success: false, error: 'FormData 파싱 실패' }, { status: 400 });
   }
   const files = formData.getAll('files').filter((f): f is File => f instanceof File);
+  if (files.length > MAX_OFFER_FILES) {
+    return NextResponse.json({ success: false, error: '업체 한 곳은 캡처 4장까지입니다.' }, { status: 400 });
+  }
   const invalid = validateFiles(files);
   if (invalid) return NextResponse.json({ success: false, error: invalid }, { status: 400 });
-  const url = formData.get('url');
+
+  const urlRaw = formData.get('url');
+  let url: string | null = null;
+  if (typeof urlRaw === 'string' && urlRaw.trim() !== '') {
+    const parsedUrl = OFFER_URL_SCHEMA.safeParse(urlRaw);
+    if (!parsedUrl.success) {
+      return NextResponse.json(
+        { success: false, error: parsedUrl.error.issues[0]?.message ?? 'URL이 올바르지 않습니다.' },
+        { status: 400 },
+      );
+    }
+    url = parsedUrl.data;
+  }
 
   const offerId = randomUUID();
   try {
@@ -45,7 +63,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     );
     await pool.query(
       `INSERT INTO sourcing_offers (id, listing_id, user_id, image_paths, url) VALUES ($1, $2, $3, $4, $5)`,
-      [offerId, listingId, user.userId, paths, typeof url === 'string' && url ? url : null],
+      [offerId, listingId, user.userId, paths, url],
     );
   } catch (err) {
     return NextResponse.json({ success: false, error: err instanceof Error ? err.message : '업로드 실패' }, { status: 500 });
