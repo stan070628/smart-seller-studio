@@ -43,20 +43,21 @@ function Row({ r, onPatch }: { r: ListingView; onPatch: Props['onPatch'] }) {
   };
 
   return (
-    <tr className={`border-t ${r.excluded ? 'text-gray-400' : ''}`}>
+    <tr className={`border-t border-white/10 ${r.excluded ? 'text-gray-400' : ''}`}>
       <td className="px-2 py-1 text-right">{r.rank}</td>
       <td className="px-2 py-1">
         <button aria-pressed={r.starred} aria-label={r.starred ? '후보에서 내리기' : '후보로 올리기'}
           onClick={() => void onPatch(r.id, { starred: !r.starred })}
-          className={r.starred ? 'text-yellow-500' : 'text-gray-300 hover:text-yellow-400'}>★</button>
+          className={r.starred ? 'text-yellow-400' : 'text-white/25 hover:text-yellow-400/70'}>★</button>
       </td>
       <td className="max-w-md px-2 py-1">
         <div className="truncate" title={r.title}>{r.title}</div>
-        <div className="text-xs text-gray-500">{r.seller}{r.badges.length ? ` · ${r.badges.join('·')}` : ''}</div>
+        <div className="text-xs text-gray-400">{r.seller}{r.badges.length ? ` · ${r.badges.join('·')}` : ''}</div>
       </td>
       <td className="px-2 py-1 text-right">
         {editing ? (
-          <input autoFocus value={price} onChange={(e) => setPrice(e.target.value)} className="w-24 border px-1 text-right"
+          <input autoFocus value={price} onChange={(e) => setPrice(e.target.value)}
+            className="w-24 border border-white/15 bg-transparent px-1 text-right text-white"
             onBlur={() => {
               if (skipBlurRef.current) { skipBlurRef.current = false; return; }
               commitPrice();
@@ -67,10 +68,10 @@ function Row({ r, onPatch }: { r: ListingView; onPatch: Props['onPatch'] }) {
             }} />
         ) : (
           <button onClick={startEdit} title="클릭해서 고치기 (쿠팡 판매가로 바꿔 보세요)">
-            {won(r.effective_price)}{r.price_override !== null && <span className="text-blue-600">*</span>}
+            {won(r.effective_price)}{r.price_override !== null && <span className="text-blue-400">*</span>}
           </button>
         )}
-        {r.number_check && <div className="text-xs text-red-600">⚠ {r.number_check}</div>}
+        {r.number_check && <div className="text-xs text-red-400">⚠ {r.number_check}</div>}
       </td>
       <td className="px-2 py-1 text-right">{r.review_count?.toLocaleString('ko-KR') ?? '—'}</td>
       <td className="px-2 py-1 text-right">{r.rating ?? '—'}</td>
@@ -94,7 +95,7 @@ export default function ListingTable({ rows, onPatch }: Props) {
   const kept = rows.filter((r) => !r.excluded);
   const excluded = rows.filter((r) => r.excluded);
   const head = (
-    <thead className="bg-gray-50 text-left text-xs text-gray-500">
+    <thead className="bg-white/5 text-left text-xs text-gray-400">
       <tr><th className="px-2 py-1 text-right">순위</th><th /><th className="px-2 py-1">상품 · 판매자</th>
         <th className="px-2 py-1 text-right">판매가</th><th className="px-2 py-1 text-right">리뷰</th>
         <th className="px-2 py-1 text-right">별점</th><th className="px-2 py-1">거름망</th><th /></tr>
@@ -105,7 +106,7 @@ export default function ListingTable({ rows, onPatch }: Props) {
       <table className="w-full text-sm">{head}<tbody>{kept.map((r) => <Row key={r.id} r={r} onPatch={onPatch} />)}</tbody></table>
       {excluded.length > 0 && (
         <div>
-          <button className="text-sm text-gray-500 underline" onClick={() => setShowExcluded((v) => !v)}>
+          <button className="text-sm text-gray-400 underline" onClick={() => setShowExcluded((v) => !v)}>
             자동 제외 {excluded.length}건 {showExcluded ? '접기' : '펼치기'} (하한선 {won(excluded[0].floor)} 미만)
           </button>
           {showExcluded && (

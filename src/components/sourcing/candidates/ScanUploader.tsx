@@ -51,13 +51,13 @@ export default function ScanUploader({ label, hint, onFiles, listenPaste = false
     <label
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => { e.preventDefault(); void handle(Array.from(e.dataTransfer.files)); }}
-      className={`block cursor-pointer rounded-lg border-2 border-dashed p-4 text-sm ${busy ? 'border-blue-300 bg-blue-50' : 'border-gray-300 hover:border-gray-400'}`}
+      className={`block cursor-pointer rounded-lg border-2 border-dashed p-4 text-sm ${busy ? 'border-blue-400 bg-blue-500/10' : 'border-white/20 hover:border-white/40'}`}
     >
       <input type="file" accept="image/*" multiple className="hidden" disabled={busy}
         onChange={(e) => { void handle(Array.from(e.target.files ?? [])); e.target.value = ''; }} />
       <div className="font-medium">{label}</div>
-      <div className="text-gray-500">{hint}</div>
-      {msg && <div className={`mt-2 ${msg.ok ? 'text-gray-700' : 'text-red-600'}`}>{msg.text}</div>}
+      <div className="text-gray-400">{hint}</div>
+      {msg && <div className={`mt-2 ${msg.ok ? 'text-gray-300' : 'text-red-400'}`}>{msg.text}</div>}
     </label>
   );
 }

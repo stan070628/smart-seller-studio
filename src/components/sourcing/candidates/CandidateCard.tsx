@@ -15,7 +15,7 @@ function Judgement({ o }: { o: OfferView }) {
     <div className="space-y-0.5 text-xs">
       <div>강의: 원가율 {pct(o.lecture.costRatio)} {o.lecture.best ? '🟢 최선' : o.lecture.pass ? '✅' : '❌'} (≤30%)</div>
       <div>실측: 마진 {won(o.real.margin)} · {pct(o.real.marginRate)} {o.real.passRate ? 'ⓐ✅' : 'ⓐ❌'} {o.real.passAmount ? 'ⓑ✅' : 'ⓑ❌'}</div>
-      {o.daily !== null && <div className="text-gray-500">일 판매 {o.daily.toFixed(1)}개 (누적÷180, 참고)</div>}
+      {o.daily !== null && <div className="text-gray-400">일 판매 {o.daily.toFixed(1)}개 (누적÷180, 참고)</div>}
     </div>
   );
 }
@@ -55,34 +55,35 @@ function OfferRowView({ o, onChanged, run }: { o: OfferView; onChanged: () => Pr
     : o.cny === null ? '위안 원가가 없어 채택할 수 없습니다' : undefined;
 
   return (
-    <tr className={`border-t align-top ${o.adopted ? 'bg-green-50' : ''}`}>
+    <tr className={`border-t border-white/10 align-top ${o.adopted ? 'bg-green-500/10' : ''}`}>
       <td className="px-2 py-1 text-xs">
         {o.parse_status === 'failed' ? (
-          <span className="text-red-600">판독 실패: {o.parse_error}{' '}
+          <span className="text-red-400">판독 실패: {o.parse_error}{' '}
             <button className="underline" onClick={() => void run(async () => { await api.reparseOffer(o.id); await onChanged(); })}>재시도</button>
           </span>
         ) : (
           <>
             <div>{o.match_verdict ? VERDICT[o.match_verdict] : '—'} {o.match_reason}</div>
-            <div className="text-gray-500">{o.title_cn}</div>
+            <div className="text-gray-400">{o.title_cn}</div>
           </>
         )}
       </td>
       <td className="px-2 py-1 text-xs">
         {(o.tiers ?? []).map((t) => <div key={t.min_qty}>{t.min_qty}+ {o.sale_unit ?? ''} ¥{t.cny}</div>)}
-        {o.tier_check && <div className="text-red-600">⚠ {o.tier_check}</div>}
+        {o.tier_check && <div className="text-red-400">⚠ {o.tier_check}</div>}
         <input placeholder="위안 직접" value={cny} onChange={(e) => setCny(e.target.value)}
-          onBlur={() => void commitCny()} className="mt-1 w-20 border px-1" />
+          onBlur={() => void commitCny()} className="mt-1 w-20 border border-white/15 bg-transparent px-1 text-white" />
       </td>
       <td className="px-2 py-1"><Judgement o={o} /></td>
       <td className="px-2 py-1 text-xs">
         <input placeholder="1688 URL" value={url} onChange={(e) => setUrl(e.target.value)}
-          onBlur={() => url !== (o.url ?? '') && void save({ url: url || null })} className="w-40 border px-1" />
+          onBlur={() => url !== (o.url ?? '') && void save({ url: url || null })}
+          className="w-40 border border-white/15 bg-transparent px-1 text-white" />
         <div className="mt-1">
           {o.adopted ? (
-            <button className="underline text-gray-600" onClick={() => void save({ adopted: false })}>채택 취소</button>
+            <button className="underline text-gray-400" onClick={() => void save({ adopted: false })}>채택 취소</button>
           ) : (
-            <button className="underline disabled:cursor-not-allowed disabled:text-gray-300 disabled:no-underline"
+            <button className="underline disabled:cursor-not-allowed disabled:text-white/25 disabled:no-underline"
               disabled={adoptDisabled} title={adoptTitle}
               onClick={() => {
                 if (o.match_verdict === 'different' && !window.confirm('AI가 다른 물건이라고 판정했습니다. 그래도 채택하시겠습니까?')) return;
@@ -138,20 +139,20 @@ function Recent6mFields({ l, run, onChanged }: { l: ListingView; run: RunFn; onC
   const sharePct = l.recent_share === null ? null : Math.round(l.recent_share * 100);
 
   return (
-    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-600">
+    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-400">
       <label className="flex items-center gap-1">
         최근 6개월 리뷰
         <input value={count} onChange={(e) => setCount(e.target.value)} onBlur={() => void commitCount()}
-          placeholder="건" className="w-16 border px-1" />
+          placeholder="건" className="w-16 border border-white/15 bg-transparent px-1 text-white" />
       </label>
       <label className="flex items-center gap-1">
         6개월 별점
         <input value={rating} onChange={(e) => setRating(e.target.value)} onBlur={() => void commitRating()}
-          placeholder="점" className="w-12 border px-1" />
+          placeholder="점" className="w-12 border border-white/15 bg-transparent px-1 text-white" />
       </label>
       <span className="text-gray-400">상세 페이지 별점 옆 ⓘ</span>
       {sharePct !== null && (
-        <span className={sharePct > 100 ? 'text-red-600' : ''}>
+        <span className={sharePct > 100 ? 'text-red-400' : ''}>
           {sharePct > 100 && '⚠ '}최근 비중 {sharePct}%
         </span>
       )}
@@ -175,18 +176,20 @@ export default function CandidateCard({ l, onChanged }: { l: ListingView; onChan
   };
 
   return (
-    <div className="rounded-lg border p-3">
-      {error && <div className="mb-2 text-sm text-red-600">{error}</div>}
+    <div className="rounded-lg border border-white/15 p-3">
+      {error && <div className="mb-2 text-sm text-red-400">{error}</div>}
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="font-medium">{l.title}</div>
-          <div className="text-xs text-gray-500">
+          <div className="text-xs text-gray-400">
             {l.category_path ?? '카테고리 미상'} · {l.seller} · {l.effective_price.toLocaleString('ko-KR')}원 · 리뷰 {l.review_count?.toLocaleString('ko-KR') ?? '—'}
           </div>
         </div>
         <select value={l.size} onChange={(e) => { const size = e.target.value; void run(async () => { await api.patchListing(l.id, { size }); await onChanged(); }); }}
-          className="border text-xs">
-          <option value="xsmall">극소형</option><option value="small">소형</option><option value="medium">중형</option>
+          className="border border-white/15 bg-transparent px-1 text-xs text-white">
+          <option value="xsmall" className="bg-black">극소형</option>
+          <option value="small" className="bg-black">소형</option>
+          <option value="medium" className="bg-black">중형</option>
         </select>
       </div>
 
@@ -194,7 +197,7 @@ export default function CandidateCard({ l, onChanged }: { l: ListingView; onChan
 
       {l.offers.length > 0 && (
         <table className="mt-2 w-full text-sm">
-          <thead className="text-left text-xs text-gray-500"><tr>
+          <thead className="text-left text-xs text-gray-400"><tr>
             <th className="px-2">같은 물건?</th><th className="px-2">구간가</th><th className="px-2">판정</th><th className="px-2" />
           </tr></thead>
           <tbody>{l.offers.map((o) => <OfferRowView key={o.id} o={o} onChanged={onChanged} run={run} />)}</tbody>
@@ -210,7 +213,8 @@ export default function CandidateCard({ l, onChanged }: { l: ListingView; onChan
             if (r.parse_error) throw new Error(`판독 실패: ${r.parse_error}`);
             return '판독 완료';
           }} />
-        <input placeholder="1688 URL (선택)" value={url} onChange={(e) => setUrl(e.target.value)} className="h-9 border px-2 text-sm" />
+        <input placeholder="1688 URL (선택)" value={url} onChange={(e) => setUrl(e.target.value)}
+          className="h-9 border border-white/15 bg-transparent px-2 text-sm text-white" />
       </div>
     </div>
   );
