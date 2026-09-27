@@ -8,7 +8,7 @@ import type { Db } from '@/lib/erp/ledger/store';
 import { resolveSaleShippingFee } from '@/lib/cost-management/sale-shipping';
 import { bareWingKey } from './keys';
 import { planLegacy, type LegacyLine, type LegacyWarning } from './legacy';
-import type { OrderChannel, StdStatus } from './types';
+import type { SaleChannel, StdStatus } from './types';
 
 const iso = (v: unknown): string | null => (v === null || v === undefined ? null : v instanceof Date ? v.toISOString() : new Date(String(v)).toISOString());
 
@@ -43,7 +43,7 @@ export async function syncLegacySales(db: Db, keys: string[]): Promise<SyncLegac
   );
   const lines: LegacyLine[] = rows.map((r) => ({
     legacyKey: String(r.legacy_key),
-    channel: r.channel as OrderChannel,
+    channel: r.channel as SaleChannel,
     status: r.status as StdStatus,
     orderQty: Number(r.order_qty),
     legacyQty: r.legacy_qty === null || r.legacy_qty === undefined ? null : Number(r.legacy_qty),

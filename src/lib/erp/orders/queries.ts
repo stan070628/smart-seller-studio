@@ -2,7 +2,7 @@
 // 주문 수집 화면·게이트 ① 조회(읽기 전용). 날짜는 주문 시각의 KST 날짜(설계 해석 #22).
 import type { Db } from '@/lib/erp/ledger/store';
 import { readDeductSetting, type DeductSetting } from './store';
-import { CHANNEL_LABEL, ORDER_CHANNELS, type OrderChannel, type StdStatus } from './types';
+import { CHANNEL_LABEL, ORDER_CHANNELS, type OrderChannel, type SaleChannel, type StdStatus } from './types';
 import { kstDay } from './window';
 
 export interface DayCount {
@@ -153,7 +153,8 @@ export async function dayLines(db: Db, channel: OrderChannel, day: string): Prom
 
 export interface DailyCountRow {
   day: string;
-  channel: OrderChannel;
+  /** 당근(수동 판매) 줄도 자기 채널 행으로 나온다 */
+  channel: SaleChannel;
   orders: number;
   lines: number;
   qty: number;
@@ -174,6 +175,6 @@ export async function dailyCounts(db: Db, fromDay: string): Promise<DailyCountRo
     [fromDay],
   );
   return rows.map((r) => ({
-    day: String(r.day), channel: r.channel as OrderChannel, orders: n(r.orders), lines: n(r.lines), qty: n(r.qty), canceled: n(r.canceled), unattributed: n(r.unattributed),
+    day: String(r.day), channel: r.channel as SaleChannel, orders: n(r.orders), lines: n(r.lines), qty: n(r.qty), canceled: n(r.canceled), unattributed: n(r.unattributed),
   }));
 }

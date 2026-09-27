@@ -21,7 +21,7 @@ const STATUS = {
 };
 const PREVIEW = {
   cutover: '2026-09-26T11:07:04.989Z', lines: 7, skus: 4, self: 6, rg: 3, firstPaidAt: '2026-09-26T12:00:00.000Z', lastPaidAt: '2026-09-27T02:00:00.000Z',
-  byChannel: { coupang_wing: 3, coupang_rg: 2, naver: 2, toss: 0 },
+  byChannel: { coupang_wing: 3, coupang_rg: 2, naver: 2, toss: 0, karrot: 0 },
   shortages: [{ skuId: 9, name: '퓨어틴 커피', option: '', location: 'rg', need: 3, have: 1 }],
 };
 

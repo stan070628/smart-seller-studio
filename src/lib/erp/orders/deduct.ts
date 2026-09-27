@@ -9,7 +9,7 @@ import type { DeductSummary } from './collect';
 import { decideDeduction, type DeductInput, type DeductionState, type PostedItem } from './deduct-plan';
 import type { AllocItem } from './resolve';
 import { readCutover, readDeductSetting, writeDeductEnabled } from './store';
-import { CHANNEL_LABEL, ORDER_CHANNELS, locationOf, type OrderChannel, type StdStatus } from './types';
+import { CHANNEL_LABEL, SALE_CHANNELS, locationOf, type OrderChannel, type SaleChannel, type StdStatus } from './types';
 
 interface LineRow extends DeductInput {
   id: number;
@@ -22,7 +22,7 @@ const iso = (v: unknown): string | null => (v === null || v === undefined ? null
 function toRow(r: Record<string, unknown>): LineRow {
   return {
     id: Number(r.id),
-    channel: r.channel as OrderChannel,
+    channel: r.channel as SaleChannel,
     externalLineId: String(r.external_line_id),
     externalOrderId: String(r.external_order_id ?? ''),
     status: r.status as StdStatus,
@@ -148,7 +148,7 @@ export interface BackfillPreview {
   rg: number;
   firstPaidAt: string | null;
   lastPaidAt: string | null;
-  byChannel: Record<OrderChannel, number>;
+  byChannel: Record<SaleChannel, number>;
   /** 원장 재고보다 많이 빼야 하는 (SKU·위치) — 켜면 그 라인들은 skipped_short로 남는다 */
   shortages: BackfillShortage[];
 }
@@ -163,7 +163,7 @@ export async function previewBackfill(db: Db): Promise<BackfillPreview> {
       where l.deduction_state in ('pending', 'skipped_short')
       order by l.paid_at nulls last, l.id`,
   );
-  const byChannel = Object.fromEntries(ORDER_CHANNELS.map((c) => [c, 0])) as Record<OrderChannel, number>;
+  const byChannel = Object.fromEntries(SALE_CHANNELS.map((c) => [c, 0])) as Record<SaleChannel, number>;
   const need = new Map<string, { skuId: number; location: 'self' | 'rg'; qty: number }>();
   const paid: string[] = [];
   let lines = 0;

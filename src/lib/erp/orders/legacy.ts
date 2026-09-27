@@ -5,7 +5,7 @@
 import type { ShippingSource } from '@/lib/cost-management/sale-shipping';
 import { LEGACY_CHANNEL, SHIPPING_SOURCE } from './keys';
 import type { Resolution } from './resolve';
-import { SOLD, VOID, type OrderChannel, type OrderLine, type StdStatus } from './types';
+import { SOLD, VOID, type OrderLine, type SaleChannel, type StdStatus } from './types';
 import { kstDay } from './window';
 
 export interface LegacyIndex {
@@ -59,7 +59,7 @@ export function pickLegacy(l: OrderLine, r: Resolution, idx: LegacyIndex): Legac
 
 export interface LegacyLine {
   legacyKey: string;
-  channel: OrderChannel;
+  channel: SaleChannel;
   status: StdStatus;
   orderQty: number;
   legacyQty: number | null;
