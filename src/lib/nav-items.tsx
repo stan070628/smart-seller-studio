@@ -138,6 +138,8 @@ const EXTRA_LABEL_RULES: { test: RegExp; label: string }[] = [
   { test: /^\/listing\/[^/]+\/detail-maker-pro$/, label: 'PRO 상세페이지 만들기' },
   { test: /^\/sourcing\/margin-calculator$/, label: '1688 사입 마진 계산기' },
   { test: /^\/sourcing\/trademark-precheck$/, label: '1688 발주 사전체크' },
+  { test: /^\/sourcing\/candidates\/print$/, label: '소싱 후보 제출 목록' },
+  { test: /^\/sourcing\/candidates$/, label: '소싱 후보 수집' },
   { test: /^\/sourcing\/inbound-checklist\/print$/, label: '1688 입고 체크리스트 (인쇄)' },
   { test: /^\/sourcing\/inbound-checklist$/, label: '1688 입고 체크리스트' },
   { test: /^\/plan\/alerts$/, label: '알림' },
