@@ -6,7 +6,7 @@
 
 **Architecture:** 순수 판정(`rg-auto.ts` `planRgAuto`)이 SKU마다 입고 이동 → 복귀 → 남는 증가 알림 순으로 나눈다. 복귀 한도는 새 쿼리 모듈(`rg-return-room.ts`)이 계산한다. 실행기(`rg-auto-run.ts`)는 SKU 잠금·savepoint 안에서 이동 뒤 원장을 다시 읽어 복귀 수량을 재계산하고 `postLotCreate`로 기록한다. 설계: `docs/superpowers/specs/2026-10-05-erp-phase1c2c-rg-returns-design.md`.
 
-**Tech Stack:** Next.js App Router · TypeScript · vitest · PostgreSQL(Supabase, `pg` 풀) · 마이그레이션은 `scripts/apply-migration`.
+**Tech Stack:** Next.js App Router · TypeScript · vitest · PostgreSQL(Supabase, `pg` 풀) · 마이그레이션은 `node scripts/apply-migration.mjs <번호>`.
 
 **작업 위치:** worktree `~/dev/smart_seller_studio/.worktrees/erp-1c2c` (브랜치 `feat/erp-1c2c`). 🔴 **`next build`·`.next` 삭제 금지**(메인 작업 폴더에서 dev 서버가 돈다). 검사는 `npx vitest run <경로>`와 `npx tsc --noEmit -p .`만.
 
@@ -673,7 +673,7 @@ git commit -m "feat(erp): RG 대조 텔레그램 — 취소·반품 복귀 머�
           {r.returned === 0 && r.plannedReturn > 0 && <span style={{ color: E.warn }}> · 복귀 예정 {r.plannedReturn}</span>}
 ```
 
-- [ ] **Step 3: 관련 테스트·타입** — Run: `npx vitest run src/__tests__ -t "RgAuto" && npx tsc --noEmit -p . 2>&1 | grep -E "rg-auto|RgAutoPanel"` · Expected: 테스트 PASS(없으면 「No test files」도 정상), 타입 출력 없음. `RgAutoPanel` 테스트가 있어 행 픽스처 타입이 깨지면 픽스처에 `plannedReturn: 0, returned: 0`을 더한다.
+- [ ] **Step 3: 관련 테스트·타입** — Run: `npx vitest run src/__tests__/components/erp-rg-auto-panel.test.tsx && npx tsc --noEmit -p . 2>&1 | grep -E "rg-auto|RgAutoPanel"` · Expected: 테스트 PASS, 타입 출력 없음. 그 테스트의 행 픽스처가 타입에서 깨지면 픽스처에 `plannedReturn: 0, returned: 0`을 더한다.
 
 - [ ] **Step 4: Commit**
 
@@ -749,7 +749,7 @@ git commit -m "docs(erp): 1-C2c 실행 기록"
 
 ## 병합 뒤 운영 순서 (사용자 게이트 — 이 계획의 범위 밖, 컨트롤러가 사용자에게 묻는다)
 
-1. PR 병합(사용자 승인) → `scripts/apply-migration`으로 125 적용. 차감 꺼짐이라 대조는 건너뜀.
+1. PR 병합(사용자 승인) → `node scripts/apply-migration.mjs 125`로 적용. 차감 꺼짐이라 대조는 건너뜀.
 2. **게이트 ②** 차감 켜기(사용자 승인).
 3. 사용자가 재고현황 「RG 실재고 대조」에서 8개 「반영」.
 4. 자동 이동 꺼진 채 3회 「입고 예정·복귀 예정」 보고 → 사용자 승인으로 `rg_auto_arrive_enabled` 켜기.
