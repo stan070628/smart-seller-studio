@@ -90,7 +90,8 @@ describe('쿠팡 RG 어댑터', () => {
     expect(r.lines[0]).toMatchObject({ channel: 'coupang_rg', status: 'paid', rawStatus: 'PAID', productId: '80000000001', orderedAt: '2026-09-27T01:00:00.000Z' });
     // (I2) 첫날 제외
     expect(r.cover).toEqual({ field: 'paid_at', from: '2026-09-26T15:00:00.000Z', to: '2026-09-27T15:00:00.000Z' });
-    expect(r.absenceMeansCancel).toBe(true);
+    // (1-C2c) RG API는 취소분을 응답에서 빼지 않는다(2026-10-05 실측) — 사라짐 판정을 하지 않는다
+    expect(r.absenceMeansCancel).toBe(false);
     expect(r.rejected).toEqual([]);
     expectNoPII(r.lines);
   });
@@ -285,7 +286,7 @@ describe('과거 보충 구간(9/1 → 지금, 26일+) — 긴 구간을 조각�
     const r = await createRgAdapter({ getRocketGrowthOrders: f }).fetch(BF);
     expect(f.mock.calls.map((c) => [c[0].paidDateFrom, c[0].paidDateTo])).toEqual([['2026-09-01', '2026-09-28']]);
     // cover는 계속 돌려주지만 보충 실행은 사라짐 판정을 하지 않는다(수집기)
-    expect(r.absenceMeansCancel).toBe(true);
+    expect(r.absenceMeansCancel).toBe(false);
   });
 
   it('토스 — 한 번에 30일(API 상한 31일 이내)씩, 30일을 넘으면 나눈다', async () => {
