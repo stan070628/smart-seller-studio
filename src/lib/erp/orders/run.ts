@@ -95,10 +95,35 @@ export async function runOrdersSync(p: {
     ];
     if (lines.length > 0) {
       const text = `🟡 주문 수집 확인 필요\n${lines.join('\n')}`;
-      await sendTelegramMessage(chatId, text).catch((e) => console.error('[orders-sync] 텔레그램 실패:', e));
+      if (await claimAlertSend(text)) {
+        await sendTelegramMessage(chatId, text).catch((e) => console.error('[orders-sync] 텔레그램 실패:', e));
+      }
     }
   }
   return reports;
+}
+
+/**
+ * 확인 알림 중복 방지 — 옛 장부 경고처럼 최근 7일을 다시 볼 때마다 같은 문구가 나오는 알림이 15분마다 반복됐다(2026-10-05).
+ * erp.settings 'orders_alert_last'에 마지막 발송 문구·시각을 두고, 문구가 바뀌었거나 24시간이 지났을 때만 자리를 잡는다.
+ * 한 문장 upsert라 겹친 실행 중 하나만 잡는다. 쿼리가 실패하면 알림을 잃지 않도록 보낸다.
+ */
+async function claimAlertSend(text: string): Promise<boolean> {
+  try {
+    const { rows } = await getSourcingPool().query(
+      `insert into erp.settings (name, value, updated_at)
+         values ('orders_alert_last', jsonb_build_object('text', $1::text, 'sentAt', now()), now())
+       on conflict (name) do update set value = excluded.value, updated_at = now()
+         where erp.settings.value->>'text' is distinct from $1::text
+            or (erp.settings.value->>'sentAt')::timestamptz < now() - interval '24 hours'
+       returning 1`,
+      [text],
+    );
+    return rows.length > 0;
+  } catch (e) {
+    console.error('[orders-sync] 알림 중복 확인 실패 — 그대로 보낸다:', e instanceof Error ? e.message : String(e));
+    return true;
+  }
 }
 
 /** 당근 대기(pending)·재고 부족(skipped_short) 줄을 다시 차감한다 — 스위치가 꺼져 있으면 판정표가 그대로 둔다 */
