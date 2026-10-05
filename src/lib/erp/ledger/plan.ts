@@ -5,7 +5,7 @@ import { allocateFifo, assertQty, type Location, type LotBalance } from './fifo'
 export type LedgerKind = 'opening' | 'receipt' | 'transfer' | 'sale' | 'return' | 'adjust' | 'reversal';
 
 /** 원장 사유(마이그레이션 115). opening = 기초재고(서버가 정한다) · rg_reconcile = RG 실재고 대조 반영 · 나머지는 화면에서 고른다 */
-export type Reason = 'opening' | 'count_diff' | 'damage' | 'loss' | 'sample' | 'return_in' | 'other' | 'rg_reconcile';
+export type Reason = 'opening' | 'count_diff' | 'damage' | 'loss' | 'sample' | 'return_in' | 'other' | 'rg_reconcile' | 'rg_return';
 
 export interface LedgerRow {
   skuId: number;
