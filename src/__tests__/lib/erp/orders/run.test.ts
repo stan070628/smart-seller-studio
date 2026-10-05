@@ -188,3 +188,46 @@ describe('runOrdersSync — (1-C2b ③ 리뷰) 당근 대기 줄 재시도', () 
     err.mockRestore();
   });
 });
+
+describe('runOrdersSync — 확인 알림 중복 방지(같은 문구는 24시간에 한 번)', () => {
+  const claimCall = () => m.query.mock.calls.find((c) => String(c[0]).includes("'orders_alert_last'"));
+  const warnRun = () => {
+    const r = ok('coupang_wing');
+    r.legacy = { ...r.legacy, warnings: 3 };
+    m.collectOrders.mockResolvedValue([r]);
+    return runOrdersSync({ channels: ['coupang_wing'], dryRun: false, trigger: 'cron' });
+  };
+
+  it('발송 자리를 잡으면(행이 돌아오면) 보내고, 잡을 때 문구를 넘긴다', async () => {
+    await warnRun();
+    expect(m.sendTelegramMessage).toHaveBeenCalledTimes(1);
+    const text = String(m.sendTelegramMessage.mock.calls[0][1]);
+    expect(text).toContain('옛 장부 경고 3건');
+    expect((claimCall()?.[1] as unknown[])[0]).toBe(text);
+  });
+
+  it('같은 문구가 24시간 안에 이미 나갔으면(행이 안 돌아오면) 보내지 않는다', async () => {
+    m.query.mockImplementation(async (sql: string) => {
+      if (sql.includes("'orders_alert_last'")) return { rows: [] };
+      return sql.startsWith('insert') ? { rows: [{ id: '1' }] } : { rows: [] };
+    });
+    await warnRun();
+    expect(m.sendTelegramMessage).not.toHaveBeenCalled();
+  });
+
+  it('자리 잡기 쿼리가 실패하면 알림을 잃지 않도록 보낸다', async () => {
+    m.query.mockImplementation(async (sql: string) => {
+      if (sql.includes("'orders_alert_last'")) throw new Error('db down');
+      return sql.startsWith('insert') ? { rows: [{ id: '1' }] } : { rows: [] };
+    });
+    await warnRun();
+    expect(m.sendTelegramMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('보낼 줄이 없으면 자리 잡기 쿼리도 하지 않는다', async () => {
+    m.collectOrders.mockResolvedValue([ok('coupang_wing')]);
+    await runOrdersSync({ channels: ['coupang_wing'], dryRun: false, trigger: 'cron' });
+    expect(claimCall()).toBeUndefined();
+    expect(m.sendTelegramMessage).not.toHaveBeenCalled();
+  });
+});
