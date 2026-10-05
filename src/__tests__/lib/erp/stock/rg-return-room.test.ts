@@ -4,7 +4,7 @@ import { returnRoomBySku, RETURN_WINDOW_DAYS } from '@/lib/erp/stock/rg-return-r
 
 describe('returnRoomBySku — 최근 30일 RG 판매 − 최근 30일 rg_return', () => {
   it('SKU별 한도를 돌려주고, 판매 기준 시각·SKU 필터를 넘긴다', async () => {
-    const query = vi.fn(async () => ({ rows: [{ sku_id: '72', room: 37 }, { sku_id: '80', room: 0 }] }));
+    const query = vi.fn(async (_t: string, _p?: unknown[]) => ({ rows: [{ sku_id: '72', room: 37 }, { sku_id: '80', room: 0 }], rowCount: 2 }));
     const m = await returnRoomBySku({ query }, '2026-10-05T00:37:00.000Z', [72, 80]);
     expect([...m]).toEqual([[72, 37], [80, 0]]);
     const [sql, params] = query.mock.calls[0] as unknown as [string, unknown[]];
@@ -19,7 +19,7 @@ describe('returnRoomBySku — 최근 30일 RG 판매 − 최근 30일 rg_return'
   });
 
   it('SKU 필터를 생략하면 null을 넘긴다(전 SKU)', async () => {
-    const query = vi.fn(async () => ({ rows: [] }));
+    const query = vi.fn(async (_t: string, _p?: unknown[]) => ({ rows: [], rowCount: 0 }));
     expect((await returnRoomBySku({ query }, '2026-10-05T00:37:00.000Z')).size).toBe(0);
     expect((query.mock.calls[0] as unknown as [string, unknown[]])[1][1]).toBeNull();
   });
