@@ -1,6 +1,7 @@
 // src/lib/erp/stock/rg-auto.ts
-// (1-C2b ④) 매일 RG 대조의 판정(순수). 설계 결정 2: 입고 완료만 자동 — RG 실재고가 원장보다 많고 그 SKU에 입고중(rg_inbound)이 있으면
-// min(차이, 입고중)만큼 입고중 → RG. 그 밖은 알림만: 보낸 기록 없는 증가 · 2회 연속 감소(분실·파손 의심) · 입고중 7일 초과 · 연결 안 된 RG 번호.
+// (1-C2b ④ · 1-C2c) 매일 RG 대조의 판정(순수). 설계 결정 2: 입고 완료만 자동 — RG 실재고가 원장보다 많고 그 SKU에 입고중(rg_inbound)이 있으면
+// min(차이, 입고중)만큼 입고중 → RG. (1-C2c) 남은 증가는 복귀 한도(최근 30일 RG 판매 − 최근 30일 복귀)까지 「취소·반품 복귀」 — RG API는 취소·반품을
+// 주지 않아 실재고로만 보인다(2026-10-05 실측). 그 밖은 알림만: 한도를 넘는 증가 · 2회 연속 감소(분실·파손 의심) · 입고중 7일 초과 · 연결 안 된 RG 번호.
 // 전제: 판매 차감이 켜져 있다(꺼져 있으면 판매분이 차이로 보인다 — 실행기가 막는다).
 
 export const STALE_DAYS = 7;
@@ -23,6 +24,8 @@ export interface RgAutoRow {
   actual: number;
   /** 원장 입고중 */
   inbound: number;
+  /** (1-C2c) 복귀 한도 = 최근 30일 RG 판매 수량 − 최근 30일 rg_return 수량(rg-return-room.ts). 음수는 0으로 본다 */
+  returnRoom: number;
   /** 직전 실행의 actual − ledger. 기록 없으면 null */
   prevDiff: number | null;
   /** 이 SKU의 rg_inbound 원장 줄(시각순) */
@@ -36,7 +39,11 @@ export type RgAlert =
   | { kind: 'unmapped_vid'; vid: string; qty: number }
   /** 실행기가 더한다: 비활성 SKU에 RG 재고 · 잠금 뒤 전표가 실패한 SKU */
   | { kind: 'inactive_sku'; skuId: number; qty: number }
-  | { kind: 'move_failed'; skuId: number; error: string };
+  | { kind: 'move_failed'; skuId: number; error: string }
+  /** (1-C2c) 복귀할 수량이 있으나 원장·옛 원가 어디에도 단가가 없어 기록하지 않았다 */
+  | { kind: 'return_no_cost'; skuId: number; qty: number }
+  /** (1-C2c) 잠금 뒤 복귀 전표가 실패했다(그 SKU savepoint 전체 — 같은 SKU의 이동도 — 되돌린다) */
+  | { kind: 'return_failed'; skuId: number; error: string };
 
 /**
  * 입고중에 남은 가장 오래된 발송 시각 — 역전표와 그것이 되돌린 원 줄을 짝으로 뺀 뒤, 들어온 줄을 오래된 순으로 쌓고
@@ -58,20 +65,26 @@ export function planRgAuto(
   rows: RgAutoRow[],
   unmapped: { vid: string; qty: number }[],
   now: Date,
-): { moves: { skuId: number; qty: number }[]; alerts: RgAlert[] } {
+): { moves: { skuId: number; qty: number }[]; returns: { skuId: number; qty: number }[]; alerts: RgAlert[] } {
   const moves: { skuId: number; qty: number }[] = [];
+  const returns: { skuId: number; qty: number }[] = [];
   const alerts: RgAlert[] = [];
   for (const r of [...rows].sort((a, b) => a.skuId - b.skuId)) {
     const d = r.actual - r.ledger;
+    // 숫자가 아닌 입력(undefined·NaN)은 0 — NaN이 끼면 비교가 전부 거짓이 되어 증가 알림까지 조용히 사라진다
+    const inbound = Number.isFinite(r.inbound) ? Math.max(0, r.inbound) : 0;
+    const room = Number.isFinite(r.returnRoom) ? Math.max(0, r.returnRoom) : 0;
     let move = 0;
     if (d > 0) {
-      move = Math.min(d, Math.max(0, r.inbound));
+      move = Math.min(d, inbound);
       if (move > 0) moves.push({ skuId: r.skuId, qty: move });
-      if (d - move > 0) alerts.push({ kind: 'unsent_increase', skuId: r.skuId, qty: d - move });
+      const ret = Math.min(d - move, room);
+      if (ret > 0) returns.push({ skuId: r.skuId, qty: ret });
+      if (d - move - ret > 0) alerts.push({ kind: 'unsent_increase', skuId: r.skuId, qty: d - move - ret });
     } else if (d < 0 && r.prevDiff !== null && r.prevDiff < 0) {
       alerts.push({ kind: 'decrease', skuId: r.skuId, qty: -d });
     }
-    if (r.inbound - move > 0) {
+    if (inbound - move > 0) {
       const since = oldestWaiting(r.inflows, move);
       if (since) {
         const days = Math.floor((now.getTime() - Date.parse(since)) / 86_400_000);
@@ -80,13 +93,13 @@ export function planRgAuto(
     }
   }
   for (const u of unmapped) if (u.qty > 0) alerts.push({ kind: 'unmapped_vid', vid: u.vid, qty: u.qty });
-  return { moves, alerts };
+  return { moves, returns, alerts };
 }
 
 /** GET /api/erp/stock/rg-auto 응답 — 마지막 실행에서 옮김·옮길 예정·알림이 있는 줄만(route 파일은 핸들러만 내보내므로 여기 둔다) */
 export interface RgAutoLast {
   runAt: string | null;
-  rows: { skuId: number | null; vid: string | null; label: string; ledger: number; actual: number; inbound: number; planned: number; moved: number; alert: string | null }[];
+  rows: { skuId: number | null; vid: string | null; label: string; ledger: number; actual: number; inbound: number; planned: number; moved: number; plannedReturn: number; returned: number; alert: string | null }[];
 }
 
 /**
@@ -101,7 +114,7 @@ export function alertKey(a: RgAlert): string {
   }
 }
 
-const KEY_PREFIX = /^(?:unsent_increase|decrease|inbound_stale|unmapped_vid|inactive_sku|move_failed):[^|]*\|/;
+const KEY_PREFIX = /^(?:unsent_increase|decrease|inbound_stale|unmapped_vid|inactive_sku|move_failed|return_no_cost|return_failed):[^|]*\|/;
 export const ALERT_SEP = ' / ';
 
 /** 기록의 「키|문구」 → 키(키가 없는 옛 문구는 null) */
@@ -124,5 +137,7 @@ export function alertText(a: RgAlert, name: (skuId: number) => string): string {
     case 'unmapped_vid': return `연결 안 된 RG 번호 ${a.vid} 재고 ${a.qty}개`;
     case 'inactive_sku': return `비활성 SKU ${name(a.skuId)} RG 재고 ${a.qty}개`;
     case 'move_failed': return `${name(a.skuId)} 자동 이동 실패: ${a.error}`;
+    case 'return_no_cost': return `${name(a.skuId)} RG 복귀 ${a.qty}개 보류(단가 없음)`;
+    case 'return_failed': return `${name(a.skuId)} 취소·반품 복귀 실패: ${a.error}`;
   }
 }

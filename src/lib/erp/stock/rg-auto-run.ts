@@ -8,12 +8,17 @@
 // 돌려준다 — 감소 알림은 늘 새 알림.
 // 자동 이동 스위치(erp.settings rg_auto_arrive_enabled)가 꺼져 있거나 forceDry면 「옮길 예정」만 기록한다.
 // RG 수집이 busy(15분 주문 수집 orders-sync가 임대를 잡고 있다 — 길어진 실행과 겹칠 때)면 30초 간격으로 4번까지 다시 부른다 — 그래도 못 하면 던진다.
+// (1-C2c) 같은 SKU 잠금·savepoint 안에서 입고 이동 뒤 원장을 다시 읽어 min(실재고 − 원장 RG, 복귀 한도)만큼 취소·반품 복귀(adjust/rg_return, 멱등키
+// rg-return:<sku>:<KST 날짜>)를 기록한다. 단가는 원장 최근 lot → 옛 원가 → 없으면 기록하지 않고 return_no_cost 알림.
 import { randomUUID } from 'node:crypto';
 import type { Connectable } from '@/lib/erp/orders/collect';
 import { collectOrders } from '@/lib/erp/orders/collect';
 import { maskPII } from '@/lib/jobs/mask';
 import { getSourcingPool } from '@/lib/sourcing/db';
-import { lockSku, postTransfer } from '@/lib/erp/ledger/store';
+import { lockSku, postLotCreate, postTransfer } from '@/lib/erp/ledger/store';
+import { latestLotCost, legacyUnitCost } from '@/lib/erp/ledger/adjust-store';
+import { kstDay } from '@/lib/erp/orders/window';
+import { returnRoomBySku } from './rg-return-room';
 import { rgQtyBySku, type RgStock } from '@/lib/erp/ledger/opening';
 import { fetchRgStock, readRgLinks } from '@/lib/erp/ledger/opening-db';
 import { activeSkuIds, rgLedgerBySku } from '@/lib/erp/stock/queries';
@@ -46,6 +51,12 @@ export interface RgAutoSummary {
   newAlerts: string[];
   /** 옮길 예정(SKU:수량) 집합이 직전 실행과 다르다 */
   movesChanged: boolean;
+  /** (1-C2c) 복귀 판정 */
+  returns: { skuId: number; qty: number }[];
+  /** 실제로 기록한 복귀(자동 이동 켜짐 · 같은 날 이미 기록됐으면 빠진다) */
+  returned: { skuId: number; qty: number }[];
+  /** 복귀 예정 집합이 직전 실행과 다르다 */
+  returnsChanged: boolean;
 }
 
 const defaultDeps = (): RgAutoDeps => ({
@@ -58,13 +69,13 @@ const defaultDeps = (): RgAutoDeps => ({
 });
 
 const enabledOf = (rows: { value?: { enabled?: boolean } }[]) => rows[0]?.value?.enabled === true;
-const SNAP_SQL = `insert into erp.rg_recon_snapshots (run_id, run_at, sku_id, vid, ledger, actual, inbound, planned_move, moved, alert)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`;
+const SNAP_SQL = `insert into erp.rg_recon_snapshots (run_id, run_at, sku_id, vid, ledger, actual, inbound, planned_move, moved, alert, planned_return, returned)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`;
 const moveKey = (ms: { skuId: number; qty: number }[]) => ms.map((x) => `${x.skuId}:${x.qty}`).sort().join(',');
 
 export async function runRgAuto(p: { now: Date; forceDry: boolean; deps?: RgAutoDeps }): Promise<RgAutoSummary> {
   const deps = p.deps ?? defaultDeps();
-  const skipped: RgAutoSummary = { skipped: 'deduct_off', autoMove: false, runId: null, skus: 0, moves: [], moved: [], failed: 0, alerts: [], newAlerts: [], movesChanged: false };
+  const skipped: RgAutoSummary = { skipped: 'deduct_off', autoMove: false, runId: null, skus: 0, moves: [], moved: [], failed: 0, alerts: [], newAlerts: [], movesChanged: false, returns: [], returned: [], returnsChanged: false };
   // 차감 스위치만 먼저 본다 — 수집(최대 수십 초 + busy 재시도 2분) 동안 연결을 붙잡지 않는다
   const c0 = await deps.pool.connect();
   let deductOn: boolean;
@@ -111,7 +122,7 @@ export async function runRgAuto(p: { now: Date; forceDry: boolean; deps?: RgAuto
     const prev = new Map(pv.map((r) => [Number(r.sku_id), Number(r.diff)]));
     const { rows: lastRun } = await c.query(
       `with last as (select run_id from erp.rg_recon_snapshots where run_at < $1::timestamptz order by run_at desc limit 1)
-       select s.sku_id, s.vid, s.planned_move, s.alert from erp.rg_recon_snapshots s join last on last.run_id = s.run_id`,
+       select s.sku_id, s.vid, s.planned_move, s.planned_return, s.alert from erp.rg_recon_snapshots s join last on last.run_id = s.run_id`,
       [at],
     );
 
@@ -122,9 +133,10 @@ export async function runRgAuto(p: { now: Date; forceDry: boolean; deps?: RgAuto
     const allIds = [...new Set([...ledger.keys(), ...actual.bySku.keys(), ...inbound.keys()])].sort((a, b) => a - b);
     const skuIds = allIds.filter((id) => active.has(id));
     const inactive = allIds.filter((id) => !active.has(id) && (actual.bySku.get(id) ?? 0) > 0);
+    const room = await returnRoomBySku(c, at, skuIds);
     const plan = planRgAuto(skuIds.map((skuId) => ({
       skuId, ledger: ledger.get(skuId) ?? 0, actual: actual.bySku.get(skuId) ?? 0, inbound: inbound.get(skuId) ?? 0,
-      prevDiff: prev.get(skuId) ?? null, inflows: inflows.get(skuId) ?? [],
+      returnRoom: room.get(skuId) ?? 0, prevDiff: prev.get(skuId) ?? null, inflows: inflows.get(skuId) ?? [],
     })), unmapped, p.now);
     const alerts: RgAlert[] = [...plan.alerts, ...inactive.map((skuId): RgAlert => ({ kind: 'inactive_sku', skuId, qty: actual.bySku.get(skuId) ?? 0 }))];
 
@@ -133,32 +145,73 @@ export async function runRgAuto(p: { now: Date; forceDry: boolean; deps?: RgAuto
     const name = (id: number) => names.get(id) ?? `SKU ${id}`;
     const moveOf = new Map(plan.moves.map((m) => [m.skuId, m.qty]));
     const movedOf = new Map<number, number>();
+    const retOf = new Map(plan.returns.map((r) => [r.skuId, r.qty]));
+    const returnedOf = new Map<number, number>();
+    const day = kstDay(p.now);
+    // 복귀 단가 — 원장의 가장 최근 lot(위치 무관) 단가로 돌아온 한 개의 원가를 근사한다. 원래 판매가 소비한 FIFO lot은 추적하지 않는다(받아들임)
+    const costOf = async (skuId: number) => (await latestLotCost(c, skuId)) ?? (await legacyUnitCost(c, skuId));
     const runId = randomUUID();
 
     await c.query('BEGIN');
     try {
       if (autoMove) {
-        for (const [n, m] of [...plan.moves].sort((a, b) => a.skuId - b.skuId).entries()) {
-          await lockSku(c, m.skuId);
-          // 읽은 뒤 잠금 전에 바뀌었을 수 있다(사람의 입고 완료·역전표·판매 차감) — 잠금 뒤 값으로 다시 잰다
-          const { rows: now } = await c.query(
-            `select location, qty from erp.stock_on_hand where sku_id = $1 and location in ('rg', 'rg_inbound')`, [m.skuId],
-          );
-          const onHand = (loc: string) => Number(now.find((r) => r.location === loc)?.qty ?? 0);
-          const qty = Math.min((actual.bySku.get(m.skuId) ?? 0) - onHand('rg'), onHand('rg_inbound'));
-          if (qty <= 0) continue;
+        const work = [...new Set([...plan.moves.map((x) => x.skuId), ...plan.returns.map((x) => x.skuId)])].sort((a, b) => a - b);
+        for (const [n, skuId] of work.entries()) {
+          await lockSku(c, skuId);
           await c.query(`savepoint rgauto_${n}`);
+          let stage: 'move' | 'return' = 'move';
           try {
-            await postTransfer(c, {
-              skuId: m.skuId, from: 'rg_inbound', to: 'rg', qty, occurredAt: at,
-              idemKey: `rgauto:${runId}:${m.skuId}`, refType: 'rg_auto', refId: runId, note: 'RG 입고 완료(자동 대조)',
-            });
+            // 읽은 뒤 잠금 전에 바뀌었을 수 있다(사람의 입고 완료·역전표·판매 차감) — 잠금 뒤 값으로 다시 잰다
+            const read = async () => {
+              const { rows: now } = await c.query(
+                `select location, qty from erp.stock_on_hand where sku_id = $1 and location in ('rg', 'rg_inbound')`, [skuId],
+              );
+              return (loc: string) => Number(now.find((r) => r.location === loc)?.qty ?? 0);
+            };
+            const act = actual.bySku.get(skuId) ?? 0;
+            let onHand = await read();
+            if (moveOf.has(skuId)) {
+              // 잠금 뒤 재계산은 줄이기만 한다 — act는 BEGIN 전에 읽었으므로 그 사이 판매 차감이 원장 RG를 낮추면 차이가 부풀어 보인다
+              const qty = Math.min(moveOf.get(skuId)!, act - onHand('rg'), onHand('rg_inbound'));
+              if (qty > 0) {
+                await postTransfer(c, {
+                  skuId, from: 'rg_inbound', to: 'rg', qty, occurredAt: at,
+                  idemKey: `rgauto:${runId}:${skuId}`, refType: 'rg_auto', refId: runId, note: 'RG 입고 완료(자동 대조)',
+                });
+                movedOf.set(skuId, qty);
+                onHand = await read();
+              }
+            }
+            if (retOf.has(skuId)) {
+              stage = 'return';
+              const roomNow = (await returnRoomBySku(c, at, [skuId])).get(skuId) ?? 0;
+              const qty = Math.min(retOf.get(skuId)!, act - onHand('rg'), roomNow);
+              if (qty > 0) {
+                const unitCost = await costOf(skuId);
+                if (unitCost === null) {
+                  alerts.push({ kind: 'return_no_cost', skuId, qty });
+                } else {
+                  const r = await postLotCreate(c, {
+                    skuId, location: 'rg', qty, unitCost, kind: 'adjust', reason: 'rg_return', occurredAt: at,
+                    idemKey: `rg-return:${skuId}:${day}`, refType: 'rg_auto', refId: runId, note: 'RG 취소·반품 복귀(자동 대조)',
+                  });
+                  if (r.posted) returnedOf.set(skuId, qty);
+                }
+              }
+            }
             await c.query(`release savepoint rgauto_${n}`);
-            movedOf.set(m.skuId, qty);
           } catch (e) {
             await c.query(`rollback to savepoint rgauto_${n}`);
-            alerts.push({ kind: 'move_failed', skuId: m.skuId, error: maskPII(e instanceof Error ? e.message : String(e)) });
+            movedOf.delete(skuId);
+            returnedOf.delete(skuId);
+            const error = maskPII(e instanceof Error ? e.message : String(e));
+            alerts.push(stage === 'move' ? { kind: 'move_failed', skuId, error } : { kind: 'return_failed', skuId, error });
           }
+        }
+      } else {
+        // dry(자동 이동 꺼짐·forceDry)에도 단가 없는 복귀를 미리 드러낸다 — 잠금·전표 없이 확인만
+        for (const r of plan.returns) {
+          if ((await costOf(r.skuId)) === null) alerts.push({ kind: 'return_no_cost', skuId: r.skuId, qty: r.qty });
         }
       }
       const alertOf = new Map<string, string[]>();
@@ -169,10 +222,10 @@ export async function runRgAuto(p: { now: Date; forceDry: boolean; deps?: RgAuto
       const joined = (k: string) => (alertOf.get(k) ?? []).join(ALERT_SEP) || null;
       for (const skuId of [...skuIds, ...inactive]) {
         await c.query(SNAP_SQL, [runId, at, skuId, null, ledger.get(skuId) ?? 0, actual.bySku.get(skuId) ?? 0, inbound.get(skuId) ?? 0,
-          moveOf.get(skuId) ?? 0, movedOf.get(skuId) ?? 0, joined(`s:${skuId}`)]);
+          moveOf.get(skuId) ?? 0, movedOf.get(skuId) ?? 0, joined(`s:${skuId}`), retOf.get(skuId) ?? 0, returnedOf.get(skuId) ?? 0]);
       }
       for (const u of unmapped) {
-        await c.query(SNAP_SQL, [runId, at, null, u.vid, 0, u.qty, 0, 0, 0, joined(`v:${u.vid}`)]);
+        await c.query(SNAP_SQL, [runId, at, null, u.vid, 0, u.qty, 0, 0, 0, joined(`v:${u.vid}`), 0, 0]);
       }
       await c.query('COMMIT');
     } catch (e) {
@@ -185,10 +238,13 @@ export async function runRgAuto(p: { now: Date; forceDry: boolean; deps?: RgAuto
     const seen = new Set(lastRun.flatMap((r) => (r.alert ? String(r.alert).split(ALERT_SEP).map(keyOfStored) : [])));
     const newAlerts = texts.filter((_, i) => alerts[i].kind === 'decrease' || !seen.has(alertKey(alerts[i])));
     const prevMoves = lastRun.filter((r) => r.sku_id != null && Number(r.planned_move) > 0).map((r) => ({ skuId: Number(r.sku_id), qty: Number(r.planned_move) }));
+    const prevReturns = lastRun.filter((r) => r.sku_id != null && Number(r.planned_return ?? 0) > 0).map((r) => ({ skuId: Number(r.sku_id), qty: Number(r.planned_return) }));
     return {
       skipped: null, autoMove, runId, skus: skuIds.length, moves: plan.moves,
-      moved: [...movedOf].map(([skuId, qty]) => ({ skuId, qty })), failed: alerts.filter((a) => a.kind === 'move_failed').length,
+      moved: [...movedOf].map(([skuId, qty]) => ({ skuId, qty })), failed: alerts.filter((a) => a.kind === 'move_failed' || a.kind === 'return_failed').length,
       alerts: texts, newAlerts, movesChanged: moveKey(plan.moves) !== moveKey(prevMoves),
+      returns: plan.returns, returned: [...returnedOf].map(([skuId, qty]) => ({ skuId, qty })),
+      returnsChanged: moveKey(plan.returns) !== moveKey(prevReturns),
     };
   } finally {
     c.release();

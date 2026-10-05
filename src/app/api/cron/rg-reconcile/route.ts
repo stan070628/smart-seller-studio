@@ -27,16 +27,25 @@ export async function GET(request: NextRequest) {
         value: r,
         counts: {
           skipped: r.skipped ? 1 : 0, auto_move: r.autoMove ? 1 : 0, skus: r.skus, moves: r.moves.length,
-          moved_qty: r.moved.reduce((a, m) => a + m.qty, 0), failed: r.failed, alerts: r.alerts.length, new_alerts: r.newAlerts.length,
+          moved_qty: r.moved.reduce((a, m) => a + m.qty, 0),
+          returns: r.returns.length, returned_qty: r.returned.reduce((a, x) => a + x.qty, 0), failed: r.failed, alerts: r.alerts.length, new_alerts: r.newAlerts.length,
         },
       };
     }, { trigger: forceDry ? 'manual' : 'cron' });
     // 중복 방지: 직전 실행에 없던 알림만(고정 키 비교 · 감소는 늘). 머리줄 — 자동 이동으로 실제로 옮겼으면 늘,
     // 자동 이동이 꺼져 있으면 옮길 예정(SKU:수량)이 직전과 달라졌을 때만
     const chatId = process.env.JOB_ALERT_TELEGRAM_CHAT_ID ?? '';
-    const head = s.autoMove
-      ? (s.moved.length > 0 ? `✅ RG 입고 완료 자동 ${s.moved.length}건${s.failed > 0 ? ` · 실패 ${s.failed}건` : ''}` : null)
+    const sum = (xs: { qty: number }[]) => xs.reduce((a, x) => a + x.qty, 0);
+    const moveHead = s.autoMove
+      ? (s.moved.length > 0 ? `✅ RG 입고 완료 자동 ${s.moved.length}건` : null)
       : (s.movesChanged && s.moves.length > 0 ? `🟡 RG 대조 — 옮길 예정 ${s.moves.length}건(자동 이동 꺼짐)` : null);
+    // (1-C2c) 복귀 — 실제로 기록했으면 늘, 꺼져 있으면 예정이 직전과 달라졌을 때만
+    const retHead = s.autoMove
+      ? (s.returned.length > 0 ? `🔵 RG 취소·반품 복귀 ${s.returned.length}건 ${sum(s.returned)}개` : null)
+      : (s.returnsChanged && s.returns.length > 0 ? `🔵 RG 취소·반품 복귀 예정 ${s.returns.length}건 ${sum(s.returns)}개(자동 이동 꺼짐)` : null);
+    // 실패는 이동·복귀가 없어도 숨기지 않는다
+    const failHead = s.autoMove && s.failed > 0 ? `🔴 RG 대조 전표 실패 ${s.failed}건` : null;
+    const head = [moveHead, retHead, failHead].filter(Boolean).join('\n') || null;
     if (chatId && !s.skipped && (head || s.newAlerts.length > 0)) {
       const text = [head ?? '🟡 RG 대조 — 새 알림', ...s.newAlerts.map((a) => `· ${a}`)].join('\n');
       await sendTelegramMessage(chatId, text).catch((e) => console.error('[rg-reconcile] 텔레그램 실패:', e));

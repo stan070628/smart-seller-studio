@@ -1,6 +1,8 @@
 // src/lib/erp/orders/adapters/coupang-rg.ts
 // 쿠팡 RG — 로켓그로스 주문 조회(rg_open_api). paidDateTo는 배타 끝이라 「마지막 날 + 1」을 넘긴다(옛 rg-bulk-import 경계 버그 재발 금지).
-// RG API는 취소를 플래그로 주지 않고 응답에서 뺀다 → absenceMeansCancel. 같은 주문의 같은 vid 품목은 합친다(옛 불러오기와 같다).
+// RG API에는 취소·반품 표시가 없고 취소된 주문도 응답에 그대로 남는다(2026-10-05 실측 — 09-29~10-04 ERP와 날짜별 동일, Wing 판매분석보다 매일 1건 안팎 많다).
+// 그래서 사라짐으로 취소를 판정하지 않는다(absenceMeansCancel false) — 취소·반품은 매일 RG 대조가 실재고로 복귀시킨다(1-C2c).
+// paidDateFrom/To는 UTC 날짜로 거른다(KST 09시 이전 주문은 전날 조회에 든다). 같은 주문의 같은 vid 품목은 합친다(옛 불러오기와 같다).
 import type { CoupangClient } from '@/lib/listing/coupang-client';
 import { assertExternalId, assertQty, rejectReasonOf, safeLineKey } from '../keys';
 import type { OrderAdapter, OrderLine, RejectedLine } from '../types';
@@ -101,7 +103,7 @@ export function createRgAdapter(client: RgClient): OrderAdapter {
         rejected: [...rejected.values()],
         // 첫날은 사라짐 판정에서 뺀다(I2 — 설계 해석 #24)
         cover: { field: 'paid_at', from: kstDayStart(addDays(fromDay, 1)).toISOString(), to: kstDayStart(addDays(toDay, 1)).toISOString() },
-        absenceMeansCancel: true,
+        absenceMeansCancel: false,
       };
     },
   };

@@ -1,10 +1,16 @@
 // src/__tests__/lib/erp/stock/rg-auto-run.test.ts
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const m = vi.hoisted(() => ({ postTransfer: vi.fn(), lockSku: vi.fn() }));
+const m = vi.hoisted(() => ({
+  postTransfer: vi.fn(), lockSku: vi.fn(), postLotCreate: vi.fn(), latestLotCost: vi.fn(), legacyUnitCost: vi.fn(),
+}));
 vi.mock('@/lib/erp/ledger/store', async () => {
   const actual = await vi.importActual<typeof import('@/lib/erp/ledger/store')>('@/lib/erp/ledger/store');
-  return { ...actual, postTransfer: m.postTransfer, lockSku: m.lockSku };
+  return { ...actual, postTransfer: m.postTransfer, lockSku: m.lockSku, postLotCreate: m.postLotCreate };
+});
+vi.mock('@/lib/erp/ledger/adjust-store', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/erp/ledger/adjust-store')>('@/lib/erp/ledger/adjust-store');
+  return { ...actual, latestLotCost: m.latestLotCost, legacyUnitCost: m.legacyUnitCost };
 });
 
 import { runRgAuto } from '@/lib/erp/stock/rg-auto-run';
@@ -21,25 +27,34 @@ const S80: Sku = { id: 80, name: '수건', option: null, vid: '95400000080', led
 
 let calls: { sql: string; params: unknown[] }[];
 let order: string[];
+let transferred: Map<number, number>;
 function client(opts: {
   deduct: boolean; auto: boolean; skus?: Sku[];
   /** 잠금 뒤 다시 읽는 원장 값(없으면 처음 읽은 값) */
   locked?: Record<number, { rg: number; rg_inbound: number }>;
   prevDiff?: { sku_id: string; diff: number }[];
-  prevRun?: { sku_id: string | null; vid: string | null; planned_move: number; alert: string | null }[];
+  prevRun?: { sku_id: string | null; vid: string | null; planned_move: number; planned_return?: number; alert: string | null }[];
   flows?: { id: string; reverses_id: string | null; sku_id: string; qty: number; occurred_at: Date }[];
+  /** (1-C2c) 복귀 한도(rg-return-room) — 없는 SKU는 행이 없다(0) */
+  room?: Record<number, number>;
 }) {
   const skus = opts.skus ?? [S72];
   const rows = (r: unknown[]) => ({ rows: r, rowCount: r.length });
   return {
     query: vi.fn(async (sql: string, params: unknown[] = []) => {
       calls.push({ sql, params });
+      // 복귀 한도 쿼리는 stock_ledger·coupang_rg도 담으므로 다른 분기보다 먼저 가른다
+      if (sql.includes("reason = 'rg_return'")) {
+        const ids = (params[1] as number[] | null) ?? skus.map((s) => s.id);
+        return rows(ids.filter((id) => opts.room?.[id] !== undefined).map((id) => ({ sku_id: String(id), room: opts.room![id] })));
+      }
       if (sql.includes("name = 'deduct_enabled'")) return rows([{ value: { enabled: opts.deduct } }]);
       if (sql.includes("name = 'rg_auto_arrive_enabled'")) return rows([{ value: { enabled: opts.auto } }]);
       if (sql.includes('stock_on_hand where sku_id = $1')) {
         const s = skus.find((k) => k.id === params[0])!;
         const l = opts.locked?.[s.id] ?? { rg: s.ledger, rg_inbound: s.inbound };
-        return rows([{ location: 'rg', qty: l.rg }, { location: 'rg_inbound', qty: l.rg_inbound }]);
+        const mv = transferred.get(s.id) ?? 0;
+        return rows([{ location: 'rg', qty: l.rg + mv }, { location: 'rg_inbound', qty: l.rg_inbound - mv }]);
       }
       if (sql.includes("location = 'rg'") && sql.includes('stock_on_hand')) return rows(skus.map((s) => ({ sku_id: String(s.id), qty: s.ledger })));
       if (sql.includes("location = 'rg_inbound'") && sql.includes('stock_on_hand')) return rows(skus.map((s) => ({ sku_id: String(s.id), qty: s.inbound })));
@@ -63,10 +78,20 @@ const deps = (c: ReturnType<typeof client>, stock = [{ vid: '95401822934', qty: 
   sleep: vi.fn(async () => {}),
 });
 const snapsOf = () => calls.filter((x) => x.sql.startsWith('insert into erp.rg_recon_snapshots'))
-  // [0]run_id [1]run_at [2]sku_id [3]vid [4]ledger [5]actual [6]inbound [7]planned [8]moved [9]alert
-  .map((s) => s.params.slice(2));
+  // [0]run_id [1]run_at [2]sku_id [3]vid [4]ledger [5]actual [6]inbound [7]planned [8]moved [9]alert [10]planned_return [11]returned
+  .map((s) => s.params.slice(2, 10));
+const retsOf = () => calls.filter((x) => x.sql.startsWith('insert into erp.rg_recon_snapshots')).map((s) => [s.params[2], ...s.params.slice(10, 12)]);
 
-beforeEach(() => { calls = []; order = []; vi.clearAllMocks(); m.postTransfer.mockResolvedValue({ posted: true, ids: [1, 2] }); });
+beforeEach(() => {
+  calls = []; order = []; transferred = new Map(); vi.clearAllMocks();
+  m.postTransfer.mockImplementation(async (_db: unknown, p: { skuId: number; qty: number }) => {
+    transferred.set(p.skuId, (transferred.get(p.skuId) ?? 0) + p.qty);
+    return { posted: true, ids: [1, 2] };
+  });
+  m.postLotCreate.mockResolvedValue({ posted: true, ids: [9] });
+  m.latestLotCost.mockResolvedValue(1200);
+  m.legacyUnitCost.mockResolvedValue(null);
+});
 
 describe('runRgAuto', () => {
   it('차감이 꺼져 있으면 건너뛴다 — RG 수집·조회도 하지 않는다', async () => {
@@ -238,5 +263,142 @@ describe('runRgAuto', () => {
     const r = await runRgAuto({ now: NOW, forceDry: false, deps: deps(c, [{ vid: '95401822934', qty: 100 }]) });
     expect(r.alerts).toEqual(['극세사 타월 · 블루 입고중 15일째(2026-09-20 발송분)']);
     expect(r.newAlerts).toEqual([]);
+  });
+});
+
+describe('runRgAuto — (1-C2c) 취소·반품 복귀', () => {
+  const S90: Sku = { id: 90, name: '비누', option: null, vid: '95400000090', ledger: 20, inbound: 0 };
+  const stock90 = (qty: number) => [{ vid: '95400000090', qty }];
+
+  it('자동 이동 꺼짐 — 복귀 예정만 기록(planned_return), 전표 없음', async () => {
+    const c = client({ deduct: true, auto: false, skus: [S90], room: { 90: 5 } });
+    const r = await runRgAuto({ now: NOW, forceDry: false, deps: deps(c, stock90(22)) });
+    expect(r.returns).toEqual([{ skuId: 90, qty: 2 }]);
+    expect(r.returned).toEqual([]);
+    expect(r.alerts).toEqual([]);
+    expect(m.postLotCreate).not.toHaveBeenCalled();
+    expect(retsOf()).toEqual([[90, 2, 0]]);
+  });
+
+  it('자동 이동 켜짐 — 잠금 뒤 adjust/rg_return 전표(멱등키 rg-return:<sku>:<KST 날짜>, 원장 최근 단가)', async () => {
+    const c = client({ deduct: true, auto: true, skus: [S90], room: { 90: 5 } });
+    const r = await runRgAuto({ now: NOW, forceDry: false, deps: deps(c, stock90(22)) });
+    expect(m.lockSku).toHaveBeenCalledWith(c, 90);
+    expect(m.postLotCreate).toHaveBeenCalledWith(c, expect.objectContaining({
+      skuId: 90, location: 'rg', qty: 2, unitCost: 1200, kind: 'adjust', reason: 'rg_return',
+      idemKey: 'rg-return:90:2026-10-05', refType: 'rg_auto',
+    }));
+    expect(r.returned).toEqual([{ skuId: 90, qty: 2 }]);
+    expect(retsOf()).toEqual([[90, 2, 2]]);
+  });
+
+  it('같은 날 이미 기록됐으면(posted false) returned에 넣지 않는다', async () => {
+    m.postLotCreate.mockResolvedValue({ posted: false, ids: [] });
+    const c = client({ deduct: true, auto: true, skus: [S90], room: { 90: 5 } });
+    const r = await runRgAuto({ now: NOW, forceDry: false, deps: deps(c, stock90(22)) });
+    expect(r.returned).toEqual([]);
+    expect(retsOf()).toEqual([[90, 2, 0]]);
+  });
+
+  it('잠금 뒤 한도를 다시 읽는다 — 그 사이 한도가 1로 줄면 1만', async () => {
+    const c = client({ deduct: true, auto: true, skus: [S90], room: { 90: 5 } });
+    let n = 0;
+    const q0 = c.query.getMockImplementation()!;
+    c.query.mockImplementation(async (sql: string, params: unknown[] = []) => {
+      if (sql.includes("reason = 'rg_return'") && n++ > 0) return { rows: [{ sku_id: '90', room: 1 }], rowCount: 1 };
+      return q0(sql, params);
+    });
+    const r = await runRgAuto({ now: NOW, forceDry: false, deps: deps(c, stock90(22)) });
+    expect(m.postLotCreate).toHaveBeenCalledWith(c, expect.objectContaining({ skuId: 90, qty: 1 }));
+    expect(r.returned).toEqual([{ skuId: 90, qty: 1 }]);
+  });
+
+  it('입고 이동 뒤 원장을 다시 읽어 남은 차이만 복귀(S72: +8 = 입고 5 + 복귀 3)', async () => {
+    const c = client({ deduct: true, auto: true, room: { 72: 10 } });
+    const r = await runRgAuto({ now: NOW, forceDry: false, deps: deps(c) });
+    expect(r.moved).toEqual([{ skuId: 72, qty: 5 }]);
+    expect(m.postLotCreate).toHaveBeenCalledWith(c, expect.objectContaining({ skuId: 72, qty: 3 }));
+    expect(r.alerts).toEqual([UNMAPPED]);
+  });
+
+  it('단가가 원장·옛 원가 모두 없으면 기록하지 않고 return_no_cost 알림', async () => {
+    m.latestLotCost.mockResolvedValue(null);
+    m.legacyUnitCost.mockResolvedValue(null);
+    const c = client({ deduct: true, auto: true, skus: [S90], room: { 90: 5 } });
+    const r = await runRgAuto({ now: NOW, forceDry: false, deps: deps(c, stock90(22)) });
+    expect(m.postLotCreate).not.toHaveBeenCalled();
+    expect(r.alerts).toEqual(['비누 RG 복귀 2개 보류(단가 없음)']);
+    expect(snapsOf()[0][7]).toBe('return_no_cost:90|비누 RG 복귀 2개 보류(단가 없음)');
+  });
+
+  it('원장 단가가 없으면 옛 원가 단가를 쓴다', async () => {
+    m.latestLotCost.mockResolvedValue(null);
+    m.legacyUnitCost.mockResolvedValue(1691);
+    const c = client({ deduct: true, auto: true, skus: [S90], room: { 90: 5 } });
+    await runRgAuto({ now: NOW, forceDry: false, deps: deps(c, stock90(22)) });
+    expect(m.postLotCreate).toHaveBeenCalledWith(c, expect.objectContaining({ unitCost: 1691 }));
+  });
+
+  it('잠금 뒤 재계산은 판정을 넘지 않는다 — 그 사이 판매 차감으로 원장 RG가 줄어도 복귀는 판정 수량까지만', async () => {
+    const c = client({ deduct: true, auto: true, skus: [S90], room: { 90: 5 }, locked: { 90: { rg: 19, rg_inbound: 0 } } });
+    const r = await runRgAuto({ now: NOW, forceDry: false, deps: deps(c, stock90(22)) });
+    expect(r.returns).toEqual([{ skuId: 90, qty: 2 }]);
+    expect(m.postLotCreate).toHaveBeenCalledWith(c, expect.objectContaining({ skuId: 90, qty: 2 }));
+    expect(r.returned).toEqual([{ skuId: 90, qty: 2 }]);
+  });
+
+  it('잠금 뒤 재계산은 판정을 넘지 않는다 — 이동도 판정 수량까지만', async () => {
+    const c = client({ deduct: true, auto: true, locked: { 72: { rg: 97, rg_inbound: 5 } } });
+    const r = await runRgAuto({ now: NOW, forceDry: false, deps: deps(c) });
+    expect(r.moves).toEqual([{ skuId: 72, qty: 5 }]);
+    expect(m.postTransfer).toHaveBeenCalledTimes(1);
+    expect(m.postTransfer).toHaveBeenCalledWith(c, expect.objectContaining({ skuId: 72, qty: 5 }));
+    // 입고중이 그 사이 늘어도(8) 판정 5를 넘지 않는다
+    vi.clearAllMocks(); calls = []; transferred = new Map();
+    m.postTransfer.mockImplementation(async (_db: unknown, p: { skuId: number; qty: number }) => {
+      transferred.set(p.skuId, (transferred.get(p.skuId) ?? 0) + p.qty);
+      return { posted: true, ids: [1, 2] };
+    });
+    const c2 = client({ deduct: true, auto: true, locked: { 72: { rg: 97, rg_inbound: 8 } } });
+    const r2 = await runRgAuto({ now: NOW, forceDry: false, deps: deps(c2) });
+    expect(m.postTransfer).toHaveBeenCalledWith(c2, expect.objectContaining({ skuId: 72, qty: 5 }));
+    expect(r2.moved).toEqual([{ skuId: 72, qty: 5 }]);
+  });
+
+  it('이동 뒤 복귀 전표가 실패하면 그 SKU savepoint를 되돌리고 return_failed 알림(이동도 빠진다)', async () => {
+    m.postLotCreate.mockRejectedValue(new Error('단가 오류'));
+    const c = client({ deduct: true, auto: true, room: { 72: 10 } });
+    const r = await runRgAuto({ now: NOW, forceDry: false, deps: deps(c) });
+    const sqls = calls.map((x) => x.sql);
+    expect(sqls).toContain('rollback to savepoint rgauto_0');
+    expect(sqls).toContain('COMMIT');
+    expect(r.moved).toEqual([]);
+    expect(r.returned).toEqual([]);
+    expect(r.failed).toBe(1);
+    expect(r.alerts).toEqual([UNMAPPED, '극세사 타월 · 블루 취소·반품 복귀 실패: 단가 오류']);
+    expect(snapsOf()[0][7]).toBe('return_failed:72|극세사 타월 · 블루 취소·반품 복귀 실패: 단가 오류');
+  });
+
+  it('자동 이동 꺼짐(dry)이어도 복귀 단가를 확인해 없으면 return_no_cost 알림 — 잠금·전표 없음', async () => {
+    m.latestLotCost.mockResolvedValue(null);
+    m.legacyUnitCost.mockResolvedValue(null);
+    const c = client({ deduct: true, auto: false, skus: [S90], room: { 90: 5 } });
+    const r = await runRgAuto({ now: NOW, forceDry: false, deps: deps(c, stock90(22)) });
+    expect(r.alerts).toEqual(['비누 RG 복귀 2개 보류(단가 없음)']);
+    expect(m.postLotCreate).not.toHaveBeenCalled();
+    expect(m.lockSku).not.toHaveBeenCalled();
+    expect(m.latestLotCost).toHaveBeenCalledWith(c, 90);
+  });
+
+  it('멱등키 날짜는 KST — UTC 10-04 16:30은 KST 10-05', async () => {
+    const c = client({ deduct: true, auto: true, skus: [S90], room: { 90: 5 } });
+    await runRgAuto({ now: new Date('2026-10-04T16:30:00.000Z'), forceDry: false, deps: deps(c, stock90(22)) });
+    expect(m.postLotCreate).toHaveBeenCalledWith(c, expect.objectContaining({ idemKey: 'rg-return:90:2026-10-05' }));
+  });
+
+  it('returnsChanged — 직전 실행의 planned_return과 비교', async () => {
+    const c = client({ deduct: true, auto: false, skus: [S90], room: { 90: 5 },
+      prevRun: [{ sku_id: '90', vid: null, planned_move: 0, planned_return: 2, alert: null } as never] });
+    expect((await runRgAuto({ now: NOW, forceDry: false, deps: deps(c, stock90(22)) })).returnsChanged).toBe(false);
   });
 });

@@ -19,6 +19,7 @@ export const REASON_LABEL: Record<Reason, string> = {
   return_in: '반품입고',
   other: '기타',
   rg_reconcile: 'RG 대조',
+  rg_return: '취소·반품 복귀(RG 자동)',
 };
 
 export type AdjustMode = 'count' | 'delta';
