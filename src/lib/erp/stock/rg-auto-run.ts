@@ -148,6 +148,8 @@ export async function runRgAuto(p: { now: Date; forceDry: boolean; deps?: RgAuto
     const retOf = new Map(plan.returns.map((r) => [r.skuId, r.qty]));
     const returnedOf = new Map<number, number>();
     const day = kstDay(p.now);
+    // 복귀 단가 — 원장의 가장 최근 lot(위치 무관) 단가로 돌아온 한 개의 원가를 근사한다. 원래 판매가 소비한 FIFO lot은 추적하지 않는다(받아들임)
+    const costOf = async (skuId: number) => (await latestLotCost(c, skuId)) ?? (await legacyUnitCost(c, skuId));
     const runId = randomUUID();
 
     await c.query('BEGIN');
@@ -157,6 +159,7 @@ export async function runRgAuto(p: { now: Date; forceDry: boolean; deps?: RgAuto
         for (const [n, skuId] of work.entries()) {
           await lockSku(c, skuId);
           await c.query(`savepoint rgauto_${n}`);
+          let stage: 'move' | 'return' = 'move';
           try {
             // 읽은 뒤 잠금 전에 바뀌었을 수 있다(사람의 입고 완료·역전표·판매 차감) — 잠금 뒤 값으로 다시 잰다
             const read = async () => {
@@ -168,7 +171,8 @@ export async function runRgAuto(p: { now: Date; forceDry: boolean; deps?: RgAuto
             const act = actual.bySku.get(skuId) ?? 0;
             let onHand = await read();
             if (moveOf.has(skuId)) {
-              const qty = Math.min(act - onHand('rg'), onHand('rg_inbound'));
+              // 잠금 뒤 재계산은 줄이기만 한다 — act는 BEGIN 전에 읽었으므로 그 사이 판매 차감이 원장 RG를 낮추면 차이가 부풀어 보인다
+              const qty = Math.min(moveOf.get(skuId)!, act - onHand('rg'), onHand('rg_inbound'));
               if (qty > 0) {
                 await postTransfer(c, {
                   skuId, from: 'rg_inbound', to: 'rg', qty, occurredAt: at,
@@ -179,10 +183,11 @@ export async function runRgAuto(p: { now: Date; forceDry: boolean; deps?: RgAuto
               }
             }
             if (retOf.has(skuId)) {
+              stage = 'return';
               const roomNow = (await returnRoomBySku(c, at, [skuId])).get(skuId) ?? 0;
-              const qty = Math.min(act - onHand('rg'), roomNow);
+              const qty = Math.min(retOf.get(skuId)!, act - onHand('rg'), roomNow);
               if (qty > 0) {
-                const unitCost = (await latestLotCost(c, skuId)) ?? (await legacyUnitCost(c, skuId));
+                const unitCost = await costOf(skuId);
                 if (unitCost === null) {
                   alerts.push({ kind: 'return_no_cost', skuId, qty });
                 } else {
@@ -199,8 +204,14 @@ export async function runRgAuto(p: { now: Date; forceDry: boolean; deps?: RgAuto
             await c.query(`rollback to savepoint rgauto_${n}`);
             movedOf.delete(skuId);
             returnedOf.delete(skuId);
-            alerts.push({ kind: 'move_failed', skuId, error: maskPII(e instanceof Error ? e.message : String(e)) });
+            const error = maskPII(e instanceof Error ? e.message : String(e));
+            alerts.push(stage === 'move' ? { kind: 'move_failed', skuId, error } : { kind: 'return_failed', skuId, error });
           }
+        }
+      } else {
+        // dry(자동 이동 꺼짐·forceDry)에도 단가 없는 복귀를 미리 드러낸다 — 잠금·전표 없이 확인만
+        for (const r of plan.returns) {
+          if ((await costOf(r.skuId)) === null) alerts.push({ kind: 'return_no_cost', skuId: r.skuId, qty: r.qty });
         }
       }
       const alertOf = new Map<string, string[]>();
@@ -230,7 +241,7 @@ export async function runRgAuto(p: { now: Date; forceDry: boolean; deps?: RgAuto
     const prevReturns = lastRun.filter((r) => r.sku_id != null && Number(r.planned_return ?? 0) > 0).map((r) => ({ skuId: Number(r.sku_id), qty: Number(r.planned_return) }));
     return {
       skipped: null, autoMove, runId, skus: skuIds.length, moves: plan.moves,
-      moved: [...movedOf].map(([skuId, qty]) => ({ skuId, qty })), failed: alerts.filter((a) => a.kind === 'move_failed').length,
+      moved: [...movedOf].map(([skuId, qty]) => ({ skuId, qty })), failed: alerts.filter((a) => a.kind === 'move_failed' || a.kind === 'return_failed').length,
       alerts: texts, newAlerts, movesChanged: moveKey(plan.moves) !== moveKey(prevMoves),
       returns: plan.returns, returned: [...returnedOf].map(([skuId, qty]) => ({ skuId, qty })),
       returnsChanged: moveKey(plan.returns) !== moveKey(prevReturns),

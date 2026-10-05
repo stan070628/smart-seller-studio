@@ -127,6 +127,13 @@ describe('planRgAuto — (1-C2c) 취소·반품 복귀', () => {
     expect(q.alerts).toEqual([{ kind: 'unsent_increase', skuId: 72, qty: 4 }]);
   });
 
+  it('return_failed 알림 — 문구·고정 키', () => {
+    const a = { kind: 'return_failed' as const, skuId: 72, error: '단가 오류' };
+    expect(alertText(a, () => '수건')).toBe('수건 취소·반품 복귀 실패: 단가 오류');
+    expect(alertKey(a)).toBe('return_failed:72');
+    expect(stripAlertKeys('return_failed:72|수건 취소·반품 복귀 실패: 단가 오류')).toBe('수건 취소·반품 복귀 실패: 단가 오류');
+  });
+
   it('return_no_cost 알림 — 문구·고정 키', () => {
     const a = { kind: 'return_no_cost' as const, skuId: 72, qty: 2 };
     expect(alertText(a, () => '수건')).toBe('수건 RG 복귀 2개 보류(단가 없음)');

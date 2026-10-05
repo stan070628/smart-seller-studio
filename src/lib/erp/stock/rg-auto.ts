@@ -41,7 +41,9 @@ export type RgAlert =
   | { kind: 'inactive_sku'; skuId: number; qty: number }
   | { kind: 'move_failed'; skuId: number; error: string }
   /** (1-C2c) 복귀할 수량이 있으나 원장·옛 원가 어디에도 단가가 없어 기록하지 않았다 */
-  | { kind: 'return_no_cost'; skuId: number; qty: number };
+  | { kind: 'return_no_cost'; skuId: number; qty: number }
+  /** (1-C2c) 잠금 뒤 복귀 전표가 실패했다(그 SKU savepoint 전체 — 같은 SKU의 이동도 — 되돌린다) */
+  | { kind: 'return_failed'; skuId: number; error: string };
 
 /**
  * 입고중에 남은 가장 오래된 발송 시각 — 역전표와 그것이 되돌린 원 줄을 짝으로 뺀 뒤, 들어온 줄을 오래된 순으로 쌓고
@@ -112,7 +114,7 @@ export function alertKey(a: RgAlert): string {
   }
 }
 
-const KEY_PREFIX = /^(?:unsent_increase|decrease|inbound_stale|unmapped_vid|inactive_sku|move_failed|return_no_cost):[^|]*\|/;
+const KEY_PREFIX = /^(?:unsent_increase|decrease|inbound_stale|unmapped_vid|inactive_sku|move_failed|return_no_cost|return_failed):[^|]*\|/;
 export const ALERT_SEP = ' / ';
 
 /** 기록의 「키|문구」 → 키(키가 없는 옛 문구는 null) */
@@ -136,5 +138,6 @@ export function alertText(a: RgAlert, name: (skuId: number) => string): string {
     case 'inactive_sku': return `비활성 SKU ${name(a.skuId)} RG 재고 ${a.qty}개`;
     case 'move_failed': return `${name(a.skuId)} 자동 이동 실패: ${a.error}`;
     case 'return_no_cost': return `${name(a.skuId)} RG 복귀 ${a.qty}개 보류(단가 없음)`;
+    case 'return_failed': return `${name(a.skuId)} 취소·반품 복귀 실패: ${a.error}`;
   }
 }

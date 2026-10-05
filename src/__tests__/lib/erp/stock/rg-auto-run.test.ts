@@ -339,6 +339,63 @@ describe('runRgAuto — (1-C2c) 취소·반품 복귀', () => {
     expect(m.postLotCreate).toHaveBeenCalledWith(c, expect.objectContaining({ unitCost: 1691 }));
   });
 
+  it('잠금 뒤 재계산은 판정을 넘지 않는다 — 그 사이 판매 차감으로 원장 RG가 줄어도 복귀는 판정 수량까지만', async () => {
+    const c = client({ deduct: true, auto: true, skus: [S90], room: { 90: 5 }, locked: { 90: { rg: 19, rg_inbound: 0 } } });
+    const r = await runRgAuto({ now: NOW, forceDry: false, deps: deps(c, stock90(22)) });
+    expect(r.returns).toEqual([{ skuId: 90, qty: 2 }]);
+    expect(m.postLotCreate).toHaveBeenCalledWith(c, expect.objectContaining({ skuId: 90, qty: 2 }));
+    expect(r.returned).toEqual([{ skuId: 90, qty: 2 }]);
+  });
+
+  it('잠금 뒤 재계산은 판정을 넘지 않는다 — 이동도 판정 수량까지만', async () => {
+    const c = client({ deduct: true, auto: true, locked: { 72: { rg: 97, rg_inbound: 5 } } });
+    const r = await runRgAuto({ now: NOW, forceDry: false, deps: deps(c) });
+    expect(r.moves).toEqual([{ skuId: 72, qty: 5 }]);
+    expect(m.postTransfer).toHaveBeenCalledTimes(1);
+    expect(m.postTransfer).toHaveBeenCalledWith(c, expect.objectContaining({ skuId: 72, qty: 5 }));
+    // 입고중이 그 사이 늘어도(8) 판정 5를 넘지 않는다
+    vi.clearAllMocks(); calls = []; transferred = new Map();
+    m.postTransfer.mockImplementation(async (_db: unknown, p: { skuId: number; qty: number }) => {
+      transferred.set(p.skuId, (transferred.get(p.skuId) ?? 0) + p.qty);
+      return { posted: true, ids: [1, 2] };
+    });
+    const c2 = client({ deduct: true, auto: true, locked: { 72: { rg: 97, rg_inbound: 8 } } });
+    const r2 = await runRgAuto({ now: NOW, forceDry: false, deps: deps(c2) });
+    expect(m.postTransfer).toHaveBeenCalledWith(c2, expect.objectContaining({ skuId: 72, qty: 5 }));
+    expect(r2.moved).toEqual([{ skuId: 72, qty: 5 }]);
+  });
+
+  it('이동 뒤 복귀 전표가 실패하면 그 SKU savepoint를 되돌리고 return_failed 알림(이동도 빠진다)', async () => {
+    m.postLotCreate.mockRejectedValue(new Error('단가 오류'));
+    const c = client({ deduct: true, auto: true, room: { 72: 10 } });
+    const r = await runRgAuto({ now: NOW, forceDry: false, deps: deps(c) });
+    const sqls = calls.map((x) => x.sql);
+    expect(sqls).toContain('rollback to savepoint rgauto_0');
+    expect(sqls).toContain('COMMIT');
+    expect(r.moved).toEqual([]);
+    expect(r.returned).toEqual([]);
+    expect(r.failed).toBe(1);
+    expect(r.alerts).toEqual([UNMAPPED, '극세사 타월 · 블루 취소·반품 복귀 실패: 단가 오류']);
+    expect(snapsOf()[0][7]).toBe('return_failed:72|극세사 타월 · 블루 취소·반품 복귀 실패: 단가 오류');
+  });
+
+  it('자동 이동 꺼짐(dry)이어도 복귀 단가를 확인해 없으면 return_no_cost 알림 — 잠금·전표 없음', async () => {
+    m.latestLotCost.mockResolvedValue(null);
+    m.legacyUnitCost.mockResolvedValue(null);
+    const c = client({ deduct: true, auto: false, skus: [S90], room: { 90: 5 } });
+    const r = await runRgAuto({ now: NOW, forceDry: false, deps: deps(c, stock90(22)) });
+    expect(r.alerts).toEqual(['비누 RG 복귀 2개 보류(단가 없음)']);
+    expect(m.postLotCreate).not.toHaveBeenCalled();
+    expect(m.lockSku).not.toHaveBeenCalled();
+    expect(m.latestLotCost).toHaveBeenCalledWith(c, 90);
+  });
+
+  it('멱등키 날짜는 KST — UTC 10-04 16:30은 KST 10-05', async () => {
+    const c = client({ deduct: true, auto: true, skus: [S90], room: { 90: 5 } });
+    await runRgAuto({ now: new Date('2026-10-04T16:30:00.000Z'), forceDry: false, deps: deps(c, stock90(22)) });
+    expect(m.postLotCreate).toHaveBeenCalledWith(c, expect.objectContaining({ idemKey: 'rg-return:90:2026-10-05' }));
+  });
+
   it('returnsChanged — 직전 실행의 planned_return과 비교', async () => {
     const c = client({ deduct: true, auto: false, skus: [S90], room: { 90: 5 },
       prevRun: [{ sku_id: '90', vid: null, planned_move: 0, planned_return: 2, alert: null } as never] });
