@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { STALE_DAYS, alertKey, alertText, oldestWaiting, planRgAuto, stripAlertKeys, type RgAutoRow } from '@/lib/erp/stock/rg-auto';
 
 const NOW = new Date('2026-10-05T00:30:00.000Z');
-const row = (o: Partial<RgAutoRow>): RgAutoRow => ({ skuId: 72, ledger: 100, actual: 100, inbound: 0, prevDiff: null, inflows: [], ...o });
+const row = (o: Partial<RgAutoRow>): RgAutoRow => ({ skuId: 72, ledger: 100, actual: 100, inbound: 0, returnRoom: 0, prevDiff: null, inflows: [], ...o });
 
 describe('oldestWaiting — 입고중에 남은 가장 오래된 발송(먼저 보낸 것부터 빠진다)', () => {
   it('들어온 줄을 오래된 순으로, 나간 합계만큼 지우고 남은 첫 줄의 시각', () => {
@@ -84,5 +84,43 @@ describe('planRgAuto', () => {
 
   it('연결 안 된 RG 번호(재고 > 0)는 알림', () => {
     expect(planRgAuto([], [{ vid: '95999999999', qty: 2 }], NOW).alerts).toEqual([{ kind: 'unmapped_vid', vid: '95999999999', qty: 2 }]);
+  });
+});
+
+describe('planRgAuto — (1-C2c) 취소·반품 복귀', () => {
+  const IN5 = [{ qty: 5, occurredAt: '2026-10-03T00:00:00Z' }];
+
+  it('입고중이 없으면 증가를 복귀 한도까지 복귀로 · 넘는 수량은 보낸 기록 없는 증가', () => {
+    const p = planRgAuto([row({ actual: 104, returnRoom: 3 })], [], NOW);
+    expect(p.moves).toEqual([]);
+    expect(p.returns).toEqual([{ skuId: 72, qty: 3 }]);
+    expect(p.alerts).toEqual([{ kind: 'unsent_increase', skuId: 72, qty: 1 }]);
+  });
+
+  it('입고중을 먼저 옮기고 남은 증가만 복귀로', () => {
+    const p = planRgAuto([row({ actual: 108, inbound: 5, returnRoom: 10, inflows: IN5 })], [], NOW);
+    expect(p.moves).toEqual([{ skuId: 72, qty: 5 }]);
+    expect(p.returns).toEqual([{ skuId: 72, qty: 3 }]);
+    expect(p.alerts).toEqual([]);
+  });
+
+  it('한도가 0이면 복귀 없이 전부 알림(지금과 같다)', () => {
+    const p = planRgAuto([row({ actual: 103, returnRoom: 0 })], [], NOW);
+    expect(p.returns).toEqual([]);
+    expect(p.alerts).toEqual([{ kind: 'unsent_increase', skuId: 72, qty: 3 }]);
+  });
+
+  it('음수 한도는 0으로 본다 · 감소에는 복귀가 없다', () => {
+    expect(planRgAuto([row({ actual: 102, returnRoom: -4 })], [], NOW).returns).toEqual([]);
+    const d = planRgAuto([row({ actual: 97, returnRoom: 9, prevDiff: -1 })], [], NOW);
+    expect(d.returns).toEqual([]);
+    expect(d.alerts).toEqual([{ kind: 'decrease', skuId: 72, qty: 3 }]);
+  });
+
+  it('return_no_cost 알림 — 문구·고정 키', () => {
+    const a = { kind: 'return_no_cost' as const, skuId: 72, qty: 2 };
+    expect(alertText(a, () => '수건')).toBe('수건 RG 복귀 2개 보류(단가 없음)');
+    expect(alertKey(a)).toBe('return_no_cost:72');
+    expect(stripAlertKeys(`return_no_cost:72|수건 RG 복귀 2개 보류(단가 없음)`)).toBe('수건 RG 복귀 2개 보류(단가 없음)');
   });
 });
