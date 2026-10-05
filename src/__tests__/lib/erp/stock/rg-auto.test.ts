@@ -117,6 +117,16 @@ describe('planRgAuto — (1-C2c) 취소·반품 복귀', () => {
     expect(d.alerts).toEqual([{ kind: 'decrease', skuId: 72, qty: 3 }]);
   });
 
+  it('한도·입고중이 숫자가 아니면(undefined·NaN) 0으로 본다 — 증가 전체가 보낸 기록 없는 증가', () => {
+    const p = planRgAuto([row({ actual: 104, returnRoom: undefined as unknown as number })], [], NOW);
+    expect(p.returns).toEqual([]);
+    expect(p.alerts).toEqual([{ kind: 'unsent_increase', skuId: 72, qty: 4 }]);
+    const q = planRgAuto([row({ actual: 104, inbound: Number.NaN, returnRoom: Number.NaN })], [], NOW);
+    expect(q.moves).toEqual([]);
+    expect(q.returns).toEqual([]);
+    expect(q.alerts).toEqual([{ kind: 'unsent_increase', skuId: 72, qty: 4 }]);
+  });
+
   it('return_no_cost 알림 — 문구·고정 키', () => {
     const a = { kind: 'return_no_cost' as const, skuId: 72, qty: 2 };
     expect(alertText(a, () => '수건')).toBe('수건 RG 복귀 2개 보류(단가 없음)');

@@ -16,6 +16,11 @@ describe('returnRoomBySku — 최근 30일 RG 판매 − 최근 30일 rg_return'
     expect(sql).toContain('reverses_id is null');
     expect(sql).toContain('not exists (select 1 from erp.stock_ledger x where x.reverses_id = l.id)');
     expect(sql).not.toContain('status');
+    // 묶음 상품은 alloc(구성 SKU별 수량)로 펼쳐 센다 · 복귀도 기준 시각 이후 것은 뺀다
+    expect(sql).toContain('jsonb_array_elements(l.alloc)');
+    expect(sql).toContain("(a->>'skuId')::bigint");
+    expect(sql).toContain('l.occurred_at <= $1::timestamptz');
+    expect(sql).not.toContain('sku_qty');
   });
 
   it('SKU 필터를 생략하면 null을 넘긴다(전 SKU)', async () => {

@@ -69,17 +69,20 @@ export function planRgAuto(
   const alerts: RgAlert[] = [];
   for (const r of [...rows].sort((a, b) => a.skuId - b.skuId)) {
     const d = r.actual - r.ledger;
+    // 숫자가 아닌 입력(undefined·NaN)은 0 — NaN이 끼면 비교가 전부 거짓이 되어 증가 알림까지 조용히 사라진다
+    const inbound = Number.isFinite(r.inbound) ? Math.max(0, r.inbound) : 0;
+    const room = Number.isFinite(r.returnRoom) ? Math.max(0, r.returnRoom) : 0;
     let move = 0;
     if (d > 0) {
-      move = Math.min(d, Math.max(0, r.inbound));
+      move = Math.min(d, inbound);
       if (move > 0) moves.push({ skuId: r.skuId, qty: move });
-      const ret = Math.min(d - move, Math.max(0, r.returnRoom));
+      const ret = Math.min(d - move, room);
       if (ret > 0) returns.push({ skuId: r.skuId, qty: ret });
       if (d - move - ret > 0) alerts.push({ kind: 'unsent_increase', skuId: r.skuId, qty: d - move - ret });
     } else if (d < 0 && r.prevDiff !== null && r.prevDiff < 0) {
       alerts.push({ kind: 'decrease', skuId: r.skuId, qty: -d });
     }
-    if (r.inbound - move > 0) {
+    if (inbound - move > 0) {
       const since = oldestWaiting(r.inflows, move);
       if (since) {
         const days = Math.floor((now.getTime() - Date.parse(since)) / 86_400_000);
