@@ -27,6 +27,8 @@ export default function RgAutoPanel() {
           {r.label} — 원장 {r.ledger} · 실재고 {r.actual} · 입고중 {r.inbound}
           {r.moved > 0 && <span style={{ color: E.profit }}> · 자동 이동 {r.moved}</span>}
           {r.moved === 0 && r.planned > 0 && <span style={{ color: E.warn }}> · 옮길 예정 {r.planned}</span>}
+          {r.returned > 0 && <span style={{ color: E.profit }}> · 취소·반품 복귀 {r.returned}</span>}
+          {r.returned === 0 && r.plannedReturn > 0 && <span style={{ color: E.warn }}> · 복귀 예정 {r.plannedReturn}</span>}
           {r.alert && <span style={{ color: E.loss }}> · {stripAlertKeys(r.alert)}</span>}
         </div>
       ))}
