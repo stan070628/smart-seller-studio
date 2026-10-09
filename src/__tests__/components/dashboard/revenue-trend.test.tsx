@@ -90,4 +90,13 @@ describe('RevenueTrend', () => {
     expect(screen.queryByText('이번 달 누적 매출')).not.toBeInTheDocument();
     expect(screen.getByRole('img', { name: '10-09 매출 24,000원' })).toBeInTheDocument();
   });
+
+  it('이번달이고 months가 있으면 왼쪽에 최근 월 매출 막대 · 다른 기간엔 없다', () => {
+    const months = [{ month: '2026-09', revenue: 16408880, orders: 862, source: 'erp' as const }];
+    const { rerender } = render(<RevenueTrend data={{ ...data, period: 'month', months }} period="month" onPeriodChange={() => {}} loading={false} error={null} />);
+    expect(screen.getByRole('region', { name: '최근 월 매출' })).toBeInTheDocument();
+    expect(screen.getByText('이번 달(1일~오늘)')).toBeInTheDocument();
+    rerender(<RevenueTrend data={{ ...data, months }} period="30d" onPeriodChange={() => {}} loading={false} error={null} />);
+    expect(screen.queryByRole('region', { name: '최근 월 매출' })).not.toBeInTheDocument();
+  });
 });

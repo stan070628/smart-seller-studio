@@ -5,6 +5,7 @@
 import React, { useState } from 'react';
 import { E } from '@/lib/design-tokens';
 import PeriodToggle from './PeriodToggle';
+import MonthlyBars from './MonthlyBars';
 import type { Period } from '@/lib/dashboard/types';
 import type { RevenueData } from '@/lib/erp/home/revenue';
 import { CHANNEL_LABEL, SALE_CHANNELS, type SaleChannel } from '@/lib/erp/orders/types';
@@ -72,6 +73,10 @@ export default function RevenueTrend({ data, period, onPeriodChange, loading, er
               </span>
             ))}
           </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'flex-end' }}>
+          {cumulative && data.months && data.months.length > 0 && <MonthlyBars months={data.months} />}
+          <div style={{ flex: '1 1 360px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {cumulative && <div style={{ fontSize: 12, fontWeight: 700, color: E.ink }}>이번 달(1일~오늘)</div>}
           <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-end', gap: 2, height: 140 }} onMouseLeave={() => setHover(null)}>
             {tip && tipDay && hover !== null && (
               <div role="tooltip" style={{
@@ -110,6 +115,8 @@ export default function RevenueTrend({ data, period, onPeriodChange, loading, er
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: E.inkMute }}>
             <span>{data.days[0]?.day.slice(5)}</span>
             <span>{data.days[data.days.length - 1]?.day.slice(5)}</span>
+          </div>
+          </div>
           </div>
         </>
       )}

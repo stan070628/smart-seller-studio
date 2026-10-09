@@ -5,6 +5,7 @@ import type { Db } from '@/lib/erp/ledger/store';
 import type { Period } from '@/lib/dashboard/types';
 import { SOLD, type SaleChannel } from '@/lib/erp/orders/types';
 import { addDays, kstDay, kstDayStart } from '@/lib/erp/orders/window';
+import type { MonthTotal } from './monthly';
 
 type Q = Pick<Db, 'query'>;
 
@@ -15,6 +16,8 @@ export interface RevenueData {
   to: string;
   days: RevenueDay[];
   totals: { revenue: number; orders: number; byChannel: Partial<Record<SaleChannel, { revenue: number; orders: number }>> };
+  /** 이번달일 때만 — 최근 6개월 월 매출(API 라우트가 붙인다) */
+  months?: MonthTotal[];
 }
 
 const SPAN: Record<Exclude<Period, 'month'>, number> = { today: 1, '7d': 7, '30d': 30 };
