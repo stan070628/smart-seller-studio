@@ -50,11 +50,11 @@
 | `src/lib/erp/home/revenue.ts` | 기간 범위(KST) · 매출 집계 쿼리 |
 | `src/app/api/erp/home/today/route.ts` · `revenue/route.ts` | `requireAuth` + 위 함수 |
 | `src/components/dashboard/TodayCards.tsx` · `TodayFlow.tsx` | 카드·흐름 렌더 |
-| `RevenueChart.tsx` | 새 응답 모양으로 맞춘다(채널 스택) |
+| `RevenueTrend.tsx` | 매출 추이(채널 스택) — 새로 만든다. 옛 `RevenueChart.tsx`(12주 누적 목표선)는 지운다 |
 | `DashboardClient.tsx` | 배치 교체 · orders-summary 호출 제거 |
 
-- 삭제: `src/app/api/dashboard/orders-summary/route.ts`와 그 타입·테스트, `OrderPipeline.tsx`·`PipelineStageCard.tsx`(다른 사용처가 없을 때만 — 구현 때 `grep`으로 확인).
-- 실사 대기열은 기존 `count-queue` 쿼리 함수를 재사용한다(새로 짜지 않는다).
+- 삭제: `src/app/api/dashboard/orders-summary/route.ts`와 그 타입(`OrdersSummaryData`), `OrderPipeline.tsx`·`PipelineStageCard.tsx`·`RevenueChart.tsx`와 테스트 `order-pipeline`·`revenue-chart`(다른 사용처 없음을 `grep`으로 확인했다).
+- 실사 대기열(`count-queue`)은 오늘 셀 목록(기본 8개 고정)이라 숫자로 세지 않고 「오늘 실사 목록 보기」 링크만 둔다(2026-10-09 계획 작성 중 발견).
 
 ## 5. 오류 처리
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { LayoutDashboard, RefreshCw, Loader2, AlertTriangle } from 'lucide-react';
 import { C } from '@/lib/design-tokens';
@@ -17,7 +17,7 @@ import {
 } from '@/lib/dashboard/types';
 import { WBS_DATA, WEEKLY_TARGETS } from '@/lib/plan/constants';
 import { getCurrentWeek, getDaysIntoWeek } from '@/lib/plan/week';
-import { loadDailyRecords, sumWeekRevenue, computeCumulativeActual } from '@/lib/plan/daily-records';
+import { loadDailyRecords, sumWeekRevenue } from '@/lib/plan/daily-records';
 
 
 interface PlanLocalData {
@@ -27,7 +27,6 @@ interface PlanLocalData {
   weekActualMan: number;
   daysIntoWeek: number;
   keyMission: string | null;
-  cumulativeActual: (number | null)[];
 }
 
 function readPlanLocalData(): PlanLocalData | null {
@@ -59,7 +58,6 @@ function readPlanLocalData(): PlanLocalData | null {
     weekActualMan,
     daysIntoWeek: getDaysIntoWeek(),
     keyMission: firstIncomplete?.text ?? null,
-    cumulativeActual: computeCumulativeActual(records, week),
   };
 }
 
@@ -91,18 +89,21 @@ export default function DashboardClient() {
     }
   };
 
+  // 기간을 빠르게 바꾸면 늦게 온 앞 응답이 뒤 기간을 덮는다 — 마지막 요청의 응답만 반영한다
+  const revenueReq = useRef(0);
   const fetchRevenue = async (p: Period) => {
+    const id = ++revenueReq.current;
     setRevenueLoading(true);
     setRevenueError(null);
     try {
       const res = await fetch(`/api/erp/home/revenue?period=${p}`);
       const json = await res.json();
       if (!json.success) throw new Error(json.error ?? '요청 실패');
-      setRevenue(json.data);
+      if (id === revenueReq.current) setRevenue(json.data);
     } catch (err) {
-      setRevenueError(err instanceof Error ? err.message : '알 수 없는 오류');
+      if (id === revenueReq.current) setRevenueError(err instanceof Error ? err.message : '알 수 없는 오류');
     } finally {
-      setRevenueLoading(false);
+      if (id === revenueReq.current) setRevenueLoading(false);
     }
   };
 
