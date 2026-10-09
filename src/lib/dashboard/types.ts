@@ -51,20 +51,6 @@ export interface DashboardErrorResponse {
   error: string;
 }
 
-// Phase 1: 카드별 점진 로딩용 분리 타입.
-export interface OrdersSummaryData {
-  pipeline: {
-    coupang: ChannelPipeline;
-    naver: ChannelPipeline;
-    rg?: ChannelPipeline;
-  };
-  revenue12w: {
-    weeks: number[];
-    target: number[];
-    actual: (number | null)[];
-  };
-}
-
 export interface ProductCountData {
   coupang: number;
   naver: number;
