@@ -8,7 +8,7 @@ import { addDays, kstDay, kstDayStart } from '@/lib/erp/orders/window';
 
 type Q = Pick<Db, 'query'>;
 
-export interface RevenueDay { day: string; total: number; byChannel: Partial<Record<SaleChannel, number>> }
+export interface RevenueDay { day: string; total: number; orders: number; byChannel: Partial<Record<SaleChannel, number>> }
 export interface RevenueData {
   period: Period;
   from: string;
@@ -39,7 +39,7 @@ export async function buildRevenue(db: Q, period: Period, now: Date): Promise<Re
       group by 1, 2`,
     [from, to, [...SOLD]],
   );
-  const byDay = new Map<string, RevenueDay>(days.map((d) => [d, { day: d, total: 0, byChannel: {} }]));
+  const byDay = new Map<string, RevenueDay>(days.map((d) => [d, { day: d, total: 0, orders: 0, byChannel: {} }]));
   const totals: RevenueData['totals'] = { revenue: 0, orders: 0, byChannel: {} };
   for (const r of rows) {
     const ch = r.channel as SaleChannel;
@@ -49,6 +49,7 @@ export async function buildRevenue(db: Q, period: Period, now: Date): Promise<Re
     if (d) {
       d.byChannel[ch] = (d.byChannel[ch] ?? 0) + revenue;
       d.total += revenue;
+      d.orders += orders;
     }
     totals.revenue += revenue;
     totals.orders += orders;
