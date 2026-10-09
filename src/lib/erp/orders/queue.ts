@@ -38,6 +38,9 @@ export interface RecentLineLink {
   updatedAt: string;
 }
 
+/** 「매핑 필요」에서 뺄 상태 — 큐(/orders 미귀속 목록)와 홈 카드가 같은 기준을 쓴다 */
+export const UNMAPPED_EXCLUDED_STATUSES = ['canceled', 'returned', 'unpaid'] as const;
+
 const iso = (v: unknown): string | null => (v === null || v === undefined ? null : v instanceof Date ? v.toISOString() : new Date(String(v)).toISOString());
 const SKU_LABEL = `s.name || case when coalesce(s.option_label, '') <> '' then ' · ' || s.option_label else '' end`;
 
@@ -47,10 +50,11 @@ export async function unattributedGroups(db: Db): Promise<UnattributedGroup[]> {
             count(*)::int as lines, sum(order_qty) as qty, min(paid_at) as first_paid, max(paid_at) as last_paid,
             array_agg(id order by paid_at nulls last, id) as line_ids
        from erp.order_lines
-      where attribution = 'unattributed' and status not in ('canceled', 'unpaid')
+      where attribution = 'unattributed' and status <> all($1::text[])
       group by channel, product_id, option_key
       order by max(paid_at) desc nulls last
       limit 200`,
+    [[...UNMAPPED_EXCLUDED_STATUSES]],
   );
   return rows.map((r) => ({
     channel: r.channel as OrderChannel, productId: String(r.product_id), optionKey: String(r.option_key ?? ''), label: String(r.label ?? ''),

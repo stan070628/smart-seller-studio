@@ -17,7 +17,7 @@ describe('unattributedGroups', () => {
       lines: 3, qty: 3, firstPaidAt: '2026-09-11T13:55:45.000Z', lastPaidAt: '2026-09-23T14:56:14.000Z', lineIds: [5, 9, 12],
     }]);
     expect(seen).toContain("attribution = 'unattributed'");
-    expect(seen).toContain("status not in ('canceled', 'unpaid')");
+    expect(seen).toContain('status <> all($1::text[])');
     // (리뷰 A5~A7 #7) 대기열이 무한정 커지지 않게 묶음 수를 제한한다
     expect(seen).toContain('limit 200');
   });
