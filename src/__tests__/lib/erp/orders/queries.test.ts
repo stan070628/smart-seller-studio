@@ -29,7 +29,13 @@ describe('ordersStatus', () => {
       },
     };
     const s = await ordersStatus(db, new Date('2026-09-26T16:00:00.000Z'));
-    expect(calls[0].params).toEqual(['2026-09-27']);
+    expect(calls[0].params[0]).toBe('2026-09-27');
+    // 미연결·보류 기준은 홈 카드와 같다
+    expect(calls[0].sql).toContain('status <> all($2::text[])');
+    expect(calls[0].params[1]).toEqual(['canceled', 'returned', 'unpaid']);
+    expect(calls[0].sql).toContain("deduction_state = 'skipped_short' and status = any($3::text[])");
+    expect(calls[0].params[2]).toEqual(expect.arrayContaining(['paid', 'delivered']));
+    expect(calls[0].params[2]).not.toContain('canceled');
     expect(s.today).toBe('2026-09-27');
     expect(s.cutover).toBe('2026-09-26T11:07:04.989Z');
     expect(s.deduct).toEqual({ enabled: false, enabledAt: null, by: null });
