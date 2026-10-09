@@ -36,8 +36,8 @@ describe('buildRevenue', () => {
     }));
     const r = await buildRevenue({ query }, '7d', NOW);
     expect(r.days).toHaveLength(7);
-    expect(r.days[0]).toEqual({ day: '2026-10-03', total: 0, byChannel: {} });
-    expect(r.days[6]).toEqual({ day: '2026-10-09', total: 24000, byChannel: { coupang_rg: 14100, naver: 9900 } });
+    expect(r.days[0]).toEqual({ day: '2026-10-03', total: 0, orders: 0, byChannel: {} });
+    expect(r.days[6]).toEqual({ day: '2026-10-09', total: 24000, orders: 2, byChannel: { coupang_rg: 14100, naver: 9900 } });
     expect(r.totals).toEqual({
       revenue: 52200, orders: 4,
       byChannel: { coupang_rg: { revenue: 42300, orders: 3 }, naver: { revenue: 9900, orders: 1 } },

@@ -62,7 +62,8 @@ function readPlanLocalData(): PlanLocalData | null {
 }
 
 export default function DashboardClient() {
-  const [period, setPeriod] = useState<Period>('30d');
+  // 이번 달 누적 매출부터 보여 준다(사용자 요청 2026-10-10)
+  const [period, setPeriod] = useState<Period>('month');
   const [today, setToday] = useState<TodayData | null>(null);
   const [todayError, setTodayError] = useState<string | null>(null);
   const [revenue, setRevenue] = useState<RevenueData | null>(null);
