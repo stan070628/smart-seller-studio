@@ -16,6 +16,7 @@ const TONE: Record<Tone, { border: string; num: string }> = {
 const RG_STALE_MS = 26 * 60 * 60 * 1000;
 const kst = (iso: string) => new Date(iso).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 
+// 대조 경과 시간은 렌더 시점에 계산한다 — 갱신하려면 다시 불러와야 한다(refetch).
 const rgStale = (runAt: string | null) => runAt === null || Date.now() - new Date(runAt).getTime() > RG_STALE_MS;
 
 function Box<T>(p: {

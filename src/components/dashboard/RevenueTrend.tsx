@@ -10,8 +10,9 @@ import type { RevenueData } from '@/lib/erp/home/revenue';
 import { CHANNEL_LABEL, SALE_CHANNELS, type SaleChannel } from '@/lib/erp/orders/types';
 
 const COLOR: Record<SaleChannel, string> = {
-  coupang_wing: '#d9480f', coupang_rg: '#1c7ed6', naver: '#2b8a3e', toss: '#5f3dc4', karrot: '#e67700',
+  coupang_wing: '#d9480f', coupang_rg: '#1c7ed6', naver: '#2b8a3e', toss: '#5f3dc4', karrot: '#c2255c',
 };
+const pct = (v: number, total: number) => { const r = (v / total) * 100; return r < 0.5 ? '<1%' : `${Math.round(r)}%`; };
 const won = (n: number) => `${n.toLocaleString('ko-KR')}원`;
 
 interface Props {
@@ -25,14 +26,14 @@ interface Props {
 export default function RevenueTrend({ data, period, onPeriodChange, loading, error }: Props) {
   const max = Math.max(1, ...(data?.days ?? []).map((d) => d.total));
   return (
-    <section aria-label="매출 추이" style={{ background: E.surface, border: `1px solid ${E.line}`, padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <section aria-label="매출 추이" style={{ background: E.surface, border: `1px solid ${E.line}`, padding: 16, display: 'flex', flexDirection: 'column', gap: 10, opacity: loading && data ? 0.5 : 1 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <h2 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: E.ink }}>매출 추이</h2>
         <div style={{ flex: 1 }} />
         <PeriodToggle value={period} onChange={onPeriodChange} />
       </div>
       {error ? (
-        <div role="alert" style={{ fontSize: 12, color: E.loss }}>매출을 불러오지 못했다: {error}</div>
+        <div role="alert" style={{ fontSize: 12, color: E.loss }}>매출을 불러오지 못했다 — 새로고침으로 다시 시도</div>
       ) : !data ? (
         <div style={{ fontSize: 12, color: E.inkMute }}>{loading ? '집계하는 중…' : ''}</div>
       ) : data.totals.revenue === 0 ? (
@@ -44,7 +45,7 @@ export default function RevenueTrend({ data, period, onPeriodChange, loading, er
             <span style={{ fontSize: 12, color: E.inkSub }}>{data.totals.orders}건</span>
             {SALE_CHANNELS.filter((c) => (data.totals.byChannel[c]?.revenue ?? 0) > 0).map((c) => (
               <span key={c} style={{ fontSize: 11, color: COLOR[c] }}>
-                {`${CHANNEL_LABEL[c]} ${Math.round(((data.totals.byChannel[c]?.revenue ?? 0) / data.totals.revenue) * 100)}%`}
+                {`${CHANNEL_LABEL[c]} ${pct(data.totals.byChannel[c]?.revenue ?? 0, data.totals.revenue)}`}
               </span>
             ))}
           </div>

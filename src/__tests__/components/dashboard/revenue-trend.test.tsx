@@ -30,9 +30,21 @@ describe('RevenueTrend', () => {
     expect(on).toHaveBeenCalledWith('30d');
   });
 
+  it('채널 비중 0.5% 미만은 <1%', () => {
+    const d: RevenueData = { ...data, totals: { revenue: 100000, orders: 2, byChannel: { coupang_rg: { revenue: 99800, orders: 1 }, naver: { revenue: 200, orders: 1 } } } };
+    render(<RevenueTrend data={d} period="7d" onPeriodChange={() => {}} loading={false} error={null} />);
+    expect(screen.getByText(/네이버 <1%/)).toBeInTheDocument();
+  });
+
+  it('다시 불러오는 중이면 흐리게', () => {
+    render(<RevenueTrend data={data} period="7d" onPeriodChange={() => {}} loading error={null} />);
+    expect(screen.getByRole('region', { name: '매출 추이' })).toHaveStyle({ opacity: '0.5' });
+  });
+
   it('오류면 오류 문구 · 매출 0이면 「매출 없음」', () => {
     const { rerender } = render(<RevenueTrend data={null} period="7d" onPeriodChange={() => {}} loading={false} error="db down" />);
-    expect(screen.getByText(/매출을 불러오지 못했다/)).toBeInTheDocument();
+    expect(screen.getByText('매출을 불러오지 못했다 — 새로고침으로 다시 시도')).toBeInTheDocument();
+    expect(screen.queryByText(/db down/)).not.toBeInTheDocument();
     rerender(<RevenueTrend data={{ ...data, days: [{ day: '2026-10-09', total: 0, byChannel: {} }], totals: { revenue: 0, orders: 0, byChannel: {} } }} period="today" onPeriodChange={() => {}} loading={false} error={null} />);
     expect(screen.getByText('매출 없음')).toBeInTheDocument();
   });
