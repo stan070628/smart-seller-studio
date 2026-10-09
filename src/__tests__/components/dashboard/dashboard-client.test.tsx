@@ -32,11 +32,12 @@ describe('DashboardClient — 매출 기간 전환', () => {
       return new Promise((res) => { pending[p] = res; });
     }));
     render(<DashboardClient />);
-    await waitFor(() => expect(pending['30d']).toBeDefined());
+    // 처음 열면 이번달이다
+    await waitFor(() => expect(pending['month']).toBeDefined());
     fireEvent.click(screen.getByRole('tab', { name: '7일' }));
     await waitFor(() => expect(pending['7d']).toBeDefined());
     await act(async () => { pending['7d'](json(revenue(7000))); });
-    await act(async () => { pending['30d'](json(revenue(30000))); });
+    await act(async () => { pending['month'](json(revenue(30000))); });
     expect(screen.getByText('7,000원')).toBeInTheDocument();
     expect(screen.queryByText('30,000원')).not.toBeInTheDocument();
   });

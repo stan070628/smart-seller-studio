@@ -70,4 +70,24 @@ describe('RevenueTrend', () => {
     fireEvent.focus(screen.getByRole('img', { name: /10-08 매출/ }));
     expect(screen.getByRole('tooltip')).toHaveTextContent('28,200원');
   });
+
+  it('이번달은 누적 — 막대가 그날까지의 합계이고 툴팁에 누적·그날 매출이 함께 뜬다', () => {
+    const month = { ...data, period: 'month' as const };
+    render(<RevenueTrend data={month} period="month" onPeriodChange={() => {}} loading={false} error={null} />);
+    expect(screen.getByText('이번 달 누적 매출')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: '10-08 누적 매출 28,200원' })).toBeInTheDocument();
+    const last = screen.getByRole('img', { name: '10-09 누적 매출 52,200원' });
+    fireEvent.mouseEnter(last);
+    const tip = screen.getByRole('tooltip');
+    expect(tip).toHaveTextContent('10-09 (금) · 누적 52,200원');
+    expect(tip).toHaveTextContent('그날 24,000원 · 2건');
+    expect(tip).toHaveTextContent('쿠팡 RG 누적 42,300원');
+    expect(tip).toHaveTextContent('네이버 누적 9,900원');
+  });
+
+  it('이번달이 아니면 하루 매출 그대로', () => {
+    render(<RevenueTrend data={data} period="30d" onPeriodChange={() => {}} loading={false} error={null} />);
+    expect(screen.queryByText('이번 달 누적 매출')).not.toBeInTheDocument();
+    expect(screen.getByRole('img', { name: '10-09 매출 24,000원' })).toBeInTheDocument();
+  });
 });

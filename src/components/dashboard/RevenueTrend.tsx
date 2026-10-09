@@ -18,6 +18,19 @@ const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토'];
 /** 'YYYY-MM-DD'(KST 날짜) → 'MM-DD (요일)'. 날짜만 보고 요일을 셈한다(시간대 무관) */
 const dayLabel = (day: string) => `${day.slice(5)} (${WEEKDAY[new Date(`${day}T00:00:00Z`).getUTCDay()]})`;
 
+/** 날짜순 누적 — 각 날은 그날까지의 합계(채널별·건수도 누적) */
+function accumulate(days: RevenueData['days']): RevenueData['days'] {
+  let total = 0;
+  let orders = 0;
+  const ch: Partial<Record<SaleChannel, number>> = {};
+  return days.map((d) => {
+    total += d.total;
+    orders += d.orders;
+    for (const c of SALE_CHANNELS) if (d.byChannel[c]) ch[c] = (ch[c] ?? 0) + (d.byChannel[c] ?? 0);
+    return { day: d.day, total, orders, byChannel: { ...ch } };
+  });
+}
+
 interface Props {
   data: RevenueData | null;
   period: Period;
@@ -27,14 +40,18 @@ interface Props {
 }
 
 export default function RevenueTrend({ data, period, onPeriodChange, loading, error }: Props) {
-  const max = Math.max(1, ...(data?.days ?? []).map((d) => d.total));
   const [hover, setHover] = useState<number | null>(null);
   const days = data?.days ?? [];
-  const tip = hover !== null ? days[hover] : undefined;
+  // 이번달은 누적 — 막대 하나 = 1일부터 그날까지의 합(채널별로도 누적)
+  const cumulative = period === 'month';
+  const bars = cumulative ? accumulate(days) : days;
+  const max = Math.max(1, ...bars.map((d) => d.total));
+  const tip = hover !== null ? bars[hover] : undefined;
+  const tipDay = hover !== null ? days[hover] : undefined;
   return (
     <section aria-label="매출 추이" style={{ background: E.surface, border: `1px solid ${E.line}`, padding: 16, display: 'flex', flexDirection: 'column', gap: 10, opacity: loading && data ? 0.5 : 1 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <h2 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: E.ink }}>매출 추이</h2>
+        <h2 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: E.ink }}>{cumulative ? '이번 달 누적 매출' : '매출 추이'}</h2>
         <div style={{ flex: 1 }} />
         <PeriodToggle value={period} onChange={onPeriodChange} />
       </div>
@@ -56,7 +73,7 @@ export default function RevenueTrend({ data, period, onPeriodChange, loading, er
             ))}
           </div>
           <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-end', gap: 2, height: 140 }} onMouseLeave={() => setHover(null)}>
-            {tip && hover !== null && (
+            {tip && tipDay && hover !== null && (
               <div role="tooltip" style={{
                 position: 'absolute', bottom: '100%', marginBottom: 6, zIndex: 2, pointerEvents: 'none', whiteSpace: 'nowrap',
                 // 양 끝 막대는 상자가 잘리지 않게 안쪽으로 붙인다
@@ -65,14 +82,21 @@ export default function RevenueTrend({ data, period, onPeriodChange, loading, er
                   : { left: `${((hover + 0.5) / days.length) * 100}%`, transform: 'translateX(-50%)' }),
                 background: E.surface, border: `1px solid ${E.line}`, boxShadow: '0 2px 8px rgba(0,0,0,.12)', padding: '6px 8px', fontSize: 11, color: E.ink,
               }}>
-                <div style={{ fontWeight: 700 }}>{`${dayLabel(tip.day)} · ${won(tip.total)} · ${tip.orders}건`}</div>
+                {cumulative ? (
+                  <>
+                    <div style={{ fontWeight: 700 }}>{`${dayLabel(tip.day)} · 누적 ${won(tip.total)}`}</div>
+                    <div style={{ color: E.inkSub }}>{`그날 ${won(tipDay.total)} · ${tipDay.orders}건`}</div>
+                  </>
+                ) : (
+                  <div style={{ fontWeight: 700 }}>{`${dayLabel(tip.day)} · ${won(tip.total)} · ${tip.orders}건`}</div>
+                )}
                 {SALE_CHANNELS.filter((c) => (tip.byChannel[c] ?? 0) > 0).map((c) => (
-                  <div key={c} style={{ color: COLOR[c] }}>{`${CHANNEL_LABEL[c]} ${won(tip.byChannel[c] ?? 0)}`}</div>
+                  <div key={c} style={{ color: COLOR[c] }}>{`${CHANNEL_LABEL[c]} ${cumulative ? '누적 ' : ''}${won(tip.byChannel[c] ?? 0)}`}</div>
                 ))}
               </div>
             )}
-            {data.days.map((d, i) => (
-              <div key={d.day} role="img" aria-label={`${d.day.slice(5)} 매출 ${won(d.total)}`} tabIndex={0}
+            {bars.map((d, i) => (
+              <div key={d.day} role="img" aria-label={`${d.day.slice(5)} ${cumulative ? '누적 ' : ''}매출 ${won(d.total)}`} tabIndex={0}
                 onMouseEnter={() => setHover(i)} onFocus={() => setHover(i)} onBlur={() => setHover(null)}
                 style={{ flex: 1, display: 'flex', flexDirection: 'column-reverse', height: '100%', cursor: 'default', outline: 'none',
                   opacity: hover === null || hover === i ? 1 : 0.55 }}>
