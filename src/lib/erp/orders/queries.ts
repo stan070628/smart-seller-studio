@@ -2,7 +2,8 @@
 // 주문 수집 화면·게이트 ① 조회(읽기 전용). 날짜는 주문 시각의 KST 날짜(설계 해석 #22).
 import type { Db } from '@/lib/erp/ledger/store';
 import { readDeductSetting, type DeductSetting } from './store';
-import { CHANNEL_LABEL, ORDER_CHANNELS, type OrderChannel, type SaleChannel, type StdStatus } from './types';
+import { CHANNEL_LABEL, ORDER_CHANNELS, SOLD, type OrderChannel, type SaleChannel, type StdStatus } from './types';
+import { UNMAPPED_EXCLUDED_STATUSES } from './queue';
 import { kstDay } from './window';
 
 export interface DayCount {
@@ -81,13 +82,13 @@ export async function ordersStatus(db: Db, now: Date): Promise<OrdersStatus> {
             count(distinct order_id) filter (where d = $1::date - 1)::int as y_orders, count(*) filter (where d = $1::date - 1)::int as y_lines,
             count(distinct order_id) filter (where d between $1::date - 2 and $1::date)::int as l3_orders,
             count(*) filter (where d between $1::date - 2 and $1::date)::int as l3_lines,
-            count(*) filter (where attribution = 'unattributed' and status not in ('canceled', 'unpaid'))::int as unattributed,
-            count(*) filter (where deduction_state = 'skipped_short')::int as short,
+            count(*) filter (where attribution = 'unattributed' and status <> all($2::text[]))::int as unattributed,
+            count(*) filter (where deduction_state = 'skipped_short' and status = any($3::text[]))::int as short,
             count(*) filter (where deduction_state = 'pending')::int as pending,
             count(*) filter (where status = 'unknown')::int as unknown
        from (select l.*, (l.ordered_at at time zone 'Asia/Seoul')::date as d from erp.order_lines l) x
       group by channel`,
-    [today],
+    [today, [...UNMAPPED_EXCLUDED_STATUSES], [...SOLD]],
   );
   const byCh = new Map(rows.map((r) => [String(r.channel), r]));
   const cursors = await db.query(`select name, cursor_at from erp.sync_cursors where name = 'ledger_cutover' or name like 'orders:%'`);

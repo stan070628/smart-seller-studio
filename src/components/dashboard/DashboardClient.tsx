@@ -1,21 +1,23 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { LayoutDashboard, RefreshCw, Loader2, AlertTriangle } from 'lucide-react';
 import { C } from '@/lib/design-tokens';
 import PlanProgressCard from './PlanProgressCard';
 import ProductCountWidget from './ProductCountWidget';
-import OrderPipeline from './OrderPipeline';
-import RevenueChart from './RevenueChart';
+import TodayCards from './TodayCards';
+import TodayFlow from './TodayFlow';
+import RevenueTrend from './RevenueTrend';
+import type { TodayData } from '@/lib/erp/home/today';
+import type { RevenueData } from '@/lib/erp/home/revenue';
 import {
   type Period,
-  type OrdersSummaryData,
   type ProductCountData,
 } from '@/lib/dashboard/types';
 import { WBS_DATA, WEEKLY_TARGETS } from '@/lib/plan/constants';
 import { getCurrentWeek, getDaysIntoWeek } from '@/lib/plan/week';
-import { loadDailyRecords, sumWeekRevenue, computeCumulativeActual } from '@/lib/plan/daily-records';
+import { loadDailyRecords, sumWeekRevenue } from '@/lib/plan/daily-records';
 
 
 interface PlanLocalData {
@@ -25,7 +27,6 @@ interface PlanLocalData {
   weekActualMan: number;
   daysIntoWeek: number;
   keyMission: string | null;
-  cumulativeActual: (number | null)[];
 }
 
 function readPlanLocalData(): PlanLocalData | null {
@@ -57,36 +58,52 @@ function readPlanLocalData(): PlanLocalData | null {
     weekActualMan,
     daysIntoWeek: getDaysIntoWeek(),
     keyMission: firstIncomplete?.text ?? null,
-    cumulativeActual: computeCumulativeActual(records, week),
   };
 }
 
 export default function DashboardClient() {
   const [period, setPeriod] = useState<Period>('30d');
-  const [orders, setOrders] = useState<OrdersSummaryData | null>(null);
+  const [today, setToday] = useState<TodayData | null>(null);
+  const [todayError, setTodayError] = useState<string | null>(null);
+  const [revenue, setRevenue] = useState<RevenueData | null>(null);
+  const [revenueLoading, setRevenueLoading] = useState(true);
+  const [revenueError, setRevenueError] = useState<string | null>(null);
   const [productCount, setProductCount] = useState<ProductCountData | null>(null);
   const [planData, setPlanData] = useState<PlanLocalData | null>(null);
-  const [isOrdersLoading, setIsOrdersLoading] = useState(true);
   const [isProductCountLoading, setIsProductCountLoading] = useState(true);
-  const [ordersError, setOrdersError] = useState<string | null>(null);
 
   // 플랜 데이터는 client side localStorage에서만
   useEffect(() => {
     setPlanData(readPlanLocalData());
   }, []);
 
-  const fetchOrders = async (p: Period) => {
-    setIsOrdersLoading(true);
-    setOrdersError(null);
+  const fetchToday = async () => {
+    setTodayError(null);
     try {
-      const res = await fetch(`/api/dashboard/orders-summary?period=${p}`);
+      const res = await fetch('/api/erp/home/today');
       const json = await res.json();
       if (!json.success) throw new Error(json.error ?? '요청 실패');
-      setOrders(json.data);
+      setToday(json.data);
     } catch (err) {
-      setOrdersError(err instanceof Error ? err.message : '알 수 없는 오류');
+      setTodayError(err instanceof Error ? err.message : '알 수 없는 오류');
+    }
+  };
+
+  // 기간을 빠르게 바꾸면 늦게 온 앞 응답이 뒤 기간을 덮는다 — 마지막 요청의 응답만 반영한다
+  const revenueReq = useRef(0);
+  const fetchRevenue = async (p: Period) => {
+    const id = ++revenueReq.current;
+    setRevenueLoading(true);
+    setRevenueError(null);
+    try {
+      const res = await fetch(`/api/erp/home/revenue?period=${p}`);
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error ?? '요청 실패');
+      if (id === revenueReq.current) setRevenue(json.data);
+    } catch (err) {
+      if (id === revenueReq.current) setRevenueError(err instanceof Error ? err.message : '알 수 없는 오류');
     } finally {
-      setIsOrdersLoading(false);
+      if (id === revenueReq.current) setRevenueLoading(false);
     }
   };
 
@@ -103,9 +120,8 @@ export default function DashboardClient() {
     }
   };
 
-  useEffect(() => {
-    fetchOrders(period);
-  }, [period]);
+  useEffect(() => { void fetchToday(); }, []);
+  useEffect(() => { void fetchRevenue(period); }, [period]);
 
   // product-count는 period와 무관하므로 마운트 시 1회만.
   useEffect(() => {
@@ -113,17 +129,10 @@ export default function DashboardClient() {
   }, []);
 
   const refreshAll = () => {
-    fetchOrders(period);
-    fetchProductCount();
+    void fetchToday();
+    void fetchRevenue(period);
+    void fetchProductCount();
   };
-
-  const chartActual = useMemo(() => {
-    const apiActual = orders?.revenue12w?.actual;
-    // API 데이터에 실제 값(>0)이 하나라도 있을 때만 사용.
-    // API가 all-zero를 반환하면(Wing/RG 데이터 없음) planData fallback 허용.
-    if (apiActual?.some((v) => v !== null && v > 0)) return apiActual;
-    return planData?.cumulativeActual ?? new Array(12).fill(null);
-  }, [orders, planData]);
 
   return (
     <div style={{ backgroundColor: '#f5f5f7', minHeight: '100%' }}>
@@ -147,7 +156,7 @@ export default function DashboardClient() {
           <div>
             <h1 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: 0 }}>운영 대시보드</h1>
             <p style={{ fontSize: 12, color: '#71717a', margin: 0 }}>
-              플랜 진행 · 등록 상품 · 주문 파이프라인 한눈에
+              오늘 할 일 · 주문 흐름 · 매출 추이
             </p>
           </div>
           <div style={{ flex: 1 }} />
@@ -172,7 +181,19 @@ export default function DashboardClient() {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* 플랜 카드 (또는 비어있음 안내) */}
+          {todayError ? (
+            <ErrorCard error={todayError} onRetry={() => void fetchToday()} />
+          ) : today ? (
+            <>
+              <TodayCards data={today} />
+              <TodayFlow flow={today.flow} />
+            </>
+          ) : (
+            <LoadingCard />
+          )}
+
+          <RevenueTrend data={revenue} period={period} onPeriodChange={setPeriod} loading={revenueLoading} error={revenueError} />
+
           {planData ? (
             <PlanProgressCard
               weekNumber={planData.weekNumber}
@@ -186,36 +207,10 @@ export default function DashboardClient() {
             <PlanEmptyCard />
           )}
 
-          {/* 등록 상품 위젯 — 자체 로딩/소스 표기 */}
           {productCount ? (
             <ProductCountWidget coupang={productCount.coupang} naver={productCount.naver} />
           ) : isProductCountLoading ? (
             <ProductCountSkeleton />
-          ) : null}
-
-          {/* 주문 파이프라인 — 자체 로딩/에러 분기 */}
-          {isOrdersLoading && !orders ? (
-            <LoadingCard />
-          ) : ordersError && !orders ? (
-            <ErrorCard error={ordersError} onRetry={() => fetchOrders(period)} />
-          ) : orders ? (
-            <>
-              <OrderPipeline
-                coupang={orders.pipeline.coupang}
-                naver={orders.pipeline.naver}
-                rg={orders.pipeline.rg}
-                period={period}
-                onPeriodChange={setPeriod}
-                coupangDimmed={(productCount?.coupang ?? 0) === 0}
-                naverDimmed={(productCount?.naver ?? 0) === 0}
-              />
-              <RevenueChart
-                weeks={orders.revenue12w.weeks}
-                target={orders.revenue12w.target}
-                actual={chartActual}
-                currentWeek={planData?.weekNumber ?? 1}
-              />
-            </>
           ) : null}
         </div>
       </main>
