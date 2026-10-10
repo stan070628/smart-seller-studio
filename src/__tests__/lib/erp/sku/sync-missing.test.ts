@@ -32,4 +32,11 @@ describe('syncMissing', () => {
   it('빠진 상품이 없으면 빈 결과', async () => {
     expect(await syncMissing(fake().deps)).toEqual({ results: [], created: 0, exists: 0, failed: 0, skus: 0, more: false });
   });
+
+  it('240초가 지나면 새 상품을 시작하지 않고 more', async () => {
+    const f = fake({ missing: [{ id: '300', name: 'C' }, { id: '200', name: 'B' }], clock: [0, 0, 241_000] });
+    const r = await syncMissing(f.deps, 5);
+    expect(r.results.map((x) => x.sellerProductId)).toEqual([300]);
+    expect(r.more).toBe(true);
+  });
 });

@@ -38,11 +38,18 @@
 
 - 네이버·토스 리스팅은 추가 시점에 `stock_sync_links`에 그 연결이 이미 있을 때만 생긴다. 나중에 네이버에 등록하면 전체 적재가 채운다(「SKU 다시 맞추기」는 리스팅이 하나라도 있으면 건너뛰므로 채우지 않는다).
 - 보정(`sku-overrides.json` — 합치기·배수·이름)이 필요한 상품은 자동 추가 뒤 전체 적재로 고친다.
+- (2026-10-10 검토 반영) **범위 밖 원가 행 제외** — 상품 하나 범위로 읽을 때, `vendor_item_id`나 원가 연결(`product_cost_channels`, 네이버 제외)이 이 상품 밖 vid를 가리키는 원가 행은 통째로 버린다. 남겨 두면 `draft.ts`의 P1 대체 연결이 그 원가 행을 이 상품 SKU 전부에 붙인다.
+- **네이버·토스 리스팅 제외** — 이미 있는 리스팅, 또는 같은 `(channel, product_id, option_key)`에 이 상품 밖 쿠팡 vid가 묶여 있는 리스팅은 만들지 않는다(이 상품만 본 초안은 묶음을 모른다). 건수는 응답 `skippedListings`로 알리고 화면은 「네이버·토스 리스팅 N개는 전체 적재 필요」를 덧붙인다.
+- **검토 필요 상품 보류** — 이 상품의 초안 이슈에 `suspect_merge`·`quantity_invalid`가 있으면 쓰지 않고 `failed`(「검토 필요(…) — 전체 적재로 처리한다」). `planOnly`는 행과 `issues`를 돌려준다.
+- **오래된 초안 적재 거부** — `sku-collect`가 초안에 `collectedAt`(DB를 읽기 전 시각)을 기록한다(없는 옛 초안은 파일 수정 시각). `sku-apply --apply`는 잠금 안에서 `origin='draft'`이고 `created_at > collectedAt`이며 **초안에 없는** SKU·리스팅이 있으면 쓰지 않고 거부한다(초안에 있는 행은 이 초안을 적재해 생긴 것이라 센다에서 뺀다). 점검은 같은 경고를 출력하고 계속한다.
+- **「SKU 다시 맞추기」 시간 상한** — 상품 20개 상한과 별도로, 시작 후 240초가 지나면 새 상품을 시작하지 않고 `more`로 남긴다.
+- 실패 문구는 `maskPII` 후 300자로 자른다.
 
 ## 5. 테스트
 
 | 대상 | 경우 |
 |---|---|
+| `syncSellerProduct` (2026-10-10 추가) | 범위 밖 vid의 원가 행 제외 · 묶음 리스팅 건너뜀 + `skippedListings` · `suspect_merge`/`quantity_invalid` 보류 · 오류 마스킹 · 240초 상한 · 오래된 초안 거부(`stale-guard`) |
 | `syncSellerProduct` | 새 상품 → 옵션별 SKU·Wing/RG 리스팅·연결 생성 · 이미 리스팅 있음 → `exists`(쓰기 없음) · 쿠팡 조회 실패 → `failed` · 원가 연결 합집합 · 다른 상품 행 미변경 |
 | 원가관리 라우트 | 상품번호 있음 → `skuSync.created` · SKU 실패해도 201·저장됨 · 상품번호 없음 → `skipped` · bulk는 상품별 결과 |
 | sync-missing | 리스팅 없는 상품만 · 20개 상한 |

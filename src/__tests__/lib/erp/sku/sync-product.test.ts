@@ -6,7 +6,7 @@ import { PC, SP, fake } from './sync-fake';
 describe('syncSellerProduct', () => {
   it('새 상품 — 잠금 뒤 옵션별 SKU·Wing/RG 리스팅·연결을 만들고, 원가 연결은 같은 상품번호의 원가 행', async () => {
     const f = fake();
-    expect(await syncSellerProduct(f.deps, SP)).toEqual({ status: 'created', skus: 2 });
+    expect(await syncSellerProduct(f.deps, SP)).toEqual({ status: 'created', skus: 2, skippedListings: 0 });
     const lockAt = f.calls.findIndex((c) => c.sql.includes('pg_advisory_xact_lock'));
     expect(f.calls[lockAt].params).toEqual([7103]);
     const w = f.writes();
@@ -81,7 +81,7 @@ describe('syncSellerProduct', () => {
     const pcs = f.calls.find((c) => c.sql.includes('from product_costs'))!;
     expect(pcs.params).toEqual([SP, [11, 21, 12]]);
     const scoped = f.calls.filter((c) => (c.sql.includes('from product_cost_channels') && !c.sql.includes('from product_costs')) || c.sql.includes('from stock_sync_links'));
-    expect(scoped.map((c) => c.params)).toEqual([[[11, 21, 12]], [[11, 21, 12]]]);
+    expect(scoped.map((c) => c.params)).toEqual([[[PC]], [[11, 21, 12]]]);
     expect(f.calls.some((c) => c.sql.includes('sale_records'))).toBe(false);
   });
 
@@ -93,7 +93,7 @@ describe('syncSellerProduct', () => {
       ],
       existingListings: ['naver|901|'],
     });
-    expect(await syncSellerProduct(f.deps, SP)).toEqual({ status: 'created', skus: 2 });
+    expect(await syncSellerProduct(f.deps, SP)).toEqual({ status: 'created', skus: 2, skippedListings: 1 });
     const ask = f.calls.find((c) => c.sql.includes('as k from erp.channel_listings'))!;
     expect(ask.params).toEqual([['naver|900|5001', 'naver|901|']]);
     const listings = f.writes()
@@ -124,5 +124,42 @@ describe('syncSellerProduct', () => {
     expect(f.calls.some((c) => c.sql.includes('as hit') || c.sql.includes('pg_advisory'))).toBe(false);
     expect(f.writes()).toHaveLength(0);
     expect(f.txCount()).toBe(0);
+  });
+
+  it('새 네이버 리스팅이라도 같은 옵션에 이 상품 밖 쿠팡 vid가 묶여 있으면 만들지 않는다', async () => {
+    const f = fake({
+      ssl: [{ coupang_vendor_item_id: '11', channel: 'naver', product_id: '900', option_key: '5001', label: '담요 · 화이트' }],
+      outsideLinks: [
+        { lk: 'naver|900|5001', coupang_vendor_item_id: '11' },
+        { lk: 'naver|900|5001', coupang_vendor_item_id: '99' },
+      ],
+    });
+    expect(await syncSellerProduct(f.deps, SP)).toEqual({ status: 'created', skus: 2, skippedListings: 1 });
+    const ask = f.calls.find((c) => c.sql.includes('as lk'))!;
+    expect(ask.params).toEqual([['naver|900|5001']]);
+    const w = f.writes();
+    expect(w.some((c) => c.sql.includes('insert into erp.channel_listings') && c.params[0] === 'naver')).toBe(false);
+    expect(w.filter((c) => c.sql.includes('insert into erp.listing_skus'))).toHaveLength(3);
+  });
+
+  it('suspect_merge·quantity_invalid가 나오면 쓰지 않고 failed — planOnly는 행과 issues를 돌려준다', async () => {
+    const bad = { sellerProductId: SP, sellerProductName: '담요', items: [{ itemName: '블랙 0개', vendorItemId: 5 }] };
+    const f = fake();
+    f.coupang.getProductDetail.mockResolvedValue(bad);
+    const r = await syncSellerProduct(f.deps, SP);
+    expect(r.status).toBe('failed');
+    expect(r.error).toBe('검토 필요(quantity_invalid) — 전체 적재로 처리한다');
+    expect(f.writes()).toHaveLength(0);
+    const p = await syncSellerProduct(f.deps, SP, { planOnly: true });
+    if (p.status !== 'planned') throw new Error('planned 아님');
+    expect(p.issues.map((i) => i.kind)).toContain('quantity_invalid');
+  });
+
+  it('실패 문구는 마스킹하고 300자로 자른다', async () => {
+    const f = fake();
+    f.coupang.getProductDetail.mockRejectedValueOnce(new Error(`연락 010-1234-5678 ${'가'.repeat(400)}`));
+    const r = await syncSellerProduct(f.deps, SP);
+    expect(r.error).not.toContain('1234');
+    expect(r.error!.length).toBeLessThanOrEqual(300);
   });
 });

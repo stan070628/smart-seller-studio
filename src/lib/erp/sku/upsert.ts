@@ -103,7 +103,7 @@ export async function upsertListings(db: Q, listings: DraftListing[]): Promise<M
   return listingId;
 }
 
-/** 연결을 넣는다(이미 있으면 그대로). manual 연결과 겹치면 던진다 */
+/** 연결을 넣는다. 호출자가 draft 연결을 먼저 지웠거나 새 상품이어야 한다 — 기존 연결과 겹치면 던진다 */
 export async function insertLinks(db: Q, links: DraftLink[], skuId: Map<string, number>, listingId: Map<string, number>): Promise<void> {
   for (const k of links) {
     const lid = listingId.get(k.listingKey);

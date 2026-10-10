@@ -34,6 +34,10 @@
 | 8 | 「SKU 다시 맞추기」 대상 | `product_costs.seller_product_id > 0` · 리스팅·SKU 키 둘 다 없음 · **최근 추가 순** · 숨김 여부는 보지 않는다 | 2026-10-10 운영 읽기 전용 측정: 대상 0건. 전체 적재도 숨김 상품을 포함한다 |
 | 9 | 앱 연결부 | `sync-app.ts`(풀·`withTx`·`getCoupangClient`를 붙인다)를 `sync-product.ts`와 따로 둔다 | `withTx`가 있는 `@/lib/erp/stock/http`는 `next/server`를 끌어온다 — 스크립트(Task 12)가 `sync-product.ts`만 import하게 |
 | 10 | 단건 화면(`AddProductModal`) | 이 창은 쿠팡에 없는 상품 전용이라 상품번호를 보내지 않는다 → 늘 `skipped`. 토스트 처리는 같은 함수로 달아 둔다(조용히 무시) | 쿠팡 상품은 `BulkAddProductModal`로만 들어온다 |
+| 12 | (검토 반영 2026-10-10) 상품 하나 DB 입력 | 범위 밖 vid(`vendor_item_id`·네이버 제외 원가 연결)를 가진 원가 행은 통째로 버리고, 원가 연결은 `product_cost_id`로 읽는다 | draft.ts P1 대체 연결이 다른 상품의 원가 행을 이 상품 SKU 전부에 붙이는 것을 막는다 |
+| 13 | (검토 반영) 네이버·토스 리스팅 | 새 리스팅도 같은 `(channel, product_id, option_key)`에 범위 밖 쿠팡 vid가 묶여 있으면 만들지 않는다. `skippedListings`(이미 있음 + 묶음)를 응답·문구에 | 묶음의 다른 상품을 모른 채 `link_mode`를 `single`로 만들지 않게 |
+| 14 | (검토 반영) 보류·안전장치 | `suspect_merge`·`quantity_invalid` → `failed`(전체 적재) · `syncMissing` 240초 상한(`now` 주입) · `syncMissingForApp` async · 오류 `maskPII` + 300자 | 사람 검토가 필요한 상품을 자동으로 쓰지 않고, 함수 시간·개인정보 노출을 막는다 |
+| 15 | (검토 반영) 전체 적재 가드 | `sku-collect`가 `collectedAt`을 쓰고 `sku-apply --apply`는 그 뒤 생겼고 **초안에 없는** draft 행이 있으면 거부(`stale-guard.ts`). 「초안에 없는」 조건을 더한 이유: 초안을 적재해 생긴 행도 수집 뒤에 생기므로 시각만 보면 늘 걸린다 | 원가관리 추가가 만든 행을 오래된 초안이 보관·삭제하는 것을 막는다 |
 | 11 | 「쿠팡 호출 1.3초 간격」 | `getProductDetail`의 실제 간격은 200ms(`API_DELAY`)다. 상한 20은 설계대로 둔다 | 1.3초는 RG API 간격(`RG_API_DELAY`)이다. 20개면 어느 쪽이든 300초 안 |
 
 ---

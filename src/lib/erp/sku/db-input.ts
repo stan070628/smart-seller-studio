@@ -13,7 +13,7 @@ export interface DbScope {
 }
 
 export async function readDraftDbInput(db: Q, scope?: DbScope): Promise<DraftDbInput> {
-  const pcs = scope
+  let pcs = scope
     ? (await db.query(
         `select id, product_name, seller_product_id, vendor_item_id from product_costs
           where seller_product_id = $1 or vendor_item_id = any($2::bigint[])
@@ -21,13 +21,27 @@ export async function readDraftDbInput(db: Q, scope?: DbScope): Promise<DraftDbI
         [scope.sellerProductId, scope.vids],
       )).rows
     : (await db.query(`select id, product_name, seller_product_id, vendor_item_id from product_costs`)).rows;
-  const pcc = scope
+  if (scope) {
+    // draft.ts의 P1 대체 연결은 vid로 닿지 않은 원가 행을 같은 seller_product_id의 SKU 전부에 잇는다.
+    // 다른 상품의 vid를 가리키는 원가 행이 이 상품 SKU 전부에 붙으면 안 되므로, 범위 밖 vid를 가진 행은 통째로 버린다.
+    const inScope = new Set(scope.vids);
+    pcs = pcs.filter((r) => !r.vendor_item_id || inScope.has(Number(r.vendor_item_id)));
+  }
+  // 상품 하나 범위는 그 원가 행의 연결을 전부 읽는다 — 범위 밖 vid를 가리키는 행을 가려내려면 일부만 읽어선 안 된다.
+  let pcc = scope
     ? (await db.query(
         `select product_cost_id, channel_type, external_id, unit_multiplier from product_cost_channels
-          where channel_type <> 'naver' and external_id = any($1::bigint[])`,
-        [scope.vids],
+          where channel_type <> 'naver' and product_cost_id = any($1::uuid[])`,
+        [pcs.map((r) => String(r.id))],
       )).rows
     : (await db.query(`select product_cost_id, channel_type, external_id, unit_multiplier from product_cost_channels`)).rows;
+  if (scope) {
+    const inScope = new Set(scope.vids);
+    const outside = new Set<string>();
+    for (const r of pcc) if (!inScope.has(Number(r.external_id))) outside.add(String(r.product_cost_id));
+    pcs = pcs.filter((r) => !outside.has(String(r.id)));
+    pcc = pcc.filter((r) => !outside.has(String(r.product_cost_id)));
+  }
   const ssl = scope
     ? (await db.query(
         `select coupang_vendor_item_id, channel, product_id, option_key, label from stock_sync_links

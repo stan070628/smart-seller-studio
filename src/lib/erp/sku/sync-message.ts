@@ -4,6 +4,8 @@ import type { SkuSync, SyncMissingResult } from './sync-product';
 
 export const SKU_SYNC_RETRY_HINT = '재고현황의 「SKU 다시 맞추기」로 다시 시도';
 
+const skippedNote = (n: number) => (n > 0 ? ` · 네이버·토스 리스팅 ${n}개는 전체 적재 필요` : '');
+
 /** 원가관리 저장 응답의 skuSync(한 개 또는 bulk 여러 개) → 토스트 하나. 말할 것이 없으면 null(이미 있음·상품번호 없음) */
 export function summarizeSkuSync(list: (SkuSync | null | undefined)[]): { kind: 'success' | 'error'; message: string } | null {
   const xs = list.filter((x): x is SkuSync => !!x);
@@ -15,7 +17,8 @@ export function summarizeSkuSync(list: (SkuSync | null | undefined)[]): { kind: 
       message: `${skus > 0 ? `SKU ${skus}개 추가 · ` : ''}SKU 자동 추가 실패${failed > 1 ? ` ${failed}건` : ''} — ${SKU_SYNC_RETRY_HINT}`,
     };
   }
-  if (skus > 0) return { kind: 'success', message: `SKU ${skus}개 자동 추가` };
+  const skipped = xs.reduce((s, x) => s + (x.skippedListings ?? 0), 0);
+  if (skus > 0) return { kind: 'success', message: `SKU ${skus}개 자동 추가${skippedNote(skipped)}` };
   return null;
 }
 
@@ -23,5 +26,6 @@ export function summarizeSkuSync(list: (SkuSync | null | undefined)[]): { kind: 
 export function formatSyncMissing(r: SyncMissingResult): string {
   if (r.results.length === 0) return '빠진 상품 없음 — 원가관리의 쿠팡 상품이 모두 SKU에 있다';
   const failedIds = r.results.filter((x) => x.status === 'failed').map((x) => x.sellerProductId);
-  return `SKU ${r.skus}개 추가 · 이미 있음 ${r.exists} · 실패 ${r.failed}${failedIds.length ? `(${failedIds.join(', ')})` : ''}${r.more ? ' · 남은 상품이 있다 — 한 번 더 누른다' : ''}`;
+  const skipped = r.results.reduce((s, x) => s + (x.skippedListings ?? 0), 0);
+  return `SKU ${r.skus}개 추가 · 이미 있음 ${r.exists} · 실패 ${r.failed}${failedIds.length ? `(${failedIds.join(', ')})` : ''}${skippedNote(skipped)}${r.more ? ' · 남은 상품이 있다 — 한 번 더 누른다' : ''}`;
 }

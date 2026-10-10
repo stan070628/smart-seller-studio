@@ -2,7 +2,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { readDraftDbInput } from '@/lib/erp/sku/db-input';
 
-function fake() {
+function fake(pccRows?: unknown[]) {
   const calls: { sql: string; params: unknown }[] = [];
   const res = (rows: unknown[]) => ({ rows, rowCount: rows.length });
   const query = vi.fn(async (sql: string, params?: unknown[]) => {
@@ -13,7 +13,7 @@ function fake() {
         { id: 'pc-2', product_name: '샴푸', seller_product_id: '-3', vendor_item_id: '96152866376' },
       ]);
     }
-    if (sql.includes('from product_cost_channels')) return res([{ product_cost_id: 'pc-1', channel_type: 'coupang_wing', external_id: '11', unit_multiplier: 2 }]);
+    if (sql.includes('from product_cost_channels')) return res(pccRows ?? [{ product_cost_id: 'pc-1', channel_type: 'coupang_wing', external_id: '11', unit_multiplier: 2 }]);
     if (sql.includes('from stock_sync_links')) return res([{ coupang_vendor_item_id: '11', channel: 'naver', product_id: '900', option_key: null, label: null }]);
     if (sql.includes('from sale_records')) {
       return res([
@@ -54,11 +54,23 @@ describe('readDraftDbInput', () => {
     expect(f.calls.some((c) => c.sql.includes('sale_records'))).toBe(false);
     expect(f.calls[0].params).toEqual([16404126884, [11, 21]]);
     expect(f.calls[0].sql).toContain('where seller_product_id = $1 or vendor_item_id = any($2::bigint[])');
-    expect(f.calls[1].params).toEqual([[11, 21]]);
-    expect(f.calls[1].sql).toContain("channel_type <> 'naver' and external_id = any($1::bigint[])");
+    expect(f.calls[1].params).toEqual([['pc-1']]);
+    expect(f.calls[1].sql).toContain("channel_type <> 'naver' and product_cost_id = any($1::uuid[])");
     expect(f.calls[2].params).toEqual([[11, 21]]);
     expect(f.calls[2].sql).toContain('where coupang_vendor_item_id = any($1::bigint[])');
     expect(x.saleAttributions).toEqual([]);
     expect(x.legacyChannels).toHaveLength(1);
+    // vendor_item_id가 범위 밖인 원가 행(pc-2)은 버린다 — draft P1 대체 연결이 이 상품 SKU 전부에 붙이지 않게
+    expect(x.legacyProductCosts.map((r) => r.id)).toEqual(['pc-1']);
+  });
+
+  it('상품 하나 — 원가 연결이 범위 밖 vid를 가리키는 원가 행과 그 연결은 버린다', async () => {
+    const f = fake([
+      { product_cost_id: 'pc-1', channel_type: 'coupang_wing', external_id: '11', unit_multiplier: 1 },
+      { product_cost_id: 'pc-1', channel_type: 'coupang_wing', external_id: '99', unit_multiplier: 1 },
+    ]);
+    const x = await readDraftDbInput(f.db, { sellerProductId: 16404126884, vids: [11, 21] });
+    expect(x.legacyProductCosts).toEqual([]);
+    expect(x.legacyChannels).toEqual([]);
   });
 });

@@ -17,6 +17,7 @@ import path from 'node:path';
 import pg from 'pg';
 import { loadEnvLocal } from './_env';
 import { applyOverrides, type Draft, type Overrides } from '@/lib/erp/sku/draft';
+import { findNewerThanDraft, staleDraftMessage, type DraftKeys } from '@/lib/erp/sku/stale-guard';
 import { insertLinks, lockSkuMaster, upsertListings, upsertSkus, validateDraft } from '@/lib/erp/sku/upsert';
 
 loadEnvLocal();
@@ -26,26 +27,36 @@ const VERIFY = process.argv.includes('--verify');
 
 const newClient = () => new pg.Client({ connectionString: process.env.SUPABASE_DB_URL, ssl: { rejectUnauthorized: false } });
 
-function loadFinalDraft(): { draftFile: string; d: Draft } {
+/** 초안에 실린 key로 만든 stale-guard 입력 */
+const draftKeysOf = (d: Draft): DraftKeys => ({
+  skuKeys: new Set(d.skus.map((x) => x.key)),
+  listingKeys: new Set(d.listings.map((l) => `${l.channel}|${l.externalProductId}|${l.externalOptionKey}`)),
+});
+
+function loadFinalDraft(): { draftFile: string; d: Draft; collectedAt: string } {
   const draftFile = fs.readdirSync(DIR).filter((n) => /^sku-draft-.*\.json$/.test(n)).sort().pop();
   if (!draftFile) throw new Error('docs/erp/sku-draft-*.json이 없다 — sku-collect.ts를 먼저 돌린다');
-  const raw = JSON.parse(fs.readFileSync(path.join(DIR, draftFile), 'utf-8')) as { draft: Draft; coupangFetchFailed?: unknown[] };
+  const raw = JSON.parse(fs.readFileSync(path.join(DIR, draftFile), 'utf-8')) as { draft: Draft; coupangFetchFailed?: unknown[]; collectedAt?: string };
   // 쿠팡 조회가 일부 실패한 초안은 SKU가 빠져 있다 — 그대로 적재하면 빠진 SKU가 보관 처리된다.
   if (raw.coupangFetchFailed && raw.coupangFetchFailed.length > 0) {
     throw new Error(`${draftFile}은 쿠팡 조회 실패 ${raw.coupangFetchFailed.length}건이 있는 초안이다 — sku-collect.ts를 다시 돌린다`);
   }
   const overrides = JSON.parse(fs.readFileSync(path.join(DIR, 'sku-overrides.json'), 'utf-8')) as Overrides;
-  return { draftFile, d: applyOverrides(raw.draft, overrides) };
+  // 수집 시각 — sku-collect가 기록한다. 그전에 만든 초안은 파일 수정 시각으로 대신한다.
+  const collectedAt = raw.collectedAt ?? fs.statSync(path.join(DIR, draftFile)).mtime.toISOString();
+  return { draftFile, d: applyOverrides(raw.draft, overrides), collectedAt };
 }
 
 const sameArr = (a: string[], b: string[]) => a.length === b.length && [...a].sort().every((x, i) => x === [...b].sort()[i]);
 const unionArr = (a: string[], b: string[]) => [...new Set([...a, ...b])];
 
-async function dryRun(draftFile: string, d: Draft): Promise<void> {
+async function dryRun(draftFile: string, d: Draft, collectedAt: string): Promise<void> {
   const c = newClient();
   await c.connect();
   try {
     await c.query('BEGIN READ ONLY');
+    const stale = await findNewerThanDraft(c, new Date(collectedAt), draftKeysOf(d));
+    if (stale.count > 0) console.log(`⚠️ ${staleDraftMessage(draftFile, collectedAt, stale.count)} — ${[...stale.skus, ...stale.listings].slice(0, 5).join(', ')} (--apply는 거부한다)`);
     const dbSkus = (await c.query(`select key, name, option_label, base_unit_label, status, legacy_product_cost_ids::text[] as legacy from erp.skus where origin = 'draft'`)).rows;
     const dbListings = (await c.query(`select id, channel, external_product_id, external_option_key, alt_product_id, label, link_mode, active from erp.channel_listings where origin = 'draft'`)).rows;
     const dbLinks = (await c.query(`
@@ -130,12 +141,15 @@ async function dryRun(draftFile: string, d: Draft): Promise<void> {
   }
 }
 
-async function apply(d: Draft): Promise<void> {
+async function apply(d: Draft, draftFile: string, collectedAt: string): Promise<void> {
   const c = newClient();
   await c.connect();
   try {
     await c.query('BEGIN');
     await lockSkuMaster(c);
+    // 잠금 안에서 확인한다 — 원가관리 상품 추가가 초안 수집 뒤에 만든 행은 초안에 없어 아래 정리가 지워 버린다
+    const stale = await findNewerThanDraft(c, new Date(collectedAt), draftKeysOf(d));
+    if (stale.count > 0) throw new Error(`${staleDraftMessage(draftFile, collectedAt, stale.count)}\n  ${[...stale.skus, ...stale.listings].slice(0, 10).join('\n  ')}`);
     const skuId = await upsertSkus(c, d.skus);
     const archived = await c.query(
       `update erp.skus set status = 'archived', updated_at = now()
@@ -196,11 +210,11 @@ async function verify(): Promise<void> {
 
 (async () => {
   if (VERIFY) return verify();
-  const { draftFile, d } = loadFinalDraft();
+  const { draftFile, d, collectedAt } = loadFinalDraft();
   validateDraft(d);
-  if (!APPLY) return dryRun(draftFile, d);
+  if (!APPLY) return dryRun(draftFile, d, collectedAt);
   console.log(`${draftFile} + overrides → SKU ${d.skus.length} · 리스팅 ${d.listings.length} · 연결 ${d.links.length} 적재 시작`);
-  return apply(d);
+  return apply(d, draftFile, collectedAt);
 })().catch((e) => {
   console.error(`❌ ${(e as Error).message}`);
   process.exitCode = 1;

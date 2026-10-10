@@ -23,6 +23,10 @@ export interface FakeOpts {
   ssl?: Record<string, unknown>[];
   existingListings?: string[];
   missing?: Record<string, unknown>[];
+  /** 같은 네이버·토스 옵션을 가리키는 stock_sync_links 전체(as lk 조회) */
+  outsideLinks?: Record<string, unknown>[];
+  /** 시계(ms) — 호출할 때마다 차례로 */
+  clock?: number[];
   /** erp.skus upsert가 manual과 겹쳐 0행 */
   skuConflict?: boolean;
 }
@@ -40,6 +44,7 @@ export function fake(o: FakeOpts = {}) {
     if (sql.includes('pg_advisory_xact_lock')) return res([{}]);
     if (sql.includes('from product_costs')) return res(o.pcs ?? [{ id: PC, product_name: '펜들턴', seller_product_id: String(SP), vendor_item_id: null }]);
     if (sql.includes('from product_cost_channels')) return res(o.pcc ?? []);
+    if (sql.includes('as lk')) return res(o.outsideLinks ?? []);
     if (sql.includes('from stock_sync_links')) return res(o.ssl ?? []);
     if (sql.includes('as k from erp.channel_listings')) return res((o.existingListings ?? []).map((k) => ({ k })));
     if (sql.includes('insert into erp.skus') && o.skuConflict) return res([]);
@@ -53,7 +58,8 @@ export function fake(o: FakeOpts = {}) {
     txCount++;
     return fn(db);
   };
-  const deps: SyncDeps = { db, tx, coupang };
+  const ticks = [...(o.clock ?? [])];
+  const deps: SyncDeps = { db, tx, coupang, ...(o.clock ? { now: () => ticks.shift() ?? Number.MAX_SAFE_INTEGER } : {}) };
   const writes = () => calls.filter((c) => /^\s*(insert|update|delete)/i.test(c.sql));
   return { deps, calls, coupang, writes, txCount: () => txCount };
 }

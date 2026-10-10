@@ -14,6 +14,8 @@ import { renderReport } from '@/lib/erp/sku/report';
 import { getCoupangClient } from '@/lib/listing/coupang-client';
 
 loadEnvLocal();
+// DB를 읽기 전에 잡는다 — 이 시각 뒤에 생긴 SKU·리스팅은 초안에 없다(sku-apply --apply가 이 값으로 오래된 초안을 거부한다)
+const COLLECTED_AT = new Date().toISOString();
 const DATE = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 const OUT = path.join(__dirname, '..', '..', 'docs', 'erp');
 
@@ -97,7 +99,7 @@ async function collectCoupang(extraIds: number[]): Promise<{ products: DraftInpu
   const input: DraftInput = { ...rest, coupangProducts };
   const draft = buildDraft(input);
   fs.mkdirSync(OUT, { recursive: true });
-  fs.writeFileSync(path.join(OUT, `sku-draft-${DATE}.json`), JSON.stringify({ input, draft, coupangFetchFailed: failed }, null, 2));
+  fs.writeFileSync(path.join(OUT, `sku-draft-${DATE}.json`), JSON.stringify({ input, draft, coupangFetchFailed: failed, collectedAt: COLLECTED_AT }, null, 2));
   const costcoLine = ops.costcoMap.length
     ? ops.costcoMap.map((m) => `${m.itemCode} 「${m.itemLabel ?? '라벨 없음'}」→${m.productName ?? '연결 없음'}`).join(', ')
     : '693742·888450 둘 다 costco_item_map에 없음';
