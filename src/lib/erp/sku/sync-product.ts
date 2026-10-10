@@ -116,3 +116,52 @@ export async function syncSellerProduct(
     return { status: 'failed', skus: 0, error: errMsg(e) };
   }
 }
+
+/** 「SKU 다시 맞추기」 한 번에 도는 상품 수 — 쿠팡 상세 조회를 순서대로 부르므로 함수 시간(300초) 안에 든다 */
+export const SYNC_MISSING_CAP = 20;
+
+export interface SyncMissingRow extends SkuSync {
+  sellerProductId: number;
+  productName: string;
+}
+export interface SyncMissingResult {
+  results: SyncMissingRow[];
+  /** status 'created'인 상품 수 */
+  created: number;
+  exists: number;
+  failed: number;
+  /** 새로 만든 SKU 수 */
+  skus: number;
+  /** 상한을 넘어 남은 상품이 있다 */
+  more: boolean;
+}
+
+/** 원가관리에 쿠팡 상품번호가 있는데 리스팅·SKU가 없는 상품(최근 추가 순)을 상한까지 syncSellerProduct */
+export async function syncMissing(deps: SyncDeps, cap = SYNC_MISSING_CAP): Promise<SyncMissingResult> {
+  const { rows } = await deps.db.query(
+    `select pc.seller_product_id as id, max(pc.product_name) as name, max(pc.created_at) as at
+       from product_costs pc
+      where pc.seller_product_id > 0
+        and not exists (select 1 from erp.channel_listings l where l.alt_product_id = pc.seller_product_id::text)
+        and not exists (select 1 from erp.skus s where s.key like 'cp:' || pc.seller_product_id || ':%')
+      group by pc.seller_product_id
+      order by at desc, id desc
+      limit $1`,
+    [cap + 1],
+  );
+  const results: SyncMissingRow[] = [];
+  for (const row of rows.slice(0, cap)) {
+    const sellerProductId = Number(row.id);
+    const r = await syncSellerProduct(deps, sellerProductId);
+    results.push({ sellerProductId, productName: String(row.name ?? ''), ...r });
+  }
+  const count = (s: SkuSyncStatus) => results.filter((x) => x.status === s).length;
+  return {
+    results,
+    created: count('created'),
+    exists: count('exists'),
+    failed: count('failed'),
+    skus: results.filter((x) => x.status === 'created').reduce((s, x) => s + x.skus, 0),
+    more: rows.length > cap,
+  };
+}
