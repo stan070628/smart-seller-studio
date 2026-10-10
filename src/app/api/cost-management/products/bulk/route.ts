@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { getCurrentUser } from '@/lib/auth';
+import { syncForApp } from '@/lib/erp/sku/sync-app';
+import { SYNC_MISSING_CAP, errMsg, type SkuSync } from '@/lib/erp/sku/sync-product';
+
+// 저장 뒤 상품마다 쿠팡 상품 상세를 읽는다(SKU 자동 추가, 최대 SYNC_MISSING_CAP개)
+export const maxDuration = 300;
+
+const OVER_CAP = `한 번에 ${SYNC_MISSING_CAP}개까지 자동 추가 — 재고현황의 「SKU 다시 맞추기」로 채운다`;
+
+type BulkSkuSync = SkuSync & { seller_product_id: number | null; product_name: string };
 
 /**
  * POST /api/cost-management/products/bulk
@@ -12,6 +21,7 @@ import { getCurrentUser } from '@/lib/auth';
  *  2) 이미 원가관리에 있는 seller_product_id는 건너뛴다. product_costs의 UNIQUE는
  *     (user_id, vendor_item_id)뿐이라(067) seller_product_id는 DB가 중복을 막지 않는다.
  *  3) 같은 요청 안의 중복도 걸러낸다 — 목록 갱신 지연으로 같은 상품이 두 번 실릴 수 있다.
+ *  4) 저장이 끝난 뒤 쿠팡 상품번호가 있는 상품을 SKU로 만든다(data.skuSync, 상품별 · 최대 20개).
  */
 
 const MAX_ITEMS = 200;
@@ -84,7 +94,7 @@ export async function POST(request: NextRequest) {
     );
     const existing = new Set<number>(existingRows.map((r) => Number(r.seller_product_id)));
 
-    const created: unknown[] = [];
+    const created: ({ seller_product_id: number | string | null; product_name: string } & Record<string, unknown>)[] = [];
     const skipped: Skipped[] = [];
     const seenInRequest = new Set<number>();
 
@@ -132,10 +142,32 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // 저장(건별 INSERT 자동 커밋)이 끝난 뒤 상품마다 SKU를 만든다 — 실패해도 등록은 그대로다(설계 §1)
+    const skuSync: BulkSkuSync[] = [];
+    let budget = SYNC_MISSING_CAP;
+    for (const row of created) {
+      const id = row.seller_product_id === null ? null : Number(row.seller_product_id);
+      const base = { seller_product_id: id, product_name: String(row.product_name) };
+      if (id === null || !(id > 0)) {
+        skuSync.push({ ...base, status: 'skipped', skus: 0 });
+        continue;
+      }
+      if (budget <= 0) {
+        skuSync.push({ ...base, status: 'failed', skus: 0, error: OVER_CAP });
+        continue;
+      }
+      budget--;
+      try {
+        skuSync.push({ ...base, ...(await syncForApp(id)) });
+      } catch (e) {
+        skuSync.push({ ...base, status: 'failed', skus: 0, error: errMsg(e) });
+      }
+    }
+
     return NextResponse.json(
       {
         success: true,
-        data: { created, skipped, created_count: created.length, skipped_count: skipped.length },
+        data: { created, skipped, created_count: created.length, skipped_count: skipped.length, skuSync },
       },
       { status: created.length > 0 ? 201 : 200 },
     );
