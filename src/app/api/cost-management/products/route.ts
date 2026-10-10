@@ -6,6 +6,11 @@ import type { CostEntryRow } from '@/lib/cost-management/calculations';
 import { calculateFifo, ENTRY_CHANNEL, SALE_CHANNEL, SALES_VAT_RATE_SIMPLE } from '@/lib/cost-management/fifo';
 import type { PurchaseBatch, SaleRow, FifoSummary } from '@/lib/cost-management/fifo';
 import { calcBreakevenRoas, determineWinnerStatus } from '@/lib/roi/calculations';
+import { syncForApp } from '@/lib/erp/sku/sync-app';
+import { errMsg, type SkuSync } from '@/lib/erp/sku/sync-product';
+
+// POST가 저장 뒤 쿠팡 상품 상세를 한 번 읽는다(SKU 자동 추가)
+export const maxDuration = 60;
 
 // ─────────────────────────────────────────
 // GET /api/cost-management/products
@@ -384,7 +389,18 @@ export async function POST(request: NextRequest) {
       ],
     );
 
-    return NextResponse.json({ success: true, data: rows[0] }, { status: 201 });
+    const saved = rows[0];
+    // 저장(INSERT 자동 커밋)이 끝난 뒤 SKU를 만든다 — 실패해도 원가관리 저장은 성공이다(설계 §1)
+    const sellerProductId = Number(saved.seller_product_id);
+    let skuSync: SkuSync = { status: 'skipped', skus: 0 };
+    if (sellerProductId > 0) {
+      try {
+        skuSync = await syncForApp(sellerProductId);
+      } catch (e) {
+        skuSync = { status: 'failed', skus: 0, error: errMsg(e) };
+      }
+    }
+    return NextResponse.json({ success: true, data: saved, skuSync }, { status: 201 });
   } catch (err) {
     const msg = err instanceof Error ? err.message : '서버 오류';
     return NextResponse.json({ success: false, error: msg }, { status: 500 });

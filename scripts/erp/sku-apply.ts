@@ -4,83 +4,61 @@
 //
 // 기본(점검): 적재할 내용과 현재 DB와의 차이만 출력한다. DB는 BEGIN READ ONLY 트랜잭션으로만 읽는다.
 // --apply : 트랜잭션 하나로 적재한다. 키 기준 upsert라 다시 돌려도 안전하다. 오류가 나면 전부 롤백하고 exit 1.
+//           SKU 마스터 잠금(lockSkuMaster, 7103)을 먼저 잡는다 — 원가관리 상품 추가(sync-product)와 겹쳐 쓰지 않게.
 //           초안에서 빠진 연결은 지운다(listing_skus는 초안이 원장이다). skus·channel_listings는 지우지 않고
 //           보관(archived / active=false)한다.
 //           보관·비활성화·연결 삭제는 origin='draft' 행에만 한다 — 1-B 이후 손으로 만든 행(manual)은 건드리지 않는다.
+//           원가 연결(legacy_product_cost_ids)은 DB 값과 초안 값의 합집합으로 둔다 — 초안은 옛 판매 기록으로만 연결을 찾아,
+//           사람이 손으로 붙인 연결(2026-10-05 콜맨·트루릴리젼·마크곤잘레스)을 모른다. 지우면 옛 장부 경고가 되살아난다.
+//           upsert·불변식은 src/lib/erp/sku/upsert.ts(원가관리 상품 추가와 공유), 정리(보관·비활성화·삭제)는 여기만.
 // --verify: 적재 결과 점검표(1-1 완료 기준)를 읽기 전용으로 출력한다.
 import fs from 'node:fs';
 import path from 'node:path';
 import pg from 'pg';
 import { loadEnvLocal } from './_env';
 import { applyOverrides, type Draft, type Overrides } from '@/lib/erp/sku/draft';
+import { findNewerThanDraft, staleDraftMessage, type DraftKeys } from '@/lib/erp/sku/stale-guard';
+import { insertLinks, lockSkuMaster, upsertListings, upsertSkus, validateDraft } from '@/lib/erp/sku/upsert';
 
 loadEnvLocal();
 const DIR = path.join(__dirname, '..', '..', 'docs', 'erp');
 const APPLY = process.argv.includes('--apply');
 const VERIFY = process.argv.includes('--verify');
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const newClient = () => new pg.Client({ connectionString: process.env.SUPABASE_DB_URL, ssl: { rejectUnauthorized: false } });
 
-function loadFinalDraft(): { draftFile: string; d: Draft } {
+/** 초안에 실린 key로 만든 stale-guard 입력 */
+const draftKeysOf = (d: Draft): DraftKeys => ({
+  skuKeys: new Set(d.skus.map((x) => x.key)),
+  listingKeys: new Set(d.listings.map((l) => `${l.channel}|${l.externalProductId}|${l.externalOptionKey}`)),
+});
+
+function loadFinalDraft(): { draftFile: string; d: Draft; collectedAt: string | null } {
   const draftFile = fs.readdirSync(DIR).filter((n) => /^sku-draft-.*\.json$/.test(n)).sort().pop();
   if (!draftFile) throw new Error('docs/erp/sku-draft-*.json이 없다 — sku-collect.ts를 먼저 돌린다');
-  const raw = JSON.parse(fs.readFileSync(path.join(DIR, draftFile), 'utf-8')) as { draft: Draft; coupangFetchFailed?: unknown[] };
+  const raw = JSON.parse(fs.readFileSync(path.join(DIR, draftFile), 'utf-8')) as { draft: Draft; coupangFetchFailed?: unknown[]; collectedAt?: string };
   // 쿠팡 조회가 일부 실패한 초안은 SKU가 빠져 있다 — 그대로 적재하면 빠진 SKU가 보관 처리된다.
   if (raw.coupangFetchFailed && raw.coupangFetchFailed.length > 0) {
     throw new Error(`${draftFile}은 쿠팡 조회 실패 ${raw.coupangFetchFailed.length}건이 있는 초안이다 — sku-collect.ts를 다시 돌린다`);
   }
   const overrides = JSON.parse(fs.readFileSync(path.join(DIR, 'sku-overrides.json'), 'utf-8')) as Overrides;
-  return { draftFile, d: applyOverrides(raw.draft, overrides) };
-}
-
-/** 적재 전 불변식. 하나라도 어긋나면 던진다(DB에 쓰기 전에). */
-function validate(d: Draft): void {
-  const errs: string[] = [];
-  if (d.skus.length === 0 || d.listings.length === 0 || d.links.length === 0) errs.push('SKU·리스팅·연결 중 비어 있는 것이 있다');
-  const skuKeys = new Set<string>();
-  for (const s of d.skus) {
-    if (skuKeys.has(s.key)) errs.push(`SKU 키 중복: ${s.key}`);
-    skuKeys.add(s.key);
-    if (!s.name) errs.push(`SKU 이름 없음: ${s.key}`);
-    for (const id of s.legacyProductCostIds) if (!UUID.test(id)) errs.push(`uuid 아님: ${s.key} → ${id}`);
-  }
-  const listingKeys = new Set<string>();
-  const uniq = new Set<string>();
-  for (const l of d.listings) {
-    if (listingKeys.has(l.key)) errs.push(`리스팅 키 중복: ${l.key}`);
-    listingKeys.add(l.key);
-    const u = `${l.channel}|${l.externalProductId}|${l.externalOptionKey}`;
-    if (uniq.has(u)) errs.push(`리스팅 유니크 키 중복: ${u}`);
-    uniq.add(u);
-  }
-  const linkCount = new Map<string, number>();
-  const linkPair = new Set<string>();
-  for (const k of d.links) {
-    if (!listingKeys.has(k.listingKey)) errs.push(`연결의 리스팅이 없다: ${k.listingKey} → ${k.skuKey}`);
-    if (!skuKeys.has(k.skuKey)) errs.push(`연결의 SKU가 없다: ${k.listingKey} → ${k.skuKey}`);
-    if (!Number.isInteger(k.multiplier) || k.multiplier <= 0) errs.push(`배수가 양의 정수가 아니다: ${k.listingKey} → ${k.skuKey} = ${k.multiplier}`);
-    const p = `${k.listingKey}→${k.skuKey}`;
-    if (linkPair.has(p)) errs.push(`연결 중복: ${p}`);
-    linkPair.add(p);
-    linkCount.set(k.listingKey, (linkCount.get(k.listingKey) ?? 0) + 1);
-  }
-  for (const l of d.listings) {
-    const n = linkCount.get(l.key) ?? 0;
-    if (n === 0) errs.push(`연결 없는 리스팅: ${l.key}`);
-    else if (l.linkMode === 'single' && n !== 1) errs.push(`single인데 SKU ${n}개: ${l.key}`);
-    else if (l.linkMode === 'any_of' && n < 2) errs.push(`any_of인데 SKU ${n}개: ${l.key}`);
-  }
-  if (errs.length > 0) throw new Error(`불변식 위반 ${errs.length}건:\n  ${errs.slice(0, 30).join('\n  ')}`);
+  // 수집 시각 — sku-collect가 기록한다. 없는 옛 초안은 오래됐는지 알 수 없으므로(파일 수정 시각은 믿을 수 없다) --apply가 거부한다.
+  return { draftFile, d: applyOverrides(raw.draft, overrides), collectedAt: raw.collectedAt ?? null };
 }
 
 const sameArr = (a: string[], b: string[]) => a.length === b.length && [...a].sort().every((x, i) => x === [...b].sort()[i]);
+const unionArr = (a: string[], b: string[]) => [...new Set([...a, ...b])];
 
-async function dryRun(draftFile: string, d: Draft): Promise<void> {
+const NO_COLLECTED_AT = '초안에 수집 시각(collectedAt)이 없다 — sku-collect를 다시 돌린다';
+
+async function dryRun(draftFile: string, d: Draft, collectedAt: string | null): Promise<void> {
   const c = newClient();
   await c.connect();
   try {
     await c.query('BEGIN READ ONLY');
+    if (!collectedAt) console.log(`⚠️ ${NO_COLLECTED_AT} (--apply는 거부한다)`);
+    const stale = collectedAt ? await findNewerThanDraft(c, new Date(collectedAt), draftKeysOf(d)) : { skus: [], listings: [], count: 0 };
+    if (stale.count > 0) console.log(`⚠️ ${staleDraftMessage(draftFile, collectedAt ?? "", stale.count)} — ${[...stale.skus, ...stale.listings].slice(0, 5).join(', ')} (--apply는 거부한다)`);
     const dbSkus = (await c.query(`select key, name, option_label, base_unit_label, status, legacy_product_cost_ids::text[] as legacy from erp.skus where origin = 'draft'`)).rows;
     const dbListings = (await c.query(`select id, channel, external_product_id, external_option_key, alt_product_id, label, link_mode, active from erp.channel_listings where origin = 'draft'`)).rows;
     const dbLinks = (await c.query(`
@@ -97,11 +75,14 @@ async function dryRun(draftFile: string, d: Draft): Promise<void> {
 
     const skuByKey = new Map(dbSkus.map((r) => [r.key as string, r]));
     let skuIns = 0, skuUpd = 0, skuSame = 0;
+    const keptLegacy: string[] = [];
     for (const s of d.skus) {
       const r = skuByKey.get(s.key);
       if (!r) { skuIns++; continue; }
       const same = r.name === s.name && r.option_label === s.optionLabel && (r.base_unit_label ?? null) === s.baseUnitLabel
-        && r.status === s.status && sameArr(r.legacy ?? [], s.legacyProductCostIds);
+        && r.status === s.status && sameArr(r.legacy ?? [], unionArr(r.legacy ?? [], s.legacyProductCostIds));
+      const kept = (r.legacy ?? []).filter((x: string) => !s.legacyProductCostIds.includes(x));
+      if (kept.length > 0) keptLegacy.push(`${s.key} ${s.name.slice(0, 24)} — DB에만 있는 원가 연결 ${kept.length}개 유지`);
       if (same) skuSame++; else skuUpd++;
     }
     const draftSkuKeys = new Set(d.skus.map((s) => s.key));
@@ -143,6 +124,7 @@ async function dryRun(draftFile: string, d: Draft): Promise<void> {
     console.log(`현재 DB: SKU ${dbSkus.length} · 리스팅 ${dbListings.length} · 연결 ${dbLinks.length}`);
     console.log('--apply 시 변경:');
     console.log(`  SKU      삽입 ${skuIns} · 갱신 ${skuUpd} · 동일 ${skuSame} · 보관(archived) ${skuArchive}`);
+    for (const k of keptLegacy) console.log(`  (유지) ${k}`);
     console.log(`  리스팅   삽입 ${lIns} · 갱신 ${lUpd} · 동일 ${lSame} · 비활성화 ${lDeactivate}`);
     console.log(`  연결     draft ${d.links.length} 재작성 (신규 ${kAdd} · 배수변경 ${kChg} · 삭제 ${kDel})`);
     console.log(`  manual 충돌 SKU ${skuConflict} · 리스팅 ${listingConflict} · 연결 ${linkConflict} — 0이 아니면 --apply가 실패한다`);
@@ -161,26 +143,16 @@ async function dryRun(draftFile: string, d: Draft): Promise<void> {
   }
 }
 
-async function apply(d: Draft): Promise<void> {
+async function apply(d: Draft, draftFile: string, collectedAt: string): Promise<void> {
   const c = newClient();
   await c.connect();
   try {
     await c.query('BEGIN');
-    const skuId = new Map<string, number>();
-    for (const s of d.skus) {
-      const { rows } = await c.query(
-        `insert into erp.skus (key, name, option_label, base_unit_label, status, legacy_product_cost_ids, origin)
-         values ($1, $2, $3, $4, $5, $6::uuid[], 'draft')
-         on conflict (key) do update set name = excluded.name, option_label = excluded.option_label,
-           base_unit_label = excluded.base_unit_label, status = excluded.status,
-           legacy_product_cost_ids = excluded.legacy_product_cost_ids, updated_at = now()
-         where erp.skus.origin = 'draft'
-         returning id`,
-        [s.key, s.name, s.optionLabel, s.baseUnitLabel, s.status, s.legacyProductCostIds],
-      );
-      if (rows.length === 0) throw new Error(`초안 키 ${s.key}가 manual SKU와 겹친다 — 초안을 고친다`);
-      skuId.set(s.key, Number(rows[0].id));
-    }
+    await lockSkuMaster(c);
+    // 잠금 안에서 확인한다 — 원가관리 상품 추가가 초안 수집 뒤에 만든 행은 초안에 없어 아래 정리가 지워 버린다
+    const stale = await findNewerThanDraft(c, new Date(collectedAt), draftKeysOf(d));
+    if (stale.count > 0) throw new Error(`${staleDraftMessage(draftFile, collectedAt, stale.count)}\n  ${[...stale.skus, ...stale.listings].slice(0, 10).join('\n  ')}`);
+    const skuId = await upsertSkus(c, d.skus);
     const archived = await c.query(
       `update erp.skus set status = 'archived', updated_at = now()
         where status <> 'archived' and origin = 'draft' and not (key = any($1::text[]))`,
@@ -197,38 +169,14 @@ async function apply(d: Draft): Promise<void> {
       throw new Error(`재고가 있는 SKU를 보관하려 한다 — 키가 바뀌었거나 병합됐다. 초안(overrides)을 고친다:\n  ${stocked.rows.map((r) => `${r.key} ${r.location} ${r.qty}`).join('\n  ')}`);
     }
 
-    const listingId = new Map<string, number>();
-    for (const l of d.listings) {
-      const { rows } = await c.query(
-        `insert into erp.channel_listings (channel, external_product_id, external_option_key, alt_product_id, label, link_mode, active, origin)
-         values ($1, $2, $3, $4, $5, $6, true, 'draft')
-         on conflict (channel, external_product_id, external_option_key) do update
-           set alt_product_id = excluded.alt_product_id, label = excluded.label, link_mode = excluded.link_mode, active = true
-         where erp.channel_listings.origin = 'draft'
-         returning id`,
-        [l.channel, l.externalProductId, l.externalOptionKey, l.altProductId, l.label, l.linkMode],
-      );
-      if (rows.length === 0) throw new Error(`초안 리스팅 ${l.key}가 manual 리스팅과 겹친다 — 초안을 고친다`);
-      listingId.set(l.key, Number(rows[0].id));
-    }
+    const listingId = await upsertListings(c, d.listings);
     const deactivated = await c.query(
       `update erp.channel_listings set active = false where active and origin = 'draft' and not (id = any($1::bigint[]))`,
       [[...listingId.values()]],
     );
 
     await c.query(`delete from erp.listing_skus where origin = 'draft'`);
-    for (const k of d.links) {
-      const lid = listingId.get(k.listingKey);
-      const sid = skuId.get(k.skuKey);
-      if (!lid || !sid) throw new Error(`연결 대상 누락: ${k.listingKey} → ${k.skuKey}`);
-      const { rows } = await c.query(
-        `insert into erp.listing_skus (listing_id, sku_id, multiplier, origin) values ($1, $2, $3, 'draft')
-         on conflict (listing_id, sku_id) do nothing
-         returning 1`,
-        [lid, sid, k.multiplier],
-      );
-      if (rows.length === 0) throw new Error(`연결 ${k.listingKey}→${k.skuKey}가 manual 연결과 겹친다 — 초안을 고친다`);
-    }
+    await insertLinks(c, d.links, skuId, listingId);
     await c.query('COMMIT');
     console.log(`✅ 적재 완료 — SKU ${skuId.size}(보관 ${archived.rowCount}) · 리스팅 ${listingId.size}(비활성화 ${deactivated.rowCount}) · 연결 ${d.links.length}`);
   } catch (e) {
@@ -264,11 +212,12 @@ async function verify(): Promise<void> {
 
 (async () => {
   if (VERIFY) return verify();
-  const { draftFile, d } = loadFinalDraft();
-  validate(d);
-  if (!APPLY) return dryRun(draftFile, d);
+  const { draftFile, d, collectedAt } = loadFinalDraft();
+  validateDraft(d);
+  if (!APPLY) return dryRun(draftFile, d, collectedAt);
+  if (!collectedAt) throw new Error(NO_COLLECTED_AT);
   console.log(`${draftFile} + overrides → SKU ${d.skus.length} · 리스팅 ${d.listings.length} · 연결 ${d.links.length} 적재 시작`);
-  return apply(d);
+  return apply(d, draftFile, collectedAt);
 })().catch((e) => {
   console.error(`❌ ${(e as Error).message}`);
   process.exitCode = 1;

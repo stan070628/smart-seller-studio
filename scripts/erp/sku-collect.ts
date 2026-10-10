@@ -2,15 +2,20 @@
 // 사용법: npx --no-install tsx scripts/erp/sku-collect.ts
 // DB(읽기 전용 세션)와 쿠팡 API(GET만)에서 입력을 모아 SKU 초안(JSON)과 점검 보고서(MD)를 docs/erp/에 쓴다.
 // 구매자 정보는 읽지 않는다 — sale_records에서는 vid·product_cost_id·건수만 모은다.
+// DB 입력 읽기·쿠팡 상세 변환은 원가관리 상품 추가(src/lib/erp/sku/sync-product.ts)와 같은 lib를 쓴다.
 import fs from 'node:fs';
 import path from 'node:path';
 import pg from 'pg';
 import { loadEnvLocal } from './_env';
 import { buildDraft, type DraftInput } from '@/lib/erp/sku/draft';
+import { readDraftDbInput, type DraftDbInput } from '@/lib/erp/sku/db-input';
+import { toCoupangProduct } from '@/lib/erp/sku/coupang-input';
 import { renderReport } from '@/lib/erp/sku/report';
 import { getCoupangClient } from '@/lib/listing/coupang-client';
 
 loadEnvLocal();
+// DB를 읽기 전에 잡는다 — 이 시각 뒤에 생긴 SKU·리스팅은 초안에 없다(sku-apply --apply가 이 값으로 오래된 초안을 거부한다)
+const COLLECTED_AT = new Date().toISOString();
 const DATE = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 const OUT = path.join(__dirname, '..', '..', 'docs', 'erp');
 
@@ -21,7 +26,7 @@ interface OpsFacts {
   costcoMap: { itemCode: string; itemLabel: string | null; productName: string | null }[];
 }
 
-type DbInput = Omit<DraftInput, 'coupangProducts'> & { sellerProductIds: number[]; ops: OpsFacts };
+type DbInput = DraftDbInput & { sellerProductIds: number[]; ops: OpsFacts };
 
 async function collectDb(): Promise<DbInput> {
   const c = new pg.Client({ connectionString: process.env.SUPABASE_DB_URL, ssl: { rejectUnauthorized: false } });
@@ -29,14 +34,7 @@ async function collectDb(): Promise<DbInput> {
   try {
     // 세션 SET이 아니라 트랜잭션 단위로 읽기 전용을 건다 — 트랜잭션 pooler 모드에서도 모든 조회가 이 트랜잭션 안에서 돈다.
     await c.query('BEGIN READ ONLY');
-    const pcs = (await c.query(`select id, product_name, seller_product_id, vendor_item_id from product_costs`)).rows;
-    const pcc = (await c.query(`select product_cost_id, channel_type, external_id, unit_multiplier from product_cost_channels`)).rows;
-    const ssl = (await c.query(`select coupang_vendor_item_id, channel, product_id, option_key, label from stock_sync_links`)).rows;
-    const sales = (await c.query(`
-      select nullif(regexp_replace(coupang_order_item_id, '^.*-', ''), '')::bigint as vid, product_cost_id, count(*)::int as rows
-        from sale_records
-       where voided_at is null and channel in ('coupang', 'rocket_growth') and coupang_order_item_id ~ '-[0-9]+$'
-       group by 1, 2`)).rows;
+    const core = await readDraftDbInput(c);
     // 운영 영향 메모용 실측(읽기 전용). 구매자 정보는 읽지 않는다 — 건수와 상품 수만.
     const naverSync = (await c.query(`select count(distinct product_id)::int as n from stock_sync_links where channel = 'naver'`)).rows[0];
     const naverSales = (await c.query(`
@@ -57,29 +55,8 @@ async function collectDb(): Promise<DbInput> {
     await c.query('COMMIT');
     return {
       ops,
-      legacyProductCosts: pcs.map((r) => ({
-        id: String(r.id),
-        productName: String(r.product_name),
-        sellerProductId: Number(r.seller_product_id),
-        vendorItemId: r.vendor_item_id ? Number(r.vendor_item_id) : null,
-      })),
-      legacyChannels: pcc.map((r) => ({
-        productCostId: String(r.product_cost_id),
-        channelType: r.channel_type as DraftInput['legacyChannels'][number]['channelType'],
-        externalId: Number(r.external_id),
-        unitMultiplier: Number(r.unit_multiplier),
-      })),
-      syncLinks: ssl.map((r) => ({
-        coupangVid: Number(r.coupang_vendor_item_id),
-        channel: r.channel as DraftInput['syncLinks'][number]['channel'],
-        productId: Number(r.product_id),
-        optionKey: String(r.option_key ?? ''),
-        label: r.label ?? null,
-      })),
-      saleAttributions: sales
-        .filter((r) => r.vid && r.product_cost_id)
-        .map((r) => ({ vid: Number(r.vid), productCostId: String(r.product_cost_id), rows: Number(r.rows) })),
-      sellerProductIds: [...new Set(pcs.map((r) => Number(r.seller_product_id)).filter((n) => n > 0))],
+      ...core,
+      sellerProductIds: [...new Set(core.legacyProductCosts.map((r) => r.sellerProductId).filter((n) => n > 0))],
     };
   } catch (e) {
     await c.query('ROLLBACK').catch(() => undefined);
@@ -105,31 +82,7 @@ async function collectCoupang(extraIds: number[]): Promise<{ products: DraftInpu
   const failed: number[] = [];
   for (const id of ids) {
     try {
-      const d = (await cp.getProductDetail(id)) as { sellerProductId: number; sellerProductName: string; items?: Record<string, unknown>[] };
-      products.push({
-        sellerProductId: Number(d.sellerProductId),
-        productName: d.sellerProductName,
-        items: (d.items ?? []).map((it) => {
-          // 로켓그로스 동시 운영 상품은 Wing vid가 최상위가 아니라 marketplaceItemData.vendorItemId에 있다(2026-09-26 실측).
-          const rg = it.rocketGrowthItemData as { vendorItemId?: number } | undefined;
-          const mp = it.marketplaceItemData as { vendorItemId?: number } | undefined;
-          const wing = it.vendorItemId ?? mp?.vendorItemId;
-          return {
-            itemName: String(it.itemName ?? ''),
-            // 옵션 키가 쓰는 세 필드(이름·값·exposed)만 남기고, 값이 빈 속성은 버린다(초안 JSON 크기 절감).
-            // 빈 속성은 옵션 조합에서도 어차피 걸러지지만, 값이 빈 `수량` 속성까지 버리므로 그런 item은
-            // 수량을 itemName에서 읽는다(빈 값을 수량 1로 읽는 것보다 정확하다). exposed는 구매옵션(EXPOSED)과
-            // 검색옵션(NONE)을 가르는 데 필요하므로 유지한다.
-            attributes: Array.isArray(it.attributes)
-              ? (it.attributes as { attributeTypeName: string; attributeValueName: string; exposed?: string }[])
-                  .filter((a) => String(a.attributeValueName ?? '').trim() !== '')
-                  .map((a) => ({ attributeTypeName: a.attributeTypeName, attributeValueName: a.attributeValueName, ...(a.exposed ? { exposed: a.exposed } : {}) }))
-              : [],
-            wingVid: wing ? Number(wing) : null,
-            rgVid: rg?.vendorItemId ? Number(rg.vendorItemId) : null,
-          };
-        }),
-      });
+      products.push(toCoupangProduct(await cp.getProductDetail(id)));
     } catch (e) {
       failed.push(id);
       console.error(`⚠️ 쿠팡 상품 ${id} 조회 실패: ${(e as Error).message}`);
@@ -146,7 +99,7 @@ async function collectCoupang(extraIds: number[]): Promise<{ products: DraftInpu
   const input: DraftInput = { ...rest, coupangProducts };
   const draft = buildDraft(input);
   fs.mkdirSync(OUT, { recursive: true });
-  fs.writeFileSync(path.join(OUT, `sku-draft-${DATE}.json`), JSON.stringify({ input, draft, coupangFetchFailed: failed }, null, 2));
+  fs.writeFileSync(path.join(OUT, `sku-draft-${DATE}.json`), JSON.stringify({ input, draft, coupangFetchFailed: failed, collectedAt: COLLECTED_AT }, null, 2));
   const costcoLine = ops.costcoMap.length
     ? ops.costcoMap.map((m) => `${m.itemCode} 「${m.itemLabel ?? '라벨 없음'}」→${m.productName ?? '연결 없음'}`).join(', ')
     : '693742·888450 둘 다 costco_item_map에 없음';

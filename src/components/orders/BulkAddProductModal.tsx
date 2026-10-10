@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { X, Search, RefreshCw } from 'lucide-react';
 import { toast } from '@/components/ui/toast';
+import { summarizeSkuSync } from '@/lib/erp/sku/sync-message';
+import type { SkuSync } from '@/lib/erp/sku/sync-product';
 import { E } from '@/lib/design-tokens';
 
 /**
@@ -308,6 +310,9 @@ export default function BulkAddProductModal({ onClose, onAdded }: Props) {
       };
 
       if (created_count > 0) toast.success(`${created_count}건을 원가관리에 추가했습니다.`);
+      // 저장 뒤 서버가 SKU를 만든 결과 — 실패만 남기면 재고현황에서 다시 맞출 수 있다
+      const sync = summarizeSkuSync((json.data as { skuSync?: SkuSync[] }).skuSync ?? []);
+      if (sync) toast[sync.kind](sync.message);
       if (skipped_count > 0) {
         // 건너뛴 건은 사유를 보여준다 — 왜 6건 골랐는데 4건만 들어갔는지 알 수 있어야 한다.
         const head = skipped.slice(0, 3).map((s) => `${s.product_name}: ${s.reason}`).join(' / ');
