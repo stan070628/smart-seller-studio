@@ -2146,3 +2146,11 @@ git commit -m "docs(erp): SKU 자동 추가 — 계획에서 정한 것 · 실�
 
 1. PR 생성·병합은 사용자 승인 뒤(이 계획은 push하지 않는다). 마이그레이션 없음.
 2. 배포 뒤 첫 실제 확인은 사용자가 한다 — 원가관리 「쿠팡 상품 불러오기」로 새 상품 하나를 넣고 토스트 「SKU N개 자동 추가」 → 재고현황에 그 SKU가 보이는지 → 코스트코 영수증 입고에서 조회되는지.
+
+## 실행 기록 (2026-10-10)
+
+- 커밋(시작 16d6f293 위): 1cc79f4f coupang-input · 4a4d9fcc db-input · babfebb4 upsert · 0d1bd4f4 스크립트 리팩터 · a68af208 syncSellerProduct · cf36c8fa syncMissing · c326ab06 sync-app/message · 849a8617 검토 반영(범위 밖 원가·묶음 리스팅·오래된 초안 거부·검토 필요 보류) · ac71b143 원가관리 라우트 · f45a530f 토스트 · cd97e15e sync-missing 라우트 · c8ea7d75 버튼 · 이 기록 앞의 운영 대조 스크립트 커밋.
+- 새 테스트: lib/erp/sku 6파일 → 10파일(75 → 119개), API 2파일(9개), 컴포넌트 1파일(3개).
+- Task 4 Step 6: 점검 dry-run 출력이 기준선(`/tmp/sku-apply-before.txt`)과 `diff` 동일(삽입 0 · 갱신 0 · 동일 220). Step 7: 입력 4종 초안과 같음(82/139/165/109), 쿠팡 변환 16404126884 같다.
+- Task 12 Step 3: 4개 상품 모두 SKU·리스팅·연결이 DB와 같다(1/1/1 · 1/1/1 · 2/2/2 · 1/1/1), 건너뛴 리스팅 0 · 이슈 0. Step 4: 대조 전후 DB 집계 동일(SKU 223 = draft 221 + manual 2 · 리스팅 466 = 452 + 14 · 연결 476 = 462 + 14), `max(updated_at)` 2026-10-10 08:14 UTC로 작업 시작 전.
+- Task 13: 최종 dry-run 출력 기준선과 동일. `src/__tests__/lib/erp · api · components` 224 파일 통과, 7 파일 실패는 시작 전부터 있던 것(cleanup-image-region · costco-naver-compare-handler · analyze-detail-images · keyword-discover · keyword-suggest-with-evaluate · assets-tab · detail-maker-thumbnail-panel). tsc 0.
