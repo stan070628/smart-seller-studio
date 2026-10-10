@@ -7,6 +7,8 @@
 //           초안에서 빠진 연결은 지운다(listing_skus는 초안이 원장이다). skus·channel_listings는 지우지 않고
 //           보관(archived / active=false)한다.
 //           보관·비활성화·연결 삭제는 origin='draft' 행에만 한다 — 1-B 이후 손으로 만든 행(manual)은 건드리지 않는다.
+//           원가 연결(legacy_product_cost_ids)은 DB 값과 초안 값의 합집합으로 둔다 — 초안은 옛 판매 기록으로만 연결을 찾아,
+//           사람이 손으로 붙인 연결(2026-10-05 콜맨·트루릴리젼·마크곤잘레스)을 모른다. 지우면 옛 장부 경고가 되살아난다.
 // --verify: 적재 결과 점검표(1-1 완료 기준)를 읽기 전용으로 출력한다.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -75,6 +77,7 @@ function validate(d: Draft): void {
 }
 
 const sameArr = (a: string[], b: string[]) => a.length === b.length && [...a].sort().every((x, i) => x === [...b].sort()[i]);
+const unionArr = (a: string[], b: string[]) => [...new Set([...a, ...b])];
 
 async function dryRun(draftFile: string, d: Draft): Promise<void> {
   const c = newClient();
@@ -97,11 +100,14 @@ async function dryRun(draftFile: string, d: Draft): Promise<void> {
 
     const skuByKey = new Map(dbSkus.map((r) => [r.key as string, r]));
     let skuIns = 0, skuUpd = 0, skuSame = 0;
+    const keptLegacy: string[] = [];
     for (const s of d.skus) {
       const r = skuByKey.get(s.key);
       if (!r) { skuIns++; continue; }
       const same = r.name === s.name && r.option_label === s.optionLabel && (r.base_unit_label ?? null) === s.baseUnitLabel
-        && r.status === s.status && sameArr(r.legacy ?? [], s.legacyProductCostIds);
+        && r.status === s.status && sameArr(r.legacy ?? [], unionArr(r.legacy ?? [], s.legacyProductCostIds));
+      const kept = (r.legacy ?? []).filter((x: string) => !s.legacyProductCostIds.includes(x));
+      if (kept.length > 0) keptLegacy.push(`${s.key} ${s.name.slice(0, 24)} — DB에만 있는 원가 연결 ${kept.length}개 유지`);
       if (same) skuSame++; else skuUpd++;
     }
     const draftSkuKeys = new Set(d.skus.map((s) => s.key));
@@ -143,6 +149,7 @@ async function dryRun(draftFile: string, d: Draft): Promise<void> {
     console.log(`현재 DB: SKU ${dbSkus.length} · 리스팅 ${dbListings.length} · 연결 ${dbLinks.length}`);
     console.log('--apply 시 변경:');
     console.log(`  SKU      삽입 ${skuIns} · 갱신 ${skuUpd} · 동일 ${skuSame} · 보관(archived) ${skuArchive}`);
+    for (const k of keptLegacy) console.log(`  (유지) ${k}`);
     console.log(`  리스팅   삽입 ${lIns} · 갱신 ${lUpd} · 동일 ${lSame} · 비활성화 ${lDeactivate}`);
     console.log(`  연결     draft ${d.links.length} 재작성 (신규 ${kAdd} · 배수변경 ${kChg} · 삭제 ${kDel})`);
     console.log(`  manual 충돌 SKU ${skuConflict} · 리스팅 ${listingConflict} · 연결 ${linkConflict} — 0이 아니면 --apply가 실패한다`);
@@ -173,7 +180,8 @@ async function apply(d: Draft): Promise<void> {
          values ($1, $2, $3, $4, $5, $6::uuid[], 'draft')
          on conflict (key) do update set name = excluded.name, option_label = excluded.option_label,
            base_unit_label = excluded.base_unit_label, status = excluded.status,
-           legacy_product_cost_ids = excluded.legacy_product_cost_ids, updated_at = now()
+           legacy_product_cost_ids = array(select distinct x from unnest(erp.skus.legacy_product_cost_ids || excluded.legacy_product_cost_ids) as x order by x),
+           updated_at = now()
          where erp.skus.origin = 'draft'
          returning id`,
         [s.key, s.name, s.optionLabel, s.baseUnitLabel, s.status, s.legacyProductCostIds],
