@@ -33,7 +33,7 @@ const draftKeysOf = (d: Draft): DraftKeys => ({
   listingKeys: new Set(d.listings.map((l) => `${l.channel}|${l.externalProductId}|${l.externalOptionKey}`)),
 });
 
-function loadFinalDraft(): { draftFile: string; d: Draft; collectedAt: string } {
+function loadFinalDraft(): { draftFile: string; d: Draft; collectedAt: string | null } {
   const draftFile = fs.readdirSync(DIR).filter((n) => /^sku-draft-.*\.json$/.test(n)).sort().pop();
   if (!draftFile) throw new Error('docs/erp/sku-draft-*.json이 없다 — sku-collect.ts를 먼저 돌린다');
   const raw = JSON.parse(fs.readFileSync(path.join(DIR, draftFile), 'utf-8')) as { draft: Draft; coupangFetchFailed?: unknown[]; collectedAt?: string };
@@ -42,21 +42,23 @@ function loadFinalDraft(): { draftFile: string; d: Draft; collectedAt: string } 
     throw new Error(`${draftFile}은 쿠팡 조회 실패 ${raw.coupangFetchFailed.length}건이 있는 초안이다 — sku-collect.ts를 다시 돌린다`);
   }
   const overrides = JSON.parse(fs.readFileSync(path.join(DIR, 'sku-overrides.json'), 'utf-8')) as Overrides;
-  // 수집 시각 — sku-collect가 기록한다. 그전에 만든 초안은 파일 수정 시각으로 대신한다.
-  const collectedAt = raw.collectedAt ?? fs.statSync(path.join(DIR, draftFile)).mtime.toISOString();
-  return { draftFile, d: applyOverrides(raw.draft, overrides), collectedAt };
+  // 수집 시각 — sku-collect가 기록한다. 없는 옛 초안은 오래됐는지 알 수 없으므로(파일 수정 시각은 믿을 수 없다) --apply가 거부한다.
+  return { draftFile, d: applyOverrides(raw.draft, overrides), collectedAt: raw.collectedAt ?? null };
 }
 
 const sameArr = (a: string[], b: string[]) => a.length === b.length && [...a].sort().every((x, i) => x === [...b].sort()[i]);
 const unionArr = (a: string[], b: string[]) => [...new Set([...a, ...b])];
 
-async function dryRun(draftFile: string, d: Draft, collectedAt: string): Promise<void> {
+const NO_COLLECTED_AT = '초안에 수집 시각(collectedAt)이 없다 — sku-collect를 다시 돌린다';
+
+async function dryRun(draftFile: string, d: Draft, collectedAt: string | null): Promise<void> {
   const c = newClient();
   await c.connect();
   try {
     await c.query('BEGIN READ ONLY');
-    const stale = await findNewerThanDraft(c, new Date(collectedAt), draftKeysOf(d));
-    if (stale.count > 0) console.log(`⚠️ ${staleDraftMessage(draftFile, collectedAt, stale.count)} — ${[...stale.skus, ...stale.listings].slice(0, 5).join(', ')} (--apply는 거부한다)`);
+    if (!collectedAt) console.log(`⚠️ ${NO_COLLECTED_AT} (--apply는 거부한다)`);
+    const stale = collectedAt ? await findNewerThanDraft(c, new Date(collectedAt), draftKeysOf(d)) : { skus: [], listings: [], count: 0 };
+    if (stale.count > 0) console.log(`⚠️ ${staleDraftMessage(draftFile, collectedAt ?? "", stale.count)} — ${[...stale.skus, ...stale.listings].slice(0, 5).join(', ')} (--apply는 거부한다)`);
     const dbSkus = (await c.query(`select key, name, option_label, base_unit_label, status, legacy_product_cost_ids::text[] as legacy from erp.skus where origin = 'draft'`)).rows;
     const dbListings = (await c.query(`select id, channel, external_product_id, external_option_key, alt_product_id, label, link_mode, active from erp.channel_listings where origin = 'draft'`)).rows;
     const dbLinks = (await c.query(`
@@ -213,6 +215,7 @@ async function verify(): Promise<void> {
   const { draftFile, d, collectedAt } = loadFinalDraft();
   validateDraft(d);
   if (!APPLY) return dryRun(draftFile, d, collectedAt);
+  if (!collectedAt) throw new Error(NO_COLLECTED_AT);
   console.log(`${draftFile} + overrides → SKU ${d.skus.length} · 리스팅 ${d.listings.length} · 연결 ${d.links.length} 적재 시작`);
   return apply(d, draftFile, collectedAt);
 })().catch((e) => {

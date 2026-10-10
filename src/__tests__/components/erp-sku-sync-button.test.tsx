@@ -46,4 +46,14 @@ describe('SkuSyncButton', () => {
     expect(screen.getByRole('button', { name: /SKU 다시 맞추기/ })).toBeInTheDocument();
     expect(screen.queryByRole('status')).toBeNull();
   });
+
+  it('다시 누르면 이전 결과 줄을 지운다(오류여도 낡은 결과가 남지 않는다)', async () => {
+    server.use(http.post('/api/erp/skus/sync-missing', () => HttpResponse.json({ success: true, data: data({}) }), { once: true }));
+    render(<SkuSyncButton onDone={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /SKU 다시 맞추기/ }));
+    expect(await screen.findByText(/빠진 상품 없음/)).toBeInTheDocument();
+    server.use(http.post('/api/erp/skus/sync-missing', () => HttpResponse.json({ success: false, code: 'server', error: '서버 오류' }, { status: 500 })));
+    fireEvent.click(screen.getByRole('button', { name: /SKU 다시 맞추기/ }));
+    await waitFor(() => expect(screen.queryByText(/빠진 상품 없음/)).toBeNull());
+  });
 });

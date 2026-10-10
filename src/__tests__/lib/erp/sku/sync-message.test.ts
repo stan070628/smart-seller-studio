@@ -22,6 +22,14 @@ describe('summarizeSkuSync', () => {
       kind: 'success', message: 'SKU 3개 자동 추가 · 네이버·토스 리스팅 3개는 전체 적재 필요',
     });
   });
+  it('미룬 상품은 실패로 세지 않고 안내한다', () => {
+    expect(summarizeSkuSync([{ status: 'created', skus: 2 }, { status: 'deferred', skus: 0 }, { status: 'deferred', skus: 0 }])).toEqual({
+      kind: 'success', message: 'SKU 2개 자동 추가 · SKU 자동 추가는 2건 뒤로 미뤘다 — 재고현황의 「SKU 다시 맞추기」로 마저 한다',
+    });
+    expect(summarizeSkuSync([{ status: 'deferred', skus: 0 }])).toEqual({
+      kind: 'success', message: 'SKU 자동 추가는 1건 뒤로 미뤘다 — 재고현황의 「SKU 다시 맞추기」로 마저 한다',
+    });
+  });
   it('이미 있음·건너뜀·없음은 말하지 않는다', () => {
     expect(summarizeSkuSync([{ status: 'exists', skus: 0 }, { status: 'skipped', skus: 0 }, undefined, null])).toBeNull();
     expect(summarizeSkuSync([])).toBeNull();

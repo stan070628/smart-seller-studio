@@ -2,12 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSourcingPool } from '@/lib/sourcing/db';
 import { getCurrentUser } from '@/lib/auth';
 import { syncForApp } from '@/lib/erp/sku/sync-app';
-import { SYNC_MISSING_CAP, errMsg, type SkuSync } from '@/lib/erp/sku/sync-product';
+import { SYNC_MISSING_CAP, SYNC_MISSING_DEADLINE_MS, errMsg, type SkuSync } from '@/lib/erp/sku/sync-product';
 
 // 저장 뒤 상품마다 쿠팡 상품 상세를 읽는다(SKU 자동 추가, 최대 SYNC_MISSING_CAP개)
 export const maxDuration = 300;
-
-const OVER_CAP = `한 번에 ${SYNC_MISSING_CAP}개까지 자동 추가 — 재고현황의 「SKU 다시 맞추기」로 채운다`;
 
 type BulkSkuSync = SkuSync & { seller_product_id: number | null; product_name: string };
 
@@ -145,6 +143,8 @@ export async function POST(request: NextRequest) {
     // 저장(건별 INSERT 자동 커밋)이 끝난 뒤 상품마다 SKU를 만든다 — 실패해도 등록은 그대로다(설계 §1)
     const skuSync: BulkSkuSync[] = [];
     let budget = SYNC_MISSING_CAP;
+    const startedAt = Date.now();
+    let deferRest = false;
     for (const row of created) {
       const id = row.seller_product_id === null ? null : Number(row.seller_product_id);
       const base = { seller_product_id: id, product_name: String(row.product_name) };
@@ -152,8 +152,10 @@ export async function POST(request: NextRequest) {
         skuSync.push({ ...base, status: 'skipped', skus: 0 });
         continue;
       }
-      if (budget <= 0) {
-        skuSync.push({ ...base, status: 'failed', skus: 0, error: OVER_CAP });
+      // 상한(개수 20 · 시간 240초)을 넘으면 새 상품을 시작하지 않고 뒤로 미룬다 — 실패가 아니라 「SKU 다시 맞추기」 몫이다
+      if (!deferRest && Date.now() - startedAt > SYNC_MISSING_DEADLINE_MS) deferRest = true;
+      if (deferRest || budget <= 0) {
+        skuSync.push({ ...base, status: 'deferred', skus: 0 });
         continue;
       }
       budget--;

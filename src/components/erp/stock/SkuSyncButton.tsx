@@ -19,17 +19,21 @@ export default function SkuSyncButton({ onDone }: { onDone: () => void }) {
 
   async function run() {
     setBusy(true);
-    const r = await postSkuSyncMissing();
-    setBusy(false);
-    if (!r.ok) {
-      toast.error(r.error);
-      return;
+    setLast(null);
+    try {
+      const r = await postSkuSyncMissing();
+      if (!r.ok) {
+        toast.error(r.error);
+        return;
+      }
+      const msg = formatSyncMissing(r.data);
+      setLast(msg);
+      if (r.data.failed > 0) toast.error(msg);
+      else toast.success(msg);
+      if (r.data.created > 0) onDone();
+    } finally {
+      setBusy(false);
     }
-    const msg = formatSyncMissing(r.data);
-    setLast(msg);
-    if (r.data.failed > 0) toast.error(msg);
-    else toast.success(msg);
-    if (r.data.created > 0) onDone();
   }
 
   return (

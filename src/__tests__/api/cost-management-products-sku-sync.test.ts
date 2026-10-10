@@ -77,14 +77,27 @@ describe('POST /api/cost-management/products/bulk — skuSync', () => {
     ]);
   });
 
-  it('한 요청에서 20개까지만 — 넘는 상품은 failed로 「SKU 다시 맞추기」 안내', async () => {
+  it('한 요청에서 20개까지만 — 넘는 상품은 deferred(실패 아님)', async () => {
     const items = Array.from({ length: 21 }, (_, i) => ({ product_name: `P${i}`, seller_product_id: 1000 + i }));
     const { POST } = await import('@/app/api/cost-management/products/bulk/route');
     const json = await (await POST(post('/api/cost-management/products/bulk', { items }))).json();
     expect(mockSync).toHaveBeenCalledTimes(20);
     expect(json.data.skuSync).toHaveLength(21);
-    expect(json.data.skuSync[20]).toMatchObject({ seller_product_id: 1020, status: 'failed', skus: 0 });
-    expect(json.data.skuSync[20].error).toContain('SKU 다시 맞추기');
+    expect(json.data.skuSync[20]).toMatchObject({ seller_product_id: 1020, status: 'deferred', skus: 0 });
+  });
+
+  it('240초가 지나면 새 상품을 시작하지 않고 남은 상품은 deferred', async () => {
+    const t = [0, 0, 241_000, 241_000];
+    const spy = vi.spyOn(Date, 'now').mockImplementation(() => t.shift() ?? 241_000);
+    try {
+      const items = [101, 102, 103].map((id) => ({ product_name: `P${id}`, seller_product_id: id }));
+      const { POST } = await import('@/app/api/cost-management/products/bulk/route');
+      const json = await (await POST(post('/api/cost-management/products/bulk', { items }))).json();
+      expect(mockSync).toHaveBeenCalledTimes(1);
+      expect(json.data.skuSync.map((x: { status: string }) => x.status)).toEqual(['created', 'deferred', 'deferred']);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('SKU 추가가 던져도 그 상품만 failed', async () => {

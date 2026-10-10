@@ -12,8 +12,8 @@ import { insertLinks, lockSkuMaster, upsertListings, upsertSkus, validateDraft }
 
 type Q = Pick<Db, 'query'>;
 
-export type SkuSyncStatus = 'created' | 'exists' | 'failed' | 'skipped';
-/** 원가관리 응답의 skuSync. skipped = 상품번호 없음(가상 ID) */
+export type SkuSyncStatus = 'created' | 'exists' | 'failed' | 'skipped' | 'deferred';
+/** 원가관리 응답의 skuSync. skipped = 상품번호 없음(가상 ID) · deferred = 한 요청의 상한(개수·시간)을 넘어 뒤로 미룸(실패 아님) */
 export interface SkuSync {
   status: SkuSyncStatus;
   skus: number;

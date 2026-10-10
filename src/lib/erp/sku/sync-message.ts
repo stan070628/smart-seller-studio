@@ -11,15 +11,19 @@ export function summarizeSkuSync(list: (SkuSync | null | undefined)[]): { kind: 
   const xs = list.filter((x): x is SkuSync => !!x);
   const skus = xs.filter((x) => x.status === 'created').reduce((s, x) => s + x.skus, 0);
   const failed = xs.filter((x) => x.status === 'failed').length;
+  const deferred = xs.filter((x) => x.status === 'deferred').length;
+  // 미룬 것은 실패가 아니다 — 한 요청의 상한을 넘어 재고현황 버튼 몫으로 남았다
+  const deferNote = deferred > 0 ? `SKU 자동 추가는 ${deferred}건 뒤로 미뤘다 — 재고현황의 「SKU 다시 맞추기」로 마저 한다` : '';
   if (failed > 0) {
     return {
       kind: 'error',
-      message: `${skus > 0 ? `SKU ${skus}개 추가 · ` : ''}SKU 자동 추가 실패${failed > 1 ? ` ${failed}건` : ''} — ${SKU_SYNC_RETRY_HINT}`,
+      message: `${skus > 0 ? `SKU ${skus}개 추가 · ` : ''}SKU 자동 추가 실패${failed > 1 ? ` ${failed}건` : ''} — ${SKU_SYNC_RETRY_HINT}${deferNote ? ` · ${deferNote}` : ''}`,
     };
   }
   const skipped = xs.reduce((s, x) => s + (x.skippedListings ?? 0), 0);
-  if (skus > 0) return { kind: 'success', message: `SKU ${skus}개 자동 추가${skippedNote(skipped)}` };
-  return null;
+  const head = skus > 0 ? `SKU ${skus}개 자동 추가${skippedNote(skipped)}` : '';
+  const message = [head, deferNote].filter(Boolean).join(' · ');
+  return message ? { kind: 'success', message } : null;
 }
 
 /** 「SKU 다시 맞추기」 결과 한 줄 — 「SKU N개 추가 · 이미 있음 N · 실패 N(상품번호…)」 */
