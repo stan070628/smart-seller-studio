@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { X, Package } from 'lucide-react';
 import { toast } from '@/components/ui/toast';
+import { summarizeSkuSync } from '@/lib/erp/sku/sync-message';
+import type { SkuSync } from '@/lib/erp/sku/sync-product';
 import { useDraftPersist, loadDraft } from '@/hooks/useDraftPersist';
 import { ADD_PRODUCT_DRAFT_KEY } from './draft-keys';
 import { E } from '@/lib/design-tokens';
@@ -83,6 +85,9 @@ export default function AddProductModal({ onClose, onAdded }: Props) {
       const json = await res.json();
       if (json.success) {
         clearDraftNow();
+        // 이 창은 상품번호를 보내지 않아 보통 skipped(말하지 않는다) — 응답 규격이 같으므로 같은 처리를 둔다
+        const sync = summarizeSkuSync([json.skuSync as SkuSync | undefined]);
+        if (sync) toast[sync.kind](sync.message);
         onAdded();
         onClose();
       } else {
