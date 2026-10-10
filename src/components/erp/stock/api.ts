@@ -11,6 +11,7 @@ import type { RecentLineLink, RecentListingLink, UnattributedGroup } from '@/lib
 import type { RelinkResult } from '@/lib/erp/orders/relink';
 import type { KarrotRecordResult, KarrotSaleRow } from '@/lib/erp/orders/karrot';
 import type { RgAutoLast } from '@/lib/erp/stock/rg-auto';
+import type { SyncMissingResult } from '@/lib/erp/sku/sync-product';
 
 export type ApiResult<T> =
   | { ok: true; data: T }
@@ -117,3 +118,6 @@ export const postKarrot = (b: { skuId: number; qty: number; amount: number; sold
 export const postKarrotCancel = (lineId: number) => call<{ lineId: number }>('/api/erp/sales/karrot/cancel', { lineId });
 
 export const fetchRgAuto = () => call<RgAutoLast>('/api/erp/stock/rg-auto');
+
+// 원가관리에 있는데 SKU가 없는 쿠팡 상품을 SKU로(한 번에 20개)
+export const postSkuSyncMissing = () => call<SyncMissingResult>('/api/erp/skus/sync-missing', {});

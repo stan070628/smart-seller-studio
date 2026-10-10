@@ -22,6 +22,7 @@ import KarrotSaleForm from './KarrotSaleForm';
 import CountQueuePanel from './CountQueuePanel';
 import OrdersSyncPanel from './OrdersSyncPanel';
 import RgAutoPanel from './RgAutoPanel';
+import SkuSyncButton from './SkuSyncButton';
 import { fetchRecon, fetchStock, postAdjust, postRgApply, postRgArrive } from './api';
 import {
   computeKpis, defaultCost, filterGroups, filterRows, filtersActive, groupRows, parseRecon, rgArriveQty, rgDiff, stageKey, summarizeStaged,
@@ -268,6 +269,7 @@ export default function StockClient() {
         <button type="button" onClick={() => setShowKarrot(true)} style={btnStyle}>당근 판매</button>
         <button type="button" onClick={() => setShowImport(true)} style={btnStyle}><Upload size={12} /> 실사표 불러오기(CSV)</button>
         <button type="button" onClick={exportCsv} style={btnStyle}><Download size={12} /> 엑셀↓</button>
+        <SkuSyncButton onDone={() => void load()} />
         <div style={{ flex: 1 }} />
         <button
           type="button"
