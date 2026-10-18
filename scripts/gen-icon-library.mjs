@@ -29,11 +29,20 @@ const KEY_MAP = {
   // 사용감·효익
   feel_sparkle: 'sparkles', feel_heart: 'heart', feel_smile: 'smile',
   safe_shield: 'shield-check', mild_baby: 'baby', scent_wind: 'wind',
-  bubble_cloud: 'cloud', moisture_droplet: 'glass-water',
+  // moisture_droplet은 glass-water(물컵)였다 — 키 이름만 보는 레이아웃 모델이 「흡수」「보습」에
+  // 골라 물컵이 그려졌다(2026-10-18 렌더 비교). 이름대로 물방울로 고친다.
+  bubble_cloud: 'cloud', moisture_droplet: 'droplet',
   // 의류
   cloth_shirt: 'shirt', fit_move: 'move-vertical', stretch_expand: 'expand',
   // 범용
   check_badge: 'badge-check', star_point: 'star', home_house: 'house',
+  // 2026-10-18 보강 — 렌더 비교에서 「세탁」에 맞는 키가 없어 물결이 붙었다. 자주 나오는 속성을 채운다.
+  wash_machine: 'washing-machine', reuse_recycle: 'recycle', care_gentle: 'hand-heart',
+  power_zap: 'zap', charge_battery: 'battery-charging', quiet_mute: 'volume-x',
+  waterproof_umbrella: 'umbrella', warm_flame: 'flame', cool_thermo: 'thermometer-snowflake',
+  microwave_ok: 'microwave', fridge_storage: 'refrigerator', kitchen_utensils: 'utensils',
+  magnet_attach: 'magnet', lock_secure: 'lock', compact_minimize: 'minimize-2', cut_scissors: 'scissors',
+  pet_paw: 'paw-print', car_vehicle: 'car', sleep_bed: 'bed', living_sofa: 'sofa',
 };
 
 const dir = resolve(repoRoot, 'node_modules/lucide-static/icons');
