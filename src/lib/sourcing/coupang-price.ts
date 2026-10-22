@@ -95,6 +95,11 @@ export const DEFAULT_ORDER_QTY = 30;
  */
 const PRICE_LINKED_RATE = COMMISSION_RATE + SALES_VAT_RATE;
 
+/** 마진율 조건(①)만 만족하는 판매가 — 올림 전 원값. breakEvenPrice·minViablePrice가 공유한다 */
+function priceForTargetRate(effectiveCost: number, size: LogisticsSize): number {
+  return (effectiveCost + LOGISTICS_FEE[size]) / (1 - PRICE_LINKED_RATE - TARGET_MARGIN_RATE);
+}
+
 /**
  * 진입 가능한 최소 판매가(원).
  *
@@ -106,7 +111,7 @@ const PRICE_LINKED_RATE = COMMISSION_RATE + SALES_VAT_RATE;
  */
 export function breakEvenPrice(effectiveCost: number, size: LogisticsSize): number {
   const logi = LOGISTICS_FEE[size];
-  const byRate = (effectiveCost + logi) / (1 - PRICE_LINKED_RATE - TARGET_MARGIN_RATE);
+  const byRate = priceForTargetRate(effectiveCost, size);
   // logi * (1 + MARGIN_TO_LOGISTICS): 물류비 자체를 회수(logi)하고,
   // 그 위에 물류비의 MARGIN_TO_LOGISTICS배를 마진으로 더 얹는다.
   const byAmount = (effectiveCost + logi * (1 + MARGIN_TO_LOGISTICS)) / (1 - PRICE_LINKED_RATE);
@@ -128,6 +133,50 @@ export function marginOf(
   return Math.round(
     sellingPrice * (1 - PRICE_LINKED_RATE) - LOGISTICS_FEE[size] - effectiveCost,
   );
+}
+
+/**
+ * 마진율 30%만 겨우 맞추는 판매가(원) — 사전 거름망용 하한.
+ *
+ * breakEvenPrice는 「물류비 × 1.5」 조건까지 넣어 원가가 낮을 때 그 조건이 지배한다
+ * (¥5 기준 14,813원). 캡처를 훑는 단계에서 그 값으로 자르면 강의 공식으로는
+ * 통과할 12~14천원대를 미리 버리게 된다. 그래서 거름망은 ① 조건만 쓰고,
+ * ② 조건은 채택한 1688 원가로 marginVerdict가 판정한다.
+ */
+export function minViablePrice(effectiveCost: number, size: LogisticsSize): number {
+  return Math.ceil(priceForTargetRate(effectiveCost, size));
+}
+
+export interface MarginVerdict {
+  margin: number;
+  marginRate: number;
+  /** ① 마진율 30% 이상 */
+  passRate: boolean;
+  /** ② 개당 마진 ≥ 물류비 × 1.5 */
+  passAmount: boolean;
+  pass: boolean;
+}
+
+/**
+ * breakEvenPrice가 역산하는 두 조건을 정방향으로 판정한다.
+ *
+ * passRate·passAmount는 반올림 전 마진(raw)으로 판정한다 — breakEvenPrice·minViablePrice는
+ * Math.ceil(반올림 전 공식)으로 하한가를 구하는데, 그 값을 marginOf의 반올림된 마진으로
+ * 다시 판정하면 반올림 오차 때문에 방금 하한선이 보장한 가격이 도로 불통과로 나올 수
+ * 있다(원가·사이즈 조합의 약 13~18%에서 실측). 화면에 보여줄 `margin`·`marginRate`는
+ * 종전대로 반올림된 marginOf 값을 쓴다 — 판정과 표시값을 분리한다.
+ */
+export function marginVerdict(
+  sellingPrice: number,
+  effectiveCost: number,
+  size: LogisticsSize,
+): MarginVerdict {
+  const raw = sellingPrice * (1 - PRICE_LINKED_RATE) - LOGISTICS_FEE[size] - effectiveCost;
+  const margin = marginOf(sellingPrice, effectiveCost, size);
+  const marginRate = sellingPrice > 0 ? margin / sellingPrice : 0;
+  const passRate = sellingPrice > 0 && raw / sellingPrice >= TARGET_MARGIN_RATE;
+  const passAmount = raw >= LOGISTICS_FEE[size] * MARGIN_TO_LOGISTICS;
+  return { margin, marginRate, passRate, passAmount, pass: passRate && passAmount };
 }
 
 /**
