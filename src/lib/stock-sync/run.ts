@@ -32,6 +32,33 @@ interface Target {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** 다시 물으면 풀리는 실패 — 5xx(504 게이트웨이 타임아웃 등)·요청 타임아웃·연결 끊김 */
+export function isTransientCoupangError(e: any): boolean {
+  if (e?.name === 'TimeoutError' || e?.name === 'AbortError') return true;
+  if (e instanceof TypeError) return true; // fetch failed
+  return /쿠팡 API 오류 \(5\d\d\)/.test(String(e?.message ?? ''));
+}
+
+/**
+ * 재고 조회는 읽기라 다시 물어도 안전하다. 재시도는 여기서만 한다 —
+ * 클라이언트 공통 request()에 넣으면 「ERROR여도 생성되는」 등록 POST까지 재시도돼 중복 상품이 생긴다.
+ * 2026-10-26~30 낮 시간대에 166개 중 최대 18개가 504로 빠져 그 옵션의 동기화가 3시간씩 비었다.
+ */
+export async function getInventoryWithRetry(
+  cp: { getVendorItemInventory(vi: number): Promise<Record<string, unknown>> },
+  vi: number,
+  delaysMs: number[] = [1_000, 2_000],
+): Promise<Record<string, unknown>> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await cp.getVendorItemInventory(vi);
+    } catch (e) {
+      if (attempt >= delaysMs.length || !isTransientCoupangError(e)) throw e;
+      await sleep(delaysMs[attempt]);
+    }
+  }
+}
+
 /** @param preset 연결을 DB 대신 넘긴다 — 등록 전 로컬 드라이런용. 이때는 dryRun만 허용한다 */
 export async function runStockSync({ dryRun, preset }: { dryRun: boolean; preset?: SyncLink[] }): Promise<SyncResult> {
   if (preset && !dryRun) throw new Error('preset 연결은 드라이런에서만 쓸 수 있다');
@@ -51,7 +78,7 @@ export async function runStockSync({ dryRun, preset }: { dryRun: boolean; preset
   const coupang = new Map<number, CoupangState>();
   for (const vi of new Set(links.map((l) => l.coupangVendorItemId))) {
     try {
-      const inv: any = await cp.getVendorItemInventory(vi);
+      const inv: any = await getInventoryWithRetry(cp, vi);
       if (typeof inv.amountInStock !== 'number' || typeof inv.onSale !== 'boolean') throw new Error('응답에 amountInStock/onSale 없음');
       coupang.set(vi, { amountInStock: inv.amountInStock, onSale: inv.onSale });
     } catch (e: any) {
